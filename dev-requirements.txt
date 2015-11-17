@@ -1,0 +1,3 @@
+coverage>=4.0b1
+flake8
+CommonMark
