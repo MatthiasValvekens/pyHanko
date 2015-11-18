@@ -281,7 +281,7 @@ class ValidationContext():
                 # some of which separate the hex char pairs via spaces or colons
                 whitelisted_cert = whitelisted_cert.replace(' ', '').replace(':', '')
                 self._whitelisted_certs.add(
-                    binascii.unhexlify(whitelisted_cert)
+                    binascii.unhexlify(whitelisted_cert.encode('ascii'))
                 )
 
         self.certificate_registry = CertificateRegistry(
