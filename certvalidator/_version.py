@@ -2,5 +2,5 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 
-__version__ = '0.9.0'
-__version_info__ = (0, 9, 0)
+__version__ = '0.9.1'
+__version_info__ = (0, 9, 1)
