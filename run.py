@@ -11,7 +11,7 @@ else:
 
 
 def show_usage():
-    print('Usage: run.py (api_docs | lint | tests [regex] | coverage | ci)', file=sys.stderr)
+    print('Usage: run.py (api_docs | lint | tests [regex] | coverage | ci | stress_test)', file=sys.stderr)
     sys.exit(1)
 
 
@@ -29,7 +29,7 @@ if len(sys.argv) < 2 or len(sys.argv) > 3:
 
 task = get_arg(1)
 
-if task not in set(['api_docs', 'lint', 'tests', 'coverage', 'ci']):
+if task not in set(['api_docs', 'lint', 'tests', 'coverage', 'ci', 'stress_test']):
     show_usage()
 
 if task != 'tests' and len(sys.argv) == 3:
@@ -53,6 +53,9 @@ elif task == 'coverage':
 
 elif task == 'ci':
     from dev.ci import run
+
+elif task == 'stress_test':
+    from dev.stress_test import run
 
 result = run(*params)
 sys.exit(int(not result))
