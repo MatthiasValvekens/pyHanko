@@ -16,9 +16,9 @@ from .path import ValidationPath
 from .registry import CertificateRegistry
 
 if sys.version_info < (3,):
-    from urllib2 import HTTPError
+    from urllib2 import URLError
 else:
-    from urllib.error import HTTPError
+    from urllib.error import URLError
 
 
 class ValidationContext():
@@ -461,9 +461,9 @@ class ValidationContext():
                         for cert_ in certs:
                             if self.certificate_registry.add_other_cert(cert_):
                                 self._revocation_certs[cert_.issuer_serial] = cert_
-                    except (HTTPError, socket.error):
+                    except (URLError, socket.error):
                         pass
-            except (HTTPError, socket.error) as e:
+            except (URLError, socket.error) as e:
                 self._fetched_crls[cert.issuer_serial] = []
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)
@@ -501,7 +501,7 @@ class ValidationContext():
                 # response itself. We can use these since they will be validated using
                 # the local trust roots.
                 self._extract_ocsp_certs(ocsp_response)
-            except (HTTPError, socket.error) as e:
+            except (URLError, socket.error) as e:
                 self._fetched_ocsps[cert.issuer_serial] = []
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)

@@ -33,7 +33,7 @@ def fetch(cert, use_deltas=True, user_agent=None, timeout=10):
         The number of seconds after which an HTTP request should timeout
 
     :raises:
-        urllib.error.HTTPError/urllib2.HTTPError - when an HTTP error occurs
+        urllib.error.URLError/urllib2.URLError - when a URL/HTTP error occurs
         socket.error - when a socket error occurs
 
     :return:
@@ -107,7 +107,7 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
         The number of seconds after which an HTTP request should timeout
 
     :raises:
-        urllib.error.HTTPError/urllib2.HTTPError - when an HTTP error occurs
+        urllib.error.URLError/urllib2.URLError - when a URL/HTTP error occurs
         socket.error - when a socket error occurs
 
     :return:

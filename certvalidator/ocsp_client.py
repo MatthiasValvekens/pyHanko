@@ -11,11 +11,11 @@ from ._types import str_cls, type_name
 from ._version import __version__
 
 if sys.version_info < (3,):
-    from urllib2 import Request, urlopen, HTTPError
+    from urllib2 import Request, urlopen, URLError
 
 else:
     from urllib.request import Request, urlopen
-    from urllib.error import HTTPError
+    from urllib.error import URLError
 
 
 def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=10):
@@ -43,7 +43,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
         The number of seconds after which an HTTP request should timeout
 
     :raises:
-        urllib.error.HTTPError/urllib2.HTTPError - when an HTTP error occurs
+        urllib.error.URLError/urllib2.URLError - when a URL/HTTP error occurs
         socket.error - when a socket error occurs
 
     :return:
@@ -112,7 +112,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
                 )
             return ocsp_response
 
-        except (HTTPError) as e:
+        except (URLError) as e:
             last_e = e
 
     raise last_e
