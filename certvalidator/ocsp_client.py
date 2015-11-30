@@ -4,7 +4,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 import os
 import sys
 
-from asn1crypto import core, ocsp, x509, algos
+from asn1crypto import core, ocsp, x509, algos, util
 
 from . import errors
 from ._types import str_cls, type_name
@@ -96,6 +96,8 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
     last_e = None
     for ocsp_url in cert.ocsp_urls:
         try:
+            if sys.version_info < (3,):
+                ocsp_url = util.iri_to_uri(ocsp_url)
             request = Request(ocsp_url)
             _add_header(request, 'Accept', 'application/ocsp-response')
             _add_header(request, 'Content-Type', 'application/ocsp-request')

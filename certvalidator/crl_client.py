@@ -3,7 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import sys
 
-from asn1crypto import crl, x509, cms, pem
+from asn1crypto import crl, x509, cms, pem, util
 
 from ._types import str_cls, type_name
 from ._version import __version__
@@ -78,6 +78,8 @@ def _grab_crl(user_agent, url, timeout):
         An asn1crypto.crl.CertificateList object
     """
 
+    if sys.version_info < (3,):
+        url = util.iri_to_uri(url)
     request = Request(url)
     request.add_header(b'Accept', b'application/pkix-crl')
     request.add_header(b'User-Agent', user_agent.encode('iso-8859-1'))
@@ -120,6 +122,8 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
         raise TypeError('user_agent must be a unicode string, not %s' % type_name(user_agent))
 
     for url in certificate_list.issuer_cert_urls:
+        if sys.version_info < (3,):
+            url = util.iri_to_uri(url)
         request = Request(url)
         request.add_header(b'Accept', b'application/pkix-cert,application/pkcs7-mime')
         request.add_header(b'User-Agent', user_agent.encode('iso-8859-1'))
