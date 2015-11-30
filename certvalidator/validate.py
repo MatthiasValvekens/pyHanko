@@ -1190,7 +1190,8 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
                             raise
                         raise CRLValidationError('CRL issuer certificate path could not be validated')
 
-                if 'crl_sign' not in candidate_crl_issuer.key_usage_value.native:
+                key_usage_value = candidate_crl_issuer.key_usage_value
+                if key_usage_value and 'crl_sign' not in key_usage_value.native:
                     unauthorized_certs += 1
                     continue
 
