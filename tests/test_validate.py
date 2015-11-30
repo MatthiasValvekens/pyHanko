@@ -786,7 +786,7 @@ class ValidateTests(unittest.TestCase):
                 PathValidationError,
                 (
                     'The path could not be validated because intermediate certificate 1 '
-                    'is not yet valid as of the validation time'
+                    'is not valid until 2047-01-01 12:01:00Z'
                 )
             ),
             (
@@ -803,7 +803,7 @@ class ValidateTests(unittest.TestCase):
                 PathValidationError,
                 (
                     'The path could not be validated because the end-entity certificate '
-                    'is not yet valid as of the validation time'
+                    'is not valid until 2047-01-01 12:01:00Z'
                 )
             ),
             (
@@ -848,7 +848,7 @@ class ValidateTests(unittest.TestCase):
                 PathValidationError,
                 (
                     'The path could not be validated because intermediate certificate 1 '
-                    'has expired as of the validation time'
+                    'expired 2011-01-01 08:30:00Z'
                 )
             ),
             (
@@ -865,7 +865,7 @@ class ValidateTests(unittest.TestCase):
                 PathValidationError,
                 (
                     'The path could not be validated because the end-entity certificate '
-                    'has expired as of the validation time'
+                    'expired 2011-01-01 08:30:00Z'
                 )
             ),
             (
@@ -882,7 +882,7 @@ class ValidateTests(unittest.TestCase):
                 PathValidationError,
                 (
                     'The path could not be validated because the end-entity certificate '
-                    'has expired as of the validation time'
+                    'expired 1999-01-01 12:01:00Z'
                 )
             ),
             (

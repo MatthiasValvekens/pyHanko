@@ -335,18 +335,19 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             if moment < validity['not_before'].native:
                 raise PathValidationError(pretty_message(
                     '''
-                    The path could not be validated because %s is not yet valid
-                    as of the validation time
+                    The path could not be validated because %s is not valid
+                    until %s
                     ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True)
+                    _cert_type(index, last_index, end_entity_name_override, definite=True),
+                    validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ')
                 ))
             if moment > validity['not_after'].native:
                 raise PathValidationError(pretty_message(
                     '''
-                    The path could not be validated because %s has expired as
-                    of the validation time
+                    The path could not be validated because %s expired %s
                     ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True)
+                    _cert_type(index, last_index, end_entity_name_override, definite=True),
+                    validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ')
                 ))
 
         # Step 2 a 3 - CRL/OCSP
