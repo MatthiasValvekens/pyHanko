@@ -18,7 +18,7 @@ else:
     from urllib.error import HTTPError
 
 
-def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=None):
+def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=10):
     """
     Fetches an OCSP response for a certificate
 
@@ -43,7 +43,8 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=N
         The number of seconds after which an HTTP request should timeout
 
     :raises:
-        certvalidator.errors.OCSPValidationError - when an HTTP error occurs
+        urllib.error.HTTPError/urllib2.HTTPError - when an HTTP error occurs
+        socket.error - when a socket error occurs
 
     :return:
         An asn1crypto.ocsp.OCSPResponse object
@@ -92,6 +93,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=N
         'tbs_request': tbs_request,
     })
 
+    last_e = None
     for ocsp_url in cert.ocsp_urls:
         try:
             request = Request(ocsp_url)
@@ -108,11 +110,10 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=N
                 )
             return ocsp_response
 
-        except (HTTPError):
-            continue
+        except (HTTPError) as e:
+            last_e = e
 
-    plural = 's' if len(cert.ocsp_urls) != 1 else ''
-    raise errors.OCSPValidationError('OCSP request%s could not be sent due to HTTP error%s' % (plural, plural))
+    raise last_e
 
 
 def _add_header(request, name, value):

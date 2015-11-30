@@ -368,7 +368,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             matched = False
             failures = []
 
-            if cert.ocsp_urls or validation_context.require_revocation_checks:
+            if cert.ocsp_urls or validation_context.revocation_mode == 'require':
                 try:
                     verify_ocsp_response(
                         cert,
@@ -391,7 +391,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 except (OCSPNoMatchesError):
                     pass
 
-            if not status_good and (cert.crl_distribution_points or validation_context.require_revocation_checks):
+            if not status_good and (cert.crl_distribution_points or validation_context.revocation_mode == 'require'):
                 try:
                     cert_description = _cert_type(index, last_index, end_entity_name_override, definite=True)
                     verify_crl(
@@ -411,7 +411,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 except (CRLNoMatchesError):
                     pass
 
-            if not matched and validation_context.require_revocation_checks:
+            if not matched and validation_context.revocation_mode == 'require':
                 raise PathValidationError(pretty_message(
                     '''
                     The path could not be validated because no revocation
@@ -811,9 +811,13 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
                     if signing_cert.ocsp_no_check_value is not None and \
                             validation_context._skip_revocation_checks is False:
                         changed_revocation_flags = True
-                        original_require_revocation_checks = validation_context.require_revocation_checks
+
+                        original_revocation_mode = validation_context.revocation_mode
+                        new_revocation_mode = "soft-fail" if original_revocation_mode == "soft-fail" else "hard-fail"
+
                         validation_context._skip_revocation_checks = True
-                        validation_context.require_revocation_checks = False
+                        validation_context._revocation_mode = new_revocation_mode
+
                     if end_entity_name_override is None and signing_cert.sha256 != issuer.sha256:
                         end_entity_name_override = cert_description + ' OCSP responder'
                     _validate_path(
@@ -830,7 +834,7 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
                 finally:
                     if changed_revocation_flags:
                         validation_context._skip_revocation_checks = False
-                        validation_context.require_revocation_checks = original_require_revocation_checks
+                        validation_context._revocation_mode = original_revocation_mode
 
             else:
                 failures.append((

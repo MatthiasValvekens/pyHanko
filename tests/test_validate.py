@@ -45,6 +45,56 @@ class ValidateTests(unittest.TestCase):
             cert = x509.Certificate.load(cert_bytes)
         return cert
 
+    def test_revocation_mode_soft(self):
+        cert = self._load_cert_object('revoked.grc.com.crt')
+        ca_certs = [self._load_cert_object('globalsign_root.crt')]
+        other_certs = [
+            self._load_cert_object('globalsign_dv_g2.crt'),
+        ]
+
+        # Sets an impossibly low connection timeout so the revocation check
+        # fails
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=True,
+            crl_fetch_params={'timeout': 0.001},
+            ocsp_fetch_params={'timeout': 0.001},
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+
+        validate_path(context, path)
+
+    def test_revocation_mode_hard(self):
+        cert = self._load_cert_object('revoked.grc.com.crt')
+        ca_certs = [self._load_cert_object('globalsign_root.crt')]
+        other_certs = [
+            self._load_cert_object('globalsign_dv_g2.crt'),
+        ]
+
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=True,
+            crl_fetch_params={'timeout': 30},
+            ocsp_fetch_params={'timeout': 30},
+            revocation_mode='hard-fail'
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+
+        expected = (
+            'CRL indicates the end-entity certificate was revoked at 15:44:10 '
+            'on 2014-04-23, due to an unspecified reason'
+        )
+        with self.assertRaisesRegexp(RevokedError, expected):
+            validate_path(context, path)
+
     @data('ocsp_info', True)
     def openssl_ocsp(self, ca_file, other_files, cert_file, ocsp_files, path_len, moment, excp_class, excp_msg):
         ca_certs = [self._load_cert_object('openssl-ocsp', ca_file)]
@@ -656,11 +706,13 @@ class ValidateTests(unittest.TestCase):
         crls = [self._load_nist_crl(filename) for filename in crl_files]
         crls.append(self._load_nist_crl('TrustAnchorRootCRL.crl'))
 
+        revocation_mode = "require" if require_rev else "hard-fail"
+
         context = ValidationContext(
             trust_roots=ca_certs,
             other_certs=other_certs,
             crls=crls,
-            require_revocation_checks=require_rev
+            revocation_mode=revocation_mode
         )
 
         paths = context.certificate_registry.build_paths(cert)

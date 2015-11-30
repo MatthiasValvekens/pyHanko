@@ -204,9 +204,9 @@ validator = CertificateValidator(end_entity_cert, validation_context=context)
 
 With this configuration, any CRLs or OCSP responders listed in the end-entity
 certificate or any intermediate certificates will be fetching via HTTP. *Please
-note that this mode allows soft failures. If there is no revocation information,
-the information can not be fetched, or does not match the certificate in
-question, it will not be used.*
+note that the default revocation mode is `soft-fail`. If there is no revocation
+information, the information can not be fetched, or does not match the
+certificate in question, it will not be used.*
 
 If there is the desire to customize the timeout or user agent for the fetchers,
 please use the `crl_fetch_params` and `ocsp_fetch_params` keyword parameters.
@@ -238,25 +238,38 @@ context = ValidationContext(crls=crls, ocsps=ocsps)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
 ```
 
-*Please note that providing revocation information does allow soft failures. If
+*Please note that providing revocation information does allow soft failures
+unless the . If
 there is no revocation information or does not match the certificate in
 question, it will not be used.*
 
-#### Requiring Revocation Information
+#### Setting the Revocation Mode
 
-In the case that soft failure is not the desired mode of operation, it is
-possible to require that every intermediate certificate and the end-entity
-certificate all have a CRL or OCSP response. This is enabled by passing `True`
-to the `require_revocation_checks` keyword parameter of the
-`ValidationContext()` object.
+In the case that `soft-fail` is not the desired mode of operation, it is
+possible to change the revocation mode into one of two other modes:
+
+ - `hard-fail`
+ - `require`
+
+In `hard-fail` mode, any error in checking revocation is considered a failure.
+However, if there is no known source of revocation information, it is not
+considered a failure.
+
+In `require` mode, any error in checking revocation is considered a failure. In
+addition, all certificates must have revocation information, otherwise it is
+considered a path validation failure.
+
+The `revocation_mode` keyword parameter of `ValidationContext()` accepts a
+unicode string of: `"soft-fail"`, `"hard-fail"` or `"require"`.
 
 ```python
+from __future__ import unicode_literals
 from certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
 
-context = ValidationContext(allow_fetching=True, require_revocation_checks=True)
+context = ValidationContext(allow_fetching=True, revocation_mode="hard-fail")
 validator = CertificateValidator(end_entity_cert, validation_context=context)
 ```
 

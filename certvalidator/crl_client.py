@@ -5,19 +5,17 @@ import sys
 
 from asn1crypto import crl, x509, cms, pem
 
-from . import errors
 from ._types import str_cls, type_name
 from ._version import __version__
 
 if sys.version_info < (3,):
-    from urllib2 import Request, urlopen, HTTPError
+    from urllib2 import Request, urlopen
 
 else:
     from urllib.request import Request, urlopen
-    from urllib.error import HTTPError
 
 
-def fetch(cert, use_deltas=True, user_agent=None, timeout=None):
+def fetch(cert, use_deltas=True, user_agent=None, timeout=10):
     """
     Fetches the CRLs for a certificate
 
@@ -35,7 +33,8 @@ def fetch(cert, use_deltas=True, user_agent=None, timeout=None):
         The number of seconds after which an HTTP request should timeout
 
     :raises:
-        certvalidator.errors.CRLValidationError - when an HTTP error occurs
+        urllib.error.HTTPError/urllib2.HTTPError - when an HTTP error occurs
+        socket.error - when a socket error occurs
 
     :return:
         A list asn1crypto.crl.CertificateList objects
@@ -56,12 +55,8 @@ def fetch(cert, use_deltas=True, user_agent=None, timeout=None):
         sources.extend(cert.delta_crl_distribution_points)
 
     for distribution_point in sources:
-        try:
-            url = distribution_point.url
-            output.append(_grab_crl(user_agent, url, timeout))
-
-        except (HTTPError) as e:
-            raise errors.CRLValidationError('CRL could not be fetched due to an HTTP error - %s' % str_cls(e))
+        url = distribution_point.url
+        output.append(_grab_crl(user_agent, url, timeout))
 
     return output
 
@@ -93,7 +88,7 @@ def _grab_crl(user_agent, url, timeout):
     return crl.CertificateList.load(data)
 
 
-def fetch_certs(certificate_list, user_agent=None, timeout=None):
+def fetch_certs(certificate_list, user_agent=None, timeout=10):
     """
     Fetches certificates from the authority information access extension of
     an asn1crypto.crl.CertificateList object and places them into the
@@ -108,6 +103,10 @@ def fetch_certs(certificate_list, user_agent=None, timeout=None):
 
     :param timeout:
         The number of seconds after which an HTTP request should timeout
+
+    :raises:
+        urllib.error.HTTPError/urllib2.HTTPError - when an HTTP error occurs
+        socket.error - when a socket error occurs
 
     :return:
         A list of any asn1crypto.x509.Certificate objects that were fetched

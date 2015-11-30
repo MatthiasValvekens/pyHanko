@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import socket
+import sys
 from datetime import datetime
 import binascii
 
@@ -12,6 +14,11 @@ from ._errors import pretty_message
 from ._types import type_name, byte_cls, str_cls
 from .path import ValidationPath
 from .registry import CertificateRegistry
+
+if sys.version_info < (3,):
+    from urllib2 import HTTPError
+else:
+    from urllib.error import HTTPError
 
 
 class ValidationContext():
@@ -69,6 +76,9 @@ class ValidationContext():
     # A dict of keyword params to pass to certificates.ocsp_client.fetch()
     _ocsp_fetch_params = None
 
+    # Any exceptions that were ignored while the revocation_mode is "soft-fail"
+    _soft_fail_exceptions = None
+
     # A datetime.datetime object to use when checking the validity
     # period of certificates
     moment = None
@@ -84,14 +94,14 @@ class ValidationContext():
     # responder certificate.
     _skip_revocation_checks = None
 
-    # A bool - if every certificate, other than trust roots, must have a valid
-    # CRL or OCSP response to ensure it has not been revoked
-    require_revocation_checks = None
+    # A unicode string of the revocation mode - "soft-fail", "hard-fail",
+    # or "require"
+    _revocation_mode = None
 
     def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None,
                  whitelisted_certs=None, moment=None, allow_fetching=False, crls=None,
                  crl_fetch_params=None, ocsps=None, ocsp_fetch_params=None,
-                 require_revocation_checks=False, weak_hash_algos=None):
+                 revocation_mode="soft-fail", weak_hash_algos=None):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -154,10 +164,14 @@ class ValidationContext():
             a CRL or OCSP responder, an HTTP request will be made to obtain
             information for revocation checking.
 
-        :param require_revocation_checks:
-            If a valid CRL or OCSP response should be required for each
-            certificate in a path, even if the certificate does not contain
-            information on how to obtain said revocation information.
+        :param revocation_mode:
+            A unicode string of the revocation mode to use: "soft-fail" (the
+            default), "hard-fail" or "require". In "soft-fail" mode, any sort of
+            error in fetching or locating revocation information is ignored. In
+            "hard-fail" mode, if a certificate has a known CRL or OCSP and it
+            can not be checked, it is considered a revocation failure. In
+            "require" mode, every certificate in the certificate path must have
+            a CRL or OCSP.
 
         :param weak_hash_algos:
             A set of unicode strings of hash algorithms that should be
@@ -220,12 +234,12 @@ class ValidationContext():
                     '''
                 ))
 
-        elif not allow_fetching and crls is None and ocsps is None and require_revocation_checks:
+        elif not allow_fetching and crls is None and ocsps is None and revocation_mode != "soft-fail":
             raise ValueError(pretty_message(
                 '''
-                require_revocation_checks is True and allow_fetching is False,
-                however crls and ocsps are both None, meaning that no validation
-                can happen
+                revocation_mode is "%s" and allow_fetching is False, however
+                crls and ocsps are both None, meaning that no validation can
+                happen
                 '''
             ))
 
@@ -264,12 +278,13 @@ class ValidationContext():
                     '''
                 ))
 
-        if not isinstance(require_revocation_checks, bool):
-            raise TypeError(pretty_message(
+        if revocation_mode not in set(['soft-fail', 'hard-fail', 'require']):
+            raise ValueError(pretty_message(
                 '''
-                require_revocation_checks must be a boolean, not %s
+                revocation_mode must be one of "soft-fail", "hard-fail",
+                "require", not %s
                 ''',
-                type_name(require_revocation_checks)
+                repr(revocation_mode)
             ))
 
         self._whitelisted_certs = set()
@@ -343,7 +358,8 @@ class ValidationContext():
 
         self._allow_fetching = bool(allow_fetching)
         self._skip_revocation_checks = False
-        self.require_revocation_checks = require_revocation_checks
+        self._revocation_mode = revocation_mode
+        self._soft_fail_exceptions = []
         self.weak_hash_algos = weak_hash_algos
 
     @property
@@ -383,6 +399,23 @@ class ValidationContext():
 
         return list(self._revocation_certs.values())
 
+    @property
+    def soft_fail_exceptions(self):
+        """
+        A list of soft-fail exceptions that were ignored during checks
+        """
+
+        return self._soft_fail_exceptions
+
+    @property
+    def revocation_mode(self):
+        """
+        A unicode string of the revocation checking mode: "soft-fail",
+        "hard-fail", or "require"
+        """
+
+        return self._revocation_mode
+
     def is_whitelisted(self, cert):
         """
         Checks to see if a certificate has been whitelisted
@@ -412,20 +445,30 @@ class ValidationContext():
             return self._crls
 
         if cert.issuer_serial not in self._fetched_crls:
-            crls = crl_client.fetch(
-                cert,
-                **self._crl_fetch_params
-            )
-            self._fetched_crls[cert.issuer_serial] = crls
-            for crl_ in crls:
-                certs = crl_client.fetch_certs(
-                    crl_,
-                    user_agent=self._crl_fetch_params.get('user_agent'),
-                    timeout=self._crl_fetch_params.get('timeout')
+            try:
+                crls = crl_client.fetch(
+                    cert,
+                    **self._crl_fetch_params
                 )
-                for cert_ in certs:
-                    if self.certificate_registry.add_other_cert(cert_):
-                        self._revocation_certs[cert_.issuer_serial] = cert_
+                self._fetched_crls[cert.issuer_serial] = crls
+                for crl_ in crls:
+                    try:
+                        certs = crl_client.fetch_certs(
+                            crl_,
+                            user_agent=self._crl_fetch_params.get('user_agent'),
+                            timeout=self._crl_fetch_params.get('timeout')
+                        )
+                        for cert_ in certs:
+                            if self.certificate_registry.add_other_cert(cert_):
+                                self._revocation_certs[cert_.issuer_serial] = cert_
+                    except (HTTPError, socket.error):
+                        pass
+            except (HTTPError, socket.error) as e:
+                self._fetched_crls[cert.issuer_serial] = []
+                if self._revocation_mode == "soft-fail":
+                    self._soft_fail_exceptions.append(e)
+                else:
+                    raise
 
         return self._fetched_crls[cert.issuer_serial]
 
@@ -445,18 +488,25 @@ class ValidationContext():
             return self._ocsps
 
         if cert.issuer_serial not in self._fetched_ocsps:
-            ocsp_response = ocsp_client.fetch(
-                cert,
-                issuer,
-                **self._ocsp_fetch_params
-            )
+            try:
+                ocsp_response = ocsp_client.fetch(
+                    cert,
+                    issuer,
+                    **self._ocsp_fetch_params
+                )
 
-            self._fetched_ocsps[cert.issuer_serial] = [ocsp_response]
+                self._fetched_ocsps[cert.issuer_serial] = [ocsp_response]
 
-            # Responses can contain certificates that are useful in validating the
-            # response itself. We can use these since they will be validated using
-            # the local trust roots.
-            self._extract_ocsp_certs(ocsp_response)
+                # Responses can contain certificates that are useful in validating the
+                # response itself. We can use these since they will be validated using
+                # the local trust roots.
+                self._extract_ocsp_certs(ocsp_response)
+            except (HTTPError, socket.error) as e:
+                self._fetched_ocsps[cert.issuer_serial] = []
+                if self._revocation_mode == "soft-fail":
+                    self._soft_fail_exceptions.append(e)
+                else:
+                    raise
 
         return self._fetched_ocsps[cert.issuer_serial]
 
