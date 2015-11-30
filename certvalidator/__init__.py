@@ -5,7 +5,7 @@ from asn1crypto import pem
 from asn1crypto.x509 import Certificate
 
 from .context import ValidationContext
-from .errors import ValidationError, InvalidCertificateError
+from .errors import ValidationError, PathBuildingError, InvalidCertificateError
 from .validate import validate_path, validate_tls_hostname, validate_usage
 from ._errors import pretty_message
 from ._types import type_name, str_cls, byte_cls
@@ -104,7 +104,19 @@ class CertificateValidator():
                 self._certificate.hash_algo
             ))
 
-        for candidate_path in self._context.certificate_registry.build_paths(self._certificate):
+        try:
+            paths = self._context.certificate_registry.build_paths(self._certificate)
+        except (PathBuildingError) as e:
+            if self._certificate.self_signed in set(['yes', 'maybe']):
+                raise InvalidCertificateError(pretty_message(
+                    '''
+                    The X.509 certificate provided is self-signed - "%s"
+                    ''',
+                    self._certificate.subject.human_friendly
+                ))
+            raise
+
+        for candidate_path in paths:
             try:
                 validate_path(self._context, candidate_path)
                 self._path = candidate_path
