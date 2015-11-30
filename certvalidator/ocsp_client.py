@@ -95,9 +95,9 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=N
     for ocsp_url in cert.ocsp_urls:
         try:
             request = Request(ocsp_url)
-            request.add_header(b'Accept', b'application/ocsp-response')
-            request.add_header(b'Content-Type', b'application/ocsp-request')
-            request.add_header(b'User-Agent', user_agent.encode('iso-8859-1'))
+            _add_header(request, 'Accept', 'application/ocsp-response')
+            _add_header(request, 'Content-Type', 'application/ocsp-request')
+            _add_header(request, 'User-Agent', user_agent)
             response = urlopen(request, ocsp_request.dump(), timeout)
             ocsp_response = ocsp.OCSPResponse.load(response.read())
             request_nonce = ocsp_request.nonce_value
@@ -113,3 +113,25 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=N
 
     plural = 's' if len(cert.ocsp_urls) != 1 else ''
     raise errors.OCSPValidationError('OCSP request%s could not be sent due to HTTP error%s' % (plural, plural))
+
+
+def _add_header(request, name, value):
+    """
+    Adds a header to a urllib2/urllib.request Request object, ensuring values
+    are encoded appropriately based on the version of Python
+
+    :param request:
+        An instance of urllib2.Request or urllib.request.Request
+
+    :param name:
+        A unicode string of the header name
+
+    :param value:
+        A unicode string of the header value
+    """
+
+    if sys.version_info < (3,):
+        name = name.encode('iso-8859-1')
+        value = value.encode('iso-8859-1')
+
+    request.add_header(name, value)
