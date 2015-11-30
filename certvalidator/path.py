@@ -230,3 +230,6 @@ class ValidationPath():
 
     def __iter__(self):
         return iter(self._certs)
+
+    def __eq__(self, other):
+        return self._certs == other._certs

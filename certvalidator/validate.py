@@ -808,8 +808,9 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
                 try:
                     # Store the original revocation check value
                     changed_revocation_flags = False
-                    if signing_cert.ocsp_no_check_value is not None and \
-                            validation_context._skip_revocation_checks is False:
+                    skip_ocsp = signing_cert.ocsp_no_check_value is not None
+                    skip_ocsp = skip_ocsp or signing_cert_path == path
+                    if skip_ocsp and validation_context._skip_revocation_checks is False:
                         changed_revocation_flags = True
 
                         original_revocation_mode = validation_context.revocation_mode
