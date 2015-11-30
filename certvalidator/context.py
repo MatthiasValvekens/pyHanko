@@ -19,6 +19,10 @@ class ValidationContext():
     # A certvalidator.registry.CertificateRegistry() object
     certificate_registry = None
 
+    # A set of unicode strings of hash algorithms to be considered weak. Valid
+    # options include: "md2", "md5", "sha1"
+    weak_hash_algos = None
+
     # A set of byte strings of the SHA-1 hashes of certificates that are whitelisted
     _whitelisted_certs = None
 
@@ -87,7 +91,7 @@ class ValidationContext():
     def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None,
                  whitelisted_certs=None, moment=None, allow_fetching=False, crls=None,
                  crl_fetch_params=None, ocsps=None, ocsp_fetch_params=None,
-                 require_revocation_checks=False):
+                 require_revocation_checks=False, weak_hash_algos=None):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -154,6 +158,10 @@ class ValidationContext():
             If a valid CRL or OCSP response should be required for each
             certificate in a path, even if the certificate does not contain
             information on how to obtain said revocation information.
+
+        :param weak_hash_algos:
+            A set of unicode strings of hash algorithms that should be
+            considered weak. Valid options include: "md2", "md5", "sha1"
         """
 
         if crls is not None:
@@ -284,6 +292,27 @@ class ValidationContext():
                     binascii.unhexlify(whitelisted_cert.encode('ascii'))
                 )
 
+        if weak_hash_algos is not None:
+            if not isinstance(weak_hash_algos, set):
+                raise TypeError(pretty_message(
+                    '''
+                    weak_hash_algos must be a set of unicode strings, not %s
+                    ''',
+                    type_name(weak_hash_algos)
+                ))
+
+            unsupported_hash_algos = weak_hash_algos - set(['md2', 'md5', 'sha1'])
+            if unsupported_hash_algos:
+                raise ValueError(pretty_message(
+                    '''
+                    weak_hash_algos must contain only the unicode strings "md2",
+                    "md5", "sha1", not %s
+                    ''',
+                    repr(unsupported_hash_algos)
+                ))
+        else:
+            weak_hash_algos = set(['md2', 'md5'])
+
         self.certificate_registry = CertificateRegistry(
             trust_roots,
             extra_trust_roots,
@@ -315,6 +344,7 @@ class ValidationContext():
         self._allow_fetching = bool(allow_fetching)
         self._skip_revocation_checks = False
         self.require_revocation_checks = require_revocation_checks
+        self.weak_hash_algos = weak_hash_algos
 
     @property
     def crls(self):

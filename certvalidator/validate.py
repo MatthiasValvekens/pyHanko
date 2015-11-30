@@ -301,6 +301,16 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
         signature_algo = cert['signature_algorithm'].signature_algo
         hash_algo = cert['signature_algorithm'].hash_algo
 
+        if hash_algo in validation_context.weak_hash_algos:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because the signature of %s
+                uses the weak hash algorithm %s
+                ''',
+                _cert_type(index, last_index, end_entity_name_override, definite=True),
+                hash_algo
+            ))
+
         if signature_algo == 'rsassa_pkcs1v15':
             verify_func = asymmetric.rsa_pkcs1v15_verify
         elif signature_algo == 'dsa':

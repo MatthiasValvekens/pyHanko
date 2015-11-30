@@ -5,7 +5,7 @@ from asn1crypto import pem
 from asn1crypto.x509 import Certificate
 
 from .context import ValidationContext
-from .errors import ValidationError
+from .errors import ValidationError, InvalidCertificateError
 from .validate import validate_path, validate_tls_hostname, validate_usage
 from ._errors import pretty_message
 from ._types import type_name, str_cls, byte_cls
@@ -94,6 +94,15 @@ class CertificateValidator():
             return
 
         exceptions = []
+
+        if self._certificate.hash_algo in self._context.weak_hash_algos:
+            raise InvalidCertificateError(pretty_message(
+                '''
+                The X.509 certificate provided has a signature using the weak
+                hash algorithm %s
+                ''',
+                self._certificate.hash_algo
+            ))
 
         for candidate_path in self._context.certificate_registry.build_paths(self._certificate):
             try:
