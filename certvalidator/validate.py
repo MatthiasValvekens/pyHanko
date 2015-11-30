@@ -323,6 +323,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 The path could not be validated because the signature of %s
                 uses the unsupported algorithm %s
                 ''',
+                _cert_type(index, last_index, end_entity_name_override, definite=True),
                 signature_algo
             ))
 
