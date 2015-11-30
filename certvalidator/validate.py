@@ -625,7 +625,7 @@ def _self_signed(cert):
 
     try:
         key_object = asymmetric.load_certificate(cert)
-        verify_func(key_object, cert['signature'].native, cert['tbs_certificate'].dump(), hash_algo)
+        verify_func(key_object, cert['signature_value'].native, cert['tbs_certificate'].dump(), hash_algo)
         return True
 
     except (oscrypto.errors.SignatureError):
