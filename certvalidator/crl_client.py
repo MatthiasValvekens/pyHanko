@@ -3,7 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import sys
 
-from asn1crypto import crl, x509, cms
+from asn1crypto import crl, x509, cms, pem
 
 from . import errors
 from ._types import str_cls, type_name
@@ -87,7 +87,10 @@ def _grab_crl(user_agent, url, timeout):
     request.add_header(b'Accept', b'application/pkix-crl')
     request.add_header(b'User-Agent', user_agent.encode('iso-8859-1'))
     response = urlopen(request, None, timeout)
-    return crl.CertificateList.load(response.read())
+    data = response.read()
+    if pem.detect(data):
+        _, _, data = pem.unarmor(data)
+    return crl.CertificateList.load(data)
 
 
 def fetch_certs(certificate_list, user_agent=None, timeout=None):
