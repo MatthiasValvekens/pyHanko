@@ -420,7 +420,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                     _cert_type(index, last_index, end_entity_name_override, definite=True)
                 ))
 
-            if revocation_check_failed:
+            if not status_good and revocation_check_failed:
                 raise PathValidationError(pretty_message(
                     '''
                     The path could not be validated because the %s revocation
