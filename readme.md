@@ -132,3 +132,13 @@ The following will regenerate the API documentation:
 ```bash
 python run.py api_docs
 ```
+
+The following will run a test that connects to all (non-adult) sites in the
+Alexa top 1000 that respond on port 443:
+
+```bash
+python run.py stress_test
+```
+
+Once the script is complete, results that differ between the OS validation and
+the *certvalidator* validation will be listed for further debugging.
