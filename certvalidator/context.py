@@ -12,6 +12,7 @@ from asn1crypto.util import timezone
 from . import ocsp_client, crl_client
 from ._errors import pretty_message
 from ._types import type_name, byte_cls, str_cls
+from .errors import SoftFailError
 from .path import ValidationPath
 from .registry import CertificateRegistry
 
@@ -467,6 +468,7 @@ class ValidationContext():
                 self._fetched_crls[cert.issuer_serial] = []
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)
+                    raise SoftFailError()
                 else:
                     raise
 
@@ -505,6 +507,7 @@ class ValidationContext():
                 self._fetched_ocsps[cert.issuer_serial] = []
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)
+                    raise SoftFailError()
                 else:
                     raise
 

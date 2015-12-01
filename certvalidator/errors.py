@@ -51,6 +51,11 @@ class OCSPValidationIndeterminateError(OCSPValidationError):
         return self.args[1]
 
 
+class SoftFailError(Exception):
+
+    pass
+
+
 class ValidationError(Exception):
 
     pass

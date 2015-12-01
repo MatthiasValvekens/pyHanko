@@ -17,6 +17,7 @@ from .errors import (
     OCSPValidationIndeterminateError,
     PathValidationError,
     RevokedError,
+    SoftFailError,
 )
 from .path import ValidationPath
 
@@ -359,6 +360,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             status_good = False
             revocation_check_failed = False
             matched = False
+            soft_fail = False
             failures = []
 
             if cert.ocsp_urls or validation_context.revocation_mode == 'require':
@@ -381,6 +383,8 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                     failures.extend([failure[0] for failure in e.failures])
                     revocation_check_failed = True
                     matched = True
+                except (SoftFailError):
+                    soft_fail = True
                 except (OCSPNoMatchesError):
                     pass
 
@@ -401,27 +405,30 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                     failures.extend([failure[0] for failure in e.failures])
                     revocation_check_failed = True
                     matched = True
+                except (SoftFailError):
+                    soft_fail = True
                 except (CRLNoMatchesError):
                     pass
 
-            if not matched and validation_context.revocation_mode == 'require':
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because no revocation
-                    information could be found for %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True)
-                ))
+            if not soft_fail:
+                if not matched and validation_context.revocation_mode == 'require':
+                    raise PathValidationError(pretty_message(
+                        '''
+                        The path could not be validated because no revocation
+                        information could be found for %s
+                        ''',
+                        _cert_type(index, last_index, end_entity_name_override, definite=True)
+                    ))
 
-            if not status_good and revocation_check_failed:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because the %s revocation
-                    checks failed: %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override),
-                    '; '.join(failures)
-                ))
+                if not status_good and revocation_check_failed:
+                    raise PathValidationError(pretty_message(
+                        '''
+                        The path could not be validated because the %s revocation
+                        checks failed: %s
+                        ''',
+                        _cert_type(index, last_index, end_entity_name_override),
+                        '; '.join(failures)
+                    ))
 
         # Step 2 a 4
         if cert.issuer != working_issuer_name:
