@@ -257,13 +257,6 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     # Inputs
 
     trust_anchor = path.first
-    if not _self_signed(trust_anchor):
-        raise PathValidationError(pretty_message(
-            '''
-            The path could not be validated because the trust anchor is not a
-            self-signed certificate
-            '''
-        ))
 
     # We skip the trust anchor when measuring the path since technically
     # the trust anchor is not part of the path
