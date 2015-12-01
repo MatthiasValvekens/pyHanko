@@ -196,4 +196,8 @@ def _color(name, status, text, start=None, *extras):
             initial_indent=' ' * indent_len,
             subsequent_indent=' ' * indent_len
         ))
-        print('%s%s%s' % (Style.DIM, wrapped_message, Style.RESET_ALL))
+        message = '%s%s%s' % (Style.DIM, wrapped_message, Style.RESET_ALL)
+        try:
+            print(message)
+        except (UnicodeEncodeError) as e:
+            print(message.encode('utf-8'))
