@@ -55,7 +55,7 @@ def run():
 
     context = ValidationContext(allow_fetching=True)
 
-    with open(os.path.join(fixtures_dir, 'bad_osx.csv'), 'rb') as f:
+    with open(os.path.join(fixtures_dir, 'alexa_top_1000.csv'), 'rb') as f:
         for line in f:
             domain = line.decode('utf-8').rstrip()
             os_result = None
