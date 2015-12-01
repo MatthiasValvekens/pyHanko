@@ -31,6 +31,7 @@ revocation checks.
    - Failure on unknown/unsupported critical extensions
  - TLS/SSL server validation
  - Whitelisting certificates
+ - Blacklisting hash algorithms
  - Revocation checks
    - CRLs
      - Indirect CRLs

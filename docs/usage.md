@@ -4,6 +4,7 @@
  - [TLS/SSL Server Validation](#tlsssl-server-validation)
  - [Advanced Features](#advanced-features)
    - [Whitelisting Certificates](#whitelisting-certificates)
+   - [Blacklisting Hash Algorithms](#blacklisting-hash-algorithms)
    - [Revocation Checking](#revocation-checking)
    - [Custom Trust Roots/CA Certs](#custom-trust-roots-ca-certs)
    - [Moment-In-Time Validation](#moment-in-time-validation)
@@ -126,6 +127,7 @@ allows control of different aspects of the validation via the
 keyword parameter to the `CertificateValidator()`.
 
  - [Whitelisting Certificates](#whitelisting-certificates)
+ - [Blacklisting Hash Algorithms](#blacklisting-hash-algorithms)
  - [Revocation Checking](#revocation-checking)
  - [Custom Trust Roots/CA Certs](#custom-trust-roots-ca-certs)
  - [Moment-In-Time Validation](#moment-in-time-validation)
@@ -175,6 +177,30 @@ whitelist = [
 context = ValidationContext(whitelisted_certs=whitelist)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
 ```
+
+### Blacklisting Hash Algorithms
+
+By default, `CertificateValidator()` will raise a validation error if any
+certificate in the validation path, other than the trust root, uses MD2 or MD5
+for the signature hash algorithm.
+
+It is possible to add other algorithms to the blacklist by passing the complete
+list of weak hash algorithms to the `weak_hash_algos` keyword parameter of
+`ValidationContext()`.
+
+```python
+from __future__ import unicode_literals
+rom certvalidator import CertificateValidator, ValidationContext
+
+with open('/path/to/cert.crt', 'rb') as f:
+    end_entity_cert = f.read()
+
+context = ValidationContext(weak_hash_algos=['md2', 'md5', 'sha1'])
+validator = CertificateValidator(end_entity_cert, validation_context=context)
+```
+
+Valid algorithm names are the unicode strings: `"md2"`, `"md5"`, `"sha1"`,
+`"sha256"`, `"sha384"` and `"sha512"`.
 
 ### Revocation Checking
 
