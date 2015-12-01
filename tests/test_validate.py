@@ -89,8 +89,8 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(3, len(path))
 
         expected = (
-            'CRL indicates the end-entity certificate was revoked at 15:44:10 '
-            'on 2014-04-23, due to an unspecified reason'
+            '(CRL|OCSP response) indicates the end-entity certificate was '
+            'revoked at 15:44:10 on 2014-04-23, due to an unspecified reason'
         )
         with self.assertRaisesRegexp(RevokedError, expected):
             validate_path(context, path)
