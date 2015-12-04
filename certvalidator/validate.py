@@ -295,7 +295,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     completed_path = ValidationPath(trust_anchor)
     validation_context.record_validation(trust_anchor, completed_path)
 
-    cert = None
+    cert = trust_anchor
     while index <= last_index:
         cert = path[index]
 
