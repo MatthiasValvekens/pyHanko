@@ -26,8 +26,7 @@ def validate_path(validation_context, path):
     """
     Validates the path using the algorithm from
     https://tools.ietf.org/html/rfc5280#section-6.1, with the exception
-    that name constraints and policy constraints are not checked or
-    enforced.
+    that name constraints are not checked or enforced.
 
     Critical extensions on the end-entity certificate are not validated
     and are left up to the consuming application to process and/or fail on.
@@ -263,14 +262,23 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     # the trust anchor is not part of the path
     path_length = len(path) - 1
 
-    # We skip setting up variables for name and policy constraints since
-    # they are not currently implemented
+    # We don't accept any certificate policy or name constraint values as input
+    # and instead just start allowing everything during initialization
 
     # Step 1: initialization
 
-    # Step 1 a skipped since it relates to policy constraints
-    # Steps 1 b-c skipped since they related to name constraints
-    # Steps 1 d-f skipped since they relate to policy constraints
+    # Step 1 a
+    valid_policy_tree = PolicyTreeRoot('any_policy', set(), set(['any_policy']))
+
+    # Steps 1 b-c skipped since they relate to name constraints
+
+    # Steps 1 d-f
+    # We do not use initial-explicit-policy, initial-any-policy-inhibit or
+    # initial-policy-mapping-inhibit, so they are all set to the path length + 1
+    explicit_policy = path_length + 1
+    inhibit_any_policy = path_length + 1
+    policy_mapping = path_length + 1
+
     # Steps 1 g-i
     working_public_key = trust_anchor.public_key
     # Step 1 j
@@ -441,35 +449,138 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             ))
 
         # Steps 2 b-c skipped since they relate to name constraints
-        # Steps 2 d-f skipped since they relate to policy constraints
 
-        # Check for critical unsupported extensions
-        supported_extensions = set([
-            'authority_information_access',
-            'authority_key_identifier',
-            'basic_constraints',
-            'crl_distribution_points',
-            'extended_key_usage',
-            'freshest_crl',
-            'key_identifier',
-            'key_usage',
-            'ocsp_no_check',
-        ])
-        unsupported_critical_extensions = cert.critical_extensions - supported_extensions
-        if unsupported_critical_extensions:
+        # Steps 2 d
+        if cert.certificate_policies_value and valid_policy_tree is not None:
+
+            cert_any_policy = None
+            cert_policy_identifiers = set()
+
+            # Step 2 d 1
+            for policy in cert.certificate_policies_value:
+                policy_identifier = policy['policy_identifier'].native
+
+                if policy_identifier == 'any_policy':
+                    cert_any_policy = policy
+                    continue
+
+                cert_policy_identifiers.add(policy_identifier)
+
+                policy_qualifiers = policy['policy_qualifiers']
+
+                policy_id_match = False
+                parent_any_policy = None
+
+                # Step 2 d 1 i
+                for node in valid_policy_tree.at_depth(index - 1):
+                    if node.valid_policy == 'any_policy':
+                        parent_any_policy = node
+                    if policy_identifier not in node.expected_policy_set:
+                        continue
+                    policy_id_match = True
+                    node.add_child(
+                        policy_identifier,
+                        policy_qualifiers,
+                        set([policy_identifier])
+                    )
+
+                # Step 2 d 1 ii
+                if not policy_id_match and parent_any_policy:
+                    parent_any_policy.add_child(
+                        policy_identifier,
+                        policy_qualifiers,
+                        set([policy_identifier])
+                    )
+
+            # Step 2 d 2
+            if cert_any_policy and (inhibit_any_policy > 0 or (index < path_length and cert.self_issued)):
+                for node in valid_policy_tree.at_depth(index - 1):
+                    for expected_policy_identifier in node.expected_policy_set:
+                        if expected_policy_identifier not in cert_policy_identifiers:
+                            node.add_child(
+                                expected_policy_identifier,
+                                cert_any_policy['policy_qualifiers'],
+                                set([expected_policy_identifier])
+                            )
+
+            # Step 2 d 3
+            for node in valid_policy_tree.walk_up(index - 1):
+                if not node.children:
+                    node.parent.remove_child(node)
+            if len(valid_policy_tree.children) == 0:
+                valid_policy_tree = None
+
+        # Step 2 e
+        if cert.certificate_policies_value is None:
+            valid_policy_tree = None
+
+        # Step 2 f
+        if valid_policy_tree is None and explicit_policy <= 0:
             raise PathValidationError(pretty_message(
                 '''
-                The path could not be validated because %s contains the
-                following unsupported critical extension%s: %s
+                The path could not be validated because there is no valid set
+                of policies for %s
                 ''',
                 _cert_type(index, last_index, end_entity_name_override, definite=True),
-                's' if len(unsupported_critical_extensions) != 1 else '',
-                ', '.join(sorted(unsupported_critical_extensions)),
             ))
 
         if index != last_index:
             # Step 3: prepare for certificate index+1
-            # Steps 3 a-b skipped since they relate to policy constraints
+
+            if cert.policy_mappings_value:
+                policy_map = {}
+                for mapping in cert.policy_mappings_value:
+                    issuer_domain_policy = mapping['issuer_domain_policy'].native
+                    subject_domain_policy = mapping['subject_domain_policy'].native
+
+                    if issuer_domain_policy not in policy_map:
+                        policy_map[issuer_domain_policy] = set()
+                    policy_map[issuer_domain_policy].add(subject_domain_policy)
+
+                    # Step 3 a
+                    if issuer_domain_policy == 'any_policy' or subject_domain_policy == 'any_policy':
+                        raise PathValidationError(pretty_message(
+                            '''
+                            The path could not be validated because %s contains
+                            a policy mapping for the "any policy"
+                            ''',
+                            _cert_type(index, last_index, end_entity_name_override, definite=True)
+                        ))
+
+                # Step 3 b
+                if valid_policy_tree is not None:
+                    for mapping in cert.policy_mappings_value:
+                        issuer_domain_policy = mapping['issuer_domain_policy'].native
+
+                        # Step 3 b 1
+                        if policy_mapping > 0:
+                            issuer_domain_policy_match = False
+                            cert_any_policy = None
+
+                            for node in valid_policy_tree.at_depth(index):
+                                if node.valid_policy == 'any_policy':
+                                    cert_any_policy = node
+                                if node.valid_policy == issuer_domain_policy:
+                                    issuer_domain_policy_match = True
+                                    node.expected_policy_set = policy_map[issuer_domain_policy]
+
+                            if not issuer_domain_policy_match and cert_any_policy:
+                                cert_any_policy.parent.add_child(
+                                    issuer_domain_policy,
+                                    cert_any_policy.qualifier_set,
+                                    policy_map[issuer_domain_policy]
+                                )
+
+                        # Step 3 b 2
+                        elif policy_mapping == 0:
+                            for node in valid_policy_tree.at_depth(index):
+                                if node.valid_policy == issuer_domain_policy:
+                                    node.parent.remove_child(node)
+                            for node in valid_policy_tree.walk_up(index - 1):
+                                if not node.children:
+                                    node.parent.remove_child(node)
+                            if len(valid_policy_tree.children) == 0:
+                                valid_policy_tree = None
 
             # Step 3 c
             working_issuer_name = cert.subject
@@ -489,7 +600,33 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 working_public_key['algorithm']['parameters'] = copy_params
 
             # Step 3 g skipped since it relates to name constraints
-            # Steps 3 h-j skipped since they relate to policy constraints
+
+            # Step 3 h
+            if not cert.self_issued:
+                # Step 3 h 1
+                if explicit_policy != 0:
+                    explicit_policy -= 1
+                # Step 3 h 2
+                if policy_mapping != 0:
+                    policy_mapping -= 1
+                # Step 3 h 3
+                if inhibit_any_policy != 0:
+                    inhibit_any_policy -= 1
+
+            # Step 3 i
+            if cert.policy_constraints_value:
+                # Step 3 i 1
+                require_explicit_policy = cert.policy_constraints_value['require_explicit_policy'].native
+                if require_explicit_policy is not None and require_explicit_policy < explicit_policy:
+                    explicit_policy = require_explicit_policy
+                # Step 3 i 2
+                inhibit_policy_mapping = cert.policy_constraints_value['inhibit_policy_mapping'].native
+                if inhibit_policy_mapping is not None and inhibit_policy_mapping < policy_mapping:
+                    policy_mapping = inhibit_policy_mapping
+
+            # Step 3 j
+            if cert.inhibit_any_policy_value:
+                inhibit_any_policy = min(cert.inhibit_any_policy_value.native, inhibit_any_policy)
 
             # Step 3 k
             if not cert.ca:
@@ -525,18 +662,34 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                     _cert_type(index, last_index, end_entity_name_override, definite=True)
                 ))
 
-            # Step 3 o
-            unprocessed_critical_extensions = cert.critical_extensions - set(['basic_constraints', 'key_usage'])
-            if unprocessed_critical_extensions:
-                unprocessed_string = ''.join(sorted(unprocessed_critical_extensions))
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because %s has the
-                    following unprocessed critical extensions: %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True),
-                    unprocessed_string
-                ))
+        # Step 3 o
+        # Check for critical unsupported extensions
+        supported_extensions = set([
+            'authority_information_access',
+            'authority_key_identifier',
+            'basic_constraints',
+            'crl_distribution_points',
+            'extended_key_usage',
+            'freshest_crl',
+            'key_identifier',
+            'key_usage',
+            'ocsp_no_check',
+            'certificate_policies',
+            'policy_mappings',
+            'policy_constraints',
+            'inhibit_any_policy',
+        ])
+        unsupported_critical_extensions = cert.critical_extensions - supported_extensions
+        if unsupported_critical_extensions:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because %s contains the
+                following unsupported critical extension%s: %s
+                ''',
+                _cert_type(index, last_index, end_entity_name_override, definite=True),
+                's' if len(unsupported_critical_extensions) != 1 else '',
+                ', '.join(sorted(unsupported_critical_extensions)),
+            ))
 
         if validation_context:
             completed_path = completed_path.copy().append(cert)
@@ -546,10 +699,38 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
 
     # Step 4: wrap-up procedure
 
-    # Steps 4 a-b skipped since they relate to policy constraints
+    # Step 4 a
+    if explicit_policy != 0:
+        explicit_policy -= 1
+
+    # Step 4 b
+    if cert.policy_constraints_value:
+        if cert.policy_constraints_value['require_explicit_policy'].native == 0:
+            explicit_policy = 0
+
     # Steps 4 c-e skipped since this method doesn't output it
     # Step 4 f skipped since this method defers that to the calling application
-    # Step 4 g skipped since it relates to policy constraints
+
+    # Step 4 g
+
+    # Step 4 g i
+    if valid_policy_tree is None:
+        intersection = None
+
+    # Step 4 g ii
+    else:
+        intersection = valid_policy_tree
+
+    # Step 4 g iii is skipped since the initial policy set is always any_policy
+
+    if explicit_policy == 0 and intersection is None:
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because there is no valid set of
+            policies for %s
+            ''',
+            _cert_type(last_index, last_index, end_entity_name_override, definite=True)
+        ))
 
     return cert
 
@@ -1653,3 +1834,130 @@ def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
         return (revoked_cert['revocation_date'], crl_reason)
 
     return (None, None)
+
+
+class PolicyTreeRoot():
+    """
+    A generic policy tree node, used for the root node in the tree
+    """
+
+    # None for the root node, an instance of PolicyTreeNode or PolicyTreeRoot
+    # for all other nodes
+    parent = None
+
+    # A list of PolicyTreeNode objects
+    children = None
+
+    def __init__(self, valid_policy, qualifier_set, expected_policy_set):
+        """
+        Accepts values for a PolicyTreeNode that will be created at depth 0
+
+        :param valid_policy:
+            A unicode string of a policy name or OID
+
+        :param qualifier_set:
+            An instance of asn1crypto.x509.PolicyQualifierInfos
+
+        :param expected_policy_set:
+            A set of unicode strings containing policy names or OIDs
+        """
+
+        self.children = []
+        self.add_child(valid_policy, qualifier_set, expected_policy_set)
+
+    def add_child(self, valid_policy, qualifier_set, expected_policy_set):
+        """
+        Creates a new PolicyTreeNode as a child of this node
+
+        :param valid_policy:
+            A unicode string of a policy name or OID
+
+        :param qualifier_set:
+            An instance of asn1crypto.x509.PolicyQualifierInfos
+
+        :param expected_policy_set:
+            A set of unicode strings containing policy names or OIDs
+        """
+
+        child = PolicyTreeNode(valid_policy, qualifier_set, expected_policy_set)
+        child.parent = self
+        self.children.append(child)
+
+    def remove_child(self, child):
+        """
+        Removes a child from this node
+
+        :param child:
+            An instance of PolicyTreeNode
+        """
+
+        self.children.remove(child)
+
+    def at_depth(self, depth):
+        """
+        Returns a generator yielding all nodes in the tree at a specific depth
+
+        :param depth:
+            An integer >= 0 of the depth of nodes to yield
+
+        :return:
+            A generator yielding PolicyTreeNode objects
+        """
+
+        for child in self.children.copy():
+            if depth == 0:
+                yield child
+            else:
+                for grandchild in child.at_depth(depth - 1):
+                    yield grandchild
+
+    def walk_up(self, depth):
+        """
+        Returns a generator yielding all nodes in the tree at a specific depth,
+        or above. Yields nodes starting with leaves and traversing up to the
+        root.
+
+        :param depth:
+            An integer >= 0 of the depth of nodes to walk up from
+
+        :return:
+            A generator yielding PolicyTreeNode objects
+        """
+
+        for child in self.children.copy():
+            if depth != 0:
+                for grandchild in child.walk_up(depth - 1):
+                    yield grandchild
+            yield child
+
+
+class PolicyTreeNode(PolicyTreeRoot):
+    """
+    A policy tree node that is used for all nodes but the root
+    """
+
+    # A unicode string of a policy name or OID
+    valid_policy = None
+
+    # An instance of asn1crypto.x509.PolicyQualifierInfos
+    qualifier_set = None
+
+    # A set of unicode strings containing policy names or OIDs
+    expected_policy_set = None
+
+    def __init__(self, valid_policy, qualifier_set, expected_policy_set):
+        """
+        :param valid_policy:
+            A unicode string of a policy name or OID
+
+        :param qualifier_set:
+            An instance of asn1crypto.x509.PolicyQualifierInfos
+
+        :param expected_policy_set:
+            A set of unicode strings containing policy names or OIDs
+        """
+
+        self.valid_policy = valid_policy
+        self.qualifier_set = qualifier_set
+        self.expected_policy_set = expected_policy_set
+        self.children = []

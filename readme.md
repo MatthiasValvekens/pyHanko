@@ -28,6 +28,10 @@ revocation checks.
      - Path length constraint
    - Key usage extension
    - Extended key usage extension
+   - Certificate policies
+     - Policy constraints
+     - Policy mapping
+     - Inhibit anyPolicy
    - Failure on unknown/unsupported critical extensions
  - TLS/SSL server validation
  - Whitelisting certificates
@@ -45,8 +49,7 @@ revocation checks.
 
 Unsupported features:
  
- - X.509 name constraints
- - X.509 policy constraints
+ - Name constraints
 
 ## Related Crypto Libraries
 
