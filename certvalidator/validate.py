@@ -1904,7 +1904,7 @@ class PolicyTreeRoot():
             A generator yielding PolicyTreeNode objects
         """
 
-        for child in self.children.copy():
+        for child in list(self.children):
             if depth == 0:
                 yield child
             else:
@@ -1924,7 +1924,7 @@ class PolicyTreeRoot():
             A generator yielding PolicyTreeNode objects
         """
 
-        for child in self.children.copy():
+        for child in list(self.children):
             if depth != 0:
                 for grandchild in child.walk_up(depth - 1):
                     yield grandchild
