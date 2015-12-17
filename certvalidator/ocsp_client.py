@@ -56,7 +56,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
     if not isinstance(issuer, x509.Certificate):
         raise TypeError('issuer must be an instance of asn1crypto.x509.Certificate, not %s' % type_name(issuer))
 
-    if hash_algo not in ('sha1', 'sha256'):
+    if hash_algo not in set(['sha1', 'sha256']):
         raise ValueError('hash_algo must be one of "sha1", "sha256", not %s' % repr(hash_algo))
 
     if not isinstance(nonce, bool):
