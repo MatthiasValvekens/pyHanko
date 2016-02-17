@@ -5,7 +5,7 @@
 The documentation consists of the following topics:
 
  - [Implementation Details](#implementation-details)
- - [Usage](usage.mdf)
+ - [Usage](usage.md)
  - [API Documentation](api.md)
 
 ## Implementation Details
