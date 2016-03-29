@@ -70,7 +70,7 @@ install:
             fi
         fi
     else
-        pip install --upgrade pip;
+        python -c "import sys,pip; pip.main(['install', '--upgrade', 'pip' + ('==7.1.2' if sys.version_info[0:2] == (3, 2) else '')])";
         pip install flake8;
         pip install https://github.com/wbond/asn1crypto/archive/master.zip;
         pip install https://github.com/wbond/oscrypto/archive/master.zip;
