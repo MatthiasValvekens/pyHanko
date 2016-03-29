@@ -145,3 +145,11 @@ python run.py stress_test
 
 Once the script is complete, results that differ between the OS validation and
 the *certvalidator* validation will be listed for further debugging.
+
+After creating a [semver](http://semver.org/) git tag, a `.tar.gz` and `.whl`
+of the package can be created and uploaded to
+[PyPi](https://pypi.python.org/pypi/certvalidator) by executing:
+
+```bash
+python run.py release
+```
