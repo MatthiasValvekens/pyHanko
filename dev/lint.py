@@ -7,7 +7,7 @@ from flake8.engine import get_style_guide
 
 
 cur_dir = os.path.dirname(__file__)
-config_file = os.path.join(cur_dir, '..', '.pep8')
+config_file = os.path.join(cur_dir, '..', 'tox.ini')
 
 
 def run():
