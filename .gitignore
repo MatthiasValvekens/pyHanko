@@ -7,3 +7,4 @@ dist/
 tests/output/
 .DS_Store
 .coverage
+.tox
