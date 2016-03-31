@@ -1,4 +1,5 @@
 version: "{build}"
+skip_tags: true
 environment:
   matrix:
     - PYTHON: "C:\\Python26"
