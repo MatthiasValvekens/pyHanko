@@ -63,6 +63,8 @@ setup(
     ],
     packages=find_packages(exclude=['tests*', 'dev*']),
 
+    test_suite='dev.tests.make_suite',
+
     cmdclass={
         'clean': CleanCommand,
     }

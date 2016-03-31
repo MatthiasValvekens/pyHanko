@@ -14,6 +14,23 @@ from tests.test_validate import ValidateTests
 test_classes = [CertificateValidatorTests, CRLClientTests, OCSPClientTests, RegistryTests, ValidateTests]
 
 
+def make_suite():
+    """
+    Constructs a unittest.TestSuite() of all tests for the package. For use
+    with setuptools.
+
+    :return:
+        A unittest.TestSuite() object
+    """
+
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    for test_class in test_classes:
+        tests = loader.loadTestsFromTestCase(test_class)
+        suite.addTests(tests)
+    return suite
+
+
 def run(matcher=None):
     """
     Runs the tests
