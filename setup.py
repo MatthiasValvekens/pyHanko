@@ -7,10 +7,12 @@ import certvalidator
 
 
 class CleanCommand(Command):
-    user_options = []
+    user_options = [
+        ('all', None, '(Compatibility with original clean command)')
+    ]
 
     def initialize_options(self):
-        pass
+        self.all = False
 
     def finalize_options(self):
         pass
