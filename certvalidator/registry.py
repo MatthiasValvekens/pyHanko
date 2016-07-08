@@ -82,7 +82,7 @@ class CertificateRegistry():
             other_certs = self._validate_unarmor(other_certs, 'other_certs')
 
         if trust_roots is None:
-            trust_roots = trust_list.get_list()
+            trust_roots = [e[0] for e in trust_list.get_list()]
         else:
             trust_roots = self._validate_unarmor(trust_roots, 'trust_roots')
 
