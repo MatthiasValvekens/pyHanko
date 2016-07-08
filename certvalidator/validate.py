@@ -129,7 +129,7 @@ def validate_usage(validation_context, cert, key_usage, extended_key_usage, exte
         A set of unicode strings of the required extended key usage purposes
 
     :param extended_optional:
-        A bool - if the extended_key_usage extension may be ommited and still
+        A bool - if the extended_key_usage extension may be omitted and still
         considered valid
 
     :raises:
