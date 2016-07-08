@@ -17,6 +17,10 @@ docs_dir = os.path.join(project_dir, 'docs')
 module_name = 'certvalidator'
 
 
+if hasattr(CommonMark, 'DocParser'):
+    raise EnvironmentError("CommonMark must be version 0.6.0 or newer")
+
+
 # Maps a markdown document to a Python source file to look in for
 # class/method/function docstrings
 MD_SOURCE_MAP = {
@@ -130,21 +134,36 @@ def _find_sections(md_ast, sections, last, last_class, total_lines=None):
         used to work around a bug in the API of the Python port of CommonMark
     """
 
-    for child in md_ast.children:
-        if child.t == 'ATXHeader':
+    def child_walker(node):
+        for child, entering in node.walker():
+            if child == node:
+                continue
+            yield child, entering
 
-            if child.level in set([3, 5]) and len(child.inline_content) == 2:
-                first = child.inline_content[0]
-                second = child.inline_content[1]
-                if first.t != 'Code':
+
+    for child, entering in child_walker(md_ast):
+        if child.t == 'heading':
+
+            if child.level in set([3, 5]):
+                heading_elements = []
+                for heading_child, _ in child_walker(child):
+                    heading_elements.append(heading_child)
+                if len(heading_elements) != 2:
                     continue
-                if second.t != 'Str':
+                first = heading_elements[0]
+                second = heading_elements[1]
+                if first.t != 'code':
                     continue
-                type_name = second.c.strip()
-                identifier = first.c.strip().replace('()', '').lstrip('.')
+                if second.t != 'text':
+                    continue
+
+                type_name = second.literal.strip()
+                identifier = first.literal.strip().replace('()', '').lstrip('.')
+
+                start_line = child.sourcepos[0][0]
 
                 if last:
-                    sections[(last['type_name'], last['identifier'])] = (last['start_line'], child.start_line - 1)
+                    sections[(last['type_name'], last['identifier'])] = (last['start_line'], start_line - 1)
                     last.clear()
 
                 if type_name == 'function':
@@ -164,10 +183,10 @@ def _find_sections(md_ast, sections, last, last_class, total_lines=None):
                 last.update({
                     'type_name': type_name,
                     'identifier': identifier,
-                    'start_line': child.start_line,
+                    'start_line': start_line,
                 })
 
-        elif child.t == 'BlockQuote':
+        elif child.t == 'block_quote':
             find_sections(child, sections, last, last_class)
 
     if last:
@@ -321,7 +340,7 @@ def walk_ast(node, code_lines, sections, md_chunks):
                         description_md
                     )
 
-                md_chunks[key] = md_chunk.rstrip()
+                md_chunks[key] = re.sub('[ \\t]+\n', '\n', md_chunk.rstrip())
 
     elif isinstance(node, _ast.If):
         for subast in node.body:
@@ -358,7 +377,7 @@ def run():
                 continue
             md_files.append(os.path.join(root, filename))
 
-    parser = CommonMark.DocParser()
+    parser = CommonMark.Parser()
 
     for md_file in md_files:
         md_file_relative = md_file[len(project_dir) + 1:]
