@@ -1,5 +1,9 @@
 # changelog
 
+## 0.11.0
+
+ - Updated for compatibility with oscrypto 0.16.0
+
 ## 0.10.0
 
  - Backwards compability break: the `require_revocation_checks` parameter was
