@@ -24,7 +24,7 @@ environment:
       PYTHON_ID: "pypy"
       PYTHON_EXE: pypy
 install:
-  - ps:
+  - ps: |-
       $env:PYTMP = "${env:TMP}\py";
       if (!(Test-Path "$env:PYTMP")) {
         New-Item -ItemType directory -Path "$env:PYTMP" | Out-Null;
