@@ -38,9 +38,6 @@ matrix:
     - os: linux
       language: python
       python: "pypy"
-    - os: linux
-      language: python
-      python: "pypy3"
 install:
   - if [ "$TRAVIS_OS_NAME" == "osx" ]; then
         if [ "$TRAVIS_PYTHON_VERSION" == "pypy" ]; then

@@ -71,7 +71,7 @@ Unsupported features:
 
  - *asn1crypto*
  - *oscrypto*
- - Python 2.6, 2.7, 3.2, 3.3, 3.4, 3.5, pypy or pypy3
+ - Python 2.6, 2.7, 3.2, 3.3, 3.4, 3.5 or pypy
 
 ## Installation
 
