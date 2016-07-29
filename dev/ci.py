@@ -22,7 +22,6 @@ def run():
         lint_result = run_lint()
     else:
         lint_result = True
-    lint_result = run_lint()
     print('\nRunning tests')
     sys.stdout.flush()
     tests_result = run_tests()
