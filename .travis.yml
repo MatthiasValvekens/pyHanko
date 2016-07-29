@@ -72,6 +72,7 @@ install:
                     unzip oscrypto-master.zip;
                     cd oscrypto-master;
                     sudo /usr/bin/python2.6 setup.py install clean;
+                    cd ..;
                     export PYTHON_BIN=/usr/bin/python2.6;
                 fi
             fi
