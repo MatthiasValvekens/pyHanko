@@ -63,10 +63,14 @@ install:
                     sudo /usr/bin/python2.7 -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/oscrypto/archive/master.zip'])";
                     export PYTHON_BIN=/usr/bin/python2.7;
                 else
-                    curl --silent --show-error https://bootstrap.pypa.io/get-pip.py | sudo /usr/bin/python2.6;
-                    sudo /usr/bin/python2.6 -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'flake8'])";
-                    sudo /usr/bin/python2.6 -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/asn1crypto/archive/master.zip'])";
-                    sudo /usr/bin/python2.6 -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/oscrypto/archive/master.zip'])";
+                    curl --silent --show-error -o asn1crypto-master.zip https://github.com/wbond/asn1crypto/archive/master.zip;
+                    unzip ans1crypto-master.zip;
+                    cd asn1crypto-master;
+                    sudo /usr/bin/python2.6 setup.py install clean;
+                    curl --silent --show-error -o oscrypto-master.zip https://github.com/wbond/oscrypto/archive/master.zip;
+                    unzip ans1crypto-master.zip;
+                    cd oscrypto-master;
+                    sudo /usr/bin/python2.6 setup.py install clean;
                     export PYTHON_BIN=/usr/bin/python2.6;
                 fi
             fi
