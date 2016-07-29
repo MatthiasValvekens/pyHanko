@@ -5,9 +5,11 @@ from datetime import datetime
 import base64
 import unittest
 import os
+import sys
 
 from asn1crypto import crl, ocsp, pem, x509
 from asn1crypto.util import timezone
+from certvalidator import crl_client, ocsp_client
 from certvalidator.context import ValidationContext
 from certvalidator.path import ValidationPath
 from certvalidator.validate import validate_path
@@ -15,6 +17,11 @@ from certvalidator.errors import PathValidationError, RevokedError
 
 from ._unittest_compat import patch
 from .unittest_data import data_decorator, data
+
+if sys.version_info < (3,):
+    from urllib2 import URLError
+else:
+    from urllib.error import URLError
 
 patch()
 
@@ -52,21 +59,34 @@ class ValidateTests(unittest.TestCase):
             self._load_cert_object('globalsign_dv_g2.crt'),
         ]
 
-        # Sets an impossibly low connection timeout so the revocation check
-        # fails
-        context = ValidationContext(
-            trust_roots=ca_certs,
-            other_certs=other_certs,
-            allow_fetching=True,
-            crl_fetch_params={'timeout': 0.001},
-            ocsp_fetch_params={'timeout': 0.001},
-        )
-        paths = context.certificate_registry.build_paths(cert)
-        self.assertEqual(1, len(paths))
-        path = paths[0]
-        self.assertEqual(3, len(path))
+        try:
+            # Mock the crl and ocsp clients to fail
+            orig_crl_fetch = crl_client.fetch
+            orig_ocsp_fetch = ocsp_client.fetch
 
-        validate_path(context, path)
+            def crl_fetch(cert, use_deltas=True, user_agent=None, timeout=10):
+                raise URLError('Connection timed out')
+            crl_client.fetch = crl_fetch
+
+            def ocsp_fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=10):
+                raise URLError('Connection timed out')
+            ocsp_client.fetch = ocsp_fetch
+
+            context = ValidationContext(
+                trust_roots=ca_certs,
+                other_certs=other_certs,
+                allow_fetching=True
+            )
+            paths = context.certificate_registry.build_paths(cert)
+            self.assertEqual(1, len(paths))
+            path = paths[0]
+            self.assertEqual(3, len(path))
+
+            validate_path(context, path)
+        finally:
+            crl_client.fetch = orig_crl_fetch
+            ocsp_client.fetch = orig_ocsp_fetch
+
 
     def test_revocation_mode_hard(self):
         cert = self._load_cert_object('revoked.grc.com.crt')
