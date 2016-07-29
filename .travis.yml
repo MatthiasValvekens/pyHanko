@@ -67,8 +67,9 @@ install:
                     unzip ans1crypto-master.zip;
                     cd asn1crypto-master;
                     sudo /usr/bin/python2.6 setup.py install clean;
+                    cd ..;
                     curl --silent --show-error -o oscrypto-master.zip https://github.com/wbond/oscrypto/archive/master.zip;
-                    unzip ans1crypto-master.zip;
+                    unzip oscrypto-master.zip;
                     cd oscrypto-master;
                     sudo /usr/bin/python2.6 setup.py install clean;
                     export PYTHON_BIN=/usr/bin/python2.6;
