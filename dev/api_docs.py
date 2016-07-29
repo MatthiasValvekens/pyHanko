@@ -16,11 +16,6 @@ project_dir = os.path.abspath(os.path.join(cur_dir, '..'))
 docs_dir = os.path.join(project_dir, 'docs')
 module_name = 'certvalidator'
 
-
-if hasattr(CommonMark, 'DocParser'):
-    raise EnvironmentError("CommonMark must be version 0.6.0 or newer")
-
-
 # Maps a markdown document to a Python source file to look in for
 # class/method/function docstrings
 MD_SOURCE_MAP = {
@@ -33,6 +28,10 @@ MD_SOURCE_MAP = {
 # A search/replace dictionary to modify docstring contents before generating
 # markdown from them
 definition_replacements = {}
+
+
+if hasattr(CommonMark, 'DocParser'):
+    raise EnvironmentError("CommonMark must be version 0.6.0 or newer")
 
 
 def _get_func_info(docstring, def_lineno, code_lines, prefix):
@@ -387,11 +386,7 @@ def run():
         md_file_relative = md_file[len(project_dir) + 1:]
         if md_file_relative in MD_SOURCE_MAP:
             py_files = MD_SOURCE_MAP[md_file_relative]
-            py_paths = []
-            for py_file in py_files:
-                if isinstance(py_file, tuple):
-                    py_file = py_file[0]
-                py_paths.append(os.path.join(project_dir, py_file))
+            py_paths = [os.path.join(project_dir, py_file) for py_file in py_files]
         else:
             py_files = [os.path.basename(md_file).replace('.md', '.py')]
             py_paths = [os.path.join(project_dir, module_name, py_files[0])]
