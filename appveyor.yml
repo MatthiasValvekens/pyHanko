@@ -97,10 +97,20 @@ install:
         & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install flake8;
         & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/asn1crypto/archive/master.zip;
         & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/oscrypto/archive/master.zip;
+
       } elseif ("${env:PYTHON_ID}" -eq "26" -or "${env:PYTHON_ID}" -eq "26-x64") {
-        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'flake8'])";
-        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/asn1crypto/archive/master.zip'])";
-        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/oscrypto/archive/master.zip'])";
+        # Skip flake8 for 2.6 since pip, flake8 and pycodestyle have all deprecated support for it
+        (New-Object Net.WebClient).DownloadFile('https://github.com/wbond/asn1crypto/archive/master.zip', "${env:TMP}\asn1crypto-master.zip");
+        7z x -y "${env:TMP}\asn1crypto-master.zip" -o"${env:TMP}\" | Out-Null;
+        (New-Object Net.WebClient).DownloadFile('https://github.com/wbond/oscrypto/archive/master.zip', "${env:TMP}\oscrypto-master.zip");
+        7z x -y "${env:TMP}\oscrypto-master.zip" -o"${env:TMP}\" | Out-Null;
+        $origDir = "$pwd";
+        cd "${env:TMP}\asn1crypto-master\";
+        & "${env:PYTHON}\python.exe" setup.py install clean;
+        cd "${env:TMP}\oscrypto-master\";
+        & "${env:PYTHON}\python.exe" setup.py install clean;
+        cd "$origDir";
+
       } else {
         & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install flake8;
         & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/asn1crypto/archive/master.zip;
