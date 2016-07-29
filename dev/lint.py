@@ -3,7 +3,11 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import os
 
-from flake8.engine import get_style_guide
+import flake8
+if flake8.__version_info__ < (3,):
+    from flake8.engine import get_style_guide
+else:
+    from flake8.api.legacy import get_style_guide
 
 
 cur_dir = os.path.dirname(__file__)
