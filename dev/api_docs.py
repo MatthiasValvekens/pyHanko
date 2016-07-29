@@ -143,6 +143,12 @@ def _find_sections(md_ast, sections, last, last_class, total_lines=None):
 
     for child, entering in child_walker(md_ast):
         if child.t == 'heading':
+            start_line = child.sourcepos[0][0]
+
+            if child.level == 2:
+                if last:
+                    sections[(last['type_name'], last['identifier'])] = (last['start_line'], start_line - 1)
+                    last.clear()
 
             if child.level in set([3, 5]):
                 heading_elements = []
@@ -159,8 +165,6 @@ def _find_sections(md_ast, sections, last, last_class, total_lines=None):
 
                 type_name = second.literal.strip()
                 identifier = first.literal.strip().replace('()', '').lstrip('.')
-
-                start_line = child.sourcepos[0][0]
 
                 if last:
                     sections[(last['type_name'], last['identifier'])] = (last['start_line'], start_line - 1)
