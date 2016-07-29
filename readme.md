@@ -65,7 +65,7 @@ Unsupported features:
 
 ## Current Release
 
-0.11.0 - [changelog](changelog.md)
+0.11.1 - [changelog](changelog.md)
 
 ## Dependencies
 

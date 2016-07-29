@@ -61,7 +61,7 @@ setup(
 
     install_requires=[
         'asn1crypto>=0.18.1',
-        'oscrypto>=0.16.0'
+        'oscrypto>=0.16.1'
     ],
     packages=find_packages(exclude=['tests*', 'dev*']),
 

@@ -1,5 +1,11 @@
 # changelog
 
+## 0.11.1
+
+ - Updated [asn1crypto](https://github.com/wbond/asn1crypto) dependency to
+   `0.18.1`, [oscrypto](https://github.com/wbond/oscrypto) dependency to
+   `0.16.1`.
+
 ## 0.11.0
 
  - Updated for compatibility with oscrypto 0.16.0
