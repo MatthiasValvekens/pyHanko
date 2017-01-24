@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import imp
+import os
 import unittest
 
 
@@ -28,6 +30,12 @@ def test_classes():
     :return:
         A list of unittest.TestCase classes
     """
+
+    # Make sure the module is loaded from this source folder
+    module_name = 'certvalidator'
+    src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+    module_info = imp.find_module(module_name, [src_dir])
+    imp.load_module(module_name, *module_info)
 
     from .test_certificate_validator import CertificateValidatorTests
     from .test_crl_client import CRLClientTests
