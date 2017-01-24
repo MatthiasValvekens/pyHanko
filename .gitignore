@@ -7,4 +7,5 @@ dist/
 tests/output/
 .DS_Store
 .coverage
+coverage.xml
 .tox

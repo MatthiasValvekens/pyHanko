@@ -5,24 +5,66 @@ environment:
     - PYTHON: "C:\\Python26"
       PYTHON_ID: "26"
       PYTHON_EXE: python
+      PYTHON_VERSION: "2.6"
+      PLATFORM: win-x32
+      BACKEND: win
     - PYTHON: "C:\\Python26-x64"
       PYTHON_ID: "26-x64"
       PYTHON_EXE: python
+      PYTHON_VERSION: "2.6"
+      PLATFORM: win-x64
+      BACKEND: win
     - PYTHON: "C:\\Python27"
       PYTHON_ID: "27"
       PYTHON_EXE: python
+      PYTHON_VERSION: "2.7"
+      PLATFORM: win-x32
+      BACKEND: win
+    - PYTHON: "C:\\Python27"
+      PYTHON_ID: "27"
+      PYTHON_EXE: python
+      PYTHON_VERSION: "2.7"
+      PLATFORM: win-x32
+      BACKEND: winlegacy
+      OSCRYPTO_USE_WINLEGACY: 1
     - PYTHON: "C:\\Python27-x64"
       PYTHON_ID: "27-x64"
       PYTHON_EXE: python
+      PYTHON_VERSION: "2.7"
+      PLATFORM: win-x64
+      BACKEND: win
     - PYTHON: "C:\\Python33"
       PYTHON_ID: "33"
       PYTHON_EXE: python
+      PYTHON_VERSION: "3.3"
+      PLATFORM: win-x32
+      BACKEND: win
+    - PYTHON: "C:\\Python33"
+      PYTHON_ID: "33"
+      PYTHON_EXE: python
+      PYTHON_VERSION: "3.3"
+      PLATFORM: win-x32
+      BACKEND: winlegacy
+      OSCRYPTO_USE_WINLEGACY: 1
     - PYTHON: "C:\\Python33-x64"
       PYTHON_ID: "33-x64"
       PYTHON_EXE: python
+      PYTHON_VERSION: "3.3"
+      PLATFORM: win-x64
+      BACKEND: win
     - PYTHON: "C:\\pypy2-v5.3.1-win32"
       PYTHON_ID: "pypy"
       PYTHON_EXE: pypy
+      PYTHON_VERSION: "pypy"
+      PLATFORM: win-x32
+      BACKEND: win
+    - PYTHON: "C:\\pypy2-v5.3.1-win32"
+      PYTHON_ID: "pypy"
+      PYTHON_EXE: pypy
+      PYTHON_VERSION: "pypy"
+      PLATFORM: win-x32
+      BACKEND: winlegacy
+      OSCRYPTO_USE_WINLEGACY: 1
 install:
   - ps: |-
       $env:PYTMP = "${env:TMP}\py";
@@ -94,31 +136,32 @@ install:
           (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "${env:PYTMP}\get-pip.py");
         }
         & "${env:PYTHON}\pypy.exe" "${env:PYTMP}\get-pip.py";
-        & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install flake8;
+        & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install flake8 coverage;
         & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/asn1crypto/archive/master.zip;
         & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/oscrypto/archive/master.zip;
 
       } elseif ("${env:PYTHON_ID}" -eq "26" -or "${env:PYTHON_ID}" -eq "26-x64") {
-        # Skip flake8 for 2.6 since pip, flake8 and pycodestyle have all deprecated support for it
-        (New-Object Net.WebClient).DownloadFile('https://github.com/wbond/asn1crypto/archive/master.zip', "${env:TMP}\asn1crypto-master.zip");
-        7z x -y "${env:TMP}\asn1crypto-master.zip" -o"${env:TMP}\" | Out-Null;
-        (New-Object Net.WebClient).DownloadFile('https://github.com/wbond/oscrypto/archive/master.zip', "${env:TMP}\oscrypto-master.zip");
-        7z x -y "${env:TMP}\oscrypto-master.zip" -o"${env:TMP}\" | Out-Null;
-        $origDir = "$pwd";
-        cd "${env:TMP}\asn1crypto-master\";
-        & "${env:PYTHON}\python.exe" setup.py install clean;
-        cd "${env:TMP}\oscrypto-master\";
-        & "${env:PYTHON}\python.exe" setup.py install clean;
-        cd "$origDir";
+        if (!(Test-Path "${env:PYTMP}\get-pip.py")) {
+          (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "${env:PYTMP}\get-pip.py");
+        }
+        & "${env:PYTHON}\python.exe" -W ignore "${env:PYTMP}\get-pip.py";
+        # Skip flake8 for 2.6 since flake8 and pycodestyle have deprecated support for it
+        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'coverage'])";
+        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/asn1crypto/archive/master.zip'])";
+        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/oscrypto/archive/master.zip'])";
 
       } else {
-        & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install flake8;
+        & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install flake8 coverage;
         & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/asn1crypto/archive/master.zip;
         & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/oscrypto/archive/master.zip;
       }
+
+      & "C:\Python27-x64\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/codecov/codecov-python/archive/v2.0.6.zip;
   - "SET PATH=%PYTHON%;%PATH%"
 cache:
   - '%TMP%\py\'
 build: off
 test_script:
   - cmd: "%PYTHON_EXE% run.py ci"
+after_test:
+  - C:\Python27-x64\Scripts\codecov -X gcov -f coverage.xml -e PYTHON_VERSION PLATFORM BACKEND

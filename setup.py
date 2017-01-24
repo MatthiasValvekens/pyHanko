@@ -52,6 +52,7 @@ setup(
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: Implementation :: PyPy',
 
         'Topic :: Security :: Cryptography',
@@ -60,8 +61,8 @@ setup(
     keywords='crypto pki x509 certificate crl ocsp',
 
     install_requires=[
-        'asn1crypto>=0.18.1',
-        'oscrypto>=0.16.1'
+        'asn1crypto>=0.21.0',
+        'oscrypto>=0.18.0'
     ],
     packages=find_packages(exclude=['tests*', 'dev*']),
 
