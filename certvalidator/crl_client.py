@@ -6,7 +6,7 @@ import sys
 from asn1crypto import crl, x509, cms, pem, util
 
 from ._types import str_cls, type_name
-from ._version import __version__
+from .version import __version__
 
 if sys.version_info < (3,):
     from urllib2 import Request, urlopen

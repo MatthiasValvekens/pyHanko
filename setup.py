@@ -3,7 +3,7 @@ import shutil
 
 from setuptools import setup, find_packages, Command
 
-import certvalidator
+from certvalidator import version
 
 
 class CleanCommand(Command):
@@ -27,7 +27,7 @@ class CleanCommand(Command):
 
 setup(
     name='certvalidator',
-    version=certvalidator.__version__,
+    version=version.__version__,
 
     description='Validates X.509 certificates and paths',
     long_description='Docs for this project are maintained at https://github.com/wbond/certvalidator#readme.',

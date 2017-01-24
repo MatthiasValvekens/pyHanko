@@ -7,9 +7,9 @@ from asn1crypto.x509 import Certificate
 from .context import ValidationContext
 from .errors import ValidationError, PathBuildingError, InvalidCertificateError
 from .validate import validate_path, validate_tls_hostname, validate_usage
+from .version import __version__, __version_info__
 from ._errors import pretty_message
 from ._types import type_name, str_cls, byte_cls
-from ._version import __version__, __version_info__
 
 
 __all__ = [
