@@ -15,6 +15,11 @@ revocation checks.
  - [Testing](#testing)
  - [Development](#development)
 
+[![Travis CI](https://api.travis-ci.org/wbond/certvalidator.svg?branch=master)](https://travis-ci.org/wbond/certvalidator)
+[![AppVeyor](https://ci.appveyor.com/api/projects/status/github/wbond/certvalidator?branch=master&svg=true)](https://ci.appveyor.com/project/wbond/certvalidator)
+[![Codecov](https://codecov.io/gh/wbond/certvalidator/branch/master/graph/badge.svg)](https://codecov.io/gh/wbond/certvalidator)
+[![PyPI](https://img.shields.io/pypi/v/certvalidator.svg)](https://pypi.python.org/pypi/certvalidator)
+
 ## Features
 
  - X.509 path building
@@ -92,6 +97,7 @@ pip install certvalidator
 
  - [Windows](https://ci.appveyor.com/project/wbond/certvalidator/history) via AppVeyor
  - [OS X & Linux](https://travis-ci.org/wbond/certvalidator/builds) via Travis CI
+ - [Test Coverage](https://codecov.io/gh/wbond/certvalidator/commits) via Codecov
 
 ## Testing
 
