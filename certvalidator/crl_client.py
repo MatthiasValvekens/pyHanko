@@ -7,6 +7,7 @@ from asn1crypto import crl, x509, cms, pem, util
 
 from ._types import str_cls, type_name
 from .version import __version__
+from ._urllib import _get_host, _add_header
 
 if sys.version_info < (3,):
     from urllib2 import Request, urlopen
@@ -81,8 +82,9 @@ def _grab_crl(user_agent, url, timeout):
     if sys.version_info < (3,):
         url = util.iri_to_uri(url)
     request = Request(url)
-    request.add_header(b'Accept', b'application/pkix-crl')
-    request.add_header(b'User-Agent', user_agent.encode('iso-8859-1'))
+    _add_header(request, 'Accept', 'application/pkix-crl')
+    _add_header(request, 'User-Agent', user_agent)
+    _add_header(request, 'Host', _get_host(request))
     response = urlopen(request, None, timeout)
     data = response.read()
     if pem.detect(data):
@@ -125,8 +127,9 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
         if sys.version_info < (3,):
             url = util.iri_to_uri(url)
         request = Request(url)
-        request.add_header(b'Accept', b'application/pkix-cert,application/pkcs7-mime')
-        request.add_header(b'User-Agent', user_agent.encode('iso-8859-1'))
+        _add_header(request, 'Accept', 'application/pkix-cert,application/pkcs7-mime')
+        _add_header(request, 'User-Agent', user_agent)
+        _add_header(request, 'Host', _get_host(request))
         response = urlopen(request, None, timeout)
 
         content_type = response.headers['Content-Type'].strip()
