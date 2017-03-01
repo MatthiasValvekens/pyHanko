@@ -102,6 +102,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
             _add_header(request, 'Accept', 'application/ocsp-response')
             _add_header(request, 'Content-Type', 'application/ocsp-request')
             _add_header(request, 'User-Agent', user_agent)
+            _add_header(request, 'Host', _get_host(request))
             response = urlopen(request, ocsp_request.dump(), timeout)
             ocsp_response = ocsp.OCSPResponse.load(response.read())
             request_nonce = ocsp_request.nonce_value
@@ -138,3 +139,19 @@ def _add_header(request, name, value):
         value = value.encode('iso-8859-1')
 
     request.add_header(name, value)
+
+
+def _get_host(request):
+    """
+    Get's the hostname from the request object according to the python version.
+
+    :param request:
+        An instance of urllib2.Request or urllib.request.Request
+
+    :returns:
+        A string containing the hostname without colon and portnumber.
+    """
+
+    if sys.version_info < (3,):
+        return request.get_host().split(":")[0]
+    return request.host.split(":")[0]
