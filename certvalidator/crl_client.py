@@ -1,19 +1,11 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-import sys
-
-from asn1crypto import crl, x509, cms, pem, util
+from asn1crypto import crl, x509, cms, pem
 
 from ._types import str_cls, type_name
 from .version import __version__
-from ._urllib import _get_host, _add_header
-
-if sys.version_info < (3,):
-    from urllib2 import Request, urlopen
-
-else:
-    from urllib.request import Request, urlopen
+from ._urllib import Request, urlopen
 
 
 def fetch(cert, use_deltas=True, user_agent=None, timeout=10):
@@ -78,13 +70,10 @@ def _grab_crl(user_agent, url, timeout):
     :return:
         An asn1crypto.crl.CertificateList object
     """
-
-    if sys.version_info < (3,):
-        url = util.iri_to_uri(url)
     request = Request(url)
-    _add_header(request, 'Accept', 'application/pkix-crl')
-    _add_header(request, 'User-Agent', user_agent)
-    _add_header(request, 'Host', _get_host(request))
+    request.add_header('Accept', 'application/pkix-crl')
+    request.add_header('User-Agent', user_agent)
+    request.add_header('Host', request.get_host().split(':')[0])
     response = urlopen(request, None, timeout)
     data = response.read()
     if pem.detect(data):
@@ -124,12 +113,10 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
         raise TypeError('user_agent must be a unicode string, not %s' % type_name(user_agent))
 
     for url in certificate_list.issuer_cert_urls:
-        if sys.version_info < (3,):
-            url = util.iri_to_uri(url)
         request = Request(url)
-        _add_header(request, 'Accept', 'application/pkix-cert,application/pkcs7-mime')
-        _add_header(request, 'User-Agent', user_agent)
-        _add_header(request, 'Host', _get_host(request))
+        request.add_header('Accept', 'application/pkix-cert,application/pkcs7-mime')
+        request.add_header('User-Agent', user_agent)
+        request.add_header('Host', request.get_host().split(':')[0])
         response = urlopen(request, None, timeout)
 
         content_type = response.headers['Content-Type'].strip()

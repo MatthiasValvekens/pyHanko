@@ -2,20 +2,13 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import os
-import sys
 
-from asn1crypto import core, ocsp, x509, algos, util
+from asn1crypto import core, ocsp, x509, algos
 
 from . import errors
 from ._types import str_cls, type_name
 from .version import __version__
-from ._urllib import _get_host, _add_header
-
-if sys.version_info < (3,):
-    from urllib2 import Request, urlopen, URLError
-else:
-    from urllib.request import Request, urlopen
-    from urllib.error import URLError
+from ._urllib import Request, urlopen, URLError
 
 
 def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=10):
@@ -96,13 +89,11 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
     last_e = None
     for ocsp_url in cert.ocsp_urls:
         try:
-            if sys.version_info < (3,):
-                ocsp_url = util.iri_to_uri(ocsp_url)
             request = Request(ocsp_url)
-            _add_header(request, 'Accept', 'application/ocsp-response')
-            _add_header(request, 'Content-Type', 'application/ocsp-request')
-            _add_header(request, 'User-Agent', user_agent)
-            _add_header(request, 'Host', _get_host(request))
+            request.add_header('Accept', 'application/ocsp-response')
+            request.add_header('Content-Type', 'application/ocsp-request')
+            request.add_header('User-Agent', user_agent)
+            request.add_header('Host', request.get_host().split(":")[0])
             response = urlopen(request, ocsp_request.dump(), timeout)
             ocsp_response = ocsp.OCSPResponse.load(response.read())
             request_nonce = ocsp_request.nonce_value

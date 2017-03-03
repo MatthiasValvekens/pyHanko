@@ -4,41 +4,64 @@ Various abstractions to cater for Python2/3 differences.
 """
 from __future__ import unicode_literals, division, absolute_import, print_function
 import sys
+from asn1crypto import util
 
+if sys.version_info < (3,):
+    from urllib2 import Request as _Request
+    from urllib2 import urlopen, URLError  # noqa
+else:
+    from urllib.request import Request as _Request
+    from urllib.request import urlopen  # noqa
+    from urllib.error import URLError  # noqa
 
-def _add_header(request, name, value):
-    """
-    Adds a header to a urllib2/urllib.request Request object, ensuring values
-    are encoded appropriately based on the version of Python
+if sys.version_info < (3,):
+    class Request(_Request):
+        """
+        Wrapper for the Request object of urllib2 to add conversion of URI to
+        URI before setting the url attribute and encode header values before
+        setting them.
+        """
+        def __init__(self, url, data=None, headers={}, origin_req_host=None, unverifiable=False):
+            """
+            Wrapper for the ``__init__`` method of urllib that converts IRI's
+            to URI's before setting the url attribute.
 
-    :param request:
-        An instance of urllib2.Request or urllib.request.Request
+            :param url str: Valid URL
+            :param data str: Data to send to the server or None
+            :param headers dict: Dictionary containing [header type]: [header
+                value] items
+            :param origin_req_host str: Host name or IP address of the original
+                request that was initiated
+            :param unverifiable bool: Indicates whether the request is
+                unverifiable, as defined by RFC 2965.
+            """
+            url = util.iri_to_uri(url)
+            _Request.__init__(self, url, data, headers, origin_req_host, unverifiable)
 
-    :param name:
-        A unicode string of the header name
+        def add_header(self, name, value):
+            """
+            Wrapper for the add_header method of urllib2 to properly encode the
+            headers
 
-    :param value:
-        A unicode string of the header value
-    """
+            :param name str: name of the header type
+            :param value str: value of the header
+            """
+            _Request.add_header(
+                self,
+                name.encode('iso-8859-1'),
+                value.encode('iso-8859-1')
+            )
+else:
+    class Request(_Request):
+        """
+        Wrapper for the Request object of urllib to add a ``get_host()``
+        method.
+        """
+        def get_host(self):
+            """
+            Wrapper to add a ``get_host()`` method to urllib.
 
-    if sys.version_info < (3,):
-        name = name.encode('iso-8859-1')
-        value = value.encode('iso-8859-1')
-
-    request.add_header(name, value)
-
-
-def _get_host(request):
-    """
-    Get's the hostname from the request object according to the python version.
-
-    :param request:
-        An instance of urllib2.Request or urllib.request.Request
-
-    :returns:
-        A string containing the hostname without colon and portnumber.
-    """
-
-    if sys.version_info < (3,):
-        return request.get_host().split(":")[0]
-    return request.host.split(":")[0]
+            :return str: The hostname Request will connect to possibly with a
+                colon and port number suffixed
+            """
+            return self.host
