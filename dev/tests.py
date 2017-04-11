@@ -3,6 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import unittest
 import re
+import sys
 
 from tests import test_classes
 
@@ -30,5 +31,5 @@ def run(matcher=None):
         else:
             suite.addTest(loader.loadTestsFromTestCase(test_class))
     verbosity = 2 if matcher else 1
-    result = unittest.TextTestRunner(verbosity=verbosity).run(suite)
+    result = unittest.TextTestRunner(stream=sys.stdout, verbosity=verbosity).run(suite)
     return result.wasSuccessful()
