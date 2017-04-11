@@ -1,0 +1,4 @@
+https://github.com/wbond/asn1crypto/archive/master.zip
+https://github.com/wbond/oscrypto/archive/master.zip
+-r ./coverage
+-r ./lint

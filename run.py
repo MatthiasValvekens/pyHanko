@@ -29,7 +29,7 @@ if len(sys.argv) < 2 or len(sys.argv) > 3:
 
 task = get_arg(1)
 
-if task not in set(['api_docs', 'lint', 'tests', 'coverage', 'ci', 'stress_test', 'release']):
+if task not in set(['api_docs', 'lint', 'tests', 'coverage', 'deps', 'ci', 'stress_test', 'release']):
     show_usage()
 
 if task != 'tests' and len(sys.argv) == 3:
@@ -50,6 +50,9 @@ elif task == 'tests':
 
 elif task == 'coverage':
     from dev.coverage import run
+
+elif task == 'deps':
+    from dev.deps import run
 
 elif task == 'ci':
     from dev.ci import run

@@ -1,76 +1,15 @@
 version: "{build}"
 skip_tags: true
-environment:
-  matrix:
-    - PYTHON: "C:\\Python26"
-      PYTHON_ID: "26"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "2.6"
-      PLATFORM: win-x32
-      BACKEND: win
-    - PYTHON: "C:\\Python26-x64"
-      PYTHON_ID: "26-x64"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "2.6"
-      PLATFORM: win-x64
-      BACKEND: win
-    - PYTHON: "C:\\Python27"
-      PYTHON_ID: "27"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "2.7"
-      PLATFORM: win-x32
-      BACKEND: win
-    - PYTHON: "C:\\Python27"
-      PYTHON_ID: "27"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "2.7"
-      PLATFORM: win-x32
-      BACKEND: winlegacy
-      OSCRYPTO_USE_WINLEGACY: 1
-    - PYTHON: "C:\\Python27-x64"
-      PYTHON_ID: "27-x64"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "2.7"
-      PLATFORM: win-x64
-      BACKEND: win
-    - PYTHON: "C:\\Python33"
-      PYTHON_ID: "33"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "3.3"
-      PLATFORM: win-x32
-      BACKEND: win
-    - PYTHON: "C:\\Python33"
-      PYTHON_ID: "33"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "3.3"
-      PLATFORM: win-x32
-      BACKEND: winlegacy
-      OSCRYPTO_USE_WINLEGACY: 1
-    - PYTHON: "C:\\Python33-x64"
-      PYTHON_ID: "33-x64"
-      PYTHON_EXE: python
-      PYTHON_VERSION: "3.3"
-      PLATFORM: win-x64
-      BACKEND: win
-    - PYTHON: "C:\\pypy2-v5.3.1-win32"
-      PYTHON_ID: "pypy"
-      PYTHON_EXE: pypy
-      PYTHON_VERSION: "pypy"
-      PLATFORM: win-x32
-      BACKEND: win
-    - PYTHON: "C:\\pypy2-v5.3.1-win32"
-      PYTHON_ID: "pypy"
-      PYTHON_EXE: pypy
-      PYTHON_VERSION: "pypy"
-      PLATFORM: win-x32
-      BACKEND: winlegacy
-      OSCRYPTO_USE_WINLEGACY: 1
 install:
   - ps: |-
       $env:PYTMP = "${env:TMP}\py";
       if (!(Test-Path "$env:PYTMP")) {
         New-Item -ItemType directory -Path "$env:PYTMP" | Out-Null;
       }
+      if (!(Test-Path "${env:PYTMP}\pypy2-v5.3.1-win32.zip")) {
+        (New-Object Net.WebClient).DownloadFile('https://bitbucket.org/pypy/pypy/downloads/pypy2-v5.3.1-win32.zip', "${env:PYTMP}\pypy2-v5.3.1-win32.zip");
+      }
+      7z x -y "${env:PYTMP}\pypy2-v5.3.1-win32.zip" -oC:\ | Out-Null;
 
       [Byte[]] $geotrustCaBytes = 0x30,0x82,0x03,0x7C,0x30,0x82,0x02,0x64,0xA0,0x03,0x02,0x01,0x02,
       0x02,0x10,0x18,0xAC,0xB5,0x6A,0xFD,0x69,0xB6,0x15,0x3A,0x63,0x6C,0xAF,0xDA,0xFA,0xC4,0xA1,0x30,
@@ -126,42 +65,33 @@ install:
       $rootStore.Open("ReadWrite");
       $rootStore.Add($geotrustCa);
       $rootStore.Close();
-
-      if ("${env:PYTHON_ID}" -eq "pypy") {
-        if (!(Test-Path "${env:PYTMP}\pypy2-v5.3.1-win32.zip")) {
-          (New-Object Net.WebClient).DownloadFile('https://bitbucket.org/pypy/pypy/downloads/pypy2-v5.3.1-win32.zip', "${env:PYTMP}\pypy2-v5.3.1-win32.zip");
-        }
-        7z x -y "${env:PYTMP}\pypy2-v5.3.1-win32.zip" -oC:\ | Out-Null;
-        if (!(Test-Path "${env:PYTMP}\get-pip.py")) {
-          (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "${env:PYTMP}\get-pip.py");
-        }
-        & "${env:PYTHON}\pypy.exe" "${env:PYTMP}\get-pip.py";
-        & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install flake8 coverage;
-        & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/asn1crypto/archive/master.zip;
-        & "${env:PYTHON}\bin\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/oscrypto/archive/master.zip;
-
-      } elseif ("${env:PYTHON_ID}" -eq "26" -or "${env:PYTHON_ID}" -eq "26-x64") {
-        if (!(Test-Path "${env:PYTMP}\get-pip.py")) {
-          (New-Object Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', "${env:PYTMP}\get-pip.py");
-        }
-        & "${env:PYTHON}\python.exe" -W ignore "${env:PYTMP}\get-pip.py";
-        # Skip flake8 for 2.6 since flake8 and pycodestyle have deprecated support for it
-        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'coverage'])";
-        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/asn1crypto/archive/master.zip'])";
-        & "${env:PYTHON}\python.exe" -W ignore -c "import pip; pip.main(['--disable-pip-version-check', '--quiet', 'install', 'https://github.com/wbond/oscrypto/archive/master.zip'])";
-
-      } else {
-        & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install flake8 coverage;
-        & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/asn1crypto/archive/master.zip;
-        & "${env:PYTHON}\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/wbond/oscrypto/archive/master.zip;
-      }
-
-      & "C:\Python27-x64\Scripts\pip.exe" --disable-pip-version-check --quiet install https://github.com/codecov/codecov-python/archive/v2.0.6.zip;
-  - "SET PATH=%PYTHON%;%PATH%"
 cache:
   - '%TMP%\py\'
 build: off
 test_script:
-  - cmd: "%PYTHON_EXE% run.py ci"
-after_test:
-  - C:\Python27-x64\Scripts\codecov -X gcov -f coverage.xml -e PYTHON_VERSION PLATFORM BACKEND
+  - ps: '& C:\Python26\python run.py deps'
+  - ps: '& C:\Python26\python run.py ci'
+  - ps: '& C:\Python26-x64\python run.py deps'
+  - ps: '& C:\Python26-x64\python run.py ci'
+  - ps: '& C:\Python27\python run.py deps'
+  - ps: '& C:\Python27\python run.py ci'
+  - ps: >
+      $env:OSCRYPTO_USE_WINLEGACY = "true";
+      & C:\Python27\python run.py ci;
+      remove-item env:\OSCRYPTO_USE_WINLEGACY;
+  - ps: '& C:\Python27-x64\python run.py deps'
+  - ps: '& C:\Python27-x64\python run.py ci'
+  - ps: '& C:\Python33\python run.py deps'
+  - ps: '& C:\Python33\python run.py ci'
+  - ps: >
+      $env:OSCRYPTO_USE_WINLEGACY = "true";
+      & C:\Python33\python run.py ci;
+      remove-item env:\OSCRYPTO_USE_WINLEGACY;
+  - ps: '& C:\Python33-x64\python run.py deps'
+  - ps: '& C:\Python33-x64\python run.py ci'
+  - ps: '& C:\pypy2-v5.3.1-win32\pypy run.py deps'
+  - ps: '& C:\pypy2-v5.3.1-win32\pypy run.py ci'
+  - ps: >
+      $env:OSCRYPTO_USE_WINLEGACY = "true";
+      & C:\pypy2-v5.3.1-win32\pypy run.py ci;
+      remove-item env:\OSCRYPTO_USE_WINLEGACY;

@@ -1,11 +1,11 @@
-__pycache__/
-*.pyc
-.python-version
 *.egg-info/
+.tox/
+__pycache__/
 build/
 dist/
 tests/output/
-.DS_Store
+*.pyc
 .coverage
+.DS_Store
+.python-version
 coverage.xml
-.tox

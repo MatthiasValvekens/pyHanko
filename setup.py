@@ -8,7 +8,7 @@ from certvalidator import version
 
 class CleanCommand(Command):
     user_options = [
-        ('all', None, '(Compatibility with original clean command)')
+        ('all', 'a', '(Compatibility with original clean command)')
     ]
 
     def initialize_options(self):
@@ -61,8 +61,8 @@ setup(
     keywords='crypto pki x509 certificate crl ocsp',
 
     install_requires=[
-        'asn1crypto>=0.20.0',
-        'oscrypto>=0.17.3'
+        'asn1crypto>=0.22.0',
+        'oscrypto>=0.18.0'
     ],
     packages=find_packages(exclude=['tests*', 'dev*']),
 
