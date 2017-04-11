@@ -11,7 +11,7 @@ else:
 
 
 def show_usage():
-    print('Usage: run.py (api_docs | lint | tests [regex] | coverage | ci | stress_test | release)', file=sys.stderr)
+    print('Usage: run.py (api_docs | lint | tests [regex] | coverage | deps | ci | stress_test | release)', file=sys.stderr)
     sys.exit(1)
 
 
