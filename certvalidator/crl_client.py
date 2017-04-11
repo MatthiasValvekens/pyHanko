@@ -73,7 +73,6 @@ def _grab_crl(user_agent, url, timeout):
     request = Request(url)
     request.add_header('Accept', 'application/pkix-crl')
     request.add_header('User-Agent', user_agent)
-    request.add_header('Host', request.get_host().split(':')[0])
     response = urlopen(request, None, timeout)
     data = response.read()
     if pem.detect(data):
@@ -116,7 +115,6 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
         request = Request(url)
         request.add_header('Accept', 'application/pkix-cert,application/pkcs7-mime')
         request.add_header('User-Agent', user_agent)
-        request.add_header('Host', request.get_host().split(':')[0])
         response = urlopen(request, None, timeout)
 
         content_type = response.headers['Content-Type'].strip()

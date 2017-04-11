@@ -93,7 +93,6 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
             request.add_header('Accept', 'application/ocsp-response')
             request.add_header('Content-Type', 'application/ocsp-request')
             request.add_header('User-Agent', user_agent)
-            request.add_header('Host', request.get_host().split(":")[0])
             response = urlopen(request, ocsp_request.dump(), timeout)
             ocsp_response = ocsp.OCSPResponse.load(response.read())
             request_nonce = ocsp_request.nonce_value

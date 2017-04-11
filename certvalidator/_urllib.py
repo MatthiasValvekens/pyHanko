@@ -1,9 +1,11 @@
 # coding: utf-8
 """
-Various abstractions to cater for Python2/3 differences.
+Compatibility shims between urllib2 (Python 2) and urllib.request (Python 3)
 """
 from __future__ import unicode_literals, division, absolute_import, print_function
+
 import sys
+
 from asn1crypto import util
 
 if sys.version_info < (3,):
@@ -14,54 +16,57 @@ else:
     from urllib.request import urlopen  # noqa
     from urllib.error import URLError  # noqa
 
-if sys.version_info < (3,):
-    class Request(_Request):
-        """
-        Wrapper for the Request object of urllib2 to add conversion of URI to
-        URI before setting the url attribute and encode header values before
-        setting them.
-        """
-        def __init__(self, url, data=None, headers={}, origin_req_host=None, unverifiable=False):
-            """
-            Wrapper for the ``__init__`` method of urllib that converts IRI's
-            to URI's before setting the url attribute.
 
-            :param url str: Valid URL
-            :param data str: Data to send to the server or None
-            :param headers dict: Dictionary containing [header type]: [header
-                value] items
-            :param origin_req_host str: Host name or IP address of the original
-                request that was initiated
-            :param unverifiable bool: Indicates whether the request is
-                unverifiable, as defined by RFC 2965.
+if sys.version_info < (3,):
+
+    class Request(_Request, object):
+        """
+        Compatibility shim to make urrlib2.Request handle unicode
+        """
+
+        def __init__(self, url):
             """
-            url = util.iri_to_uri(url)
-            _Request.__init__(self, url, data, headers, origin_req_host, unverifiable)
+            Wrapper that converts IRI's to URI's before passing to super, and
+            automatically adds the Host header
+
+            :param url:
+                A unicode string of the URL to request
+            """
+
+            super(Request, self).__init__(util.iri_to_uri(url))
+            self.add_header('Host', self.get_host().decode('ascii').split(":")[0])
 
         def add_header(self, name, value):
             """
             Wrapper for the add_header method of urllib2 to properly encode the
             headers
 
-            :param name str: name of the header type
-            :param value str: value of the header
+            :param name:
+                A unicode string of the header name
+
+            :param value:
+                A unicode string of the header value
             """
-            _Request.add_header(
-                self,
+
+            super(Request, self).add_header(
                 name.encode('iso-8859-1'),
                 value.encode('iso-8859-1')
             )
+
 else:
+
     class Request(_Request):
         """
-        Wrapper for the Request object of urllib to add a ``get_host()``
-        method.
+        Automatically adds the Host header
         """
-        def get_host(self):
-            """
-            Wrapper to add a ``get_host()`` method to urllib.
 
-            :return str: The hostname Request will connect to possibly with a
-                colon and port number suffixed
+        def __init__(self, url):
             """
-            return self.host
+            Wrapper that automatically sets the Host header
+
+            :param url:
+                A unicode string of the URL to request
+            """
+
+            super().__init__(url)
+            self.add_header('Host', self.host.split(":")[0])
