@@ -1098,7 +1098,10 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
 
         if status == 'revoked':
             revocation_info = cert_response['cert_status'].chosen
-            reason = revocation_info['revocation_reason'].human_friendly
+            if revocation_info['revocation_reason'].native is None:
+                reason = crl.CRLReason('unspecified').human_friendly
+            else:
+                reason = revocation_info['revocation_reason'].human_friendly
             date = revocation_info['revocation_time'].native.strftime('%Y-%m-%d')
             time = revocation_info['revocation_time'].native.strftime('%H:%M:%S')
             raise RevokedError(pretty_message(
