@@ -75,7 +75,8 @@ def _download(url, dest):
     if sys.platform == 'win32':
         system_root = os.environ.get('SystemRoot')
         powershell_exe = os.path.join('system32\\WindowsPowerShell\\v1.0\\powershell.exe')
-        code = "(New-Object Net.WebClient).DownloadFile('%s', '%s');" % (url, dest_path)
+        code = "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;"
+        code += "(New-Object Net.WebClient).DownloadFile('%s', '%s');" % (url, dest_path)
         _execute([powershell_exe, '-Command', code], dest)
 
     else:

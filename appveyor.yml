@@ -6,10 +6,10 @@ install:
       if (!(Test-Path "$env:PYTMP")) {
         New-Item -ItemType directory -Path "$env:PYTMP" | Out-Null;
       }
-      if (!(Test-Path "${env:PYTMP}\pypy2-v5.3.1-win32.zip")) {
-        (New-Object Net.WebClient).DownloadFile('https://bitbucket.org/pypy/pypy/downloads/pypy2-v5.3.1-win32.zip', "${env:PYTMP}\pypy2-v5.3.1-win32.zip");
+      if (!(Test-Path "${env:PYTMP}\pypy2-v5.7.1-win32.zip")) {
+        (New-Object Net.WebClient).DownloadFile('https://bitbucket.org/pypy/pypy/downloads/pypy2-v5.7.1-win32.zip', "${env:PYTMP}\pypy2-v5.7.1-win32.zip");
       }
-      7z x -y "${env:PYTMP}\pypy2-v5.3.1-win32.zip" -oC:\ | Out-Null;
+      7z x -y "${env:PYTMP}\pypy2-v5.7.1-win32.zip" -oC:\ | Out-Null;
 
       [Byte[]] $geotrustCaBytes = 0x30,0x82,0x03,0x7C,0x30,0x82,0x02,0x64,0xA0,0x03,0x02,0x01,0x02,
       0x02,0x10,0x18,0xAC,0xB5,0x6A,0xFD,0x69,0xB6,0x15,0x3A,0x63,0x6C,0xAF,0xDA,0xFA,0xC4,0xA1,0x30,
@@ -89,9 +89,9 @@ test_script:
       remove-item env:\OSCRYPTO_USE_WINLEGACY;
   - ps: '& C:\Python33-x64\python run.py deps'
   - ps: '& C:\Python33-x64\python run.py ci'
-  - ps: '& C:\pypy2-v5.3.1-win32\pypy run.py deps'
-  - ps: '& C:\pypy2-v5.3.1-win32\pypy run.py ci'
+  - ps: '& C:\pypy2-v5.7.1-win32\pypy run.py deps'
+  - ps: '& C:\pypy2-v5.7.1-win32\pypy run.py ci'
   - ps: >
       $env:OSCRYPTO_USE_WINLEGACY = "true";
-      & C:\pypy2-v5.3.1-win32\pypy run.py ci;
+      & C:\pypy2-v5.7.1-win32\pypy run.py ci;
       remove-item env:\OSCRYPTO_USE_WINLEGACY;
