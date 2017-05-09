@@ -54,9 +54,9 @@ class ValidateTests(unittest.TestCase):
 
     def test_revocation_mode_soft(self):
         cert = self._load_cert_object('revoked.grc.com.crt')
-        ca_certs = [self._load_cert_object('globalsign_root.crt')]
+        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
         other_certs = [
-            self._load_cert_object('globalsign_dv_g2.crt'),
+            self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
         ]
 
         try:
@@ -90,9 +90,9 @@ class ValidateTests(unittest.TestCase):
 
     def test_revocation_mode_hard(self):
         cert = self._load_cert_object('revoked.grc.com.crt')
-        ca_certs = [self._load_cert_object('globalsign_root.crt')]
+        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
         other_certs = [
-            self._load_cert_object('globalsign_dv_g2.crt'),
+            self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
         ]
 
         context = ValidationContext(
@@ -110,7 +110,7 @@ class ValidateTests(unittest.TestCase):
 
         expected = (
             '(CRL|OCSP response) indicates the end-entity certificate was '
-            'revoked at 15:44:10 on 2014-04-23, due to an unspecified reason'
+            'revoked at 21:21:34 on 2017-04-09, due to an unspecified reason'
         )
         with self.assertRaisesRegexp(RevokedError, expected):
             validate_path(context, path)
