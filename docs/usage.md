@@ -6,7 +6,7 @@
    - [Whitelisting Certificates](#whitelisting-certificates)
    - [Blacklisting Hash Algorithms](#blacklisting-hash-algorithms)
    - [Revocation Checking](#revocation-checking)
-   - [Custom Trust Roots/CA Certs](#custom-trust-roots-ca-certs)
+   - [Custom Trust Roots/CA Certs](#custom-trust-rootsca-certs)
    - [Moment-In-Time Validation](#moment-in-time-validation)
 
 ## Basic Path Validation
