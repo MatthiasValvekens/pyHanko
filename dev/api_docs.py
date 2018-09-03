@@ -139,7 +139,6 @@ def _find_sections(md_ast, sections, last, last_class, total_lines=None):
                 continue
             yield child, entering
 
-
     for child, entering in child_walker(md_ast):
         if child.t == 'heading':
             start_line = child.sourcepos[0][0]
@@ -194,6 +193,7 @@ def _find_sections(md_ast, sections, last, last_class, total_lines=None):
 
     if last:
         sections[(last['type_name'], last['identifier'])] = (last['start_line'], total_lines)
+
 
 find_sections = _find_sections
 

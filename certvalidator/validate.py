@@ -1391,7 +1391,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
                     crl_issuer = candidate_crl_issuer
                     break
 
-                except (CRLValidationError) as e:
+                except (CRLValidationError):
                     signatures_failed += 1
                     continue
 

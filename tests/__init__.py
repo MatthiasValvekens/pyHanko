@@ -43,7 +43,6 @@ def test_classes():
     from .test_registry import RegistryTests
     from .test_validate import ValidateTests
 
-
     return [
         CertificateValidatorTests,
         CRLClientTests,

@@ -106,7 +106,7 @@ class CertificateValidator():
 
         try:
             paths = self._context.certificate_registry.build_paths(self._certificate)
-        except (PathBuildingError) as e:
+        except (PathBuildingError):
             if self._certificate.self_signed in set(['yes', 'maybe']):
                 raise InvalidCertificateError(pretty_message(
                     '''

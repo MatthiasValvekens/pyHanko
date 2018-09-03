@@ -87,7 +87,6 @@ class ValidateTests(unittest.TestCase):
             crl_client.fetch = orig_crl_fetch
             ocsp_client.fetch = orig_ocsp_fetch
 
-
     def test_revocation_mode_hard(self):
         cert = self._load_cert_object('revoked.grc.com.crt')
         ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]

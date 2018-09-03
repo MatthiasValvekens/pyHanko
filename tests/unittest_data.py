@@ -44,9 +44,12 @@ def data_decorator(cls):
         else:
             data_name = num
         expanded_name = 'test_%s_%s' % (name, data_name)
+
         # We used expanded variable names here since this line is present in
         # backtraces that are generated from test failures.
-        generated_test_function = lambda self: original_function(self, *params)
+        def generated_test_function(self):
+            original_function(self, *params)
+
         setattr(cls, expanded_name, generated_test_function)
 
     for name in dir(cls):

@@ -13,7 +13,7 @@ from certvalidator import CertificateValidator, ValidationContext
 from certvalidator.errors import PathValidationError, PathBuildingError
 
 if sys.version_info < (3,):
-    str_cls = unicode
+    str_cls = unicode  # noqa
 else:
     str_cls = str
 
@@ -199,5 +199,5 @@ def _color(name, status, text, start=None, *extras):
         message = '%s%s%s' % (Style.DIM, wrapped_message, Style.RESET_ALL)
         try:
             print(message)
-        except (UnicodeEncodeError) as e:
+        except (UnicodeEncodeError):
             print(message.encode('utf-8'))
