@@ -22,7 +22,7 @@ matrix:
       python: "3.6"
     - os: linux
       language: python
-      python: "pypy-5.3.1"
+      python: "pypy"
 script:
   - python run.py deps
   - python run.py ci

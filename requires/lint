@@ -1,1 +1,7 @@
-flake8 ; python_version == '2.7' or python_version >= '3.3'
+setuptools == 39.0.1 ; python_version == '2.7' or python_version >= '3.3'
+enum34 == 1.1.6 ; python_version == '2.7' or python_version == '3.3'
+mccabe == 0.6.1 ; python_version == '2.7' or python_version >= '3.3'
+pycodestyle == 2.3.1 ; python_version == '2.7' or python_version >= '3.3'
+pyflakes == 1.6.0 ; python_version == '2.7' or python_version >= '3.3'
+configparser == 3.5.0 ; python_version == '2.7'
+flake8 == 3.5.0 ; python_version == '2.7' or python_version >= '3.3'
