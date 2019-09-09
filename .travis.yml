@@ -6,21 +6,27 @@ branches:
 matrix:
   include:
     - os: linux
+      dist: trusty
       language: python
       python: "2.6"
     - os: linux
+      dist: bionic
       language: python
       python: "2.7"
     - os: linux
+      dist: trusty
       language: python
       python: "3.2"
     - os: linux
+      dist: trusty
       language: python
       python: "3.3"
     - os: linux
+      dist: bionic
       language: python
-      python: "3.6"
+      python: "3.7"
     - os: linux
+      dist: xenial
       language: python
       python: "pypy"
 script:
