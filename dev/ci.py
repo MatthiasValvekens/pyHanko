@@ -50,7 +50,7 @@ def run():
         oscrypto_tests_module_info = imp.find_module('tests', [oscrypto_path])
     except ImportError:
         print(
-            'Error loading oscrypto.tests from %r' % oscrypto_path,
+            'Error loading oscrypto.tests from "%s"' % oscrypto_path,
             file=sys.stderr
         )
         return False

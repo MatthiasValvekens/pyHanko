@@ -50,6 +50,10 @@ def run():
             shutil.rmtree(deps_dir, ignore_errors=True)
         raise
 
+    print('Staged dependencies to "%s":' % deps_dir)
+    for subdir in sorted(os.listdir(dest_path)):
+        print('  %s/' % subdir)
+
     return True
 
 
