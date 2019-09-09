@@ -5,7 +5,14 @@ jobs:
       # This is the last version using macOS 10.12, which has Python 2.6
       xcode: 9.2.0
     steps:
+      - restore_cache:
+          keys:
+            - homebrew
       - run: brew update
+      - save_cache:
+          key: homebrew
+          paths:
+            - /usr/local/Homebrew
       - run: brew upgrade python
       - run: brew install pypy
       - checkout
