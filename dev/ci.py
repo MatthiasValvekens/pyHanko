@@ -36,7 +36,17 @@ def run():
 
     print('Python ' + sys.version.replace('\n', ''))
 
-    oscrypto_tests_module_info = imp.find_module('tests', [os.path.join(build_root, 'oscrypto')])
+    oscrypto_path = os.path.join(build_root, 'oscrypto')
+    if not os.path.exists(oscrypto_path):
+        oscrypto_path = os.path.join(build_root, 'modularcrypto-deps', 'oscrypto')
+    if not os.path.exists(oscrypto_path):
+        print(
+            'Unable to locate oscrypto.tests',
+            file=sys.stderr
+        )
+        return False
+
+    oscrypto_tests_module_info = imp.find_module('tests', [oscrypto_path])
     oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
     asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
     print(
