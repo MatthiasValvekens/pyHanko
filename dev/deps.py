@@ -51,7 +51,7 @@ def run():
         raise
 
     print('Staged dependencies to "%s":' % deps_dir)
-    for subdir in sorted(os.listdir(dest_path)):
+    for subdir in sorted(os.listdir(deps_dir)):
         print('  %s/' % subdir)
 
     return True
