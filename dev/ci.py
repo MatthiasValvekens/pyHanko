@@ -50,9 +50,12 @@ def run():
         oscrypto_tests_module_info = imp.find_module('tests', [oscrypto_path])
     except ImportError:
         print(
-            'Error loading oscrypto.tests from "%s"' % oscrypto_path,
+            'Error loading oscrypto.tests from "%s":' % oscrypto_path,
             file=sys.stderr
         )
+        for subpath in os.listdir(oscrypto_path):
+            slash = os.sep if os.path.isdir(os.path.join(oscrypto_path, subpath)) else ''
+            print('  %s%s' % (subpath, slash), file=sys.stderr)
         return False
     oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
     asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
