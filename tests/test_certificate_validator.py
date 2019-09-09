@@ -33,31 +33,34 @@ class CertificateValidatorTests(unittest.TestCase):
         return cert
 
     def test_basic_certificate_validator_tls(self):
-        cert = self._load_cert_object('codex.crt')
-        other_certs = [self._load_cert_object('GeoTrust_EV_SSL_CA_-_G4.crt')]
+        cert = self._load_cert_object('mozilla.org.crt')
+        other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
-        moment = datetime(2015, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        moment = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
 
-        path = validator.validate_tls('codexns.io')
+        path = validator.validate_tls('www.mozilla.org')
         self.assertEqual(3, len(path))
 
     def test_basic_certificate_validator_tls_expired(self):
-        cert = self._load_cert_object('codex.crt')
-        other_certs = [self._load_cert_object('GeoTrust_EV_SSL_CA_-_G4.crt')]
+        cert = self._load_cert_object('mozilla.org.crt')
+        other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
-        validator = CertificateValidator(cert, other_certs)
+        moment = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        context = ValidationContext(moment=moment)
+        validator = CertificateValidator(cert, other_certs, context)
 
         with self.assertRaisesRegexp(PathValidationError, 'expired'):
-            validator.validate_tls('codexns.io')
+            validator.validate_tls('www.mozilla.org')
 
     def test_basic_certificate_validator_tls_invalid_hostname(self):
-        cert = self._load_cert_object('codex.crt')
-        other_certs = [self._load_cert_object('GeoTrust_EV_SSL_CA_-_G4.crt')]
+        cert = self._load_cert_object('mozilla.org.crt')
+        other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
-        moment = datetime(2015, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        moment = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
@@ -66,10 +69,10 @@ class CertificateValidatorTests(unittest.TestCase):
             validator.validate_tls('google.com')
 
     def test_basic_certificate_validator_tls_invalid_key_usage(self):
-        cert = self._load_cert_object('codex.crt')
-        other_certs = [self._load_cert_object('GeoTrust_EV_SSL_CA_-_G4.crt')]
+        cert = self._load_cert_object('mozilla.org.crt')
+        other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
-        moment = datetime(2015, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        moment = datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
@@ -78,14 +81,19 @@ class CertificateValidatorTests(unittest.TestCase):
             validator.validate_usage(set(['crl_sign']))
 
     def test_basic_certificate_validator_tls_whitelist(self):
-        cert = self._load_cert_object('codex.crt')
-        other_certs = [self._load_cert_object('GeoTrust_EV_SSL_CA_-_G4.crt')]
+        cert = self._load_cert_object('mozilla.org.crt')
+        other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
-        context = ValidationContext(whitelisted_certs=[cert.sha1_fingerprint])
+        moment = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        context = ValidationContext(
+            whitelisted_certs=[cert.sha1_fingerprint],
+            moment=moment
+        )
         validator = CertificateValidator(cert, other_certs, context)
 
         # If whitelist does not work, this will raise exception for expiration
-        validator.validate_tls('codexns.io')
+        validator.validate_tls('www.mozilla.org')
 
         # If whitelist does not work, this will raise exception for hostname
         validator.validate_tls('google.com')

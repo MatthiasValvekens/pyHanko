@@ -17,7 +17,7 @@ fixtures_dir = os.path.join(tests_root, 'fixtures')
 class CRLClientTests(unittest.TestCase):
 
     def test_fetch_crl(self):
-        with open(os.path.join(fixtures_dir, 'GeoTrust_EV_SSL_CA_-_G4.crt'), 'rb') as f:
+        with open(os.path.join(fixtures_dir, 'digicert-sha2-secure-server-ca.crt'), 'rb') as f:
             file_bytes = f.read()
             if pem.detect(file_bytes):
                 _, _, file_bytes = pem.unarmor(file_bytes)

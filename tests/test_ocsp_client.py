@@ -18,7 +18,7 @@ fixtures_dir = os.path.join(tests_root, 'fixtures')
 class OCSPClientTests(unittest.TestCase):
 
     def test_fetch_ocsp(self):
-        with open(os.path.join(fixtures_dir, 'GeoTrust_EV_SSL_CA_-_G4.crt'), 'rb') as f:
+        with open(os.path.join(fixtures_dir, 'digicert-sha2-secure-server-ca.crt'), 'rb') as f:
             cert_bytes = f.read()
             if pem.detect(cert_bytes):
                 _, _, cert_bytes = pem.unarmor(cert_bytes)
