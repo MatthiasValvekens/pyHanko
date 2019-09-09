@@ -36,13 +36,22 @@ def run():
 
     print('Python ' + sys.version.replace('\n', ''))
 
-    try:
-        oscrypto_tests_module_info = imp.find_module('tests', [os.path.join(build_root, 'oscrypto')])
-        oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
-        oscrypto = oscrypto_tests.local_oscrypto()
-        print('\noscrypto backend: %s' % oscrypto.backend())
-    except (ImportError):
-        pass
+    oscrypto_tests_module_info = imp.find_module('tests', [os.path.join(build_root, 'oscrypto')])
+    oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
+    asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
+    print(
+        '\nasn1crypto: %s, %s' % (
+            asn1crypto.__version__,
+            os.path.dirname(asn1crypto.__file__)
+        )
+    )
+    print(
+        'oscrypto: %s backend, %s, %s' % (
+            oscrypto.backend(),
+            oscrypto.__version__,
+            os.path.dirname(oscrypto.__file__)
+        )
+    )
 
     if run_lint:
         print('')
@@ -57,7 +66,7 @@ def run():
     else:
         print('\nRunning tests')
         sys.stdout.flush()
-        tests_result = run_tests()
+        tests_result = run_tests(ci=True)
     sys.stdout.flush()
 
     return lint_result and tests_result

@@ -8,6 +8,7 @@ import imp
 import json
 import os
 import unittest
+import re
 import sys
 import tempfile
 import platform as _plat
@@ -25,6 +26,11 @@ else:
     str_cls = str
     from urllib.error import URLError
     from urllib.parse import urlencode
+
+if sys.version_info < (3, 7):
+    Pattern = re._pattern_type
+else:
+    Pattern = re.Pattern
 
 
 def run(ci=False):
@@ -101,8 +107,44 @@ def _load_package_tests(name):
     return tests_module.test_classes()
 
 
-def _codecov_submit():
+def _env_info():
+    """
+    :return:
+        A two-element tuple of unicode strings. The first is the name of the
+        environment, the second the root of the repo. The environment name
+        will be one of: "ci-travis", "ci-circle", "ci-appveyor",
+        "ci-github-actions", "local"
+    """
+
     if os.getenv('CI') == 'true' and os.getenv('TRAVIS') == 'true':
+        return ('ci-travis', os.getenv('TRAVIS_BUILD_DIR'))
+
+    if os.getenv('CI') == 'True' and os.getenv('APPVEYOR') == 'True':
+        return ('ci-appveyor', os.getenv('APPVEYOR_BUILD_FOLDER'))
+
+    if os.getenv('CI') == 'true' and os.getenv('CIRCLECI') == 'true':
+        return ('ci-circle', os.getcwdu() if sys.version_info < (3,) else os.getcwd())
+
+    if os.getenv('GITHUB_ACTIONS') == 'true':
+        return ('ci-github-actions', os.getenv('GITHUB_WORKSPACE'))
+
+    return ('local', package_root)
+
+
+def _codecov_submit():
+    env_name, root = _env_info()
+
+    try:
+        with open(os.path.join(root, 'codecov.json'), 'rb') as f:
+            json_data = json.loads(f.read().decode('utf-8'))
+    except (OSError, ValueError, UnicodeDecodeError, KeyError):
+        print('error reading codecov.json')
+        return
+
+    if json_data.get('disabled'):
+        return
+
+    if env_name == 'ci-travis':
         # http://docs.travis-ci.com/user/environment-variables/#Default-Environment-Variables
         build_url = 'https://travis-ci.org/%s/jobs/%s' % (os.getenv('TRAVIS_REPO_SLUG'), os.getenv('TRAVIS_JOB_ID'))
         query = {
@@ -116,9 +158,8 @@ def _codecov_submit():
             'commit': os.getenv('TRAVIS_COMMIT'),
             'build_url': build_url,
         }
-        root = os.getenv('TRAVIS_BUILD_DIR')
 
-    elif os.getenv('CI') == 'True' and os.getenv('APPVEYOR') == 'True':
+    elif env_name == 'ci-appveyor':
         # http://www.appveyor.com/docs/environment-variables
         build_url = 'https://ci.appveyor.com/project/%s/build/%s' % (
             os.getenv('APPVEYOR_REPO_NAME'),
@@ -139,9 +180,8 @@ def _codecov_submit():
             'commit': os.getenv('APPVEYOR_REPO_COMMIT'),
             'build_url': build_url,
         }
-        root = os.getenv('APPVEYOR_BUILD_FOLDER')
 
-    elif os.getenv('CI') == 'true' and os.getenv('CIRCLECI') == 'true':
+    elif env_name == 'ci-circle':
         # https://circleci.com/docs/environment-variables
         query = {
             'service': 'circleci',
@@ -154,29 +194,38 @@ def _codecov_submit():
             'commit': os.getenv('CIRCLE_SHA1'),
             'build_url': os.getenv('CIRCLE_BUILD_URL'),
         }
-        if sys.version_info < (3,):
-            root = os.getcwdu()
-        else:
-            root = os.getcwd()
+
+    elif env_name == 'ci-github-actions':
+        branch = ''
+        tag = ''
+        ref = os.getenv('GITHUB_REF', '')
+        if ref.startswith('refs/tags/'):
+            tag = ref[10:]
+        elif ref.startswith('refs/heads/'):
+            branch = ref[11:]
+
+        impl = _plat.python_implementation()
+        major, minor = _plat.python_version_tuple()[0:2]
+        build_name = '%s %s %s.%s' % (_platform_name(), impl, major, minor)
+
+        query = {
+            'service': 'custom',
+            'token': json_data['token'],
+            'branch': branch,
+            'tag': tag,
+            'slug': os.getenv('GITHUB_REPOSITORY'),
+            'commit': os.getenv('GITHUB_SHA'),
+            'build_url': 'https://github.com/wbond/oscrypto/commit/%s/checks' % os.getenv('GITHUB_SHA'),
+            'name': 'GitHub Actions %s on %s' % (build_name, os.getenv('RUNNER_OS'))
+        }
+
     else:
-        root = package_root
         if not os.path.exists(os.path.join(root, '.git')):
             print('git repository not found, not submitting coverage data')
             return
         git_status = _git_command(['status', '--porcelain'], root)
         if git_status != '':
             print('git repository has uncommitted changes, not submitting coverage data')
-            return
-
-        slug = None
-        token = None
-        try:
-            with open(os.path.join(root, 'codecov.json'), 'rb') as f:
-                json_data = json.loads(f.read().decode('utf-8'))
-                slug = json_data['slug']
-                token = json_data['token']
-        except (OSError, ValueError, UnicodeDecodeError, KeyError):
-            print('error reading codecov.json')
             return
 
         branch = _git_command(['rev-parse', '--abbrev-ref', 'HEAD'], root)
@@ -188,8 +237,8 @@ def _codecov_submit():
         query = {
             'branch': branch,
             'commit': commit,
-            'slug': slug,
-            'token': token,
+            'slug': json_data['slug'],
+            'token': json_data['token'],
             'build': build_name,
         }
         if tag != 'undefined':
@@ -500,7 +549,11 @@ def _do_request(method, url, headers, data=None, query_params=None, timeout=20):
             # To properly obtain bytes, we use BitConverter to get hex dash
             # encoding (e.g. AE-09-3F) and they decode in python
             code += " + [System.BitConverter]::ToString($out);"
-            stdout, stderr = _execute([powershell_exe, '-Command', code], os.getcwd())
+            stdout, stderr = _execute(
+                [powershell_exe, '-Command', code],
+                os.getcwd(),
+                re.compile(r'Unable to connect to|TLS')
+            )
             if stdout[-2:] == b'\r\n' and b'\r\n\r\n' in stdout:
                 # An extra trailing crlf is added at the end by powershell
                 stdout = stdout[0:-2]
@@ -526,7 +579,11 @@ def _do_request(method, url, headers, data=None, query_params=None, timeout=20):
             args.append('--data-binary')
             args.append('@%s' % tempf_path)
             args.append(url)
-            stdout, stderr = _execute(args, os.getcwd())
+            stdout, stderr = _execute(
+                args,
+                os.getcwd(),
+                re.compile(r'Failed to connect to|TLS|SSLRead')
+            )
     finally:
         if tempf_path and os.path.exists(tempf_path):
             os.remove(tempf_path)
@@ -566,7 +623,7 @@ def _do_request(method, url, headers, data=None, query_params=None, timeout=20):
     return (content_type, encoding, body)
 
 
-def _execute(params, cwd):
+def _execute(params, cwd, retry=None):
     """
     Executes a subprocess
 
@@ -575,6 +632,9 @@ def _execute(params, cwd):
 
     :param cwd:
         The working directory to execute the command in
+
+    :param retry:
+        If this string is present in stderr, or regex pattern matches stderr, retry the operation
 
     :return:
         A 2-element tuple of (stdout, stderr)
@@ -589,7 +649,14 @@ def _execute(params, cwd):
     stdout, stderr = proc.communicate()
     code = proc.wait()
     if code != 0:
-        e = OSError('subprocess exit code was non-zero')
+        if retry:
+            stderr_str = stderr.decode('utf-8')
+            if isinstance(retry, Pattern):
+                if retry.search(stderr_str) is not None:
+                    return _execute(params, cwd, retry)
+            elif retry in stderr_str:
+                return _execute(params, cwd, retry)
+        e = OSError('subprocess exit code for "%s" was %d: %s' % (' '.join(params), code, stderr))
         e.stdout = stdout
         e.stderr = stderr
         raise e

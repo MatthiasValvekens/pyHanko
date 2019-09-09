@@ -1,14 +1,18 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import imp
+import os
 import unittest
 import re
 import sys
 
+from . import build_root
+
 from tests import test_classes
 
 
-def run(matcher=None):
+def run(matcher=None, ci=False):
     """
     Runs the tests
 
@@ -19,6 +23,27 @@ def run(matcher=None):
     :return:
         A bool - if the tests succeeded
     """
+
+    if not ci:
+        print('Python ' + sys.version.replace('\n', ''))
+
+    oscrypto_tests_module_info = imp.find_module('tests', [os.path.join(build_root, 'oscrypto')])
+    oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
+    asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
+    if not ci:
+        print(
+            '\nasn1crypto: %s, %s' % (
+                asn1crypto.__version__,
+                os.path.dirname(asn1crypto.__file__)
+            )
+        )
+        print(
+            'oscrypto: %s backend, %s, %s\n' % (
+                oscrypto.backend(),
+                oscrypto.__version__,
+                os.path.dirname(oscrypto.__file__)
+            )
+        )
 
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
