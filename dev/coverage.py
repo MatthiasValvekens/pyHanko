@@ -582,7 +582,7 @@ def _do_request(method, url, headers, data=None, query_params=None, timeout=20):
             stdout, stderr = _execute(
                 args,
                 os.getcwd(),
-                re.compile(r'Failed to connect to|TLS|SSLRead')
+                re.compile(r'Failed to connect to|TLS|SSLRead|outstanding|cleanly')
             )
     finally:
         if tempf_path and os.path.exists(tempf_path):
