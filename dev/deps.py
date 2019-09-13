@@ -292,7 +292,7 @@ def _extract_package(deps_dir, pkg_path, pkg_dir):
 
         _execute(
             [
-                'python',
+                sys.executable,
                 'setup.py',
                 'install',
                 '--root=%s' % root,
