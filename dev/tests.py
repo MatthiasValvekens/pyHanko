@@ -1,18 +1,23 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-import imp
-import os
 import unittest
 import re
 import sys
 
-from . import build_root
+from . import requires_oscrypto
+from ._import import _preload
 
 from tests import test_classes
 
+if sys.version_info < (3,):
+    range = xrange  # noqa
+    from cStringIO import StringIO
+else:
+    from io import StringIO
 
-def run(matcher=None, ci=False):
+
+def run(matcher=None, repeat=1, ci=False):
     """
     Runs the tests
 
@@ -20,51 +25,51 @@ def run(matcher=None, ci=False):
         A unicode string containing a regular expression to use to filter test
         names by. A value of None will cause no filtering.
 
+    :param repeat:
+        An integer - the number of times to run the tests
+
+    :param ci:
+        A bool, indicating if the tests are being run as part of CI
+
     :return:
         A bool - if the tests succeeded
     """
 
-    if not ci:
-        print('Python ' + sys.version.replace('\n', ''))
+    _preload(requires_oscrypto, not ci)
 
-    oscrypto_path = os.path.join(build_root, 'oscrypto')
-    if not os.path.exists(oscrypto_path):
-        oscrypto_path = os.path.join(build_root, 'modularcrypto-deps', 'oscrypto')
-    if not os.path.exists(oscrypto_path):
-        print(
-            'Unable to locate oscrypto.tests',
-            file=sys.stderr
-        )
-        return False
-
-    oscrypto_tests_module_info = imp.find_module('tests', [oscrypto_path])
-    oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
-    asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
-    if not ci:
-        print(
-            '\nasn1crypto: %s, %s' % (
-                asn1crypto.__version__,
-                os.path.dirname(asn1crypto.__file__)
-            )
-        )
-        print(
-            'oscrypto: %s backend, %s, %s\n' % (
-                oscrypto.backend(),
-                oscrypto.__version__,
-                os.path.dirname(oscrypto.__file__)
-            )
-        )
-
-    suite = unittest.TestSuite()
     loader = unittest.TestLoader()
+    # We have to manually track the list of applicable tests because for
+    # some reason with Python 3.4 on Windows, the tests in a suite are replaced
+    # with None after being executed. This breaks the repeat functionality.
+    test_list = []
     for test_class in test_classes():
         if matcher:
             names = loader.getTestCaseNames(test_class)
             for name in names:
                 if re.search(matcher, name):
-                    suite.addTest(test_class(name))
+                    test_list.append(test_class(name))
         else:
-            suite.addTest(loader.loadTestsFromTestCase(test_class))
-    verbosity = 2 if matcher else 1
-    result = unittest.TextTestRunner(stream=sys.stdout, verbosity=verbosity).run(suite)
-    return result.wasSuccessful()
+            test_list.append(loader.loadTestsFromTestCase(test_class))
+
+    stream = sys.stdout
+    verbosity = 1
+    if matcher and repeat == 1:
+        verbosity = 2
+    elif repeat > 1:
+        stream = StringIO()
+
+    for _ in range(0, repeat):
+        suite = unittest.TestSuite()
+        for test in test_list:
+            suite.addTest(test)
+        result = unittest.TextTestRunner(stream=stream, verbosity=verbosity).run(suite)
+
+        if len(result.errors) > 0 or len(result.failures) > 0:
+            if repeat > 1:
+                print(stream.getvalue())
+            return False
+
+        if repeat > 1:
+            stream.truncate(0)
+
+    return True

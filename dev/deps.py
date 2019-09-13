@@ -50,10 +50,6 @@ def run():
             shutil.rmtree(deps_dir, ignore_errors=True)
         raise
 
-    print('Staged dependencies to "%s":' % deps_dir)
-    for subdir in sorted(os.listdir(deps_dir)):
-        print('  %s/' % subdir)
-
     return True
 
 
@@ -209,7 +205,7 @@ def _extract_info(archive, info):
     return None
 
 
-def _extract_package(deps_dir, pkg_path):
+def _extract_package(deps_dir, pkg_path, pkg_dir):
     """
     Extract a .whl, .zip, .tar.gz or .tar.bz2 into a package path to
     use when running CI tasks
@@ -219,6 +215,9 @@ def _extract_package(deps_dir, pkg_path):
 
     :param pkg_path:
         A unicode string of the path to the archive
+
+    :param pkg_dir:
+        If running setup.py, change to this dir first - a unicode string
     """
 
     if pkg_path.endswith('.exe'):
@@ -253,51 +252,61 @@ def _extract_package(deps_dir, pkg_path):
                 zf.close()
         return
 
-    # Source archives may contain a bunch of other things.
-    # The following code works for the packages coverage and
-    # configparser, which are the two we currently require that
-    # do not provide wheels
+    # Source archives may contain a bunch of other things, including mutliple
+    # packages, so we must use setup.py/setuptool to install/extract it
 
+    ar = None
+    staging_dir = os.path.join(deps_dir, '_staging')
     try:
-        ar = None
         ar = _open_archive(pkg_path)
 
-        pkg_name = None
-        base_path = _archive_single_dir(ar) or ''
-        if len(base_path):
-            if '-' in base_path:
-                pkg_name, _ = base_path.split('-', 1)
-            base_path += '/'
-
-        base_pkg_path = None
-        if pkg_name is not None:
-            base_pkg_path = base_path + pkg_name + '/'
-        src_path = base_path + 'src/'
+        common_root = _archive_single_dir(ar)
 
         members = []
         for info in _list_archive_members(ar):
-            fn = _info_name(info)
-            if base_pkg_path is not None and fn.startswith(base_pkg_path):
-                dst_path = fn[len(base_pkg_path) - len(pkg_name) - 1:]
-                members.append((info, dst_path))
-                continue
-            if fn.startswith(src_path):
-                members.append((info, fn[len(src_path):]))
-                continue
+            dst_rel_path = _info_name(info)
+            if common_root is not None:
+                dst_rel_path = dst_rel_path[len(common_root) + 1:]
+            members.append((info, dst_rel_path))
 
-        for info, path in members:
+        if not os.path.exists(staging_dir):
+            os.makedirs(staging_dir)
+
+        for info, rel_path in members:
             info_data = _extract_info(ar, info)
             # Dirs won't return a file
             if info_data is not None:
-                dst_path = os.path.join(deps_dir, path)
+                dst_path = os.path.join(staging_dir, rel_path)
                 dst_dir = os.path.dirname(dst_path)
                 if not os.path.exists(dst_dir):
                     os.makedirs(dst_dir)
                 with open(dst_path, 'wb') as f:
                     f.write(info_data)
+
+        setup_dir = staging_dir
+        if pkg_dir:
+            setup_dir = os.path.join(staging_dir, pkg_dir)
+
+        root = os.path.abspath(os.path.join(deps_dir, '..'))
+        install_lib = os.path.basename(deps_dir)
+
+        _execute(
+            [
+                'python',
+                'setup.py',
+                'install',
+                '--root=%s' % root,
+                '--install-lib=%s' % install_lib,
+                '--no-compile'
+            ],
+            setup_dir
+        )
+
     finally:
         if ar:
             ar.close()
+        if staging_dir:
+            shutil.rmtree(staging_dir)
 
 
 def _stage_requirements(deps_dir, path):
@@ -310,7 +319,7 @@ def _stage_requirements(deps_dir, path):
         A unicode path to a temporary diretory to use for downloads
 
     :param path:
-        A unicoe filesystem path to a requirements file
+        A unicode filesystem path to a requirements file
     """
 
     valid_tags = _pep425tags()
@@ -324,7 +333,20 @@ def _stage_requirements(deps_dir, path):
     packages = _parse_requires(path)
     for p in packages:
         pkg = p['pkg']
+        pkg_sub_dir = None
         if p['type'] == 'url':
+            anchor = None
+            if '#' in pkg:
+                pkg, anchor = pkg.split('#', 1)
+                if '&' in anchor:
+                    parts = anchor.split('&')
+                else:
+                    parts = [anchor]
+                for part in parts:
+                    param, value = part.split('=')
+                    if param == 'subdirectory':
+                        pkg_sub_dir = value
+
             if pkg.endswith('.zip') or pkg.endswith('.tar.gz') or pkg.endswith('.tar.bz2') or pkg.endswith('.whl'):
                 url = pkg
             else:
@@ -387,7 +409,7 @@ def _stage_requirements(deps_dir, path):
 
         local_path = _download(url, deps_dir)
 
-        _extract_package(deps_dir, local_path)
+        _extract_package(deps_dir, local_path, pkg_sub_dir)
 
         os.remove(local_path)
 

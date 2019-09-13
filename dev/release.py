@@ -1,14 +1,13 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-import os
 import subprocess
 import sys
 
-import setuptools.sandbox
 import twine.cli
 
-from . import package_name, package_root
+from . import package_name, package_root, has_tests_package
+from .build import run as build
 
 
 def run():
@@ -19,8 +18,6 @@ def run():
     :return:
         A bool - if the packaging and upload process was successful
     """
-
-    setup_file = os.path.join(package_root, 'setup.py')
 
     git_wc_proc = subprocess.Popen(
         ['git', 'status', '--porcelain', '-uno'],
@@ -54,14 +51,10 @@ def run():
 
     tag = tag.decode('ascii').strip()
 
-    setuptools.sandbox.run_setup(
-        setup_file,
-        ['sdist', 'bdist_wheel', '--universal']
-    )
+    build()
 
     twine.cli.dispatch(['upload', 'dist/%s-%s*' % (package_name, tag)])
+    if has_tests_package:
+        twine.cli.dispatch(['upload', 'dist/%s_tests-%s*' % (package_name, tag)])
 
-    setuptools.sandbox.run_setup(
-        setup_file,
-        ['clean']
-    )
+    return True

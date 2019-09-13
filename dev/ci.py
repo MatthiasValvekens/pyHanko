@@ -3,9 +3,9 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import sys
 import os
-import imp
 
-from . import build_root
+from . import build_root, requires_oscrypto
+from ._import import _preload
 
 
 deps_dir = os.path.join(build_root, 'modularcrypto-deps')
@@ -34,44 +34,7 @@ def run():
         A bool - if the linter and tests ran successfully
     """
 
-    print('Python ' + sys.version.replace('\n', ''))
-
-    oscrypto_path = os.path.join(build_root, 'oscrypto')
-    if not os.path.exists(oscrypto_path):
-        oscrypto_path = os.path.join(build_root, 'modularcrypto-deps', 'oscrypto')
-    if not os.path.exists(oscrypto_path):
-        print(
-            'Unable to locate oscrypto.tests',
-            file=sys.stderr
-        )
-        return False
-
-    try:
-        oscrypto_tests_module_info = imp.find_module('tests', [oscrypto_path])
-    except ImportError:
-        print(
-            'Error loading oscrypto.tests from "%s":' % oscrypto_path,
-            file=sys.stderr
-        )
-        for subpath in os.listdir(oscrypto_path):
-            slash = os.sep if os.path.isdir(os.path.join(oscrypto_path, subpath)) else ''
-            print('  %s%s' % (subpath, slash), file=sys.stderr)
-        return False
-    oscrypto_tests = imp.load_module('oscrypto.tests', *oscrypto_tests_module_info)
-    asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
-    print(
-        '\nasn1crypto: %s, %s' % (
-            asn1crypto.__version__,
-            os.path.dirname(asn1crypto.__file__)
-        )
-    )
-    print(
-        'oscrypto: %s backend, %s, %s' % (
-            oscrypto.backend(),
-            oscrypto.__version__,
-            os.path.dirname(oscrypto.__file__)
-        )
-    )
+    _preload(requires_oscrypto, True)
 
     if run_lint:
         print('')

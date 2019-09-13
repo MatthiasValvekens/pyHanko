@@ -1,14 +1,63 @@
+import codecs
 import os
 import shutil
+import sys
+import warnings
 
-from setuptools import setup, find_packages, Command
+import setuptools
+from setuptools import find_packages, setup, Command
+from setuptools.command.egg_info import egg_info
 
-from certvalidator import version
+
+PACKAGE_NAME = 'certvalidator'
+PACKAGE_VERSION = '0.12.0.dev1'
+PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+# setuptools 38.6.0 and newer know about long_description_content_type, but
+# distutils still complains about it, so silence the warning
+sv = setuptools.__version__
+svi = tuple(int(o) if o.isdigit() else o for o in sv.split('.'))
+if svi >= (38, 6):
+    warnings.filterwarnings(
+        'ignore',
+        "Unknown distribution option: 'long_description_content_type'",
+        module='distutils.dist'
+    )
+
+
+# This allows us to send the LICENSE and docs when creating a sdist. Wheels
+# automatically include the LICENSE, and don't need the docs. For these
+# to be included, the command must be "python setup.py sdist".
+package_data = {}
+if sys.argv[1:] == ['sdist'] or sorted(sys.argv[1:]) == ['-q', 'sdist']:
+    package_data[PACKAGE_NAME] = [
+        '../LICENSE',
+        '../*.md',
+        '../docs/*.md',
+    ]
+
+
+# Ensures a copy of the LICENSE is included with the egg-info for
+# install and bdist_egg commands
+class EggInfoCommand(egg_info):
+    def run(self):
+        egg_info_path = os.path.join(
+            PACKAGE_ROOT,
+            '%s.egg-info' % PACKAGE_NAME
+        )
+        if not os.path.exists(egg_info_path):
+            os.mkdir(egg_info_path)
+        shutil.copy2(
+            os.path.join(PACKAGE_ROOT, 'LICENSE'),
+            os.path.join(egg_info_path, 'LICENSE')
+        )
+        egg_info.run(self)
 
 
 class CleanCommand(Command):
     user_options = [
-        ('all', 'a', '(Compatibility with original clean command)')
+        ('all', 'a', '(Compatibility with original clean command)'),
     ]
 
     def initialize_options(self):
@@ -18,19 +67,34 @@ class CleanCommand(Command):
         pass
 
     def run(self):
-        folder = os.path.dirname(os.path.abspath(__file__))
-        for sub_folder in ['build', 'dist', 'certvalidator.egg-info']:
-            full_path = os.path.join(folder, sub_folder)
+        sub_folders = ['build', 'temp', '%s.egg-info' % PACKAGE_NAME]
+        if self.all:
+            sub_folders.append('dist')
+        for sub_folder in sub_folders:
+            full_path = os.path.join(PACKAGE_ROOT, sub_folder)
             if os.path.exists(full_path):
                 shutil.rmtree(full_path)
+        for root, dirs, files in os.walk(os.path.join(PACKAGE_ROOT, PACKAGE_NAME)):
+            for filename in files:
+                if filename[-4:] == '.pyc':
+                    os.unlink(os.path.join(root, filename))
+            for dirname in list(dirs):
+                if dirname == '__pycache__':
+                    shutil.rmtree(os.path.join(root, dirname))
+
+
+readme = ''
+with codecs.open(os.path.join(PACKAGE_ROOT, 'readme.md'), 'r', 'utf-8') as f:
+    readme = f.read()
 
 
 setup(
-    name='certvalidator',
-    version=version.__version__,
+    name=PACKAGE_NAME,
+    version=PACKAGE_VERSION,
 
     description='Validates X.509 certificates and paths',
-    long_description='Docs for this project are maintained at https://github.com/wbond/certvalidator#readme.',
+    long_description=readme,
+    long_description_content_type='text/markdown',
 
     url='https://github.com/wbond/certvalidator',
 
@@ -61,14 +125,16 @@ setup(
     keywords='crypto pki x509 certificate crl ocsp',
 
     install_requires=[
-        'asn1crypto>=0.22.0',
-        'oscrypto>=0.18.0'
+        'asn1crypto>=0.25.0.dev1',
+        'oscrypto>=0.20.0.dev1'
     ],
-    packages=find_packages(exclude=['tests*', 'dev*']),
+    packages=[PACKAGE_NAME],
+    package_data=package_data,
 
     test_suite='tests.make_suite',
 
     cmdclass={
         'clean': CleanCommand,
+        'egg_info': EggInfoCommand,
     }
 )

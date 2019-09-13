@@ -1,4 +1,5 @@
 https://github.com/wbond/asn1crypto/archive/master.zip
 https://github.com/wbond/oscrypto/archive/master.zip
+https://github.com/wbond/oscrypto/archive/master.zip#egg=oscrypto_tests&subdirectory=tests
 -r ./coverage
 -r ./lint
