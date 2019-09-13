@@ -1,8 +1,9 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-import sys
 import os
+import site
+import sys
 
 from . import build_root, requires_oscrypto
 from ._import import _preload
@@ -10,7 +11,7 @@ from ._import import _preload
 
 deps_dir = os.path.join(build_root, 'modularcrypto-deps')
 if os.path.exists(deps_dir):
-    sys.path.insert(1, deps_dir)
+    site.addsitedir(deps_dir)
 
 if sys.version_info[0:2] not in [(2, 6), (3, 2)]:
     from .lint import run as run_lint
