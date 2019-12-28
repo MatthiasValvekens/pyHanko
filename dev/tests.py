@@ -4,6 +4,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 import unittest
 import re
 import sys
+import warnings
 
 from . import requires_oscrypto
 from ._import import _preload
@@ -36,6 +37,8 @@ def run(matcher=None, repeat=1, ci=False):
     """
 
     _preload(requires_oscrypto, not ci)
+
+    warnings.filterwarnings("error")
 
     loader = unittest.TestLoader()
     # We have to manually track the list of applicable tests because for

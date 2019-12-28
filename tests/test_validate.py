@@ -111,7 +111,7 @@ class ValidateTests(unittest.TestCase):
             '(CRL|OCSP response) indicates the end-entity certificate was '
             'revoked at 21:21:34 on 2017-04-09, due to an unspecified reason'
         )
-        with self.assertRaisesRegexp(RevokedError, expected):
+        with self.assertRaisesRegex(RevokedError, expected):
             validate_path(context, path)
 
     @data('ocsp_info', True)
@@ -133,7 +133,7 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(path_len, len(path))
 
         if excp_class:
-            with self.assertRaisesRegexp(excp_class, excp_msg):
+            with self.assertRaisesRegex(excp_class, excp_msg):
                 validate_path(context, path)
         else:
             validate_path(context, path)
@@ -682,7 +682,7 @@ class ValidateTests(unittest.TestCase):
             'The path could not be validated because the end-entity certificate '
             'issuer name could not be matched'
         )
-        with self.assertRaisesRegexp(PathValidationError, expected):
+        with self.assertRaisesRegex(PathValidationError, expected):
             validate_path(context, path)
 
     def test_nist_40302_invalid_name_chaining_order_test2(self):
@@ -714,7 +714,7 @@ class ValidateTests(unittest.TestCase):
             'The path could not be validated because the end-entity certificate '
             'issuer name could not be matched'
         )
-        with self.assertRaisesRegexp(PathValidationError, expected):
+        with self.assertRaisesRegex(PathValidationError, expected):
             validate_path(context, path)
 
     @data('nist_info', True)
@@ -740,7 +740,7 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(path_len, len(path))
 
         if excp_class:
-            with self.assertRaisesRegexp(excp_class, excp_msg):
+            with self.assertRaisesRegex(excp_class, excp_msg):
                 validate_path(context, path)
         else:
             validate_path(context, path)

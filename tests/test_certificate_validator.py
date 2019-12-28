@@ -53,7 +53,7 @@ class CertificateValidatorTests(unittest.TestCase):
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
 
-        with self.assertRaisesRegexp(PathValidationError, 'expired'):
+        with self.assertRaisesRegex(PathValidationError, 'expired'):
             validator.validate_tls('www.mozilla.org')
 
     def test_basic_certificate_validator_tls_invalid_hostname(self):
@@ -65,7 +65,7 @@ class CertificateValidatorTests(unittest.TestCase):
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
 
-        with self.assertRaisesRegexp(PathValidationError, 'not valid'):
+        with self.assertRaisesRegex(PathValidationError, 'not valid'):
             validator.validate_tls('google.com')
 
     def test_basic_certificate_validator_tls_invalid_key_usage(self):
@@ -77,7 +77,7 @@ class CertificateValidatorTests(unittest.TestCase):
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
 
-        with self.assertRaisesRegexp(PathValidationError, 'for the purpose'):
+        with self.assertRaisesRegex(PathValidationError, 'for the purpose'):
             validator.validate_usage(set(['crl_sign']))
 
     def test_basic_certificate_validator_tls_whitelist(self):
