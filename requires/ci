@@ -3,3 +3,6 @@ https://github.com/wbond/oscrypto/archive/master.zip
 https://github.com/wbond/oscrypto/archive/master.zip#egg=oscrypto_tests&subdirectory=tests
 -r ./coverage
 -r ./lint
+# These were added for ensuring we don't throw warnings on cffi 1.13.1+ on Mac
+cffi == 1.13.2 ; (python_version == '2.7' or python_version >= '3.6') and sys_platform == 'darwin'
+pycparser == 2.19 ; (python_version == '2.7' or python_version >= '3.6') and sys_platform == 'darwin'

@@ -127,8 +127,8 @@ setup(
     keywords='crypto pki x509 certificate crl ocsp',
 
     install_requires=[
-        'asn1crypto>=0.25.0.dev1',
-        'oscrypto>=0.20.0.dev1'
+        'asn1crypto>=1.2.0',
+        'oscrypto>=1.1.0'
     ],
     packages=[PACKAGE_NAME],
     package_data=package_data,
