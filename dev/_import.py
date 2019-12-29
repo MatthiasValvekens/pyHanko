@@ -44,6 +44,10 @@ def _import_from(mod, path, mod_dir=None, allow_error=False):
             and not os.path.exists(os.path.join(path, mod_dir + '.py')):
         return None
 
+    if os.sep in mod_dir:
+        append, mod_dir = mod_dir.rsplit(os.sep, 1)
+        path = os.path.join(path, append)
+
     try:
         mod_info = imp.find_module(mod_dir, [path])
         return imp.load_module(mod, *mod_info)
