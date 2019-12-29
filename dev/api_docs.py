@@ -1,10 +1,11 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-import re
-import os
 import ast
 import _ast
+import os
+import re
+import sys
 import textwrap
 
 import commonmark
@@ -251,7 +252,9 @@ def walk_ast(node, code_lines, sections, md_chunks):
                     continue
 
                 docstring = ast.get_docstring(subnode)
-                def_lineno = subnode.lineno + len(subnode.decorator_list)
+                def_lineno = subnode.lineno
+                if sys.version_info < (3, 8):
+                    def_lineno += len(subnode.decorator_list)
 
                 if not docstring:
                     continue

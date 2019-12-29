@@ -18,6 +18,19 @@ else:
     from io import StringIO
 
 
+run_args = [
+    {
+        'name': 'regex',
+        'kwarg': 'matcher',
+    },
+    {
+        'name': 'repeat_count',
+        'kwarg': 'repeat',
+        'cast': 'int',
+    },
+]
+
+
 def run(matcher=None, repeat=1, ci=False):
     """
     Runs the tests

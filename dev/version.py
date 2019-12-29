@@ -8,6 +8,14 @@ import re
 from . import package_root, package_name, has_tests_package
 
 
+run_args = [
+    {
+        'name': 'pep440_version',
+        'required': True
+    },
+]
+
+
 def run(new_version):
     """
     Updates the package version in the various locations

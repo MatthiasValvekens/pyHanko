@@ -8,6 +8,8 @@ package_name = "certvalidator"
 
 other_packages = []
 
+task_keyword_args = []
+
 requires_oscrypto = True
 has_tests_package = False
 

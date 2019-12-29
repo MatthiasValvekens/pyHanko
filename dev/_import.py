@@ -5,10 +5,15 @@ import imp
 import sys
 import os
 
-from . import build_root
+from . import build_root, package_name, package_root
+
+if sys.version_info < (3,):
+    getcwd = os.getcwdu
+else:
+    getcwd = os.getcwd
 
 
-def _import_from(mod, path, mod_dir=None):
+def _import_from(mod, path, mod_dir=None, allow_error=False):
     """
     Imports a module from a specific path
 
@@ -22,23 +27,29 @@ def _import_from(mod, path, mod_dir=None):
         If the sub directory of "path" is different than the "mod" name,
         pass the sub directory as a unicode string
 
+    :param allow_error:
+        If an ImportError should be raised when the module can't be imported
+
     :return:
         None if not loaded, otherwise the module
     """
 
     if mod_dir is None:
-        mod_dir = mod
+        mod_dir = mod.replace('.', os.sep)
 
     if not os.path.exists(path):
         return None
 
-    if not os.path.exists(os.path.join(path, mod_dir)):
+    if not os.path.exists(os.path.join(path, mod_dir)) \
+            and not os.path.exists(os.path.join(path, mod_dir + '.py')):
         return None
 
     try:
         mod_info = imp.find_module(mod_dir, [path])
         return imp.load_module(mod, *mod_info)
     except ImportError:
+        if allow_error:
+            raise
         return None
 
 
@@ -55,13 +66,18 @@ def _preload(require_oscrypto, print_info):
     """
 
     if print_info:
+        print('Working dir: ' + getcwd())
         print('Python ' + sys.version.replace('\n', ''))
 
     asn1crypto = None
     oscrypto = None
 
     if require_oscrypto:
-        oscrypto_dir = os.path.join(build_root, 'oscrypto')
+        # Some CI services don't use the package name for the dir
+        if package_name == 'oscrypto':
+            oscrypto_dir = package_root
+        else:
+            oscrypto_dir = os.path.join(build_root, 'oscrypto')
         oscrypto_tests = None
         if os.path.exists(oscrypto_dir):
             oscrypto_tests = _import_from('oscrypto_tests', oscrypto_dir, 'tests')
@@ -70,7 +86,10 @@ def _preload(require_oscrypto, print_info):
         asn1crypto, oscrypto = oscrypto_tests.local_oscrypto()
 
     else:
-        asn1crypto_dir = os.path.join(build_root, 'asn1crypto')
+        if package_name == 'asn1crypto':
+            asn1crypto_dir = package_root
+        else:
+            asn1crypto_dir = os.path.join(build_root, 'asn1crypto')
         if os.path.exists(asn1crypto_dir):
             asn1crypto = _import_from('asn1crypto', asn1crypto_dir)
         if asn1crypto is None:
