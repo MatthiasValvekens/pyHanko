@@ -27,6 +27,7 @@ def patch():
         unittest.TestCase.assertRegex = _assert_regex
         unittest.TestCase.assertRaises = _assert_raises
         unittest.TestCase.assertRaisesRegex = _assert_raises_regex
+        unittest.TestCase.assertGreaterEqual = _assert_greater_equal
         unittest.TestCase.assertLess = _assert_less
         unittest.TestCase.assertLessEqual = _assert_less_equal
         unittest.TestCase.assertIn = _assert_in
@@ -46,6 +47,12 @@ def _safe_repr(obj):
 
 def _format_message(msg, standard_msg):
     return msg or standard_msg
+
+
+def _assert_greater_equal(self, a, b, msg=None):
+    if not a >= b:
+        standard_msg = '%s not greater than or equal to %s' % (_safe_repr(a), _safe_repr(b))
+        self.fail(_format_message(msg, standard_msg))
 
 
 def _assert_less(self, a, b, msg=None):
