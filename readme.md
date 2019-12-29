@@ -16,6 +16,7 @@ revocation checks.
  - [Development](#development)
  - [CI Tasks](#ci-tasks)
 
+[![GitHub Actions CI](https://github.com/wbond/certvalidator/workflows/CI/badge.svg)](https://github.com/wbond/certvalidator/actions?workflow=CI)
 [![Travis CI](https://api.travis-ci.org/wbond/certvalidator.svg?branch=master)](https://travis-ci.org/wbond/certvalidator)
 [![AppVeyor](https://ci.appveyor.com/api/projects/status/github/wbond/certvalidator?branch=master&svg=true)](https://ci.appveyor.com/project/wbond/certvalidator)
 [![CircleCI](https://circleci.com/gh/wbond/certvalidator.svg?style=shield)](https://circleci.com/gh/wbond/certvalidator)
@@ -104,7 +105,15 @@ pip install certvalidator
 
 ## Testing
 
-Tests are written using `unittest` and require no third-party packages:
+Tests are written using `unittest` and require no third-party packages.
+
+Depending on what type of source is available for the package, the following
+commands can be used to run the test suite.
+
+### Git Repository
+
+When working within a Git working copy, or an archive of the Git repository,
+the full test suite is run via:
 
 ```bash
 python run.py tests
@@ -114,6 +123,15 @@ To run only some tests, pass a regular expression as a parameter to `tests`.
 
 ```bash
 python run.py tests path
+```
+
+### PyPi Source Distribution
+
+When working within an extracted source distribution (aka `.tar.gz`) from
+PyPi, the full test suite is run via:
+
+```bash
+python setup.py test
 ```
 
 ### Test Cases
@@ -172,6 +190,12 @@ python run.py stress_test
 Once the script is complete, results that differ between the OS validation and
 the *certvalidator* validation will be listed for further debugging.
 
+To change the version number of the package, run:
+
+```bash
+python run.py version {pep440_version}
+```
+
 To install the necessary packages for releasing a new version on PyPI, run:
 
 ```bash
@@ -180,14 +204,14 @@ pip install --user -r requires/release
 
 Releases are created by:
 
- - Making a git tag in [semver](http://semver.org/) format
+ - Making a git tag in [PEP 440](https://www.python.org/dev/peps/pep-0440/#examples-of-compliant-version-schemes) format
  - Running the command:
 
    ```bash
    python run.py release
    ```
 
-Existing releases can be found at https://pypi.python.org/pypi/certvalidator.
+Existing releases can be found at https://pypi.org/project/certvalidator.
 
 ## CI Tasks
 
