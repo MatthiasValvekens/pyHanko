@@ -474,7 +474,7 @@ class BasePdfFileWriter(PdfHandler):
             generation, idnum = ix
             obj = self.objects[ix]
             object_position_dict[ix] = stream.tell()
-            stream.write(('%d %d obj' % (idnum, generation)).encode('ascii'))
+            stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
             if self._encrypt is not None and idnum != self._encrypt.idnum:
                 key = _derive_key(self._encrypt_key, idnum, generation)
             else:
