@@ -96,7 +96,78 @@ def _tuple_from_ver(version_string):
         A tuple of integers
     """
 
-    return tuple(map(int, version_string.split('.')))
+    match = re.search(
+        r'(\d+(?:\.\d+)*)'
+        r'([-._]?(?:alpha|a|beta|b|preview|pre|c|rc)\.?\d*)?'
+        r'(-\d+|(?:[-._]?(?:rev|r|post)\.?\d*))?'
+        r'([-._]?dev\.?\d*)?',
+        version_string
+    )
+    if not match:
+        return tuple()
+
+    nums = tuple(map(int, match.group(1).split('.')))
+
+    pre = match.group(2)
+    if pre:
+        pre = pre.replace('alpha', 'a')
+        pre = pre.replace('beta', 'b')
+        pre = pre.replace('preview', 'rc')
+        pre = pre.replace('pre', 'rc')
+        pre = re.sub(r'(?<!r)c', 'rc', pre)
+        pre = pre.lstrip('._-')
+        pre_dig_match = re.search(r'\d+', pre)
+        if pre_dig_match:
+            pre_dig = int(pre_dig_match.group(0))
+        else:
+            pre_dig = 0
+        pre = pre.rstrip('0123456789')
+
+        pre_num = {
+            'a': -3,
+            'b': -2,
+            'rc': -1,
+        }[pre]
+
+        pre_tup = (pre_num, pre_dig)
+    else:
+        pre_tup = tuple()
+
+    post = match.group(3)
+    if post:
+        post_dig_match = re.search(r'\d+', post)
+        if post_dig_match:
+            post_dig = int(post_dig_match.group(0))
+        else:
+            post_dig = 0
+        post_tup = (1, post_dig)
+    else:
+        post_tup = tuple()
+
+    dev = match.group(4)
+    if dev:
+        dev_dig_match = re.search(r'\d+', dev)
+        if dev_dig_match:
+            dev_dig = int(dev_dig_match.group(0))
+        else:
+            dev_dig = 0
+        dev_tup = (-4, dev_dig)
+    else:
+        dev_tup = tuple()
+
+    normalized = [nums]
+    if pre_tup:
+        normalized.append(pre_tup)
+    if post_tup:
+        normalized.append(post_tup)
+    if dev_tup:
+        normalized.append(dev_tup)
+    # This ensures regular releases happen after dev and prerelease, but
+    # before post releases
+    if not pre_tup and not post_tup and not dev_tup:
+        normalized.append((0, 0))
+
+    return tuple(normalized)
 
 
 def _open_archive(path):
@@ -309,6 +380,151 @@ def _extract_package(deps_dir, pkg_path, pkg_dir):
             shutil.rmtree(staging_dir)
 
 
+def _sort_pep440_versions(releases, include_prerelease):
+    """
+    :param releases:
+        A list of unicode string PEP 440 version numbers
+
+    :param include_prerelease:
+        A boolean indicating if prerelease versions should be included
+
+    :return:
+        A sorted generator of 2-element tuples:
+         0: A unicode string containing a PEP 440 version number
+         1: A tuple of tuples containing integers - this is the output of
+            _tuple_from_ver() for the PEP 440 version number and is intended
+            for comparing versions
+    """
+
+    parsed_versions = []
+    for v in releases:
+        t = _tuple_from_ver(v)
+        if not include_prerelease and t[1][0] < 0:
+            continue
+        parsed_versions.append((v, t))
+
+    return sorted(parsed_versions, key=lambda v: v[1])
+
+
+def _is_valid_python_version(python_version, requires_python):
+    """
+    Verifies the "python_version" and "requires_python" keys from a PyPi
+    download record are applicable to the current version of Python
+
+    :param python_version:
+        The "python_version" value from a PyPi download JSON structure. This
+        should be one of: "py2", "py3", "py2.py3" or "source".
+
+    :param requires_python:
+        The "requires_python" value from a PyPi download JSON structure. This
+        will be None, or a comma-separated list of conditions that must be
+        true. Ex: ">=3.5", "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7"
+    """
+
+    if python_version == "py2" and sys.version_info >= (3,):
+        return False
+    if python_version == "py3" and sys.version_info < (3,):
+        return False
+
+    if requires_python is not None:
+
+        def _ver_tuples(ver_str):
+            ver_str = ver_str.strip()
+            if ver_str.endswith('.*'):
+                ver_str = ver_str[:-2]
+            cond_tup = tuple(map(int, ver_str.split('.')))
+            return (sys.version_info[:len(cond_tup)], cond_tup)
+
+        for part in map(str_cls.strip, requires_python.split(',')):
+            if part.startswith('!='):
+                sys_tup, cond_tup = _ver_tuples(part[2:])
+                if sys_tup == cond_tup:
+                    return False
+            elif part.startswith('>='):
+                sys_tup, cond_tup = _ver_tuples(part[2:])
+                if sys_tup < cond_tup:
+                    return False
+            elif part.startswith('>'):
+                sys_tup, cond_tup = _ver_tuples(part[1:])
+                if sys_tup <= cond_tup:
+                    return False
+            elif part.startswith('<='):
+                sys_tup, cond_tup = _ver_tuples(part[2:])
+                if sys_tup > cond_tup:
+                    return False
+            elif part.startswith('<'):
+                sys_tup, cond_tup = _ver_tuples(part[1:])
+                if sys_tup >= cond_tup:
+                    return False
+            elif part.startswith('=='):
+                sys_tup, cond_tup = _ver_tuples(part[2:])
+                if sys_tup != cond_tup:
+                    return False
+
+    return True
+
+
+def _locate_suitable_download(downloads):
+    """
+    :param downloads:
+        A list of dicts containing a key "url", "python_version" and
+        "requires_python"
+
+    :return:
+        A unicode string URL, or None if not a valid release for the current
+        version of Python
+    """
+
+    valid_tags = _pep425tags()
+
+    exe_suffix = None
+    if sys.platform == 'win32' and _pep425_implementation() == 'cp':
+        win_arch = 'win32' if sys.maxsize == 2147483647 else 'win-amd64'
+        version_info = sys.version_info
+        exe_suffix = '.%s-py%d.%d.exe' % (win_arch, version_info[0], version_info[1])
+
+    wheels = {}
+    whl = None
+    tar_bz2 = None
+    tar_gz = None
+    exe = None
+    for download in downloads:
+        if not _is_valid_python_version(download.get('python_version'), download.get('requires_python')):
+            continue
+
+        if exe_suffix and download['url'].endswith(exe_suffix):
+            exe = download['url']
+        if download['url'].endswith('.whl'):
+            parts = os.path.basename(download['url']).split('-')
+            tag_impl = parts[-3]
+            tag_abi = parts[-2]
+            tag_arch = parts[-1].split('.')[0]
+            wheels[(tag_impl, tag_abi, tag_arch)] = download['url']
+        if download['url'].endswith('.tar.bz2'):
+            tar_bz2 = download['url']
+        if download['url'].endswith('.tar.gz'):
+            tar_gz = download['url']
+
+    # Find the most-specific wheel possible
+    for tag in valid_tags:
+        if tag in wheels:
+            whl = wheels[tag]
+            break
+
+    if exe_suffix and exe:
+        url = exe
+    elif whl:
+        url = whl
+    elif tar_bz2:
+        url = tar_bz2
+    elif tar_gz:
+        url = tar_gz
+    else:
+        return None
+
+    return url
+
+
 def _stage_requirements(deps_dir, path):
     """
     Installs requirements without using Python to download, since
@@ -322,16 +538,9 @@ def _stage_requirements(deps_dir, path):
         A unicode filesystem path to a requirements file
     """
 
-    valid_tags = _pep425tags()
-
-    exe_suffix = None
-    if sys.platform == 'win32' and _pep425_implementation() == 'cp':
-        win_arch = 'win32' if sys.maxsize == 2147483647 else 'win-amd64'
-        version_info = sys.version_info
-        exe_suffix = '.%s-py%d.%d.exe' % (win_arch, version_info[0], version_info[1])
-
     packages = _parse_requires(path)
     for p in packages:
+        url = None
         pkg = p['pkg']
         pkg_sub_dir = None
         if p['type'] == 'url':
@@ -359,53 +568,25 @@ def _stage_requirements(deps_dir, path):
             if os.path.exists(json_dest):
                 os.remove(json_dest)
 
-            latest = pkg_info['info']['version']
-            if p['type'] == '>=':
-                if _tuple_from_ver(p['ver']) > _tuple_from_ver(latest):
-                    raise Exception('Unable to find version %s of %s, newest is %s' % (p['ver'], pkg, latest))
-                version = latest
-            elif p['type'] == '==':
+            if p['type'] == '==':
                 if p['ver'] not in pkg_info['releases']:
                     raise Exception('Unable to find version %s of %s' % (p['ver'], pkg))
-                version = p['ver']
+                url = _locate_suitable_download(pkg_info['releases'][p['ver']])
+                if not url:
+                    raise Exception('Unable to find a compatible download of %s == %s' % (pkg, p['ver']))
             else:
-                version = latest
-
-            wheels = {}
-            whl = None
-            tar_bz2 = None
-            tar_gz = None
-            exe = None
-            for download in pkg_info['releases'][version]:
-                if exe_suffix and download['url'].endswith(exe_suffix):
-                    exe = download['url']
-                if download['url'].endswith('.whl'):
-                    parts = os.path.basename(download['url']).split('-')
-                    tag_impl = parts[-3]
-                    tag_abi = parts[-2]
-                    tag_arch = parts[-1].split('.')[0]
-                    wheels[(tag_impl, tag_abi, tag_arch)] = download['url']
-                if download['url'].endswith('.tar.bz2'):
-                    tar_bz2 = download['url']
-                if download['url'].endswith('.tar.gz'):
-                    tar_gz = download['url']
-
-            # Find the most-specific wheel possible
-            for tag in valid_tags:
-                if tag in wheels:
-                    whl = wheels[tag]
-                    break
-
-            if exe_suffix and exe:
-                url = exe
-            elif whl:
-                url = whl
-            elif tar_bz2:
-                url = tar_bz2
-            elif tar_gz:
-                url = tar_gz
-            else:
-                raise Exception('Unable to find suitable download for %s' % pkg)
+                p_ver_tup = _tuple_from_ver(p['ver'])
+                for ver_str, ver_tup in reversed(_sort_pep440_versions(pkg_info['releases'], False)):
+                    if p['type'] == '>=' and ver_tup < p_ver_tup:
+                        break
+                    url = _locate_suitable_download(pkg_info['releases'][ver_str])
+                    if url:
+                        break
+                if not url:
+                    if p['type'] == '>=':
+                        raise Exception('Unable to find a compatible download of %s >= %s' % (pkg, p['ver']))
+                    else:
+                        raise Exception('Unable to find a compatible download of %s' % pkg)
 
         local_path = _download(url, deps_dir)
 
