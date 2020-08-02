@@ -1,8 +1,43 @@
 import fpdf
+import qrcode
 from PyPDF2 import PdfFileReader, PdfFileWriter
 from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
+
+
+class FPDFImage(qrcode.image.base.BaseImage):
+    """
+    Quick-and-dirty implementation of the Image interface required
+    by the qrcode package.
+    """
+    kind = "PDF"
+    allowed_kinds = ("PDF",)
+
+    def new_image(self, **kwargs):
+        return []
+
+    def drawrect(self, row, col):
+        self._img.append((row, col))
+
+    def save(self, stream, kind=None):
+        """
+        Assume that "stream" is a FPDF object.
+
+        WARNING: this will set the fill_color setting to black,
+        and since FPDF has no API to retrieve the current value
+        of that setting, there is no "official" way to restore
+        it to the caller's value. We make no attempt to do so.
+        """
+        base_x = stream.get_x()
+        base_y = stream.get_y()
+        stream.set_fill_color(0,0,0)
+        for row, col in self._img:
+            (x,y), _ = self.pixel_box(row, col)
+            stream.set_xy(
+                base_x + x, base_y + y
+            )
+            stream.cell(self.box_size, self.box_size, fill=True)
 
 
 @dataclass(frozen=True)
@@ -11,9 +46,10 @@ class StampStyle:
     font_family: str = 'Courier'
     # TODO fix bogus defaults
     stamp_width: int = 340
-    stamp_innsep: int = 5
+    stamp_innsep: int = 3
+    stamp_textsep: int = 3
 
-    stamp_qrsize: int = 80
+    stamp_qrsize: int = 100
 
     timestamp_format = '%Y-%m-%d %H:%M:%S'
 
@@ -36,8 +72,9 @@ class Stamper:
         overlay.set_font(style.font_family, size=style.font_size)
 
         text_x = x + 2 * style.stamp_innsep + style.stamp_qrsize
-        overlay.set_xy(text_x, y + style.stamp_innsep)
-        # TODO support local timezone output
+        overlay.set_xy(text_x, y + style.stamp_innsep + style.stamp_textsep)
+        # TODO support local timezone output, linkify
+        # TODO set width by measuring string widths
         stamp_text = (
             "Digital version available at\n"
             "%(url)s\n\n"
@@ -52,9 +89,22 @@ class Stamper:
             txt=stamp_text
         )
 
-        stamp_height = overlay.get_y() + style.stamp_innsep - y
+        # height is determined by the height of the text,
+        # or the QR code, whichever is greater
+        stamp_height = max(
+            overlay.get_y() + style.stamp_innsep - y,
+            style.stamp_qrsize + 2 * style.stamp_innsep
+        )
         overlay.set_xy(x, y)
         overlay.cell(style.stamp_width, stamp_height, border=1)
+
+
+        qr_y_sep = (stamp_height - style.stamp_qrsize) // 2
+        overlay.set_xy(
+            x + style.stamp_innsep,
+            y + max(style.stamp_innsep, qr_y_sep)
+        )
+        self._draw_qr(overlay, url)
 
         # output(...) returns a string, not a bytestring,
         # so we have to call encode().
@@ -72,6 +122,16 @@ class Stamper:
         output_handle = output_handle or BytesIO()
         result.write(output_handle)
         return output_handle
+
+    def _draw_qr(self, overlay, url):
+        qr = qrcode.QRCode(box_size=4)
+        qr.add_data(url)
+        qr.make()
+
+        # fit the QR code in a square of the requested size
+        qr_num_boxes = len(qr.modules) + 2 * qr.border
+        qr.box_size = int(round(self.style.stamp_qrsize / qr_num_boxes))
+        qr.make_image(image_factory=FPDFImage).save(overlay)
 
     def stamp_file(self, input_name, output_name, **kwargs):
 
