@@ -10,8 +10,7 @@ class StampStyle:
     font_size: int = 10
     font_family: str = 'Courier'
     # TODO fix bogus defaults
-    stamp_width: int = 440
-    stamp_height: int = 100
+    stamp_width: int = 340
     stamp_innsep: int = 5
 
     stamp_qrsize: int = 80
@@ -35,12 +34,9 @@ class Stamper:
         overlay = fpdf.FPDF(format=(width, height), unit='pt')
         overlay.add_page()
         overlay.set_font(style.font_family, size=style.font_size)
-        overlay.set_xy(x, y)
-        overlay.cell(style.stamp_width, style.stamp_height, border=1)
 
-        # FIXME: x-align doesn't seem to be working as intended
         text_x = x + 2 * style.stamp_innsep + style.stamp_qrsize
-        overlay.set_xy(x, y + style.stamp_innsep)
+        overlay.set_xy(text_x, y + style.stamp_innsep)
         # TODO support local timezone output
         stamp_text = (
             "Digital version available at\n"
@@ -55,6 +51,10 @@ class Stamper:
             h=style.font_size + 2,
             txt=stamp_text
         )
+
+        stamp_height = overlay.get_y() + style.stamp_innsep - y
+        overlay.set_xy(x, y)
+        overlay.cell(style.stamp_width, stamp_height, border=1)
 
         # output(...) returns a string, not a bytestring,
         # so we have to call encode().
