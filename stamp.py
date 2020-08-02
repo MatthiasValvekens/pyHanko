@@ -5,8 +5,10 @@ from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
 
+from qrcode.image.base import BaseImage
 
-class FPDFImage(qrcode.image.base.BaseImage):
+
+class FPDFImage(BaseImage):
     """
     Quick-and-dirty implementation of the Image interface required
     by the qrcode package.
@@ -31,13 +33,12 @@ class FPDFImage(qrcode.image.base.BaseImage):
         """
         base_x = stream.get_x()
         base_y = stream.get_y()
-        stream.set_fill_color(0,0,0)
+        stream.set_fill_color(0, 0, 0)
         for row, col in self._img:
-            (x,y), _ = self.pixel_box(row, col)
+            (x, y), _ = self.pixel_box(row, col)
             stream.rect(
                 base_x + x, base_y + y, self.box_size, self.box_size, style='F'
             )
-
 
 
 @dataclass(frozen=True)
@@ -59,8 +60,6 @@ class StampStyle:
         "this url: @@@\n\n"
         "Timestamp: %(ts)s"
     )
-
-
 
 
 class Stamper:
