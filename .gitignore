@@ -112,3 +112,4 @@ celerybeat.pid
 
 # ignore wordlists
 dictionaries/
+*.pdf

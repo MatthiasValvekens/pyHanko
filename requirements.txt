@@ -1,0 +1,5 @@
+fpdf==1.7.2
+Pillow==7.2.0
+PyPDF2==1.26.0
+qrcode==6.1
+six==1.15.0
