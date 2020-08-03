@@ -89,35 +89,12 @@ class PKCS7Placeholder(generic.PdfObject):
     # noinspection PyPep8Naming, PyUnusedLocal
     def writeToStream(self, stream, encryption_key):
         start = stream.tell()
-        digesting = isinstance(stream, DigestingBytesIO)
-
-        if digesting:
-            stream._digesting = False
         stream.write(b'<')
         stream.write(self.value)
         stream.write(b'>')
-        if digesting:
-            stream._digesting = True
         end = stream.tell()
         if self._offsets is None:
             self._offsets = start, end
-
-
-class DigestingBytesIO(BytesIO):
-
-    def __init__(self, *args, md, **kwargs):
-        self._md = md
-        self._digesting = True
-        super().__init__(*args, **kwargs)
-
-    @property
-    def md(self):
-        return self._md
-
-    def write(self, b, ignore_digest=False):
-        if self._digesting and not ignore_digest:
-            self._md.update(b)
-        return super().write(b)
 
 
 # simple PDF signature with two digested regions
@@ -154,8 +131,8 @@ class SignatureFormField(generic.DictionaryObject):
             # Annotation properties: bare minimum
             pdf_name('/Type'): pdf_name('/Annot'),
             pdf_name('/Subtype'): pdf_name('/Widget'),
-            # TODO look this up in the spec
-            pdf_name('/F'): generic.NumberObject(132),
+            # this sets the "Locked" and "Print" bits
+            pdf_name('/F'): generic.NumberObject(0b10000100),
             pdf_name('/P'): include_on_page,
             pdf_name('/Rect'): generic.ArrayObject(
                 [generic.FloatObject(0.0)] * 4
@@ -286,7 +263,16 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     #  cloning the document root doesn't seem to work
     pdf_in = PdfFileReader(input_handle)
     pdf_out = PdfFileWriter()
+    # TODO: potential copying fidelity issues
+    # The cloning methods on PdfFileWriter are unreliable
+    # specifically, self._pages handling is broken
+    # We therefore copy the pages from the input pdf one by one,
+    # and take care of existing form metadata manually.
+    # This works for simple documents, but it's fragile at best, so it's
+    # worth looking into whether pikepdf or sth. supports a more robust cloning
+    # mechanism
     root = pdf_out._root_object
+    orig_root = pdf_in.trailer['/Root']
 
     for p in range(pdf_in.getNumPages()):
         pdf_out.addPage(pdf_in.getPage(p))
