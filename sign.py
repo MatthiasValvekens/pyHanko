@@ -7,9 +7,11 @@ from io import BytesIO
 from typing import List
 
 import pytz
-from PyPDF2 import generic, PdfFileWriter, PdfFileReader
+from PyPDF2 import generic
 from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
+
+from pdf_utils import IncrementalPdfFileWriter
 
 pdf_name = generic.NameObject
 pdf_string = generic.createStringObject
@@ -65,7 +67,7 @@ class PKCS7Placeholder(generic.PdfObject):
 
     # FIXME I have no idea what a reasonable size would be
     #  Write a "fake" signature first?
-    def __init__(self, bytes_reserved=16384):
+    def __init__(self, bytes_reserved=8192):
         self._placeholder = True
         self.value = b'0' * bytes_reserved
         self._offsets = None
@@ -259,23 +261,8 @@ class PdfSignatureMetadata:
 
 def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
              md_algorithm='sha1'):
-    # TODO attempt to transfer data from the root of the input file
-    #  cloning the document root doesn't seem to work
-    pdf_in = PdfFileReader(input_handle)
-    pdf_out = PdfFileWriter()
-    # TODO: potential copying fidelity issues
-    # The cloning methods on PdfFileWriter are unreliable
-    # specifically, self._pages handling is broken
-    # We therefore copy the pages from the input pdf one by one,
-    # and take care of existing form metadata manually.
-    # This works for simple documents, but it's fragile at best, so it's
-    # worth looking into whether pikepdf or sth. supports a more robust cloning
-    # mechanism
+    pdf_out = IncrementalPdfFileWriter(input_handle)
     root = pdf_out._root_object
-    orig_root = pdf_in.trailer['/Root']
-
-    for p in range(pdf_in.getNumPages()):
-        pdf_out.addPage(pdf_in.getPage(p))
 
     # we need to add a signature object and a corresponding form field
     # to the PDF file
@@ -283,17 +270,17 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
         signature_meta.name, signature_meta.location,
         signature_meta.reason, signature_meta.date_string
     )
-    sig_obj_ref = pdf_out._addObject(sig_obj)
+    sig_obj_ref = pdf_out.add_object(sig_obj)
     form_field = SignatureFormField(
         signature_meta.field_name, sig_obj_ref,
         include_on_page=root['/Pages']['/Kids'][0]
     )
-    form_field_ref = pdf_out._addObject(form_field)
+    form_field_ref = pdf_out.add_object(form_field)
 
     # TODO support certification signatures (more metadata)
     # TODO extend /AcroForm if already present
     #  (this is necessary for multiple signatures anyway)
-    root[pdf_name('/AcroForm')] = generic.DictionaryObject(
+    form = generic.DictionaryObject(
         {
             pdf_name('/Fields'): generic.ArrayObject([form_field_ref]),
             pdf_name('/SigFlags'): generic.NumberObject(
@@ -301,6 +288,8 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
             )
         }
     )
+    root[pdf_name('/AcroForm')] = pdf_out.add_object(form)
+    pdf_out.update_root()
 
     # Render the PDF to a byte buffer with placeholder values
     # for the signature data
