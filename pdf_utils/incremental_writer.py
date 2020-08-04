@@ -73,6 +73,9 @@ def write_xref_table(stream, position_dict):
     # This is necessarily more complicated than the implementation
     # in PyPDF2 (see ISO 32000 § 7.5.4, esp. on updates)
     subsections = _contiguous_xref_chunks(position_dict)
+    # insert origin of linked list of freed objects
+    # TODO support deleting objects
+    stream.write(b'0 1\n0000000000 65535 f \n')
     for first_idnum, subsection in subsections:
         # subsection header: list first object ID + length of subsection
         header = '%d %d\n' % (first_idnum, len(subsection))
@@ -83,8 +86,6 @@ def write_xref_table(stream, position_dict):
 
     return xref_location
 
-
-# TODO support deleting objects
 
 class IncrementalPdfFileWriter:
 
