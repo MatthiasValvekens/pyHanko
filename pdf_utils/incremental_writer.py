@@ -1,5 +1,9 @@
 import struct
+import os
+
 from PyPDF2 import generic
+from PyPDF2.pdf import _alg34, _alg35
+
 from .reader import PdfFileReader
 from hashlib import md5
 
@@ -103,8 +107,37 @@ class IncrementalPdfFileWriter:
         self._root_object = root.getObject()
         info = prev.trailer.raw_get('/Info')
         self._info = generic.IndirectObject(info.idnum, info.generation, self)
+        self._encrypt = self._encrypt_key = None
+        self._document_id = self.__class__._handle_id(prev)
+
+    @classmethod
+    def _handle_id(cls, prev):
+        # There are a number of issues at play here
+        #  - Documents *should* have a unique id, but it's not a strict
+        #    requirement unless the document is encrypted.
+        #  - We are updating an existing document, but the result is not the
+        #    same document. Hence, we want to assign an ID to this document that
+        #    is not the same as the one on the existing document.
+        #  - The first part of the ID is part of the key derivation used to
+        #    to encrypt documents. Since we need to encrypt the file using
+        #    the same cryptographic data as the original, we cannot change
+        #    this value if it is present (cf. § 7.6.3.3 in ISO 32000).
+        #    Even when no encryption is involved, changing this part violates
+        #    the spec (cf. § 14.4 in loc. cit.)
+
+        id2 = os.urandom(16)
+        try:
+            id1, _ = prev.trailer["/ID"]
+        except KeyError:
+            # no primary ID present, so generate one
+            id1 = os.urandom(16)
+        # noinspection PyArgumentList
+        return generic.ArrayObject(
+            [generic.ByteStringObject(id1), generic.ByteStringObject(id2)]
+        )
 
     # for compatibility with PyPDF API
+    # noinspection PyPep8Naming
     def getObject(self, ido):
         if ido.pdf is not self and ido.pdf is not self.prev:
             raise ValueError("pdf must be self or prev")
@@ -128,7 +161,22 @@ class IncrementalPdfFileWriter:
         return generic.IndirectObject(self._lastobj_id, 0, self)
 
     def write(self, stream):
-        # first copy the original data
+        # before doing anything else, we attempt to load the crypto-relevant
+        # data, so that we can bail early if something's not right
+        trailer = generic.DictionaryObject()
+        trailer[pdf_name("/ID")] = self._document_id
+        if self.prev.isEncrypted:
+            if self._encrypt is not None:
+                trailer[pdf_name("/Encrypt")] = self._encrypt
+            else:
+                # removing encryption in an incremental update is impossible
+                raise ValueError(
+                    'Cannot save this document unencrypted. Please call '
+                    'encrypt() with the user password of the original file '
+                    'before calling write().'
+                )
+
+        # copy the original data to the output
         input_pos = self.input_stream.tell()
         self.input_stream.seek(0)
         # TODO there has to be a better way to do this that doesn't involve
@@ -146,7 +194,7 @@ class IncrementalPdfFileWriter:
             obj = self.objects_to_update[ix]
             updated_object_positions[ix] = stream.tell()
             stream.write(('%d %d obj' % (idnum, generation)).encode('ascii'))
-            if hasattr(self, "_encrypt") and idnum != self._encrypt.idnum:
+            if self._encrypt is not None and idnum != self._encrypt.idnum:
                 key = _derive_key(self._encrypt_key, idnum, generation)
             else:
                 key = None
@@ -157,7 +205,6 @@ class IncrementalPdfFileWriter:
         xref_location = write_xref_table(stream, updated_object_positions)
 
         # write trailer and EOF
-        trailer = generic.DictionaryObject()
         stream.write(b'trailer\n')
         trailer.update({
             pdf_name('/Size'): generic.NumberObject(self._lastobj_id + 1),
@@ -165,17 +212,49 @@ class IncrementalPdfFileWriter:
             pdf_name('/Info'): self._info,
             pdf_name('/Prev'): generic.NumberObject(self.prev.last_startxref)
         })
-        # TODO port actual encryption code
-        try:
-            trailer[pdf_name("/ID")] = self._ID
-        except AttributeError:
-            pass
-        try:
-            trailer[pdf_name("/Encrypt")] = self._encrypt
-        except AttributeError:
-            pass
         trailer.writeToStream(stream, None)
         # write xref table pointer and EOF
         xref_pointer_string = '\nstartxref\n%s\n' % xref_location
         stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')
 
+    def encrypt(self, user_pwd):
+        prev = self.prev
+        # first, attempt decryption
+        if prev.isEncrypted:
+            if not prev.decrypt(user_pwd):
+                raise ValueError(
+                    'Failed to decrypt original with the password supplied'
+                )
+        else:
+            raise ValueError('Original file was not encrypted.')
+
+        # take care to use the same encryption algorithm as the underlying file
+        try:
+            encrypt_ref = prev.trailer.raw_get("/Encrypt")
+        except KeyError:
+            raise ValueError(
+                'Original document does not have an encryption dictionary'
+            )
+        encrypt = encrypt_ref.getObject()
+        use_128bit = encrypt["/V"] == 2
+
+        # see § 7.6.3.2 in ISO 32000
+        user_access_flags = encrypt["/P"]
+        owner_verif_material = encrypt["/O"]
+
+        # TODO figure out what the first item in deriv_result is for
+        if use_128bit:
+            deriv_result = _alg35(
+                password=user_pwd, rev=3, keylen=16,
+                owner_entry=owner_verif_material,
+                p_entry=user_access_flags, id1_entry=self._document_id[0],
+                metadata_encrypt=False
+            )
+        else:
+            deriv_result = _alg34(
+                password=user_pwd, owner_entry=owner_verif_material,
+                p_entry=user_access_flags, id1_entry=self._document_id[0]
+            )
+
+        self._encrypt_key = deriv_result[1]
+        self._encrypt = encrypt_ref
