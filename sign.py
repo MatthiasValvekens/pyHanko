@@ -278,18 +278,41 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     form_field_ref = pdf_out.add_object(form_field)
 
     # TODO support certification signatures (more metadata)
-    # TODO extend /AcroForm if already present
-    #  (this is necessary for multiple signatures anyway)
-    form = generic.DictionaryObject(
-        {
-            pdf_name('/Fields'): generic.ArrayObject([form_field_ref]),
-            pdf_name('/SigFlags'): generic.NumberObject(
-                signature_meta.sig_flags
-            )
-        }
-    )
-    root[pdf_name('/AcroForm')] = pdf_out.add_object(form)
-    pdf_out.update_root()
+    # TODO figure out how to place empty signature fields and fill them
+    #  (necessary for multiple signatures)
+    try:
+        # try to extend the existing form object first
+        # and mark it for an update if necessary
+        form_ref = root.raw_get('/AcroForm')
+        if isinstance(form_ref, generic.IndirectObject):
+            pdf_out.mark_update(form_ref)
+            form = form_ref.getObject()
+        else:
+            # the form is a direct object, so we'll replace it with
+            # an indirect one, and mark the root to be updated
+            # (I think this is fairly rare, but requires testing!)
+            form = form_ref
+            form_ref = pdf_out.add_object(form)
+            root[pdf_name('/AcroForm')] = form_ref
+            pdf_out.update_root()
+        # grab the array of form fields
+        try:
+            fields = form['/Fields']
+            fields.append(form_field_ref)
+        except KeyError:
+            # in a well-formed PDF, this should never happen
+            fields = generic.ArrayObject([form_field_ref])
+    except KeyError:
+        # no AcroForm present, so create one
+        form = generic.DictionaryObject()
+        root[pdf_name('/AcroForm')] = pdf_out.add_object(form)
+        fields = generic.ArrayObject([form_field_ref])
+        # now we need to mark the root as updated
+        pdf_out.update_root()
+    form.update({
+        pdf_name('/Fields'): fields,
+        pdf_name('/SigFlags'):  generic.NumberObject(signature_meta.sig_flags)
+    })
 
     # Render the PDF to a byte buffer with placeholder values
     # for the signature data
