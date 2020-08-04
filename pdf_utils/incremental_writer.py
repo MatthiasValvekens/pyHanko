@@ -1,29 +1,40 @@
 import struct
-from PyPDF2 import generic, PdfFileWriter, PdfFileReader
+from PyPDF2 import generic
+from .reader import PdfFileReader
 from hashlib import md5
+
+"""
+Utility class for writing incremental updates to PDF files.
+Contains code from the PyPDF2 project, see LICENSE.PyPDF2
+"""
+
+__all__ = ['IncrementalPdfFileWriter']
 
 pdf_name = generic.NameObject
 pdf_string = generic.createStringObject
 
 
-
 def _derive_key(base_key, idnum, generation):
-    # TODO This is mostly from PyPDF2, but I should double-check with the spec
+    # Ripped out of PyPDF2
+    # See § 7.6.2 in ISO 32000
     pack1 = struct.pack("<i", idnum)[:3]
     pack2 = struct.pack("<i", generation)[:2]
     key = base_key + pack1 + pack2
     md5_hash = md5(key).digest()
     return md5_hash[:min(16, len(base_key) + 5)]
 
+
 def peek(itr):
     itr = iter(itr)
     first = next(itr)
+
     def _itr():
         yield first
         yield from itr
 
     return first, _itr()
-    
+
+
 # helper method to set up the xref table of an incremental update
 def _contiguous_xref_chunks(position_dict):
     previous_idnum = None
@@ -50,6 +61,7 @@ def _contiguous_xref_chunks(position_dict):
     # there is always at least one chunk, so this is fine
     yield first_idnum, current_chunk
 
+
 def write_xref_table(stream, position_dict):
     xref_location = stream.tell()
     stream.write(b'xref\n')
@@ -66,6 +78,7 @@ def write_xref_table(stream, position_dict):
             stream.write(entry.encode('ascii'))
 
     return xref_location
+
 
 # TODO support deleting objects
 
@@ -93,7 +106,7 @@ class IncrementalPdfFileWriter:
 
     # for compatibility with PyPDF API
     def getObject(self, ido):
-        if ido.pdf is not self and ido.pdf is not prev:
+        if ido.pdf is not self and ido.pdf is not self.prev:
             raise ValueError("pdf must be self or prev")
         try:
             return self.objects_to_update[(ido.generation, ido.idnum)]
@@ -123,7 +136,6 @@ class IncrementalPdfFileWriter:
         stream.write(self.input_stream.read())
         self.input_stream.seek(input_pos)
 
-
         if not self.objects_to_update:
             return
 
@@ -151,10 +163,9 @@ class IncrementalPdfFileWriter:
             pdf_name('/Size'): generic.NumberObject(self._lastobj_id + 1),
             pdf_name('/Root'): self._root,
             pdf_name('/Info'): self._info,
-            # FIXME XXX HACK: PyPDF2 does not record startxref in PdfFileReader,
-            # I added a line to its read() method myself
-            pdf_name('/Prev'): generic.NumberObject(self.prev.startxref)
+            pdf_name('/Prev'): generic.NumberObject(self.prev.last_startxref)
         })
+        # TODO port actual encryption code
         try:
             trailer[pdf_name("/ID")] = self._ID
         except AttributeError:

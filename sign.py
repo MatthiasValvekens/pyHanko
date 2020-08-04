@@ -11,7 +11,7 @@ from PyPDF2 import generic
 from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
 
-from pdf_utils import IncrementalPdfFileWriter
+from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 pdf_name = generic.NameObject
 pdf_string = generic.createStringObject
