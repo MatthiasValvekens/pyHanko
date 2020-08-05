@@ -126,16 +126,19 @@ class IncrementalPdfFileWriter:
         #    Even when no encryption is involved, changing this part violates
         #    the spec (cf. § 14.4 in loc. cit.)
 
-        id2 = os.urandom(16)
+        # noinspection PyArgumentList
+        id2 = generic.ByteStringObject(os.urandom(16))
         try:
             id1, _ = prev.trailer["/ID"]
+            # is this a bug in PyPDF2?
+            if isinstance(id1, generic.TextStringObject):
+                # noinspection PyArgumentList
+                id1 = generic.ByteStringObject(id1.original_bytes)
         except KeyError:
             # no primary ID present, so generate one
-            id1 = os.urandom(16)
-        # noinspection PyArgumentList
-        return generic.ArrayObject(
-            [generic.ByteStringObject(id1), generic.ByteStringObject(id2)]
-        )
+            # noinspection PyArgumentList
+            id1 = generic.ByteStringObject(os.urandom(16))
+        return generic.ArrayObject([id1, id2])
 
     # for compatibility with PyPDF API
     # noinspection PyPep8Naming
