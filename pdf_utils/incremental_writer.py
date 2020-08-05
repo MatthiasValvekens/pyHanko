@@ -140,6 +140,10 @@ class IncrementalPdfFileWriter:
             id1 = generic.ByteStringObject(os.urandom(16))
         return generic.ArrayObject([id1, id2])
 
+    @property
+    def root(self):
+        return self._root_object
+
     # for compatibility with PyPDF API
     # noinspection PyPep8Naming
     def getObject(self, ido):

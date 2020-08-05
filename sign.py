@@ -440,7 +440,7 @@ def _prepare_sig_field(sig_field_name, root,
 
 def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
     pdf_out = IncrementalPdfFileWriter(input_handle)
-    root = pdf_out._root_object
+    root = pdf_out.root
 
     page_list = root['/Pages']['/Kids']
     for sp in sig_field_specs:
@@ -471,7 +471,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     # TODO allow signing an existing signature field without specifying the name
 
     pdf_out = IncrementalPdfFileWriter(input_handle)
-    root = pdf_out._root_object
+    root = pdf_out.root
 
     # we need to add a signature object and a corresponding form field
     # to the PDF file
