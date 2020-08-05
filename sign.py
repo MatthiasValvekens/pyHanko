@@ -582,7 +582,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     # grab or create a sig field
     field_created, sig_field_ref = _prepare_sig_field(
         signature_meta.field_name, root, update_writer=pdf_out,
-        existing_fields_only=existing_fields_only
+        existing_fields_only=existing_fields_only, lock_sig_flags=True
     )
     sig_field = sig_field_ref.getObject()
     # fill in a reference to the (empty) signature object
