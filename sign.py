@@ -121,16 +121,76 @@ class SignatureObject(generic.DictionaryObject):
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
+def _simple_box_appearance(box): 
+    # box should have four coordinates: x1 y1 x2 y2
+    x1, y1, x2, y2 = box
+    box_width = abs(x1 - x2)
+    box_height = abs(y1 - y2)
+    if len(box) != 4:
+        raise ValueError('Box should have four coordinates')
+    rect = list(map(generic.FloatObject, box))
+    command_stream = ' '.join([
+        'q',  # save
+        '0.3 0.3 0.3 rg',  # set fill colour
+        # set up rectangle path
+        '0 %.4f %.4f %.4f re' % (box_height, box_width, -box_height),
+        'f',  # fill stroke
+        'Q'  # restore graphics state
+    ]).encode('ascii')
+    # we'll only set normal appearance, nothing else
+    normal_appearance = generic.StreamObject.initializeFromDictionary({
+        '__streamdata__': command_stream,
+        # PyPDF2 is bizarre about /Length. It requires the /Length attribute
+        #  in initializeFromDictionary (because deleting it produces a KeyError)
+        #  but then simply recomputes it as needed.
+        pdf_name('/Length'): len(command_stream),
+        pdf_name('/BBox'): generic.ArrayObject(list(
+            map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
+        )),
+        # TODO this will change when we involve text etc.
+        pdf_name('/Resources'): generic.DictionaryObject(),
+        pdf_name('/Type'): pdf_name('/XObject'),
+        pdf_name('/Subtype'): pdf_name('/Form')
+    })
+    return rect, normal_appearance
+
+
+def register_annotation(page_ref, annot_ref, writer: IncrementalPdfFileWriter):
+    page_obj = page_ref.getObject()
+    try:
+        annots_ref = page_obj.raw_get('/Annots')
+        if isinstance(annots_ref, generic.IndirectObject):
+            annots = annots_ref.getObject()
+            writer.mark_update(annot_ref)
+        else:
+            # we need to update the entire page object if the annots array
+            # is a direct object
+            annots = annots_ref
+            writer.mark_update(page_ref)
+    except KeyError:
+        annots = generic.ArrayObject()
+        writer.mark_update(page_ref)
+        page_obj[pdf_name('/Annots')] = annots
+
+    annots.append(annot_ref)
+
 
 class SignatureFormField(generic.DictionaryObject):
-    def __init__(self, field_name, include_on_page, sig_object_ref=None, box=None):
+    def __init__(self, field_name, include_on_page, *, writer,
+                 sig_object_ref=None, box=None):
         if box is not None:
-            # box should have four coordinates: llx lly urx ury
-            if len(box) != 4:
-                raise ValueError('Box should have four coordinates')
-            rect = [generic.FloatObject(c) for c in box]
+            visible = True
+            rect, normal_app = _simple_box_appearance(box)
+            normal_app_ref = writer.add_object(normal_app)
+            ap = generic.DictionaryObject({pdf_name('/N'): normal_app_ref})
         else:
             rect = [generic.FloatObject(0.0)] * 4
+            ap = None
+            visible = False
+
+        # this sets the "Print" bit, and activates "Locked" if the
+        # signature field is ready to be filled
+        flags = 0b100 if sig_object_ref is None else 0b10000100
         super().__init__({
             # Signature field properties
             pdf_name('/FT'): pdf_name('/Sig'),
@@ -138,13 +198,20 @@ class SignatureFormField(generic.DictionaryObject):
             # Annotation properties: bare minimum
             pdf_name('/Type'): pdf_name('/Annot'),
             pdf_name('/Subtype'): pdf_name('/Widget'),
-            # this sets the "Locked" and "Print" bits
-            pdf_name('/F'): generic.NumberObject(0b10000100),
+            pdf_name('/F'): generic.NumberObject(flags),
             pdf_name('/P'): include_on_page,
             pdf_name('/Rect'): generic.ArrayObject(rect)
         })
         if sig_object_ref is not None:
             self[pdf_name('/V')] = sig_object_ref
+        if ap is not None:
+            self[pdf_name('/AP')] = ap
+
+        # register ourselves
+        self.reference = self_reference = writer.add_object(self)
+        # if we're building an invisible form field, this is all there is to it
+        if visible:
+            register_annotation(include_on_page, self_reference, writer)
 
 
 def simple_cms_attribute(attr_type, value):
@@ -253,6 +320,15 @@ class Signer:
         )
 
 
+# TODO add more customisability
+
+@dataclass(frozen=True)
+class SigFieldSpec:
+    sig_field_name: str
+    on_page: int = 0
+    box: (int, int, int, int) = None
+
+
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
     name: str
@@ -345,9 +421,10 @@ def _prepare_sig_field(sig_field_name, root,
             'include_on_page': root['/Pages']['/Kids'][0],
         }
         sig_form_kwargs.update(**kwargs)
-        sig_field = SignatureFormField(sig_field_name, **sig_form_kwargs)
-        sig_field_ref = update_writer.add_object(sig_field)
-        fields.append(sig_field_ref)
+        sig_field = SignatureFormField(
+            sig_field_name, writer=update_writer, **sig_form_kwargs
+        )
+        fields.append(sig_field.reference)
         form[pdf_name('/Fields')] = fields
 
         # make sure /SigFlags is present. If not, create it
@@ -361,18 +438,21 @@ def _prepare_sig_field(sig_field_name, root,
     return field_created, sig_field_ref
 
 
-def append_signature_fields(input_handle, sig_field_names, **kwargs):
+def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
     pdf_out = IncrementalPdfFileWriter(input_handle)
     root = pdf_out._root_object
 
-    for sig_field_name in sig_field_names:
+    page_list = root['/Pages']['/Kids']
+    for sp in sig_field_specs:
         field_created, _ = _prepare_sig_field(
-            sig_field_name, root, update_writer=pdf_out,
-            existing_fields_only=False, **kwargs
+            sp.sig_field_name, root, update_writer=pdf_out,
+            existing_fields_only=False, box=sp.box,
+            include_on_page=page_list[sp.on_page]
         )
         if not field_created:
             raise ValueError(
-                'Signature field with name %s already exists.' % sig_field_name
+                'Signature field with name %s already exists.'
+                % sp.sig_field_name
             )
 
     output = BytesIO()
@@ -445,9 +525,9 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     return output
 
 
-def append_signature_fields_to_file(infile_name, outfile_name, *args, box=None):
+def append_signature_fields_to_file(infile_name, outfile_name, *args):
     with open(infile_name, 'rb') as infile:
-        result = append_signature_fields(infile, args, box=box)
+        result = append_signature_fields(infile, args)
     with open(outfile_name, 'wb') as outfile:
         buf = result.getbuffer()
         outfile.write(buf)
