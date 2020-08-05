@@ -142,6 +142,7 @@ class SignatureFormField(generic.DictionaryObject):
         if sig_object_ref is not None:
             self[pdf_name('/V')] = sig_object_ref
 
+
 def simple_cms_attribute(attr_type, value):
     return cms.CMSAttribute({
         'type': cms.CMSAttributeType(attr_type),
@@ -258,7 +259,7 @@ class PdfSignatureMetadata:
     field_name: str
 
 
-def _prepare_form_fields(form, sig_field_name, allow_updates=True):
+def _find_sig_field(form, sig_field_name):
 
     utf16be_name = pdf_utf16be_string(sig_field_name)
     try:
@@ -268,7 +269,7 @@ def _prepare_form_fields(form, sig_field_name, allow_updates=True):
         for field_ref in fields:
             field = field_ref.getObject()
             if field.raw_get('/T') == utf16be_name:
-                if field['/Type'] != '/Sig':
+                if field['/FT'] != pdf_name('/Sig'):
                     raise ValueError(
                         'A field with name %s exists but is not a signature '
                         'field' % sig_field_name
@@ -288,7 +289,7 @@ def _prepare_form_fields(form, sig_field_name, allow_updates=True):
 
 def _prepare_sig_field(sig_field_name, root,
                        update_writer: IncrementalPdfFileWriter = None,
-                       existing_fields_only=False):
+                       existing_fields_only=False, lock_sig_flags=True):
 
     if not existing_fields_only and update_writer is None:
         raise ValueError(
@@ -319,9 +320,7 @@ def _prepare_sig_field(sig_field_name, root,
                 update_writer.update_root()
         # try to extend the existing form object first
         # and mark it for an update if necessary
-        sig_field_ref, fields = _prepare_form_fields(
-            form, sig_field_name, allow_updates=existing_fields_only
-        )
+        sig_field_ref, fields = _find_sig_field(form, sig_field_name)
     except KeyError:
         if existing_fields_only:
             raise ValueError('This file does not contain a form.')
@@ -346,14 +345,35 @@ def _prepare_sig_field(sig_field_name, root,
         fields.append(sig_field_ref)
         form[pdf_name('/Fields')] = fields
 
-        # make sure /SigFlags is present. If not, create it with value 1
-        form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(1))
+        # make sure /SigFlags is present. If not, create it
+        sig_flags = 3 if lock_sig_flags else 1
+        form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(sig_flags))
         # if we're adding a field to an existing form, this requires
         # registering an update
         if not form_created:
             update_writer.mark_update(form_ref)
 
     return field_created, sig_field_ref
+
+
+def append_signature_fields(input_handle, sig_field_names):
+    pdf_out = IncrementalPdfFileWriter(input_handle)
+    root = pdf_out._root_object
+
+    for sig_field_name in sig_field_names:
+        field_created, _ = _prepare_sig_field(
+            sig_field_name, root, update_writer=pdf_out,
+            existing_fields_only=False
+        )
+        if not field_created:
+            raise ValueError(
+                'Signature field with name %s already exists.' % sig_field_name
+            )
+
+    output = BytesIO()
+    pdf_out.write(output)
+    output.seek(0)
+    return output
 
 
 def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
@@ -419,13 +439,26 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     return output
 
 
-def sign_pdf_file(infile_name, outfile_name, signature_meta: PdfSignatureMetadata,
-                  key_file, cert_file, key_passphrase):
+def append_signature_fields_to_file(infile_name, outfile_name, *args):
+    with open(infile_name, 'rb') as infile:
+        result = append_signature_fields(infile, args)
+    with open(outfile_name, 'wb') as outfile:
+        buf = result.getbuffer()
+        outfile.write(buf)
+        buf.release()
+
+
+def sign_pdf_file(infile_name, outfile_name,
+                  signature_meta: PdfSignatureMetadata, key_file, cert_file,
+                  key_passphrase, existing_fields_only=False):
     signer = Signer.load(
         cert_file=cert_file, key_file=key_file, key_passphrase=key_passphrase
     )
     with open(infile_name, 'rb') as infile:
-        result = sign_pdf(infile, signature_meta, signer)
+        result = sign_pdf(
+            infile, signature_meta, signer,
+            existing_fields_only=existing_fields_only
+        )
     with open(outfile_name, 'wb') as outfile:
         buf = result.getbuffer()
         outfile.write(buf)
