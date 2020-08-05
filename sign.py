@@ -123,7 +123,14 @@ class SignatureObject(generic.DictionaryObject):
 
 
 class SignatureFormField(generic.DictionaryObject):
-    def __init__(self, field_name, sig_object_ref=None, include_on_page=0):
+    def __init__(self, field_name, include_on_page, sig_object_ref=None, box=None):
+        if box is not None:
+            # box should have four coordinates: llx lly urx ury
+            if len(box) != 4:
+                raise ValueError('Box should have four coordinates')
+            rect = [generic.FloatObject(c) for c in box]
+        else:
+            rect = [generic.FloatObject(0.0)] * 4
         super().__init__({
             # Signature field properties
             pdf_name('/FT'): pdf_name('/Sig'),
@@ -134,9 +141,7 @@ class SignatureFormField(generic.DictionaryObject):
             # this sets the "Locked" and "Print" bits
             pdf_name('/F'): generic.NumberObject(0b10000100),
             pdf_name('/P'): include_on_page,
-            pdf_name('/Rect'): generic.ArrayObject(
-                [generic.FloatObject(0.0)] * 4
-            )
+            pdf_name('/Rect'): generic.ArrayObject(rect)
         })
         if sig_object_ref is not None:
             self[pdf_name('/V')] = sig_object_ref
@@ -286,7 +291,8 @@ def _find_sig_field(form, sig_field_name):
 
 def _prepare_sig_field(sig_field_name, root,
                        update_writer: IncrementalPdfFileWriter = None,
-                       existing_fields_only=False, lock_sig_flags=True):
+                       existing_fields_only=False, lock_sig_flags=True, 
+                       **kwargs):
 
     if not existing_fields_only and update_writer is None:
         raise ValueError(
@@ -335,9 +341,11 @@ def _prepare_sig_field(sig_field_name, root,
         # no signature field exists, so create one
         if existing_fields_only:
             raise ValueError('Could not find signature field')
-        sig_field = SignatureFormField(
-            sig_field_name, include_on_page=root['/Pages']['/Kids'][0]
-        )
+        sig_form_kwargs = {
+            'include_on_page': root['/Pages']['/Kids'][0],
+        }
+        sig_form_kwargs.update(**kwargs)
+        sig_field = SignatureFormField(sig_field_name, **sig_form_kwargs)
         sig_field_ref = update_writer.add_object(sig_field)
         fields.append(sig_field_ref)
         form[pdf_name('/Fields')] = fields
@@ -353,14 +361,14 @@ def _prepare_sig_field(sig_field_name, root,
     return field_created, sig_field_ref
 
 
-def append_signature_fields(input_handle, sig_field_names):
+def append_signature_fields(input_handle, sig_field_names, **kwargs):
     pdf_out = IncrementalPdfFileWriter(input_handle)
     root = pdf_out._root_object
 
     for sig_field_name in sig_field_names:
         field_created, _ = _prepare_sig_field(
             sig_field_name, root, update_writer=pdf_out,
-            existing_fields_only=False
+            existing_fields_only=False, **kwargs
         )
         if not field_created:
             raise ValueError(
@@ -378,7 +386,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
 
     # TODO generate an error when signatures are present and there's no
     #  open signature field to fill (since in that situation we cannot sign
-    #  without invalidating the signatures)
+    #  without invalidating the existing signatures)
 
     # TODO allow signing an existing signature field without specifying the name
 
@@ -437,9 +445,9 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     return output
 
 
-def append_signature_fields_to_file(infile_name, outfile_name, *args):
+def append_signature_fields_to_file(infile_name, outfile_name, *args, box=None):
     with open(infile_name, 'rb') as infile:
-        result = append_signature_fields(infile, args)
+        result = append_signature_fields(infile, args, box=box)
     with open(outfile_name, 'wb') as outfile:
         buf = result.getbuffer()
         outfile.write(buf)
