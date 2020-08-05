@@ -106,8 +106,14 @@ class IncrementalPdfFileWriter:
         root = prev.trailer.raw_get('/Root')
         self._root = generic.IndirectObject(root.idnum, root.generation, self)
         self._root_object = root.getObject()
-        info = prev.trailer.raw_get('/Info')
-        self._info = generic.IndirectObject(info.idnum, info.generation, self)
+        try:
+            info = prev.trailer.raw_get('/Info')
+            self._info = generic.IndirectObject(
+                info.idnum, info.generation, self
+            )
+        except KeyError:
+            # rare, but it can happen. /Info is not a required entry
+            self._info = None
         self._encrypt = self._encrypt_key = None
         self._document_id = self.__class__._handle_id(prev)
 
@@ -217,9 +223,10 @@ class IncrementalPdfFileWriter:
         trailer.update({
             pdf_name('/Size'): generic.NumberObject(self._lastobj_id + 1),
             pdf_name('/Root'): self._root,
-            pdf_name('/Info'): self._info,
             pdf_name('/Prev'): generic.NumberObject(self.prev.last_startxref)
         })
+        if self._info is not None:
+            trailer[pdf_name('/Info')] = self._info
         trailer.writeToStream(stream, None)
         # write xref table pointer and EOF
         xref_pointer_string = '\nstartxref\n%s\n' % xref_location
