@@ -103,7 +103,7 @@ class PKCS7Placeholder(generic.PdfObject):
 # (pre- and post content)
 class SignatureObject(generic.DictionaryObject):
     # TODO handle date encoding here as well
-    def __init__(self, name, location, reason, date_string):
+    def __init__(self, name, location, reason):
         # initialise signature object
         super().__init__(
             {
@@ -112,8 +112,7 @@ class SignatureObject(generic.DictionaryObject):
                 pdf_name('/SubFilter'): pdf_name('/adbe.pkcs7.detached'),
                 pdf_name('/Name'): pdf_string(name),
                 pdf_name('/Location'): pdf_string(location),
-                pdf_name('/Reason'): pdf_string(reason),
-                pdf_name('/M'): pdf_string(date_string),
+                pdf_name('/Reason'): pdf_string(reason)
             }
         )
         # initialise placeholders for /Contents and /ByteRange
@@ -171,7 +170,6 @@ class Signer:
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
             # TODO support using timestamping servers
-            # TODO enforce consistency with the value set in the signature field
             # TODO doesn't the PDF mandate that signing_time should be
             #  an unauthenticated attribute if present? This is how JSignPDF
             #  does it, though
@@ -255,7 +253,6 @@ class PdfSignatureMetadata:
     name: str
     location: str
     reason: str
-    date_string: str
     field_name: str
 
 
@@ -380,7 +377,8 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
              md_algorithm='sha1', existing_fields_only=False):
 
     # TODO generate an error when signatures are present and there's no
-    #  open signature field to fill
+    #  open signature field to fill (since in that situation we cannot sign
+    #  without invalidating the signatures)
 
     # TODO allow signing an existing signature field without specifying the name
 
@@ -391,7 +389,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     # to the PDF file
     sig_obj = SignatureObject(
         signature_meta.name, signature_meta.location,
-        signature_meta.reason, signature_meta.date_string
+        signature_meta.reason
     )
     sig_obj_ref = pdf_out.add_object(sig_obj)
 
