@@ -3,6 +3,7 @@ import hashlib
 import logging
 from datetime import datetime
 from dataclasses import dataclass
+from enum import IntEnum
 from io import BytesIO
 from typing import List
 
@@ -120,6 +121,7 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/Contents')] = self.signature_contents = pkcs7
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
+
 
 def _simple_box_appearance(box): 
     # box should have four coordinates: x1 y1 x2 y2
@@ -329,12 +331,25 @@ class SigFieldSpec:
     box: (int, int, int, int) = None
 
 
+class DocMDPPerm(IntEnum):
+    """
+    Cf. Table 254  in ISO 32000
+    """
+
+    NO_CHANGES = 0
+    FILL_FORMS = 2
+    ANNOTATE = 3
+
+
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
     name: str
     location: str
     reason: str
     field_name: str
+    certify: bool = False
+    # only relevant for certification
+    docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
 
 
 def _find_sig_field(form, sig_field_name):
@@ -363,6 +378,50 @@ def _find_sig_field(form, sig_field_name):
         fields = generic.ArrayObject()
     # no corresponding field found, need to create it later
     return None, fields
+
+
+def _certification_setup(writer: IncrementalPdfFileWriter,
+                         sig_obj_ref, md_algorithm, permission_level):
+    """
+    Cf. Tables 252, 253 and 254 in ISO 32000
+    """
+    transform_params = generic.DictionaryObject({
+        pdf_name('/Type'): pdf_name('/TransformParams'),
+        pdf_name('/V'): pdf_name('/1.2'),
+        pdf_name('/P'): generic.NumberObject(permission_level)
+    })
+    tp_ref = writer.add_object(transform_params)
+
+    # not to be confused with our indirect reference *to* the signature object--
+    # this is part of the /Reference entry of the signature object.
+    sigref_object = generic.DictionaryObject({
+        pdf_name('/Type'): pdf_name('/SigRef'),
+        pdf_name('/TransformMethod'): pdf_name('/DocMDP'),
+        pdf_name('/DigestMethod'): pdf_name('/' + md_algorithm.upper()),
+        pdf_name('/TransformParams'): tp_ref
+    })
+
+    # after preparing the sigref object, insert it into the actual signature
+    # object under /Reference (for some reason this is supposed to be an array)
+    sigref_list = generic.ArrayObject([writer.add_object(sigref_object)])
+    sig_obj_ref.getObject()[pdf_name('/Reference')] = sigref_list
+
+    # finally, register a /DocMDP permission entry in the document catalog
+    root = writer.root
+    # the usual song and dance to grab a reference to /Perms, or create it
+    # TODO I've done this enough times to factor it out, I suppose
+    try:
+        perms_ref = root.raw_get('/Perms')
+        if isinstance(perms_ref, generic.IndirectObject):
+            perms = perms_ref.getObject()
+            writer.mark_update(perms_ref)
+        else:
+            perms = perms_ref
+            writer.update_root()
+    except KeyError:
+        root[pdf_name('/Perms')] = perms = generic.DictionaryObject()
+        writer.update_root()
+    perms[pdf_name('/DocMDP')] = sig_obj_ref
 
 
 def _prepare_sig_field(sig_field_name, root,
@@ -466,7 +525,13 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
 
     # TODO generate an error when signatures are present and there's no
     #  open signature field to fill (since in that situation we cannot sign
-    #  without invalidating the existing signatures)
+    #  without invalidating the existing signatures) or DocMDP doesn't allow
+    #  signing
+
+    # TODO explicitly disallow multiple certification signatures
+
+    # TODO force md_algorithm to agree with the certification signature
+    #  if present
 
     # TODO allow signing an existing signature field without specifying the name
 
@@ -493,7 +558,12 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     if not field_created:
         # still need to mark it for updating
         pdf_out.mark_update(sig_field_ref)
-    # TODO support certification signatures (more metadata)
+
+    if signature_meta.certify:
+        _certification_setup(
+            pdf_out, sig_obj_ref, md_algorithm,
+            signature_meta.docmdp_permissions
+        )
 
     # Render the PDF to a byte buffer with placeholder values
     # for the signature data
