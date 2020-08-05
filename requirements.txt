@@ -8,3 +8,4 @@ PyPDF2==1.26.0
 pytz==2020.1
 qrcode==6.1
 six==1.15.0
+tzlocal==2.1

@@ -7,7 +7,7 @@ from enum import IntEnum
 from io import BytesIO
 from typing import List
 
-import pytz
+import tzlocal
 from PyPDF2 import generic
 from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
@@ -22,6 +22,33 @@ logger = logging.getLogger(__name__)
 
 def pdf_utf16be_string(s):
     return pdf_string(codecs.BOM_UTF16_BE + s.encode('utf-16be'))
+
+
+ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
+
+
+def pdf_date(dt: datetime):
+    base_dt = dt.strftime(ASN_DT_FORMAT)
+    utc_offset_string = ''
+    if dt.tzinfo is not None:
+        # compute UTC off set string
+        tz_seconds = dt.utcoffset().seconds
+        if not tz_seconds:
+            utc_offset_string = 'Z'
+        else:
+            sign = '+'
+            if tz_seconds < 0:
+                sign = '-'
+                tz_seconds = abs(tz_seconds)
+            hrs, tz_seconds = divmod(tz_seconds, 3600)
+            mins = tz_seconds // 60
+            # XXX the apostrophe after the minute part of the offset is NOT
+            #  what's in the spec, but Adobe Reader DC refuses to validate
+            #  signatures with a date string that doesn't contain it.
+            #  No idea why.
+            utc_offset_string = sign + ("%02d'%02d'" % (hrs, mins))
+
+    return pdf_string(base_dt + utc_offset_string)
 
 
 class SigByteRangeObject(generic.PdfObject):
@@ -104,7 +131,7 @@ class PKCS7Placeholder(generic.PdfObject):
 # (pre- and post content)
 class SignatureObject(generic.DictionaryObject):
     # TODO handle date encoding here as well
-    def __init__(self, name, location, reason):
+    def __init__(self, name, location, reason, timestamp: datetime):
         # initialise signature object
         super().__init__(
             {
@@ -113,7 +140,8 @@ class SignatureObject(generic.DictionaryObject):
                 pdf_name('/SubFilter'): pdf_name('/adbe.pkcs7.detached'),
                 pdf_name('/Name'): pdf_string(name),
                 pdf_name('/Location'): pdf_string(location),
-                pdf_name('/Reason'): pdf_string(reason)
+                pdf_name('/Reason'): pdf_string(reason),
+                pdf_name('/M'): pdf_date(timestamp)
             }
         )
         # initialise placeholders for /Contents and /ByteRange
@@ -230,7 +258,8 @@ class Signer:
     signing_key: keys.PrivateKeyInfo
     validity_window: (datetime, datetime)
 
-    def sign(self, data_digest: bytes, digest_algorithm: str) -> bytes:
+    def sign(self, data_digest: bytes, digest_algorithm: str,
+             timestamp: datetime = None) -> bytes:
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
@@ -239,14 +268,16 @@ class Signer:
             {'algorithm': digest_algorithm}
         )
 
-        timestamp = datetime.utcnow().replace(tzinfo=pytz.utc)
+        timestamp = timestamp or datetime.now(tz=tzlocal.get_localzone())
         signed_attrs = cms.CMSAttributes([
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
             # TODO support using timestamping servers
-            # TODO doesn't the PDF mandate that signing_time should be
-            #  an unauthenticated attribute if present? This is how JSignPDF
-            #  does it, though
+            # TODO The spec actually mandates that the timestamp be
+            #  an unauthenticated attribute if present. This is how JSignPDF
+            #  does it, though, so meh.
+            #  Anyway, doing this properly in the way mandated by RFC 3161
+            #  Appendix A is a little more involved.
             simple_cms_attribute(
                 'signing_time', cms.Time({'utc_time': core.UTCTime(timestamp)})
             )
@@ -483,7 +514,8 @@ def _prepare_sig_field(sig_field_name, root,
         sig_field = SignatureFormField(
             sig_field_name, writer=update_writer, **sig_form_kwargs
         )
-        fields.append(sig_field.reference)
+        sig_field_ref = sig_field.reference
+        fields.append(sig_field_ref)
         form[pdf_name('/Fields')] = fields
 
         # make sure /SigFlags is present. If not, create it
@@ -538,11 +570,12 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     pdf_out = IncrementalPdfFileWriter(input_handle)
     root = pdf_out.root
 
+    timestamp = datetime.now(tz=tzlocal.get_localzone())
     # we need to add a signature object and a corresponding form field
     # to the PDF file
     sig_obj = SignatureObject(
         signature_meta.name, signature_meta.location,
-        signature_meta.reason
+        signature_meta.reason, timestamp
     )
     sig_obj_ref = pdf_out.add_object(sig_obj)
 
@@ -578,14 +611,15 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
 
     # compute the digests
     output_buffer = output.getbuffer()
-    # TODO support for non-default md algorithms
     md = getattr(hashlib, md_algorithm)()
     # these are memoryviews, so slices should not copy stuff around
     md.update(output_buffer[:sig_start])
     md.update(output_buffer[sig_end:])
     output_buffer.release()
 
-    signature = signer.sign(md.digest(), md_algorithm).hex().encode('ascii')
+    signature = signer.sign(
+        md.digest(), md_algorithm, timestamp=timestamp
+    ).hex().encode('ascii')
 
     # +1 to skip the '<'
     output.seek(sig_start + 1)
