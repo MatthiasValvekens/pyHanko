@@ -100,10 +100,6 @@ class PKCS7Placeholder(generic.PdfObject):
         self.value = b'0' * bytes_reserved
         self._offsets = None
 
-    def fill_signature(self):
-        self._placeholder = False
-        # TODO implement
-
     @property
     def offsets(self):
         if self._offsets is None:
@@ -251,12 +247,13 @@ def simple_cms_attribute(attr_type, value):
     })
 
 
-@dataclass(frozen=True)
 class Signer:
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
-    signing_key: keys.PrivateKeyInfo
-    validity_window: (datetime, datetime)
+    pkcs7_signature_mechanism: str
+
+    def sign_raw(self, data: bytes, digest_algorithm: str):
+        raise NotImplementedError
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None) -> bytes:
@@ -286,26 +283,24 @@ class Signer:
 
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
-        signature = asymmetric.rsa_pkcs1v15_sign(
-            asymmetric.load_private_key(self.signing_key),
-            signed_attrs.dump(),
-            digest_algorithm.lower()
-        )
+        #
+        signature = self.sign_raw(signed_attrs.dump(), digest_algorithm.lower())
 
+        signing_cert = self.signing_cert
         # build the signer info object that goes into the PKCS7 signature
         # (see RFC 2315 § 9.2)
         signer_info = cms.SignerInfo({
             'version': 'v1',
             'sid': cms.SignerIdentifier({
                 'issuer_and_serial_number': cms.IssuerAndSerialNumber({
-                    'issuer': self.signing_cert.issuer,
-                    'serial_number': self.signing_cert.serial_number,
+                    'issuer': signing_cert.issuer,
+                    'serial_number': signing_cert.serial_number,
                 })
             }),
             'digest_algorithm': digest_algorithm_obj,
             # TODO implement PSS & HSM support (PKCS11 devices)
             'signature_algorithm': algos.SignedDigestAlgorithm(
-                {'algorithm': 'rsassa_pkcs1v15'}
+                {'algorithm': self.pkcs7_signature_mechanism}
             ),
             'signed_attrs': signed_attrs,
             'signature': signature
@@ -316,7 +311,7 @@ class Signer:
             'version': 'v1',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': {'content_type': 'data'},
-            'certificates': [self.signing_cert] + self.ca_chain,
+            'certificates': [signing_cert] + self.ca_chain,
             'signer_infos': [signer_info]
         }
 
@@ -327,6 +322,20 @@ class Signer:
         })
 
         return message.dump()
+
+
+@dataclass(frozen=True)
+class SimpleSigner(Signer):
+    signing_cert: x509.Certificate
+    ca_chain: List[x509.Certificate]
+    signing_key: keys.PrivateKeyInfo
+    pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
+
+    def sign_raw(self, data: bytes, digest_algorithm: str):
+        return asymmetric.rsa_pkcs1v15_sign(
+            asymmetric.load_private_key(self.signing_key),
+            data, digest_algorithm.lower()
+        )
 
     @classmethod
     def load(cls, key_file, cert_file, key_passphrase=None):
@@ -343,15 +352,11 @@ class Signer:
         except (IOError, ValueError) as e:
             logger.error('Could not load cryptographic material', e)
             return None
-        valid_from = signing_cert.not_valid_before
-        valid_until = signing_cert.not_valid_after
 
-        return Signer(
+        return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
-            validity_window=(valid_from, valid_until),
             ca_chain=[]  # TODO implement this
         )
-
 
 # TODO add more customisability
 
@@ -553,7 +558,7 @@ def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
 
 
 def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
-             md_algorithm='sha1', existing_fields_only=False):
+             md_algorithm='sha512', existing_fields_only=False):
 
     # TODO generate an error when signatures are present and there's no
     #  open signature field to fill (since in that situation we cannot sign
@@ -641,7 +646,7 @@ def append_signature_fields_to_file(infile_name, outfile_name, *args):
 def sign_pdf_file(infile_name, outfile_name,
                   signature_meta: PdfSignatureMetadata, key_file, cert_file,
                   key_passphrase, existing_fields_only=False):
-    signer = Signer.load(
+    signer = SimpleSigner.load(
         cert_file=cert_file, key_file=key_file, key_passphrase=key_passphrase
     )
     with open(infile_name, 'rb') as infile:
