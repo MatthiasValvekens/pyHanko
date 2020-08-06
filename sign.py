@@ -93,11 +93,13 @@ class SigByteRangeObject(generic.PdfObject):
 
 class PKCS7Placeholder(generic.PdfObject):
 
-    # FIXME I have no idea what a reasonable size would be
-    #  Write a "fake" signature first?
-    def __init__(self, bytes_reserved=8192):
+    # FIXME We should try to estimate bytes_reserved using a fake signature
+    #  The length required scales more or less with the length of the CA chain,
+    #  so we could try to run the signer in dry-run mode, where it doesn't
+    #  actually use any key material
+    def __init__(self, bytes_reserved=None):
         self._placeholder = True
-        self.value = b'0' * bytes_reserved
+        self.value = b'0' * (bytes_reserved or 8192)
         self._offsets = None
 
     @property
@@ -127,7 +129,8 @@ class PKCS7Placeholder(generic.PdfObject):
 # (pre- and post content)
 class SignatureObject(generic.DictionaryObject):
     # TODO handle date encoding here as well
-    def __init__(self, name, location, reason, timestamp: datetime):
+    def __init__(self, name, location, reason, timestamp: datetime,
+                 bytes_reserved=None):
         # initialise signature object
         super().__init__(
             {
@@ -141,7 +144,7 @@ class SignatureObject(generic.DictionaryObject):
             }
         )
         # initialise placeholders for /Contents and /ByteRange
-        pkcs7 = PKCS7Placeholder()
+        pkcs7 = PKCS7Placeholder(bytes_reserved=bytes_reserved)
         self[pdf_name('/Contents')] = self.signature_contents = pkcs7
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
@@ -358,6 +361,74 @@ class SimpleSigner(Signer):
             ca_chain=[]  # TODO implement this
         )
 
+
+class PKCS11Signer(Signer):
+
+    pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
+
+    def __init__(self, pkcs11_session, cert_label, ca_chain=None,
+                 key_label=None):
+        self.cert_label = cert_label
+        self.key_label = key_label or cert_label
+        self.pkcs11_session = pkcs11_session
+        self._ca_chain = ca_chain
+        self._signing_cert = self._key_handle = None
+        self._loaded = False
+
+    @property
+    def ca_chain(self):
+        # it's conceivable that one might want to load this separately from
+        # the key data, so we allow for that.
+        if self._ca_chain is None:
+            self._ca_chain = self._load_ca_chain()
+        return self._ca_chain
+
+    @property
+    def signing_cert(self):
+        self._load_objects()
+        return self._signing_cert
+
+    def sign_raw(self, data: bytes, digest_algorithm: str):
+        self._load_objects()
+        from pkcs11 import Mechanism, SignMixin
+        kh: SignMixin = self._key_handle
+        mech = {
+            'sha1': Mechanism.SHA1_RSA_PKCS,
+            'sha256': Mechanism.SHA256_RSA_PKCS,
+            'sha384': Mechanism.SHA384_RSA_PKCS,
+            'sha512': Mechanism.SHA512_RSA_PKCS,
+        }[digest_algorithm.lower()]
+        return kh.sign(data, mechanism=mech)
+
+    def _load_ca_chain(self):
+        return []
+
+    def _load_objects(self):
+        if self._loaded:
+            return
+
+        from pkcs11 import Attribute, ObjectClass
+
+        q = self.pkcs11_session.get_objects({
+            Attribute.LABEL: self.cert_label,
+            Attribute.CLASS: ObjectClass.CERTIFICATE
+        })
+        # need to run through the full iterator to make sure the operation
+        # terminates
+        cert_obj, = list(q)
+        self._signing_cert = oskeys.parse_certificate(cert_obj[Attribute.VALUE])
+
+        self._load_ca_chain()
+
+        q = self.pkcs11_session.get_objects({
+            Attribute.LABEL: self.key_label,
+            Attribute.CLASS: ObjectClass.PRIVATE_KEY
+        })
+        self._key_handle, = list(q)
+
+        self._loaded = True
+
+
 # TODO add more customisability
 
 @dataclass(frozen=True)
@@ -558,7 +629,8 @@ def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
 
 
 def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
-             md_algorithm='sha512', existing_fields_only=False):
+             md_algorithm='sha512', existing_fields_only=False,
+             bytes_reserved=None):
 
     # TODO generate an error when signatures are present and there's no
     #  open signature field to fill (since in that situation we cannot sign
@@ -580,7 +652,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     # to the PDF file
     sig_obj = SignatureObject(
         signature_meta.name, signature_meta.location,
-        signature_meta.reason, timestamp
+        signature_meta.reason, timestamp, bytes_reserved=bytes_reserved
     )
     sig_obj_ref = pdf_out.add_object(sig_obj)
 
