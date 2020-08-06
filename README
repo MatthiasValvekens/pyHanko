@@ -1,0 +1,20 @@
+This repository contains some experimental Python code related to incrementally updating, 
+stamping & signing PDF files.
+
+ - Invisible signatures (both certifying and non-certifying) should work.
+ - Adding and signing signature fields is experimental, especially with regards to the appearance
+   of the signature (for now, it's nothing more than a gray box).
+ - Support for handling encrypted files has been added in, but is untested.
+
+
+Some TODOs
+----------
+
+ - Improve handling of signature field widgets.
+ - Rework the stamper to also operate in append mode, to minimise potential mangling caused 
+   by rerendering the entire file through PyPDF2. This would also allow me to remove the dependency
+   on PyFPDF.
+ - Add validation functionality.
+ - Add systematic tests, both with real-world PDF files and minimal examples from the spec.
+
+This repository includes some code from PyPDF2 (with modifications); see pdf_utils/LICENSE.PyPDF2.
