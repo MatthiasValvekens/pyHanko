@@ -1,6 +1,8 @@
 import struct
 import os
 
+from io import BytesIO
+
 from PyPDF2 import generic
 from PyPDF2.pdf import _alg34, _alg35
 
@@ -85,6 +87,46 @@ def write_xref_table(stream, position_dict):
             stream.write(entry.encode('ascii'))
 
     return xref_location
+
+
+class XRefStream(generic.StreamObject):
+
+    def __init__(self, position_dict):
+        super().__init__()
+        self.position_dict = position_dict
+
+        # type indicator is one byte wide
+        # we use longs to indicate positions of objects (>Q)
+        # two more bytes for the generation number of an uncompressed object
+        widths = map(generic.NumberObject, (1,8,2))
+        self.update({
+            pdf_name('/W'): generic.ArrayObject(widths),
+            pdf_name('/Type'): pdf_name('/XRef'),
+        })
+
+    def writeToStream(self, stream, encryption_key):
+        # the caller is responsible for making sure that the stream 
+        # is registered in the position dictionary
+        if encryption_key is not None:
+            raise ValueError('XRef streams cannot be encrypted')
+        
+        index = [0,1]
+        subsections = _contiguous_xref_chunks(self.position_dict)
+        stream_content = BytesIO()
+        # write null object
+        stream_content.write(b'\x00' * 9 + b'\xff\xff')
+        for first_idnum, subsection in subsections:
+            index += [first_idnum, len(subsection)]
+            for position, generation in subsection:
+                # TODO support compressing objects
+                stream_content.write(b'\x01')
+                stream_content.write(struct.pack('>Q', position))
+                stream_content.write(struct.pack('>H', generation))
+        index_entry = generic.ArrayObject(map(generic.NumberObject, index))
+
+        self[pdf_name('/Index')] = index_entry
+        self._data = stream_content.getbuffer()
+        super().writeToStream(stream, encryption_key)
 
 
 class IncrementalPdfFileWriter:
@@ -174,11 +216,18 @@ class IncrementalPdfFileWriter:
         self.objects_to_update[(0, self._lastobj_id)] = obj
         return generic.IndirectObject(self._lastobj_id, 0, self)
 
-    def write(self, stream):
+    def write(self, stream): 
+        updated_object_positions = {}
+
+        stream_xrefs = self.prev.has_xref_stream
+        if stream_xrefs:
+            trailer = XRefStream(updated_object_positions)
+        else:
+            trailer = generic.DictionaryObject()
+
         # before doing anything else, we attempt to load the crypto-relevant
         # data, so that we can bail early if something's not right
-        trailer = generic.DictionaryObject()
-        trailer[pdf_name("/ID")] = self._document_id
+        trailer[pdf_name('/ID')] = self._document_id
         if self.prev.isEncrypted:
             if self._encrypt is not None:
                 trailer[pdf_name("/Encrypt")] = self._encrypt
@@ -201,8 +250,6 @@ class IncrementalPdfFileWriter:
         if not self.objects_to_update:
             return
 
-        updated_object_positions = {}
-
         for ix in sorted(self.objects_to_update.keys()):
             generation, idnum = ix
             obj = self.objects_to_update[ix]
@@ -215,19 +262,34 @@ class IncrementalPdfFileWriter:
             obj.writeToStream(stream, key)
             stream.write(b'\nendobj\n')
 
-        # TODO what if the original PDF has an xref stream?
-        xref_location = write_xref_table(stream, updated_object_positions)
-
-        # write trailer and EOF
-        stream.write(b'trailer\n')
+        
+        # prepare trailer dictionary entries
         trailer.update({
-            pdf_name('/Size'): generic.NumberObject(self._lastobj_id + 1),
             pdf_name('/Root'): self._root,
             pdf_name('/Prev'): generic.NumberObject(self.prev.last_startxref)
         })
         if self._info is not None:
             trailer[pdf_name('/Info')] = self._info
-        trailer.writeToStream(stream, None)
+
+        if stream_xrefs:
+            xref_location = stream.tell()
+            xrefs_id = self._lastobj_id + 1
+            updated_object_positions[(0, xrefs_id)] = xref_location
+            trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
+            # write XRef stream
+            stream.write(('%d %d obj' % (xrefs_id, 0)).encode('ascii'))
+            trailer.writeToStream(stream, None)
+            stream.write(b'\nendobj\n')
+        else:
+            # classical xref table
+            xref_location = write_xref_table(stream, updated_object_positions)
+            trailer[pdf_name('/Size')] = generic.NumberObject(
+                self._lastobj_id + 1
+            )
+            # write trailer
+            stream.write(b'trailer\n')
+            trailer.writeToStream(stream, None)
+
         # write xref table pointer and EOF
         xref_pointer_string = '\nstartxref\n%s\n' % xref_location
         stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')

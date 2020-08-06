@@ -16,6 +16,7 @@ __all__ = ['PdfFileReader']
 
 class PdfFileReader(PdfFileReaderOrig):
     last_startxref = None
+    has_xref_stream = False
 
     def _read_xref_stream(self, stream):
         idnum, generation = self.readObjectHeader(stream)
@@ -190,6 +191,7 @@ class PdfFileReader(PdfFileReaderOrig):
                 # PDF 1.5+ Cross-Reference Stream
                 stream.seek(-1, 1)
                 startxref = self._read_xref_stream(stream)
+                self.has_xref_stream = True
             else:
                 # bad xref character at startxref.  Let's see if we can find
                 # the xref table nearby, as we've observed this error with an
