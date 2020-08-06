@@ -93,10 +93,6 @@ class SigByteRangeObject(generic.PdfObject):
 
 class PKCS7Placeholder(generic.PdfObject):
 
-    # FIXME We should try to estimate bytes_reserved using a fake signature
-    #  The length required scales more or less with the length of the CA chain,
-    #  so we could try to run the signer in dry-run mode, where it doesn't
-    #  actually use any key material
     def __init__(self, bytes_reserved=None):
         self._placeholder = True
         self.value = b'0' * (bytes_reserved or 8192)
@@ -255,11 +251,11 @@ class Signer:
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
 
-    def sign_raw(self, data: bytes, digest_algorithm: str):
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
-             timestamp: datetime = None) -> bytes:
+             timestamp: datetime = None, dry_run=False) -> bytes:
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
@@ -287,7 +283,9 @@ class Signer:
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
         #
-        signature = self.sign_raw(signed_attrs.dump(), digest_algorithm.lower())
+        signature = self.sign_raw(
+            signed_attrs.dump(), digest_algorithm.lower(), dry_run
+        )
 
         signing_cert = self.signing_cert
         # build the signer info object that goes into the PKCS7 signature
@@ -334,7 +332,7 @@ class SimpleSigner(Signer):
     signing_key: keys.PrivateKeyInfo
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
-    def sign_raw(self, data: bytes, digest_algorithm: str):
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         return asymmetric.rsa_pkcs1v15_sign(
             asymmetric.load_private_key(self.signing_key),
             data, digest_algorithm.lower()
@@ -388,7 +386,11 @@ class PKCS11Signer(Signer):
         self._load_objects()
         return self._signing_cert
 
-    def sign_raw(self, data: bytes, digest_algorithm: str):
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
+        if dry_run:
+            # allocate 4096 bits for the fake signature
+            return b'0' * 512
+
         self._load_objects()
         from pkcs11 import Mechanism, SignMixin
         kh: SignMixin = self._key_handle
@@ -648,6 +650,13 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
+
+    if bytes_reserved is None:
+        test_md = getattr(hashlib, md_algorithm)().digest()
+        test_signature = signer.sign(
+            test_md, md_algorithm, timestamp=timestamp, dry_run=True
+        ).hex().encode('ascii')
+        bytes_reserved = len(test_signature)
     # we need to add a signature object and a corresponding form field
     # to the PDF file
     sig_obj = SignatureObject(
@@ -697,6 +706,8 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     signature = signer.sign(
         md.digest(), md_algorithm, timestamp=timestamp
     ).hex().encode('ascii')
+
+    assert len(signature) <= bytes_reserved
 
     # +1 to skip the '<'
     output.seek(sig_start + 1)
