@@ -12,7 +12,10 @@ from PyPDF2 import generic
 from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
 
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdf_utils.incremental_writer import (
+    IncrementalPdfFileWriter,
+    init_xobject_dictionary,
+)
 
 pdf_name = generic.NameObject
 pdf_string = generic.createStringObject
@@ -163,20 +166,9 @@ def _simple_box_appearance(box):
         'Q'  # restore graphics state
     ]).encode('ascii')
     # we'll only set normal appearance, nothing else
-    normal_appearance = generic.StreamObject.initializeFromDictionary({
-        '__streamdata__': command_stream,
-        # PyPDF2 is bizarre about /Length. It requires the /Length attribute
-        #  in initializeFromDictionary (because deleting it produces a KeyError)
-        #  but then simply recomputes it as needed.
-        pdf_name('/Length'): len(command_stream),
-        pdf_name('/BBox'): generic.ArrayObject(list(
-            map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
-        )),
-        # TODO this will change when we involve text etc.
-        pdf_name('/Resources'): generic.DictionaryObject(),
-        pdf_name('/Type'): pdf_name('/XObject'),
-        pdf_name('/Subtype'): pdf_name('/Form')
-    })
+    normal_appearance = init_xobject_dictionary(
+        command_stream, box_width, box_height
+    )
     return rect, normal_appearance
 
 

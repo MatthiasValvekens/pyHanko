@@ -1,6 +1,5 @@
 asn1crypto==1.4.0
 cffi==1.14.1
-fpdf==1.7.2
 oscrypto==1.2.1
 pycparser==2.20
 PyPDF2==1.26.0

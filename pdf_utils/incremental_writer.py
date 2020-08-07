@@ -129,6 +129,12 @@ class XRefStream(generic.StreamObject):
         super().writeToStream(stream, encryption_key)
 
 
+resource_dict_names = map(pdf_name, [
+    'ExtGState', 'ColorSpace', 'Pattern', 'Shading', 'XObject', 
+    'Font', 'ProcSet', 'Properties'
+])
+
+
 class IncrementalPdfFileWriter:
 
     def __init__(self, input_stream):
@@ -261,7 +267,6 @@ class IncrementalPdfFileWriter:
                 key = None
             obj.writeToStream(stream, key)
             stream.write(b'\nendobj\n')
-
         
         # prepare trailer dictionary entries
         trailer.update({
@@ -335,3 +340,144 @@ class IncrementalPdfFileWriter:
 
         self._encrypt_key = deriv_result[1]
         self._encrypt = encrypt_ref
+
+    def add_stream_to_page(self, page_ix, stream_ref, resources=None):
+        """
+        Append an indirect stream object to a page in a PDF.
+        """
+        # TODO support operating on deeper page tree structures
+
+        # the spec says that this will always be an indirect reference
+        page_tree_root_ref = self.root.raw_get('/Pages')
+        page_tree_root = page_tree_root_ref.getObject()
+        page_ref = page_tree_root['/Kids'][page_ix]
+        page_obj = page_ref.getObject()
+        contents_ref = page_obj.raw_get('/Contents')
+
+        if isinstance(contents_ref, generic.IndirectObject):
+            contents = contents_ref.getObject()
+            if isinstance(contents, generic.ArrayObject):
+                # This is the easy case. It suffices to mark
+                # this array for an update, and append our stream to it.
+                self.mark_update(contents_ref)
+                contents.append(stream_ref)
+            elif isinstance(contents, generic.DictionaryObject):
+                # replace the dictionary with an array containing 
+                # a reference to the original dict, and our own stream.
+                contents = generic.ArrayObject([contents_ref, stream_ref])
+                page_obj[pdf_name('/Contents')] = self.add_object(contents)
+                # mark the page to be updated as well
+                self.mark_update(page_ref)
+            else:
+                raise ValueError('Unexpected type for page /Contents')
+        elif isinstance(contents_ref, generic.ArrayObject):
+            # make /Contents an indirect array, and append our stream
+            contents = contents_ref
+            contents.append(stream_ref)
+            page_obj[pdf_name('/Contents')] = self.add_object(contents)
+            self.mark_update(page_ref)
+        elif isinstance(contents_ref, generic.DictionaryObject):
+            old_contents = contents_ref
+            # create a new array with indirect references to the old contents
+            # and our stream
+            contents = generic.ArrayObject(
+                [self.add_object(old_contents), stream_ref]
+            )
+            # ... then insert a reference into the page's /Contents entry
+            page_obj[pdf_name('/Contents')] = self.add_object(contents) 
+            self.mark_update(page_ref)
+        else:
+            raise ValueError('Unexpected type for page /Contents')
+
+        if resources is None:
+            return
+
+        # update the page's resource dictionary
+        
+        # first, check if the page contains a /Resources entry.
+        # if not, move up the tree.
+        try:
+            res_ref = page_obj.raw_get('/Resources')
+            resource_container = page_obj
+            resource_container_ref = page_ref
+        except KeyError:
+            try:
+                res_ref = page_tree_root.raw_get('/Resources')
+            except KeyError:
+                # this cannot happen in a valid PDF, but we can deal with it
+                # easily.
+                res_ref = generic.DictionaryObject()
+            resource_container = page_tree_root
+            resource_container_ref = page_tree_root_ref
+
+        if isinstance(res_ref, generic.IndirectObject):
+            # we can get away with only updating this reference
+            orig_resource_dict = res_ref.getObject()
+            update_boundary = res_ref
+        else:
+            # externalise the /Resources dictionary
+            orig_resource_dict = res_ref
+            resource_container[pdf_name('/Resources')] = self.add_object(
+                res_ref
+            )
+            update_boundary = resource_container_ref
+
+        if self.merge_resources(orig_resource_dict, resources):
+            self.mark_update(update_boundary)
+
+    def merge_resources(self, orig_dict, new_dict) -> bool:
+        """
+        Update an existing resource dictionary object with data from another
+        one. Returns `True` if the original dict object was modified directly.
+
+        The caller is responsible for avoiding name conflicts with existing
+        resources.
+        """
+
+        update_needed = False
+        for key, value in new_dict.items():
+            try:
+                orig_value_ref = orig_dict.raw_get(key)
+            except KeyError:
+                update_needed = True
+                orig_dict[key] = value
+                continue
+
+            if isinstance(orig_value_ref, generic.IndirectObject):
+                orig_value = orig_value_ref.getObject()
+                self.mark_update(orig_value_ref)
+            else:
+                orig_value = orig_value_ref
+                update_needed = True
+
+            if isinstance(orig_value, generic.ArrayObject):
+                # the /ProcSet case
+                orig_value.extend(value)
+            elif isinstance(orig_value, generic.DictionaryObject):
+                for key_, value_ in value.items():
+                    if key_ in orig_value:
+                        raise ValueError(
+                            'Naming conflict in resource of type %s: '
+                            'key %s occurs in both.' % (key, key_)
+                        )
+                    orig_value[key_] = value_
+
+        return update_needed
+
+
+def init_xobject_dictionary(command_stream, box_width, box_height,
+                            resources=None):
+    resources = resources or generic.DictionaryObject()
+    return generic.StreamObject.initializeFromDictionary({
+        '__streamdata__': command_stream,
+        # PyPDF2 is bizarre about /Length. It requires the /Length attribute
+        #  in initializeFromDictionary (because deleting it produces a KeyError)
+        #  but then simply recomputes it as needed.
+        pdf_name('/Length'): len(command_stream),
+        pdf_name('/BBox'): generic.ArrayObject(list(
+            map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
+        )),
+        pdf_name('/Resources'): resources,
+        pdf_name('/Type'): pdf_name('/XObject'),
+        pdf_name('/Subtype'): pdf_name('/Form')
+    })
