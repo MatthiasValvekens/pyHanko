@@ -77,7 +77,6 @@ class QRStamp(generic.StreamObject):
         self.url = url
         self.style = style
         self.text_params = None
-        # TODO declare font resources!
         self.update({
             pdf_name('/Type'): pdf_name('/XObject'),
             pdf_name('/Subtype'): pdf_name('/Form')
@@ -144,6 +143,7 @@ class QRStamp(generic.StreamObject):
             text_height + 2 * total_text_sep,
             style.stamp_qrsize + 2 * style.innsep
         )
+        self._height = stamp_height
         text_y_sep = (stamp_height - text_height) // 2
 
         # text rendering
@@ -155,6 +155,7 @@ class QRStamp(generic.StreamObject):
             text_min_x + min(style.max_text_width, max_line_len)
             + total_text_sep
         )
+        self._width = stamp_width
 
         qr_y_sep = (stamp_height - style.stamp_qrsize) // 2
 
@@ -247,11 +248,24 @@ class QRStamp(generic.StreamObject):
                 pdf_name(resource_name): stamp_ref
             })
         })
-        writer.add_stream_to_page(
+        page_ref = writer.add_stream_to_page(
             dest_page, writer.add_object(stamp_wrapper_stream), resources
         )
         stamp.render_all()
-        # TODO add link annotation!
+
+        link_rect = (x, y, x + stamp._width, y + stamp._height)
+        link_annot = generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/Annot'),
+            pdf_name('/Subtype'): pdf_name('/Link'),
+            pdf_name('/Rect'): generic.ArrayObject(list(
+                map(generic.FloatObject, link_rect)
+            )),
+            pdf_name('/A'): generic.DictionaryObject({
+                pdf_name('/S'): pdf_name('/URI'),
+                pdf_name('/URI'): pdf_string(url)
+            })
+        })
+        writer.register_annotation(page_ref, writer.add_object(link_annot))
         return stamp_ref
 
 

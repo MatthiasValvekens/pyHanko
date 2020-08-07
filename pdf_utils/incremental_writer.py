@@ -424,6 +424,7 @@ class IncrementalPdfFileWriter:
 
         if self.merge_resources(orig_resource_dict, resources):
             self.mark_update(update_boundary)
+        return page_ref
 
     def merge_resources(self, orig_dict, new_dict) -> bool:
         """
