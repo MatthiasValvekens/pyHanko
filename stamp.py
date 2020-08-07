@@ -1,6 +1,8 @@
 import os
 
 import qrcode
+import tzlocal
+
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, init_xobject_dictionary
 )
@@ -57,8 +59,7 @@ class StampStyle:
 
     stamp_qrsize: int = 100
 
-    # TODO support local timezone output
-    timestamp_format = '%Y-%m-%d %H:%M:%S UTC'
+    timestamp_format = '%Y-%m-%d %H:%M:%S %Z'
 
     stamp_text = (
         "Digital version available at\n"
@@ -187,8 +188,9 @@ class QRStamp(generic.StreamObject):
 
         # render text
         max_line_len = 0
+        ts = datetime.now(tz=tzlocal.get_localzone())
         _text_params = {
-            'ts': datetime.utcnow().strftime(style.timestamp_format),
+            'ts': ts.strftime(style.timestamp_format),
             'url': self.url
         }
         if self.text_params is not None:
