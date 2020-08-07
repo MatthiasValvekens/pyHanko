@@ -172,26 +172,6 @@ def _simple_box_appearance(box):
     return rect, normal_appearance
 
 
-def register_annotation(page_ref, annot_ref, writer: IncrementalPdfFileWriter):
-    page_obj = page_ref.getObject()
-    try:
-        annots_ref = page_obj.raw_get('/Annots')
-        if isinstance(annots_ref, generic.IndirectObject):
-            annots = annots_ref.getObject()
-            writer.mark_update(annot_ref)
-        else:
-            # we need to update the entire page object if the annots array
-            # is a direct object
-            annots = annots_ref
-            writer.mark_update(page_ref)
-    except KeyError:
-        annots = generic.ArrayObject()
-        writer.mark_update(page_ref)
-        page_obj[pdf_name('/Annots')] = annots
-
-    annots.append(annot_ref)
-
-
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, include_on_page, *, writer,
                  sig_object_ref=None, box=None):
@@ -228,7 +208,7 @@ class SignatureFormField(generic.DictionaryObject):
         self.reference = self_reference = writer.add_object(self)
         # if we're building an invisible form field, this is all there is to it
         if visible:
-            register_annotation(include_on_page, self_reference, writer)
+            writer.register_annotation(include_on_page, self_reference)
 
 
 def simple_cms_attribute(attr_type, value):

@@ -464,6 +464,25 @@ class IncrementalPdfFileWriter:
 
         return update_needed
 
+    def register_annotation(self, page_ref, annot_ref):
+        page_obj = page_ref.getObject()
+        try:
+            annots_ref = page_obj.raw_get('/Annots')
+            if isinstance(annots_ref, generic.IndirectObject):
+                annots = annots_ref.getObject()
+                self.mark_update(annot_ref)
+            else:
+                # we need to update the entire page object if the annots array
+                # is a direct object
+                annots = annots_ref
+                self.mark_update(page_ref)
+        except KeyError:
+            annots = generic.ArrayObject()
+            self.mark_update(page_ref)
+            page_obj[pdf_name('/Annots')] = annots
+
+        annots.append(annot_ref)
+
 
 def init_xobject_dictionary(command_stream, box_width, box_height,
                             resources=None):
