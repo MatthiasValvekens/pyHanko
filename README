@@ -5,15 +5,14 @@ stamping & signing PDF files.
  - Adding and signing signature fields is experimental, especially with regards to the appearance
    of the signature (for now, it's nothing more than a gray box).
  - Support for handling encrypted files has been added in, but is untested.
+ - The signer supports PKCS11 devices too (see beid.py for an example).
 
 
 Some TODOs
 ----------
 
+ - The signing/stamping code currently only works on PDF files with a flat page tree (which fortunately covers the vast majority of real-life examples). For the signer, this is relatively easy to work around, but the resource dictionary handling logic in the stamper needs to be reworked a little to cover the general case.
  - Improve handling of signature field widgets.
- - Rework the stamper to also operate in append mode, to minimise potential mangling caused 
-   by rerendering the entire file through PyPDF2. This would also allow me to remove the dependency
-   on PyFPDF.
  - Add validation functionality.
  - Add systematic tests, both with real-world PDF files and minimal examples from the spec.
 
