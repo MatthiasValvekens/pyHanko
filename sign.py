@@ -226,6 +226,17 @@ class Signer:
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
 
+    @property
+    def subject_name(self):
+        name: x509.Name = self.signing_cert.subject
+        result = name.native['common_name']
+        try:
+            email = name.native['email_address']
+            result = '%s <%s>' % (result, email)
+        except KeyError:
+            pass
+        return result
+
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False) -> bytes:
 
@@ -424,10 +435,10 @@ class DocMDPPerm(IntEnum):
 
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
-    name: str
     location: str
     reason: str
     field_name: str
+    name: str = None
     certify: bool = False
     # only relevant for certification
     docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
@@ -629,11 +640,15 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
             test_md, md_algorithm, timestamp=timestamp, dry_run=True
         ).hex().encode('ascii')
         bytes_reserved = len(test_signature)
+
+    name = signature_meta.name
+    if name is None:
+        name = signer.subject_name
     # we need to add a signature object and a corresponding form field
     # to the PDF file
     sig_obj = SignatureObject(
-        signature_meta.name, signature_meta.location,
-        signature_meta.reason, timestamp, bytes_reserved=bytes_reserved
+        name, signature_meta.location, signature_meta.reason,
+        timestamp, bytes_reserved=bytes_reserved
     )
     sig_obj_ref = pdf_out.add_object(sig_obj)
 
