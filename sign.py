@@ -667,7 +667,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
         # TODO figure out how the auto-scaling between the XObject's /BBox
         #  and the annotation's /Rect works in this case (§ 12.5.5 in ISO 32000)
         tss = TextStampStyle(
-            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, max_width=w,
+            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, fixed_aspect_ratio=w/h
         )
         text_params = {
             'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)

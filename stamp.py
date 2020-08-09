@@ -60,8 +60,9 @@ class TextStampStyle:
     font_size: int = 10
     leading: int = None
     textsep: int = 10
-    max_width: int = 300
     avg_char_width: int = None
+    # AR initialises the height as a fraction of the width
+    fixed_aspect_ratio: float = None
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
 
 
@@ -89,6 +90,8 @@ class TextStamp(generic.StreamObject):
         })
         self._resources_ready = False
         self.font = font = self.style.font or 'Courier'
+        self._wrapped_lines = None
+        self._max_line_len = None
         self._stamp_ref = None
 
         if isinstance(font, TTFont):
@@ -151,14 +154,30 @@ class TextStamp(generic.StreamObject):
     def get_text_height(self):
         return len(self.style.stamp_text.split('\n')) * self.get_leading()
 
+    def get_stamp_width(self):
+        if self._max_line_len is None:
+            self._preprocess_text()
+
+        return self.get_text_xstart() + self._max_line_len + self.get_text_sep()
+
     def get_stamp_height(self):
-        return self.get_text_height() + 2 * self.get_text_sep()
+        ar = self.style.fixed_aspect_ratio
+        if ar is None:
+            return self.get_text_height() + 2 * self.get_text_sep()
+        else:
+            stamp_width = self.get_stamp_width()
+            return int(stamp_width / ar)
 
     def get_text_xstart(self):
         return self.get_text_sep()
 
     def get_text_ystart(self):
-        return (self.get_text_height() + self.get_stamp_height()) // 2
+        th = self.get_text_height()
+        sh = self.get_stamp_height()
+        if th < sh:
+            return (th + sh) // 2
+        else:
+            return sh
 
     def get_default_text_params(self):
         ts = datetime.now(tz=tzlocal.get_localzone())
@@ -167,24 +186,16 @@ class TextStamp(generic.StreamObject):
         }
 
     def _render_stream(self):
-        style = self.style
-
         command_stream = ['q']
 
-        # The width depends on the width of the inner text box
-        #  => compute later
         stamp_height = self.get_stamp_height()
+        stamp_width = self.get_stamp_width()
         # text rendering
-        max_line_len, text_commands = self._text_stream()
+        text_commands = self._text_stream()
         command_stream.append(text_commands)
 
         # append additional drawing commands
         command_stream.extend(self.extra_commands())
-
-        stamp_width = min(
-            style.max_width,
-            self.get_text_xstart() + max_line_len + self.get_text_sep()
-        )
 
         # draw border around stamp and set bounding box
         self[pdf_name('/BBox')] = generic.ArrayObject(list(
@@ -197,31 +208,39 @@ class TextStamp(generic.StreamObject):
         self._data = ' '.join(command_stream).encode('latin-1')
         return stamp_width, stamp_height
 
+    def _preprocess_text(self):
+        # compute line lengths, wrap strings
+        max_line_len = 0
+        _text_params = self.get_default_text_params()
+        if self.text_params is not None:
+            _text_params.update(self.text_params)
+        text = self.style.stamp_text % _text_params
+
+        lines = []
+        for line in text.split('\n'):
+            wrapped_line, line_len = self.wrap_string(line)
+            max_line_len = max(max_line_len, line_len)
+            lines.append(wrapped_line)
+        self._wrapped_lines = lines
+        self._max_line_len = max_line_len
+
     def _text_stream(self):
         style = self.style
         leading = style.font_size if style.leading is None else style.leading
         xstart = self.get_text_xstart()
         ystart = self.get_text_ystart()
 
-        # render text
-        max_line_len = 0
-        _text_params = self.get_default_text_params()
-        if self.text_params is not None:
-            _text_params.update(self.text_params)
-        text = style.stamp_text % _text_params
-
         # TODO Auto word-wrap is probably too much trouble, but
         #  perhaps it's worth experimenting a little
         command_stream = [
             'BT', '/F1 %d Tf' % self.style.font_size,
-                  '%d TL' % leading, '%d %d Td' % (xstart, ystart)
+            '%d TL' % leading, '%d %d Td' % (xstart, ystart)
         ]
-        for line in text.split('\n'):
-            wrapped_line, line_len = self.wrap_string(line)
-            max_line_len = max(max_line_len, line_len)
-            command_stream.append("%s '" % wrapped_line)
+        if self._wrapped_lines is None:
+            self._preprocess_text()
+        command_stream.extend("%s '" % wl for wl in self._wrapped_lines)
         command_stream.append('ET')
-        return max_line_len, ' '.join(command_stream)
+        return ' '.join(command_stream)
 
     def render_all(self):
         w, h = self._render_stream()
@@ -317,6 +336,9 @@ class QRStamp(TextStamp):
     def get_stamp_height(self):
         # height is determined by the height of the text,
         # or the QR code, whichever is greater
+        # This potentially breaks the fixed AR logic, but since QR codes
+        # should have a certain minimal size anyway, I think I'm
+        # willing to pay that price
         sh = super().get_stamp_height()
         return max(sh, self.style.stamp_qrsize + 2 * self.style.innsep)
 
