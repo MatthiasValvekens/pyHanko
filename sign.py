@@ -15,6 +15,7 @@ from oscrypto import asymmetric, keys as oskeys
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, AnnotAppearances,
 )
+from stamp import TextStampStyle, TextStamp
 
 pdf_name = generic.NameObject
 pdf_string = generic.createStringObject
@@ -600,14 +601,17 @@ def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
     return output
 
 
+SIG_DETAILS_DEFAULT_TEMPLATE = (
+    'Digitally signed by %(signer)s.\n'
+    'Timestamp: %(ts)s.'
+)
+
+
 def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
              md_algorithm='sha512', existing_fields_only=False,
-             bytes_reserved=None):
+             bytes_reserved=None, ):
 
-    # TODO generate an error when signatures are present and there's no
-    #  open signature field to fill (since in that situation we cannot sign
-    #  without invalidating the existing signatures) or DocMDP doesn't allow
-    #  signing
+    # TODO generate an error when DocMDP doesn't allow extra signatures.
 
     # TODO explicitly disallow multiple certification signatures
 
@@ -651,6 +655,30 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     if not field_created:
         # still need to mark it for updating
         pdf_out.mark_update(sig_field_ref)
+
+    x1, y1, x2, y2 = sig_field[pdf_name('/Rect')]
+    w = abs(x1 - x2)
+    h = abs(y1 - y2)
+    if w and h:
+        # the field is probably a visible one.
+        # if the field is a visible one, we change its appearance stream
+        # to show some data about the signature
+        # TODO allow customisation
+        # TODO figure out how the auto-scaling between the XObject's /BBox
+        #  and the annotation's /Rect works in this case (§ 12.5.5 in ISO 32000)
+        tss = TextStampStyle(
+            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, max_width=w,
+        )
+        text_params = {
+            'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
+        }
+        stamp = TextStamp(pdf_out, tss, text_params=text_params)
+        sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
+        try:
+            # if there was an entry like this, it's meaningless now
+            del sig_field[pdf_name('/AS')]
+        except KeyError:
+            pass
 
     if signature_meta.certify:
         _certification_setup(
