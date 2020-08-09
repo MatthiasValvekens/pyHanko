@@ -43,7 +43,7 @@ class PdfStreamImage(BaseImage):
             (x, y), _ = self.pixel_box(row, col)
             # paint a rectangle
             command_stream.append(
-                '%f %f %f %f re f' % (
+                '%g %g %g %g re f' % (
                     rd(x), rd(y), rd(self.box_size), rd(self.box_size)
                 )
             )
@@ -192,7 +192,7 @@ class QRStamp(generic.StreamObject):
         command_stream.append(text_commands)
         # paint the QR code, translated and with y axis inverted
         command_stream.append(
-            'q 1 0 0 -1 %f %f cm /QR Do Q' % (
+            'q 1 0 0 -1 %g %g cm /QR Do Q' % (
                 rd(style.innsep),
                 rd(stamp_height - max(style.innsep, qr_y_sep)),
             )
@@ -203,7 +203,7 @@ class QRStamp(generic.StreamObject):
             map(generic.FloatObject, [0, 0, stamp_width, stamp_height])
         ))
         command_stream.append(
-            '3 w 0 0 %f %f re S' % (stamp_width, stamp_height)
+            '3 w 0 0 %g %g re S' % (stamp_width, stamp_height)
         )
         command_stream.append('Q')
         self._data = ' '.join(command_stream).encode('latin-1')
@@ -256,7 +256,7 @@ class QRStamp(generic.StreamObject):
         stamp_ref = writer.add_object(stamp)
         # randomise resource name to avoid conflicts
         resource_name = '/QRStamp' + os.urandom(16).hex()
-        stamp_paint = 'q 1 0 0 1 %f %f cm %s Do Q' % (
+        stamp_paint = 'q 1 0 0 1 %g %g cm %s Do Q' % (
             rd(x), rd(y), resource_name
         )
         stamp_wrapper_stream = generic.StreamObject.initializeFromDictionary({
