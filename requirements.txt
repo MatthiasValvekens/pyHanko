@@ -8,3 +8,4 @@ qrcode==6.1
 six==1.15.0
 tzlocal==2.1
 python-pkcs11==0.6.0
+fonttools==4.13.0

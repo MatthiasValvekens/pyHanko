@@ -1,7 +1,10 @@
 import os
+from typing import Optional, Union
 
 import qrcode
 import tzlocal
+from fontTools.ttLib import TTFont
+from pdf_utils.font import GlyphAccumulator
 
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, init_xobject_dictionary
@@ -52,16 +55,18 @@ class PdfStreamImage(BaseImage):
 
 @dataclass(frozen=True)
 class StampStyle:
+    font: Optional[Union[str, TTFont]] = None
     font_size: int = 10
     innsep: int = 3
     textsep: int = 10
-    max_text_width = 300
+    max_text_width: int = 300
+    avg_char_width: int = None
 
     stamp_qrsize: int = 100
 
-    timestamp_format = '%Y-%m-%d %H:%M:%S %Z'
+    timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
 
-    stamp_text = (
+    stamp_text: str = (
         "Digital version available at\n"
         "this url: %(url)s\n"
         "Timestamp: %(ts)s"
@@ -83,20 +88,45 @@ class QRStamp(generic.StreamObject):
         })
         self._resources_ready = False
         self.text_params = text_params
+        self.font = font = self.style.font or 'Courier'
+
+        if isinstance(font, TTFont):
+            self.glyph_accumulator = GlyphAccumulator(font)
+        elif isinstance(font, str):
+            self.glyph_accumulator = None
+        else:
+            raise ValueError(
+                "Invalid type '%s' for font parameter" % type(font)
+            )
+
+    def wrap_string(self, txt):
+        if self.glyph_accumulator is not None:
+            hex_str, width = self.glyph_accumulator.feed_string(txt)
+            return '<%s>' % hex_str, width
+        else:
+            # FIXME This is a very crappy estimate for non-monospaced fonts
+            char_width = self.style.avg_char_width or 0.6 * self.style.font_size
+            return '(%s)' % txt, len(txt) * char_width
 
     def _format_resources(self):
         if self._resources_ready:
             return
-        # TODO work out how to do this properly for arbitrary fonts
-        font_dict = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/Font'),
-            pdf_name('/BaseFont'): pdf_name('/Courier'),
-            pdf_name('/Subtype'): pdf_name('/Type1'), 
-            pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
-        })
+        if self.glyph_accumulator is None:
+            # assume that self.font is the name of a PDF standard font
+            # TODO enforce that
+            font_dict = generic.DictionaryObject({
+                pdf_name('/Type'): pdf_name('/Font'),
+                pdf_name('/BaseFont'): pdf_name('/' + self.font),
+                pdf_name('/Subtype'): pdf_name('/Type1'),
+                pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
+            })
+            font_ref = self.writer.add_object(font_dict)
+        else:
+            font_ref = self.glyph_accumulator.embed_subset(self.writer)
+
         resources = generic.DictionaryObject({
             pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/F1'): self.writer.add_object(font_dict)
+                pdf_name('/F1'): font_ref
             }),
             pdf_name('/XObject'): generic.DictionaryObject({
                 pdf_name('/QR'): self._qr_xobject()
@@ -176,16 +206,11 @@ class QRStamp(generic.StreamObject):
             '3 w 0 0 %f %f re S' % (stamp_width, stamp_height)
         )
         command_stream.append('Q')
-        # I'm going to encode in utf-8 for the text content,
-        # but I'm not sure that my text painting code actually
-        # deals with multibyte characters correctly (TODO)
-        self._data = ' '.join(command_stream).encode('utf-8')
+        self._data = ' '.join(command_stream).encode('latin-1')
 
     def _text_stream(self, xstart, ystart):
         style = self.style
         line_height = style.font_size
-        # FIXME This is a very crappy estimate for non-monospaced fonts
-        char_width = 0.6 * style.font_size
 
         # render text
         max_line_len = 0
@@ -200,21 +225,16 @@ class QRStamp(generic.StreamObject):
 
         # TODO Auto word-wrap is probably too much trouble, but
         #  perhaps it's worth experimenting a little
-        # TODO is it really necessary to do this in every text object?
-        font_sel = "/F1 %d Tf" % self.style.font_size
-        command_stream = []
-        ypos = ystart
-        # TODO what about non-Latin character sets?
-
+        self.glyph_accumulator.feed_string(text)
+        command_stream = [
+            'BT', '/F1 %d Tf' % self.style.font_size,
+            '%d TL' % line_height, '%d %d Td' % (xstart, ystart)
+        ]
         for line in text.split('\n'):
-            line_len = len(line) * char_width
+            wrapped_line, line_len = self.wrap_string(line)
             max_line_len = max(max_line_len, line_len)
-            command_stream.append(
-                'BT %s %d %d Td (%s) Tj ET' % (
-                    font_sel, xstart, ypos, line
-                )
-            )
-            ypos -= line_height
+            command_stream.append('%s Tj T*' % wrapped_line)
+        command_stream.append('ET')
         return max_line_len, ' '.join(command_stream)
 
     def render_all(self):
