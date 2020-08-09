@@ -5,7 +5,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import IntEnum
 from io import BytesIO
-from typing import List
+from typing import List, Optional
 
 import tzlocal
 from PyPDF2 import generic
@@ -13,8 +13,7 @@ from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
 
 from pdf_utils.incremental_writer import (
-    IncrementalPdfFileWriter,
-    init_xobject_dictionary,
+    IncrementalPdfFileWriter, AnnotAppearances,
 )
 
 pdf_name = generic.NameObject
@@ -149,39 +148,20 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
 
-def _simple_box_appearance(box): 
-    # box should have four coordinates: x1 y1 x2 y2
-    x1, y1, x2, y2 = box
-    box_width = abs(x1 - x2)
-    box_height = abs(y1 - y2)
-    if len(box) != 4:
-        raise ValueError('Box should have four coordinates')
-    rect = list(map(generic.FloatObject, box))
-    command_stream = ' '.join([
-        'q',  # save
-        '0.3 0.3 0.3 rg',  # set fill colour
-        # set up rectangle path
-        '0 %.4f %.4f %.4f re' % (box_height, box_width, -box_height),
-        'f',  # fill stroke
-        'Q'  # restore graphics state
-    ]).encode('ascii')
-    # we'll only set normal appearance, nothing else
-    normal_appearance = init_xobject_dictionary(
-        command_stream, box_width, box_height
-    )
-    return rect, normal_appearance
-
-
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, include_on_page, *, writer,
-                 sig_object_ref=None, box=None):
+                 sig_object_ref=None, box=None,
+                 appearances: Optional[AnnotAppearances] = None):
+
         if box is not None:
             visible = True
-            rect, normal_app = _simple_box_appearance(box)
-            normal_app_ref = writer.add_object(normal_app)
-            ap = generic.DictionaryObject({pdf_name('/N'): normal_app_ref})
+            rect = list(map(generic.FloatObject, box))
+            if appearances is not None:
+                ap = appearances.as_pdf_object()
+            else:
+                ap = None
         else:
-            rect = [generic.FloatObject(0.0)] * 4
+            rect = [generic.FloatObject(0)] * 4
             ap = None
             visible = False
 
@@ -282,7 +262,7 @@ class Signer:
                 })
             }),
             'digest_algorithm': digest_algorithm_obj,
-            # TODO implement PSS & HSM support (PKCS11 devices)
+            # TODO implement PSS support
             'signature_algorithm': algos.SignedDigestAlgorithm(
                 {'algorithm': self.pkcs7_signature_mechanism}
             ),
@@ -421,6 +401,12 @@ class SigFieldSpec:
     sig_field_name: str
     on_page: int = 0
     box: (int, int, int, int) = None
+
+    @property
+    def dimensions(self):
+        if self.box is not None:
+            x1, y1, x2, y2 = self.box
+            return abs(x1 - x2), abs(y1 - y2)
 
 
 class DocMDPPerm(IntEnum):
@@ -596,6 +582,7 @@ def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
 
     page_list = root['/Pages']['/Kids']
     for sp in sig_field_specs:
+        # use default appearance
         field_created, _ = _prepare_sig_field(
             sp.sig_field_name, root, update_writer=pdf_out,
             existing_fields_only=False, box=sp.box,

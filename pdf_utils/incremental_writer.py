@@ -98,7 +98,7 @@ class XRefStream(generic.StreamObject):
         # type indicator is one byte wide
         # we use longs to indicate positions of objects (>Q)
         # two more bytes for the generation number of an uncompressed object
-        widths = map(generic.NumberObject, (1,8,2))
+        widths = map(generic.NumberObject, (1, 8, 2))
         self.update({
             pdf_name('/W'): generic.ArrayObject(widths),
             pdf_name('/Type'): pdf_name('/XRef'),
@@ -110,7 +110,7 @@ class XRefStream(generic.StreamObject):
         if encryption_key is not None:
             raise ValueError('XRef streams cannot be encrypted')
         
-        index = [0,1]
+        index = [0, 1]
         subsections = _contiguous_xref_chunks(self.position_dict)
         stream_content = BytesIO()
         # write null object
@@ -501,3 +501,77 @@ def init_xobject_dictionary(command_stream, box_width, box_height,
         pdf_name('/Type'): pdf_name('/XObject'),
         pdf_name('/Subtype'): pdf_name('/Form')
     })
+
+
+class AnnotAppearances:
+
+    def __init__(self, normal, rollover=None, down=None):
+        self.normal = normal
+        self.rollover = rollover
+        self.down = down
+
+    def as_pdf_object(self):
+        res = generic.DictionaryObject({pdf_name('/N'): self.normal})
+        if self.rollover is not None:
+            res[pdf_name('/R')] = self.rollover
+        if self.down is not None:
+            res[pdf_name('/D')] = self.down
+        return res
+
+
+class SimpleAnnotAppearances(AnnotAppearances):
+
+    def __init__(self, writer: IncrementalPdfFileWriter, w, h, normal,
+                 rollover=None, down=None, resources=None):
+        """
+        Describe the appearance of a single-state annotation
+        using three command streams operating in a common bounding box with
+        a common set of resources (see Table 168 in ISO 32000).
+        The command streams are specified as bytestrings of operators.
+
+        :param writer:
+            The writer to record objects to.
+            This is required because all streams must be referenced indirectly.
+        :param w:
+            Width of the bounding box.
+        :param h:
+            Height of the bounding box.
+        :param normal:
+            The normal appearance.
+        :param rollover:
+            The rollover appearance (defaults to the normal appearance)
+        :param down:
+            The down appearance (defaults to the normal appearance)
+        :param resources:
+            A resource dictionary, or a reference to one.
+            Since this object will be attached to the XObject dictionaries
+            of all appearance stream objects, it is a good idea to pass this
+            in as an indirect reference.
+        """
+        def as_xobject(cmds):
+            xobj = init_xobject_dictionary(cmds, w, h, resources=resources)
+            return writer.add_object(xobj)
+
+        normal = as_xobject(normal)
+        if rollover is not None:
+            rollover = as_xobject(rollover)
+        if down is not None:
+            down = as_xobject(down)
+
+        super().__init__(normal, rollover, down)
+        self.w = w
+        self.h = h
+        self.resources = resources
+
+
+def simple_grey_box_appearance(writer, w, h, lightness=0.8):
+    command_stream = ' '.join([
+        'q',  # save
+        '%g %g %g rg' % (lightness, lightness, lightness),  # set fill colour
+        # set up rectangle path
+        '0 %g %g %g re' % (h, w, -h),
+        'f',  # fill stroke
+        'Q'  # restore graphics state
+    ]).encode('ascii')
+    # we'll only set normal appearance, nothing else
+    return SimpleAnnotAppearances(writer, w, h, normal=command_stream)

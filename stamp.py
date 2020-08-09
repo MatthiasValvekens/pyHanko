@@ -7,7 +7,7 @@ from fontTools.ttLib import TTFont
 from pdf_utils.font import GlyphAccumulator
 
 from pdf_utils.incremental_writer import (
-    IncrementalPdfFileWriter, init_xobject_dictionary
+    IncrementalPdfFileWriter, init_xobject_dictionary, AnnotAppearances,
 )
 from PyPDF2 import generic
 from dataclasses import dataclass
@@ -60,7 +60,7 @@ class TextStampStyle:
     font_size: int = 10
     leading: int = None
     textsep: int = 10
-    max_text_width: int = 300
+    max_width: int = 300
     avg_char_width: int = None
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
 
@@ -89,6 +89,7 @@ class TextStamp(generic.StreamObject):
         })
         self._resources_ready = False
         self.font = font = self.style.font or 'Courier'
+        self._stamp_ref = None
 
         if isinstance(font, TTFont):
             self.glyph_accumulator = GlyphAccumulator(font)
@@ -180,9 +181,9 @@ class TextStamp(generic.StreamObject):
         # append additional drawing commands
         command_stream.extend(self.extra_commands())
 
-        stamp_width = (
-            self.get_text_xstart() + min(style.max_text_width, max_line_len)
-            + self.get_text_sep()
+        stamp_width = min(
+            style.max_width,
+            self.get_text_xstart() + max_line_len + self.get_text_sep()
         )
 
         # draw border around stamp and set bounding box
@@ -211,7 +212,6 @@ class TextStamp(generic.StreamObject):
 
         # TODO Auto word-wrap is probably too much trouble, but
         #  perhaps it's worth experimenting a little
-        self.glyph_accumulator.feed_string(text)
         command_stream = [
             'BT', '/F1 %d Tf' % self.style.font_size,
                   '%d TL' % leading, '%d %d Td' % (xstart, ystart)
@@ -235,8 +235,14 @@ class TextStamp(generic.StreamObject):
             )
         return super().writeToStream(stream, key)
 
+    def register(self):
+        stamp_ref = self._stamp_ref
+        if stamp_ref is None:
+            self._stamp_ref = stamp_ref = self.writer.add_object(self)
+        return stamp_ref
+
     def apply(self, dest_page, x, y):
-        stamp_ref = self.writer.add_object(self)
+        stamp_ref = self.register()
         # randomise resource name to avoid conflicts
         resource_name = '/Stamp' + os.urandom(16).hex()
         stamp_paint = 'q 1 0 0 1 %g %g cm %s Do Q' % (
@@ -255,7 +261,14 @@ class TextStamp(generic.StreamObject):
         page_ref = wr.add_stream_to_page(
             dest_page, wr.add_object(stamp_wrapper_stream), resources
         )
-        return stamp_ref, page_ref, self.render_all()
+        return page_ref, self.render_all()
+
+    def as_appearances(self) -> AnnotAppearances:
+        # TODO support defining overrides/extra's for the rollover/down
+        #  appearances in some form
+        stamp_ref = self.register()
+        self.render_all()
+        return AnnotAppearances(normal=stamp_ref)
 
 
 class QRStamp(TextStamp):
@@ -313,7 +326,7 @@ class QRStamp(TextStamp):
         return tp
 
     def apply(self, dest_page, x, y):
-        stamp_ref, page_ref, (w, h) = super().apply(dest_page, x, y)
+        page_ref, (w, h) = super().apply(dest_page, x, y)
         link_rect = (x, y, x + w, y + h)
         link_annot = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/Annot'),
@@ -328,7 +341,7 @@ class QRStamp(TextStamp):
         })
         wr = self.writer
         wr.register_annotation(page_ref, wr.add_object(link_annot))
-        return stamp_ref, page_ref, (w, h)
+        return page_ref, (w, h)
 
 
 def stamp_file(input_name, output_name, style, dest_page,
