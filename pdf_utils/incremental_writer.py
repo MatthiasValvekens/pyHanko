@@ -8,6 +8,7 @@ from PyPDF2.pdf import _alg34, _alg35
 
 from .reader import PdfFileReader
 from hashlib import md5
+from .misc import pdf_name
 
 """
 Utility class for writing incremental updates to PDF files.
@@ -15,9 +16,6 @@ Contains code from the PyPDF2 project, see LICENSE.PyPDF2
 """
 
 __all__ = ['IncrementalPdfFileWriter']
-
-pdf_name = generic.NameObject
-pdf_string = generic.createStringObject
 
 
 def _derive_key(base_key, idnum, generation):

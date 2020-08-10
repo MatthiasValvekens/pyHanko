@@ -14,10 +14,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from qrcode.image.base import BaseImage
+from pdf_utils.misc import pdf_name, pdf_string
 
 
-pdf_name = generic.NameObject
-pdf_string = generic.createStringObject
 rd = lambda x: round(x, 4)
 
 

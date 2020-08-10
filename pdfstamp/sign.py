@@ -1,4 +1,3 @@
-import codecs
 import hashlib
 import logging
 from datetime import datetime
@@ -16,15 +15,9 @@ from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, AnnotAppearances,
 )
 from pdfstamp.stamp import TextStampStyle, TextStamp
-
-pdf_name = generic.NameObject
-pdf_string = generic.createStringObject
+from pdf_utils.misc import pdf_name, pdf_string
 
 logger = logging.getLogger(__name__)
-
-
-def pdf_utf16be_string(s):
-    return pdf_string(codecs.BOM_UTF16_BE + s.encode('utf-16be'))
 
 
 ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
@@ -177,7 +170,7 @@ class SignatureFormField(generic.DictionaryObject):
         super().__init__({
             # Signature field properties
             pdf_name('/FT'): pdf_name('/Sig'),
-            pdf_name('/T'): pdf_utf16be_string(field_name),
+            pdf_name('/T'): pdf_string(field_name),
             # Annotation properties: bare minimum
             pdf_name('/Type'): pdf_name('/Annot'),
             pdf_name('/Subtype'): pdf_name('/Widget'),
@@ -428,6 +421,7 @@ class DocMDPPerm(IntEnum):
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
     field_name: str
+    md_algorithm: str = 'sha512'
     location: str = None
     reason: str = None
     name: str = None
@@ -438,14 +432,13 @@ class PdfSignatureMetadata:
 
 def _find_sig_field(form, sig_field_name):
 
-    utf16be_name = pdf_utf16be_string(sig_field_name)
     try:
         # grab the array of form field references
         fields = form['/Fields']
         # check if a signature field with the requested name exists
         for field_ref in fields:
             field = field_ref.getObject()
-            if field.raw_get('/T') == utf16be_name:
+            if field['/T'] == sig_field_name:
                 if field['/FT'] != pdf_name('/Sig'):
                     raise ValueError(
                         'A field with name %s exists but is not a signature '
@@ -614,8 +607,8 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 
 def sign_pdf(pdf_out: IncrementalPdfFileWriter, 
              signature_meta: PdfSignatureMetadata, signer: Signer,
-             md_algorithm='sha512', existing_fields_only=False,
-             bytes_reserved=None, ):
+             existing_fields_only=False,
+             bytes_reserved=None):
 
     # TODO generate an error when DocMDP doesn't allow extra signatures.
 
@@ -633,9 +626,10 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     timestamp = datetime.now(tz=tzlocal.get_localzone())
 
     if bytes_reserved is None:
-        test_md = getattr(hashlib, md_algorithm)().digest()
+        test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
         test_signature = signer.sign(
-            test_md, md_algorithm, timestamp=timestamp, dry_run=True
+            test_md, signature_meta.md_algorithm, timestamp=timestamp,
+            dry_run=True
         ).hex().encode('ascii')
         bytes_reserved = len(test_signature)
 
@@ -692,7 +686,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     if signature_meta.certify:
         _certification_setup(
-            pdf_out, sig_obj_ref, md_algorithm,
+            pdf_out, sig_obj_ref, signature_meta.md_algorithm,
             signature_meta.docmdp_permissions
         )
 
@@ -709,14 +703,14 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     # compute the digests
     output_buffer = output.getbuffer()
-    md = getattr(hashlib, md_algorithm)()
+    md = getattr(hashlib, signature_meta.md_algorithm)()
     # these are memoryviews, so slices should not copy stuff around
     md.update(output_buffer[:sig_start])
     md.update(output_buffer[sig_end:])
     output_buffer.release()
 
     signature = signer.sign(
-        md.digest(), md_algorithm, timestamp=timestamp
+        md.digest(), signature_meta.md_algorithm, timestamp=timestamp
     ).hex().encode('ascii')
 
     assert len(signature) <= bytes_reserved
