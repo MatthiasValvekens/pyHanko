@@ -15,7 +15,7 @@ from oscrypto import asymmetric, keys as oskeys
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, AnnotAppearances,
 )
-from stamp import TextStampStyle, TextStamp
+from pdfstamp.stamp import TextStampStyle, TextStamp
 
 pdf_name = generic.NameObject
 pdf_string = generic.createStringObject
