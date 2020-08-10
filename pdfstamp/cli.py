@@ -105,7 +105,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, passfile):
               type=readable_file, required=True)
 @click.option('--use-auth-cert', type=bool, show_default=True,
               default=False, required=False, is_flag=True,
-              help='when true, use Authentication cert')
+              help='use Authentication cert instead')
 @click.option('--slot-no', help='specify PKCS#11 slot to use', 
               required=False, type=int, default=None)
 @click.pass_context
@@ -126,5 +126,44 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     outfile.write(buf)
     buf.release()
 
+    infile.close()
+    outfile.close()
+
+
+@signing.command(name='addfields')
+@click.argument('infile', type=click.File('rb'))
+@click.argument('outfile', type=click.File('wb'))
+@click.argument('specs', metavar='PAGE/X1,Y1,X2,Y2/NAME [...]', nargs=-1)
+def add_sig_field(infile, outfile, specs):
+    def _parse_specs():
+        for spec in specs:
+            try:
+                page, box, name = spec.split('/')
+            except ValueError:
+                raise click.ClickException(
+                    "Sig field should be of the form PAGE/X1,Y1,X2,Y2/NAME."
+                )
+            try:
+                page_ix = int(page) - 1
+                if page_ix < 0:
+                    raise ValueError
+            except ValueError:
+                raise click.ClickException(
+                    "Sig field parameter PAGE should be a nonnegative integer, "
+                    "not %s." % page
+                )
+            try:
+                x1, y1, x2, y2 = map(int, box.split(','))
+            except ValueError:
+                raise click.ClickException(
+                    "Sig field parameters X1,Y1,X2,Y2 should be four integers."
+                )
+            yield sign.SigFieldSpec(
+                sig_field_name=name, on_page=page_ix, box=(x1, y1, x2, y2)
+            )
+
+    writer = IncrementalPdfFileWriter(infile)
+    sign.append_signature_fields(writer, list(_parse_specs()))
+    writer.write(outfile)
     infile.close()
     outfile.close()

@@ -479,6 +479,8 @@ def _prepare_sig_field(sig_field_name, root,
                        update_writer: IncrementalPdfFileWriter,
                        existing_fields_only=False, lock_sig_flags=True, 
                        **kwargs):
+    if sig_field_name is None:
+        raise ValueError
 
     # Holds a reference to the object containing our form field
     # that we'll have to update IF we create a new form field.
@@ -523,16 +525,21 @@ def _prepare_sig_field(sig_field_name, root,
             field_container_ref = form_ref
             form[pdf_name('/Fields')] = fields
 
-        empty_fields = enumerate_sig_fields_in(fields, filled_status=False)
+        candidates = enumerate_sig_fields_in(fields, with_name=sig_field_name)
         sig_field_ref = None
-        for field_name, value, field_ref in empty_fields:
-            if field_name == sig_field_name:
-                sig_field_ref = field_ref
-                break
-        if existing_fields_only and sig_field_ref is None:
-            raise ValueError(
-                'No empty signature field with name %s found.' % sig_field_name
-            )
+        try:
+            field_name, value, sig_field_ref = next(candidates)
+            if value is not None:
+                raise ValueError(
+                    'Signature field with name %s appears to be filled already.'
+                    % sig_field_name
+                )
+        except StopIteration:
+            if existing_fields_only:
+                raise ValueError(
+                    'No empty signature field with name %s found.'
+                    % sig_field_name
+                )
     except KeyError:
         # we have to create the form
         if existing_fields_only:
@@ -596,24 +603,32 @@ def enumerate_sig_fields(reader: PdfFileReader, filled_status=None):
     yield from enumerate_sig_fields_in(fields, filled_status)
 
 
-def enumerate_sig_fields_in(field_list, filled_status=None):
+def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None):
     ft_sig = pdf_name('/Sig')
     for field_ref in field_list:
         # TODO the spec mandates this, but perhaps we should be a bit more
         #  tolerant
         assert isinstance(field_ref, generic.IndirectObject)
         field = field_ref.getObject()
-        if field.get('/FT') != ft_sig:
-            continue
         # /T is the field name. Required entry, but you never know.
         try:
             field_name = field['/T']
         except KeyError:
             continue
+        field_type = field.get('/FT')
+        if field_type != ft_sig:
+            if with_name is not None and field_name == with_name:
+                raise ValueError(
+                    'Field with name %s exists but is not a signature field'
+                    % field_name
+                )
+            continue
         field_value = field.get('/V')
         # "cast" to a regular string object
         filled = field_value is not None
-        if filled_status is None or filled == filled_status:
+        status_check = filled_status is None or filled == filled_status
+        name_check = with_name is None or with_name == field_name
+        if status_check and name_check:
             yield str(field_name), field_value, field_ref
 
         try:
@@ -793,11 +808,3 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     output.seek(0)
     return output
 
-
-def append_signature_fields_to_file(infile_name, outfile_name, *args):
-    with open(infile_name, 'rb') as infile:
-        result = append_signature_fields(IncrementalPdfFileWriter(infile), args)
-    with open(outfile_name, 'wb') as outfile:
-        buf = result.getbuffer()
-        outfile.write(buf)
-        buf.release()
