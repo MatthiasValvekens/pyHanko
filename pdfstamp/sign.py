@@ -14,6 +14,7 @@ from oscrypto import asymmetric, keys as oskeys
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, AnnotAppearances,
 )
+from pdf_utils.reader import PdfFileReader
 from pdfstamp.stamp import TextStampStyle, TextStamp
 from pdf_utils.misc import pdf_name, pdf_string
 
@@ -420,7 +421,7 @@ class DocMDPPerm(IntEnum):
 
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
-    field_name: str
+    field_name: str = None
     md_algorithm: str = 'sha512'
     location: str = None
     reason: str = None
@@ -428,33 +429,6 @@ class PdfSignatureMetadata:
     certify: bool = False
     # only relevant for certification
     docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
-
-
-def _find_sig_field(form, sig_field_name):
-
-    try:
-        # grab the array of form field references
-        fields = form['/Fields']
-        # check if a signature field with the requested name exists
-        for field_ref in fields:
-            field = field_ref.getObject()
-            if field['/T'] == sig_field_name:
-                if field['/FT'] != pdf_name('/Sig'):
-                    raise ValueError(
-                        'A field with name %s exists but is not a signature '
-                        'field' % sig_field_name
-                    )
-                elif '/V' in field:
-                    raise ValueError(
-                        'The field with name %s appears to be filled already'
-                        % sig_field_name
-                    )
-                return field_ref, fields
-    except KeyError:
-        # in a well-formed PDF, this should never happen
-        fields = generic.ArrayObject()
-    # no corresponding field found, need to create it later
-    return None, fields
 
 
 def _certification_setup(writer: IncrementalPdfFileWriter,
@@ -502,18 +476,18 @@ def _certification_setup(writer: IncrementalPdfFileWriter,
 
 
 def _prepare_sig_field(sig_field_name, root,
-                       update_writer: IncrementalPdfFileWriter = None,
+                       update_writer: IncrementalPdfFileWriter,
                        existing_fields_only=False, lock_sig_flags=True, 
                        **kwargs):
 
-    if not existing_fields_only and update_writer is None:
-        raise ValueError(
-            'Adding form fields requires a writer to process updates'
-        )
-
+    # Holds a reference to the object containing our form field
+    # that we'll have to update IF we create a new form field.
+    # In typical situations, this is either the
+    # /AcroForm object itself (when its /Fields are a flat, direct array),
+    # or whatever /Fields points to.
+    field_container_ref = None
     try:
         form_ref = root.raw_get('/AcroForm')
-        form_created = False
 
         if isinstance(form_ref, generic.IndirectObject):
             # The /AcroForm exists and is indirect. Hence, we may need to write
@@ -524,26 +498,50 @@ def _prepare_sig_field(sig_field_name, root,
             # an indirect one, and mark the root to be updated
             # (I think this is fairly rare, but requires testing!)
             form = form_ref
-            # if updates are active, we forgo the replacement
+            # if updates are not active, we forgo the replacement
             #  operation; in this case, one should only update the
             #  referenced form field anyway.
-            if update_writer is not None:
-                # this creates a new xref
-                form_created = True
-                form_ref = update_writer.add_object(form)
-                root[pdf_name('/AcroForm')] = form_ref
-                update_writer.update_root()
+            # this creates a new xref
+            form_ref = update_writer.add_object(form)
+            root[pdf_name('/AcroForm')] = form_ref
+            update_writer.update_root()
         # try to extend the existing form object first
         # and mark it for an update if necessary
-        sig_field_ref, fields = _find_sig_field(form, sig_field_name)
+        try:
+            fields_ref = form.raw_get('/Fields')
+            if isinstance(fields_ref, generic.IndirectObject):
+                field_container_ref = fields_ref
+                fields = fields_ref.getObject()
+            else:
+                fields = fields_ref
+                # /Fields is directly embedded into form_ref, so that's
+                # what we'll have to update if we create a new field
+                field_container_ref = form_ref
+        except KeyError:
+            # shouldn't happen, but eh
+            fields = generic.ArrayObject()
+            field_container_ref = form_ref
+            form[pdf_name('/Fields')] = fields
+
+        empty_fields = enumerate_sig_fields_in(fields, filled_status=False)
+        sig_field_ref = None
+        for field_name, value, field_ref in empty_fields:
+            if field_name == sig_field_name:
+                sig_field_ref = field_ref
+                break
+        if existing_fields_only and sig_field_ref is None:
+            raise ValueError(
+                'No empty signature field with name %s found.' % sig_field_name
+            )
     except KeyError:
+        # we have to create the form
         if existing_fields_only:
             raise ValueError('This file does not contain a form.')
         # no AcroForm present, so create one
         form = generic.DictionaryObject()
-        form_created = True
-        root[pdf_name('/AcroForm')] = form_ref = update_writer.add_object(form)
+        root[pdf_name('/AcroForm')] = update_writer.add_object(form)
         fields = generic.ArrayObject()
+        form[pdf_name('/Fields')] = fields
         # now we need to mark the root as updated
         update_writer.update_root()
         sig_field_ref = None
@@ -562,17 +560,66 @@ def _prepare_sig_field(sig_field_name, root,
         )
         sig_field_ref = sig_field.reference
         fields.append(sig_field_ref)
-        form[pdf_name('/Fields')] = fields
 
         # make sure /SigFlags is present. If not, create it
         sig_flags = 3 if lock_sig_flags else 1
         form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(sig_flags))
         # if we're adding a field to an existing form, this requires
-        # registering an update
-        if not form_created:
-            update_writer.mark_update(form_ref)
+        # registering an extra update
+        if field_container_ref is not None:
+            update_writer.mark_update(field_container_ref)
 
     return field_created, sig_field_ref
+
+
+def enumerate_sig_fields(reader: PdfFileReader, filled_status=None):
+    """
+    Enumerate signature fields.
+
+    :param reader:
+        The PDF reader to operate on.
+    :param filled_status:
+        Optional boolean. If True (resp. False) then all filled (resp. empty)
+        fields are returned. If left None (the default), then all fields
+        are returned.
+    :return:
+        A generator producing signature fields.
+    """
+
+    root = reader.trailer['/Root']
+    try:
+        form = root['/AcroForm']
+        fields = form['/Fields']
+    except KeyError:
+        return
+
+    yield from enumerate_sig_fields_in(fields, filled_status)
+
+
+def enumerate_sig_fields_in(field_list, filled_status=None):
+    ft_sig = pdf_name('/Sig')
+    for field_ref in field_list:
+        # TODO the spec mandates this, but perhaps we should be a bit more
+        #  tolerant
+        assert isinstance(field_ref, generic.IndirectObject)
+        field = field_ref.getObject()
+        if field.get('/FT') != ft_sig:
+            continue
+        # /T is the field name. Required entry, but you never know.
+        try:
+            field_name = field['/T']
+        except KeyError:
+            continue
+        field_value = field.get('/V')
+        # "cast" to a regular string object
+        filled = field_value is not None
+        if filled_status is None or filled == filled_status:
+            yield str(field_name), field_value, field_ref
+
+        try:
+            yield from enumerate_sig_fields_in(field['/Kids'])
+        except KeyError:
+            continue
 
 
 def append_signature_fields(pdf_out: IncrementalPdfFileWriter, 
@@ -617,8 +664,6 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     # TODO force md_algorithm to agree with the certification signature
     #  if present
 
-    # TODO allow signing an existing signature field without specifying the name
- 
     # TODO deal with SV dictionaries properly
 
     root = pdf_out.root
@@ -647,11 +692,36 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     )
     sig_obj_ref = pdf_out.add_object(sig_obj)
 
-    # grab or create a sig field
-    field_created, sig_field_ref = _prepare_sig_field(
-        signature_meta.field_name, root, update_writer=pdf_out,
-        existing_fields_only=existing_fields_only, lock_sig_flags=True
-    )
+    if signature_meta.field_name is None:
+        if not existing_fields_only:
+            raise ValueError('Not specifying a signature field name is only '
+                             'allowed when existing_fields_only=True')
+
+        # most of the logic in _prepare_sig_field has to do with preparing
+        # for the potential addition of a new field. That is completely
+        # irrelevant in this special case, so we might as well short circuit
+        # things.
+        field_created = False
+        empty_fields = enumerate_sig_fields(pdf_out.prev, filled_status=False)
+        try:
+            field_name, _, sig_field_ref = next(empty_fields)
+        except StopIteration:
+            raise ValueError('There are no empty signature fields.')
+
+        others = ', '.join(fn for fn, _, _ in empty_fields if fn is not None)
+        if others:
+            raise ValueError(
+                'There are several empty signature fields. Please specify '
+                'a field name. The options are %s, %s.' % (
+                    field_name, others
+                )
+            )
+    else:
+        # grab or create a sig field
+        field_created, sig_field_ref = _prepare_sig_field(
+            signature_meta.field_name, root, update_writer=pdf_out,
+            existing_fields_only=existing_fields_only, lock_sig_flags=True
+        )
     sig_field = sig_field_ref.getObject()
     # fill in a reference to the (empty) signature object
     sig_field[pdf_name('/V')] = sig_obj_ref
