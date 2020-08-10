@@ -122,8 +122,8 @@ class PKCS7Placeholder(generic.PdfObject):
 # (pre- and post content)
 class SignatureObject(generic.DictionaryObject):
 
-    def __init__(self, timestamp: datetime, name=None, location=None, reason=None, 
-                 bytes_reserved=None):
+    def __init__(self, timestamp: datetime, name=None, location=None,
+                 reason=None, bytes_reserved=None):
         # initialise signature object
         super().__init__(
             {
@@ -741,7 +741,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         # TODO figure out how the auto-scaling between the XObject's /BBox
         #  and the annotation's /Rect works in this case (§ 12.5.5 in ISO 32000)
         tss = TextStampStyle(
-            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, fixed_aspect_ratio=float(w/h)
+            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
+            fixed_aspect_ratio=float(w/h)
         )
         text_params = {
             'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
