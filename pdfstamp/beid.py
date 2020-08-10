@@ -1,6 +1,6 @@
 from oscrypto import keys
 
-import sign
+from . import sign
 import pkcs11
 from pkcs11 import Attribute, ObjectClass
 
@@ -54,20 +54,3 @@ class BEIDSigner(sign.PKCS11Signer):
         cert_obj, = list(q)
         root_ca = keys.parse_certificate(cert_obj[Attribute.VALUE])
         return [intermediate_ca, root_ca]
-
-
-def sign_pdf_file(infile_name, outfile_name,
-                  signature_meta: sign.PdfSignatureMetadata, session,
-                  use_signature_cert=True,
-                  existing_fields_only=False):
-    label = 'Signature' if use_signature_cert else 'Authentication'
-    signer = BEIDSigner(session, label)
-    with open(infile_name, 'rb') as infile:
-        result = sign.sign_pdf(
-            infile, signature_meta, signer,
-            existing_fields_only=existing_fields_only, bytes_reserved=16384
-        )
-    with open(outfile_name, 'wb') as outfile:
-        buf = result.getbuffer()
-        outfile.write(buf)
-        buf.release()

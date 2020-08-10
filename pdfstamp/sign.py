@@ -127,8 +127,8 @@ class PKCS7Placeholder(generic.PdfObject):
 # simple PDF signature with two digested regions
 # (pre- and post content)
 class SignatureObject(generic.DictionaryObject):
-    # TODO handle date encoding here as well
-    def __init__(self, name, location, reason, timestamp: datetime,
+
+    def __init__(self, timestamp: datetime, name=None, location=None, reason=None, 
                  bytes_reserved=None):
         # initialise signature object
         super().__init__(
@@ -136,12 +136,17 @@ class SignatureObject(generic.DictionaryObject):
                 pdf_name('/Type'): pdf_name('/Sig'),
                 pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
                 pdf_name('/SubFilter'): pdf_name('/adbe.pkcs7.detached'),
-                pdf_name('/Name'): pdf_string(name),
-                pdf_name('/Location'): pdf_string(location),
-                pdf_name('/Reason'): pdf_string(reason),
                 pdf_name('/M'): pdf_date(timestamp)
             }
         )
+
+        if name:
+            self[pdf_name('/Name')] = pdf_string(name),
+        if location:
+            self[pdf_name('/Location')] = pdf_string(location),
+        if reason:
+            self[pdf_name('/Reason')] = pdf_string(reason),
+
         # initialise placeholders for /Contents and /ByteRange
         pkcs7 = PKCS7Placeholder(bytes_reserved=bytes_reserved)
         self[pdf_name('/Contents')] = self.signature_contents = pkcs7
@@ -422,9 +427,9 @@ class DocMDPPerm(IntEnum):
 
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
-    location: str
-    reason: str
     field_name: str
+    location: str = None
+    reason: str = None
     name: str = None
     certify: bool = False
     # only relevant for certification
@@ -577,8 +582,8 @@ def _prepare_sig_field(sig_field_name, root,
     return field_created, sig_field_ref
 
 
-def append_signature_fields(input_handle, sig_field_specs: List[SigFieldSpec]):
-    pdf_out = IncrementalPdfFileWriter(input_handle)
+def append_signature_fields(pdf_out: IncrementalPdfFileWriter, 
+                            sig_field_specs: List[SigFieldSpec]):
     root = pdf_out.root
 
     page_list = root['/Pages']['/Kids']
@@ -607,7 +612,8 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
-def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
+def sign_pdf(pdf_out: IncrementalPdfFileWriter, 
+             signature_meta: PdfSignatureMetadata, signer: Signer,
              md_algorithm='sha512', existing_fields_only=False,
              bytes_reserved=None, ):
 
@@ -619,8 +625,9 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
     #  if present
 
     # TODO allow signing an existing signature field without specifying the name
+ 
+    # TODO deal with SV dictionaries properly
 
-    pdf_out = IncrementalPdfFileWriter(input_handle)
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
@@ -637,9 +644,12 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
         name = signer.subject_name
     # we need to add a signature object and a corresponding form field
     # to the PDF file
+    # Here, we pass in the name as specified in the signature metadata.
+    # When it's None, the reader will/should derive it from the contents
+    # of the certificate.
     sig_obj = SignatureObject(
-        name, signature_meta.location, signature_meta.reason,
-        timestamp, bytes_reserved=bytes_reserved
+        timestamp, name=signature_meta.name, location=signature_meta.location, 
+        reason=signature_meta.reason, bytes_reserved=bytes_reserved
     )
     sig_obj_ref = pdf_out.add_object(sig_obj)
 
@@ -667,7 +677,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
         # TODO figure out how the auto-scaling between the XObject's /BBox
         #  and the annotation's /Rect works in this case (§ 12.5.5 in ISO 32000)
         tss = TextStampStyle(
-            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, fixed_aspect_ratio=w/h
+            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, fixed_aspect_ratio=float(w/h)
         )
         text_params = {
             'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
@@ -721,24 +731,7 @@ def sign_pdf(input_handle, signature_meta: PdfSignatureMetadata, signer: Signer,
 
 def append_signature_fields_to_file(infile_name, outfile_name, *args):
     with open(infile_name, 'rb') as infile:
-        result = append_signature_fields(infile, args)
-    with open(outfile_name, 'wb') as outfile:
-        buf = result.getbuffer()
-        outfile.write(buf)
-        buf.release()
-
-
-def sign_pdf_file(infile_name, outfile_name,
-                  signature_meta: PdfSignatureMetadata, key_file, cert_file,
-                  key_passphrase, existing_fields_only=False):
-    signer = SimpleSigner.load(
-        cert_file=cert_file, key_file=key_file, key_passphrase=key_passphrase
-    )
-    with open(infile_name, 'rb') as infile:
-        result = sign_pdf(
-            infile, signature_meta, signer,
-            existing_fields_only=existing_fields_only
-        )
+        result = append_signature_fields(IncrementalPdfFileWriter(infile), args)
     with open(outfile_name, 'wb') as outfile:
         buf = result.getbuffer()
         outfile.write(buf)
