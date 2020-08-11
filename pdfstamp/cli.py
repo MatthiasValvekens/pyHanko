@@ -29,13 +29,24 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 @click.argument('infile', type=click.File('rb'))
 @click.option('--skip-status', help='do not print status', required=False,
               type=bool, is_flag=True, default=False, show_default=True)
-def list_sigfields(infile, skip_status):
+@click.option('--validate', help='validate signatures', required=False,
+              type=bool, is_flag=True, default=False, show_default=True)
+def list_sigfields(infile, skip_status, validate):
     r = PdfFileReader(infile)
     for name, value, _ in sign.enumerate_sig_fields(r):
         if skip_status:
             print(name)
-        else:
-            print('%s:%s' % (name, 'EMPTY' if value is None else 'FILLED'))
+            continue
+        status = 'EMPTY'
+        if value is not None:
+            if validate:
+                try:
+                    status = sign.validate_signature(r, value).summary()
+                except ValueError:
+                    status = 'MALFORMED'
+            else:
+                status = 'FILLED'
+        print('%s:%s' % (name, status))
 
 
 @signing.group(name='addsig', help='add a signature')

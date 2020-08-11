@@ -1,4 +1,5 @@
 import hashlib
+import os
 import logging
 from datetime import datetime
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ import tzlocal
 from PyPDF2 import generic
 from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
+from oscrypto.errors import SignatureError
 
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, AnnotAppearances,
@@ -148,6 +150,131 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
 
+@dataclass(frozen=True)
+class SignatureStatus:
+    intact: bool
+    valid: bool
+    complete_document: bool
+    signing_cert: x509.Certificate
+    ca_chain: List[x509.Certificate]
+    pkcs7_signature_mechanism: str
+    md_algorithm: str
+
+    def summary(self):
+        if not self.valid:
+            return 'FORGED'
+        elif self.intact:
+            if self.complete_document:
+                return 'INTACT_UNTOUCHED'
+            else:
+                return 'INTACT_EXTENDED'
+        else:
+            return 'INVALID'
+
+
+def pair_iter(lst):
+    i = iter(lst)
+    while True:
+        try:
+            x1 = next(i)
+        except StopIteration:
+            return
+        try:
+            x2 = next(i)
+        except StopIteration:
+            raise ValueError('List has odd number of elements')
+        yield x1, x2
+
+
+MECHANISMS = (
+    'rsassa_pkcs1v15', 'sha1_rsa', 'sha256_rsa', 'sha384_rsa', 'sha512_rsa'
+)
+
+def validate_signature(reader: PdfFileReader, sig_object):
+    if isinstance(sig_object, generic.IndirectObject):
+        sig_object = sig_object.getObject()
+    try:
+        pkcs7_content = sig_object['/Contents']
+        byte_range = sig_object['/ByteRange']
+    except:
+        raise ValueError('Signature PDF object is not correctly formatted')
+    message = cms.ContentInfo.load(pkcs7_content)
+    signed_data = message['content']
+    certs = [c.parse() for c in signed_data['certificates']]
+    cert = certs[0]
+    ca_chain = certs[1:]
+    try:
+        signer_info, = signed_data['signer_infos']
+    except ValueError:
+        raise ValueError('signer_infos should contain exactly one entry')
+
+    mechanism = signer_info['signature_algorithm']['algorithm'].native
+    md_algorithm = signer_info['digest_algorithm']['algorithm'].native.lower()
+    signature = signer_info['signature'].native
+    signed_attrs = signer_info['signed_attrs']
+    md = getattr(hashlib, md_algorithm)()
+    stream = reader.stream
+    
+    # compute the digest
+    old_seek = stream.tell()
+    total_len = 0
+    for lo, chunk_len in pair_iter(byte_range):
+        stream.seek(lo)
+        md.update(stream.read(chunk_len))
+        total_len += chunk_len
+    # compute file size
+    stream.seek(0, os.SEEK_END)
+    # the * 2 is because of the ASCII hex encoding, and the + 2
+    # is the wrapping <>
+    embedded_sig_content = len(pkcs7_content) * 2 + 2
+    complete_document = stream.tell() == total_len + embedded_sig_content
+    stream.seek(old_seek)
+
+    # TODO implement logic to detect whether
+    # the modifications made are permissible
+
+    raw_digest = md.digest()
+    embedded_digest = None
+    for attr in signed_attrs:
+        if attr['type'].native == 'message_digest':
+            embedded_digest = attr['values'][0].native
+    if embedded_digest is None:
+        raise ValueError('Unable to locate message digest.') 
+    intact = raw_digest == embedded_digest
+
+    # finally validate the signature
+    if mechanism not in MECHANISMS:
+        raise NotImplementedError(
+            'Signature mechanism %s is not currently supported'
+            % mechanism
+        )
+    try:
+        # XXX for some reason, these values are sometimes set wrongly
+        # when asn1crypto loads things. No clue why, but they mess up
+        # the header byte (and hence the signature) of the DER-encoded
+        # message object. Needs investigation.
+        signed_attrs.class_ = 0
+        signed_attrs.tag = 17
+        data = signed_attrs.dump(force=True)
+        asymmetric.rsa_pkcs1v15_verify(
+            asymmetric.load_public_key(cert.public_key), signature, 
+            data, hash_algorithm=md_algorithm
+        )
+        valid = True
+    except SignatureError as e:
+        valid = False
+
+    # TODO what about chain-of-trust validation?
+
+    return SignatureStatus(
+        intact=intact, complete_document=complete_document,
+        ca_chain=ca_chain, valid=valid, signing_cert=cert, 
+        md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism
+    )
+
+    
+
+
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, include_on_page, *, writer,
                  sig_object_ref=None, box=None,
@@ -245,7 +372,6 @@ class Signer:
 
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
-        #
         signature = self.sign_raw(
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
         )
@@ -325,6 +451,7 @@ class SimpleSigner(Signer):
 
 class PKCS11Signer(Signer):
 
+    # TODO is this actually the correct one to use?
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
     def __init__(self, pkcs11_session, cert_label, ca_chain=None,
