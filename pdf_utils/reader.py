@@ -23,6 +23,8 @@ class PdfFileReader(PdfFileReaderOrig):
         xrefstream = readObject(stream, self)
         assert xrefstream["/Type"] == "/XRef"
         self.cacheIndirectObject(generation, idnum, xrefstream)
+        # FIXME the FlateDecode routine in PyPDF is very broken, and
+        # always returns a string object, even if that doesn't make any sense.
         stream_data = BytesIO(xrefstream.getData())
         # Index pairs specify the subsections in the dictionary. If
         # none create one subsection that spans everything.
@@ -65,7 +67,7 @@ class PdfFileReader(PdfFileReaderOrig):
                     # linked list of free objects
                     # XXX these were assigned to something in the PyPDF source,
                     # but the value wasn't being used anywhere.
-                    # TODO check the speck
+                    # TODO check the spec
                     get_entry(1)
                     get_entry(2)
                 elif xref_type == 1:
