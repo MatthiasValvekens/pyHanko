@@ -13,6 +13,7 @@ It's nowhere near complete, but here is a short overview of the features:
  - Support for handling encrypted files has been added in, but is untested.
  - All operations on PDF files are executed in append-only mode, to minimise the risk of unintentional mangling. This is also necessary to provide support for adding multiple signatures to a given document.
  - The signer supports PKCS11 devices too. For Belgian eID cards, this has been integrated into the CLI.
+ - Through the CLI, it is possible to syntactically and cryptographically verify the validity of a signature. This means that it is possible to verify whether or not a signature is intact, cryptographically sound and whether it covers the entire document. However, the semantics are not checked (see below).
  
  The CLI was implemented using `click`, so it comes with a built-in help function.
  Launch `python -m pdfstamp` to get started.
@@ -21,7 +22,7 @@ It's nowhere near complete, but here is a short overview of the features:
 ### Some TODOs and known limitations
 
  - The signing/stamping code currently only works on PDF files with a flat page tree (which fortunately covers the vast majority of real-life examples). For the signer, this is relatively easy to work around, but the resource dictionary handling logic in the stamper needs to be reworked a little to cover the general case.
- - Add validation functionality.
+ - Expand signature validation functionality. This includes verifying the chain of trust (which is straightforward). More difficult is the following: in case the document has been modified through incremental updates, we should judge whether these changes are allowed by the signature's document modification protection policy.
  - Add support for timestamping servers.
  - Add the stamping functionality the CLI.
  - Prevent the user from shooting themselves in the foot to some degree, by explicitly disallowing obviously destructive operations on signed documents.
