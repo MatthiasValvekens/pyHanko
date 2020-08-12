@@ -8,7 +8,8 @@ from io import BytesIO
 from typing import List, Optional
 
 import tzlocal
-from PyPDF2 import generic
+from pdf_utils import generic, misc
+from pdf_utils.generic import pdf_name, pdf_string
 from asn1crypto import cms, x509, algos, core, keys
 from oscrypto import asymmetric, keys as oskeys
 from oscrypto.errors import SignatureError
@@ -18,7 +19,6 @@ from pdf_utils.incremental_writer import (
 )
 from pdf_utils.reader import PdfFileReader
 from pdfstamp.stamp import TextStampStyle, TextStamp
-from pdf_utils.misc import pdf_name, pdf_string
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +75,12 @@ class SigByteRangeObject(generic.PdfObject):
         # so we can just write over it
 
         stream.seek(self._range_object_offset)
-        self.writeToStream(stream, None)
+        self.write_to_stream(stream, None)
 
         stream.seek(old_seek)
 
     # noinspection PyPep8Naming, PyUnusedLocal
-    def writeToStream(self, stream, encryption_key):
+    def write_to_stream(self, stream, encryption_key):
         if self._range_object_offset is None:
             self._range_object_offset = stream.tell()
         string_repr = "[ %08d %08d %08d %08d ]" % (
@@ -110,7 +110,7 @@ class PKCS7Placeholder(generic.PdfObject):
     # always ignore encryption key
     # (I think this is correct, but testing is required)
     # noinspection PyPep8Naming, PyUnusedLocal
-    def writeToStream(self, stream, encryption_key):
+    def write_to_stream(self, stream, encryption_key):
         start = stream.tell()
         stream.write(b'<')
         stream.write(self.value)
@@ -172,27 +172,13 @@ class SignatureStatus:
             return 'INVALID'
 
 
-def pair_iter(lst):
-    i = iter(lst)
-    while True:
-        try:
-            x1 = next(i)
-        except StopIteration:
-            return
-        try:
-            x2 = next(i)
-        except StopIteration:
-            raise ValueError('List has odd number of elements')
-        yield x1, x2
-
-
 MECHANISMS = (
     'rsassa_pkcs1v15', 'sha1_rsa', 'sha256_rsa', 'sha384_rsa', 'sha512_rsa'
 )
 
 def validate_signature(reader: PdfFileReader, sig_object):
     if isinstance(sig_object, generic.IndirectObject):
-        sig_object = sig_object.getObject()
+        sig_object = sig_object.get_object()
     try:
         pkcs7_content = sig_object['/Contents']
         byte_range = sig_object['/ByteRange']
@@ -218,7 +204,7 @@ def validate_signature(reader: PdfFileReader, sig_object):
     # compute the digest
     old_seek = stream.tell()
     total_len = 0
-    for lo, chunk_len in pair_iter(byte_range):
+    for lo, chunk_len in misc.pair_iter(byte_range):
         stream.seek(lo)
         md.update(stream.read(chunk_len))
         total_len += chunk_len
@@ -582,7 +568,7 @@ def _certification_setup(writer: IncrementalPdfFileWriter,
     # after preparing the sigref object, insert it into the actual signature
     # object under /Reference (for some reason this is supposed to be an array)
     sigref_list = generic.ArrayObject([writer.add_object(sigref_object)])
-    sig_obj_ref.getObject()[pdf_name('/Reference')] = sigref_list
+    sig_obj_ref.get_object()[pdf_name('/Reference')] = sigref_list
 
     # finally, register a /DocMDP permission entry in the document catalog
     root = writer.root
@@ -591,7 +577,7 @@ def _certification_setup(writer: IncrementalPdfFileWriter,
     try:
         perms_ref = root.raw_get('/Perms')
         if isinstance(perms_ref, generic.IndirectObject):
-            perms = perms_ref.getObject()
+            perms = perms_ref.get_object()
             writer.mark_update(perms_ref)
         else:
             perms = perms_ref
@@ -621,7 +607,7 @@ def _prepare_sig_field(sig_field_name, root,
         if isinstance(form_ref, generic.IndirectObject):
             # The /AcroForm exists and is indirect. Hence, we may need to write
             # an update if we end up having to add the signature field
-            form = form_ref.getObject()
+            form = form_ref.get_object()
         else:
             # the form is a direct object, so we'll replace it with
             # an indirect one, and mark the root to be updated
@@ -640,7 +626,7 @@ def _prepare_sig_field(sig_field_name, root,
             fields_ref = form.raw_get('/Fields')
             if isinstance(fields_ref, generic.IndirectObject):
                 field_container_ref = fields_ref
-                fields = fields_ref.getObject()
+                fields = fields_ref.get_object()
             else:
                 fields = fields_ref
                 # /Fields is directly embedded into form_ref, so that's
@@ -736,7 +722,7 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None):
         # TODO the spec mandates this, but perhaps we should be a bit more
         #  tolerant
         assert isinstance(field_ref, generic.IndirectObject)
-        field = field_ref.getObject()
+        field = field_ref.get_object()
         # /T is the field name. Required entry, but you never know.
         try:
             field_name = field['/T']
@@ -864,7 +850,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             signature_meta.field_name, root, update_writer=pdf_out,
             existing_fields_only=existing_fields_only, lock_sig_flags=True
         )
-    sig_field = sig_field_ref.getObject()
+    sig_field = sig_field_ref.get_object()
     # fill in a reference to the (empty) signature object
     sig_field[pdf_name('/V')] = sig_obj_ref
 

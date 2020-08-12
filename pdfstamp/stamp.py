@@ -9,12 +9,12 @@ from pdf_utils.font import GlyphAccumulator
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter, init_xobject_dictionary, AnnotAppearances,
 )
-from PyPDF2 import generic
 from dataclasses import dataclass
 from datetime import datetime
 
 from qrcode.image.base import BaseImage
-from pdf_utils.misc import pdf_name, pdf_string
+from pdf_utils import generic
+from pdf_utils.generic import pdf_name, pdf_string
 
 
 rd = lambda x: round(x, 4)
@@ -246,12 +246,12 @@ class TextStamp(generic.StreamObject):
         self._format_resources()
         return w, h
 
-    def writeToStream(self, stream, key):
+    def write_to_stream(self, stream, key):
         if self._data is None:
             raise ValueError(
                 'Stamp stream needs to be rendered before calling .write()'
             )
-        return super().writeToStream(stream, key)
+        return super().write_to_stream(stream, key)
 
     def register(self):
         stamp_ref = self._stamp_ref

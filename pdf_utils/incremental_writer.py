@@ -3,12 +3,12 @@ import os
 
 from io import BytesIO
 
-from PyPDF2 import generic
-from PyPDF2.pdf import _alg34, _alg35
+from . import generic
+from .crypt import _alg34, _alg35
 
 from .reader import PdfFileReader
 from hashlib import md5
-from .misc import pdf_name
+from .generic import pdf_name
 
 """
 Utility class for writing incremental updates to PDF files.
@@ -102,7 +102,7 @@ class XRefStream(generic.StreamObject):
             pdf_name('/Type'): pdf_name('/XRef'),
         })
 
-    def writeToStream(self, stream, encryption_key):
+    def write_to_stream(self, stream, encryption_key):
         # the caller is responsible for making sure that the stream 
         # is registered in the position dictionary
         if encryption_key is not None:
@@ -124,7 +124,7 @@ class XRefStream(generic.StreamObject):
 
         self[pdf_name('/Index')] = index_entry
         self._data = stream_content.getbuffer()
-        super().writeToStream(stream, encryption_key)
+        super().write_to_stream(stream, encryption_key)
 
 
 resource_dict_names = map(pdf_name, [
@@ -151,7 +151,7 @@ class IncrementalPdfFileWriter:
         # subsume root/info references
         root = prev.trailer.raw_get('/Root')
         self._root = generic.IndirectObject(root.idnum, root.generation, self)
-        self._root_object = root.getObject()
+        self._root_object = root.get_object()
         try:
             info = prev.trailer.raw_get('/Info')
             self._info = generic.IndirectObject(
@@ -197,19 +197,18 @@ class IncrementalPdfFileWriter:
         return self._root_object
 
     # for compatibility with PyPDF API
-    # noinspection PyPep8Naming
-    def getObject(self, ido):
+    def get_object(self, ido):
         if ido.pdf is not self and ido.pdf is not self.prev:
             raise ValueError("pdf must be self or prev")
         try:
             return self.objects_to_update[(ido.generation, ido.idnum)]
         except KeyError:
-            return self.prev.getObject(ido)
+            return self.prev.get_object(ido)
 
     def mark_update(self, obj_ref: generic.IndirectObject):
         assert obj_ref.pdf is self.prev or obj_ref.pdf is self
         ix = (obj_ref.generation, obj_ref.idnum)
-        self.objects_to_update[ix] = obj_ref.getObject()
+        self.objects_to_update[ix] = obj_ref.get_object()
         return generic.IndirectObject(obj_ref.idnum, obj_ref.generation, self)
 
     def update_root(self):
@@ -263,7 +262,7 @@ class IncrementalPdfFileWriter:
                 key = _derive_key(self._encrypt_key, idnum, generation)
             else:
                 key = None
-            obj.writeToStream(stream, key)
+            obj.write_to_stream(stream, key)
             stream.write(b'\nendobj\n')
         
         # prepare trailer dictionary entries
@@ -281,7 +280,7 @@ class IncrementalPdfFileWriter:
             trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
             # write XRef stream
             stream.write(('%d %d obj' % (xrefs_id, 0)).encode('ascii'))
-            trailer.writeToStream(stream, None)
+            trailer.write_to_stream(stream, None)
             stream.write(b'\nendobj\n')
         else:
             # classical xref table
@@ -291,7 +290,7 @@ class IncrementalPdfFileWriter:
             )
             # write trailer
             stream.write(b'trailer\n')
-            trailer.writeToStream(stream, None)
+            trailer.write_to_stream(stream, None)
 
         # write xref table pointer and EOF
         xref_pointer_string = '\nstartxref\n%s\n' % xref_location
@@ -315,7 +314,7 @@ class IncrementalPdfFileWriter:
             raise ValueError(
                 'Original document does not have an encryption dictionary'
             )
-        encrypt = encrypt_ref.getObject()
+        encrypt = encrypt_ref.get_object()
         use_128bit = encrypt["/V"] == 2
 
         # see § 7.6.3.2 in ISO 32000
@@ -347,13 +346,13 @@ class IncrementalPdfFileWriter:
 
         # the spec says that this will always be an indirect reference
         page_tree_root_ref = self.root.raw_get('/Pages')
-        page_tree_root = page_tree_root_ref.getObject()
+        page_tree_root = page_tree_root_ref.get_object()
         page_ref = page_tree_root['/Kids'][page_ix]
-        page_obj = page_ref.getObject()
+        page_obj = page_ref.get_object()
         contents_ref = page_obj.raw_get('/Contents')
 
         if isinstance(contents_ref, generic.IndirectObject):
-            contents = contents_ref.getObject()
+            contents = contents_ref.get_object()
             if isinstance(contents, generic.ArrayObject):
                 # This is the easy case. It suffices to mark
                 # this array for an update, and append our stream to it.
@@ -410,7 +409,7 @@ class IncrementalPdfFileWriter:
 
         if isinstance(res_ref, generic.IndirectObject):
             # we can get away with only updating this reference
-            orig_resource_dict = res_ref.getObject()
+            orig_resource_dict = res_ref.get_object()
             update_boundary = res_ref
         else:
             # externalise the /Resources dictionary
@@ -443,7 +442,7 @@ class IncrementalPdfFileWriter:
                 continue
 
             if isinstance(orig_value_ref, generic.IndirectObject):
-                orig_value = orig_value_ref.getObject()
+                orig_value = orig_value_ref.get_object()
                 self.mark_update(orig_value_ref)
             else:
                 orig_value = orig_value_ref
@@ -464,11 +463,11 @@ class IncrementalPdfFileWriter:
         return update_needed
 
     def register_annotation(self, page_ref, annot_ref):
-        page_obj = page_ref.getObject()
+        page_obj = page_ref.get_object()
         try:
             annots_ref = page_obj.raw_get('/Annots')
             if isinstance(annots_ref, generic.IndirectObject):
-                annots = annots_ref.getObject()
+                annots = annots_ref.get_object()
                 self.mark_update(annot_ref)
             else:
                 # we need to update the entire page object if the annots array

@@ -2,7 +2,6 @@ asn1crypto==1.4.0
 cffi==1.14.1
 oscrypto==1.2.1
 pycparser==2.20
-PyPDF2==1.26.0
 pytz==2020.1
 qrcode==6.1
 six==1.15.0

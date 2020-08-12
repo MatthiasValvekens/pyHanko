@@ -1,12 +1,12 @@
 from io import BytesIO
 
-from PyPDF2 import generic
+from pdf_utils import generic
 from fontTools import ttLib, subset
 
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter, peek
 
 pdf_name = generic.NameObject
-pdf_string = generic.createStringObject
+pdf_string = generic.pdf_string
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
