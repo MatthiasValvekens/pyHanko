@@ -96,9 +96,18 @@ def addsig_pemder(ctx, infile, outfile, key, cert, passfile):
     signer = sign.SimpleSigner.load(
         cert_file=cert, key_file=key, key_passphrase=passphrase
     )
+    writer = IncrementalPdfFileWriter(infile)
+
+    # TODO make this an option higher up the tree
+    # TODO mention filename in prompt
+    if writer.prev.encrypted:
+        pdf_pass = getpass.getpass(
+            prompt=f'Password for encrypted file: '
+        ).encode('utf-8')
+        writer.encrypt(pdf_pass)
 
     result = sign.sign_pdf(
-        IncrementalPdfFileWriter(infile), signature_meta, signer,
+        writer, signature_meta, signer,
         existing_fields_only=existing_fields_only
     )
     buf = result.getbuffer()

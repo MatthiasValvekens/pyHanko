@@ -151,7 +151,6 @@ class IncrementalPdfFileWriter:
         # subsume root/info references
         root = prev.trailer.raw_get('/Root')
         self._root = generic.IndirectObject(root.idnum, root.generation, self)
-        self._root_object = root.get_object()
         try:
             info = prev.trailer.raw_get('/Info')
             self._info = generic.IndirectObject(
@@ -194,7 +193,7 @@ class IncrementalPdfFileWriter:
 
     @property
     def root(self):
-        return self._root_object
+        return self._root.get_object()
 
     # for compatibility with PyPDF API
     def get_object(self, ido):
