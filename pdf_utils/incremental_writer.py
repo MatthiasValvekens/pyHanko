@@ -231,7 +231,7 @@ class IncrementalPdfFileWriter:
         # before doing anything else, we attempt to load the crypto-relevant
         # data, so that we can bail early if something's not right
         trailer[pdf_name('/ID')] = self._document_id
-        if self.prev.isEncrypted:
+        if self.prev.encrypted:
             if self._encrypt is not None:
                 trailer[pdf_name("/Encrypt")] = self._encrypt
             else:
@@ -299,7 +299,7 @@ class IncrementalPdfFileWriter:
     def encrypt(self, user_pwd):
         prev = self.prev
         # first, attempt decryption
-        if prev.isEncrypted:
+        if prev.encrypted:
             if not prev.decrypt(user_pwd):
                 raise ValueError(
                     'Failed to decrypt original with the password supplied'
@@ -485,7 +485,7 @@ class IncrementalPdfFileWriter:
 def init_xobject_dictionary(command_stream, box_width, box_height,
                             resources=None):
     resources = resources or generic.DictionaryObject()
-    return generic.StreamObject.initializeFromDictionary({
+    return generic.StreamObject.initialize_from_dictionary({
         '__streamdata__': command_stream,
         # PyPDF2 is bizarre about /Length. It requires the /Length attribute
         #  in initializeFromDictionary (because deleting it produces a KeyError)

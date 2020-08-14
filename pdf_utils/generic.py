@@ -9,7 +9,7 @@ from .misc import (
     read_non_whitespace, rc4_encrypt, skip_over_comment, read_until_regex
 )
 from .misc import PdfStreamError, PdfReadError, PdfReadWarning
-import warnings
+import logging
 from . import filters
 import decimal
 import codecs
@@ -18,10 +18,12 @@ ObjectPrefix = b'/<[tf(n%'
 NumberSigns = b'+-'
 IndirectPattern = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
 
+logger = logging.getLogger(__name__)
+
 
 def read_object(stream, pdf):
     tok = stream.read(1)
-    stream.seek(-1, 1) # reset to start
+    stream.seek(-1, 1)  # reset to start
     idx = ObjectPrefix.find(tok)
     if idx == 0:
         # name object
@@ -29,7 +31,7 @@ def read_object(stream, pdf):
     elif idx == 1:
         # hexadecimal string OR dictionary
         peek = stream.read(2)
-        stream.seek(-2, 1) # reset to start
+        stream.seek(-2, 1)  # reset to start
         if peek == b'<<':
             return DictionaryObject.read_from_stream(stream, pdf)
         else:
@@ -50,7 +52,7 @@ def read_object(stream, pdf):
         # comment
         while tok not in (b'\r', b'\n'):
             tok = stream.read(1)
-        tok = read_non_whitespace(stream)
+        read_non_whitespace(stream)
         stream.seek(-1, 1)
         return read_object(stream, pdf)
     else:
@@ -59,8 +61,8 @@ def read_object(stream, pdf):
             # number
             return NumberObject.read_from_stream(stream)
         peek = stream.read(20)
-        stream.seek(-len(peek), 1) # reset to start
-        if IndirectPattern.match(peek) != None:
+        stream.seek(-len(peek), 1)  # reset to start
+        if IndirectPattern.match(peek) is not None:
             return IndirectObject.read_from_stream(stream, pdf)
         else:
             return NumberObject.read_from_stream(stream)
@@ -269,7 +271,7 @@ def pdf_string(string):
         except UnicodeDecodeError:
             return ByteStringObject(string)
     else:
-        raise TypeError("createStringObject should have str or unicode arg")
+        raise TypeError("pdf_string should have str or bytes arg")
 
 
 HEX_DIGITS = b'0123456789abcdefABCDEF'
@@ -313,7 +315,7 @@ def read_string_from_stream(stream):
         elif tok == b"\\":
             tok = stream.read(1)
             if tok in b"() /%<>[]#_&$\\":
-                pass # simply use the second byte we read
+                pass  # simply use the second byte we read
             elif tok == b"n":
                 tok = b"\n"
             elif tok == b"r":
@@ -344,7 +346,7 @@ def read_string_from_stream(stream):
                 # break occurs.  If it's a multi-char EOL, consume the
                 # second character:
                 tok = stream.read(1)
-                if not tok in b"\n\r":
+                if tok not in b"\n\r":
                     stream.seek(-1, 1)
                 # Then don't add anything to the actual string, since this
                 # line break was escaped:
@@ -447,11 +449,12 @@ class NameObject(str, PdfObject):
                                  ignore_eof=True)
         try:
             return NameObject(name.decode('utf-8'))
-        except (UnicodeEncodeError, UnicodeDecodeError) as e:
+        except (UnicodeEncodeError, UnicodeDecodeError):
             # Name objects should represent irregular characters
             # with a '#' followed by the symbol's hex number
             if not pdf.strict:
-                warnings.warn("Illegal character in Name Object", PdfReadWarning)
+                logger.warning("Illegal character in Name Object",
+                               PdfReadWarning)
                 return NameObject(name)
             else:
                 raise PdfReadError("Illegal character in Name Object")
@@ -513,31 +516,33 @@ class DictionaryObject(dict, PdfObject):
                 break
             stream.seek(-1, 1)
             key = read_object(stream, pdf)
-            tok = read_non_whitespace(stream)
+            read_non_whitespace(stream)
             stream.seek(-1, 1)
             value = read_object(stream, pdf)
-            if not data.get(key):
+            if key not in data:
                 data[key] = value
-            elif pdf.strict:
-                # multiple definitions of key not permitted
-                raise PdfReadError("Multiple definitions in dictionary at byte %s for key %s" \
-                                           % (hex(stream.tell()), key))
             else:
-                warnings.warn("Multiple definitions in dictionary at byte %s for key %s" \
-                                           % (hex(stream.tell()), key), PdfReadWarning)
+                err = (
+                    "Multiple definitions in dictionary at byte "
+                    "%s for key %s" % (hex(stream.tell()), key)
+                )
+                if pdf.strict:
+                    raise PdfReadError(err)
+                else:
+                    logger.warning(err)
 
         pos = stream.tell()
         s = read_non_whitespace(stream)
         if s == b's' and stream.read(5) == b'tream':
             eol = stream.read(1)
-            # odd PDF file output has spaces after 'stream' keyword but before EOL.
-            # patch provided by Danial Sandler
+            # odd PDF file output has spaces after 'stream' keyword
+            # but before EOL. patch provided by Danial Sandler
             while eol == b' ':
                 eol = stream.read(1)
             assert eol in (b"\n", b"\r")
             if eol == b"\r":
                 # read \n after
-                if stream.read(1)  != b'\n':
+                if stream.read(1) != b'\n':
                     stream.seek(-1, 1)
             # this is a stream object, not a dictionary
             assert "/Length" in data
@@ -564,11 +569,14 @@ class DictionaryObject(dict, PdfObject):
                     data["__streamdata__"] = data["__streamdata__"][:-1]
                 else:
                     stream.seek(pos, 0)
-                    raise PdfReadError("Unable to find 'endstream' marker after stream at byte %s." % hex(stream.tell()))
+                    raise PdfReadError(
+                        "Unable to find 'endstream' marker after "
+                        "stream at byte %s." % hex(stream.tell())
+                    )
         else:
             stream.seek(pos, 0)
         if "__streamdata__" in data:
-            return StreamObject.initializeFromDictionary(data)
+            return StreamObject.initialize_from_dictionary(data)
         else:
             retval = DictionaryObject()
             retval.update(data)
@@ -593,18 +601,21 @@ class StreamObject(DictionaryObject):
         stream.write(b"\nendstream")
 
     @staticmethod
-    def initializeFromDictionary(data):
+    def initialize_from_dictionary(data):
         if "/Filter" in data:
             retval = EncodedStreamObject()
         else:
             retval = DecodedStreamObject()
         retval._data = data["__streamdata__"]
         del data["__streamdata__"]
-        del data["/Length"]
+        try:
+            del data["/Length"]
+        except KeyError:
+            pass
         retval.update(data)
         return retval
 
-    def flateEncode(self):
+    def flate_encode(self):
         if "/Filter" in self:
             f = self["/Filter"]
             if isinstance(f, ArrayObject):
@@ -623,10 +634,10 @@ class StreamObject(DictionaryObject):
 
 
 class DecodedStreamObject(StreamObject):
-    def getData(self):
+    def get_data(self):
         return self._data
 
-    def setData(self, data):
+    def set_data(self, data):
         self._data = data
 
 
@@ -635,23 +646,26 @@ class EncodedStreamObject(StreamObject):
         super().__init__()
         self.decodedSelf = None
 
-    def getData(self):
+    def get_data(self):
         if self.decodedSelf:
             # cached version of decoded object
-            return self.decodedSelf.getData()
+            return self.decodedSelf.get_data()
         else:
             # create decoded object
             decoded = DecodedStreamObject()
 
             decoded._data = filters.decode_stream_data(self)
             for key, value in list(self.items()):
-                if not key in ("/Length", "/Filter", "/DecodeParms"):
+                if key not in ("/Length", "/Filter", "/DecodeParms"):
                     decoded[key] = value
             self.decodedSelf = decoded
             return decoded._data
 
-    def setData(self, data):
-        raise PdfReadError("Creating EncodedStreamObject is not currently supported")
+    def set_data(self, data):
+        # TODO at least for flate, this can't be hard
+        raise PdfReadError(
+            "Creating EncodedStreamObject is not currently supported"
+        )
 
 
 def encode_pdfdocencoding(unicode_string):
@@ -660,54 +674,59 @@ def encode_pdfdocencoding(unicode_string):
             try:
                 yield _pdfDocEncoding_rev[c]
             except KeyError:
-                raise UnicodeEncodeError("pdfdocencoding", c, -1, -1,
-                        "does not exist in translation table")
+                raise UnicodeEncodeError(
+                    "pdfdocencoding", c, -1, -1,
+                    "does not exist in translation table"
+                )
     return bytes(_build())
 
 
 def decode_pdfdocencoding(byte_array):
-    retval = ''
-    for b in byte_array:
-        c = _pdfDocEncoding[b]
-        if c == '\u0000':
-            raise UnicodeDecodeError("pdfdocencoding", bytes((b,)), -1, -1,
-                    "does not exist in translation table")
-        retval += c
-    return retval
+    def _build():
+        for b in byte_array:
+            c = _pdfDocEncoding[b]
+            if c == '\u0000':
+                raise UnicodeDecodeError(
+                    "pdfdocencoding", bytes((b,)), -1, -1,
+                    "does not exist in translation table"
+                )
+            yield c
+    return ''.join(_build())
+
 
 _pdfDocEncoding = (
-  '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
-  '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
-  '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
-  '\u02d8', '\u02c7', '\u02c6', '\u02d9', '\u02dd', '\u02db', '\u02da', '\u02dc',
-  '\u0020', '\u0021', '\u0022', '\u0023', '\u0024', '\u0025', '\u0026', '\u0027',
-  '\u0028', '\u0029', '\u002a', '\u002b', '\u002c', '\u002d', '\u002e', '\u002f',
-  '\u0030', '\u0031', '\u0032', '\u0033', '\u0034', '\u0035', '\u0036', '\u0037',
-  '\u0038', '\u0039', '\u003a', '\u003b', '\u003c', '\u003d', '\u003e', '\u003f',
-  '\u0040', '\u0041', '\u0042', '\u0043', '\u0044', '\u0045', '\u0046', '\u0047',
-  '\u0048', '\u0049', '\u004a', '\u004b', '\u004c', '\u004d', '\u004e', '\u004f',
-  '\u0050', '\u0051', '\u0052', '\u0053', '\u0054', '\u0055', '\u0056', '\u0057',
-  '\u0058', '\u0059', '\u005a', '\u005b', '\u005c', '\u005d', '\u005e', '\u005f',
-  '\u0060', '\u0061', '\u0062', '\u0063', '\u0064', '\u0065', '\u0066', '\u0067',
-  '\u0068', '\u0069', '\u006a', '\u006b', '\u006c', '\u006d', '\u006e', '\u006f',
-  '\u0070', '\u0071', '\u0072', '\u0073', '\u0074', '\u0075', '\u0076', '\u0077',
-  '\u0078', '\u0079', '\u007a', '\u007b', '\u007c', '\u007d', '\u007e', '\u0000',
-  '\u2022', '\u2020', '\u2021', '\u2026', '\u2014', '\u2013', '\u0192', '\u2044',
-  '\u2039', '\u203a', '\u2212', '\u2030', '\u201e', '\u201c', '\u201d', '\u2018',
-  '\u2019', '\u201a', '\u2122', '\ufb01', '\ufb02', '\u0141', '\u0152', '\u0160',
-  '\u0178', '\u017d', '\u0131', '\u0142', '\u0153', '\u0161', '\u017e', '\u0000',
-  '\u20ac', '\u00a1', '\u00a2', '\u00a3', '\u00a4', '\u00a5', '\u00a6', '\u00a7',
-  '\u00a8', '\u00a9', '\u00aa', '\u00ab', '\u00ac', '\u0000', '\u00ae', '\u00af',
-  '\u00b0', '\u00b1', '\u00b2', '\u00b3', '\u00b4', '\u00b5', '\u00b6', '\u00b7',
-  '\u00b8', '\u00b9', '\u00ba', '\u00bb', '\u00bc', '\u00bd', '\u00be', '\u00bf',
-  '\u00c0', '\u00c1', '\u00c2', '\u00c3', '\u00c4', '\u00c5', '\u00c6', '\u00c7',
-  '\u00c8', '\u00c9', '\u00ca', '\u00cb', '\u00cc', '\u00cd', '\u00ce', '\u00cf',
-  '\u00d0', '\u00d1', '\u00d2', '\u00d3', '\u00d4', '\u00d5', '\u00d6', '\u00d7',
-  '\u00d8', '\u00d9', '\u00da', '\u00db', '\u00dc', '\u00dd', '\u00de', '\u00df',
-  '\u00e0', '\u00e1', '\u00e2', '\u00e3', '\u00e4', '\u00e5', '\u00e6', '\u00e7',
-  '\u00e8', '\u00e9', '\u00ea', '\u00eb', '\u00ec', '\u00ed', '\u00ee', '\u00ef',
-  '\u00f0', '\u00f1', '\u00f2', '\u00f3', '\u00f4', '\u00f5', '\u00f6', '\u00f7',
-  '\u00f8', '\u00f9', '\u00fa', '\u00fb', '\u00fc', '\u00fd', '\u00fe', '\u00ff'
+ '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
+ '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
+ '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
+ '\u02d8', '\u02c7', '\u02c6', '\u02d9', '\u02dd', '\u02db', '\u02da', '\u02dc',
+ '\u0020', '\u0021', '\u0022', '\u0023', '\u0024', '\u0025', '\u0026', '\u0027',
+ '\u0028', '\u0029', '\u002a', '\u002b', '\u002c', '\u002d', '\u002e', '\u002f',
+ '\u0030', '\u0031', '\u0032', '\u0033', '\u0034', '\u0035', '\u0036', '\u0037',
+ '\u0038', '\u0039', '\u003a', '\u003b', '\u003c', '\u003d', '\u003e', '\u003f',
+ '\u0040', '\u0041', '\u0042', '\u0043', '\u0044', '\u0045', '\u0046', '\u0047',
+ '\u0048', '\u0049', '\u004a', '\u004b', '\u004c', '\u004d', '\u004e', '\u004f',
+ '\u0050', '\u0051', '\u0052', '\u0053', '\u0054', '\u0055', '\u0056', '\u0057',
+ '\u0058', '\u0059', '\u005a', '\u005b', '\u005c', '\u005d', '\u005e', '\u005f',
+ '\u0060', '\u0061', '\u0062', '\u0063', '\u0064', '\u0065', '\u0066', '\u0067',
+ '\u0068', '\u0069', '\u006a', '\u006b', '\u006c', '\u006d', '\u006e', '\u006f',
+ '\u0070', '\u0071', '\u0072', '\u0073', '\u0074', '\u0075', '\u0076', '\u0077',
+ '\u0078', '\u0079', '\u007a', '\u007b', '\u007c', '\u007d', '\u007e', '\u0000',
+ '\u2022', '\u2020', '\u2021', '\u2026', '\u2014', '\u2013', '\u0192', '\u2044',
+ '\u2039', '\u203a', '\u2212', '\u2030', '\u201e', '\u201c', '\u201d', '\u2018',
+ '\u2019', '\u201a', '\u2122', '\ufb01', '\ufb02', '\u0141', '\u0152', '\u0160',
+ '\u0178', '\u017d', '\u0131', '\u0142', '\u0153', '\u0161', '\u017e', '\u0000',
+ '\u20ac', '\u00a1', '\u00a2', '\u00a3', '\u00a4', '\u00a5', '\u00a6', '\u00a7',
+ '\u00a8', '\u00a9', '\u00aa', '\u00ab', '\u00ac', '\u0000', '\u00ae', '\u00af',
+ '\u00b0', '\u00b1', '\u00b2', '\u00b3', '\u00b4', '\u00b5', '\u00b6', '\u00b7',
+ '\u00b8', '\u00b9', '\u00ba', '\u00bb', '\u00bc', '\u00bd', '\u00be', '\u00bf',
+ '\u00c0', '\u00c1', '\u00c2', '\u00c3', '\u00c4', '\u00c5', '\u00c6', '\u00c7',
+ '\u00c8', '\u00c9', '\u00ca', '\u00cb', '\u00cc', '\u00cd', '\u00ce', '\u00cf',
+ '\u00d0', '\u00d1', '\u00d2', '\u00d3', '\u00d4', '\u00d5', '\u00d6', '\u00d7',
+ '\u00d8', '\u00d9', '\u00da', '\u00db', '\u00dc', '\u00dd', '\u00de', '\u00df',
+ '\u00e0', '\u00e1', '\u00e2', '\u00e3', '\u00e4', '\u00e5', '\u00e6', '\u00e7',
+ '\u00e8', '\u00e9', '\u00ea', '\u00eb', '\u00ec', '\u00ed', '\u00ee', '\u00ef',
+ '\u00f0', '\u00f1', '\u00f2', '\u00f3', '\u00f4', '\u00f5', '\u00f6', '\u00f7',
+ '\u00f8', '\u00f9', '\u00fa', '\u00fb', '\u00fc', '\u00fd', '\u00fe', '\u00ff'
 )
 
 assert len(_pdfDocEncoding) == 256
@@ -715,4 +734,3 @@ assert len(_pdfDocEncoding) == 256
 _pdfDocEncoding_rev = {char: ix for ix, char in enumerate(_pdfDocEncoding)}
 
 pdf_name = NameObject
-

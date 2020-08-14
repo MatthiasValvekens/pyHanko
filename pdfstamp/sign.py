@@ -176,13 +176,14 @@ MECHANISMS = (
     'rsassa_pkcs1v15', 'sha1_rsa', 'sha256_rsa', 'sha384_rsa', 'sha512_rsa'
 )
 
+
 def validate_signature(reader: PdfFileReader, sig_object):
     if isinstance(sig_object, generic.IndirectObject):
         sig_object = sig_object.get_object()
     try:
         pkcs7_content = sig_object['/Contents']
         byte_range = sig_object['/ByteRange']
-    except:
+    except KeyError:
         raise ValueError('Signature PDF object is not correctly formatted')
     message = cms.ContentInfo.load(pkcs7_content)
     signed_data = message['content']
@@ -247,7 +248,7 @@ def validate_signature(reader: PdfFileReader, sig_object):
             data, hash_algorithm=md_algorithm
         )
         valid = True
-    except SignatureError as e:
+    except SignatureError:
         valid = False
 
     # TODO what about chain-of-trust validation?
@@ -257,8 +258,6 @@ def validate_signature(reader: PdfFileReader, sig_object):
         ca_chain=ca_chain, valid=valid, signing_cert=cert, 
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism
     )
-
-    
 
 
 class SignatureFormField(generic.DictionaryObject):
@@ -920,4 +919,3 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     output.seek(0)
     return output
-

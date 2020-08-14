@@ -184,7 +184,7 @@ class FontDescriptor(generic.DictionaryObject):
         self.cff.compile(stream_buf, self.tt)
         stream_length = stream_buf.tell()
         stream_buf.seek(0)
-        font_stream = generic.StreamObject.initializeFromDictionary({
+        font_stream = generic.StreamObject.initialize_from_dictionary({
             pdf_name('/Length'): stream_length,
             # this is a Type0 CFF font program (see Table 126 in ISO 32000)
             pdf_name('/Subtype'): pdf_name('/CIDFontType0C'),
