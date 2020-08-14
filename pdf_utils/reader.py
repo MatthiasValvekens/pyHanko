@@ -2,7 +2,7 @@ import struct
 import os
 from io import BytesIO
 
-from .generic import *
+from . import generic
 from .misc import read_non_whitespace
 from . import misc
 from hashlib import md5
@@ -73,13 +73,11 @@ class PdfFileReader:
         self.read(stream)
         self.stream = stream
 
-        self._override_encryption = False
-
     def _get_object_from_stream(self, ref):
         # indirect reference to object in object stream
         # read the entire object stream into memory
         stmnum, idx = self.obj_stream_refs[ref.idnum]
-        stream_ref = IndirectObject(stmnum, 0, self).get_object()
+        stream_ref = generic.IndirectObject(stmnum, 0, self).get_object()
         # This is an xref to a stream, so its type better be a stream
         assert stream_ref['/Type'] == '/ObjStm'
         # /N is the number of indirect objects in the stream
@@ -88,10 +86,10 @@ class PdfFileReader:
         for i in range(stream_ref['/N']):
             read_non_whitespace(stream_data)
             stream_data.seek(-1, os.SEEK_CUR)
-            objnum = NumberObject.read_from_stream(stream_data)
+            objnum = generic.NumberObject.read_from_stream(stream_data)
             read_non_whitespace(stream_data)
             stream_data.seek(-1, os.SEEK_CUR)
-            offset = NumberObject.read_from_stream(stream_data)
+            offset = generic.NumberObject.read_from_stream(stream_data)
             read_non_whitespace(stream_data)
             stream_data.seek(-1, os.SEEK_CUR)
             if objnum != ref.idnum:
@@ -101,7 +99,7 @@ class PdfFileReader:
                 raise misc.PdfReadError("Object is in wrong index.")
             stream_data.seek(stream_ref['/First']+offset)
             try:
-                obj = read_object(stream_data, self)
+                obj = generic.read_object(stream_data, self)
             except misc.PdfStreamError as e:
                 # Stream object cannot be read. Normally, a critical error, but
                 # Adobe Reader doesn't complain, so continue (in strict mode?)
@@ -113,14 +111,21 @@ class PdfFileReader:
                 if self.strict:
                     raise misc.PdfReadError("Can't read object stream: %s" % e)
                 # Replace with null. Hopefully it's nothing important.
-                obj = NullObject()
+                obj = generic.NullObject()
             return obj
 
         if self.strict:
             raise misc.PdfReadError("This is a fatal error in strict mode.")
-        return NullObject()
+        return generic.NullObject()
 
-    def get_object(self, ref):
+    def get_encryption_params(self):
+        encrypt_ref = self.trailer.raw_get('/Encrypt')
+        if isinstance(encrypt_ref, generic.IndirectObject):
+            return self.get_object(encrypt_ref, never_decrypt=True)
+        else:
+            return encrypt_ref
+
+    def get_object(self, ref, never_decrypt=False):
         retval = self.cache_get_indirect_object(ref.generation, ref.idnum)
         if retval is not None:
             return retval
@@ -151,10 +156,10 @@ class PdfFileReader:
                     f"does not match actual ({idnum} {generation})."
                 )
             assert generation == ref.generation
-            retval = read_object(self.stream, self)
+            retval = generic.read_object(self.stream, self)
 
             # override encryption is used for the /Encrypt dictionary
-            if not self._override_encryption and self.encrypted:
+            if not never_decrypt and self.encrypted:
                 # if we don't have the encryption key:
                 if not hasattr(self, '_decryption_key'):
                     raise misc.PdfReadError("file has not been decrypted")
@@ -179,15 +184,15 @@ class PdfFileReader:
         return retval
 
     def _decrypt_object(self, obj, key):
-        if isinstance(obj, ByteStringObject) or \
-                isinstance(obj, TextStringObject):
-            obj = pdf_string(misc.rc4_encrypt(key, obj.original_bytes))
-        elif isinstance(obj, StreamObject):
+        if isinstance(obj, generic.ByteStringObject) or \
+                isinstance(obj, generic.TextStringObject):
+            obj = generic.pdf_string(misc.rc4_encrypt(key, obj.original_bytes))
+        elif isinstance(obj, generic.StreamObject):
             obj._data = misc.rc4_encrypt(key, obj._data)
-        elif isinstance(obj, DictionaryObject):
+        elif isinstance(obj, generic.DictionaryObject):
             for dictkey, value in list(obj.items()):
                 obj[dictkey] = self._decrypt_object(value, key)
-        elif isinstance(obj, ArrayObject):
+        elif isinstance(obj, generic.ArrayObject):
             for i in range(len(obj)):
                 obj[i] = self._decrypt_object(obj[i], key)
         return obj
@@ -232,7 +237,7 @@ class PdfFileReader:
 
     def _read_xref_stream(self, stream):
         idnum, generation = self.read_object_header(stream)
-        xrefstream = read_object(stream, self)
+        xrefstream = generic.read_object(stream, self)
         assert xrefstream["/Type"] == "/XRef"
         self.cache_indirect_object(generation, idnum, xrefstream)
         stream_data = BytesIO(xrefstream.get_data())
@@ -302,7 +307,7 @@ class PdfFileReader:
         trailer_keys = "/Root", "/Encrypt", "/Info", "/ID", "/Size"
         for key in trailer_keys:
             if key in xrefstream and key not in self.trailer:
-                self.trailer[NameObject(key)] = xrefstream.raw_get(key)
+                self.trailer[generic.NameObject(key)] = xrefstream.raw_get(key)
         return xrefstream.get('/Prev')
 
     def _read_xref_table(self, stream):
@@ -312,7 +317,7 @@ class PdfFileReader:
         # check if the first time looking at the xref table
         firsttime = True
         while True:
-            num = read_object(stream, self)
+            num = generic.read_object(stream, self)
             if firsttime and num != 0:
                 self.xrefIndex = num
                 if self.strict:
@@ -327,7 +332,7 @@ class PdfFileReader:
             firsttime = False
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
-            size = read_object(stream, self)
+            size = generic.read_object(stream, self)
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
             cnt = 0
@@ -377,7 +382,7 @@ class PdfFileReader:
                 break
         read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
-        new_trailer = read_object(stream, self)
+        new_trailer = generic.read_object(stream, self)
         for key, value in list(new_trailer.items()):
             if key not in self.trailer:
                 self.trailer[key] = value
@@ -387,7 +392,7 @@ class PdfFileReader:
         # read all cross reference tables and their trailers
         self.xref = {}
         self.obj_stream_refs = {}
-        self.trailer = DictionaryObject()
+        self.trailer = generic.DictionaryObject()
         startxref = self.last_startxref
         while startxref is not None:
             # load the xref table
@@ -507,14 +512,10 @@ class PdfFileReader:
             method.
         """
 
-        self._override_encryption = True
-        try:
-            return self._decrypt(password)
-        finally:
-            self._override_encryption = False
+        return self._decrypt(password)
 
     def _decrypt(self, password):
-        encrypt = self.trailer['/Encrypt'].get_object()
+        encrypt = self.get_encryption_params()
         if encrypt['/Filter'] != '/Standard':
             raise NotImplementedError(
                 "only Standard PDF encryption handler is available"
@@ -540,7 +541,7 @@ class PdfFileReader:
             else:
                 val = owner_token
                 for i in range(19, -1, -1):
-                    new_key = bytes(b ^ i for b in reversed(key))
+                    new_key = bytes(b ^ i for b in key)
                     val = misc.rc4_encrypt(new_key, val)
                 userpass = val
             owner_password, key = self._auth_user_password(userpass)
@@ -550,7 +551,7 @@ class PdfFileReader:
         return 0
 
     def _auth_user_password(self, password):
-        encrypt = self.trailer['/Encrypt'].get_object()
+        encrypt = self.get_encryption_params()
         rev = encrypt['/R'].get_object()
         owner_entry = encrypt['/O'].get_object()
         p_entry = encrypt['/P'].get_object()
@@ -563,7 +564,7 @@ class PdfFileReader:
             )
         elif rev >= 3:
             encrypt_meta = encrypt.get(
-                "/EncryptMetadata", BooleanObject(False)
+                "/EncryptMetadata", generic.BooleanObject(False)
             ).get_object()
             user_tok_supplied, key = _alg35(
                 password, rev, encrypt["/Length"].get_object() // 8,

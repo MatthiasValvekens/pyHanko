@@ -116,6 +116,9 @@ class RC4:
         t = sigma[(sigma[i] + sigma[j]) % 256]
         return t
 
+    def __iter__(self):
+        return self
+
     def crypt(self, data):
         return bytearray(b ^ t for b, t in zip(data, self))
 

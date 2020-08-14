@@ -14,6 +14,13 @@ from . import filters
 import decimal
 import codecs
 
+__all__ = [
+    'PdfObject', 'NullObject', 'BooleanObject', 'ArrayObject',
+    'IndirectObject', 'FloatObject', 'NumberObject', 'pdf_name', 'pdf_string',
+    'ByteStringObject', 'TextStringObject', 'NameObject', 'DictionaryObject',
+    'StreamObject', 'DecodedStreamObject', 'EncodedStreamObject', 'read_object'
+]
+
 ObjectPrefix = b'/<[tf(n%'
 NumberSigns = b'+-'
 IndirectPattern = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
