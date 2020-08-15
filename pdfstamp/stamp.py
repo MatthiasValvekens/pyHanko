@@ -104,8 +104,8 @@ class TextStamp(generic.StreamObject):
 
     def wrap_string(self, txt):
         if self.glyph_accumulator is not None:
-            hex_str, width = self.glyph_accumulator.feed_string(txt)
-            return '<%s>' % hex_str, width
+            hex_str, width_em = self.glyph_accumulator.feed_string(txt)
+            return '<%s>' % hex_str, width_em * self.style.font_size
         else:
             # FIXME This is a very crappy estimate for non-monospaced fonts
             char_width = self.style.avg_char_width or 0.6 * self.style.font_size

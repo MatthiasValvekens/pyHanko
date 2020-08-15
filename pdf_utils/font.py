@@ -23,6 +23,10 @@ class GlyphAccumulator:
         self.glyph_set = self.tt.getGlyphSet(preferCFF=True)
         self._glyphs = {}
         self._extracted = False
+        try:
+            self.units_per_em = tt['head'].unitsPerEm
+        except KeyError:
+            self.units_per_em = 1000
 
     def _encode_char(self, ch):
         try:
@@ -40,6 +44,20 @@ class GlyphAccumulator:
         return glyph_id, glyph.width
 
     def feed_string(self, txt):
+        """
+        Feed a string to this glyph accumulator.
+
+        :param txt:
+            String to encode/measure.
+            The glyphs used to render the string are marked for inclusion in the
+            font subset associated with this glyph accumulator.
+        :return:
+            Returns the CID-encoded version of the string passed in, and
+            an estimate of the width in em units.
+            The width computation ignores kerning, but takes the width of all
+            characters into account.
+        """
+
         total_width = 0
 
         def _gen():
@@ -51,7 +69,7 @@ class GlyphAccumulator:
                 yield '%04x' % glyph_id
 
         hex_encoded = ''.join(_gen())
-        return hex_encoded, total_width
+        return hex_encoded, total_width / self.units_per_em
 
     def extract_subset(self, options=None):
         options = options or subset.Options()
