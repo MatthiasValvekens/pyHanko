@@ -1,6 +1,9 @@
 import hashlib
 import os
 import logging
+import struct
+import requests
+from base64 import b64encode
 from datetime import datetime
 from dataclasses import dataclass
 from enum import IntEnum
@@ -10,7 +13,7 @@ from typing import List, Optional
 import tzlocal
 from pdf_utils import generic, misc
 from pdf_utils.generic import pdf_name, pdf_string
-from asn1crypto import cms, x509, algos, core, keys
+from asn1crypto import cms, x509, algos, core, keys, tsp
 from oscrypto import asymmetric, keys as oskeys
 from oscrypto.errors import SignatureError
 
@@ -314,6 +317,7 @@ class Signer:
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
+    timestamper: 'Timestamper' = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
@@ -329,42 +333,26 @@ class Signer:
             pass
         return result
 
-    def sign(self, data_digest: bytes, digest_algorithm: str,
-             timestamp: datetime = None, dry_run=False) -> bytes:
-
-        # Implementation loosely based on similar functionality in
-        # https://github.com/m32/endesive/.
-
-        digest_algorithm_obj = algos.DigestAlgorithm(
-            {'algorithm': digest_algorithm}
-        )
-
+    def signed_attrs(self, data_digest: bytes, timestamp: datetime = None):
         timestamp = timestamp or datetime.now(tz=tzlocal.get_localzone())
-        signed_attrs = cms.CMSAttributes([
+        return cms.CMSAttributes([
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
-            # TODO support using timestamping servers
-            # TODO The spec actually mandates that the timestamp be
-            #  an unauthenticated attribute if present. This is how JSignPDF
-            #  does it, though, so meh.
-            #  Anyway, doing this properly in the way mandated by RFC 3161
-            #  Appendix A is a little more involved.
             simple_cms_attribute(
                 'signing_time', cms.Time({'utc_time': core.UTCTime(timestamp)})
             )
             # TODO support adding Adobe-style revocation information
         ])
 
-        # the piece of data we'll actually sign is a DER-encoded version of the
-        # signed attributes of our message
-        signature = self.sign_raw(
-            signed_attrs.dump(), digest_algorithm.lower(), dry_run
+    def signer_info(self, digest_algorithm: str, signed_attrs, signature):
+        digest_algorithm_obj = algos.DigestAlgorithm(
+            {'algorithm': digest_algorithm}
         )
 
         signing_cert = self.signing_cert
         # build the signer info object that goes into the PKCS7 signature
         # (see RFC 2315 § 9.2)
-        signer_info = cms.SignerInfo({
+        sig_info = cms.SignerInfo({
             'version': 'v1',
             'sid': cms.SignerIdentifier({
                 'issuer_and_serial_number': cms.IssuerAndSerialNumber({
@@ -380,14 +368,39 @@ class Signer:
             'signed_attrs': signed_attrs,
             'signature': signature
         })
+        if self.timestamper is not None:
+            # the timestamp server needs to cross-sign our signature
+            md = getattr(hashlib, digest_algorithm)()
+            md.update(signature)
+            ts_token = self.timestamper.timestamp(md.digest(), digest_algorithm)
+            sig_info['unsigned_attrs'] = cms.CMSAttributes([ts_token])
+        return sig_info
 
+    def sign(self, data_digest: bytes, digest_algorithm: str,
+             timestamp: datetime = None, dry_run=False) -> bytes:
+
+        # Implementation loosely based on similar functionality in
+        # https://github.com/m32/endesive/.
+
+        # the piece of data we'll actually sign is a DER-encoded version of the
+        # signed attributes of our message
+        signed_attrs = self.signed_attrs(data_digest, timestamp)
+        signature = self.sign_raw(
+            signed_attrs.dump(), digest_algorithm.lower(), dry_run
+        )
+
+        sig_info = self.signer_info(digest_algorithm, signed_attrs, signature)
+
+        digest_algorithm_obj = algos.DigestAlgorithm(
+            {'algorithm': digest_algorithm}
+        )
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
             'version': 'v1',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': {'content_type': 'data'},
-            'certificates': [signing_cert] + self.ca_chain,
-            'signer_infos': [signer_info]
+            'certificates': [self.signing_cert] + self.ca_chain,
+            'signer_infos': [sig_info]
         }
 
         # time to pack up
@@ -399,7 +412,7 @@ class Signer:
         return message.dump()
 
 
-@dataclass(frozen=True)
+@dataclass
 class SimpleSigner(Signer):
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
@@ -440,10 +453,11 @@ class PKCS11Signer(Signer):
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
     def __init__(self, pkcs11_session, cert_label, ca_chain=None,
-                 key_label=None):
+                 key_label=None, timestamper=None):
         self.cert_label = cert_label
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
+        self.timestamper = timestamper
         self._ca_chain = ca_chain
         self._signing_cert = self._key_handle = None
         self._loaded = False
@@ -779,10 +793,104 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
+class Timestamper:
+    """
+    Class to make RFC3161 timestamp requests
+    """
+
+    # see also
+    # https://github.com/m32/endesive/blob/5e38809387b8bdb218d02cdcaa8f17b89a8a16fc/endesive/signer.py#L161
+
+    def __init__(self, url, https=False, timeout=5):
+        self.url = url
+        self.https = https
+        self.timeout = timeout
+
+    def request_headers(self):
+        return {'Content-Type': 'application/timestamp-query'}
+
+    def get_nonce(self):
+        # generate a random 8-byte unsigned integer
+        return struct.unpack('=Q', os.urandom(8))[0]
+
+    def request_cms(self, message_digest, md_algorithm):
+        nonce = self.get_nonce()
+        req = tsp.TimeStampReq({
+            'version': 1,
+            'message_imprint': tsp.MessageImprint({
+                'hash_algorithm': algos.DigestAlgorithm({
+                    'algorithm': md_algorithm
+                }),
+                'hashed_message': message_digest
+            }),
+            'nonce': nonce,
+            # we want the server to send along its certs
+            'cert_req': True
+        })
+        return nonce, req
+
+    def timestamp(self, message_digest, md_algorithm):
+        if self.https and not self.url.startswith('https://'):
+            raise ValueError('Timestamp URL is not HTTPS.')
+        nonce, req = self.request_cms(message_digest, md_algorithm)
+        raw_res = requests.post(
+            self.url, req.dump(), headers=self.request_headers(),
+        )
+        if raw_res.headers.get('Content-Type') != 'application/timestamp-reply':
+            raise IOError('Timestamp server response is malformed.', raw_res)
+        res = tsp.TimeStampResp.load(raw_res.content)
+        pki_status_info = res['status']
+        if pki_status_info['status'].native != 'granted':
+            try:
+                status_string = pki_status_info['status_string'].native
+            except KeyError:
+                status_string = ''
+            try:
+                fail_info = pki_status_info['fail_info'].native
+            except KeyError:
+                fail_info = ''
+            raise IOError(
+                f'Timestamp server refused our request: statusString '
+                f'\"{status_string}\", failInfo \"{fail_info}\"'
+            )
+        tst = res['time_stamp_token']
+        tst_info = tst['content']['encap_content_info']['content']
+        nonce_received = tst_info.parsed['nonce'].native
+        if nonce_received != nonce:
+            raise IOError(
+                f'Timestamp server sent back bad nonce value. Expected '
+                f'{nonce}, but got {nonce_received}.'
+            )
+        return simple_cms_attribute('signature_time_stamp_token', tst)
+
+
+class BasicAuthTimestamper(Timestamper):
+    def __init__(self, url, username, password, https=True):
+        super().__init__(url, https)
+        self.username = username
+        self.password = password
+
+    def request_headers(self):
+        h = super().request_headers()
+        b64 = b64encode('%s:%s' % (self.username, self.password))
+        h['Authorization'] = 'Basic ' + b64.decode('ascii')
+        return h
+
+
+class BearerAuthTimestamper(Timestamper):
+    def __init__(self, url, token, https=True):
+        super().__init__(url, https)
+        self.token = token
+
+    def request_headers(self):
+        h = super().request_headers()
+        h['Authorization'] = 'Bearer ' + self.token
+        return h
+
+
 def sign_pdf(pdf_out: IncrementalPdfFileWriter, 
              signature_meta: PdfSignatureMetadata, signer: Signer,
-             existing_fields_only=False,
-             bytes_reserved=None):
+             existing_fields_only=False, bytes_reserved=None):
 
     # TODO generate an error when DocMDP doesn't allow extra signatures.
 
@@ -792,6 +900,9 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     #  if present
 
     # TODO deal with SV dictionaries properly
+
+    # TODO this function is becoming rather bloated, should refactor
+    #  into a class for more fine-grained control
 
     root = pdf_out.root
 
@@ -861,12 +972,9 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     w = abs(x1 - x2)
     h = abs(y1 - y2)
     if w and h:
-        # the field is probably a visible one.
-        # if the field is a visible one, we change its appearance stream
-        # to show some data about the signature
+        # the field is probably a visible one, so we change its appearance
+        # stream to show some data about the signature
         # TODO allow customisation
-        # TODO figure out how the auto-scaling between the XObject's /BBox
-        #  and the annotation's /Rect works in this case (§ 12.5.5 in ISO 32000)
         tss = TextStampStyle(
             stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
             fixed_aspect_ratio=float(w/h)

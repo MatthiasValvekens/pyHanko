@@ -82,8 +82,10 @@ def addsig(ctx, field, name, reason, location, certify, existing_only):
 @click.option('--passfile', help='file containing the passphrase '
               'for the private key', required=False, type=click.File('rb'),
               show_default='stdin')
+@click.option('--timestamp-url', help='URL for timestamp server',
+              required=False, type=str, default=None)
 @click.pass_context
-def addsig_pemder(ctx, infile, outfile, key, cert, passfile):
+def addsig_pemder(ctx, infile, outfile, key, cert, passfile, timestamp_url):
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
 
@@ -94,8 +96,10 @@ def addsig_pemder(ctx, infile, outfile, key, cert, passfile):
         passfile.close()
     
     signer = sign.SimpleSigner.load(
-        cert_file=cert, key_file=key, key_passphrase=passphrase
+        cert_file=cert, key_file=key, key_passphrase=passphrase,
     )
+    if timestamp_url is not None:
+        signer.timestamper = sign.Timestamper(timestamp_url)
     writer = IncrementalPdfFileWriter(infile)
 
     # TODO make this an option higher up the tree
@@ -128,16 +132,23 @@ def addsig_pemder(ctx, infile, outfile, key, cert, passfile):
               help='use Authentication cert instead')
 @click.option('--slot-no', help='specify PKCS#11 slot to use', 
               required=False, type=int, default=None)
+@click.option('--timestamp-url', help='URL for timestamp server',
+              required=False, type=str, default=None)
 @click.pass_context
-def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
+def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no,
+                timestamp_url):
     from . import beid
 
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
     session = beid.open_beid_session(lib, slot_no=slot_no)
     label = 'Authentication' if use_auth_cert else 'Signature'
-    signer = beid.BEIDSigner(session, label)
-    
+    if timestamp_url is not None:
+        timestamper = sign.Timestamper(timestamp_url)
+    else:
+        timestamper = None
+    signer = beid.BEIDSigner(session, label, timestamper=timestamper)
+
     result = sign.sign_pdf(
         IncrementalPdfFileWriter(infile), signature_meta, signer,
         existing_fields_only=existing_fields_only
