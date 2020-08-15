@@ -22,7 +22,6 @@ It's nowhere near complete, but here is a short overview of the features:
 
 ### Some TODOs and known limitations
 
- - The signing/stamping code currently only works on PDF files with a flat page tree (which fortunately covers the vast majority of real-life examples). For the signer, this is relatively easy to work around, but the resource dictionary handling logic in the stamper needs to be reworked a little to cover the general case.
  - Expand signature validation functionality. This includes verifying the chain of trust (which is straightforward). More difficult is the following: in case the document has been modified through incremental updates, we should judge whether these changes are allowed by the signature's document modification protection policy.
  - Prevent the user from shooting themselves in the foot to some degree, by explicitly disallowing obviously destructive operations on signed documents.
  - Add systematic tests, both with real-world PDF files and minimal examples from the spec.
