@@ -13,7 +13,7 @@ from typing import List, Optional
 import tzlocal
 from pdf_utils import generic, misc
 from pdf_utils.generic import pdf_name, pdf_string
-from asn1crypto import cms, x509, algos, core, keys, tsp
+from asn1crypto import cms, x509, algos, core, keys, tsp, pem
 from oscrypto import asymmetric, keys as oskeys
 from oscrypto.errors import SignatureError
 
@@ -425,8 +425,31 @@ class SimpleSigner(Signer):
             data, digest_algorithm.lower()
         )
 
+    @staticmethod
+    def load_ca_chain(ca_chain_files):
+        for ca_chain_file in ca_chain_files:
+            with open(ca_chain_file, 'rb') as f:
+                ca_chain_bytes = f.read()
+            # use the pattern from the asn1crypto docs
+            # to distinguish PEM/DER and read multiple certs
+            # from one PEM file (if necessary)
+            if pem.detect(ca_chain_bytes):
+                pems = pem.unarmor(ca_chain_bytes, multiple=True)
+                for type_name, _, der in pems:
+                    if type_name is None or type_name.lower() == 'certificate':
+                        yield x509.Certificate.load(der)
+                    else:
+                        logger.debug(
+                            f'Skipping PEM block of type {type_name} in '
+                            f'{ca_chain_file}.'
+                        )
+            else:
+                # no need to unarmor, just try to load it immediately
+                yield x509.Certificate.load(ca_chain_bytes)
+
     @classmethod
-    def load(cls, key_file, cert_file, key_passphrase=None):
+    def load(cls, key_file, cert_file, ca_chain_files=None,
+             key_passphrase=None):
         try:
             # load cryptographic data (both PEM and DER are supported)
             with open(key_file, 'rb') as f:
@@ -441,9 +464,18 @@ class SimpleSigner(Signer):
             logger.error('Could not load cryptographic material', e)
             return None
 
+        if ca_chain_files:
+            try:
+                ca_chain = list(SimpleSigner.load_ca_chain(ca_chain_files))
+            except (IOError, ValueError) as e:
+                logger.error('Could not load CA chain', e)
+                return None
+        else:
+            ca_chain = []
+
         return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
-            ca_chain=[]  # TODO implement this
+            ca_chain=ca_chain
         )
 
 

@@ -77,6 +77,11 @@ def addsig(ctx, field, name, reason, location, certify, existing_only):
               type=readable_file, required=True)
 @click.option('--cert', help='file containing the signer\'s certificate '
               '(PEM/DER)', type=readable_file, required=True)
+@click.option('--chain', type=readable_file, multiple=True,
+              help='file(s) containing the chain of trust for the '
+                   'signer\'s certificate (PEM/DER). May be '
+                   'passed multiple times. The root should be the last '
+                   'certificate passed')
 # TODO allow reading the passphrase from a specific file descriptor
 #  (for advanced scripting setups)
 @click.option('--passfile', help='file containing the passphrase '
@@ -85,7 +90,8 @@ def addsig(ctx, field, name, reason, location, certify, existing_only):
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
 @click.pass_context
-def addsig_pemder(ctx, infile, outfile, key, cert, passfile, timestamp_url):
+def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
+                  timestamp_url):
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
 
@@ -97,6 +103,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, passfile, timestamp_url):
     
     signer = sign.SimpleSigner.load(
         cert_file=cert, key_file=key, key_passphrase=passphrase,
+        ca_chain_files=chain
     )
     if timestamp_url is not None:
         signer.timestamper = sign.Timestamper(timestamp_url)
