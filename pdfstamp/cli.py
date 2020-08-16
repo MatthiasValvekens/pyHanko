@@ -1,6 +1,8 @@
 import click
 import getpass
 
+from certvalidator import ValidationContext
+
 from pdf_utils.reader import PdfFileReader
 from . import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -31,7 +33,13 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--validate', help='validate signatures', required=False,
               type=bool, is_flag=True, default=False, show_default=True)
-def list_sigfields(infile, skip_status, validate):
+@click.option('--trust-replace',
+              help='listed trust roots supersede OS-provided trust store',
+              required=False,
+              type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--trust', help='list trust roots (multiple allowed)',
+              required=False, multiple=True, type=readable_file)
+def list_sigfields(infile, skip_status, validate, trust, trust_replace):
     r = PdfFileReader(infile)
     for name, value, _ in sign.enumerate_sig_fields(r):
         if skip_status:
@@ -40,8 +48,20 @@ def list_sigfields(infile, skip_status, validate):
         status = 'EMPTY'
         if value is not None:
             if validate:
+                v_context = None
+                if trust:
+                    # add trust roots to the validation context, or replace them
+                    trust_certs = list(sign.load_ca_chain(trust))
+                    if trust_replace:
+                        v_context = ValidationContext(trust_roots=trust_certs)
+                    else:
+                        v_context = ValidationContext(
+                            extra_trust_roots=trust_certs
+                        )
                 try:
-                    status = sign.validate_signature(r, value).summary()
+                    status = sign.validate_signature(
+                        r, value, signer_validation_context=v_context
+                    ).summary()
                 except ValueError:
                     status = 'MALFORMED'
             else:

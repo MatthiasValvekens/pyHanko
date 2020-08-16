@@ -11,6 +11,12 @@ from io import BytesIO
 from typing import List, Optional
 
 import tzlocal
+from certvalidator import CertificateValidator
+from certvalidator.errors import (
+    PathValidationError, RevokedError,
+    InvalidCertificateError, PathBuildingError,
+)
+
 from pdf_utils import generic, misc
 from pdf_utils.generic import pdf_name, pdf_string
 from asn1crypto import cms, x509, algos, core, keys, tsp, pem
@@ -157,6 +163,9 @@ class SignatureObject(generic.DictionaryObject):
 class SignatureStatus:
     intact: bool
     valid: bool
+    trusted: bool
+    revoked: bool
+    non_repud: bool
     complete_document: bool
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
@@ -164,13 +173,20 @@ class SignatureStatus:
     md_algorithm: str
 
     def summary(self):
-        if not self.valid:
-            return 'FORGED'
-        elif self.intact:
+        if self.intact and self.valid:
             if self.complete_document:
-                return 'INTACT_UNTOUCHED'
+                doc_status = 'UNTOUCHED'
             else:
-                return 'INTACT_EXTENDED'
+                doc_status = 'EXTENDED'
+            if self.trusted:
+                cert_status = 'TRUSTED'
+            elif self.revoked:
+                cert_status = 'REVOKED'
+            else:
+                cert_status = 'UNTRUSTED'
+            if self.non_repud:
+                cert_status += ',NON_REPUDIATION'
+            return 'INTACT:%s,%s' % (doc_status, cert_status)
         else:
             return 'INVALID'
 
@@ -180,7 +196,8 @@ MECHANISMS = (
 )
 
 
-def validate_signature(reader: PdfFileReader, sig_object):
+def validate_signature(reader: PdfFileReader, sig_object,
+                       signer_validation_context=None):
     if isinstance(sig_object, generic.IndirectObject):
         sig_object = sig_object.get_object()
     try:
@@ -191,12 +208,33 @@ def validate_signature(reader: PdfFileReader, sig_object):
     message = cms.ContentInfo.load(pkcs7_content)
     signed_data = message['content']
     certs = [c.parse() for c in signed_data['certificates']]
-    cert = certs[0]
-    ca_chain = certs[1:]
+
     try:
         signer_info, = signed_data['signer_infos']
     except ValueError:
         raise ValueError('signer_infos should contain exactly one entry')
+
+    # The 'certificates' entry is defined as a set in PCKS#7.
+    # In particular, we cannot make any assumptions about the order.
+    # This means that we have to manually dig through the list to find
+    # the actual signer
+    iss_sn = signer_info['sid']
+    # TODO Figure out how the subject key identifier thing works
+    if iss_sn.name != 'issuer_and_serial_number':
+        raise ValueError(
+            'Can only look up certificates by issuer and serial number'
+        )
+    issuer = iss_sn.chosen['issuer']
+    serial_number = iss_sn.chosen['serial_number'].native
+    cert = None
+    ca_chain = []
+    for c in certs:
+        if c.issuer == issuer and c.serial_number == serial_number:
+            cert = c
+        else:
+            ca_chain.append(c)
+    if cert is None:
+        raise ValueError('signer certificate not included in signature')
 
     mechanism = signer_info['signature_algorithm']['algorithm'].native
     md_algorithm = signer_info['digest_algorithm']['algorithm'].native.lower()
@@ -238,28 +276,48 @@ def validate_signature(reader: PdfFileReader, sig_object):
             'Signature mechanism %s is not currently supported'
             % mechanism
         )
-    try:
-        # XXX for some reason, these values are sometimes set wrongly
-        # when asn1crypto loads things. No clue why, but they mess up
-        # the header byte (and hence the signature) of the DER-encoded
-        # message object. Needs investigation.
-        signed_attrs.class_ = 0
-        signed_attrs.tag = 17
-        data = signed_attrs.dump(force=True)
-        asymmetric.rsa_pkcs1v15_verify(
-            asymmetric.load_public_key(cert.public_key), signature, 
-            data, hash_algorithm=md_algorithm
-        )
-        valid = True
-    except SignatureError:
-        valid = False
 
-    # TODO what about chain-of-trust validation?
+    valid = False
+    if intact:
+        try:
+            # XXX for some reason, these values are sometimes set wrongly
+            # when asn1crypto loads things. No clue why, but they mess up
+            # the header byte (and hence the signature) of the DER-encoded
+            # message object. Needs investigation.
+            signed_attrs.class_ = 0
+            signed_attrs.tag = 17
+            data = signed_attrs.dump(force=True)
+            asymmetric.rsa_pkcs1v15_verify(
+                asymmetric.load_public_key(cert.public_key), signature,
+                data, hash_algorithm=md_algorithm
+            )
+            valid = True
+        except SignatureError:
+            valid = False
+
+    # TODO validate timestamp certs too
+    non_repud = revoked = trusted = False
+    if valid:
+        try:
+            validator = CertificateValidator(
+                cert, intermediate_certs=ca_chain,
+                validation_context=signer_validation_context
+            )
+            validator.validate_usage({'non_repudiation'})
+            trusted = non_repud = True
+        except InvalidCertificateError:
+            trusted = True
+        except RevokedError:
+            revoked = True
+        except (PathValidationError, PathBuildingError):
+            # catch-all
+            pass
 
     return SignatureStatus(
         intact=intact, complete_document=complete_document,
         ca_chain=ca_chain, valid=valid, signing_cert=cert, 
-        md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism
+        md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
+        trusted=trusted, revoked=revoked, non_repud=non_repud
     )
 
 
@@ -412,6 +470,28 @@ class Signer:
         return message.dump()
 
 
+def load_ca_chain(ca_chain_files):
+    for ca_chain_file in ca_chain_files:
+        with open(ca_chain_file, 'rb') as f:
+            ca_chain_bytes = f.read()
+        # use the pattern from the asn1crypto docs
+        # to distinguish PEM/DER and read multiple certs
+        # from one PEM file (if necessary)
+        if pem.detect(ca_chain_bytes):
+            pems = pem.unarmor(ca_chain_bytes, multiple=True)
+            for type_name, _, der in pems:
+                if type_name is None or type_name.lower() == 'certificate':
+                    yield x509.Certificate.load(der)
+                else:
+                    logger.debug(
+                        f'Skipping PEM block of type {type_name} in '
+                        f'{ca_chain_file}.'
+                    )
+        else:
+            # no need to unarmor, just try to load it immediately
+            yield x509.Certificate.load(ca_chain_bytes)
+
+
 @dataclass
 class SimpleSigner(Signer):
     signing_cert: x509.Certificate
@@ -424,28 +504,6 @@ class SimpleSigner(Signer):
             asymmetric.load_private_key(self.signing_key),
             data, digest_algorithm.lower()
         )
-
-    @staticmethod
-    def load_ca_chain(ca_chain_files):
-        for ca_chain_file in ca_chain_files:
-            with open(ca_chain_file, 'rb') as f:
-                ca_chain_bytes = f.read()
-            # use the pattern from the asn1crypto docs
-            # to distinguish PEM/DER and read multiple certs
-            # from one PEM file (if necessary)
-            if pem.detect(ca_chain_bytes):
-                pems = pem.unarmor(ca_chain_bytes, multiple=True)
-                for type_name, _, der in pems:
-                    if type_name is None or type_name.lower() == 'certificate':
-                        yield x509.Certificate.load(der)
-                    else:
-                        logger.debug(
-                            f'Skipping PEM block of type {type_name} in '
-                            f'{ca_chain_file}.'
-                        )
-            else:
-                # no need to unarmor, just try to load it immediately
-                yield x509.Certificate.load(ca_chain_bytes)
 
     @classmethod
     def load(cls, key_file, cert_file, ca_chain_files=None,
@@ -466,7 +524,7 @@ class SimpleSigner(Signer):
 
         if ca_chain_files:
             try:
-                ca_chain = list(SimpleSigner.load_ca_chain(ca_chain_files))
+                ca_chain = list(load_ca_chain(ca_chain_files))
             except (IOError, ValueError) as e:
                 logger.error('Could not load CA chain', e)
                 return None
