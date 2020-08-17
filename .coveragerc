@@ -1,0 +1,11 @@
+[run]
+    omit = *docs*
+           *test*
+           *venv*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    pragma: nocover
+    raise AssertionError
+    raise NotImplementedError
