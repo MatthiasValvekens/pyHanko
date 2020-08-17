@@ -8,10 +8,10 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import IntEnum
 from io import BytesIO
-from typing import List, Optional
+from typing import List, Optional, Set, ClassVar
 
 import tzlocal
-from certvalidator import CertificateValidator
+from certvalidator import CertificateValidator, ValidationContext
 from certvalidator.errors import (
     PathValidationError, RevokedError,
     InvalidCertificateError, PathBuildingError,
@@ -159,75 +159,7 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
 
-@dataclass(frozen=True)
-class SignatureStatus:
-    intact: bool
-    valid: bool
-    trusted: bool
-    revoked: bool
-    non_repud: bool
-    signing_cert: x509.Certificate
-    ca_chain: List[x509.Certificate]
-    pkcs7_signature_mechanism: str
-    md_algorithm: str
-
-    def summary_fields(self):
-        if self.trusted:
-            cert_status = 'TRUSTED'
-        elif self.revoked:
-            cert_status = 'REVOKED'
-        else:
-            cert_status = 'UNTRUSTED'
-        yield cert_status
-        if self.non_repud:
-            yield 'NON_REPUDIATION'
-
-    def summary(self):
-        if self.intact and self.valid:
-            return 'INTACT:' + ','.join(self.summary_fields())
-        else:
-            return 'INVALID'
-
-
-@dataclass(frozen=True)
-class TimestampSignatureStatus(SignatureStatus):
-    timestamp: datetime
-
-
-@dataclass(frozen=True)
-class PDFSignatureStatus(SignatureStatus):
-    complete_document: bool
-    signed_dt: Optional[datetime] = None
-    timestamp_validity: Optional[TimestampSignatureStatus] = None
-
-    def summary_fields(self):
-        yield from super().summary_fields()
-        yield 'UNTOUCHED' if self.complete_document else 'EXTENDED'
-
-
-MECHANISMS = (
-    'rsassa_pkcs1v15', 'sha1_rsa', 'sha256_rsa', 'sha384_rsa', 'sha512_rsa'
-)
-
-
-def validate_signature(reader: PdfFileReader, sig_object,
-                       signer_validation_context=None):
-    if isinstance(sig_object, generic.IndirectObject):
-        sig_object = sig_object.get_object()
-    try:
-        pkcs7_content = sig_object['/Contents']
-        byte_range = sig_object['/ByteRange']
-    except KeyError:
-        raise ValueError('Signature PDF object is not correctly formatted')
-    message = cms.ContentInfo.load(pkcs7_content)
-    signed_data = message['content']
-    certs = [c.parse() for c in signed_data['certificates']]
-
-    try:
-        signer_info, = signed_data['signer_infos']
-    except ValueError:
-        raise ValueError('signer_infos should contain exactly one entry')
-
+def partition_certs(certs, signer_info):
     # The 'certificates' entry is defined as a set in PCKS#7.
     # In particular, we cannot make any assumptions about the order.
     # This means that we have to manually dig through the list to find
@@ -249,11 +181,175 @@ def validate_signature(reader: PdfFileReader, sig_object,
             ca_chain.append(c)
     if cert is None:
         raise ValueError('signer certificate not included in signature')
+    return cert, ca_chain
 
-    mechanism = signer_info['signature_algorithm']['algorithm'].native
+
+@dataclass(frozen=True)
+class SignatureStatus:
+    intact: bool
+    valid: bool
+    trusted: bool
+    revoked: bool
+    usage_ok: bool
+    signing_cert: x509.Certificate
+    ca_chain: List[x509.Certificate]
+    pkcs7_signature_mechanism: str
+    md_algorithm: str
+
+    # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
+    #  (probably legacy behaviour)
+    key_usage: ClassVar[Set[str]] = {'non_repudiation'}
+    extd_key_usage: ClassVar[Set[str]] = set()
+
+    def summary_fields(self):
+        if self.trusted:
+            cert_status = 'TRUSTED'
+        elif self.revoked:
+            cert_status = 'REVOKED'
+        else:
+            cert_status = 'UNTRUSTED'
+        yield cert_status
+        if self.usage_ok:
+            yield 'USAGE_OK'
+
+    def summary(self):
+        if self.intact and self.valid:
+            return 'INTACT:' + ','.join(self.summary_fields())
+        else:
+            return 'INVALID'
+
+    @classmethod
+    def validate_cert_usage(cls, validator: CertificateValidator):
+
+        usage_ok = revoked = trusted = False
+        try:
+            validator.validate_usage(
+                key_usage=cls.key_usage, extended_key_usage=cls.extd_key_usage
+            )
+            usage_ok = trusted = True
+        except InvalidCertificateError:
+            trusted = True
+        except RevokedError:
+            revoked = True
+        except (PathValidationError, PathBuildingError) as e:
+            # catch-all
+            pass
+        return trusted, revoked, usage_ok
+
+    @classmethod
+    def validate_cms_signature(cls, signed_data: cms.SignedData,
+                               raw_digest: bytes,
+                               validation_context: ValidationContext,
+                               status_kwargs: dict):
+        """
+        Validate CMS and PKCS#7 signatures.
+        """
+
+        certs = [c.parse() for c in signed_data['certificates']]
+
+        try:
+            signer_info, = signed_data['signer_infos']
+        except ValueError:
+            raise ValueError('signer_infos should contain exactly one entry')
+
+        cert, ca_chain = partition_certs(certs, signer_info)
+
+        mechanism = \
+            signer_info['signature_algorithm']['algorithm'].native.lower()
+        md_algorithm = \
+            signer_info['digest_algorithm']['algorithm'].native.lower()
+        signature = signer_info['signature'].native
+        try:
+            signed_attrs = signer_info['signed_attrs']
+        except KeyError:
+            signed_attrs = None
+
+        embedded_digest = None
+        for attr in signed_attrs:
+            if attr['type'].native == 'message_digest':
+                embedded_digest = attr['values'][0].native
+        if embedded_digest is None:
+            raise ValueError('Unable to locate message digest.')
+        intact = raw_digest == embedded_digest
+
+        # finally validate the signature
+        if mechanism not in MECHANISMS:
+            raise NotImplementedError(
+                'Signature mechanism %s is not currently supported'
+                % mechanism
+            )
+
+        valid = False
+        if intact:
+            try:
+                # XXX for some reason, these values are sometimes set wrongly
+                # when asn1crypto loads things. No clue why, but they mess up
+                # the header byte (and hence the signature) of the DER-encoded
+                # message object. Needs investigation.
+                signed_attrs.class_ = 0
+                signed_attrs.tag = 17
+                data = signed_attrs.dump(force=True)
+                asymmetric.rsa_pkcs1v15_verify(
+                    asymmetric.load_public_key(cert.public_key), signature,
+                    data, hash_algorithm=md_algorithm
+                )
+                valid = True
+            except SignatureError:
+                valid = False
+
+        trusted = revoked = usage_ok = False
+        if valid:
+            validator = CertificateValidator(
+                cert, intermediate_certs=ca_chain,
+                validation_context=validation_context
+            )
+            trusted, revoked, usage_ok = cls.validate_cert_usage(validator)
+        # noinspection PyArgumentList
+        return cls(
+            intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
+            md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
+            revoked=revoked, usage_ok=usage_ok, trusted=trusted, **status_kwargs
+        )
+
+
+@dataclass(frozen=True)
+class TimestampSignatureStatus(SignatureStatus):
+    extd_key_usage = {'time_stamping'}
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
+class PDFSignatureStatus(SignatureStatus):
+    complete_document: bool
+    signed_dt: Optional[datetime] = None
+    timestamp_validity: Optional[TimestampSignatureStatus] = None
+
+    def summary_fields(self):
+        yield from super().summary_fields()
+        yield 'UNTOUCHED' if self.complete_document else 'EXTENDED'
+
+
+MECHANISMS = (
+    'rsassa_pkcs1v15', 'sha1_rsa', 'sha256_rsa', 'sha384_rsa', 'sha512_rsa'
+)
+
+
+def validate_pdf_signature(reader: PdfFileReader, sig_object,
+                           signer_validation_context=None):
+    if isinstance(sig_object, generic.IndirectObject):
+        sig_object = sig_object.get_object()
+    try:
+        pkcs7_content = sig_object['/Contents']
+        byte_range = sig_object['/ByteRange']
+    except KeyError:
+        raise ValueError('Signature PDF object is not correctly formatted')
+    message = cms.ContentInfo.load(pkcs7_content)
+    signed_data = message['content']
+    try:
+        signer_info, = signed_data['signer_infos']
+    except ValueError:
+        raise ValueError('signer_infos should contain exactly one entry')
     md_algorithm = signer_info['digest_algorithm']['algorithm'].native.lower()
-    signature = signer_info['signature'].native
-    signed_attrs = signer_info['signed_attrs']
     md = getattr(hashlib, md_algorithm)()
     stream = reader.stream
     
@@ -273,64 +369,13 @@ def validate_signature(reader: PdfFileReader, sig_object,
     stream.seek(old_seek)
 
     # TODO implement logic to detect whether
-    # the modifications made are permissible
+    #  the modifications made are permissible
 
     raw_digest = md.digest()
-    embedded_digest = None
-    for attr in signed_attrs:
-        if attr['type'].native == 'message_digest':
-            embedded_digest = attr['values'][0].native
-    if embedded_digest is None:
-        raise ValueError('Unable to locate message digest.') 
-    intact = raw_digest == embedded_digest
 
-    # finally validate the signature
-    if mechanism not in MECHANISMS:
-        raise NotImplementedError(
-            'Signature mechanism %s is not currently supported'
-            % mechanism
-        )
-
-    valid = False
-    if intact:
-        try:
-            # XXX for some reason, these values are sometimes set wrongly
-            # when asn1crypto loads things. No clue why, but they mess up
-            # the header byte (and hence the signature) of the DER-encoded
-            # message object. Needs investigation.
-            signed_attrs.class_ = 0
-            signed_attrs.tag = 17
-            data = signed_attrs.dump(force=True)
-            asymmetric.rsa_pkcs1v15_verify(
-                asymmetric.load_public_key(cert.public_key), signature,
-                data, hash_algorithm=md_algorithm
-            )
-            valid = True
-        except SignatureError:
-            valid = False
-
-    non_repud = revoked = trusted = False
-    if valid:
-        try:
-            validator = CertificateValidator(
-                cert, intermediate_certs=ca_chain,
-                validation_context=signer_validation_context
-            )
-            validator.validate_usage({'non_repudiation'})
-            trusted = non_repud = True
-        except InvalidCertificateError:
-            trusted = True
-        except RevokedError:
-            revoked = True
-        except (PathValidationError, PathBuildingError) as e:
-            # catch-all
-            pass
-
-    return PDFSignatureStatus(
-        intact=intact, complete_document=complete_document,
-        ca_chain=ca_chain, valid=valid, signing_cert=cert, 
-        md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-        trusted=trusted, revoked=revoked, non_repud=non_repud
+    return PDFSignatureStatus.validate_cms_signature(
+        signed_data, raw_digest, validation_context=signer_validation_context,
+        status_kwargs={'complete_document': complete_document}
     )
 
 

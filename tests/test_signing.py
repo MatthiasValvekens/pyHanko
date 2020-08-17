@@ -55,7 +55,7 @@ FROM_CA_TS = sign.SimpleSigner(
 
 
 def val_trusted(r, sig_obj, extd=False):
-    val_status = sign.validate_signature(r, sig_obj, SIMPLE_V_CONTEXT)
+    val_status = sign.validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
@@ -66,7 +66,7 @@ def val_trusted(r, sig_obj, extd=False):
 
 # validate a signature, don't care about trust
 def val_untrusted(r, sig_obj, extd=False):
-    val_status = sign.validate_signature(r, sig_obj, NOTRUST_V_CONTEXT)
+    val_status = sign.validate_pdf_signature(r, sig_obj, NOTRUST_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     if not extd:

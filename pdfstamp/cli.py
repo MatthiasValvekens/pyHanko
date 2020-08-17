@@ -59,7 +59,7 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
                             extra_trust_roots=trust_certs
                         )
                 try:
-                    status = sign.validate_signature(
+                    status = sign.validate_pdf_signature(
                         r, value, signer_validation_context=v_context
                     ).summary()
                 except ValueError:
