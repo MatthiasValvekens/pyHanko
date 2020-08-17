@@ -38,6 +38,21 @@ ROOT_CERT = oskeys.parse_certificate(read_all(CRYPTO_DATA_DIR + '/ca.cert.pem'))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
 
+DUMMY_TS = sign.DummyTimeStamper(
+    tsa_cert=oskeys.parse_certificate(
+        read_all(CRYPTO_DATA_DIR + '/tsa.cert.pem')
+    ),
+    tsa_key=oskeys.parse_private(
+        read_all(CRYPTO_DATA_DIR + '/tsa.key.pem'), password=b'secret'
+    ),
+    ca_chain=FROM_CA.ca_chain,
+)
+
+FROM_CA_TS = sign.SimpleSigner(
+    signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
+    signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS
+)
+
 
 def val_trusted(r, sig_obj, extd=False):
     val_status = sign.validate_signature(r, sig_obj, SIMPLE_V_CONTEXT)
@@ -161,3 +176,17 @@ def test_sign_field_filled():
     )
     out1.seek(0)
     val2(out2)
+
+
+def test_dummy_timestamp():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = sign.sign_pdf(
+        w, sign.PdfSignatureMetadata(), signer=FROM_CA_TS,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_obj)

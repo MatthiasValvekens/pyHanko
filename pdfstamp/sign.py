@@ -498,6 +498,7 @@ class SimpleSigner(Signer):
     ca_chain: List[x509.Certificate]
     signing_key: keys.PrivateKeyInfo
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
+    timestamper: 'TimeStamper' = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         return asymmetric.rsa_pkcs1v15_sign(
@@ -883,20 +884,22 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
+def get_nonce():
+    # generate a random 8-byte integer
+    # we initialise it like this to guarantee a fixed width
+    return struct.unpack('>q', b'\x01' + os.urandom(7))[0]
+
+
 class TimeStamper:
     """
     Class to make RFC3161 timestamp requests
     """
 
-    # see also
-    # https://github.com/m32/endesive/blob/5e38809387b8bdb218d02cdcaa8f17b89a8a16fc/endesive/signer.py#L161
-
-    def get_nonce(self):
-        # generate a random 8-byte unsigned integer
-        return struct.unpack('=Q', os.urandom(8))[0]
-
     def request_cms(self, message_digest, md_algorithm):
-        nonce = self.get_nonce()
+        # see also
+        # https://github.com/m32/endesive/blob/5e38809387b8bdb218d02cdcaa8f17b89a8a16fc/endesive/signer.py#L161
+
+        nonce = get_nonce()
         req = tsp.TimeStampReq({
             'version': 1,
             'message_imprint': tsp.MessageImprint({
@@ -905,7 +908,7 @@ class TimeStamper:
                 }),
                 'hashed_message': message_digest
             }),
-            'nonce': nonce,
+            'nonce': cms.Integer(nonce),
             # we want the server to send along its certs
             'cert_req': True
         })
@@ -940,6 +943,86 @@ class TimeStamper:
                 f'{nonce}, but got {nonce_received}.'
             )
         return simple_cms_attribute('signature_time_stamp_token', tst)
+
+
+class DummyTimeStamper(TimeStamper):
+    """
+    Timestamper that acts as its own TSA. It accepts all requests and
+    signs them using the certificate provided.
+    Used for testing purposes.
+    """
+
+    def __init__(self, tsa_cert: x509.Certificate,
+                 tsa_key: keys.PrivateKeyInfo,
+                 ca_chain: List[x509.Certificate] = None,
+                 md_algorithm='sha512', fixed_dt: datetime = None):
+        self.tsa_cert = tsa_cert
+        self.tsa_key = tsa_key
+        self.md_algorithm = md_algorithm
+        self.ca_chain = ca_chain or []
+        self.fixed_dt = fixed_dt
+
+    def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        # TODO generalise my detached signature logic to include cases like this
+        #  (see § 5.4 in RFC 5652)
+        status = tsp.PKIStatusInfo({'status': tsp.PKIStatus('granted')})
+        md_algorithm = self.md_algorithm.lower()
+        digest_algorithm_obj = algos.DigestAlgorithm({
+            'algorithm': md_algorithm
+        })
+        tst_info = {
+            'version': 'v1',
+            # See http://oidref.com/1.3.6.1.4.1.4146.2.2
+            # I don't really care too much, this is a testing device anyway
+            'policy': tsp.ObjectIdentifier('1.3.6.1.4.1.4146.2.2'),
+            'message_imprint': req['message_imprint'],
+            # should be sufficiently random (again, this is a testing class)
+            'serial_number': get_nonce(),
+            'gen_time': self.fixed_dt or datetime.now(
+                tz=tzlocal.get_localzone()
+            ),
+        }
+        try:
+            tst_info['nonce'] = req['nonce']
+        except KeyError:
+            pass
+
+        tst_info = tsp.TSTInfo(tst_info)
+        tst_info_data = tst_info.dump()
+        signature = asymmetric.rsa_pkcs1v15_sign(
+            asymmetric.load_private_key(self.tsa_key),
+            tst_info_data, md_algorithm
+        )
+        sig_info = cms.SignerInfo({
+            'version': 'v1',
+            'sid': cms.SignerIdentifier({
+                'issuer_and_serial_number': cms.IssuerAndSerialNumber({
+                    'issuer': self.tsa_cert.issuer,
+                    'serial_number': self.tsa_cert.serial_number,
+                })
+            }),
+            'digest_algorithm': digest_algorithm_obj,
+            'signature_algorithm': algos.SignedDigestAlgorithm(
+                {'algorithm': 'rsassa_pkcs1v15'}
+            ),
+            'signature': signature
+        })
+        signed_data = {
+            # must use v3 to get access to the EncapsulatedContentInfo construct
+            'version': 'v3',
+            'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
+            'encap_content_info': cms.EncapsulatedContentInfo({
+                'content_type': 'tst_info',
+                'content': tst_info
+            }),
+            'certificates': [self.tsa_cert] + self.ca_chain,
+            'signer_infos': [sig_info]
+        }
+        tst = cms.ContentInfo({
+            'content_type': cms.ContentType('signed_data'),
+            'content': cms.SignedData(signed_data)
+        })
+        return tsp.TimeStampResp({'status': status, 'time_stamp_token': tst})
 
 
 class HTTPTimeStamper(TimeStamper):
@@ -1121,7 +1204,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         md.digest(), signature_meta.md_algorithm, timestamp=timestamp
     ).hex().encode('ascii')
 
-    assert len(signature) <= bytes_reserved
+    assert len(signature) <= bytes_reserved, (len(signature), bytes_reserved)
 
     # +1 to skip the '<'
     output.seek(sig_start + 1)
