@@ -1,3 +1,4 @@
+import pytest
 from io import BytesIO
 
 from certvalidator import ValidationContext
@@ -7,11 +8,17 @@ from pdf_utils.reader import PdfFileReader
 from pdfstamp import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
+
+def read_all(fname):
+    with open(fname, 'rb') as f:
+        return f.read()
+
+
 CRYPTO_DATA_DIR = 'tests/data/crypto'
 PDF_DATA_DIR = 'tests/data/pdf'
-MINIMAL = PDF_DATA_DIR + '/minimal.pdf'
-MINIMAL_ONE_FIELD = PDF_DATA_DIR + '/minimal-with-field.pdf'
-MINIMAL_TWO_FIELDS = PDF_DATA_DIR + '/minimal-two-fields.pdf'
+MINIMAL = read_all(PDF_DATA_DIR + '/minimal.pdf')
+MINIMAL_ONE_FIELD = read_all(PDF_DATA_DIR + '/minimal-with-field.pdf')
+MINIMAL_TWO_FIELDS = read_all(PDF_DATA_DIR + '/minimal-two-fields.pdf')
 
 SELF_SIGN = sign.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',
@@ -27,47 +34,78 @@ FROM_CA = sign.SimpleSigner.load(
 )
 
 
-with open(CRYPTO_DATA_DIR + '/ca.cert.pem', 'rb') as f:
-    ROOT_CERT = oskeys.parse_certificate(f.read())
-
+ROOT_CERT = oskeys.parse_certificate(read_all(CRYPTO_DATA_DIR + '/ca.cert.pem'))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
 
 
-def test_simple_sign():
-    with open(MINIMAL, 'rb') as f:
-        indata = f.read()
-
-    w = IncrementalPdfFileWriter(BytesIO(indata))
-    out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
-                        signer=SELF_SIGN)
-    r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_status = sign.validate_signature(r, sig_obj, NOTRUST_V_CONTEXT)
-    summ = val_status.summary()
-    assert 'INTACT' in summ
-    assert 'UNTOUCHED' in summ
-
-
-def test_sign_with_trust():
-    with open(MINIMAL, 'rb') as f:
-        indata = f.read()
-
-    w = IncrementalPdfFileWriter(BytesIO(indata))
-    out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
-                        signer=FROM_CA)
-    r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_status = sign.validate_signature(r, sig_obj, NOTRUST_V_CONTEXT)
-    summ = val_status.summary()
-    assert 'INTACT' in summ
-    assert 'UNTOUCHED' in summ
-    assert 'UNTRUSTED' in summ
-
+def val_trusted(r, sig_obj):
     val_status = sign.validate_signature(r, sig_obj, SIMPLE_V_CONTEXT)
     summ = val_status.summary()
     assert 'INTACT' in summ
     assert 'UNTOUCHED' in summ
     assert 'TRUSTED' in summ
+    return summ
+
+
+# validate a signature, don't care about trust
+def val_untrusted(r, sig_obj):
+    val_status = sign.validate_signature(r, sig_obj, NOTRUST_V_CONTEXT)
+    summ = val_status.summary()
+    assert 'INTACT' in summ
+    assert 'UNTOUCHED' in summ
+    return summ
+
+
+def test_simple_sign():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
+                        signer=SELF_SIGN)
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_untrusted(r, sig_obj)
+
+
+
+def test_sign_with_trust():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
+                        signer=FROM_CA)
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    summ = val_untrusted(r, sig_obj)
+    assert 'UNTRUSTED' in summ
+
+    val_trusted(r, sig_obj)
+
+
+def test_sign_field_unclear():
+    # test error on signing attempt where the signature field to be used
+    # is not clear
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+
+    with pytest.raises(ValueError):
+        sign.sign_pdf(w, sign.PdfSignatureMetadata(), signer=FROM_CA)
+
+    with pytest.raises(ValueError):
+        sign.sign_pdf(w, sign.PdfSignatureMetadata(), signer=FROM_CA,
+                      existing_fields_only=True)
+
+
+def test_sign_field_infer():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    with pytest.raises(ValueError):
+        sign.sign_pdf(w, sign.PdfSignatureMetadata(), signer=FROM_CA)
+
+    out = sign.sign_pdf(
+        w, sign.PdfSignatureMetadata(), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_obj)
