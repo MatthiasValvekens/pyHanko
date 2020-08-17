@@ -375,7 +375,7 @@ class Signer:
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
-    timestamper: 'Timestamper' = None
+    timestamper: 'TimeStamper' = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
@@ -883,21 +883,13 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
-class Timestamper:
+class TimeStamper:
     """
     Class to make RFC3161 timestamp requests
     """
 
     # see also
     # https://github.com/m32/endesive/blob/5e38809387b8bdb218d02cdcaa8f17b89a8a16fc/endesive/signer.py#L161
-
-    def __init__(self, url, https=False, timeout=5):
-        self.url = url
-        self.https = https
-        self.timeout = timeout
-
-    def request_headers(self):
-        return {'Content-Type': 'application/timestamp-query'}
 
     def get_nonce(self):
         # generate a random 8-byte unsigned integer
@@ -919,16 +911,12 @@ class Timestamper:
         })
         return nonce, req
 
+    def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        raise NotImplementedError
+
     def timestamp(self, message_digest, md_algorithm):
-        if self.https and not self.url.startswith('https://'):
-            raise ValueError('Timestamp URL is not HTTPS.')
         nonce, req = self.request_cms(message_digest, md_algorithm)
-        raw_res = requests.post(
-            self.url, req.dump(), headers=self.request_headers(),
-        )
-        if raw_res.headers.get('Content-Type') != 'application/timestamp-reply':
-            raise IOError('Timestamp server response is malformed.', raw_res)
-        res = tsp.TimeStampResp.load(raw_res.content)
+        res = self.request_tsa_response(req)
         pki_status_info = res['status']
         if pki_status_info['status'].native != 'granted':
             try:
@@ -948,13 +936,37 @@ class Timestamper:
         nonce_received = tst_info.parsed['nonce'].native
         if nonce_received != nonce:
             raise IOError(
-                f'Timestamp server sent back bad nonce value. Expected '
+                f'Time stamping authority sent back bad nonce value. Expected '
                 f'{nonce}, but got {nonce_received}.'
             )
         return simple_cms_attribute('signature_time_stamp_token', tst)
 
 
-class BasicAuthTimestamper(Timestamper):
+class HTTPTimeStamper(TimeStamper):
+
+    def __init__(self, url, https=False, timeout=5):
+        self.url = url
+        self.https = https
+        self.timeout = timeout
+
+    def request_headers(self):
+        return {'Content-Type': 'application/timestamp-query'}
+
+    def timestamp(self, message_digest, md_algorithm):
+        if self.https and not self.url.startswith('https://'):
+            raise ValueError('Timestamp URL is not HTTPS.')
+        return super().timestamp(message_digest, md_algorithm)
+
+    def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        raw_res = requests.post(
+            self.url, req.dump(), headers=self.request_headers(),
+        )
+        if raw_res.headers.get('Content-Type') != 'application/timestamp-reply':
+            raise IOError('Timestamp server response is malformed.', raw_res)
+        return tsp.TimeStampResp.load(raw_res.content)
+
+
+class BasicAuthTimeStamper(HTTPTimeStamper):
     def __init__(self, url, username, password, https=True):
         super().__init__(url, https)
         self.username = username
@@ -967,7 +979,7 @@ class BasicAuthTimestamper(Timestamper):
         return h
 
 
-class BearerAuthTimestamper(Timestamper):
+class BearerAuthTimeStamper(HTTPTimeStamper):
     def __init__(self, url, token, https=True):
         super().__init__(url, https)
         self.token = token

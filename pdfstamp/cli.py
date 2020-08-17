@@ -126,7 +126,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
         ca_chain_files=chain
     )
     if timestamp_url is not None:
-        signer.timestamper = sign.Timestamper(timestamp_url)
+        signer.timestamper = sign.HTTPTimeStamper(timestamp_url)
     writer = IncrementalPdfFileWriter(infile)
 
     # TODO make this an option higher up the tree
@@ -171,7 +171,7 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no,
     session = beid.open_beid_session(lib, slot_no=slot_no)
     label = 'Authentication' if use_auth_cert else 'Signature'
     if timestamp_url is not None:
-        timestamper = sign.Timestamper(timestamp_url)
+        timestamper = sign.HTTPTimeStamper(timestamp_url)
     else:
         timestamper = None
     signer = beid.BEIDSigner(session, label, timestamper=timestamper)
