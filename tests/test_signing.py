@@ -39,20 +39,27 @@ NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
 
 
-def val_trusted(r, sig_obj):
+def val_trusted(r, sig_obj, extd=False):
     val_status = sign.validate_signature(r, sig_obj, SIMPLE_V_CONTEXT)
     summ = val_status.summary()
     assert 'INTACT' in summ
-    assert 'UNTOUCHED' in summ
+    if extd:
+        assert 'EXTENDED' in summ
+    else:
+        assert 'UNTOUCHED' in summ
     assert 'TRUSTED' in summ
     return summ
 
 
 # validate a signature, don't care about trust
-def val_untrusted(r, sig_obj):
+def val_untrusted(r, sig_obj, extd=False):
     val_status = sign.validate_signature(r, sig_obj, NOTRUST_V_CONTEXT)
     summ = val_status.summary()
     assert 'INTACT' in summ
+    if extd:
+        assert 'EXTENDED' in summ
+    else:
+        assert 'UNTOUCHED' in summ
     assert 'UNTOUCHED' in summ
     return summ
 
@@ -65,7 +72,6 @@ def test_simple_sign():
     field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     val_untrusted(r, sig_obj)
-
 
 
 def test_sign_with_trust():
@@ -109,3 +115,49 @@ def test_sign_field_infer():
     field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     val_trusted(r, sig_obj)
+
+
+def test_sign_field_filled():
+    w1 = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+
+    out1 = sign.sign_pdf(
+        w1, sign.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    # can't sign the same field twice
+    w2 = IncrementalPdfFileWriter(out1)
+    with pytest.raises(ValueError):
+        sign.sign_pdf(
+            w2, sign.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+            existing_fields_only=True
+        )
+    out1.seek(0)
+
+    def val2(out_buf):
+        r = PdfFileReader(out_buf)
+        sig_fields = sign.enumerate_sig_fields(r)
+        field_name, sig_obj, _ = next(sig_fields)
+        assert field_name == 'Sig1'
+        val_trusted(r, sig_obj, extd=True)
+
+        field_name, sig_obj, _ = next(sig_fields)
+        assert field_name == 'Sig2'
+        val_trusted(r, sig_obj)
+
+    w2 = IncrementalPdfFileWriter(out1)
+    # autodetect remaining open field
+    out2 = sign.sign_pdf(
+        w2, sign.PdfSignatureMetadata(), signer=FROM_CA,
+        existing_fields_only=True
+    )
+    out1.seek(0)
+    val2(out2)
+
+    w2 = IncrementalPdfFileWriter(out1)
+    out2 = sign.sign_pdf(
+        w2, sign.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
+        existing_fields_only=True
+    )
+    out1.seek(0)
+    val2(out2)
