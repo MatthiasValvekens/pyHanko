@@ -166,29 +166,43 @@ class SignatureStatus:
     trusted: bool
     revoked: bool
     non_repud: bool
-    complete_document: bool
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
     md_algorithm: str
 
+    def summary_fields(self):
+        if self.trusted:
+            cert_status = 'TRUSTED'
+        elif self.revoked:
+            cert_status = 'REVOKED'
+        else:
+            cert_status = 'UNTRUSTED'
+        yield cert_status
+        if self.non_repud:
+            yield 'NON_REPUDIATION'
+
     def summary(self):
         if self.intact and self.valid:
-            if self.complete_document:
-                doc_status = 'UNTOUCHED'
-            else:
-                doc_status = 'EXTENDED'
-            if self.trusted:
-                cert_status = 'TRUSTED'
-            elif self.revoked:
-                cert_status = 'REVOKED'
-            else:
-                cert_status = 'UNTRUSTED'
-            if self.non_repud:
-                cert_status += ',NON_REPUDIATION'
-            return 'INTACT:%s,%s' % (doc_status, cert_status)
+            return 'INTACT:' + ','.join(self.summary_fields())
         else:
             return 'INVALID'
+
+
+@dataclass(frozen=True)
+class TimestampSignatureStatus(SignatureStatus):
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
+class PDFSignatureStatus(SignatureStatus):
+    complete_document: bool
+    signed_dt: Optional[datetime] = None
+    timestamp_validity: Optional[TimestampSignatureStatus] = None
+
+    def summary_fields(self):
+        yield from super().summary_fields()
+        yield 'UNTOUCHED' if self.complete_document else 'EXTENDED'
 
 
 MECHANISMS = (
@@ -295,7 +309,6 @@ def validate_signature(reader: PdfFileReader, sig_object,
         except SignatureError:
             valid = False
 
-    # TODO validate timestamp certs too
     non_repud = revoked = trusted = False
     if valid:
         try:
@@ -309,11 +322,11 @@ def validate_signature(reader: PdfFileReader, sig_object,
             trusted = True
         except RevokedError:
             revoked = True
-        except (PathValidationError, PathBuildingError):
+        except (PathValidationError, PathBuildingError) as e:
             # catch-all
             pass
 
-    return SignatureStatus(
+    return PDFSignatureStatus(
         intact=intact, complete_document=complete_document,
         ca_chain=ca_chain, valid=valid, signing_cert=cert, 
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
@@ -1099,7 +1112,11 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             test_md, signature_meta.md_algorithm, timestamp=timestamp,
             dry_run=True
         ).hex().encode('ascii')
-        bytes_reserved = len(test_signature)
+        # External actors such as timestamping servers can't be relied on to
+        # always return exactly the same response, so we build in a 50% error
+        # margin (+ ensure that bytes_reserved is even)
+        test_len = len(test_signature)
+        bytes_reserved = test_len + 2 * (test_len // 4)
 
     name = signature_meta.name
     if name is None:

@@ -56,27 +56,22 @@ FROM_CA_TS = sign.SimpleSigner(
 
 def val_trusted(r, sig_obj, extd=False):
     val_status = sign.validate_signature(r, sig_obj, SIMPLE_V_CONTEXT)
-    summ = val_status.summary()
-    assert 'INTACT' in summ
-    if extd:
-        assert 'EXTENDED' in summ
-    else:
-        assert 'UNTOUCHED' in summ
-    assert 'TRUSTED' in summ
-    return summ
+    assert val_status.intact
+    assert val_status.valid
+    assert val_status.trusted
+    if not extd:
+        assert val_status.complete_document
+    return val_status
 
 
 # validate a signature, don't care about trust
 def val_untrusted(r, sig_obj, extd=False):
     val_status = sign.validate_signature(r, sig_obj, NOTRUST_V_CONTEXT)
-    summ = val_status.summary()
-    assert 'INTACT' in summ
-    if extd:
-        assert 'EXTENDED' in summ
-    else:
-        assert 'UNTOUCHED' in summ
-    assert 'UNTOUCHED' in summ
-    return summ
+    assert val_status.intact
+    assert val_status.valid
+    if not extd:
+        assert val_status.complete_document
+    return val_status
 
 
 def test_simple_sign():
@@ -96,8 +91,8 @@ def test_sign_with_trust():
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    summ = val_untrusted(r, sig_obj)
-    assert 'UNTRUSTED' in summ
+    status = val_untrusted(r, sig_obj)
+    assert not status.trusted
 
     val_trusted(r, sig_obj)
 
