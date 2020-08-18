@@ -184,4 +184,6 @@ def test_dummy_timestamp():
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_trusted(r, sig_obj)
+    validity = val_trusted(r, sig_obj)
+    assert validity.timestamp_validity is not None
+    assert validity.timestamp_validity.trusted

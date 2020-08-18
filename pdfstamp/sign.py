@@ -8,7 +8,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import IntEnum
 from io import BytesIO
-from typing import List, Optional, Set, ClassVar
+from typing import List, Optional, Set, ClassVar, Type, TypeVar
 
 import tzlocal
 from certvalidator import CertificateValidator, ValidationContext
@@ -231,93 +231,94 @@ class SignatureStatus:
             trusted = True
         except RevokedError:
             revoked = True
-        except (PathValidationError, PathBuildingError) as e:
+        except (PathValidationError, PathBuildingError):
             # catch-all
             pass
         return trusted, revoked, usage_ok
 
-    @classmethod
-    def validate_cms_signature(cls, signed_data: cms.SignedData,
-                               raw_digest: bytes = None,
-                               validation_context: ValidationContext = None,
-                               status_kwargs: dict = None):
-        """
-        Validate CMS and PKCS#7 signatures.
-        """
 
-        certs = [c.parse() for c in signed_data['certificates']]
+StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
-        try:
-            signer_info, = signed_data['signer_infos']
-        except ValueError:
-            raise ValueError('signer_infos should contain exactly one entry')
 
-        cert, ca_chain = partition_certs(certs, signer_info)
+def validate_cms_signature(signed_data: cms.SignedData,
+                           status_cls: Type[StatusType] = SignatureStatus,
+                           raw_digest: bytes = None,
+                           validation_context: ValidationContext = None,
+                           status_kwargs: dict = None):
+    """
+    Validate CMS and PKCS#7 signatures.
+    """
 
-        mechanism = \
-            signer_info['signature_algorithm']['algorithm'].native.lower()
-        md_algorithm = \
-            signer_info['digest_algorithm']['algorithm'].native.lower()
-        signature = signer_info['signature'].native
-        signed_attrs = signer_info['signed_attrs']
+    certs = [c.parse() for c in signed_data['certificates']]
 
-        # TODO What to do if signed_attrs is absent?
-        # I guess I'll wait until someone complains that a valid signature
-        # isn't being validated correctly
-        if raw_digest is None:
-            # this means that there should be encapsulated data
-            # TODO Carefully read § 5.2.1 in RFC 5652, and compare with
-            #  the implementation in asn1crypto.
-            raw = signed_data['encap_content_info']['content'].parsed.dump()
-            raw_digest = getattr(hashlib, md_algorithm)(raw).digest()
+    try:
+        signer_info, = signed_data['signer_infos']
+    except ValueError:
+        raise ValueError('signer_infos should contain exactly one entry')
 
-        # XXX for some reason, these values are sometimes set wrongly
-        # when asn1crypto loads things. No clue why, but they mess up
-        # the header byte (and hence the signature) of the DER-encoded
-        # message object. Needs investigation.
-        signed_attrs.class_ = 0
-        signed_attrs.tag = 17
-        signed_blob = signed_attrs.dump(force=True)
-        embedded_digest = None
-        for attr in signed_attrs:
-            if attr['type'].native == 'message_digest':
-                embedded_digest = attr['values'][0].native
-        if embedded_digest is None:
-            raise ValueError('Unable to locate message digest.')
-        intact = raw_digest == embedded_digest
+    cert, ca_chain = partition_certs(certs, signer_info)
 
-        # finally validate the signature
-        if mechanism not in MECHANISMS:
-            raise NotImplementedError(
-                'Signature mechanism %s is not currently supported'
-                % mechanism
-            )
+    mechanism = \
+        signer_info['signature_algorithm']['algorithm'].native.lower()
+    md_algorithm = \
+        signer_info['digest_algorithm']['algorithm'].native.lower()
+    signature = signer_info['signature'].native
+    signed_attrs = signer_info['signed_attrs']
 
-        valid = False
-        if intact:
-            try:
-                asymmetric.rsa_pkcs1v15_verify(
-                    asymmetric.load_public_key(cert.public_key), signature,
-                    signed_blob, hash_algorithm=md_algorithm
-                )
-                valid = True
-            except SignatureError:
-                valid = False
+    # TODO What to do if signed_attrs is absent?
+    # I guess I'll wait until someone complains that a valid signature
+    # isn't being validated correctly
+    if raw_digest is None:
+        # this means that there should be encapsulated data
+        # TODO Carefully read § 5.2.1 in RFC 5652, and compare with
+        #  the implementation in asn1crypto.
+        raw = signed_data['encap_content_info']['content'].parsed.dump()
+        raw_digest = getattr(hashlib, md_algorithm)(raw).digest()
 
-        trusted = revoked = usage_ok = False
-        if valid:
-            validator = CertificateValidator(
-                cert, intermediate_certs=ca_chain,
-                validation_context=validation_context
-            )
-            trusted, revoked, usage_ok = cls.validate_cert_usage(validator)
-        # noinspection PyArgumentList
-        return cls(
-            intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
-            md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-            revoked=revoked, usage_ok=usage_ok, trusted=trusted,
-            **(status_kwargs or {})
+    # XXX for some reason, these values are sometimes set wrongly
+    # when asn1crypto loads things. No clue why, but they mess up
+    # the header byte (and hence the signature) of the DER-encoded
+    # message object. Needs investigation.
+    signed_attrs.class_ = 0
+    signed_attrs.tag = 17
+    signed_blob = signed_attrs.dump(force=True)
+    try:
+        embedded_digest = find_cms_attribute(signed_attrs, 'message_digest')
+    except KeyError:
+        raise ValueError('Message digest not found in signature')
+    intact = raw_digest == embedded_digest[0].native
+
+    # finally validate the signature
+    if mechanism not in MECHANISMS:
+        raise NotImplementedError(
+            'Signature mechanism %s is not currently supported'
+            % mechanism
         )
+
+    valid = False
+    if intact:
+        try:
+            asymmetric.rsa_pkcs1v15_verify(
+                asymmetric.load_public_key(cert.public_key), signature,
+                signed_blob, hash_algorithm=md_algorithm
+            )
+            valid = True
+        except SignatureError:
+            valid = False
+
+    trusted = revoked = usage_ok = False
+    if valid:
+        validator = CertificateValidator(
+            cert, intermediate_certs=ca_chain,
+            validation_context=validation_context
+        )
+        trusted, revoked, usage_ok = status_cls.validate_cert_usage(validator)
+    return status_cls(
+        intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
+        md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
+        revoked=revoked, usage_ok=usage_ok, trusted=trusted,
+        **(status_kwargs or {})
+    )
 
 
 @dataclass(frozen=True)
@@ -343,7 +344,11 @@ MECHANISMS = (
 
 
 def validate_pdf_signature(reader: PdfFileReader, sig_object,
-                           signer_validation_context=None):
+                           signer_validation_context=None,
+                           ts_validation_context=None) -> PDFSignatureStatus:
+    if ts_validation_context is None:
+        ts_validation_context = signer_validation_context
+
     if isinstance(sig_object, generic.IndirectObject):
         sig_object = sig_object.get_object()
     try:
@@ -353,11 +358,8 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
         raise ValueError('Signature PDF object is not correctly formatted')
     message = cms.ContentInfo.load(pkcs7_content)
     signed_data = message['content']
-    try:
-        signer_info, = signed_data['signer_infos']
-    except ValueError:
-        raise ValueError('signer_infos should contain exactly one entry')
-    md_algorithm = signer_info['digest_algorithm']['algorithm'].native.lower()
+    sd_digest = signed_data['digest_algorithms'][0]
+    md_algorithm = sd_digest['algorithm'].native.lower()
     md = getattr(hashlib, md_algorithm)()
     stream = reader.stream
     
@@ -381,9 +383,43 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
 
     raw_digest = md.digest()
 
-    return PDFSignatureStatus.validate_cms_signature(
-        signed_data, raw_digest, validation_context=signer_validation_context,
-        status_kwargs={'complete_document': complete_document}
+    status_kwargs = {'complete_document': complete_document}
+    try:
+        signer_info, = signed_data['signer_infos']
+    except ValueError:
+        raise ValueError('signer_infos should contain exactly one entry')
+
+    # try to find an embedded timestamp
+    try:
+        sa = signer_info['signed_attrs']
+        st = find_cms_attribute(sa, 'signed_time')[0]
+        print(st.native)
+        status_kwargs['signed_dt'] = st.native
+    except KeyError:
+        pass
+    # if there's a signed timestamp, find that one too
+    try:
+        ua = signer_info['unsigned_attrs']
+        tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
+    except KeyError:
+        tst = None
+
+    # if we managed to find a signed timestamp, we now proceed to validate it
+    if tst is not None:
+        tst_signed_data = tst['content']
+        tst_info = tst_signed_data['encap_content_info']['content'].parsed
+        assert isinstance(tst_info, tsp.TSTInfo)
+        timestamp = tst_info['gen_time'].native
+        status_kwargs['timestamp_validity'] = validate_cms_signature(
+            tst_signed_data, status_cls=TimestampSignatureStatus,
+            validation_context=ts_validation_context,
+            status_kwargs={'timestamp': timestamp}
+        )
+
+    return validate_cms_signature(
+        signed_data, status_cls=PDFSignatureStatus,
+        raw_digest=raw_digest, validation_context=signer_validation_context,
+        status_kwargs=status_kwargs
     )
 
 
@@ -435,6 +471,13 @@ def simple_cms_attribute(attr_type, value):
         'type': cms.CMSAttributeType(attr_type),
         'values': (value,)
     })
+
+
+def find_cms_attribute(attrs, name):
+    for attr in attrs:
+        if attr['type'].native == name:
+            return attr['values']
+    raise KeyError(f'Unable to locate attribute {name}.')
 
 
 class Signer:
