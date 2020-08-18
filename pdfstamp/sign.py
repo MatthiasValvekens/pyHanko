@@ -238,9 +238,9 @@ class SignatureStatus:
 
     @classmethod
     def validate_cms_signature(cls, signed_data: cms.SignedData,
-                               raw_digest: bytes,
-                               validation_context: ValidationContext,
-                               status_kwargs: dict):
+                               raw_digest: bytes = None,
+                               validation_context: ValidationContext = None,
+                               status_kwargs: dict = None):
         """
         Validate CMS and PKCS#7 signatures.
         """
@@ -259,11 +259,25 @@ class SignatureStatus:
         md_algorithm = \
             signer_info['digest_algorithm']['algorithm'].native.lower()
         signature = signer_info['signature'].native
-        try:
-            signed_attrs = signer_info['signed_attrs']
-        except KeyError:
-            signed_attrs = None
+        signed_attrs = signer_info['signed_attrs']
 
+        # TODO What to do if signed_attrs is absent?
+        # I guess I'll wait until someone complains that a valid signature
+        # isn't being validated correctly
+        if raw_digest is None:
+            # this means that there should be encapsulated data
+            # TODO Carefully read § 5.2.1 in RFC 5652, and compare with
+            #  the implementation in asn1crypto.
+            raw = signed_data['encap_content_info']['content'].parsed.dump()
+            raw_digest = getattr(hashlib, md_algorithm)(raw).digest()
+
+        # XXX for some reason, these values are sometimes set wrongly
+        # when asn1crypto loads things. No clue why, but they mess up
+        # the header byte (and hence the signature) of the DER-encoded
+        # message object. Needs investigation.
+        signed_attrs.class_ = 0
+        signed_attrs.tag = 17
+        signed_blob = signed_attrs.dump(force=True)
         embedded_digest = None
         for attr in signed_attrs:
             if attr['type'].native == 'message_digest':
@@ -282,16 +296,9 @@ class SignatureStatus:
         valid = False
         if intact:
             try:
-                # XXX for some reason, these values are sometimes set wrongly
-                # when asn1crypto loads things. No clue why, but they mess up
-                # the header byte (and hence the signature) of the DER-encoded
-                # message object. Needs investigation.
-                signed_attrs.class_ = 0
-                signed_attrs.tag = 17
-                data = signed_attrs.dump(force=True)
                 asymmetric.rsa_pkcs1v15_verify(
                     asymmetric.load_public_key(cert.public_key), signature,
-                    data, hash_algorithm=md_algorithm
+                    signed_blob, hash_algorithm=md_algorithm
                 )
                 valid = True
             except SignatureError:
@@ -308,7 +315,8 @@ class SignatureStatus:
         return cls(
             intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
             md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-            revoked=revoked, usage_ok=usage_ok, trusted=trusted, **status_kwargs
+            revoked=revoked, usage_ok=usage_ok, trusted=trusted,
+            **(status_kwargs or {})
         )
 
 
@@ -1021,6 +1029,8 @@ class DummyTimeStamper(TimeStamper):
         self.fixed_dt = fixed_dt
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        # We pretend that certReq is always true in the request
+
         # TODO generalise my detached signature logic to include cases like this
         #  (see § 5.4 in RFC 5652)
         status = tsp.PKIStatusInfo({'status': tsp.PKIStatus('granted')})
@@ -1028,6 +1038,7 @@ class DummyTimeStamper(TimeStamper):
         digest_algorithm_obj = algos.DigestAlgorithm({
             'algorithm': md_algorithm
         })
+        dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
         tst_info = {
             'version': 'v1',
             # See http://oidref.com/1.3.6.1.4.1.4146.2.2
@@ -1036,9 +1047,10 @@ class DummyTimeStamper(TimeStamper):
             'message_imprint': req['message_imprint'],
             # should be sufficiently random (again, this is a testing class)
             'serial_number': get_nonce(),
-            'gen_time': self.fixed_dt or datetime.now(
-                tz=tzlocal.get_localzone()
-            ),
+            'gen_time': dt,
+            'tsa': x509.GeneralName(
+                name='directory_name', value=self.tsa_cert.subject
+            )
         }
         try:
             tst_info['nonce'] = req['nonce']
@@ -1047,9 +1059,28 @@ class DummyTimeStamper(TimeStamper):
 
         tst_info = tsp.TSTInfo(tst_info)
         tst_info_data = tst_info.dump()
+        message_digest = getattr(hashlib, md_algorithm)(tst_info_data).digest()
+        signed_attrs = cms.CMSAttributes([
+            simple_cms_attribute('content_type', 'tst_info'),
+            simple_cms_attribute(
+                'signing_time', cms.Time({'utc_time': core.UTCTime(dt)})
+            ),
+            simple_cms_attribute(
+                'signing_certificate', tsp.SigningCertificate({
+                    'certs': [
+                        # see RFC 2634, § 5.4.1
+                        tsp.ESSCertID({
+                            'cert_hash':
+                                hashlib.sha1(self.tsa_cert.dump()).digest()
+                        })
+                    ]
+                })
+            ),
+            simple_cms_attribute('message_digest', message_digest),
+        ])
         signature = asymmetric.rsa_pkcs1v15_sign(
             asymmetric.load_private_key(self.tsa_key),
-            tst_info_data, md_algorithm
+            signed_attrs.dump(), md_algorithm
         )
         sig_info = cms.SignerInfo({
             'version': 'v1',
@@ -1063,6 +1094,7 @@ class DummyTimeStamper(TimeStamper):
             'signature_algorithm': algos.SignedDigestAlgorithm(
                 {'algorithm': 'rsassa_pkcs1v15'}
             ),
+            'signed_attrs': signed_attrs,
             'signature': signature
         })
         signed_data = {
@@ -1070,8 +1102,8 @@ class DummyTimeStamper(TimeStamper):
             'version': 'v3',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': cms.EncapsulatedContentInfo({
-                'content_type': 'tst_info',
-                'content': tst_info
+                'content_type': cms.ContentType('tst_info'),
+                'content': cms.ParsableOctetString(tst_info_data)
             }),
             'certificates': [self.tsa_cert] + self.ca_chain,
             'signer_infos': [sig_info]
