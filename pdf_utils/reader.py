@@ -124,9 +124,27 @@ class PdfFileReader:
         else:
             return encrypt_ref
 
-    def get_object(self, ref, never_decrypt=False):
+    def get_object(self, ref, never_decrypt=False, transparent_decrypt=True):
+        """
+        Read an object from the input stream.
+
+        :param ref:
+            Reference to the object.
+        :param never_decrypt:
+            Skip decryption step (only needed for parsing /Encrypt)
+        :param transparent_decrypt:
+            If True, all encrypted objects are transparently decrypted by
+            default (in the sense that a user of the API in a PyPDF2 compatible
+            way would only "see" decrypted objects).
+            If False, this method may return a proxy object that still allows
+            access to the "original".
+        :return:
+        """
         retval = self.cache_get_indirect_object(ref.generation, ref.idnum)
         if retval is not None:
+            if transparent_decrypt and \
+                    isinstance(retval, generic.DecryptedObjectProxy):
+                retval = retval.decrypted
             return retval
         if ref.generation == 0 and \
                 ref.idnum in self.obj_stream_refs:
@@ -164,31 +182,16 @@ class PdfFileReader:
                 except AttributeError:
                     raise misc.PdfReadError("file has not been decrypted")
                 key = derive_key(shared_key, ref.idnum, ref.generation)
-                retval = self._decrypt_object(retval, key)
+                # make sure the object that lands in the cache is always
+                # a proxy object
+                retval = generic.proxy_encrypted_obj(retval, key)
         else:
-            logger.warning(
-                "Object %d %d not defined." %
-                (ref.idnum, ref.generation),
-                misc.PdfReadWarning
-            )
             raise misc.PdfReadError("Could not find object.")
-        self.cache_indirect_object(ref.generation,
-                                   ref.idnum, retval)
+        self.cache_indirect_object(ref.generation, ref.idnum, retval)
+        if transparent_decrypt and \
+                isinstance(retval, generic.DecryptedObjectProxy):
+            retval = retval.decrypted
         return retval
-
-    def _decrypt_object(self, obj, key):
-        if isinstance(obj, generic.ByteStringObject) or \
-                isinstance(obj, generic.TextStringObject):
-            obj = generic.pdf_string(rc4_encrypt(key, obj.original_bytes))
-        elif isinstance(obj, generic.StreamObject):
-            obj._data = rc4_encrypt(key, obj._data)
-        elif isinstance(obj, generic.DictionaryObject):
-            for dictkey, value in list(obj.items()):
-                obj[dictkey] = self._decrypt_object(value, key)
-        elif isinstance(obj, generic.ArrayObject):
-            for i in range(len(obj)):
-                obj[i] = self._decrypt_object(obj[i], key)
-        return obj
 
     def read_object_header(self, stream):
         # Should never be necessary to read out whitespace, since the
@@ -530,12 +533,12 @@ class PdfFileReader:
             key = _alg33_1(password, rev, keylen)
             owner_token = encrypt["/O"].get_object()
             if rev == 2:
-                userpass = misc.rc4_encrypt(key, owner_token)
+                userpass = rc4_encrypt(key, owner_token)
             else:
                 val = owner_token
                 for i in range(19, -1, -1):
                     new_key = bytes(b ^ i for b in key)
-                    val = misc.rc4_encrypt(new_key, val)
+                    val = rc4_encrypt(new_key, val)
                 userpass = val
             owner_password, key = self._auth_user_password(userpass)
             if owner_password:

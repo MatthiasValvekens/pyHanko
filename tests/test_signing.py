@@ -20,6 +20,10 @@ MINIMAL = read_all(PDF_DATA_DIR + '/minimal.pdf')
 MINIMAL_ONE_FIELD = read_all(PDF_DATA_DIR + '/minimal-with-field.pdf')
 MINIMAL_TWO_FIELDS = read_all(PDF_DATA_DIR + '/minimal-two-fields.pdf')
 
+# user/owner passwords are 'usersecret' and 'ownersecret' respectively
+MINIMAL_RC4 = read_all(PDF_DATA_DIR + '/minimal-rc4.pdf')
+MINIMAL_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-rc4.pdf')
+
 SELF_SIGN = sign.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',
     CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
@@ -173,6 +177,20 @@ def test_sign_field_filled():
     val2(out2)
 
 
+@pytest.mark.parametrize('file', [MINIMAL, MINIMAL_ONE_FIELD])
+def test_sign_new(file):
+    w = IncrementalPdfFileWriter(BytesIO(file))
+    out = sign.sign_pdf(
+        w, sign.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    field_name = sig_obj = None
+    sig_fields = sign.enumerate_sig_fields(r)
+    while field_name != 'SigNew':
+        field_name, sig_obj, _ = next(sig_fields)
+    val_trusted(r, sig_obj)
+
+
 def test_dummy_timestamp():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
@@ -187,3 +205,44 @@ def test_dummy_timestamp():
     validity = val_trusted(r, sig_obj)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
+
+
+# try both the user password and the owner password
+@pytest.mark.parametrize('password', [b'usersecret', b'ownersecret'])
+def test_sign_crypt_rc4(password):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD_RC4))
+    w.encrypt(password)
+    out = sign.sign_pdf(
+        w, sign.PdfSignatureMetadata(), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    r = PdfFileReader(out)
+    r.decrypt(password)
+    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    val_trusted(r, sig_obj)
+
+
+sign_crypt_rc4_new_params = [
+    [b'usersecret', MINIMAL_RC4],
+    [b'usersecret', MINIMAL_ONE_FIELD_RC4],
+    [b'ownersecret', MINIMAL_RC4],
+    [b'ownersecret', MINIMAL_ONE_FIELD_RC4]
+]
+
+
+@pytest.mark.parametrize('password, file', sign_crypt_rc4_new_params)
+def test_sign_crypt_rc4_new(password, file):
+    w = IncrementalPdfFileWriter(BytesIO(file))
+    w.encrypt(password)
+    out = sign.sign_pdf(
+        w, sign.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    out.seek(0)
+    r = PdfFileReader(out)
+    r.decrypt(password)
+    field_name = sig_obj = None
+    sig_fields = sign.enumerate_sig_fields(r)
+    while field_name != 'SigNew':
+        field_name, sig_obj, _ = next(sig_fields)
+    val_trusted(r, sig_obj)

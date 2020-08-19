@@ -353,11 +353,23 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
 
     if isinstance(sig_object, generic.IndirectObject):
         sig_object = sig_object.get_object()
+    assert isinstance(sig_object, generic.DictionaryObject)
     try:
-        pkcs7_content = sig_object['/Contents']
+        pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
         byte_range = sig_object['/ByteRange']
     except KeyError:
         raise ValueError('Signature PDF object is not correctly formatted')
+
+    # we need the pkcs7_content raw, so we need to deencapsulate a couple
+    # pieces of data here.
+    if isinstance(pkcs7_content, generic.DecryptedObjectProxy):
+        # it was a direct reference, so just grab the raw one
+        pkcs7_content = pkcs7_content.raw_object
+    elif isinstance(pkcs7_content, generic.IndirectObject):
+        pkcs7_content = reader.get_object(
+            pkcs7_content, transparent_decrypt=False
+        )
+
     message = cms.ContentInfo.load(pkcs7_content)
     signed_data = message['content']
     sd_digest = signed_data['digest_algorithms'][0]

@@ -120,6 +120,15 @@ class BooleanObject(PdfObject):
 
 
 class ArrayObject(list, PdfObject):
+
+    # transparently decrypt, but otherwise don't dereference
+    #  (keeps PyPDF2 behaviour)
+    def __getitem__(self, item):
+        value = list.__getitem__(self, item)
+        if isinstance(value, DecryptedObjectProxy):
+            return value.decrypted
+        return value
+
     def write_to_stream(self, stream, encryption_key):
         stream.write(b"[")
         for data in self:
@@ -469,8 +478,12 @@ class NameObject(str, PdfObject):
 
 
 class DictionaryObject(dict, PdfObject):
-    def raw_get(self, key):
-        return dict.__getitem__(self, key)
+    def raw_get(self, key, decrypt=True):
+        val = dict.__getitem__(self, key)
+        if decrypt and isinstance(val, DecryptedObjectProxy):
+            return val.decrypted
+        else:
+            return val
 
     def __setitem__(self, key, value):
         if not isinstance(key, PdfObject):
@@ -592,9 +605,11 @@ class DictionaryObject(dict, PdfObject):
 
 
 class StreamObject(DictionaryObject):
-    def __init__(self):
-        super().__init__()
-        self._data = None
+    def __init__(self, dict_data=None, stream_data=None, **kwargs):
+        # since {} is falsy, this is better
+        dict_data = dict_data if dict_data is not None else {}
+        super().__init__(dict_data, **kwargs)
+        self._data = stream_data
         self.decodedSelf = None
 
     def write_to_stream(self, stream, encryption_key):
@@ -608,6 +623,8 @@ class StreamObject(DictionaryObject):
         stream.write(data)
         stream.write(b"\nendstream")
 
+    # TODO get rid of this function, it's a holdover from PyPDF2 that I don't
+    #  particularly like
     @staticmethod
     def initialize_from_dictionary(data):
         if "/Filter" in data:
@@ -742,3 +759,59 @@ assert len(_pdfDocEncoding) == 256
 _pdfDocEncoding_rev = {char: ix for ix, char in enumerate(_pdfDocEncoding)}
 
 pdf_name = NameObject
+PROXYABLE = (TextStringObject, ByteStringObject, DictionaryObject, ArrayObject)
+
+
+def proxy_encrypted_obj(encrypted_obj, key):
+    if isinstance(encrypted_obj, PROXYABLE):
+        return DecryptedObjectProxy(encrypted_obj, key)
+    else:
+        return encrypted_obj
+
+
+class DecryptedObjectProxy(PdfObject):
+
+    def __init__(self, raw_object: PdfObject, key):
+        self.raw_object = raw_object
+        self.key = key
+        self._decrypted = None
+
+    @property
+    def decrypted(self):
+        decrypted = self._decrypted
+        if decrypted is not None:
+            return decrypted
+
+        obj = self.raw_object
+        key = self.key
+        if isinstance(obj, ByteStringObject) or \
+                isinstance(obj, TextStringObject):
+            decrypted = pdf_string(rc4_encrypt(key, obj.original_bytes))
+        elif isinstance(obj, DictionaryObject):
+            decrypted_entries = {
+                dictkey: proxy_encrypted_obj(value, key)
+                for dictkey, value in obj.items()
+            }
+            if isinstance(obj, StreamObject):
+                decrypted = StreamObject(
+                    decrypted_entries, stream_data=rc4_encrypt(key, obj._data)
+                )
+            else:
+                decrypted = DictionaryObject(decrypted_entries)
+        elif isinstance(obj, ArrayObject):
+            decrypted_map = map(lambda v: proxy_encrypted_obj(v, key), obj)
+            decrypted = ArrayObject(decrypted_map)
+        else:
+            raise TypeError(f'Object of type {type(obj)} is not proxyable.')
+        self._decrypted = decrypted
+        return decrypted
+
+    def write_to_stream(self, stream, encryption_key):
+        # maybe the encryption key for this object changed (due to it being
+        # included as part of a larger object or somesuch, without proper
+        # dereferencing), so to avoid unexpected shenanigans, let's start from
+        # scratch.
+        self.decrypted.write_to_stream(stream, encryption_key)
+
+    def get_object(self):
+        return self.decrypted
