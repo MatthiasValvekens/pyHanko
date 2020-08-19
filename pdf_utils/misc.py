@@ -96,37 +96,6 @@ def read_until_regex(stream, regex, ignore_eof=False):
     return name
 
 
-class RC4:
-
-    def __init__(self, key):
-        sigma = bytearray(range(256))
-        j = 0
-        for i in range(256):
-            j = (j + sigma[i] + key[i % len(key)]) % 256
-            sigma[i], sigma[j] = sigma[j], sigma[i]
-
-        self.sigma = sigma
-        self.i = self.j = 0
-
-    def __next__(self):
-        sigma = self.sigma
-        self.i = i = (self.i + 1) % 256
-        self.j = j = (self.j + sigma[i]) % 256
-        sigma[i], sigma[j] = sigma[j], sigma[i]
-        t = sigma[(sigma[i] + sigma[j]) % 256]
-        return t
-
-    def __iter__(self):
-        return self
-
-    def crypt(self, data):
-        return bytearray(b ^ t for b, t in zip(data, self))
-
-
-def rc4_encrypt(key, plaintext):
-    return RC4(key).crypt(plaintext)
-
-
 class PyPdfError(Exception):
     pass
 

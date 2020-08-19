@@ -6,11 +6,12 @@ Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 import re
 import binascii
 from .misc import (
-    read_non_whitespace, rc4_encrypt, skip_over_comment, read_until_regex
+    read_non_whitespace, skip_over_comment, read_until_regex
 )
 from .misc import PdfStreamError, PdfReadError, PdfReadWarning
 import logging
 from . import filters
+from .crypt import rc4_encrypt
 import decimal
 import codecs
 
@@ -261,7 +262,7 @@ class NumberObject(int, PdfObject):
 def pdf_string(string):
     if isinstance(string, str):
         return TextStringObject(string)
-    elif isinstance(string, bytes):
+    elif isinstance(string, (bytes, bytearray)):
         try:
             if string.startswith(codecs.BOM_UTF16_BE):
                 retval = TextStringObject(string.decode("utf-16"))

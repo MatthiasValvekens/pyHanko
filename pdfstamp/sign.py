@@ -1,3 +1,4 @@
+import binascii
 import hashlib
 import os
 import logging
@@ -116,8 +117,7 @@ class PKCS7Placeholder(generic.PdfObject):
     def original_bytes(self):
         return self.value
 
-    # always ignore encryption key
-    # (I think this is correct, but testing is required)
+    # always ignore encryption key, since this is a placeholder
     # noinspection PyPep8Naming, PyUnusedLocal
     def write_to_stream(self, stream, encryption_key):
         start = stream.tell()
@@ -346,6 +346,8 @@ MECHANISMS = (
 def validate_pdf_signature(reader: PdfFileReader, sig_object,
                            signer_validation_context=None,
                            ts_validation_context=None) -> PDFSignatureStatus:
+    if sig_object is None:
+        raise ValueError('Signature is empty')
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
@@ -1337,10 +1339,14 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     md.update(output_buffer[sig_end:])
     output_buffer.release()
 
-    signature = signer.sign(
+    signature_bytes = signer.sign(
         md.digest(), signature_meta.md_algorithm, timestamp=timestamp
-    ).hex().encode('ascii')
-
+    )
+    signature = binascii.hexlify(signature_bytes)
+    # NOTE: the PDF spec is not completely clear on this, but
+    # signature contents are NOT supposed to be encrypted.
+    # Perhaps this falls under the "strings in encrypted containers"
+    # denominator in § 7.6.1?
     assert len(signature) <= bytes_reserved, (len(signature), bytes_reserved)
 
     # +1 to skip the '<'

@@ -5,8 +5,7 @@ from io import BytesIO
 from . import generic
 from .misc import read_non_whitespace
 from . import misc
-from hashlib import md5
-from .crypt import _alg33_1, _alg34, _alg35
+from .crypt import _alg33_1, _alg34, _alg35, derive_key, rc4_encrypt
 
 import logging
 
@@ -160,17 +159,11 @@ class PdfFileReader:
 
             # override encryption is used for the /Encrypt dictionary
             if not never_decrypt and self.encrypted:
-                # if we don't have the encryption key:
-                if not hasattr(self, '_decryption_key'):
+                try:
+                    shared_key = self._decryption_key
+                except AttributeError:
                     raise misc.PdfReadError("file has not been decrypted")
-                # otherwise, decrypt here...
-                import struct
-                pack1 = struct.pack("<i", ref.idnum)[:3]
-                pack2 = struct.pack("<i", ref.generation)[:2]
-                key = self._decryption_key + pack1 + pack2
-                assert len(key) == (len(self._decryption_key) + 5)
-                md5_hash = md5(key).digest()
-                key = md5_hash[:min(16, len(self._decryption_key) + 5)]
+                key = derive_key(shared_key, ref.idnum, ref.generation)
                 retval = self._decrypt_object(retval, key)
         else:
             logger.warning(
@@ -186,9 +179,9 @@ class PdfFileReader:
     def _decrypt_object(self, obj, key):
         if isinstance(obj, generic.ByteStringObject) or \
                 isinstance(obj, generic.TextStringObject):
-            obj = generic.pdf_string(misc.rc4_encrypt(key, obj.original_bytes))
+            obj = generic.pdf_string(rc4_encrypt(key, obj.original_bytes))
         elif isinstance(obj, generic.StreamObject):
-            obj._data = misc.rc4_encrypt(key, obj._data)
+            obj._data = rc4_encrypt(key, obj._data)
         elif isinstance(obj, generic.DictionaryObject):
             for dictkey, value in list(obj.items()):
                 obj[dictkey] = self._decrypt_object(value, key)
@@ -504,7 +497,7 @@ class PdfFileReader:
         the correct decryption key that will allow the document to be used with
         this library.
 
-        :param str password: The password to match.
+        :param bytes password: The password to match.
         :return: ``0`` if the password failed, ``1`` if the password matched the
             user password, and ``2`` if the password matched the owner password.
         :rtype: int

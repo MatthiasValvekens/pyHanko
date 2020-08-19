@@ -4,7 +4,6 @@ import os
 from io import BytesIO
 
 from . import generic
-from .crypt import _alg34, _alg35
 
 from .reader import PdfFileReader
 from hashlib import md5
@@ -139,13 +138,6 @@ class IncrementalPdfFileWriter:
         self.input_stream = input_stream
         self.prev = prev = PdfFileReader(input_stream)
         self.objects_to_update = {}
-        # TODO This is a bit silly. Should perhaps read the spec
-        # more carefully to figure out a way to deal with these things
-        # properly. The write logic should already deal with object 
-        # generations properly, so it's a matter of getting object
-        # registration on board.
-        # FIXME this is also borked in cases with xrefstream, since
-        # PyPDF2 does not fully populate the trailer in this case
         self._lastobj_id = prev.trailer['/Size']
 
         # subsume root/info references
@@ -313,28 +305,8 @@ class IncrementalPdfFileWriter:
             raise ValueError(
                 'Original document does not have an encryption dictionary'
             )
-        encrypt = encrypt_ref.get_object()
-        use_128bit = encrypt["/V"] == 2
 
-        # see § 7.6.3.2 in ISO 32000
-        user_access_flags = encrypt["/P"]
-        owner_verif_material = encrypt["/O"]
-
-        # TODO figure out what the first item in deriv_result is for
-        if use_128bit:
-            deriv_result = _alg35(
-                password=user_pwd, rev=3, keylen=16,
-                owner_entry=owner_verif_material,
-                p_entry=user_access_flags, id1_entry=self._document_id[0],
-                metadata_encrypt=False
-            )
-        else:
-            deriv_result = _alg34(
-                password=user_pwd, owner_entry=owner_verif_material,
-                p_entry=user_access_flags, id1_entry=self._document_id[0]
-            )
-
-        self._encrypt_key = deriv_result[1]
+        self._encrypt_key = self.prev._decryption_key
         self._encrypt = encrypt_ref
 
     def find_page_for_modification(self, page_ix, repair_direct_pages=True):
