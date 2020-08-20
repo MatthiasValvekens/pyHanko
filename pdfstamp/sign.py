@@ -7,7 +7,7 @@ import requests
 from base64 import b64encode
 from datetime import datetime
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import IntFlag
 from io import BytesIO
 from typing import List, Optional, Set, ClassVar, Type, TypeVar
 
@@ -395,6 +395,8 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
     # TODO implement logic to detect whether
     #  the modifications made are permissible
 
+    # TODO validate /SV constraints if present!
+
     raw_digest = md.digest()
 
     status_kwargs = {'complete_document': complete_document}
@@ -734,13 +736,134 @@ class PKCS11Signer(Signer):
         self._loaded = True
 
 
-# TODO add more customisability
+class SigSeedValFlags(IntFlag):
+    """
+    Flags for the /Ff entry in the seed value dictionary for a dictionary field.
+    These mark which of the constraints are to be strictly enforced, as opposed
+    to optional ones.
+    Note: not all constraint types (and hence not all flags) are supported by
+    this library.
+    """
 
+    FILTER = 1
+    SUBFILTER = 2
+    V = 4
+    REASONS = 8
+    LEGAL_ATTESTATION = 16
+    ADD_REV_INFO = 32
+    DIGEST_METHOD = 64
+
+
+class SigCertConstraintFlags:
+    """
+    Flags for the /Ff entry in the certificate seed value dictionary for
+    a dictionary field. These mark which of the constraints are to be
+    strictly enforced, as opposed to optional ones.
+    """
+
+    SUBJECT = 1
+    ISSUER = 2
+    OID = 4
+    SUBJECT_DN = 8
+    RESERVED = 16
+    KEY_USAGE = 32
+    URL = 64
+
+
+def x509_name_keyval_pairs(name: x509.Name):
+    rdns: x509.RDNSequence = name.chosen
+    for rdn in rdns:
+        for type_and_value in rdn:
+            oid: x509.NameType = type_and_value['type']
+            # these are all some kind of string, and the PDF
+            # standard says that the value should be a text string object,
+            # so we just have asn1crypto convert everything to strings
+            value = type_and_value['value']
+            yield oid.dotted, value.native
+            # these should be strings
+
+
+@dataclass(frozen=True)
+class SigCertConstraints:
+    """
+    See Table 235 in ISO 32000-1
+    """
+    flags: SigCertConstraintFlags = 0
+    subjects: List[x509.Certificate] = None
+    subject_dns: List[x509.Name] = None
+    issuers: List[x509.Certificate] = None
+    info_url: str = None
+    url_type: generic.NameObject = pdf_name('/Browser')
+
+    # TODO support key usage and OID constraints
+
+    def as_pdf_object(self):
+        result = generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/SVCert'),
+            pdf_name('/Ff'): generic.NumberObject(self.flags),
+        })
+        if self.subjects is not None:
+            result[pdf_name('/Subject')] = generic.ArrayObject(
+                generic.ByteStringObject(cert.dump())
+                for cert in self.subjects
+            )
+        if self.subject_dns is not None:
+            # FIXME Adobe Reader seems to ignore this for some reason.
+            #  Should try to figure out what I'm doing wrong
+            result[pdf_name('/SubjectDN')] = generic.ArrayObject(
+                generic.DictionaryObject({
+                    pdf_name('/' + oid): pdf_string(value)
+                    for oid, value in x509_name_keyval_pairs(subj_dn)
+                }) for subj_dn in self.subject_dns
+            )
+        if self.issuers is not None:
+            result[pdf_name('/Issuer')] = generic.ArrayObject(
+                generic.ByteStringObject(cert.dump())
+                for cert in self.issuers
+            )
+        if self.info_url is not None:
+            result[pdf_name('/URL')] = pdf_string(self.info_url)
+            result[pdf_name('/URLType')] = self.url_type
+
+        return result
+
+
+# TODO support other seed value dict entries
+@dataclass(frozen=True)
+class SigSeedValueSpec:
+    flags: SigSeedValFlags = 0
+    reasons: List[str] = None
+    timestamp_server_url: str = None
+    cert: SigCertConstraints = None
+
+    def as_pdf_object(self):
+        result = generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/SV'),
+            pdf_name('/Ff'): generic.NumberObject(self.flags),
+        })
+        if self.reasons is not None:
+            result[pdf_name('/Reasons')] = generic.ArrayObject(
+                pdf_string(reason) for reason in self.reasons
+            )
+        if self.timestamp_server_url is not None:
+            result[pdf_name('/TimeStamp')] = generic.DictionaryObject({
+                pdf_name('/URL'): pdf_string(self.timestamp_server_url),
+                # why would you bother including a TSA URL and then make the
+                # timestamp optional?
+                pdf_name('/Ff'): generic.NumberObject(1)
+            })
+        if self.cert is not None:
+            result[pdf_name('/Cert')] = self.cert.as_pdf_object()
+        return result
+
+
+# TODO add more customisability appearance-wise
 @dataclass(frozen=True)
 class SigFieldSpec:
     sig_field_name: str
     on_page: int = 0
     box: (int, int, int, int) = None
+    seed_value_dict: SigSeedValueSpec = None
 
     @property
     def dimensions(self):
@@ -749,7 +872,7 @@ class SigFieldSpec:
             return abs(x1 - x2), abs(y1 - y2)
 
 
-class DocMDPPerm(IntEnum):
+class DocMDPPerm(IntFlag):
     """
     Cf. Table 254  in ISO 32000
     """
@@ -984,7 +1107,7 @@ def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
     page_list = root['/Pages']['/Kids']
     for sp in sig_field_specs:
         # use default appearance
-        field_created, _ = _prepare_sig_field(
+        field_created, sig_field_ref = _prepare_sig_field(
             sp.sig_field_name, root, update_writer=pdf_out,
             existing_fields_only=False, box=sp.box,
             include_on_page=page_list[sp.on_page]
@@ -994,6 +1117,12 @@ def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
                 'Signature field with name %s already exists.'
                 % sp.sig_field_name
             )
+
+        if sp.seed_value_dict is not None:
+            sig_field = sig_field_ref.get_object()
+            # /SV must be an indirect reference as per the spec
+            sv_ref = pdf_out.add_object(sp.seed_value_dict.as_pdf_object())
+            sig_field[pdf_name('/SV')] = sv_ref
 
     output = BytesIO()
     pdf_out.write(output)
