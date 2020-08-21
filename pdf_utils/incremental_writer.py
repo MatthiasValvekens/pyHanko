@@ -123,7 +123,7 @@ class XRefStream(generic.StreamObject):
 
         self[pdf_name('/Index')] = index_entry
         self._data = stream_content.getbuffer()
-        super().write_to_stream(stream, encryption_key)
+        super().write_to_stream(stream, None)
 
 
 resource_dict_names = map(pdf_name, [
@@ -531,19 +531,14 @@ class IncrementalPdfFileWriter:
 def init_xobject_dictionary(command_stream, box_width, box_height,
                             resources=None):
     resources = resources or generic.DictionaryObject()
-    return generic.StreamObject.initialize_from_dictionary({
-        '__streamdata__': command_stream,
-        # PyPDF2 is bizarre about /Length. It requires the /Length attribute
-        #  in initializeFromDictionary (because deleting it produces a KeyError)
-        #  but then simply recomputes it as needed.
-        pdf_name('/Length'): len(command_stream),
+    return generic.StreamObject({
         pdf_name('/BBox'): generic.ArrayObject(list(
             map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
         )),
         pdf_name('/Resources'): resources,
         pdf_name('/Type'): pdf_name('/XObject'),
         pdf_name('/Subtype'): pdf_name('/Form')
-    })
+    }, stream_data=command_stream)
 
 
 class AnnotAppearances:

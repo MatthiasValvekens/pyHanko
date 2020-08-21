@@ -5,6 +5,8 @@ Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 
 import re
 import binascii
+from typing import Iterator, Tuple, Optional
+
 from .misc import (
     read_non_whitespace, skip_over_comment, read_until_regex
 )
@@ -19,7 +21,7 @@ __all__ = [
     'PdfObject', 'NullObject', 'BooleanObject', 'ArrayObject',
     'IndirectObject', 'FloatObject', 'NumberObject', 'pdf_name', 'pdf_string',
     'ByteStringObject', 'TextStringObject', 'NameObject', 'DictionaryObject',
-    'StreamObject', 'DecodedStreamObject', 'EncodedStreamObject', 'read_object'
+    'StreamObject', 'read_object'
 ]
 
 ObjectPrefix = b'/<[tf(n%'
@@ -86,6 +88,7 @@ class PdfObject(object):
 
 
 class NullObject(PdfObject):
+
     def write_to_stream(self, stream, encryption_key):
         stream.write(b"null")
 
@@ -95,6 +98,12 @@ class NullObject(PdfObject):
         if nulltxt != b"null":
             raise PdfReadError("Could not read Null object")
         return NullObject()
+
+    def __eq__(self, other):
+        return self is other or isinstance(other, NullObject)
+
+    def __bool__(self):
+        return False
 
 
 class BooleanObject(PdfObject):
@@ -554,6 +563,7 @@ class DictionaryObject(dict, PdfObject):
 
         pos = stream.tell()
         s = read_non_whitespace(stream)
+        stream_data = None
         if s == b's' and stream.read(5) == b'tream':
             eol = stream.read(1)
             # odd PDF file output has spaces after 'stream' keyword
@@ -572,7 +582,7 @@ class DictionaryObject(dict, PdfObject):
                 t = stream.tell()
                 length = pdf.get_object(length)
                 stream.seek(t, 0)
-            data["__streamdata__"] = stream.read(length)
+            stream_data = stream.read(length)
             e = read_non_whitespace(stream)
             ndstream = stream.read(8)
             if (e + ndstream) != b"endstream":
@@ -587,7 +597,7 @@ class DictionaryObject(dict, PdfObject):
                 end = stream.read(9)
                 if end == b"endstream":
                     # we found it by looking back one character further.
-                    data["__streamdata__"] = data["__streamdata__"][:-1]
+                    stream_data = stream_data[:-1]
                 else:
                     stream.seek(pos, 0)
                     raise PdfReadError(
@@ -596,101 +606,107 @@ class DictionaryObject(dict, PdfObject):
                     )
         else:
             stream.seek(pos, 0)
-        if "__streamdata__" in data:
-            return StreamObject.initialize_from_dictionary(data)
+        if stream_data is not None:
+            # pass in everything as encoded data, the StreamObject class
+            # will take care of decoding as necessary
+            return StreamObject(data, encoded_data=stream_data)
         else:
-            retval = DictionaryObject()
-            retval.update(data)
-            return retval
+            return DictionaryObject(data)
 
 
 class StreamObject(DictionaryObject):
-    def __init__(self, dict_data=None, stream_data=None, **kwargs):
-        # since {} is falsy, this is better
-        dict_data = dict_data if dict_data is not None else {}
+    def __init__(self, dict_data=None, stream_data=None, encoded_data=None,
+                 **kwargs):
+        dict_data = dict_data or {}
         super().__init__(dict_data, **kwargs)
         self._data = stream_data
+        self._encoded_data = encoded_data
         self.decodedSelf = None
 
+    def _filters(self) -> Iterator[Tuple[str, Optional[dict]]]:
+        try:
+            filter_arr = self[pdf_name('/Filter')]
+        except KeyError:
+            return
+
+        if isinstance(filter_arr, NameObject):
+            # we have a single filter instance
+            filter_arr = (filter_arr,)
+        elif not isinstance(filter_arr, ArrayObject):
+            raise TypeError(
+                '/Filter should be a name object or an array of names.'
+            )
+
+        try:
+            decode_params = self[pdf_name('/DecodeParms')]
+            if isinstance(decode_params, DictionaryObject):
+                # one instance
+                decode_params = (decode_params,)
+            if isinstance(decode_params, (ArrayObject, tuple)):
+                lendiff = len(filter_arr) - len(decode_params)
+                # this should be zero, but let's be lenient
+                if lendiff > 0:
+                    decode_params += [None] * lendiff
+        except KeyError:
+            decode_params = [None] * len(filter_arr)
+
+        yield from zip(filter_arr, decode_params)
+
+    def _stream_decoders(self) -> Iterator[Tuple[filters.Decoder, dict]]:
+        for filter_type, params in self._filters():
+            try:
+                if params is None or isinstance(params, NullObject):
+                    params = {}
+                yield filters.DECODERS[filter_type], params
+            except KeyError:
+                raise NotImplementedError(
+                    "Filters of type %s are not supported." % filter_type
+                )
+
+    def strip_filters(self):
+        """
+        Ensure the stream is decoded, and remove any filters.
+        :return:
+        """
+        self._data = self._encoded_data = self.data
+        self.pop(pdf_name('/Filter'))
+        self.pop(pdf_name('/DecodeParms'))
+
+    @property
+    def data(self):
+        if self._data is None:
+            data = self._encoded_data
+            if data is None:
+                return None
+            for filter_cls, decode_params in self._stream_decoders():
+                data = filter_cls.decode(data, decode_params)
+            self._data = data
+        return self._data
+
+    @property
+    def encoded_data(self):
+        if self._encoded_data is None:
+            data = self._data
+            if data is None:
+                return None
+            decoders = tuple(self._stream_decoders())
+            for filter_cls, decode_params in reversed(decoders):
+                data = filter_cls.encode(data, decode_params)
+            self._encoded_data = data
+        return self._encoded_data
+
+
     def write_to_stream(self, stream, encryption_key):
-        self[NameObject("/Length")] = NumberObject(len(self._data))
-        DictionaryObject.write_to_stream(self, stream, encryption_key)
+        data = self.encoded_data
+        self[NameObject("/Length")] = NumberObject(len(data))
+        # write the dictionary
+        super().write_to_stream(stream, encryption_key)
         del self["/Length"]
         stream.write(b"\nstream\n")
-        data = self._data
         if encryption_key:
             data = rc4_encrypt(encryption_key, data)
         stream.write(data)
         stream.write(b"\nendstream")
-
-    # TODO get rid of this function, it's a holdover from PyPDF2 that I don't
-    #  particularly like
-    @staticmethod
-    def initialize_from_dictionary(data):
-        if "/Filter" in data:
-            retval = EncodedStreamObject()
-        else:
-            retval = DecodedStreamObject()
-        retval._data = data["__streamdata__"]
-        del data["__streamdata__"]
-        try:
-            del data["/Length"]
-        except KeyError:
-            pass
-        retval.update(data)
-        return retval
-
-    def flate_encode(self):
-        if "/Filter" in self:
-            f = self["/Filter"]
-            if isinstance(f, ArrayObject):
-                f.insert(0, NameObject("/FlateDecode"))
-            else:
-                newf = ArrayObject()
-                newf.append(NameObject("/FlateDecode"))
-                newf.append(f)
-                f = newf
-        else:
-            f = NameObject("/FlateDecode")
-        retval = EncodedStreamObject()
-        retval[NameObject("/Filter")] = f
-        retval._data = filters.FlateDecode.encode(self._data)
-        return retval
-
-
-class DecodedStreamObject(StreamObject):
-    def get_data(self):
-        return self._data
-
-    def set_data(self, data):
-        self._data = data
-
-
-class EncodedStreamObject(StreamObject):
-    def __init__(self):
-        super().__init__()
-        self.decodedSelf = None
-
-    def get_data(self):
-        if self.decodedSelf:
-            # cached version of decoded object
-            return self.decodedSelf.get_data()
-        else:
-            # create decoded object
-            decoded = DecodedStreamObject()
-
-            decoded._data = filters.decode_stream_data(self)
-            for key, value in list(self.items()):
-                if key not in ("/Length", "/Filter", "/DecodeParms"):
-                    decoded[key] = value
-            self.decodedSelf = decoded
-            return decoded._data
-
-    def set_data(self, data):
-        # TODO at least for flate, this can't be hard
-        raise PdfReadError(
-            "Creating EncodedStreamObject is not currently supported"
-        )
 
 
 def encode_pdfdocencoding(unicode_string):

@@ -200,14 +200,11 @@ class FontDescriptor(generic.DictionaryObject):
         stream_buf = BytesIO()
         # write the CFF table to the stream
         self.cff.compile(stream_buf, self.tt)
-        stream_length = stream_buf.tell()
         stream_buf.seek(0)
-        font_stream = generic.StreamObject.initialize_from_dictionary({
-            pdf_name('/Length'): stream_length,
+        font_stream = generic.StreamObject({
             # this is a Type0 CFF font program (see Table 126 in ISO 32000)
             pdf_name('/Subtype'): pdf_name('/CIDFontType0C'),
-            '__streamdata__': stream_buf.read()
-        })
+        }, stream_data=stream_buf.read())
         font_stream_ref = writer.add_object(font_stream)
         self[pdf_name('/FontFile3')] = font_stream_ref
         return font_stream_ref

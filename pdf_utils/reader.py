@@ -81,7 +81,7 @@ class PdfFileReader:
         assert stream_ref['/Type'] == '/ObjStm'
         # /N is the number of indirect objects in the stream
         assert idx < stream_ref['/N']
-        stream_data = BytesIO(stream_ref.get_data())
+        stream_data = BytesIO(stream_ref.data)
         for i in range(stream_ref['/N']):
             read_non_whitespace(stream_data)
             stream_data.seek(-1, os.SEEK_CUR)
@@ -236,7 +236,7 @@ class PdfFileReader:
         xrefstream = generic.read_object(stream, self)
         assert xrefstream["/Type"] == "/XRef"
         self.cache_indirect_object(generation, idnum, xrefstream)
-        stream_data = BytesIO(xrefstream.get_data())
+        stream_data = BytesIO(xrefstream.data)
         # Index pairs specify the subsections in the dictionary. If
         # none create one subsection that spans everything.
         idx_pairs = xrefstream.get("/Index", [0, xrefstream.get("/Size")])

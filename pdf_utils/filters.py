@@ -21,7 +21,7 @@ class Decoder:
         raise NotImplementedError
 
     @classmethod
-    def encode(cls, data: bytes) -> bytes:
+    def encode(cls, data: bytes, decode_params) -> bytes:
         raise NotImplementedError
 
 
@@ -86,7 +86,7 @@ class FlateDecode(Decoder):
             )
 
     @classmethod
-    def encode(cls, data):
+    def encode(cls, data, decode_params=None):
         return compress(data)
 
 
@@ -95,7 +95,7 @@ class FlateDecode(Decoder):
 class ASCIIHexDecode(Decoder):
 
     @classmethod
-    def encode(cls, data: bytes) -> bytes:
+    def encode(cls, data: bytes, decode_params=None) -> bytes:
         return binascii.hexlify(data)
 
     @classmethod
@@ -116,7 +116,7 @@ class ASCIIHexDecode(Decoder):
 class ASCII85Decode(Decoder):
 
     @classmethod
-    def encode(cls, data: bytes) -> bytes:
+    def encode(cls, data: bytes, decode_params=None) -> bytes:
         raise NotImplementedError
 
     @classmethod
@@ -148,7 +148,7 @@ class ASCII85Decode(Decoder):
 # mostly a dummy
 class CryptDecoder(Decoder):
     @classmethod
-    def encode(cls, data: bytes) -> bytes:
+    def encode(cls, data: bytes, decode_params) -> bytes:
         pass
 
     @classmethod
@@ -166,22 +166,3 @@ DECODERS = {
     '/ASCII85Decode': ASCII85Decode, '/A85': ASCII85Decode,
     '/Crypt': CryptDecoder
 }
-
-
-def decode_stream_data(stream):
-    from .generic import NameObject
-    filters = stream.get("/Filter", ())
-    if len(filters) and not isinstance(filters[0], NameObject):
-        # we have a single filter instance
-        filters = (filters,)
-    data = stream._data
-    # If there is no data to decode we should not try to decode the data.
-    if data:
-        for filterType in filters:
-            try:
-                filter_cls = DECODERS[filterType]
-            except KeyError:
-                raise NotImplementedError("unsupported filter %s" % filterType)
-            decode_params = stream.get("/DecodeParms", {})
-            data = filter_cls.decode(data, decode_params)
-    return data

@@ -266,10 +266,9 @@ class TextStamp(generic.StreamObject):
         stamp_paint = 'q 1 0 0 1 %g %g cm %s Do Q' % (
             rd(x), rd(y), resource_name
         )
-        stamp_wrapper_stream = generic.StreamObject.initialize_from_dictionary({
-            '__streamdata__': stamp_paint.encode('ascii'),
-            pdf_name('/Length'): len(stamp_paint)
-        })
+        stamp_wrapper_stream = generic.StreamObject(
+            stream_data=stamp_paint.encode('ascii')
+        )
         resources = generic.DictionaryObject({
             pdf_name('/XObject'): generic.DictionaryObject({
                 pdf_name(resource_name): stamp_ref
