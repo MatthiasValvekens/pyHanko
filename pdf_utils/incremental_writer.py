@@ -4,6 +4,7 @@ import os
 from io import BytesIO
 
 from . import generic
+from .misc import peek
 
 from .reader import PdfFileReader
 from hashlib import md5
@@ -25,17 +26,6 @@ def _derive_key(base_key, idnum, generation):
     key = base_key + pack1 + pack2
     md5_hash = md5(key).digest()
     return md5_hash[:min(16, len(base_key) + 5)]
-
-
-def peek(itr):
-    itr = iter(itr)
-    first = next(itr)
-
-    def _itr():
-        yield first
-        yield from itr
-
-    return first, _itr()
 
 
 # helper method to set up the xref table of an incremental update

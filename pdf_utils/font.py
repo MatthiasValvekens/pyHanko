@@ -3,7 +3,8 @@ from io import BytesIO
 from pdf_utils import generic
 from fontTools import ttLib, subset
 
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter, peek
+from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdf_utils.misc import peek
 
 pdf_name = generic.NameObject
 pdf_string = generic.pdf_string

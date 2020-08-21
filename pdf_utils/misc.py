@@ -114,3 +114,14 @@ class PdfReadWarning(UserWarning):
 
 class PdfStreamError(PdfReadError):
     pass
+
+
+def peek(itr):
+    itr = iter(itr)
+    first = next(itr)
+
+    def _itr():
+        yield first
+        yield from itr
+
+    return first, _itr()
