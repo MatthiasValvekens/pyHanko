@@ -150,14 +150,22 @@ def init_xobject_dictionary(command_stream, box_width, box_height,
 
 
 class BasePdfFileWriter:
+    output_version = (1, 7)
 
-    def __init__(self, root_ref, info_ref, document_id, obj_id_start=0,
+    def __init__(self, root, info, document_id, obj_id_start=0,
                  stream_xrefs=True):
         self.objects = {}
         self._lastobj_id = obj_id_start
 
-        self._root = root_ref
-        self._info = info_ref
+        if isinstance(root, generic.IndirectObject):
+            self._root = root
+        else:
+            self._root = self.add_object(root)
+
+        if info is None or isinstance(info, generic.IndirectObject):
+            self._info = info
+        else:
+            self._info = self.add_object(info)
         self._encrypt = self._encrypt_key = None
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs

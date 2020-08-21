@@ -20,12 +20,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.input_stream = input_stream
         self.prev = prev = PdfFileReader(input_stream)
         trailer = prev.trailer
-        # subsume root/info references
-        root = trailer.raw_get('/Root')
-        root_ref = generic.IndirectObject(root.idnum, root.generation, self)
+        root_ref = trailer.raw_get('/Root')
         try:
-            info = trailer.raw_get('/Info')
-            info_ref = generic.IndirectObject(info.idnum, info.generation, self)
+            info_ref = trailer.raw_get('/Info')
         except KeyError:
             # rare, but it can happen. /Info is not a required entry
             info_ref = None

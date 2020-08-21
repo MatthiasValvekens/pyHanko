@@ -274,14 +274,7 @@ class PdfFileReader:
                 # The first entry is the type
                 xref_type = get_entry(0)
                 # The rest of the elements depend on the xref_type
-                if xref_type == 0:
-                    # linked list of free objects
-                    # XXX these were assigned to something in the PyPDF source,
-                    # but the value wasn't being used anywhere.
-                    # TODO check the spec
-                    get_entry(1)
-                    get_entry(2)
-                elif xref_type == 1:
+                if xref_type == 1:
                     # objects that are in use but are not compressed
                     byte_offset = get_entry(1)
                     generation = get_entry(2)
@@ -296,9 +289,12 @@ class PdfFileReader:
                     generation = 0  # PDF spec table 18, generation is 0
                     if not used_before(num, generation):
                         self.obj_stream_refs[num] = (objstr_num, obstr_idx)
-                elif self.strict:
-                    raise misc.PdfReadError("Unknown xref type: %s" %
-                                            xref_type)
+                else:
+                    # either xref_type = 0 (freed object)
+                    # or it's some unknown type (=> ignore).
+                    # In either case, simply advance the cursor
+                    get_entry(1)
+                    get_entry(2)
 
         trailer_keys = "/Root", "/Encrypt", "/Info", "/ID", "/Size"
         for key in trailer_keys:
