@@ -496,3 +496,8 @@ class PdfFileWriter(BasePdfFileWriter):
         # write some binary characters to make sure the file is flagged
         # as binary (see § 7.5.2 in ISO 32000-1)
         stream.write(b'%\xc2\xa5\xc2\xb1\xc3\xab\n')
+
+    # I can't be arsed to actually implement encrypt() for newly written PDFs,
+    # since all security handlers specified in the 1.7 standard are insecure as
+    # hell. I'm going to keep the RC4 functionality in the incremental writer,
+    # since we still want to be able to sign old PDF files.
