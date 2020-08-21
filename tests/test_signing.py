@@ -7,22 +7,8 @@ from oscrypto import keys as oskeys
 from pdf_utils.reader import PdfFileReader
 from pdfstamp import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from .samples import *
 
-
-def read_all(fname):
-    with open(fname, 'rb') as f:
-        return f.read()
-
-
-CRYPTO_DATA_DIR = 'tests/data/crypto'
-PDF_DATA_DIR = 'tests/data/pdf'
-MINIMAL = read_all(PDF_DATA_DIR + '/minimal.pdf')
-MINIMAL_ONE_FIELD = read_all(PDF_DATA_DIR + '/minimal-with-field.pdf')
-MINIMAL_TWO_FIELDS = read_all(PDF_DATA_DIR + '/minimal-two-fields.pdf')
-
-# user/owner passwords are 'usersecret' and 'ownersecret' respectively
-MINIMAL_RC4 = read_all(PDF_DATA_DIR + '/minimal-rc4.pdf')
-MINIMAL_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-rc4.pdf')
 
 SELF_SIGN = sign.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',

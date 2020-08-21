@@ -1,10 +1,18 @@
+import os
 import struct
 from hashlib import md5
 from io import BytesIO
 
 from pdf_utils import generic
-from pdf_utils.generic import pdf_name
+from pdf_utils.generic import pdf_name, pdf_string
 from pdf_utils.misc import peek
+
+"""
+Utility classes for writing PDF files.
+Contains code from the PyPDF2 project, see LICENSE.PyPDF2
+"""
+
+VENDOR = 'pdfstamp'
 
 
 def _derive_key(base_key, idnum, generation):
@@ -268,3 +276,223 @@ class BasePdfFileWriter:
             page_obj[pdf_name('/Annots')] = annots
 
         annots.append(annot_ref)
+
+    def _walk_page_tree(self, page_ix, retrieve_parent):
+
+        # the spec says that this will always be an indirect reference
+        page_tree_root_ref = self.root.raw_get('/Pages')
+        assert isinstance(page_tree_root_ref, generic.IndirectObject)
+        page_tree_root = page_tree_root_ref.get_object()
+        try:
+            root_resources = page_tree_root['/Resources']
+        except KeyError:
+            root_resources = generic.DictionaryObject()
+
+        page_count = page_tree_root['/Count']
+        if not (0 <= page_ix < page_count):
+            raise ValueError('Page index out of range')
+
+        def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict,
+                     prev_last_indir):
+            last_indir = prev_last_indir
+            pages_obj = pages_obj_ref.get_object()
+            kids = pages_obj.raw_get('/Kids')
+            if isinstance(kids, generic.IndirectObject):
+                last_indir = kids
+                kids = kids.get_object()
+
+            try:
+                last_rsrc_dict = pages_obj.raw_get('/Resources')
+            except KeyError:
+                pass
+
+            cur_page_ix = first_page_ix
+            for kid_index, kid_ref in enumerate(kids):
+                # If this is not the case, the child node cannot possibly have
+                # a valid /Parent entry either, so let's assume that nobody
+                # screws up their PDF generator THAT badly
+                assert isinstance(kid_ref, generic.IndirectObject)
+
+                kid = kid_ref.get_object()
+
+                node_type = kid['/Type']
+                if node_type == '/Pages':
+                    # recurse into this branch if the page we need
+                    # is part of it
+                    desc_count = kid['/Count']
+                    if cur_page_ix <= page_ix < cur_page_ix + desc_count:
+                        return _recurse(
+                            cur_page_ix, kid_ref, last_rsrc_dict,
+                            kid_ref
+                        )
+                    cur_page_ix += desc_count
+                elif node_type == '/Page':
+                    if cur_page_ix == page_ix:
+                        if retrieve_parent:
+                            return (
+                                pages_obj_ref, kid_index, last_rsrc_dict,
+                                # we want to ignore the potential reference to
+                                # /Kids in this case
+                                prev_last_indir
+                            )
+                        else:
+                            try:
+                                last_rsrc_dict = kid.raw_get('/Resources')
+                            except KeyError:
+                                pass
+                            return kid_ref, last_rsrc_dict, last_indir
+                    else:
+                        cur_page_ix += 1
+            # This means the PDF is not standards-compliant
+            raise ValueError('Page not found')
+
+        return _recurse(0, page_tree_root, root_resources, page_tree_root_ref)
+
+    def find_page_container(self, page_ix):
+        """
+        Retrieve the node in the page tree containing the
+        page with index page_ix, along with the necessary objects to modify it
+        in an incremental update scenario.
+
+        :param page_ix:
+            The (zero-indexed) number of the page for which we want to
+            retrieve the parent.
+        :return:
+            A quadruple with the /Pages object (or a reference to it),
+            the index of the target page in said /Pages object,
+            (possibly inherited) resource dictionary, and a reference
+            to the object that needs to be marked for an update
+            if the /Pagees object is updated.
+        """
+        return self._walk_page_tree(page_ix, retrieve_parent=True)
+
+    def find_page_for_modification(self, page_ix):
+        """
+        Retrieve the page with index page_ix from the page tree, along with
+        the necessary objects to modify it in an incremental update scenario.
+
+        :param page_ix:
+            The (zero-indexed) number of the page to retrieve.
+        :return:
+            A triple with the page object (or a reference to it),
+            (possibly inherited) resource dictionary, and a reference
+            to the object that needs to be marked for an update
+            if the page object is updated.
+        """
+        return self._walk_page_tree(page_ix, retrieve_parent=False)
+
+    def insert_page(self, new_page, after=None):
+        """
+        Insert a page object into the tree.
+
+        :param new_page:
+            Page object to insert.
+        :param after:
+            Page number (zero-indexed) after which to insert the page.
+        :return:
+        """
+        if new_page['/Type'] != pdf_name('/Page'):
+            raise ValueError('Not a page object')
+        if '/Parent' in new_page:
+            raise ValueError('/Parent must not be set.')
+
+        page_tree_root_ref = self.root.raw_get('/Pages')
+        if after is None:
+            page_count = page_tree_root_ref.get_object()['/Count']
+            after = page_count - 1
+
+        if after == -1:
+            # there are no pages yet, this will be the first
+            pages_obj_ref = upd_boundary = page_tree_root_ref
+            kid_ix = -1
+        else:
+            pages_obj_ref, kid_ix, _, upd_boundary \
+                = self.find_page_container(after)
+
+        pages_obj = pages_obj_ref.get_object()
+        kids_ref = pages_obj.raw_get('/Kids')
+        if isinstance(kids_ref, generic.IndirectObject):
+            kids_update_boundary = kids_ref
+            kids = kids_ref.get_object()
+        else:
+            kids = kids_ref
+            kids_update_boundary = upd_boundary
+        # increase page count for all parents
+        parent = pages_obj
+        while parent is not None:
+            # can't use += 1 because of the way PyPDF2's generic types work
+            count = parent['/Count']
+            parent[pdf_name('/Count')] = generic.NumberObject(count + 1)
+            parent = parent.get('/Parent')
+        kids.insert(kid_ix + 1, self.add_object(new_page))
+        new_page[pdf_name('/Parent')] = pages_obj_ref
+        self.mark_update(upd_boundary)
+        if upd_boundary != kids_update_boundary:
+            self.mark_update(kids_update_boundary)
+
+
+class PageObject(generic.DictionaryObject):
+
+    # TODO be more clever with inheritable required attributes,
+    #  and enforce the requirements on insertion instead
+    # (setting /MediaBox at the page tree root seems to make sense, for example)
+    def __init__(self, contents, media_box, resources=None):
+        resources = resources or generic.DictionaryObject()
+
+        if isinstance(contents, list):
+            if not all(map(generic.is_indirect, contents)):
+                raise ValueError(
+                    'Contents array must consist of indirect references'
+                )
+            if not isinstance(contents, generic.ArrayObject):
+                contents = generic.ArrayObject(contents)
+        elif not isinstance(contents, generic.IndirectObject):
+            raise ValueError(
+                'Contents must be either an indirect reference or an array'
+            )
+
+        if len(media_box) != 4:
+            raise ValueError('Media box must consist of 4 coordinates.')
+        super().__init__({
+            pdf_name('/Type'): pdf_name('/Page'),
+            pdf_name('/MediaBox'): generic.ArrayObject(
+                map(generic.NumberObject, media_box)
+            ),
+            pdf_name('/Resources'): resources,
+            pdf_name('/Contents'): contents
+        })
+
+
+class PdfFileWriter(BasePdfFileWriter):
+
+    def __init__(self):
+        # root object
+        root = generic.DictionaryObject({
+            pdf_name("/Type"): pdf_name("/Catalog"),
+        })
+
+        id1 = generic.ByteStringObject(os.urandom(16))
+        id2 = generic.ByteStringObject(os.urandom(16))
+        id_obj = generic.ArrayObject([id1, id2])
+
+        # info object
+        info = generic.DictionaryObject({
+            pdf_name('/Producer'): pdf_string(VENDOR)
+        })
+
+        super().__init__(root, info, id_obj)
+
+        pages = generic.DictionaryObject({
+            pdf_name("/Type"): pdf_name("/Pages"),
+            pdf_name("/Count"): generic.NumberObject(0),
+            pdf_name("/Kids"): generic.ArrayObject(),
+        })
+
+        root[pdf_name('/Pages')] = self.add_object(pages)
+
+    def _write_header(self, stream):
+        major, minor = self.output_version
+        stream.write(f'%PDF-{major}.{minor}\n'.encode('ascii'))
+        # write some binary characters to make sure the file is flagged
+        # as binary (see § 7.5.2 in ISO 32000-1)
+        stream.write(b'%\xc2\xa5\xc2\xb1\xc3\xab\n')

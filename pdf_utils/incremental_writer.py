@@ -139,96 +139,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self._encrypt_key = self.prev._decryption_key
         self._encrypt = encrypt_ref
 
-    def find_page_for_modification(self, page_ix, repair_direct_pages=True):
-        """
-        Retrieve the page with index page_ix from the page tree, along with
-        the necessary objects to modify it.
-        :param page_ix:
-            The (zero-indexed) number of the page to retrieve.
-        :param repair_direct_pages:
-            The PDF spec mandates that /Kids be an array of indirect references.
-            Passing repair_direct_pages=True fixes this problem in noncompliant
-            PDFs, and also ensures that the first item returned by this method
-            is always an indirect reference.
-        :return:
-            A triple with the page object (or a reference to it),
-            (possibly inherited) resource dictionary, and a reference
-            to the object that needs to be marked for an update
-            if the page object is updated.
-        """
-        # the spec says that this will always be an indirect reference
-        page_tree_root_ref = self.root.raw_get('/Pages')
-        assert isinstance(page_tree_root_ref, generic.IndirectObject)
-        page_tree_root = page_tree_root_ref.get_object()
-        try:
-            root_resources = page_tree_root['/Resources']
-        except KeyError:
-            root_resources = generic.DictionaryObject()
-
-        page_count = page_tree_root['/Count']
-        if not (0 <= page_ix < page_count):
-            raise ValueError('Page index out of range')
-
-        def _recurse(first_page_ix, pages_obj, last_rsrc_dict, last_indir):
-            kids = pages_obj.raw_get('/Kids')
-            if isinstance(kids, generic.IndirectObject):
-                last_indir = kids
-                kids = kids.get_object()
-
-            try:
-                last_rsrc_dict = pages_obj.raw_get('/Resources')
-            except KeyError:
-                pass
-
-            cur_page_ix = first_page_ix
-            for kid_index, kid_ref in enumerate(kids):
-                if isinstance(kid_ref, generic.IndirectObject):
-                    # should always be the case, but let's play it safe
-                    recurse_last_indir = kid_ref
-                    kid = kid_ref.get_object()
-                else:
-                    kid = kid_ref
-                    if repair_direct_pages:
-                        # We force the entry in /Kids to be indirect as follows.
-
-                        # first, we register the content of the child node
-                        #  as a new object.
-                        kids[kid_index] = kid_ref = self.add_object(kid)
-                        # then we mark the current update boundary for
-                        # an update to reflect the previous update
-                        self.mark_update(last_indir)
-                        # further recursive branches do not need to update
-                        # all the way up to last_indir, only to kid_ref, so
-                        # we change the update boundary passed to the next
-                        # call to _recurse()
-                        recurse_last_indir = kid_ref
-                    else:
-                        recurse_last_indir = last_indir
-
-                node_type = kid['/Type']
-                if node_type == '/Pages':
-                    # recurse into this branch if the page we need
-                    # is part of it
-                    desc_count = kid['/Count']
-                    if cur_page_ix <= page_ix < cur_page_ix + desc_count:
-                        return _recurse(
-                            cur_page_ix, kid, last_rsrc_dict, recurse_last_indir
-                        )
-                    cur_page_ix += desc_count
-                elif node_type == '/Page':
-                    if cur_page_ix == page_ix:
-                        try:
-                            last_rsrc_dict = kid.raw_get('/Resources')
-                        except KeyError:
-                            pass
-                        return kid_ref, last_rsrc_dict, last_indir
-                    else:
-                        cur_page_ix += 1
-            # This means the PDF is not standards-compliant
-            raise ValueError('Page not found')
-
-        return _recurse(0, page_tree_root, root_resources, page_tree_root_ref)
-
     def add_stream_to_page(self, page_ix, stream_ref, resources=None):
         """
         Append an indirect stream object to a page in a PDF.
@@ -238,7 +148,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         # we pass in repair_direct_pages=True to ensure that we get
         #  a page object reference back, as opposed to a page object.
         page_obj_ref, res_ref, page_update_boundary \
-            = self.find_page_for_modification(page_ix, repair_direct_pages=True)
+            = self.find_page_for_modification(page_ix)
 
         page_obj = page_obj_ref.get_object()
 

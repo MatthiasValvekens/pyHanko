@@ -167,6 +167,9 @@ class ArrayObject(list, PdfObject):
         return arr
 
 
+def is_indirect(obj):
+    return isinstance(obj, IndirectObject)
+
 class IndirectObject(PdfObject):
     def __init__(self, idnum, generation, pdf):
         self.idnum = idnum
@@ -680,6 +683,8 @@ class StreamObject(DictionaryObject):
                 return None
             for filter_cls, decode_params in self._stream_decoders():
                 data = filter_cls.decode(data, decode_params)
+            if isinstance(data, memoryview):
+                data = data.tobytes()
             self._data = data
         return self._data
 
