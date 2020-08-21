@@ -7,8 +7,9 @@ from fontTools.ttLib import TTFont
 from pdf_utils.font import GlyphAccumulator
 
 from pdf_utils.incremental_writer import (
-    IncrementalPdfFileWriter, init_xobject_dictionary, AnnotAppearances,
+    IncrementalPdfFileWriter,
 )
+from pdf_utils.writer import init_xobject_dictionary
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -19,6 +20,21 @@ from pdf_utils.generic import pdf_name, pdf_string
 
 rd = lambda x: round(x, 4)
 
+
+class AnnotAppearances:
+
+    def __init__(self, normal, rollover=None, down=None):
+        self.normal = normal
+        self.rollover = rollover
+        self.down = down
+
+    def as_pdf_object(self):
+        res = generic.DictionaryObject({pdf_name('/N'): self.normal})
+        if self.rollover is not None:
+            res[pdf_name('/R')] = self.rollover
+        if self.down is not None:
+            res[pdf_name('/D')] = self.down
+        return res
 
 class PdfStreamImage(BaseImage):
     """

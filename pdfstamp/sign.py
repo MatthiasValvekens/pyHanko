@@ -25,10 +25,10 @@ from oscrypto import asymmetric, keys as oskeys
 from oscrypto.errors import SignatureError
 
 from pdf_utils.incremental_writer import (
-    IncrementalPdfFileWriter, AnnotAppearances,
+    IncrementalPdfFileWriter,
 )
 from pdf_utils.reader import PdfFileReader
-from pdfstamp.stamp import TextStampStyle, TextStamp
+from pdfstamp.stamp import TextStampStyle, TextStamp, AnnotAppearances
 
 logger = logging.getLogger(__name__)
 

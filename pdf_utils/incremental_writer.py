@@ -1,14 +1,10 @@
-import struct
 import os
 
-from io import BytesIO
-
 from . import generic
-from .misc import peek
 
 from .reader import PdfFileReader
-from hashlib import md5
 from .generic import pdf_name
+from .writer import _derive_key, write_xref_table, XRefStream
 
 """
 Utility class for writing incremental updates to PDF files.
@@ -16,110 +12,6 @@ Contains code from the PyPDF2 project, see LICENSE.PyPDF2
 """
 
 __all__ = ['IncrementalPdfFileWriter']
-
-
-def _derive_key(base_key, idnum, generation):
-    # Ripped out of PyPDF2
-    # See § 7.6.2 in ISO 32000
-    pack1 = struct.pack("<i", idnum)[:3]
-    pack2 = struct.pack("<i", generation)[:2]
-    key = base_key + pack1 + pack2
-    md5_hash = md5(key).digest()
-    return md5_hash[:min(16, len(base_key) + 5)]
-
-
-# helper method to set up the xref table of an incremental update
-def _contiguous_xref_chunks(position_dict):
-    previous_idnum = None
-    current_chunk = []
-
-    # iterate over keys in object ID order
-    key_iter = sorted(position_dict.keys(), key=lambda t: t[1])
-    (_, first_idnum), key_iter = peek(key_iter)
-    for ix in key_iter:
-        generation, idnum = ix
-
-        # the idnum jumped, so yield the current chunk
-        # and start a new one
-        if current_chunk and idnum != previous_idnum + 1:
-            yield first_idnum, current_chunk
-            current_chunk = []
-            first_idnum = idnum
-
-        # append the object reference to the current chunk
-        # (xref table requires position and generation entries)
-        current_chunk.append((position_dict[ix], generation))
-        previous_idnum = idnum
-
-    # there is always at least one chunk, so this is fine
-    yield first_idnum, current_chunk
-
-
-def write_xref_table(stream, position_dict):
-    xref_location = stream.tell()
-    stream.write(b'xref\n')
-    # Insert xref table subsections in contiguous chunks.
-    # This is necessarily more complicated than the implementation
-    # in PyPDF2 (see ISO 32000 § 7.5.4, esp. on updates)
-    subsections = _contiguous_xref_chunks(position_dict)
-    # insert origin of linked list of freed objects
-    # TODO support deleting objects
-    stream.write(b'0 1\n0000000000 65535 f \n')
-    for first_idnum, subsection in subsections:
-        # subsection header: list first object ID + length of subsection
-        header = '%d %d\n' % (first_idnum, len(subsection))
-        stream.write(header.encode('ascii'))
-        for position, generation in subsection:
-            entry = "%010d %05d n \n" % (position, generation)
-            stream.write(entry.encode('ascii'))
-
-    return xref_location
-
-
-class XRefStream(generic.StreamObject):
-
-    def __init__(self, position_dict):
-        super().__init__()
-        self.position_dict = position_dict
-
-        # type indicator is one byte wide
-        # we use longs to indicate positions of objects (>Q)
-        # two more bytes for the generation number of an uncompressed object
-        widths = map(generic.NumberObject, (1, 8, 2))
-        self.update({
-            pdf_name('/W'): generic.ArrayObject(widths),
-            pdf_name('/Type'): pdf_name('/XRef'),
-        })
-
-    def write_to_stream(self, stream, encryption_key):
-        # the caller is responsible for making sure that the stream 
-        # is registered in the position dictionary
-        if encryption_key is not None:
-            raise ValueError('XRef streams cannot be encrypted')
-        
-        index = [0, 1]
-        subsections = _contiguous_xref_chunks(self.position_dict)
-        stream_content = BytesIO()
-        # write null object
-        stream_content.write(b'\x00' * 9 + b'\xff\xff')
-        for first_idnum, subsection in subsections:
-            index += [first_idnum, len(subsection)]
-            for position, generation in subsection:
-                # TODO support compressing objects
-                stream_content.write(b'\x01')
-                stream_content.write(struct.pack('>Q', position))
-                stream_content.write(struct.pack('>H', generation))
-        index_entry = generic.ArrayObject(map(generic.NumberObject, index))
-
-        self[pdf_name('/Index')] = index_entry
-        self._data = stream_content.getbuffer()
-        super().write_to_stream(stream, None)
-
-
-resource_dict_names = map(pdf_name, [
-    'ExtGState', 'ColorSpace', 'Pattern', 'Shading', 'XObject', 
-    'Font', 'ProcSet', 'Properties'
-])
 
 
 class IncrementalPdfFileWriter:
@@ -517,90 +409,3 @@ class IncrementalPdfFileWriter:
             page_obj[pdf_name('/Annots')] = annots
 
         annots.append(annot_ref)
-
-
-def init_xobject_dictionary(command_stream, box_width, box_height,
-                            resources=None):
-    resources = resources or generic.DictionaryObject()
-    return generic.StreamObject({
-        pdf_name('/BBox'): generic.ArrayObject(list(
-            map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
-        )),
-        pdf_name('/Resources'): resources,
-        pdf_name('/Type'): pdf_name('/XObject'),
-        pdf_name('/Subtype'): pdf_name('/Form')
-    }, stream_data=command_stream)
-
-
-class AnnotAppearances:
-
-    def __init__(self, normal, rollover=None, down=None):
-        self.normal = normal
-        self.rollover = rollover
-        self.down = down
-
-    def as_pdf_object(self):
-        res = generic.DictionaryObject({pdf_name('/N'): self.normal})
-        if self.rollover is not None:
-            res[pdf_name('/R')] = self.rollover
-        if self.down is not None:
-            res[pdf_name('/D')] = self.down
-        return res
-
-
-class SimpleAnnotAppearances(AnnotAppearances):
-
-    def __init__(self, writer: IncrementalPdfFileWriter, w, h, normal,
-                 rollover=None, down=None, resources=None):
-        """
-        Describe the appearance of a single-state annotation
-        using three command streams operating in a common bounding box with
-        a common set of resources (see Table 168 in ISO 32000).
-        The command streams are specified as bytestrings of operators.
-
-        :param writer:
-            The writer to record objects to.
-            This is required because all streams must be referenced indirectly.
-        :param w:
-            Width of the bounding box.
-        :param h:
-            Height of the bounding box.
-        :param normal:
-            The normal appearance.
-        :param rollover:
-            The rollover appearance (defaults to the normal appearance)
-        :param down:
-            The down appearance (defaults to the normal appearance)
-        :param resources:
-            A resource dictionary, or a reference to one.
-            Since this object will be attached to the XObject dictionaries
-            of all appearance stream objects, it is a good idea to pass this
-            in as an indirect reference.
-        """
-        def as_xobject(cmds):
-            xobj = init_xobject_dictionary(cmds, w, h, resources=resources)
-            return writer.add_object(xobj)
-
-        normal = as_xobject(normal)
-        if rollover is not None:
-            rollover = as_xobject(rollover)
-        if down is not None:
-            down = as_xobject(down)
-
-        super().__init__(normal, rollover, down)
-        self.w = w
-        self.h = h
-        self.resources = resources
-
-
-def simple_grey_box_appearance(writer, w, h, lightness=0.8):
-    command_stream = ' '.join([
-        'q',  # save
-        '%g %g %g rg' % (lightness, lightness, lightness),  # set fill colour
-        # set up rectangle path
-        '0 %g %g %g re' % (h, w, -h),
-        'f',  # fill stroke
-        'Q'  # restore graphics state
-    ]).encode('ascii')
-    # we'll only set normal appearance, nothing else
-    return SimpleAnnotAppearances(writer, w, h, normal=command_stream)
