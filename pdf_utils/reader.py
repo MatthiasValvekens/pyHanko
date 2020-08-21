@@ -1,9 +1,10 @@
 import struct
 import os
+import re
 from io import BytesIO
 
 from . import generic
-from .misc import read_non_whitespace
+from .misc import read_non_whitespace, read_until_whitespace
 from . import misc
 from .crypt import _alg33_1, _alg34, _alg35, derive_key, rc4_encrypt
 
@@ -17,11 +18,14 @@ Modified version of PdfFileReader from PyPDF2. See LICENSE.PyPDF2
 
 __all__ = ['PdfFileReader']
 
+header_regex = re.compile(b'%PDF-(\\d).(\\d)')
+catalog_version_regex = re.compile(r'/(\d).(\d)')
 
 # General remark:
 # PyPDF2 parses all files backwards.
 # This means that "next" and "previous" usually mean the opposite of what one
 #  might expect.
+
 
 def read_next_end_line(stream):
     def _build():
@@ -69,8 +73,26 @@ class PdfFileReader:
         self.strict = strict
         self.resolvedObjects = {}
         self.xrefIndex = 0
+        self.input_version = None
         self.read(stream)
         self.stream = stream
+        # override version if necessary
+        try:
+            # grab version info *without* triggering crypto
+            root_ref = self.trailer.raw_get('/Root')
+            root = self.get_object(root_ref, never_decrypt=True)
+            version = root.raw_get('/Version')
+            # not sure if anyone would be crazy enough to make this an indirect
+            # reference, but in theory it's possible
+            if isinstance(version, generic.IndirectObject):
+                version = self.get_object(version, never_decrypt=True)
+            m = catalog_version_regex.match(str(version))
+            if m is not None:
+                major = int(m.group(1))
+                minor = int(m.group(2))
+                self.input_version = (major, minor)
+        except KeyError:
+            pass
 
     def _get_object_from_stream(self, ref):
         # indirect reference to object in object stream
@@ -428,6 +450,24 @@ class PdfFileReader:
                 )
 
     def read(self, stream):
+        # first, read the header & PDF version number
+        # (version number can be overridden in the document catalog later)
+        stream.seek(0)
+        input_version = None
+        try:
+            header = read_until_whitespace(stream, maxchars=20)
+            # match ignores trailing chars
+            m = header_regex.match(header)
+            if m is not None:
+                major = int(m.group(1))
+                minor = int(m.group(2))
+                input_version = (major, minor)
+        except (UnicodeDecodeError, ValueError):
+            pass
+        if input_version is None:
+            raise ValueError('Illegal PDF header')
+        self.input_version = input_version
+
         # start at the end:
         stream.seek(-1, os.SEEK_END)
         if not stream.tell():

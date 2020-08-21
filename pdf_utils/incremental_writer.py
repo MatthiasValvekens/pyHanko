@@ -31,6 +31,11 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             root_ref, info_ref, document_id, obj_id_start=trailer['/Size'],
             stream_xrefs=prev.has_xref_stream
         )
+        if self.prev.input_version != self.output_version:
+            root = root_ref.get_object()
+            version_str = pdf_name('/%d.%d' % self.output_version)
+            root[pdf_name('/Version')] = version_str
+            self.update_root()
 
     @classmethod
     def _handle_id(cls, prev):
