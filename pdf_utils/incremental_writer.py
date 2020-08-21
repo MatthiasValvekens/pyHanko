@@ -4,7 +4,7 @@ from . import generic
 
 from .reader import PdfFileReader
 from .generic import pdf_name
-from .writer import _derive_key, write_xref_table, XRefStream
+from .writer import BasePdfFileWriter
 
 """
 Utility class for writing incremental updates to PDF files.
@@ -14,27 +14,26 @@ Contains code from the PyPDF2 project, see LICENSE.PyPDF2
 __all__ = ['IncrementalPdfFileWriter']
 
 
-class IncrementalPdfFileWriter:
+class IncrementalPdfFileWriter(BasePdfFileWriter):
 
     def __init__(self, input_stream):
         self.input_stream = input_stream
         self.prev = prev = PdfFileReader(input_stream)
-        self.objects_to_update = {}
-        self._lastobj_id = prev.trailer['/Size']
-
+        trailer = prev.trailer
         # subsume root/info references
-        root = prev.trailer.raw_get('/Root')
-        self._root = generic.IndirectObject(root.idnum, root.generation, self)
+        root = trailer.raw_get('/Root')
+        root_ref = generic.IndirectObject(root.idnum, root.generation, self)
         try:
-            info = prev.trailer.raw_get('/Info')
-            self._info = generic.IndirectObject(
-                info.idnum, info.generation, self
-            )
+            info = trailer.raw_get('/Info')
+            info_ref = generic.IndirectObject(info.idnum, info.generation, self)
         except KeyError:
             # rare, but it can happen. /Info is not a required entry
-            self._info = None
-        self._encrypt = self._encrypt_key = None
-        self._document_id = self.__class__._handle_id(prev)
+            info_ref = None
+        document_id = self.__class__._handle_id(prev)
+        super().__init__(
+            root_ref, info_ref, document_id, obj_id_start=trailer['/Size'],
+            stream_xrefs=prev.has_xref_stream
+        )
 
     @classmethod
     def _handle_id(cls, prev):
@@ -65,46 +64,38 @@ class IncrementalPdfFileWriter:
             id1 = generic.ByteStringObject(os.urandom(16))
         return generic.ArrayObject([id1, id2])
 
-    @property
-    def root(self):
-        return self._root.get_object()
-
-    # for compatibility with PyPDF API
     def get_object(self, ido):
         if ido.pdf is not self and ido.pdf is not self.prev:
             raise ValueError("pdf must be self or prev")
         try:
-            return self.objects_to_update[(ido.generation, ido.idnum)]
+            return self.objects[(ido.generation, ido.idnum)]
         except KeyError:
             return self.prev.get_object(ido)
 
     def mark_update(self, obj_ref: generic.IndirectObject):
         assert obj_ref.pdf is self.prev or obj_ref.pdf is self
         ix = (obj_ref.generation, obj_ref.idnum)
-        self.objects_to_update[ix] = obj_ref.get_object()
+        self.objects[ix] = obj_ref.get_object()
         return generic.IndirectObject(obj_ref.idnum, obj_ref.generation, self)
 
     def update_root(self):
-        return self.mark_update(self._root) 
+        return self.mark_update(self._root)
 
-    def add_object(self, obj):
-        self._lastobj_id += 1
-        self.objects_to_update[(0, self._lastobj_id)] = obj
-        return generic.IndirectObject(self._lastobj_id, 0, self)
+    def _write_header(self, stream):
 
-    def write(self, stream): 
-        updated_object_positions = {}
+        # copy the original data to the output
+        input_pos = self.input_stream.tell()
+        self.input_stream.seek(0)
+        # TODO there has to be a better way to do this that doesn't involve
+        #  loading the entire file into a separate buffer
+        stream.write(self.input_stream.read())
+        self.input_stream.seek(input_pos)
 
-        stream_xrefs = self.prev.has_xref_stream
-        if stream_xrefs:
-            trailer = XRefStream(updated_object_positions)
-            trailer.compress()
-        else:
-            trailer = generic.DictionaryObject()
-
-        # before doing anything else, we attempt to load the crypto-relevant
-        # data, so that we can bail early if something's not right
-        trailer[pdf_name('/ID')] = self._document_id
+    def _populate_trailer(self, trailer):
+        super()._populate_trailer(trailer)
+        trailer[pdf_name('/Prev')] = generic.NumberObject(
+            self.prev.last_startxref
+        )
         if self.prev.encrypted:
             if self._encrypt is not None:
                 trailer[pdf_name("/Encrypt")] = self._encrypt
@@ -116,59 +107,13 @@ class IncrementalPdfFileWriter:
                     'before calling write().'
                 )
 
-        # copy the original data to the output
-        input_pos = self.input_stream.tell()
-        self.input_stream.seek(0)
-        # TODO there has to be a better way to do this that doesn't involve
-        # loading the entire file into a separate buffer
-        stream.write(self.input_stream.read())
-        self.input_stream.seek(input_pos)
+    def write(self, stream):
 
-        if not self.objects_to_update:
+        if not self.objects:
+            # just write the original and then bail
+            self._write_header(stream)
             return
-
-        for ix in sorted(self.objects_to_update.keys()):
-            generation, idnum = ix
-            obj = self.objects_to_update[ix]
-            updated_object_positions[ix] = stream.tell()
-            stream.write(('%d %d obj' % (idnum, generation)).encode('ascii'))
-            if self._encrypt is not None and idnum != self._encrypt.idnum:
-                key = _derive_key(self._encrypt_key, idnum, generation)
-            else:
-                key = None
-            obj.write_to_stream(stream, key)
-            stream.write(b'\nendobj\n')
-        
-        # prepare trailer dictionary entries
-        trailer.update({
-            pdf_name('/Root'): self._root,
-            pdf_name('/Prev'): generic.NumberObject(self.prev.last_startxref)
-        })
-        if self._info is not None:
-            trailer[pdf_name('/Info')] = self._info
-
-        if stream_xrefs:
-            xref_location = stream.tell()
-            xrefs_id = self._lastobj_id + 1
-            updated_object_positions[(0, xrefs_id)] = xref_location
-            trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
-            # write XRef stream
-            stream.write(('%d %d obj' % (xrefs_id, 0)).encode('ascii'))
-            trailer.write_to_stream(stream, None)
-            stream.write(b'\nendobj\n')
-        else:
-            # classical xref table
-            xref_location = write_xref_table(stream, updated_object_positions)
-            trailer[pdf_name('/Size')] = generic.NumberObject(
-                self._lastobj_id + 1
-            )
-            # write trailer
-            stream.write(b'trailer\n')
-            trailer.write_to_stream(stream, None)
-
-        # write xref table pointer and EOF
-        xref_pointer_string = '\nstartxref\n%s\n' % xref_location
-        stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')
+        super().write(stream)
 
     def encrypt(self, user_pwd):
         prev = self.prev
@@ -390,22 +335,3 @@ class IncrementalPdfFileWriter:
                     orig_value[key_] = value_
 
         return update_needed
-
-    def register_annotation(self, page_ref, annot_ref):
-        page_obj = page_ref.get_object()
-        try:
-            annots_ref = page_obj.raw_get('/Annots')
-            if isinstance(annots_ref, generic.IndirectObject):
-                annots = annots_ref.get_object()
-                self.mark_update(annot_ref)
-            else:
-                # we need to update the entire page object if the annots array
-                # is a direct object
-                annots = annots_ref
-                self.mark_update(page_ref)
-        except KeyError:
-            annots = generic.ArrayObject()
-            self.mark_update(page_ref)
-            page_obj[pdf_name('/Annots')] = annots
-
-        annots.append(annot_ref)

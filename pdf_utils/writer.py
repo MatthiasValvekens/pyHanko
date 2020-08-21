@@ -147,3 +147,116 @@ def init_xobject_dictionary(command_stream, box_width, box_height,
         pdf_name('/Type'): pdf_name('/XObject'),
         pdf_name('/Subtype'): pdf_name('/Form')
     }, stream_data=command_stream)
+
+
+class BasePdfFileWriter:
+
+    def __init__(self, root_ref, info_ref, document_id, obj_id_start=0,
+                 stream_xrefs=True):
+        self.objects = {}
+        self._lastobj_id = obj_id_start
+
+        self._root = root_ref
+        self._info = info_ref
+        self._encrypt = self._encrypt_key = None
+        self._document_id = document_id
+        self.stream_xrefs = stream_xrefs
+
+    def mark_update(self, obj_ref):
+        pass
+
+    @property
+    def root(self):
+        return self._root.get_object()
+
+    def get_object(self, ido):
+        if ido.pdf is not self:
+            raise ValueError("pdf must be self")
+        return self.objects[(ido.generation, ido.idnum)]
+
+    def add_object(self, obj):
+        self._lastobj_id += 1
+        self.objects[(0, self._lastobj_id)] = obj
+        return generic.IndirectObject(self._lastobj_id, 0, self)
+
+    def _write_header(self, stream):
+        pass
+
+    def _write_objects(self, stream, object_position_dict):
+        for ix in sorted(self.objects.keys()):
+            generation, idnum = ix
+            obj = self.objects[ix]
+            object_position_dict[ix] = stream.tell()
+            stream.write(('%d %d obj' % (idnum, generation)).encode('ascii'))
+            if self._encrypt is not None and idnum != self._encrypt.idnum:
+                key = _derive_key(self._encrypt_key, idnum, generation)
+            else:
+                key = None
+            obj.write_to_stream(stream, key)
+            stream.write(b'\nendobj\n')
+
+    def _populate_trailer(self, trailer):
+        # prepare trailer dictionary entries
+        trailer[pdf_name('/Root')] = self._root
+        if self._info is not None:
+            trailer[pdf_name('/Info')] = self._info
+        # before doing anything else, we attempt to load the crypto-relevant
+        # data, so that we can bail early if something's not right
+        trailer[pdf_name('/ID')] = self._document_id
+
+    def write(self, stream):
+
+        object_positions = {}
+
+        if self.stream_xrefs:
+            trailer = XRefStream(object_positions)
+            trailer.compress()
+        else:
+            trailer = generic.DictionaryObject()
+
+        self._write_header(stream)
+        self._populate_trailer(trailer)
+        self._write_objects(stream, object_positions)
+
+        if self.stream_xrefs:
+            xref_location = stream.tell()
+            xrefs_id = self._lastobj_id + 1
+            # add position of XRef stream to the XRef stream
+            object_positions[(0, xrefs_id)] = xref_location
+            trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
+            # write XRef stream
+            stream.write(('%d %d obj' % (xrefs_id, 0)).encode('ascii'))
+            trailer.write_to_stream(stream, None)
+            stream.write(b'\nendobj\n')
+        else:
+            # classical xref table
+            xref_location = write_xref_table(stream, object_positions)
+            trailer[pdf_name('/Size')] = generic.NumberObject(
+                self._lastobj_id + 1
+            )
+            # write trailer
+            stream.write(b'trailer\n')
+            trailer.write_to_stream(stream, None)
+
+        # write xref table pointer and EOF
+        xref_pointer_string = '\nstartxref\n%s\n' % xref_location
+        stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')
+
+    def register_annotation(self, page_ref, annot_ref):
+        page_obj = page_ref.get_object()
+        try:
+            annots_ref = page_obj.raw_get('/Annots')
+            if isinstance(annots_ref, generic.IndirectObject):
+                annots = annots_ref.get_object()
+                self.mark_update(annot_ref)
+            else:
+                # we need to update the entire page object if the annots array
+                # is a direct object
+                annots = annots_ref
+                self.mark_update(page_ref)
+        except KeyError:
+            annots = generic.ArrayObject()
+            self.mark_update(page_ref)
+            page_obj[pdf_name('/Annots')] = annots
+
+        annots.append(annot_ref)
