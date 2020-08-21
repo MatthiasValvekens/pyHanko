@@ -326,6 +326,7 @@ class QRStamp(TextStamp):
         qr_xobj = init_xobject_dictionary(
             command_stream, box_size, box_size
         )
+        qr_xobj.compress()
         return self.writer.add_object(qr_xobj)
 
     def get_text_xstart(self):

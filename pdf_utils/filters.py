@@ -87,6 +87,7 @@ class FlateDecode(Decoder):
 
     @classmethod
     def encode(cls, data, decode_params=None):
+        # TODO support the parameters in the spec
         return compress(data)
 
 

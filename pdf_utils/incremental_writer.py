@@ -216,6 +216,7 @@ class IncrementalPdfFileWriter:
         stream_xrefs = self.prev.has_xref_stream
         if stream_xrefs:
             trailer = XRefStream(updated_object_positions)
+            trailer.compress()
         else:
             trailer = generic.DictionaryObject()
 

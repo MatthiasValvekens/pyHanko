@@ -695,6 +695,69 @@ class StreamObject(DictionaryObject):
             self._encoded_data = data
         return self._encoded_data
 
+    def apply_filter(self, filter_name, params=None,
+                     allow_duplicates: Optional[bool] = True):
+        """
+        Apply a new filter to this stream. This filter will be prepended
+        to any existing filters.
+        This means that is is placed *last* in the encoding order, but first
+        in the decoding order.
+
+        :param filter_name:
+            Name of the filter (see filters.DECODERS)
+        :param params:
+            Parameters to the filter (will be written to /DecodeParms)
+        :param allow_duplicates:
+            If None, silently ignore duplicate filters.
+            If False, raise ValueError when attempting to add a duplicate
+            filter. If True (default), duplicate filters are allowed.
+        :return:
+        """
+        # first, grab a decoded copy of the data
+        data = self.data
+
+        # ... and list all current filters with their parameters.
+        cur_filters = list(self._filters())
+        # normalise the input parameters
+        if not isinstance(filter_name, NameObject):
+            filter_name = pdf_name(filter_name)
+        if params is not None and not isinstance(params, DictionaryObject):
+            params = DictionaryObject(params)
+        if not cur_filters:
+            # only one filter, so don't write arrays
+            self[pdf_name('/Filter')] = filter_name
+            if params:
+                self[pdf_name('/DecodeParms')] = params
+        else:
+            # split cur_filters back into two pieces
+            filter_names, param_sets = zip(*cur_filters)
+            if not allow_duplicates and filter_name in filter_names:
+                if allow_duplicates is False:
+                    raise ValueError(
+                        f'Filter {filter_name} has already been applied to '
+                        f'this stream.'
+                    )
+                else:
+                    # Silently ignore
+                    return
+
+            # prepend the new filter (order is important!)
+            self[pdf_name('/Filter')] = [pdf_name] + filter_names
+
+            if params or any(param_sets):
+                self[pdf_name('/DecodeParms')] = [params or NullObject()] + [
+                    param_set or NullObject() for param_set in param_sets
+                ]
+        self._encoded_data = None
+        self._data = data
+
+    def compress(self):
+        """
+        Convenience method to add a /FlateDecode filter with default settings,
+        if one is not already present.
+        Note: compression is not actually applied until the stream is written.
+        """
+        self.apply_filter(pdf_name('/FlateDecode'), allow_duplicates=None)
 
     def write_to_stream(self, stream, encryption_key):
         data = self.encoded_data
