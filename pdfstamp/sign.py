@@ -409,7 +409,6 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
     try:
         sa = signer_info['signed_attrs']
         st = find_cms_attribute(sa, 'signed_time')[0]
-        print(st.native)
         status_kwargs['signed_dt'] = st.native
     except KeyError:
         pass
