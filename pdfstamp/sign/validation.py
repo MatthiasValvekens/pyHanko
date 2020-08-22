@@ -14,6 +14,10 @@ from pdf_utils.reader import PdfFileReader
 from .general import SignatureStatus, find_cms_attribute
 from .timestamps import TimestampSignatureStatus
 
+__all__ = [
+    'PDFSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
+]
+
 
 def partition_certs(certs, signer_info):
     # The 'certificates' entry is defined as a set in PCKS#7.

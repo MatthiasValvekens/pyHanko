@@ -13,6 +13,10 @@ from oscrypto import asymmetric
 
 from .general import SignatureStatus, simple_cms_attribute
 
+__all__ = [
+    'TimestampSignatureStatus', 'TimeStamper', 'HTTPTimeStamper',
+    'BasicAuthTimeStamper', 'BearerAuthTimeStamper'
+]
 
 def get_nonce():
     # generate a random 8-byte integer

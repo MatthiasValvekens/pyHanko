@@ -9,10 +9,15 @@ from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.reader import PdfFileReader
+from pdfstamp.stamp import AnnotAppearances
+
+__all__ = [
+    'SigSeedValFlags', 'SigCertConstraints', 'SignatureFormField',
+    'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigFieldSpec'
+]
 
 # TODO support other seed value dict entries
 # TODO add more customisability appearance-wise
-from pdfstamp.stamp import AnnotAppearances
 
 
 class SigSeedValFlags(IntFlag):
