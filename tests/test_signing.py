@@ -4,6 +4,8 @@ from io import BytesIO
 from certvalidator import ValidationContext
 from oscrypto import keys as oskeys
 
+from pdfstamp.sign import timestamps, fields
+from pdfstamp.sign.validation import validate_pdf_signature
 from pdf_utils.reader import PdfFileReader
 from pdfstamp import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -28,7 +30,7 @@ ROOT_CERT = oskeys.parse_certificate(read_all(CRYPTO_DATA_DIR + '/ca.cert.pem'))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
 
-DUMMY_TS = sign.DummyTimeStamper(
+DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=oskeys.parse_certificate(
         read_all(CRYPTO_DATA_DIR + '/tsa.cert.pem')
     ),
@@ -45,7 +47,7 @@ FROM_CA_TS = sign.SimpleSigner(
 
 
 def val_trusted(r, sig_obj, extd=False):
-    val_status = sign.validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
+    val_status = validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
@@ -56,7 +58,7 @@ def val_trusted(r, sig_obj, extd=False):
 
 # validate a signature, don't care about trust
 def val_untrusted(r, sig_obj, extd=False):
-    val_status = sign.validate_pdf_signature(r, sig_obj, NOTRUST_V_CONTEXT)
+    val_status = validate_pdf_signature(r, sig_obj, NOTRUST_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     if not extd:
@@ -69,7 +71,7 @@ def test_simple_sign():
     out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
                         signer=SELF_SIGN)
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     val_untrusted(r, sig_obj)
 
@@ -79,7 +81,7 @@ def test_sign_with_trust():
     out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
                         signer=FROM_CA)
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     status = val_untrusted(r, sig_obj)
     assert not status.trusted
@@ -112,7 +114,7 @@ def test_sign_field_infer():
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     val_trusted(r, sig_obj)
 
@@ -136,7 +138,7 @@ def test_sign_field_filled():
 
     def val2(out_buf):
         r = PdfFileReader(out_buf)
-        sig_fields = sign.enumerate_sig_fields(r)
+        sig_fields = fields.enumerate_sig_fields(r)
         field_name, sig_obj, _ = next(sig_fields)
         assert field_name == 'Sig1'
         val_trusted(r, sig_obj, extd=True)
@@ -171,7 +173,7 @@ def test_sign_new(file):
     )
     r = PdfFileReader(out)
     field_name = sig_obj = None
-    sig_fields = sign.enumerate_sig_fields(r)
+    sig_fields = fields.enumerate_sig_fields(r)
     while field_name != 'SigNew':
         field_name, sig_obj, _ = next(sig_fields)
     val_trusted(r, sig_obj)
@@ -186,7 +188,7 @@ def test_dummy_timestamp():
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     validity = val_trusted(r, sig_obj)
     assert validity.timestamp_validity is not None
@@ -205,7 +207,7 @@ def test_sign_crypt_rc4(password):
 
     r = PdfFileReader(out)
     r.decrypt(password)
-    field_name, sig_obj, _ = next(sign.enumerate_sig_fields(r))
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     val_trusted(r, sig_obj)
 
 
@@ -228,7 +230,7 @@ def test_sign_crypt_rc4_new(password, file):
     r = PdfFileReader(out)
     r.decrypt(password)
     field_name = sig_obj = None
-    sig_fields = sign.enumerate_sig_fields(r)
+    sig_fields = fields.enumerate_sig_fields(r)
     while field_name != 'SigNew':
         field_name, sig_obj, _ = next(sig_fields)
     val_trusted(r, sig_obj)

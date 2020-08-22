@@ -5,11 +5,10 @@ Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 
 import re
 import binascii
+from datetime import datetime
 from typing import Iterator, Tuple, Optional
 
-from .misc import (
-    read_non_whitespace, skip_over_comment, read_until_regex
-)
+from .misc import read_non_whitespace, skip_over_comment, read_until_regex
 from .misc import PdfStreamError, PdfReadError, PdfReadWarning
 import logging
 from . import filters
@@ -899,3 +898,30 @@ class DecryptedObjectProxy(PdfObject):
 
     def get_object(self):
         return self.decrypted
+
+
+
+ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
+
+def pdf_date(dt: datetime):
+    base_dt = dt.strftime(ASN_DT_FORMAT)
+    utc_offset_string = ''
+    if dt.tzinfo is not None:
+        # compute UTC off set string
+        tz_seconds = dt.utcoffset().seconds
+        if not tz_seconds:
+            utc_offset_string = 'Z'
+        else:
+            sign = '+'
+            if tz_seconds < 0:
+                sign = '-'
+                tz_seconds = abs(tz_seconds)
+            hrs, tz_seconds = divmod(tz_seconds, 3600)
+            mins = tz_seconds // 60
+            # XXX the apostrophe after the minute part of the offset is NOT
+            #  what's in the spec, but Adobe Reader DC refuses to validate
+            #  signatures with a date string that doesn't contain it.
+            #  No idea why.
+            utc_offset_string = sign + ("%02d'%02d'" % (hrs, mins))
+
+    return pdf_string(base_dt + utc_offset_string)

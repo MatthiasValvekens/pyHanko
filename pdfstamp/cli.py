@@ -3,6 +3,9 @@ import getpass
 
 from certvalidator import ValidationContext
 
+import pdfstamp.sign.fields
+from pdfstamp.sign.timestamps import HTTPTimeStamper
+from pdfstamp.sign import validation
 from pdf_utils.reader import PdfFileReader
 from . import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -41,7 +44,7 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
               required=False, multiple=True, type=readable_file)
 def list_sigfields(infile, skip_status, validate, trust, trust_replace):
     r = PdfFileReader(infile)
-    for name, value, _ in sign.enumerate_sig_fields(r):
+    for name, value, _ in pdfstamp.sign.fields.enumerate_sig_fields(r):
         if skip_status:
             print(name)
             continue
@@ -59,7 +62,7 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
                             extra_trust_roots=trust_certs
                         )
                 try:
-                    status = sign.validate_pdf_signature(
+                    status = validation.validate_pdf_signature(
                         r, value, signer_validation_context=v_context
                     ).summary()
                 except ValueError:
@@ -126,7 +129,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
         ca_chain_files=chain
     )
     if timestamp_url is not None:
-        signer.timestamper = sign.HTTPTimeStamper(timestamp_url)
+        signer.timestamper = HTTPTimeStamper(timestamp_url)
     writer = IncrementalPdfFileWriter(infile)
 
     # TODO make this an option higher up the tree
@@ -171,7 +174,7 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no,
     session = beid.open_beid_session(lib, slot_no=slot_no)
     label = 'Authentication' if use_auth_cert else 'Signature'
     if timestamp_url is not None:
-        timestamper = sign.HTTPTimeStamper(timestamp_url)
+        timestamper = HTTPTimeStamper(timestamp_url)
     else:
         timestamper = None
     signer = beid.BEIDSigner(session, label, timestamper=timestamper)
@@ -216,12 +219,12 @@ def add_sig_field(infile, outfile, specs):
                 raise click.ClickException(
                     "Sig field parameters X1,Y1,X2,Y2 should be four integers."
                 )
-            yield sign.SigFieldSpec(
+            yield pdfstamp.sign.fields.SigFieldSpec(
                 sig_field_name=name, on_page=page_ix, box=(x1, y1, x2, y2)
             )
 
     writer = IncrementalPdfFileWriter(infile)
-    sign.append_signature_fields(writer, list(_parse_specs()))
+    pdfstamp.sign.fields.append_signature_fields(writer, list(_parse_specs()))
     writer.write(outfile)
     infile.close()
     outfile.close()
