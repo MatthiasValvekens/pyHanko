@@ -2,5 +2,10 @@ from .cli import cli
 
 __all__ = []
 
-if __name__ == '__main__':
+
+def launch():
     cli(prog_name='pdfstamp')
+
+
+if __name__ == '__main__':
+    launch()
