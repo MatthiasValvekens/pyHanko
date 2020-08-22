@@ -165,9 +165,12 @@ def test_sign_field_filled():
     val2(out2)
 
 
-@pytest.mark.parametrize('file', [MINIMAL, MINIMAL_ONE_FIELD])
+sign_test_files = (MINIMAL, MINIMAL_ONE_FIELD)
+
+
+@pytest.mark.parametrize('file', [0, 1])
 def test_sign_new(file):
-    w = IncrementalPdfFileWriter(BytesIO(file))
+    w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
     out = sign.sign_pdf(
         w, sign.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
@@ -211,17 +214,16 @@ def test_sign_crypt_rc4(password):
     val_trusted(r, sig_obj)
 
 
+sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
 sign_crypt_rc4_new_params = [
-    [b'usersecret', MINIMAL_RC4],
-    [b'usersecret', MINIMAL_ONE_FIELD_RC4],
-    [b'ownersecret', MINIMAL_RC4],
-    [b'ownersecret', MINIMAL_ONE_FIELD_RC4]
+    [b'usersecret', 0], [b'usersecret', 1],
+    [b'ownersecret', 0], [b'ownersecret', 1]
 ]
 
 
 @pytest.mark.parametrize('password, file', sign_crypt_rc4_new_params)
 def test_sign_crypt_rc4_new(password, file):
-    w = IncrementalPdfFileWriter(BytesIO(file))
+    w = IncrementalPdfFileWriter(BytesIO(sign_crypt_rc4_files[file]))
     w.encrypt(password)
     out = sign.sign_pdf(
         w, sign.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
