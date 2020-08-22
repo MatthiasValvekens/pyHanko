@@ -1,3 +1,4 @@
+import logging
 from io import BytesIO
 
 from pdf_utils import generic
@@ -5,6 +6,8 @@ from fontTools import ttLib, subset
 
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.misc import peek
+
+logger = logging.getLogger(__name__)
 
 pdf_name = generic.NameObject
 pdf_string = generic.pdf_string
@@ -131,8 +134,16 @@ class CIDFontType0(generic.DictionaryObject):
         # only one font. This is fairly safe according to the fontTools docs.
         self.cff = tt['CFF '].cff
         td = self.cff[0]
-        self.name = td.rawDict['FullName']
-        registry, ordering, supplement = td.ROS
+        self.name = td.rawDict['FullName'].replace(' ', '')
+        try:
+            registry, ordering, supplement = td.ROS
+        except (AttributeError, ValueError):
+            # XXX If these attributes aren't present, chances are that the
+            # font won't work regardless.
+            logger.warning("No ROS metadata. Is this really a CIDFont?")
+            registry = "Adobe"
+            ordering = "Identity"
+            supplement = 0
         super().__init__({
             pdf_name('/Type'): pdf_name('/Font'),
             pdf_name('/Subtype'): pdf_name('/CIDFontType0'),
@@ -162,7 +173,7 @@ class FontDescriptor(generic.DictionaryObject):
         self.tt = tt
         hhea = tt['hhea']
         self.cff = tt['CFF '].cff
-        postscript_name = self.cff[0].rawDict['FullName']
+        postscript_name = self.cff[0].rawDict['FullName'].replace(' ', '')
 
         # Some metrics
 
