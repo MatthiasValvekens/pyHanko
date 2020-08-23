@@ -34,18 +34,36 @@ class GlyphAccumulator:
 
     def _encode_char(self, ch):
         try:
-            (glyph_id, glyph) = self._glyphs[ch]
+            (cid, gid, glyph) = self._glyphs[ch]
         except KeyError:
+            # NOTE: the glyph id as reported by getGlyphID is NOT what we want
+            # to encode in the string. In some fonts (I've seen this in a couple
+            # full CJK fonts), this happens to be the same as the CID of the
+            # glyph but not always.
+            # I'm not sure what the "officially sanctioned" way to do this in
+            # fontTools is, but we can derive the CID from the generated name
+            # of the glyph, which is of the form cidXXXXX
+            # We do want to save the glyph ID to pass it to the subsetter later.
+            # FIXME This obviously breaks with string-keyed fonts. How to deal
+            #  with those?
             try:
                 glyph_name = self.cmap[ord(ch)]
                 glyph = self.glyph_set[glyph_name]
-                glyph_id = self.tt.getGlyphID(glyph_name)
+                gid = self.tt.getGlyphID(glyph_name)
+                try:
+                    cid = int(glyph_name[3:])
+                except ValueError:
+                    raise NotImplementedError(
+                        f"Could not figure out CID for glyph with name "
+                        f"{glyph_name}."
+                    )
             except KeyError:
                 glyph = self.glyph_set['.notdef']
-                glyph_id = self.tt.getGlyphID('.notdef')
-            self._glyphs[ch] = (glyph_id, glyph)
+                gid = self.tt.getGlyphID('.notdef')
+                cid = 0
+            self._glyphs[ch] = (cid, gid, glyph)
 
-        return glyph_id, glyph.width
+        return cid, glyph.width
 
     def feed_string(self, txt):
         """
@@ -67,10 +85,10 @@ class GlyphAccumulator:
         def _gen():
             nonlocal total_width
             for ch in txt:
-                glyph_id, width = self._encode_char(ch)
+                cid, width = self._encode_char(ch)
                 # ignore kerning
                 total_width += width
-                yield '%04x' % glyph_id
+                yield '%04x' % cid
 
         hex_encoded = ''.join(_gen())
         return hex_encoded, total_width / self.units_per_em
@@ -78,7 +96,7 @@ class GlyphAccumulator:
     def extract_subset(self, options=None):
         options = options or subset.Options()
         subsetter: subset.Subsetter = subset.Subsetter(options=options)
-        gids = map(lambda x: x[0], self._glyphs.values())
+        gids = map(lambda x: x[1], self._glyphs.values())
         subsetter.populate(gids=list(gids))
         subsetter.subset(self.tt)
         self._extracted = True
@@ -112,8 +130,8 @@ class GlyphAccumulator:
         def _widths():
             current_chunk = []
             prev_cid = None
-            (first_cid, _), itr = peek(by_cid)
-            for cid, g in itr:
+            (first_cid, _, _), itr = peek(by_cid)
+            for cid, _, g in itr:
                 if current_chunk and cid != prev_cid + 1:
                     yield generic.NumberObject(first_cid)
                     yield generic.ArrayObject(current_chunk)
