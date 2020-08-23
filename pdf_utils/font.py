@@ -114,6 +114,7 @@ class GlyphAccumulator:
         cidfont_obj.embed(writer)
         cidfont_ref = writer.add_object(cidfont_obj)
         # TODO add ToUnicode cmap? See 9.7.6 in ISO-32000
+        to_unicode = self.format_tounicode_cmap(*cidfont_obj.ros)
         type0 = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/Font'),
             pdf_name('/Subtype'): pdf_name('/Type0'),
@@ -121,7 +122,8 @@ class GlyphAccumulator:
             # take the Identity-H encoding to inherit from the /Encoding
             # entry specified in our CIDSystemInfo dict
             pdf_name('/Encoding'): pdf_name('/Identity-H'),
-            pdf_name('/BaseFont'): pdf_name('/%s-Identity-H' % cidfont_obj.name)
+            pdf_name('/BaseFont'): pdf_name('/%s-Identity-H' % cidfont_obj.name),
+            pdf_name('/ToUnicode'): writer.add_object(to_unicode)
         })
         # compute widths entry
         # (easiest to do here, since it seems we need the original CIDs)
@@ -144,12 +146,51 @@ class GlyphAccumulator:
         cidfont_obj[pdf_name('/W')] = generic.ArrayObject(list(_widths()))
         return writer.add_object(type0)
 
+    def format_tounicode_cmap(self, registry, ordering, supplement):
+        def _pairs():
+            for ch, (cid, _, _) in self._glyphs.items():
+                yield cid, ch
+        by_cid = iter(sorted(_pairs(), key=lambda t: t[0]))
+        header = (
+            '/CIDInit /ProcSet findresource begin\n'
+            '12 dict begin\n'
+            'begincmap\n'
+            '/CIDSystemInfo 3 dict dup begin\n'
+            f'/Registry ({registry}) def\n'
+            f'/Ordering ({ordering}) def\n'
+            f'/Supplement {supplement}\n def'
+            'end def\n'
+            f'/CMapName {registry}-{ordering}-{supplement:03} def\n'
+            '/CMapType 2 def\n'
+            '1 begincodespacerange\n'
+            '<0000> <FFFF>\n'
+            'endcodespacerange\n'
+        )
+        # TODO make an effort to use ranges when appropriate, and at least
+        #  group the glyphs
+        body = '\n'.join(
+            f'1 beginbfchar\n<{cid:04x}> <{ord(ch):04x}>\nendbfchar\n'
+            for cid, ch in by_cid
+        )
+
+        footer = (
+            'endcmap\n'
+            'CMapName currentdict /CMap\n'
+            'defineresource pop\n'
+            'end\nend'
+        )
+        stream = generic.StreamObject(
+            stream_data=(header + body + footer).encode('ascii')
+        )
+        return stream
+
 
 class CIDFont(generic.DictionaryObject):
     def __init__(self, tt: ttLib.TTFont, ps_name, subtype, registry,
                  ordering, supplement):
         self.tt = tt
         self.name = ps_name
+        self.ros = registry, ordering, supplement
 
         super().__init__({
             pdf_name('/Type'): pdf_name('/Font'),
@@ -171,7 +212,6 @@ class CIDFont(generic.DictionaryObject):
 
     def set_font_file(self, writer: IncrementalPdfFileWriter):
         raise NotImplementedError
-
 
 # TODO support type 2 fonts (i.e. with 'glyf' instead of 'CFF ')
 
