@@ -89,7 +89,7 @@ class GlyphAccumulator:
         cidfont_obj = CIDFontType0(self.tt)
         # TODO keep track of used subset prefixes in the writer!
         cff_topdict = self.tt['CFF '].cff[0]
-        name = cff_topdict.rawDict['FullName']
+        name = cidfont_obj.name
         cff_topdict.rawDict['FullName'] = '%s+%s' % (
             generate_subset_prefix(), name
         )
@@ -200,15 +200,15 @@ class FontDescriptor(generic.DictionaryObject):
     """
 
     def __init__(self, cf: CIDFont):
-        self.tt = tt = cf.tt
-        hhea = tt['hhea']
+        tt = cf.tt
 
         # Some metrics
-
-        weight = tt['OS/2'].usWeightClass
-        stemv = int(10 + 220 * (weight - 50) / 900)
+        hhea = tt['hhea']
         head = tt['head']
         bbox = [head.xMin, head.yMin, head.xMax, head.yMax]
+        os2 = tt['OS/2']
+        weight = os2.usWeightClass
+        stemv = int(10 + 220 * (weight - 50) / 900)
         super().__init__({
             pdf_name('/Type'): pdf_name('/FontDescriptor'),
             pdf_name('/FontName'): pdf_name('/' + cf.name),
@@ -221,18 +221,8 @@ class FontDescriptor(generic.DictionaryObject):
             #  is there any way we can read/infer those from the TTF metadata?
             pdf_name('/Flags'): generic.NumberObject(0b110),
             pdf_name('/StemV'): generic.NumberObject(stemv),
-            # FIXME should also grab this from the metadata
-            pdf_name('/ItalicAngle'): generic.NumberObject(0),
+            pdf_name('/ItalicAngle'): generic.FloatObject(
+                tt['post'].italicAngle
+            ),
+            pdf_name('/CapHeight'): generic.NumberObject(os2.sCapHeight)
         })
-
-        glyph_set = tt.getGlyphSet(preferCFF=True)
-        cmap = tt.getBestCmap()
-        alphabet_names = [cmap[x] for x in ALPHABET if x in cmap]
-        # /CapHeight is only required if the font contains latin characters
-        if alphabet_names:
-            try:
-                cap_height = max(glyph_set[x].height for x in alphabet_names)
-            except (AttributeError, TypeError, KeyError):
-                # some glyphs may not have a well-defined height
-                cap_height = hhea.ascent
-            self[pdf_name('/CapHeight')] = generic.NumberObject(int(cap_height))
