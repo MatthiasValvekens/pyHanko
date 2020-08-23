@@ -127,14 +127,44 @@ class GlyphAccumulator:
         return writer.add_object(type0)
 
 
-class CIDFontType0(generic.DictionaryObject):
-    def __init__(self, tt: ttLib.TTFont):
+class CIDFont(generic.DictionaryObject):
+    def __init__(self, tt: ttLib.TTFont, ps_name, subtype, registry,
+                 ordering, supplement):
         self.tt = tt
+        self.name = ps_name
+
+        super().__init__({
+            pdf_name('/Type'): pdf_name('/Font'),
+            pdf_name('/Subtype'): pdf_name(subtype),
+            pdf_name('/CIDSystemInfo'): generic.DictionaryObject({
+                pdf_name('/Registry'): pdf_string(registry),
+                pdf_name('/Ordering'): pdf_string(ordering),
+                pdf_name('/Supplement'): generic.NumberObject(supplement)
+            }),
+            pdf_name('/BaseFont'): pdf_name('/' + ps_name)
+        })
+        self._font_descriptor = FontDescriptor(self)
+
+    def embed(self, writer: IncrementalPdfFileWriter):
+        fd = self._font_descriptor
+        self[pdf_name('/FontDescriptor')] = fd_ref = writer.add_object(fd)
+        font_stream_ref = self.set_font_file(writer)
+        return fd_ref, font_stream_ref
+
+    def set_font_file(self, writer: IncrementalPdfFileWriter):
+        raise NotImplementedError
+
+
+# TODO support type 2 fonts (i.e. with 'glyf' instead of 'CFF ')
+
+
+class CIDFontType0(CIDFont):
+    def __init__(self, tt: ttLib.TTFont):
         # We assume that this font set (in the CFF sense) contains
         # only one font. This is fairly safe according to the fontTools docs.
-        self.cff = tt['CFF '].cff
-        td = self.cff[0]
-        self.name = td.rawDict['FullName'].replace(' ', '')
+        self.cff = cff = tt['CFF '].cff
+        td = cff[0]
+        ps_name = td.rawDict['FullName'].replace(' ', '')
         try:
             registry, ordering, supplement = td.ROS
         except (AttributeError, ValueError):
@@ -144,23 +174,23 @@ class CIDFontType0(generic.DictionaryObject):
             registry = "Adobe"
             ordering = "Identity"
             supplement = 0
-        super().__init__({
-            pdf_name('/Type'): pdf_name('/Font'),
-            pdf_name('/Subtype'): pdf_name('/CIDFontType0'),
-            pdf_name('/CIDSystemInfo'): generic.DictionaryObject({
-                pdf_name('/Registry'): pdf_string(registry),
-                pdf_name('/Ordering'): pdf_string(ordering),
-                pdf_name('/Supplement'): generic.NumberObject(supplement)
-            }),
-            pdf_name('/BaseFont'): pdf_name('/' + self.name)
-        })
-        self._font_descriptor = None
+        super().__init__(
+            tt, ps_name, '/CIDFontType0', registry, ordering, supplement
+        )
 
-    def embed(self, writer: IncrementalPdfFileWriter):
-        self._font_descriptor = fd = FontDescriptor(self.tt)
-        self[pdf_name('/FontDescriptor')] = fd_ref = writer.add_object(fd)
-        font_stream_ref = fd.set_font_file3(writer)
-        return fd_ref, font_stream_ref
+    def set_font_file(self, writer: IncrementalPdfFileWriter):
+        stream_buf = BytesIO()
+        # write the CFF table to the stream
+        self.cff.compile(stream_buf, self.tt)
+        stream_buf.seek(0)
+        font_stream = generic.StreamObject({
+            # this is a Type0 CFF font program (see Table 126 in ISO 32000)
+            pdf_name('/Subtype'): pdf_name('/CIDFontType0C'),
+        }, stream_data=stream_buf.read())
+        font_stream.compress()
+        font_stream_ref = writer.add_object(font_stream)
+        self._font_descriptor[pdf_name('/FontFile3')] = font_stream_ref
+        return font_stream_ref
 
 
 class FontDescriptor(generic.DictionaryObject):
@@ -169,24 +199,23 @@ class FontDescriptor(generic.DictionaryObject):
     to be present. If not, it'll probably fail with a gnarly error.
     """
 
-    def __init__(self, tt: ttLib.TTFont):
-        self.tt = tt
+    def __init__(self, cf: CIDFont):
+        self.tt = tt = cf.tt
         hhea = tt['hhea']
-        self.cff = tt['CFF '].cff
-        postscript_name = self.cff[0].rawDict['FullName'].replace(' ', '')
 
         # Some metrics
 
         weight = tt['OS/2'].usWeightClass
         stemv = int(10 + 220 * (weight - 50) / 900)
-
+        head = tt['head']
+        bbox = [head.xMin, head.yMin, head.xMax, head.yMax]
         super().__init__({
             pdf_name('/Type'): pdf_name('/FontDescriptor'),
-            pdf_name('/FontName'): pdf_name('/' + postscript_name),
+            pdf_name('/FontName'): pdf_name('/' + cf.name),
             pdf_name('/Ascent'): generic.NumberObject(hhea.ascent),
             pdf_name('/Descent'): generic.NumberObject(hhea.descent),
             pdf_name('/FontBBox'): generic.ArrayObject(
-                list(map(generic.NumberObject, self.cff[0].FontBBox))
+                map(generic.NumberObject, bbox)
             ),
             # FIXME I'm setting the Serif and Symbolic flags here, but
             #  is there any way we can read/infer those from the TTF metadata?
@@ -207,17 +236,3 @@ class FontDescriptor(generic.DictionaryObject):
                 # some glyphs may not have a well-defined height
                 cap_height = hhea.ascent
             self[pdf_name('/CapHeight')] = generic.NumberObject(int(cap_height))
-
-    def set_font_file3(self, writer: IncrementalPdfFileWriter):
-        stream_buf = BytesIO()
-        # write the CFF table to the stream
-        self.cff.compile(stream_buf, self.tt)
-        stream_buf.seek(0)
-        font_stream = generic.StreamObject({
-            # this is a Type0 CFF font program (see Table 126 in ISO 32000)
-            pdf_name('/Subtype'): pdf_name('/CIDFontType0C'),
-        }, stream_data=stream_buf.read())
-        font_stream.compress()
-        font_stream_ref = writer.add_object(font_stream)
-        self[pdf_name('/FontFile3')] = font_stream_ref
-        return font_stream_ref
