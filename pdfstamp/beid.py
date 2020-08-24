@@ -1,8 +1,7 @@
 from oscrypto import keys
 
 from . import sign
-import pkcs11
-from pkcs11 import Attribute, ObjectClass
+from pkcs11 import Attribute, ObjectClass, PKCS11Error, lib as pkcs11_lib
 
 """
 Sign PDF files using a Belgian eID card.
@@ -10,7 +9,7 @@ Sign PDF files using a Belgian eID card.
 
 
 def open_beid_session(lib_location, slot_no=None):
-    lib = pkcs11.lib(lib_location)
+    lib = pkcs11_lib(lib_location)
 
     slots = lib.get_slots()
     token = None
@@ -20,16 +19,14 @@ def open_beid_session(lib_location, slot_no=None):
                 token = slot.get_token()
                 if token.label == 'BELPIC':
                     break
-            except pkcs11.PKCS11Error:
+            except PKCS11Error:
                 continue
         if token is None:
-            raise pkcs11.PKCS11Error('No BELPIC token found')
+            raise PKCS11Error('No BELPIC token found')
     else:
         token = slots[slot_no].get_token()
         if token.label != 'BELPIC':
-            raise pkcs11.PKCS11Error(
-                'Token in slot %d is not BELPIC.' % slot_no
-            )
+            raise PKCS11Error('Token in slot %d is not BELPIC.' % slot_no)
 
     # the middleware will prompt for the user's PIN when we attempt
     # to sign later, so there's no need to specify it here

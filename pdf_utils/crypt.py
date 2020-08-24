@@ -26,7 +26,6 @@ def _alg32(password, rev, keylen, owner_entry, p_entry, id1_entry,
     password = (password + _encryption_padding)[:32]
     # 2. Initialize the MD5 hash function and pass the result of step 1 as
     # input to this function.
-    import struct
     m = md5(password)
     # 3. Pass the value of the encryption dictionary's /O entry to the MD5 hash
     # function.

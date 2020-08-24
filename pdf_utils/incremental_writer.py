@@ -145,8 +145,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         Returns a reference to the page object that was modified.
         """
 
-        # we pass in repair_direct_pages=True to ensure that we get
-        #  a page object reference back, as opposed to a page object.
         page_obj_ref, res_ref, page_update_boundary \
             = self.find_page_for_modification(page_ix)
 
