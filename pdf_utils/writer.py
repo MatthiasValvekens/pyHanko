@@ -277,6 +277,7 @@ class BasePdfFileWriter:
 
         annots.append(annot_ref)
 
+    # TODO write tests specifically for this helper function
     def _walk_page_tree(self, page_ix, retrieve_parent):
 
         # the spec says that this will always be an indirect reference
@@ -340,13 +341,15 @@ class BasePdfFileWriter:
                                 last_rsrc_dict = kid.raw_get('/Resources')
                             except KeyError:
                                 pass
-                            return kid_ref, last_rsrc_dict, last_indir
+                            return kid_ref, last_rsrc_dict
                     else:
                         cur_page_ix += 1
             # This means the PDF is not standards-compliant
             raise ValueError('Page not found')
 
-        return _recurse(0, page_tree_root, root_resources, page_tree_root_ref)
+        return _recurse(
+            0, page_tree_root_ref, root_resources, page_tree_root_ref
+        )
 
     def find_page_container(self, page_ix):
         """
@@ -374,10 +377,8 @@ class BasePdfFileWriter:
         :param page_ix:
             The (zero-indexed) number of the page to retrieve.
         :return:
-            A triple with the page object (or a reference to it),
-            (possibly inherited) resource dictionary, and a reference
-            to the object that needs to be marked for an update
-            if the page object is updated.
+            A with a reference to the page object and a
+            (possibly inherited) resource dictionary.
         """
         return self._walk_page_tree(page_ix, retrieve_parent=False)
 

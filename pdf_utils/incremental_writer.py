@@ -145,8 +145,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         Returns a reference to the page object that was modified.
         """
 
-        page_obj_ref, res_ref, page_update_boundary \
-            = self.find_page_for_modification(page_ix)
+        page_obj_ref, res_ref = self.find_page_for_modification(page_ix)
 
         page_obj = page_obj_ref.get_object()
 
@@ -160,13 +159,13 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 # this array for an update, and append our stream to it.
                 self.mark_update(contents_ref)
                 contents.append(stream_ref)
-            elif isinstance(contents, generic.DictionaryObject):
-                # replace the dictionary with an array containing 
-                # a reference to the original dict, and our own stream.
+            elif isinstance(contents, generic.StreamObject):
+                # replace the old stream with an array containing
+                # a reference to the original stream, and our own stream.
                 contents = generic.ArrayObject([contents_ref, stream_ref])
                 page_obj[pdf_name('/Contents')] = self.add_object(contents)
                 # mark the page to be updated as well
-                self.mark_update(page_update_boundary)
+                self.mark_update(page_obj_ref)
             else:
                 raise ValueError('Unexpected type for page /Contents')
         elif isinstance(contents_ref, generic.ArrayObject):
@@ -174,17 +173,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             contents = contents_ref
             contents.append(stream_ref)
             page_obj[pdf_name('/Contents')] = self.add_object(contents)
-            self.mark_update(page_update_boundary)
-        elif isinstance(contents_ref, generic.DictionaryObject):
-            old_contents = contents_ref
-            # create a new array with indirect references to the old contents
-            # and our stream
-            contents = generic.ArrayObject(
-                [self.add_object(old_contents), stream_ref]
-            )
-            # ... then insert a reference into the page's /Contents entry
-            page_obj[pdf_name('/Contents')] = self.add_object(contents) 
-            self.mark_update(page_update_boundary)
+            self.mark_update(page_obj_ref)
         else:
             raise ValueError('Unexpected type for page /Contents')
 
