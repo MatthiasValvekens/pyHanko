@@ -125,6 +125,7 @@ class GlyphAccumulator:
             pdf_name('/BaseFont'): pdf_name('/%s-Identity-H' % cidfont_obj.name),
             pdf_name('/ToUnicode'): writer.add_object(to_unicode)
         })
+        to_unicode.compress()
         # compute widths entry
         # (easiest to do here, since it seems we need the original CIDs)
         by_cid = iter(sorted(self._glyphs.values(), key=lambda t: t[0]))
