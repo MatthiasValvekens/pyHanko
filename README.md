@@ -1,5 +1,10 @@
 pdfstamp
 --------
+![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp)
+[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pdf-stamp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python)
+
+
+
 The lack of open-source CLI tooling to handle digitally signing and stamping PDF files was bothering me, so I went ahead and rolled my own.
 
 ### Overview
