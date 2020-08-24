@@ -4,6 +4,9 @@ from io import BytesIO
 from certvalidator import ValidationContext
 from oscrypto import keys as oskeys
 
+from pdf_utils import generic
+from pdf_utils.font import pdf_name
+from pdf_utils.writer import PdfFileWriter
 from pdfstamp.sign import timestamps, fields
 from pdfstamp.sign.validation import validate_pdf_signature
 from pdf_utils.reader import PdfFileReader
@@ -236,3 +239,52 @@ def test_sign_crypt_rc4_new(password, file):
     while field_name != 'SigNew':
         field_name, sig_obj, _ = next(sig_fields)
     val_trusted(r, sig_obj)
+
+
+def test_append_simple_sig_field():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    sp = fields.SigFieldSpec('InvisibleSig')
+    fields.append_signature_fields(w, [sp])
+    assert len(w.root['/AcroForm']['/Fields']) == 1
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    w = IncrementalPdfFileWriter(out)
+    with pytest.raises(ValueError):
+        fields.append_signature_fields(w, [sp])
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    fields.append_signature_fields(w, [sp])
+    assert len(w.root['/AcroForm']['/Fields']) == 3
+
+
+def test_append_sig_field_acro_update():
+    # test different configurations of the AcroForm
+    w = PdfFileWriter()
+    w.root['/AcroForm'] = generic.DictionaryObject({
+        pdf_name('/Fields'): generic.ArrayObject()
+    })
+    w.insert_page(simple_page(w, 'Hello world'))
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+
+    sp = fields.SigFieldSpec('InvisibleSig')
+    w = IncrementalPdfFileWriter(out)
+    fields.append_signature_fields(w, [sp])
+    assert len(w.root['/AcroForm']['/Fields']) == 1
+
+    w = PdfFileWriter()
+    # Technically, this is not standards-compliant, but our routine
+    # shouldn't care
+    w.root['/AcroForm'] = generic.DictionaryObject()
+    w.insert_page(simple_page(w, 'Hello world'))
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+
+    sp = fields.SigFieldSpec('InvisibleSig')
+    w = IncrementalPdfFileWriter(out)
+    fields.append_signature_fields(w, [sp])
+    assert len(w.root['/AcroForm']['/Fields']) == 1

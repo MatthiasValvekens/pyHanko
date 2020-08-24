@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from enum import IntFlag
-from io import BytesIO
 from typing import List, Optional
 
 from asn1crypto import x509
@@ -319,11 +318,6 @@ def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
             # /SV must be an indirect reference as per the spec
             sv_ref = pdf_out.add_object(sp.seed_value_dict.as_pdf_object())
             sig_field[pdf_name('/SV')] = sv_ref
-
-    output = BytesIO()
-    pdf_out.write(output)
-    output.seek(0)
-    return output
 
 
 class SignatureFormField(generic.DictionaryObject):
