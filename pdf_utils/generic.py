@@ -497,7 +497,10 @@ class DictionaryObject(dict, PdfObject):
 
     def __setitem__(self, key, value):
         if not isinstance(key, PdfObject):
-            raise ValueError("key must be PdfObject")
+            if isinstance(key, str):
+                key = NameObject(key)
+            else:
+                raise ValueError("key must be PdfObject")
         if not isinstance(value, PdfObject):
             raise ValueError("value must be PdfObject")
         return dict.__setitem__(self, key, value)
