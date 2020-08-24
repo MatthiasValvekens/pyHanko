@@ -72,7 +72,7 @@ class PdfFileReader:
         """
         self.strict = strict
         self.resolvedObjects = {}
-        self.xrefIndex = 0
+        self.xref_index = 0
         self.input_version = None
         self.read(stream)
         self.stream = stream
@@ -176,25 +176,11 @@ class PdfFileReader:
             start = self.xref[ref.generation][ref.idnum]
             self.stream.seek(start)
             idnum, generation = self.read_object_header(self.stream)
-            xref_idnum = ref.idnum
-            xref_generation = ref.generation
-            if idnum != ref.idnum and self.xrefIndex:
-                if self.strict:
-                    raise misc.PdfReadError(
-                        f"Expected object ID "
-                        f"({xref_idnum} {xref_generation}) does not match "
-                        f"actual({idnum} {generation}); xref table not "
-                        f"zero-indexed."
-                    )
-                else:
-                    pass  # xref table is corrected in non-strict mode
-            elif idnum != ref.idnum:
-                # some other problem
+            if idnum != ref.idnum or generation != ref.generation:
                 raise misc.PdfReadError(
                     f"Expected object ID ({ref.idnum} {ref.generation}) "
                     f"does not match actual ({idnum} {generation})."
                 )
-            assert generation == ref.generation
             retval = generic.read_object(self.stream, self)
 
             # override encryption is used for the /Encrypt dictionary
@@ -244,12 +230,6 @@ class PdfFileReader:
         return out
 
     def cache_indirect_object(self, generation, idnum, obj):
-        if (generation, idnum) in self.resolvedObjects:
-            msg = "Overwriting cache for %s %s" % (generation, idnum)
-            if self.strict:
-                raise misc.PdfReadError(msg)
-            else:
-                logger.warning(msg)
         self.resolvedObjects[(generation, idnum)] = obj
         return obj
 
@@ -332,17 +312,10 @@ class PdfFileReader:
         firsttime = True
         while True:
             num = generic.read_object(stream, self)
+            # This is not necessarily indicative of a malformed PDF,
+            # since in linearised PDF, the table usually doesn't start at zero
             if firsttime and num != 0:
-                self.xrefIndex = num
-                if self.strict:
-                    logger.warning(
-                        "Xref table not zero-indexed. ID numbers "
-                        "for objects will be corrected.",
-                        misc.PdfReadWarning)
-                    # if table not zero indexed, could be due to error
-                    # from when PDF was created which will lead to mismatched
-                    # indices later on, only warned and corrected if
-                    # self.strict=True
+                self.xref_index = num
             firsttime = False
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
@@ -498,31 +471,6 @@ class PdfFileReader:
         # This needs to be recorded for incremental update purposes
         self.last_startxref = startxref
         self._read_xrefs(stream)
-
-        # if not zero-indexed, verify that the table is correct;
-        # change it if necessary
-        if self.xrefIndex and not self.strict:
-            loc = stream.tell()
-            for gen in self.xref:
-                if gen == 65535:
-                    continue
-                for obj_id in self.xref[gen]:
-                    stream.seek(self.xref[gen][obj_id])
-                    try:
-                        pid, pgen = self.read_object_header(stream)
-                    except ValueError:
-                        break
-                    if pid == obj_id - self.xrefIndex:
-                        self._zero_xref(gen)
-                        break
-                    # if not, then either it's just plain wrong
-                    # or the non-zero-index is actually correct
-            stream.seek(loc)  # return to where it was
-
-    def _zero_xref(self, generation):
-        self.xref[generation] = {
-            (k-self.xrefIndex, v) for (k, v) in self.xref[generation].items()
-        }
 
     def decrypt(self, password):
         """

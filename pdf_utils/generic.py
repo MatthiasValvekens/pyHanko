@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Iterator, Tuple, Optional
 
 from .misc import read_non_whitespace, skip_over_comment, read_until_regex
-from .misc import PdfStreamError, PdfReadError, PdfReadWarning
+from .misc import PdfStreamError, PdfReadError
 import logging
 from . import filters
 from .crypt import rc4_encrypt
@@ -481,8 +481,7 @@ class NameObject(str, PdfObject):
             # Name objects should represent irregular characters
             # with a '#' followed by the symbol's hex number
             if not pdf.strict:
-                logger.warning("Illegal character in Name Object",
-                               PdfReadWarning)
+                logger.warning("Illegal character in Name Object")
                 return NameObject(name)
             else:
                 raise PdfReadError("Illegal character in Name Object")

@@ -156,3 +156,15 @@ def test_read_rewrite():
     w.write(out)
     out.seek(0)
     assert out.getvalue() == MINIMAL
+
+
+def test_mildly_malformed_xref_read():
+    # this file has an xref table starting at 1
+    # and several badly aligned xref rows
+    malformed = BytesIO(read_all(PDF_DATA_DIR + '/minimal-badxref.pdf'))
+    reader = PdfFileReader(malformed)
+
+    # try something
+    assert reader.xref_index == 1
+    root = reader.trailer['/Root']
+    assert '/Pages' in root
