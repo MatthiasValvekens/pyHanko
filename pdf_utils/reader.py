@@ -104,21 +104,19 @@ class PdfFileReader:
         # /N is the number of indirect objects in the stream
         assert idx < stream_ref['/N']
         stream_data = BytesIO(stream_ref.data)
+        first_object = stream_ref['/First']
         for i in range(stream_ref['/N']):
-            read_non_whitespace(stream_data)
-            stream_data.seek(-1, os.SEEK_CUR)
+            read_non_whitespace(stream_data, seek_back=True)
             objnum = generic.NumberObject.read_from_stream(stream_data)
-            read_non_whitespace(stream_data)
-            stream_data.seek(-1, os.SEEK_CUR)
+            read_non_whitespace(stream_data, seek_back=True)
             offset = generic.NumberObject.read_from_stream(stream_data)
-            read_non_whitespace(stream_data)
-            stream_data.seek(-1, os.SEEK_CUR)
+            read_non_whitespace(stream_data, seek_back=True)
             if objnum != ref.idnum:
                 # We're only interested in one object
                 continue
             if self.strict and idx != i:
                 raise misc.PdfReadError("Object is in wrong index.")
-            stream_data.seek(stream_ref['/First']+offset)
+            stream_data.seek(first_object + offset)
             try:
                 obj = generic.read_object(stream_data, self)
             except misc.PdfStreamError as e:
@@ -215,8 +213,7 @@ class PdfFileReader:
         stream.seek(-1, os.SEEK_CUR)
         generation = misc.read_until_whitespace(stream)
         stream.read(3)
-        read_non_whitespace(stream)
-        stream.seek(-1, os.SEEK_CUR)
+        read_non_whitespace(stream, seek_back=True)
 
         if extra and self.strict:
             logger.warning(

@@ -101,7 +101,7 @@ class GlyphAccumulator:
         subsetter.subset(self.tt)
         self._extracted = True
 
-    def embed_subset(self, writer: IncrementalPdfFileWriter):
+    def embed_subset(self, writer: IncrementalPdfFileWriter, obj_stream=None):
         if not self._extracted:
             self.extract_subset()
         cidfont_obj = CIDFontType0(self.tt)
@@ -111,7 +111,7 @@ class GlyphAccumulator:
         cff_topdict.rawDict['FullName'] = '%s+%s' % (
             generate_subset_prefix(), name
         )
-        cidfont_obj.embed(writer)
+        cidfont_obj.embed(writer, obj_stream=obj_stream)
         cidfont_ref = writer.add_object(cidfont_obj)
         # TODO add ToUnicode cmap? See 9.7.6 in ISO-32000
         to_unicode = self.format_tounicode_cmap(*cidfont_obj.ros)
@@ -122,7 +122,8 @@ class GlyphAccumulator:
             # take the Identity-H encoding to inherit from the /Encoding
             # entry specified in our CIDSystemInfo dict
             pdf_name('/Encoding'): pdf_name('/Identity-H'),
-            pdf_name('/BaseFont'): pdf_name('/%s-Identity-H' % cidfont_obj.name),
+            pdf_name('/BaseFont'):
+                pdf_name('/%s-Identity-H' % cidfont_obj.name),
             pdf_name('/ToUnicode'): writer.add_object(to_unicode)
         })
         to_unicode.compress()
@@ -145,7 +146,7 @@ class GlyphAccumulator:
                 prev_cid = cid
 
         cidfont_obj[pdf_name('/W')] = generic.ArrayObject(list(_widths()))
-        return writer.add_object(type0)
+        return writer.add_object(type0, obj_stream=obj_stream)
 
     def format_tounicode_cmap(self, registry, ordering, supplement):
         def _pairs():
@@ -205,9 +206,11 @@ class CIDFont(generic.DictionaryObject):
         })
         self._font_descriptor = FontDescriptor(self)
 
-    def embed(self, writer: IncrementalPdfFileWriter):
+    def embed(self, writer: IncrementalPdfFileWriter, obj_stream=None):
         fd = self._font_descriptor
-        self[pdf_name('/FontDescriptor')] = fd_ref = writer.add_object(fd)
+        self[pdf_name('/FontDescriptor')] = fd_ref = writer.add_object(
+            fd, obj_stream=obj_stream
+        )
         font_stream_ref = self.set_font_file(writer)
         return fd_ref, font_stream_ref
 

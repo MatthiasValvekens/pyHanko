@@ -6,6 +6,7 @@ def read_all(fname):
 CRYPTO_DATA_DIR = 'tests/data/crypto'
 PDF_DATA_DIR = 'tests/data/pdf'
 MINIMAL = read_all(PDF_DATA_DIR + '/minimal.pdf')
+MINIMAL_XREF = read_all(PDF_DATA_DIR + '/minimal-xref.pdf')
 MINIMAL_ONE_FIELD = read_all(PDF_DATA_DIR + '/minimal-with-field.pdf')
 MINIMAL_TWO_FIELDS = read_all(PDF_DATA_DIR + '/minimal-two-fields.pdf')
 

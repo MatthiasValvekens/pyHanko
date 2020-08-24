@@ -31,6 +31,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             root_ref, info_ref, document_id, obj_id_start=trailer['/Size'],
             stream_xrefs=prev.has_xref_stream
         )
+        self._resolves_objs_from = (self, prev)
         if self.prev.input_version != self.output_version:
             root = root_ref.get_object()
             version_str = pdf_name('/%d.%d' % self.output_version)
@@ -67,10 +68,8 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         return generic.ArrayObject([id1, id2])
 
     def get_object(self, ido):
-        if ido.pdf is not self and ido.pdf is not self.prev:
-            raise ValueError("pdf must be self or prev")
         try:
-            return self.objects[(ido.generation, ido.idnum)]
+            return super().get_object(ido)
         except KeyError:
             return self.prev.get_object(ido)
 

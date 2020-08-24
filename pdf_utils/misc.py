@@ -1,3 +1,5 @@
+import os
+
 """
 Utility functions for PDF library.
 Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
@@ -39,13 +41,20 @@ def read_until_whitespace(stream, maxchars=None):
 PDF_WHITESPACE = b' \n\r\t\x00'
 
 
-def read_non_whitespace(stream):
+def read_non_whitespace(stream, seek_back=False, allow_eof=False):
     """
     Finds and reads the next non-whitespace character (ignores whitespace).
     """
     tok = PDF_WHITESPACE[0]
     while tok in PDF_WHITESPACE:
+        if not tok:
+            if allow_eof:
+                return b''
+            else:
+                raise PdfStreamError('Stream ended prematurely')
         tok = stream.read(1)
+    if seek_back:
+        stream.seek(-1, os.SEEK_CUR)
     return tok
 
 

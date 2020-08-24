@@ -169,6 +169,7 @@ class ArrayObject(list, PdfObject):
 def is_indirect(obj):
     return isinstance(obj, IndirectObject)
 
+
 class IndirectObject(PdfObject):
     def __init__(self, idnum, generation, pdf):
         self.idnum = idnum
@@ -566,7 +567,7 @@ class DictionaryObject(dict, PdfObject):
                     logger.warning(err)
 
         pos = stream.tell()
-        s = read_non_whitespace(stream)
+        s = read_non_whitespace(stream, allow_eof=True)
         stream_data = None
         if s == b's' and stream.read(5) == b'tream':
             eol = stream.read(1)
@@ -902,8 +903,8 @@ class DecryptedObjectProxy(PdfObject):
         return self.decrypted
 
 
-
 ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
+
 
 def pdf_date(dt: datetime):
     base_dt = dt.strftime(ASN_DT_FORMAT)

@@ -168,3 +168,39 @@ def test_mildly_malformed_xref_read():
     assert reader.xref_index == 1
     root = reader.trailer['/Root']
     assert '/Pages' in root
+
+
+def test_write_embedded_string_objstream():
+    ffile = ttLib.TTFont(NOTO_SERIF_JP)
+    ga = GlyphAccumulator(ffile)
+    cid_hx, _ = ga.feed_string('テスト')
+    assert cid_hx == '0637062a0639'
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_XREF))
+    obj_stream = w.prepare_object_stream()
+    font_ref = ga.embed_subset(w, obj_stream=obj_stream)
+    stream = generic.StreamObject(
+        stream_data=f'BT /FEmb 18 Tf 0 100 Td <{cid_hx}> Tj ET'.encode('ascii')
+    )
+    stream_ref = w.add_object(stream)
+    w.add_stream_to_page(
+        0, stream_ref, resources=generic.DictionaryObject({
+            pdf_name('/Font'): generic.DictionaryObject({
+                pdf_name('/FEmb'): font_ref
+            })
+        })
+    )
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    r = PdfFileReader(out)
+    page_obj = r.trailer['/Root']['/Pages']['/Kids'][0].get_object()
+    conts = page_obj['/Contents']
+    assert len(conts) == 2
+    assert stream_ref.idnum in (c.idnum for c in conts)
+    assert font_ref.idnum in r.obj_stream_refs
+    out.seek(0)
+
+    # attempt to grab the font from the object stream
+    font_ref.pdf = r
+    font = font_ref.get_object()
+    assert font['/Type'] == pdf_name('/Font')

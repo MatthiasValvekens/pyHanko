@@ -2,6 +2,7 @@ import os
 import struct
 from hashlib import md5
 from io import BytesIO
+from typing import Tuple, List
 
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
@@ -13,6 +14,44 @@ Contains code from the PyPDF2 project, see LICENSE.PyPDF2
 """
 
 VENDOR = 'pdfstamp'
+
+
+# TODO consider giving object streams and writers a common add_object interface
+
+class ObjectStream:
+
+    def __init__(self, compress=True):
+        self._obj_refs: List[Tuple[int, generic.PdfObject]] = []
+        self.compress = compress
+
+    def add_object(self, idnum, obj):
+        if isinstance(obj, generic.StreamObject):
+            raise TypeError(
+                'Stream objects cannot be embedded into object streams'
+            )
+        self._obj_refs.append((idnum, obj))
+
+    def as_pdf_object(self) -> generic.StreamObject:
+        stream_header = BytesIO()
+        main_body = BytesIO()
+        for idnum, obj in self._obj_refs:
+            offset = main_body.tell()
+            obj.write_to_stream(main_body, None)
+            stream_header.write(b'%d %d ' % (idnum, offset))
+
+        # strip the last bit of whitespace
+        first_obj_offset = stream_header.tell() - 1
+        stream_header.seek(0)
+        sh_bytes = stream_header.read(first_obj_offset)
+        stream_data = sh_bytes + main_body.getvalue()
+        stream_object = generic.StreamObject({
+            pdf_name('/Type'): pdf_name('/ObjStm'),
+            pdf_name('/N'): generic.NumberObject(len(self._obj_refs)),
+            pdf_name('/First'): generic.NumberObject(first_obj_offset)
+        }, stream_data=stream_data)
+        if self.compress:
+            stream_object.compress()
+        return stream_object
 
 
 def _derive_key(base_key, idnum, generation):
@@ -127,10 +166,17 @@ class XRefStream(generic.StreamObject):
         for first_idnum, subsection in subsections:
             index += [first_idnum, len(subsection)]
             for position, generation in subsection:
-                # TODO support objects in object streams
-                stream_content.write(b'\x01')
-                stream_content.write(struct.pack('>Q', position))
-                stream_content.write(struct.pack('>H', generation))
+                if isinstance(position, tuple):
+                    # reference to object in object stream
+                    assert generation == 0
+                    obj_stream_num, ix = position
+                    stream_content.write(b'\x02')
+                    stream_content.write(struct.pack('>Q', obj_stream_num))
+                    stream_content.write(struct.pack('>H', ix))
+                else:
+                    stream_content.write(b'\x01')
+                    stream_content.write(struct.pack('>Q', position))
+                    stream_content.write(struct.pack('>H', generation))
         index_entry = generic.ArrayObject(map(generic.NumberObject, index))
 
         self[pdf_name('/Index')] = index_entry
@@ -163,7 +209,10 @@ class BasePdfFileWriter:
     def __init__(self, root, info, document_id, obj_id_start=0,
                  stream_xrefs=True):
         self.objects = {}
+        self.object_streams: List[ObjectStream] = list()
+        self.objs_in_streams = {}
         self._lastobj_id = obj_id_start
+        self._resolves_objs_from = (self,)
 
         if isinstance(root, generic.IndirectObject):
             self._root = root
@@ -190,19 +239,57 @@ class BasePdfFileWriter:
         return self._root
 
     def get_object(self, ido):
-        if ido.pdf is not self:
-            raise ValueError("pdf must be self")
-        return self.objects[(ido.generation, ido.idnum)]
+        if ido.pdf not in self._resolves_objs_from:
+            raise ValueError(
+                f'Reference {ido} has no relation to this PDF writer.'
+            )
+        try:
+            return self.objects[(ido.generation, ido.idnum)]
+        except KeyError:
+            if ido.generation == 0:
+                try:
+                    return self.objs_in_streams[ido.idnum]
+                except KeyError:
+                    pass
+            raise KeyError(ido)
 
-    def add_object(self, obj):
+    def add_object(self, obj, obj_stream: ObjectStream = None):
+        idnum = self._lastobj_id + 1
+        if obj_stream is None:
+            self.objects[(0, idnum)] = obj
+        elif obj_stream in self.object_streams:
+            obj_stream.add_object(idnum, obj)
+            self.objs_in_streams[idnum] = obj
+        else:
+            raise ValueError(
+                f'Stream {repr(obj_stream)} is unknown to this PDF writer.'
+            )
         self._lastobj_id += 1
-        self.objects[(0, self._lastobj_id)] = obj
-        return generic.IndirectObject(self._lastobj_id, 0, self)
+        return generic.IndirectObject(idnum, 0, self)
+
+    def prepare_object_stream(self, compress=True):
+        if not self.stream_xrefs:
+            raise ValueError(
+                'Object streams require Xref streams to be enabled.'
+            )
+        stream = ObjectStream(compress=compress)
+        self.object_streams.append(stream)
+        return stream
 
     def _write_header(self, stream):
         pass
 
     def _write_objects(self, stream, object_position_dict):
+        # deal with objects in object streams first
+        for obj_stream in self.object_streams:
+            # first, register the object stream object
+            #  (will get written later)
+            stream_ref = self.add_object(obj_stream.as_pdf_object())
+            # loop over all objects in the stream, and prepare
+            # the data to put in the XRef table
+            for ix, (idnum, obj) in enumerate(obj_stream._obj_refs):
+                object_position_dict[(0, idnum)] = (stream_ref.idnum, ix)
+
         for ix in sorted(self.objects.keys()):
             generation, idnum = ix
             obj = self.objects[ix]
@@ -299,11 +386,9 @@ class BasePdfFileWriter:
 
         def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict,
                      prev_last_indir):
-            last_indir = prev_last_indir
             pages_obj = pages_obj_ref.get_object()
             kids = pages_obj.raw_get('/Kids')
             if isinstance(kids, generic.IndirectObject):
-                last_indir = kids
                 kids = kids.get_object()
 
             try:
