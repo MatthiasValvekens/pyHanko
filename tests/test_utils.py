@@ -149,3 +149,10 @@ def test_write_embedded_string():
     assert len(conts) == 2
     assert stream_ref.idnum in (c.idnum for c in conts)
 
+
+def test_read_rewrite():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    assert out.getvalue() == MINIMAL
