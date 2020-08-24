@@ -14,7 +14,7 @@ MINIMAL_RC4 = read_all(PDF_DATA_DIR + '/minimal-rc4.pdf')
 MINIMAL_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-rc4.pdf')
 
 
-def simple_page(pdf_out, ascii_text, compress=False):
+def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # based on the minimal pdf file of
     # https://brendanzagaeski.appspot.com/0004.html
     from pdf_utils import writer, generic
@@ -31,12 +31,25 @@ def simple_page(pdf_out, ascii_text, compress=False):
     media_box = generic.ArrayObject(
         map(generic.NumberObject, (0, 0, 300, 144))
     )
+
+    def stream_data(txt, y):
+        return f'BT /F1 18 Tf 0 {y} Td ({txt}) Tj ET'.encode('ascii')
+
     stream = generic.StreamObject(
-        stream_data=f'BT /F1 18 Tf 0 0 Td ({ascii_text}) Tj ET'.encode('ascii')
+        stream_data=stream_data(ascii_text, 0)
     )
     if compress:
         stream.compress()
+
+    if extra_stream:
+        stream2 = generic.StreamObject(stream_data=stream_data(ascii_text, 100))
+        if compress:
+            stream2.compress()
+        contents = generic.ArrayObject(
+            [pdf_out.add_object(stream), pdf_out.add_object(stream2)]
+        )
+    else:
+        contents = pdf_out.add_object(stream)
     return writer.PageObject(
-        contents=pdf_out.add_object(stream), media_box=media_box,
-        resources=resources
+        contents=contents, media_box=media_box, resources=resources
     )

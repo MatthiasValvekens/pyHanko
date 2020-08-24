@@ -391,6 +391,7 @@ class BasePdfFileWriter:
         :param after:
             Page number (zero-indexed) after which to insert the page.
         :return:
+            A reference to the newly inserted page.
         """
         if new_page['/Type'] != pdf_name('/Page'):
             raise ValueError('Not a page object')
@@ -425,11 +426,14 @@ class BasePdfFileWriter:
             count = parent['/Count']
             parent[pdf_name('/Count')] = generic.NumberObject(count + 1)
             parent = parent.get('/Parent')
-        kids.insert(kid_ix + 1, self.add_object(new_page))
+        new_page_ref = self.add_object(new_page)
+        kids.insert(kid_ix + 1, new_page_ref)
         new_page[pdf_name('/Parent')] = pages_obj_ref
         self.mark_update(upd_boundary)
         if upd_boundary != kids_update_boundary:
             self.mark_update(kids_update_boundary)
+
+        return new_page_ref
 
 
 class PageObject(generic.DictionaryObject):

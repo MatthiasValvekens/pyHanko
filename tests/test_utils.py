@@ -47,6 +47,81 @@ def test_embed_subset():
     assert '/FontFile3' in cid_font['/FontDescriptor']
 
 
+def test_add_stream():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    def stream_data(y):
+        return f'BT /F1 18 Tf 0 {y} Td (Test Test) Tj ET'.encode('ascii')
+
+    stream = generic.StreamObject(stream_data=stream_data(50))
+
+    stream_ref = w.add_object(stream)
+    w.add_stream_to_page(0, stream_ref)
+
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    r = PdfFileReader(out)
+    # check if the content stream was added
+    page_obj_ref = r.trailer['/Root']['/Pages']['/Kids'][0]
+    assert isinstance(page_obj_ref, generic.IndirectObject)
+    page_obj = page_obj_ref.get_object()
+    conts = page_obj['/Contents']
+    assert len(conts) == 2
+    assert stream_ref.idnum in (c.idnum for c in conts)
+    # check if resource dictionary is still OK
+    assert '/F1' in page_obj['/Resources']['/Font']
+
+    # let's try adding a third
+    out.seek(0)
+    w = IncrementalPdfFileWriter(out)
+
+    stream = generic.StreamObject(stream_data=stream_data(100))
+    new_stream_ref = w.add_object(stream)
+    w.add_stream_to_page(0, new_stream_ref)
+
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    r = PdfFileReader(out)
+    # check if the content stream was added
+    page_obj_ref = r.trailer['/Root']['/Pages']['/Kids'][0]
+    assert isinstance(page_obj_ref, generic.IndirectObject)
+    page_obj = page_obj_ref.get_object()
+    conts = page_obj['/Contents']
+    assert len(conts) == 3
+    ids = [c.idnum for c in conts]
+    assert stream_ref.idnum in ids and new_stream_ref.idnum in ids
+
+
+def test_add_stream_to_direct_arr():
+    w = writer.PdfFileWriter()
+    w.insert_page(simple_page(w, 'Test Test', extra_stream=True))
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    w = IncrementalPdfFileWriter(out)
+
+    new_stream = 'BT /F1 18 Tf 0 50 Td (Test2 Test2) Tj ET'.encode('ascii')
+    stream = generic.StreamObject(stream_data=new_stream)
+    stream_ref = w.add_object(stream)
+    w.add_stream_to_page(0, stream_ref)
+
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    r = PdfFileReader(out)
+    # check if the content stream was added
+    page_obj_ref = r.trailer['/Root']['/Pages']['/Kids'][0]
+    assert isinstance(page_obj_ref, generic.IndirectObject)
+    page_obj = page_obj_ref.get_object()
+    conts = page_obj['/Contents']
+    assert len(conts) == 3
+    assert stream_ref.idnum in (c.idnum for c in conts)
+    # check if resource dictionary is still OK
+    assert '/F1' in page_obj['/Resources']['/Font']
+
+
 def test_write_embedded_string():
     ffile = ttLib.TTFont(NOTO_SERIF_JP)
     ga = GlyphAccumulator(ffile)
