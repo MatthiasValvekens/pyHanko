@@ -35,4 +35,3 @@ jobs:
         flags: unittests
         env_vars: OS,PYTHON
         name: codecov-umbrella
-        path_to_write_report: ./coverage/codecov_report.gz
