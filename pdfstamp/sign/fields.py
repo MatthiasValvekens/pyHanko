@@ -147,12 +147,6 @@ class SigFieldSpec:
     box: (int, int, int, int) = None
     seed_value_dict: SigSeedValueSpec = None
 
-    @property
-    def dimensions(self):
-        if self.box is not None:
-            x1, y1, x2, y2 = self.box
-            return abs(x1 - x2), abs(y1 - y2)
-
 
 def _prepare_sig_field(sig_field_name, root,
                        update_writer: IncrementalPdfFileWriter,
@@ -161,12 +155,6 @@ def _prepare_sig_field(sig_field_name, root,
     if sig_field_name is None:
         raise ValueError
 
-    # Holds a reference to the object containing our form field
-    # that we'll have to update IF we create a new form field.
-    # In typical situations, this is either the
-    # /AcroForm object itself (when its /Fields are a flat, direct array),
-    # or whatever /Fields points to.
-    field_container_ref = None
     try:
         form_ref = root.raw_get('/AcroForm')
 
@@ -174,34 +162,25 @@ def _prepare_sig_field(sig_field_name, root,
             # The /AcroForm exists and is indirect. Hence, we may need to write
             # an update if we end up having to add the signature field
             form = form_ref.get_object()
+            update_boundary = form_ref
         else:
-            # the form is a direct object, so we'll replace it with
-            # an indirect one, and mark the root to be updated
-            # (I think this is fairly rare, but requires testing!)
+            # the form is a direct object
             form = form_ref
-            # if updates are not active, we forgo the replacement
-            #  operation; in this case, one should only update the
-            #  referenced form field anyway.
-            # this creates a new xref
-            form_ref = update_writer.add_object(form)
-            root[pdf_name('/AcroForm')] = form_ref
-            update_writer.update_root()
+            update_boundary = update_writer.root_ref
         # try to extend the existing form object first
         # and mark it for an update if necessary
         try:
             fields_ref = form.raw_get('/Fields')
             if isinstance(fields_ref, generic.IndirectObject):
-                field_container_ref = fields_ref
+                # /Fields is an indirect reference, so
+                # we can safely move the update boundary to fields_ref
+                update_boundary = fields_ref
                 fields = fields_ref.get_object()
             else:
                 fields = fields_ref
-                # /Fields is directly embedded into form_ref, so that's
-                # what we'll have to update if we create a new field
-                field_container_ref = form_ref
         except KeyError:
             # shouldn't happen, but eh
             fields = generic.ArrayObject()
-            field_container_ref = form_ref
             form[pdf_name('/Fields')] = fields
 
         candidates = enumerate_sig_fields_in(fields, with_name=sig_field_name)
@@ -231,6 +210,7 @@ def _prepare_sig_field(sig_field_name, root,
         # now we need to mark the root as updated
         update_writer.update_root()
         sig_field_ref = None
+        update_boundary = None
 
     field_created = sig_field_ref is None
     if field_created:
@@ -252,8 +232,8 @@ def _prepare_sig_field(sig_field_name, root,
         form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(sig_flags))
         # if we're adding a field to an existing form, this requires
         # registering an extra update
-        if field_container_ref is not None:
-            update_writer.mark_update(field_container_ref)
+        if update_boundary is not None:
+            update_writer.mark_update(update_boundary)
 
     return field_created, sig_field_ref
 

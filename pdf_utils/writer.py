@@ -185,6 +185,10 @@ class BasePdfFileWriter:
     def root(self):
         return self._root.get_object()
 
+    @property
+    def root_ref(self):
+        return self._root
+
     def get_object(self, ido):
         if ido.pdf is not self:
             raise ValueError("pdf must be self")
