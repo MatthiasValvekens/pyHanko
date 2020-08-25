@@ -1,5 +1,6 @@
 pdfstamp
 --------
+![status](https://github.com/MatthiasValvekens/pdf-stamp/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pdf-stamp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python)
 
