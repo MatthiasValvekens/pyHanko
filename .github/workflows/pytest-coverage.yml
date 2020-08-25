@@ -1,4 +1,4 @@
-name: Pytest & coverage
+name: pytest
 
 on:
   push:
