@@ -288,3 +288,34 @@ def test_append_sig_field_acro_update():
     w = IncrementalPdfFileWriter(out)
     fields.append_signature_fields(w, [sp])
     assert len(w.root['/AcroForm']['/Fields']) == 1
+
+
+def test_cert_constraint_deserialisation():
+    signer1 = FROM_CA.signing_cert
+    signer2 = SELF_SIGN.signing_cert
+    constr = fields.SigCertConstraints(subjects=[signer1, signer2])
+    constr_parsed = fields.SigCertConstraints.from_pdf_object(
+        constr.as_pdf_object()
+    )
+    signer1_parsed, signer2_parsed = constr_parsed.subjects
+    assert signer1_parsed.dump() == signer1.dump()
+    assert signer2_parsed.dump() == signer2.dump()
+    assert not constr_parsed.issuers
+
+    issuer1 = FROM_CA.signing_cert
+    issuer2 = SELF_SIGN.signing_cert
+    constr = fields.SigCertConstraints(issuers=[issuer1, issuer2])
+    constr_parsed = fields.SigCertConstraints.from_pdf_object(
+        constr.as_pdf_object()
+    )
+    issuer1_parsed, issuer2_parsed = constr_parsed.issuers
+    assert issuer1_parsed.dump() == issuer1.dump()
+    assert issuer2_parsed.dump() == issuer2.dump()
+    assert not constr_parsed.subjects
+
+    constr = fields.SigCertConstraints(subject_dns=[signer1.subject])
+    constr_ser = constr.as_pdf_object()
+    assert '/C' in constr_ser['/SubjectDN'][0]
+    constr_parsed = fields.SigCertConstraints.from_pdf_object(constr_ser)
+    assert constr_parsed.subject_dns[0].dump() == signer1.subject.dump()
+    assert len(constr_parsed.subject_dns) == 1

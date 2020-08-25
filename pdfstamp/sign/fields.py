@@ -3,6 +3,7 @@ from enum import IntFlag
 from typing import List, Optional
 
 from asn1crypto import x509
+from oscrypto import keys as oskeys
 
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
@@ -53,6 +54,21 @@ class SigCertConstraintFlags:
     URL = 64
 
 
+name_type_abbrevs = {
+    '2.5.4.3': 'CN',
+    '2.5.4.5': 'SerialNumber',
+    '2.5.4.6': 'C',
+    '2.5.4.7': 'L',
+    '2.5.4.8': 'ST',
+    '2.5.4.10': 'O',
+    '2.5.4.11': 'OU',
+}
+
+name_type_abbrevs_rev = {
+    v: k for k, v in name_type_abbrevs.items()
+}
+
+
 def x509_name_keyval_pairs(name: x509.Name):
     rdns: x509.RDNSequence = name.chosen
     for rdn in rdns:
@@ -62,7 +78,13 @@ def x509_name_keyval_pairs(name: x509.Name):
             # standard says that the value should be a text string object,
             # so we just have asn1crypto convert everything to strings
             value = type_and_value['value']
-            yield oid.dotted, value.native
+            key = oid.dotted
+            try:
+                key = name_type_abbrevs[key]
+            except KeyError:
+                pass
+
+            yield key, value.native
             # these should be strings
 
 
@@ -80,26 +102,66 @@ class SigCertConstraints:
 
     # TODO support key usage and OID constraints
 
+    @classmethod
+    def from_pdf_object(cls, pdf_dict):
+        try:
+            if pdf_dict['/Type'] != '/SVCert':
+                raise ValueError('Object /Type entry is not /SVCert')
+        except KeyError:
+            pass
+        flags = pdf_dict.get('/Ff', 0)
+        subjects = [
+            oskeys.parse_certificate(cert.original_bytes) for cert in
+            pdf_dict.get('/Subject', ())
+        ]
+        issuers = [
+            oskeys.parse_certificate(cert.original_bytes) for cert in
+            pdf_dict.get('/Issuer', ())
+        ]
+
+        def format_attr(attr):
+            # strip initial /
+            attr = attr[1:]
+            # attempt to convert abbreviated attrs to OIDs, since build()
+            # takes OIDs
+            return name_type_abbrevs_rev.get(attr.upper(), attr)
+
+        subject_dns = [
+            x509.Name.build(
+                {format_attr(attr): value for attr, value in dn_dir.items()}
+            ) for dn_dir in pdf_dict.get('/SubjectDN', ())
+        ]
+
+        url = pdf_dict.get('/URL')
+        url_type = pdf_dict.get('/URLType')
+        kwargs = {
+            'flags': flags, 'subjects': subjects, 'subject_dns': subject_dns,
+            'issuers': issuers, 'info_url': url
+        }
+        if url is not None and url_type is not None:
+            kwargs['url_type'] = url_type
+        return cls(**kwargs)
+
     def as_pdf_object(self):
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SVCert'),
             pdf_name('/Ff'): generic.NumberObject(self.flags),
         })
-        if self.subjects is not None:
+        if self.subjects:
             result[pdf_name('/Subject')] = generic.ArrayObject(
                 generic.ByteStringObject(cert.dump())
                 for cert in self.subjects
             )
-        if self.subject_dns is not None:
+        if self.subject_dns:
             # FIXME Adobe Reader seems to ignore this for some reason.
             #  Should try to figure out what I'm doing wrong
             result[pdf_name('/SubjectDN')] = generic.ArrayObject(
                 generic.DictionaryObject({
-                    pdf_name('/' + oid): pdf_string(value)
-                    for oid, value in x509_name_keyval_pairs(subj_dn)
+                    pdf_name('/' + key): pdf_string(value)
+                    for key, value in x509_name_keyval_pairs(subj_dn)
                 }) for subj_dn in self.subject_dns
             )
-        if self.issuers is not None:
+        if self.issuers:
             result[pdf_name('/Issuer')] = generic.ArrayObject(
                 generic.ByteStringObject(cert.dump())
                 for cert in self.issuers
