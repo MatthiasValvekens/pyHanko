@@ -61,6 +61,9 @@ def val_trusted(r, sig_obj, extd=False):
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
+    summ = val_status.summary()
+    assert 'INTACT' in summ
+    assert 'TRUSTED' in summ
     if not extd:
         assert val_status.complete_document
     return val_status
@@ -73,6 +76,8 @@ def val_untrusted(r, sig_obj, extd=False):
     assert val_status.valid
     if not extd:
         assert val_status.complete_document
+    summ = val_status.summary()
+    assert 'INTACT' in summ
     return val_status
 
 
