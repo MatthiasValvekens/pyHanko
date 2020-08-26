@@ -91,6 +91,19 @@ def test_simple_sign():
     assert field_name == 'Sig1'
     val_untrusted(r, sig_obj)
 
+    # try tampering with the file
+    out.seek(0x9d)
+    # this just changes the size of the media box, so the file should remain
+    # a valid PDF.
+    out.write(b'4')
+    out.seek(0)
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    tampered = validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
+    assert not tampered.intact
+    assert not tampered.valid
+    assert tampered.summary() == 'INVALID'
+
 
 def test_sign_with_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
