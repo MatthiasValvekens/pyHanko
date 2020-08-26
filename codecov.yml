@@ -1,0 +1,5 @@
+ignore: 
+    - "tests"
+    - "pdfstamp/sign/pkcs11.py"  # PKCS11 code is impossible to unit test without a PCKS11 mocker
+    - "pdfstamp/sign/beid.py"
+    - "pdfstamp/cli.py"  # Maybe it's not a terrible idea to do this using pytest as well (TODO)
