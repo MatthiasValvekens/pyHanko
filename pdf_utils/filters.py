@@ -3,8 +3,10 @@ Implementation of stream filters for PDF.
 Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 """
 import binascii
+import re
 
-from .misc import PdfReadError
+
+from .misc import PdfReadError, PdfStreamError
 from io import BytesIO
 import struct
 
@@ -93,61 +95,115 @@ class FlateDecode(Decoder):
 
 # TODO check boundary conditions in PDF spec
 
+WS_REGEX = re.compile(b'\\s+')
+ASCII_HEX_EOD_MARKER = b'>'
+
+
 class ASCIIHexDecode(Decoder):
 
     @classmethod
     def encode(cls, data: bytes, decode_params=None) -> bytes:
-        return binascii.hexlify(data)
-
-    @classmethod
-    def decode(cls, data, decode_params=None):
-        def _build():
-            for c in data:
-                c_ = bytes((c,))
-                if c_.isspace():
-                    continue
-                if c_ == b'>':
-                    break
-                yield c
-        return binascii.unhexlify(bytes(_build()))
-
-
-# TODO reimplement LZW decoder
-
-class ASCII85Decode(Decoder):
-
-    @classmethod
-    def encode(cls, data: bytes, decode_params=None) -> bytes:
-        raise NotImplementedError
+        return binascii.hexlify(data) + b'>'
 
     @classmethod
     def decode(cls, data, decode_params=None):
         if isinstance(data, str):
             data = data.encode('ascii')
-        n = b = 0
-        out = bytearray()
-        for c in data:
-            if ord('!') <= c <= ord('u'):
-                n += 1
-                b = b*85+(c-33)
-                if n == 5:
-                    out += struct.pack(b'>L', b)
-                    n = b = 0
-            elif c == ord('z'):
-                assert n == 0
-                out += b'\0\0\0\0'
-            elif c == ord('~'):
-                if n:
-                    for _ in range(5-n):
-                        b = b*85+84
-                    out += struct.pack(b'>L', b)[:n-1]
+        data, _ = data.split(ASCII_HEX_EOD_MARKER, 1)
+        data = WS_REGEX.sub(b'', data)
+        return binascii.unhexlify(data)
+
+
+# TODO reimplement LZW decoder
+
+ASCII_85_EOD_MARKER = b'~>'
+POWS = tuple(85 ** p for p in (4, 3, 2, 1, 0))
+
+
+class ASCII85Decode(Decoder):
+
+    @classmethod
+    def encode(cls, data: bytes, decode_params=None) -> bytes:
+        # BytesIO is quite clever, in that it doesn't copy things until modified
+        data = BytesIO(data)
+        out = BytesIO()
+
+        while True:
+            grp = data.read(4)
+            if not grp:
                 break
-        return bytes(out)
-    decode = staticmethod(decode)
+            # This needs to happen before applying padding!
+            # See § 7.4.3 in ISO 32000-1
+            if grp == b'\0\0\0\0':
+                out.write(b'z')
+                continue
+
+            bytes_read = len(grp)
+            if bytes_read < 4:
+                grp += b'\0' * (4 - bytes_read)
+                pows = POWS[:bytes_read + 1]
+            else:
+                pows = POWS
+
+            # write 5 chars in base85
+            grp_int, = struct.unpack('>L', grp)
+            for p in pows:
+                digit, grp_int = divmod(grp_int, p)
+                # use chars from 0x21 to 0x75
+                out.write(bytes((digit + 0x21,)))
+        out.write(ASCII_85_EOD_MARKER)
+        return out.getvalue()
+
+    @classmethod
+    def decode(cls, data, decode_params=None):
+        if isinstance(data, str):
+            data = data.encode('ascii')
+        data, _ = data.split(ASCII_85_EOD_MARKER, 1)
+        data = BytesIO(WS_REGEX.sub(b'', data))
+        out = BytesIO()
+        while True:
+            next_char = data.read(1)
+            if not next_char:
+                break
+            if next_char == b'z':
+                out.write(b'\0\0\0\0')
+                continue
+            rest = data.read(4)
+            if not rest:  # pragma: nocover
+                raise PdfStreamError(
+                    'Nonzero ASCII85 group must have at least two digits.'
+                )
+
+            grp = next_char + rest
+            grp_result = 0
+            p = 0  # make the linter happy
+            # convert back from base 85 to int
+            for digit, p in zip(grp, POWS):
+                digit -= 0x21
+                if 0 <= digit < 85:
+                    grp_result += p * digit
+                else:  # pragma: nocover
+                    raise PdfStreamError(
+                        'Bytes in ASCII85 data must lie beteen 0x21 and 0x75.'
+                    )
+            # 85 and 256 are coprime, so the last digit will always be off by
+            # one if we had to throw away a multiple of 256 in the encoding
+            # step (due to padding).
+            if len(grp) < 5:
+                grp_result += p
+
+            # Finally, pack the integer into a 4-byte unsigned int
+            # (potentially need to cut off some excess digits)
+            decoded = struct.pack('>L', grp_result)
+            print(decoded.hex())
+            out.write(decoded[:len(grp) - 1])
+        return out.getvalue()
 
 
-# mostly a dummy
-class CryptDecoder(Decoder):
+class CryptDecoder(Decoder):  # pragma: nocover
+    """
+    Dummy class
+    """
     @classmethod
     def encode(cls, data: bytes, decode_params) -> bytes:
         pass

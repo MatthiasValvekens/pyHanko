@@ -3,7 +3,7 @@ from io import BytesIO
 
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.reader import PdfFileReader
-from pdf_utils import writer, generic
+from pdf_utils import writer, generic, filters
 from fontTools import ttLib
 from pdf_utils.font import GlyphAccumulator, pdf_name
 
@@ -204,3 +204,23 @@ def test_write_embedded_string_objstream():
     font_ref.pdf = r
     font = font_ref.get_object()
     assert font['/Type'] == pdf_name('/Font')
+
+TEST_STRING = b'\x74\x77\x74\x84\x66'
+
+def test_ascii_hex_decode():
+    from pdf_utils import filters
+    data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
+
+    encoded = filters.ASCIIHexDecode.encode(data)
+    assert filters.ASCIIHexDecode.decode(encoded) == data
+
+
+def test_ascii85_decode():
+    import os
+    from pdf_utils import filters
+    data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
+
+    encoded = filters.ASCII85Decode.encode(data)
+    # 50 normal groups of 4 * 5 -> 200,
+    assert len(encoded) == 257
+    assert filters.ASCII85Decode.decode(encoded) == data
