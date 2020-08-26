@@ -1,7 +1,6 @@
 import hashlib
 import struct
 import os
-from base64 import b64encode
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List
@@ -15,8 +14,12 @@ from .general import SignatureStatus, simple_cms_attribute
 
 __all__ = [
     'TimestampSignatureStatus', 'TimeStamper', 'HTTPTimeStamper',
-    'BasicAuthTimeStamper', 'BearerAuthTimeStamper'
+    'TimestampRequestError',
 ]
+
+
+class TimestampRequestError(IOError):
+    pass
 
 
 def get_nonce():
@@ -71,7 +74,7 @@ class TimeStamper:
                 fail_info = pki_status_info['fail_info'].native
             except KeyError:
                 fail_info = ''
-            raise IOError(
+            raise TimestampRequestError(
                 f'Timestamp server refused our request: statusString '
                 f'\"{status_string}\", failInfo \"{fail_info}\"'
             )
@@ -79,7 +82,7 @@ class TimeStamper:
         tst_info = tst['content']['encap_content_info']['content']
         nonce_received = tst_info.parsed['nonce'].native
         if nonce_received != nonce:
-            raise IOError(
+            raise TimestampRequestError(
                 f'Time stamping authority sent back bad nonce value. Expected '
                 f'{nonce}, but got {nonce_received}.'
             )
@@ -192,47 +195,30 @@ class DummyTimeStamper(TimeStamper):
 
 class HTTPTimeStamper(TimeStamper):
 
-    def __init__(self, url, https=False, timeout=5):
+    def __init__(self, url, https=False, timeout=5, auth=None, headers=None):
         self.url = url
         self.https = https
         self.timeout = timeout
+        self.auth = auth
+        self.headers = headers
 
     def request_headers(self):
-        return {'Content-Type': 'application/timestamp-query'}
+        headers = self.headers or {}
+        headers['Content-Type'] = 'application/timestamp-query'
+        return headers
 
     def timestamp(self, message_digest, md_algorithm):
-        if self.https and not self.url.startswith('https://'):
+        if self.https and not self.url.startswith('https:'):  # pragma: nocover
             raise ValueError('Timestamp URL is not HTTPS.')
         return super().timestamp(message_digest, md_algorithm)
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
         raw_res = requests.post(
             self.url, req.dump(), headers=self.request_headers(),
+            auth=self.auth, timeout=self.timeout
         )
         if raw_res.headers.get('Content-Type') != 'application/timestamp-reply':
-            raise IOError('Timestamp server response is malformed.', raw_res)
+            raise TimestampRequestError(
+                'Timestamp server response is malformed.', raw_res
+            )
         return tsp.TimeStampResp.load(raw_res.content)
-
-
-class BasicAuthTimeStamper(HTTPTimeStamper):
-    def __init__(self, url, username, password, https=True):
-        super().__init__(url, https)
-        self.username = username
-        self.password = password
-
-    def request_headers(self):
-        h = super().request_headers()
-        b64 = b64encode('%s:%s' % (self.username, self.password))
-        h['Authorization'] = 'Basic ' + b64.decode('ascii')
-        return h
-
-
-class BearerAuthTimeStamper(HTTPTimeStamper):
-    def __init__(self, url, token, https=True):
-        super().__init__(url, https)
-        self.token = token
-
-    def request_headers(self):
-        h = super().request_headers()
-        h['Authorization'] = 'Bearer ' + self.token
-        return h

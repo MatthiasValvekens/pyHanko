@@ -47,6 +47,14 @@ FROM_CA_TS = signers.SimpleSigner(
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS
 )
 
+DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
+    'http://example.com/tsa', https=False
+)
+FROM_CA_HTTP_TS = signers.SimpleSigner(
+    signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
+    signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
+)
+
 
 def val_trusted(r, sig_obj, extd=False):
     val_status = validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
@@ -193,6 +201,40 @@ def test_dummy_timestamp():
 
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(), signer=FROM_CA_TS,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    validity = val_trusted(r, sig_obj)
+    assert validity.timestamp_validity is not None
+    assert validity.timestamp_validity.trusted
+
+
+def test_http_timestamp(requests_mock):
+    from asn1crypto import tsp
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    def response_callback(request, _context):
+        req = tsp.TimeStampReq.load(request.body)
+        return DUMMY_TS.request_tsa_response(req=req).dump()
+
+    # bad content-type
+    requests_mock.post(DUMMY_HTTP_TS.url, content=response_callback)
+    from pdfstamp.sign.timestamps import TimestampRequestError
+    with pytest.raises(TimestampRequestError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA_HTTP_TS,
+            existing_fields_only=True,
+        )
+
+    requests_mock.post(
+        DUMMY_HTTP_TS.url, content=response_callback,
+        headers={'Content-Type': 'application/timestamp-reply'}
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA_HTTP_TS,
         existing_fields_only=True,
     )
 
