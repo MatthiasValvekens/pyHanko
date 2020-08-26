@@ -1,7 +1,9 @@
 from oscrypto import keys
 
-from . import sign
+from . import pkcs11 as sign_pkcs11
 from pkcs11 import Attribute, ObjectClass, PKCS11Error, lib as pkcs11_lib
+
+__all__ = ['open_beid_session', 'BEIDSigner']
 
 """
 Sign PDF files using a Belgian eID card.
@@ -33,7 +35,7 @@ def open_beid_session(lib_location, slot_no=None):
     return token.open()
 
 
-class BEIDSigner(sign.PKCS11Signer):
+class BEIDSigner(sign_pkcs11.PKCS11Signer):
 
     def _load_ca_chain(self):
 

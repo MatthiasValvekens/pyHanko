@@ -7,21 +7,20 @@ from oscrypto import keys as oskeys
 from pdf_utils import generic
 from pdf_utils.font import pdf_name
 from pdf_utils.writer import PdfFileWriter
-from pdfstamp.sign import timestamps, fields
+from pdfstamp.sign import timestamps, fields, signers
 from pdfstamp.sign.validation import validate_pdf_signature
 from pdf_utils.reader import PdfFileReader
-from pdfstamp import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from .samples import *
 
 
-SELF_SIGN = sign.SimpleSigner.load(
+SELF_SIGN = signers.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',
     CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
     key_passphrase=b'secret'
 )
 
-FROM_CA = sign.SimpleSigner.load(
+FROM_CA = signers.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/signer.key.pem',
     CRYPTO_DATA_DIR + '/signer.cert.pem',
     ca_chain_files=(CRYPTO_DATA_DIR + '/ca-chain.pem',),
@@ -43,7 +42,7 @@ DUMMY_TS = timestamps.DummyTimeStamper(
     ca_chain=FROM_CA.ca_chain,
 )
 
-FROM_CA_TS = sign.SimpleSigner(
+FROM_CA_TS = signers.SimpleSigner(
     signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS
 )
@@ -71,8 +70,9 @@ def val_untrusted(r, sig_obj, extd=False):
 
 def test_simple_sign():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
-                        signer=SELF_SIGN)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=SELF_SIGN
+    )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
@@ -81,8 +81,9 @@ def test_simple_sign():
 
 def test_sign_with_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    out = sign.sign_pdf(w, sign.PdfSignatureMetadata(field_name='Sig1'),
-                        signer=FROM_CA)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
@@ -98,21 +99,23 @@ def test_sign_field_unclear():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
 
     with pytest.raises(ValueError):
-        sign.sign_pdf(w, sign.PdfSignatureMetadata(), signer=FROM_CA)
+        signers.sign_pdf(w, signers.PdfSignatureMetadata(), signer=FROM_CA)
 
     with pytest.raises(ValueError):
-        sign.sign_pdf(w, sign.PdfSignatureMetadata(), signer=FROM_CA,
-                      existing_fields_only=True)
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+            existing_fields_only=True
+        )
 
 
 def test_sign_field_infer():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     with pytest.raises(ValueError):
-        sign.sign_pdf(w, sign.PdfSignatureMetadata(), signer=FROM_CA)
+        signers.sign_pdf(w, signers.PdfSignatureMetadata(), signer=FROM_CA)
 
-    out = sign.sign_pdf(
-        w, sign.PdfSignatureMetadata(), signer=FROM_CA,
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
         existing_fields_only=True
     )
 
@@ -125,16 +128,16 @@ def test_sign_field_infer():
 def test_sign_field_filled():
     w1 = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
 
-    out1 = sign.sign_pdf(
-        w1, sign.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+    out1 = signers.sign_pdf(
+        w1, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
         existing_fields_only=True
     )
 
     # can't sign the same field twice
     w2 = IncrementalPdfFileWriter(out1)
     with pytest.raises(ValueError):
-        sign.sign_pdf(
-            w2, sign.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+        signers.sign_pdf(
+            w2, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
             existing_fields_only=True
         )
     out1.seek(0)
@@ -152,16 +155,16 @@ def test_sign_field_filled():
 
     w2 = IncrementalPdfFileWriter(out1)
     # autodetect remaining open field
-    out2 = sign.sign_pdf(
-        w2, sign.PdfSignatureMetadata(), signer=FROM_CA,
+    out2 = signers.sign_pdf(
+        w2, signers.PdfSignatureMetadata(), signer=FROM_CA,
         existing_fields_only=True
     )
     out1.seek(0)
     val2(out2)
 
     w2 = IncrementalPdfFileWriter(out1)
-    out2 = sign.sign_pdf(
-        w2, sign.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
+    out2 = signers.sign_pdf(
+        w2, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
         existing_fields_only=True
     )
     out1.seek(0)
@@ -174,8 +177,8 @@ sign_test_files = (MINIMAL, MINIMAL_ONE_FIELD)
 @pytest.mark.parametrize('file', [0, 1])
 def test_sign_new(file):
     w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
-    out = sign.sign_pdf(
-        w, sign.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
     r = PdfFileReader(out)
     field_name = sig_obj = None
@@ -188,8 +191,8 @@ def test_sign_new(file):
 def test_dummy_timestamp():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
-    out = sign.sign_pdf(
-        w, sign.PdfSignatureMetadata(), signer=FROM_CA_TS,
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA_TS,
         existing_fields_only=True,
     )
 
@@ -206,8 +209,8 @@ def test_dummy_timestamp():
 def test_sign_crypt_rc4(password):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD_RC4))
     w.encrypt(password)
-    out = sign.sign_pdf(
-        w, sign.PdfSignatureMetadata(), signer=FROM_CA,
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
         existing_fields_only=True
     )
 
@@ -228,8 +231,8 @@ sign_crypt_rc4_new_params = [
 def test_sign_crypt_rc4_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_rc4_files[file]))
     w.encrypt(password)
-    out = sign.sign_pdf(
-        w, sign.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
     out.seek(0)
     r = PdfFileReader(out)

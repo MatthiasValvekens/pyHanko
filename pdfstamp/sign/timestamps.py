@@ -18,6 +18,7 @@ __all__ = [
     'BasicAuthTimeStamper', 'BearerAuthTimeStamper'
 ]
 
+
 def get_nonce():
     # generate a random 8-byte integer
     # we initialise it like this to guarantee a fixed width

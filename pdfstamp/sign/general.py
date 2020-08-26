@@ -76,5 +76,3 @@ def find_cms_attribute(attrs, name):
         if attr['type'].native == name:
             return attr['values']
     raise KeyError(f'Unable to locate attribute {name}.')
-
-

@@ -3,11 +3,10 @@ import getpass
 
 from certvalidator import ValidationContext
 
-import pdfstamp.sign.fields
+from pdfstamp.sign import signers
 from pdfstamp.sign.timestamps import HTTPTimeStamper
-from pdfstamp.sign import validation
+from pdfstamp.sign import validation, beid, fields
 from pdf_utils.reader import PdfFileReader
-from . import sign
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 __all__ = ['cli']
@@ -44,7 +43,7 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
               required=False, multiple=True, type=readable_file)
 def list_sigfields(infile, skip_status, validate, trust, trust_replace):
     r = PdfFileReader(infile)
-    for name, value, _ in pdfstamp.sign.fields.enumerate_sig_fields(r):
+    for name, value, _ in fields.enumerate_sig_fields(r):
         if skip_status:
             print(name)
             continue
@@ -54,7 +53,8 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
                 v_context = None
                 if trust:
                     # add trust roots to the validation context, or replace them
-                    trust_certs = list(sign.load_ca_chain(trust))
+                    trust_certs = list(
+                        signers.load_ca_chain(trust))
                     if trust_replace:
                         v_context = ValidationContext(trust_roots=trust_certs)
                     else:
@@ -86,7 +86,7 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
 def addsig(ctx, field, name, reason, location, certify, existing_only):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
-    ctx.obj[SIG_META] = sign.PdfSignatureMetadata(
+    ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
         field_name=field, location=location, reason=reason, name=name,
         certify=certify
     )
@@ -124,7 +124,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
         passphrase = passfile.read()
         passfile.close()
     
-    signer = sign.SimpleSigner.load(
+    signer = signers.SimpleSigner.load(
         cert_file=cert, key_file=key, key_passphrase=passphrase,
         ca_chain_files=chain
     )
@@ -140,7 +140,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
         ).encode('utf-8')
         writer.encrypt(pdf_pass)
 
-    result = sign.sign_pdf(
+    result = signers.sign_pdf(
         writer, signature_meta, signer,
         existing_fields_only=existing_fields_only
     )
@@ -167,8 +167,6 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
 @click.pass_context
 def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no,
                 timestamp_url):
-    from . import beid
-
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
     session = beid.open_beid_session(lib, slot_no=slot_no)
@@ -179,7 +177,7 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no,
         timestamper = None
     signer = beid.BEIDSigner(session, label, timestamper=timestamper)
 
-    result = sign.sign_pdf(
+    result = signers.sign_pdf(
         IncrementalPdfFileWriter(infile), signature_meta, signer,
         existing_fields_only=existing_fields_only
     )
@@ -219,12 +217,12 @@ def add_sig_field(infile, outfile, specs):
                 raise click.ClickException(
                     "Sig field parameters X1,Y1,X2,Y2 should be four integers."
                 )
-            yield pdfstamp.sign.fields.SigFieldSpec(
+            yield fields.SigFieldSpec(
                 sig_field_name=name, on_page=page_ix, box=(x1, y1, x2, y2)
             )
 
     writer = IncrementalPdfFileWriter(infile)
-    pdfstamp.sign.fields.append_signature_fields(writer, list(_parse_specs()))
+    fields.append_signature_fields(writer, list(_parse_specs()))
     writer.write(outfile)
     infile.close()
     outfile.close()
