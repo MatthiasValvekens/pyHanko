@@ -255,7 +255,7 @@ def load_ca_chain(ca_chain_files):
             for type_name, _, der in pems:
                 if type_name is None or type_name.lower() == 'certificate':
                     yield x509.Certificate.load(der)
-                else:
+                else:  # pragma: nocover
                     logger.debug(
                         f'Skipping PEM block of type {type_name} in '
                         f'{ca_chain_file}.'
@@ -283,7 +283,7 @@ class SimpleSigner(Signer):
     def _load_ca_chain(cls, ca_chain_files=None):
         try:
             return list(load_ca_chain(ca_chain_files))
-        except (IOError, ValueError) as e:
+        except (IOError, ValueError) as e:  # pragma: nocover
             logger.error('Could not load CA chain', e)
             return None
 
@@ -294,7 +294,7 @@ class SimpleSigner(Signer):
         try:
             with open(pfx_file, 'rb') as f:
                 pfx_bytes = f.read()
-        except IOError as e:
+        except IOError as e:  # pragma: nocover
             logger.error(f'Could not open PKCS#12 file {pfx_file}.', e)
             return None
 
@@ -321,7 +321,7 @@ class SimpleSigner(Signer):
                 signing_cert: x509.Certificate = oskeys.parse_certificate(
                     f.read()
                 )
-        except (IOError, ValueError) as e:
+        except (IOError, ValueError) as e:  # pragma: nocover
             logger.error('Could not load cryptographic material', e)
             return None
 
