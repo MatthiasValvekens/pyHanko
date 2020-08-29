@@ -8,7 +8,9 @@ from pdf_utils import generic
 from pdf_utils.font import pdf_name
 from pdf_utils.writer import PdfFileWriter
 from pdfstamp.sign import timestamps, fields, signers
-from pdfstamp.sign.validation import validate_pdf_signature
+from pdfstamp.sign.validation import (
+    validate_pdf_signature, read_certification_data
+)
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from .samples import *
@@ -400,3 +402,29 @@ def test_cert_constraint_deserialisation():
     constr_parsed = fields.SigCertConstraints.from_pdf_object(constr_ser)
     assert constr_parsed.subject_dns[0].dump() == signer1.subject.dump()
     assert len(constr_parsed.subject_dns) == 1
+
+
+def test_certify_blank():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    assert read_certification_data(r) is None
+
+
+def test_certify():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=signers.DocMDPPerm.NO_CHANGES
+        ), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    status = val_untrusted(r, sig_obj)
+    assert not status.trusted
+
+    val_trusted(r, sig_obj)
+
+    sig_obj2, permission_bits = read_certification_data(r)
+    assert sig_obj2 == sig_obj.get_object()
+    assert permission_bits == signers.DocMDPPerm.NO_CHANGES

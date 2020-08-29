@@ -1,5 +1,6 @@
 import hashlib
 import os
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeVar, Type, Optional
@@ -10,13 +11,18 @@ from oscrypto import asymmetric
 from oscrypto.errors import SignatureError
 
 from pdf_utils import generic, misc
+from pdf_utils.generic import pdf_name
 from pdf_utils.reader import PdfFileReader
+from . import DocMDPPerm
 from .general import SignatureStatus, find_cms_attribute
 from .timestamps import TimestampSignatureStatus
 
 __all__ = [
     'PDFSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
+    'read_certification_data'
 ]
+
+logger = logging.getLogger(__name__)
 
 
 def partition_certs(certs, signer_info):
@@ -237,3 +243,45 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
         raw_digest=raw_digest, validation_context=signer_validation_context,
         status_kwargs=status_kwargs
     )
+
+
+def read_certification_data(reader: PdfFileReader):
+    try:
+        docmdp = reader.trailer['/Root']['/Perms'].raw_get('/DocMDP')
+    except KeyError:
+        return
+
+    if not isinstance(docmdp, generic.IndirectObject):  # pragma: nocover
+        raise ValueError('/DocMDP entry in /Perms should be an indirect ref')
+
+    sig_dict = docmdp.get_object()
+    # look up the relevant signature reference dictionary
+    try:
+        sig_refs = sig_dict['/Reference']
+        sig_ref = None
+        # not compliant, but meh
+        if isinstance(sig_refs, generic.DictionaryObject):  # pragma: nocover
+            logger.warning(
+                '/Reference entry should be an array of dictionaries'
+            )
+            if sig_refs['/TransformMethod'] == pdf_name('/DocMDP'):
+                sig_ref = sig_refs
+        elif isinstance(sig_refs, generic.ArrayObject):
+            for ref in sig_refs:
+                ref = ref.get_object()
+                if ref['/TransformMethod'] == pdf_name('/DocMDP'):
+                    sig_ref = ref
+                    break
+        else:  # pragma: nocover
+            logger.warning('Illegal type in /Reference, bailing.')
+        if sig_ref is None:  # pragma: nocover
+            raise ValueError('Could not parse signature reference dictionary.')
+    except KeyError:  # pragma: nocover
+        raise ValueError('Could not find signature reference dictionary.')
+
+    try:
+        permission_bits = sig_ref['/TransformParams']['/P']
+    except KeyError:
+        permission_bits = DocMDPPerm.FILL_FORMS
+
+    return sig_dict, permission_bits
