@@ -27,6 +27,9 @@ FROM_CA = signers.SimpleSigner.load(
     key_passphrase=b'secret'
 )
 
+FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
+    CRYPTO_DATA_DIR + '/signer.pfx', passphrase=b'exportsecret'
+)
 
 ROOT_CERT = oskeys.parse_certificate(read_all(CRYPTO_DATA_DIR + '/ca.cert.pem'))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
@@ -109,6 +112,21 @@ def test_sign_with_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    status = val_untrusted(r, sig_obj)
+    assert not status.trusted
+
+    val_trusted(r, sig_obj)
+
+
+def test_sign_with_trust_pkcs12():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA_PKCS12
     )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))

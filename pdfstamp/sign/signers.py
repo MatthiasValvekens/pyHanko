@@ -138,7 +138,8 @@ class Signer:
             pass
         return result
 
-    def signed_attrs(self, data_digest: bytes, timestamp: datetime = None):
+    @classmethod
+    def signed_attrs(cls, data_digest: bytes, timestamp: datetime = None):
         timestamp = timestamp or datetime.now(tz=tzlocal.get_localzone())
         return cms.CMSAttributes([
             simple_cms_attribute('content_type', 'data'),
@@ -279,6 +280,35 @@ class SimpleSigner(Signer):
         )
 
     @classmethod
+    def _load_ca_chain(cls, ca_chain_files=None):
+        try:
+            return list(load_ca_chain(ca_chain_files))
+        except (IOError, ValueError) as e:
+            logger.error('Could not load CA chain', e)
+            return None
+
+    @classmethod
+    def load_pkcs12(cls, pfx_file, ca_chain_files=None, passphrase=None):
+        # TODO support MAC integrity checking?
+
+        try:
+            with open(pfx_file, 'rb') as f:
+                pfx_bytes = f.read()
+        except IOError as e:
+            logger.error(f'Could not open PKCS#12 file {pfx_file}.', e)
+            return None
+
+        ca_chain = cls._load_ca_chain(ca_chain_files) if ca_chain_files else []
+        if ca_chain is None:  # pragma: nocover
+            return None
+
+        (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
+        return SimpleSigner(
+            signing_key=kinfo, signing_cert=cert,
+            ca_chain=ca_chain + other_certs
+        )
+
+    @classmethod
     def load(cls, key_file, cert_file, ca_chain_files=None,
              key_passphrase=None):
         try:
@@ -295,14 +325,9 @@ class SimpleSigner(Signer):
             logger.error('Could not load cryptographic material', e)
             return None
 
-        if ca_chain_files:
-            try:
-                ca_chain = list(load_ca_chain(ca_chain_files))
-            except (IOError, ValueError) as e:
-                logger.error('Could not load CA chain', e)
-                return None
-        else:
-            ca_chain = []
+        ca_chain = cls._load_ca_chain(ca_chain_files) if ca_chain_files else []
+        if ca_chain is None:  # pragma: nocover
+            return None
 
         return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
