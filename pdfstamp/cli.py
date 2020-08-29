@@ -92,7 +92,32 @@ def addsig(ctx, field, name, reason, location, certify, existing_only):
     )
 
 
-# TODO PKCS12 support
+def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
+                         timestamp_url, signature_meta, existing_fields_only):
+    if timestamp_url is not None:
+        signer.timestamper = HTTPTimeStamper(timestamp_url)
+    writer = IncrementalPdfFileWriter(infile)
+
+    # TODO make this an option higher up the tree
+    # TODO mention filename in prompt
+    if writer.prev.encrypted:
+        pdf_pass = getpass.getpass(
+            prompt=f'Password for encrypted file: '
+        ).encode('utf-8')
+        writer.encrypt(pdf_pass)
+
+    result = signers.sign_pdf(
+        writer, signature_meta, signer,
+        existing_fields_only=existing_fields_only
+    )
+    buf = result.getbuffer()
+    outfile.write(buf)
+    buf.release()
+
+    infile.close()
+    outfile.close()
+
+
 @addsig.command(name='pemder', help='read key material from PEM/DER files')
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
@@ -103,8 +128,7 @@ def addsig(ctx, field, name, reason, location, certify, existing_only):
 @click.option('--chain', type=readable_file, multiple=True,
               help='file(s) containing the chain of trust for the '
                    'signer\'s certificate (PEM/DER). May be '
-                   'passed multiple times. The root should be the last '
-                   'certificate passed')
+                   'passed multiple times.')
 # TODO allow reading the passphrase from a specific file descriptor
 #  (for advanced scripting setups)
 @click.option('--passfile', help='file containing the passphrase '
@@ -128,28 +152,48 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
         cert_file=cert, key_file=key, key_passphrase=passphrase,
         ca_chain_files=chain
     )
-    if timestamp_url is not None:
-        signer.timestamper = HTTPTimeStamper(timestamp_url)
-    writer = IncrementalPdfFileWriter(infile)
-
-    # TODO make this an option higher up the tree
-    # TODO mention filename in prompt
-    if writer.prev.encrypted:
-        pdf_pass = getpass.getpass(
-            prompt=f'Password for encrypted file: '
-        ).encode('utf-8')
-        writer.encrypt(pdf_pass)
-
-    result = signers.sign_pdf(
-        writer, signature_meta, signer,
+    return addsig_simple_signer(
+        signer, infile, outfile, timestamp_url=timestamp_url,
+        signature_meta=signature_meta,
         existing_fields_only=existing_fields_only
     )
-    buf = result.getbuffer()
-    outfile.write(buf)
-    buf.release()
 
-    infile.close()
-    outfile.close()
+
+@addsig.command(name='pkcs12', help='read key material from a PKCS#12 file')
+@click.argument('infile', type=click.File('rb'))
+@click.argument('outfile', type=click.File('wb'))
+@click.argument('pfx', type=readable_file)
+@click.option('--chain', type=readable_file, multiple=True,
+              help='PEM/DER file(s) containing extra certificates to embed '
+                   '(e.g. chain of trust not embedded in the PKCS#12 file)'
+                   'May be passed multiple times.')
+@click.option('--passfile', help='file containing the passphrase '
+                                 'for the PKCS#12 file.', required=False,
+              type=click.File('rb'),
+              show_default='stdin')
+@click.option('--timestamp-url', help='URL for timestamp server',
+              required=False, type=str, default=None)
+@click.pass_context
+def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile,
+                  timestamp_url):
+    signature_meta = ctx.obj[SIG_META]
+    existing_fields_only = ctx.obj[EXISTING_ONLY]
+
+    if passfile is None:
+        passphrase = getpass.getpass(prompt='Export passphrase: ')\
+                        .encode('utf-8')
+    else:
+        passphrase = passfile.read()
+        passfile.close()
+
+    signer = signers.SimpleSigner.load_pkcs12(
+        pfx_file=pfx, passphrase=passphrase, ca_chain_files=chain
+    )
+    return addsig_simple_signer(
+        signer, infile, outfile, timestamp_url=timestamp_url,
+        signature_meta=signature_meta,
+        existing_fields_only=existing_fields_only
+    )
 
 
 @addsig.command(name='beid', help='use Belgian eID to sign')
