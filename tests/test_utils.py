@@ -165,7 +165,6 @@ def test_mildly_malformed_xref_read():
     reader = PdfFileReader(malformed)
 
     # try something
-    assert reader.xref_index == 1
     root = reader.trailer['/Root']
     assert '/Pages' in root
 
@@ -197,7 +196,7 @@ def test_write_embedded_string_objstream():
     conts = page_obj['/Contents']
     assert len(conts) == 2
     assert stream_ref.idnum in (c.idnum for c in conts)
-    assert font_ref.idnum in r.obj_stream_refs
+    assert font_ref.idnum in r.xrefs.in_obj_stream
     out.seek(0)
 
     # attempt to grab the font from the object stream
