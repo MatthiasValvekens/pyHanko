@@ -25,6 +25,7 @@ def signing():
 
 SIG_META = 'SIG_META'
 EXISTING_ONLY = 'EXISTING_ONLY'
+TIMESTAMP_URL = 'TIMESTAMP_URL'
 
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
@@ -82,10 +83,14 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
 @click.option('--existing-only', help='never create signature fields', 
               required=False, default=False, is_flag=True, type=bool, 
               show_default=True)
+@click.option('--timestamp-url', help='URL for timestamp server',
+              required=False, type=str, default=None)
 @click.pass_context
-def addsig(ctx, field, name, reason, location, certify, existing_only):
+def addsig(ctx, field, name, reason, location, certify, existing_only,
+           timestamp_url):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
+    ctx.obj[TIMESTAMP_URL] = timestamp_url
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
         field_name=field, location=location, reason=reason, name=name,
         certify=certify
@@ -134,13 +139,11 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
 @click.option('--passfile', help='file containing the passphrase '
               'for the private key', required=False, type=click.File('rb'),
               show_default='stdin')
-@click.option('--timestamp-url', help='URL for timestamp server',
-              required=False, type=str, default=None)
 @click.pass_context
-def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
-                  timestamp_url):
+def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
+    timestamp_url = ctx.obj[TIMESTAMP_URL]
 
     if passfile is None:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
@@ -171,13 +174,14 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile,
                                  'for the PKCS#12 file.', required=False,
               type=click.File('rb'),
               show_default='stdin')
-@click.option('--timestamp-url', help='URL for timestamp server',
-              required=False, type=str, default=None)
 @click.pass_context
-def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile,
-                  timestamp_url):
+def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
+    # TODO add sanity check in case the user gets the arg order wrong
+    #  (now it fails with a gnarly DER decoding error, which is not very
+    #  user-friendly)
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
+    timestamp_url = ctx.obj[TIMESTAMP_URL]
 
     if passfile is None:
         passphrase = getpass.getpass(prompt='Export passphrase: ')\
@@ -206,13 +210,11 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile,
               help='use Authentication cert instead')
 @click.option('--slot-no', help='specify PKCS#11 slot to use', 
               required=False, type=int, default=None)
-@click.option('--timestamp-url', help='URL for timestamp server',
-              required=False, type=str, default=None)
 @click.pass_context
-def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no,
-                timestamp_url):
+def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     signature_meta = ctx.obj[SIG_META]
     existing_fields_only = ctx.obj[EXISTING_ONLY]
+    timestamp_url = ctx.obj[TIMESTAMP_URL]
     session = beid.open_beid_session(lib, slot_no=slot_no)
     label = 'Authentication' if use_auth_cert else 'Signature'
     if timestamp_url is not None:
