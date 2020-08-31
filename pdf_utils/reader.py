@@ -1,6 +1,7 @@
 import struct
 import os
 import re
+from collections import defaultdict
 from io import BytesIO
 
 from . import generic
@@ -61,14 +62,14 @@ class XRefCache:
 
     def __init__(self):
         super().__init__()
-        self.current_revision_index = 0
         self.xref_sections = 0
         self.in_obj_stream = {}
         self.standard_xrefs = {}
         # keep track of the xref section that last changed an entry
         #  (needed for some validation workflows)
         self.last_change = {}
-        self.first_occurrence = {}
+        # making this a dict doesn't make much sense
+        self.history = defaultdict(list)
 
     def used_before(self, idnum, generation):
         # We move backwards through the xrefs, don't replace any.
@@ -76,17 +77,50 @@ class XRefCache:
                idnum in self.in_obj_stream
 
     def put_ref(self, idnum, generation, start):
+        ix = (generation, idnum)
         if not self.used_before(idnum, generation):
-            self.standard_xrefs[(generation, idnum)] = start
-            self.last_change[idnum] = self.current_revision_index
-        # we move backwards through the file, so this makes sense
-        self.first_occurrence[idnum] = self.current_revision_index
+            self.standard_xrefs[ix] = start
+            self.last_change[idnum] = self.xref_sections
+        self.history[ix].append((self.xref_sections, start))
 
     def put_obj_stream_ref(self, idnum, obj_stream_num, obj_stream_ix):
+        marker = (obj_stream_num, obj_stream_ix)
         if not self.used_before(idnum, 0):
-            self.in_obj_stream[idnum] = (obj_stream_num, obj_stream_ix)
-            self.last_change[idnum] = self.current_revision_index
-        self.first_occurrence[idnum] = self.current_revision_index
+            self.in_obj_stream[idnum] = marker
+            self.last_change[idnum] = self.xref_sections
+        self.history[(0, idnum)].append((self.xref_sections, marker))
+
+    @property
+    def total_revisions(self):
+        return self.xref_sections
+
+    def get_historical_ref(self, ref, revision):
+        """
+        Look up the location of the historical value of an object.
+
+        :param ref:
+            An object reference.
+        :param revision:
+            A revision number. The oldest revision is zero.
+        :return:
+            An integer offset, or a pair of integers indicating an object
+            in an object stream.
+        """
+        max_index = self.xref_sections - 1
+        ix = (ref.generation, ref.idnum)
+
+        # Remember: in the history record, revisions are numbered backwards.
+        # (i.e. the first item is the most recent, and the last one is
+        # the oldest)
+        # Hence, the first match that corresponds to a point in time at or
+        # before 'revision' is the one we want
+        for rev_index, marker in self.history[ix]:
+            if revision >= max_index - rev_index:
+                return marker
+        raise misc.PdfReadError(
+            f'Could not find object ({ref.idnum} {ref.generation}) '
+            f'in history at revision {revision}'
+        )
 
     def __getitem__(self, ref):
         ix = (ref.generation, ref.idnum)
@@ -310,12 +344,21 @@ class PdfFileReader:
         else:
             return encrypt_ref
 
-    def get_object(self, ref, never_decrypt=False, transparent_decrypt=True):
+    @property
+    def total_revisions(self):
+        return self.xrefs.total_revisions
+
+    def get_object(self, ref, revision=None, never_decrypt=False,
+                   transparent_decrypt=True):
         """
         Read an object from the input stream.
 
         :param ref:
             Reference to the object.
+        :param revision:
+            Revision number, to return the historical value of a reference.
+            This always bypasses the cache.
+            The oldest revision is numbered zero.
         :param never_decrypt:
             Skip decryption step (only needed for parsing /Encrypt)
         :param transparent_decrypt:
@@ -326,23 +369,34 @@ class PdfFileReader:
             access to the "original".
         :return:
         """
-        retval = self.cache_get_indirect_object(ref.generation, ref.idnum)
-        if retval is not None:
-            if transparent_decrypt and \
-                    isinstance(retval, generic.DecryptedObjectProxy):
-                retval = retval.decrypted
-            return retval
+        if revision is None:
+            obj = self.cache_get_indirect_object(ref.generation, ref.idnum)
+            if obj is None:
+                obj = self._read_object(ref, self.xrefs[ref],
+                                        never_decrypt=never_decrypt)
+                # cache before (potential) decrypting
+                self.cache_indirect_object(ref.generation, ref.idnum, obj)
+        else:
+            # never cache historical refs
+            marker = self.xrefs.get_historical_ref(ref, revision)
+            obj = self._read_object(ref, marker, never_decrypt=never_decrypt)
 
-        start = self.xrefs[ref]
-        if isinstance(start, tuple):
-            # object stream
-            (obj_stream_num, obj_stream_ix) = start
+        if transparent_decrypt and \
+                isinstance(obj, generic.DecryptedObjectProxy):
+            obj = obj.decrypted
+
+        return obj
+
+    def _read_object(self, ref, marker, never_decrypt=False):
+        if isinstance(marker, tuple):
+            # object in object stream
+            (obj_stream_num, obj_stream_ix) = marker
             return self._get_object_from_stream(
                 ref.idnum, obj_stream_num, obj_stream_ix
             )
         else:
             # standard indirect object
-            self.stream.seek(start)
+            self.stream.seek(marker)
             idnum, generation = read_object_header(
                 self.stream, strict=self.strict
             )
@@ -363,10 +417,6 @@ class PdfFileReader:
                 # make sure the object that lands in the cache is always
                 # a proxy object
                 retval = generic.proxy_encrypted_obj(retval, key)
-            self.cache_indirect_object(ref.generation, ref.idnum, retval)
-            if transparent_decrypt and \
-                    isinstance(retval, generic.DecryptedObjectProxy):
-                retval = retval.decrypted
             return retval
 
     def cache_get_indirect_object(self, generation, idnum):

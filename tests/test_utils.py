@@ -3,7 +3,7 @@ from io import BytesIO
 
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.reader import PdfFileReader
-from pdf_utils import writer, generic
+from pdf_utils import writer, generic, misc
 from fontTools import ttLib
 from pdf_utils.font import GlyphAccumulator, pdf_name
 
@@ -224,3 +224,23 @@ def test_ascii85_decode():
     # 50 normal groups of 4 * 5 -> 200,
     assert len(encoded) == 257
     assert filters.ASCII85Decode.decode(encoded) == data
+
+
+def test_historical_read():
+    reader = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    assert reader.total_revisions == 2
+
+    # if this test file is ever replaced, the test will probably have to
+    # be rewritten
+    root_ref = generic.IndirectObject(1, 0, reader)
+    acroform_ref = generic.IndirectObject(6, 0, reader)
+
+    # current value
+    current_root = reader.get_object(root_ref, revision=1)
+    assert current_root == reader.trailer['/Root']
+    reader.get_object(acroform_ref, revision=1)
+
+    previous_root = reader.get_object(root_ref, revision=0)
+    assert '/AcroForm' not in previous_root
+    with pytest.raises(misc.PdfReadError):
+        reader.get_object(acroform_ref, revision=0)
