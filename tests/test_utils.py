@@ -244,3 +244,7 @@ def test_historical_read():
     assert '/AcroForm' not in previous_root
     with pytest.raises(misc.PdfReadError):
         reader.get_object(acroform_ref, revision=0)
+
+    assert (0, 6) in reader.xrefs.explicit_refs_in_revision(1)
+    assert (0, 2) in reader.xrefs.explicit_refs_in_revision(0)
+    assert (0, 2) not in reader.xrefs.explicit_refs_in_revision(1)

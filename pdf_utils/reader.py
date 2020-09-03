@@ -70,6 +70,13 @@ class XRefCache:
         self.last_change = {}
         # making this a dict doesn't make much sense
         self.history = defaultdict(list)
+        self._current_section_ids = set()
+        self._refs_by_section = []
+
+    def _next_section(self):
+        self.xref_sections += 1
+        self._refs_by_section.append(self._current_section_ids)
+        self._current_section_ids = set()
 
     def used_before(self, idnum, generation):
         # We move backwards through the xrefs, don't replace any.
@@ -82,17 +89,34 @@ class XRefCache:
             self.standard_xrefs[ix] = start
             self.last_change[idnum] = self.xref_sections
         self.history[ix].append((self.xref_sections, start))
+        self._current_section_ids.add(ix)
 
     def put_obj_stream_ref(self, idnum, obj_stream_num, obj_stream_ix):
         marker = (obj_stream_num, obj_stream_ix)
         if not self.used_before(idnum, 0):
             self.in_obj_stream[idnum] = marker
             self.last_change[idnum] = self.xref_sections
-        self.history[(0, idnum)].append((self.xref_sections, marker))
+
+        ix = (0, idnum)
+        self.history[ix].append((self.xref_sections, marker))
+        self._current_section_ids.add(ix)
 
     @property
     def total_revisions(self):
         return self.xref_sections
+
+    def explicit_refs_in_revision(self, revision):
+        """
+        Look up the object refs for all objects explicitly added or overwritten
+        in a given revision.
+
+        :param revision:
+            A revision number. The oldest revision is zero.
+        :return:
+            A set of (generation, idnum) pairs.
+        """
+        rbs = self._refs_by_section
+        return rbs[self.xref_sections - 1 - revision]
 
     def get_historical_ref(self, ref, revision):
         """
@@ -179,7 +203,7 @@ class XRefCache:
         read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
 
-        self.xref_sections += 1
+        self._next_section()
 
     def read_xref_stream(self, xrefstream):
         stream_data = BytesIO(xrefstream.data)
@@ -229,7 +253,7 @@ class XRefCache:
                     get_entry(1)
                     get_entry(2)
 
-        self.xref_sections += 1
+        self._next_section()
 
 
 def read_object_header(stream, strict):
