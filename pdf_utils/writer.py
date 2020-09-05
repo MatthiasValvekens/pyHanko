@@ -6,7 +6,7 @@ from typing import Tuple, List
 
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
-from pdf_utils.misc import peek
+from pdf_utils.misc import peek, PdfReadError
 from pdf_utils.rw_common import PdfHandler
 
 """
@@ -479,8 +479,20 @@ class BasePdfFileWriter(PdfHandler):
         page_ref, resources = other.find_page_for_modification(page_ix)
         page_obj = page_ref.get_object()
 
-        # TODO deal with the case where /MediaBox is inherited
-        mb = page_obj['/MediaBox']
+        # find the page's /MediaBox by going up the tree until we encounter it
+        pagetree_obj = page_obj
+        while True:
+            try:
+                mb = pagetree_obj['/MediaBox']
+                break
+            except KeyError:
+                try:
+                    pagetree_obj = pagetree_obj['/Parent']
+                except KeyError:  # pragma: nocover
+                    raise PdfReadError(
+                        f'Page {page_ix} does not have a /MediaBox'
+                    )
+
         stream_dict = {
             pdf_name('/BBox'): mb,
             pdf_name('/Resources'): self.import_object(resources),
@@ -512,7 +524,6 @@ class BasePdfFileWriter(PdfHandler):
             )
 
         return self.add_object(result)
-
 
 
 class PageObject(generic.DictionaryObject):

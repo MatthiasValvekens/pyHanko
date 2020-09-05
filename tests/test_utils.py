@@ -43,8 +43,9 @@ def test_embed_subset():
     assert cid_hx == '0637062a063966eb'
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     font_ref = ga.embed_subset(w)
-    cid_font = font_ref.get_object()['/DescendantFonts'][0].get_object()
-    assert '/FontFile3' in cid_font['/FontDescriptor']
+    df = font_ref.get_object()['/DescendantFonts'][0].get_object()
+    font_file = df['/FontDescriptor']['/FontFile3']
+    assert len(font_file.data) == 1919
 
 
 def test_add_stream():
@@ -250,7 +251,7 @@ def test_historical_read():
     assert (0, 2) not in reader.xrefs.explicit_refs_in_revision(1)
 
 
-# TODO actually attempt to render the XObject
+# TODO actually attempt to render the XObjects
 
 @pytest.mark.parametrize('file_no, inherit_filters',
                          [[0, True], [0, False], [1, True], [1, False]])
@@ -266,3 +267,18 @@ def test_page_import(file_no, inherit_filters):
     # just a piece of data I know occurs in the decoded content stream
     # of the (only) page in VECTOR_IMAGE_PDF
     assert b'0 1 0 rg /a0 gs' in xobj.data
+
+
+@pytest.mark.parametrize('inherit_filters', [True, False])
+def test_page_import_with_fonts(inherit_filters):
+    image_input = PdfFileReader(BytesIO(FILE_WITH_EMBEDDED_FONT))
+    w = writer.PdfFileWriter()
+    xobj_ref = w.import_page_as_xobject(
+        image_input, inherit_filters=inherit_filters
+    )
+    xobj: generic.StreamObject = xobj_ref.get_object()
+    fonts = xobj['/Resources']['/Font']
+    assert '/FEmb' in fonts
+    df = fonts['/FEmb']['/DescendantFonts'][0].get_object()
+    font_file = df['/FontDescriptor']['/FontFile3']
+    assert len(font_file.data) == 1424
