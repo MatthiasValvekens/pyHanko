@@ -14,6 +14,9 @@ MINIMAL_TWO_FIELDS = read_all(PDF_DATA_DIR + '/minimal-two-fields.pdf')
 MINIMAL_RC4 = read_all(PDF_DATA_DIR + '/minimal-rc4.pdf')
 MINIMAL_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-rc4.pdf')
 
+VECTOR_IMAGE_PDF = read_all(PDF_DATA_DIR + '/scribble.pdf')
+VECTOR_IMAGE_PDF_DECOMP = read_all(PDF_DATA_DIR + '/scribble-decomp.pdf')
+
 
 def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # based on the minimal pdf file of

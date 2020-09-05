@@ -418,6 +418,102 @@ class BasePdfFileWriter(PdfHandler):
 
         return new_page_ref
 
+    def import_object(self, obj: generic.PdfObject) -> generic.PdfObject:
+        """
+        Deep-copy an object into this writer, dealing with resolving indirect
+        references in the process.
+
+        :param obj:
+            The object to import.
+        :return:
+            The object as associated with this writer.
+            If the input object was an indirect reference, a dictionary
+            (incl. streams) or an array, the returned value will always be
+            a new instance. In other cases, the original object is returned.
+        """
+
+        # TODO support collecting all relevant references into a single object
+        #  stream. This makes sense in various scenarios (e.g. encapsulating
+        #  content from an existing PDF file)
+
+        # TODO check the spec for guidance on fonts. Do font identifiers have
+        #  to be globally unique?
+
+        if isinstance(obj, generic.IndirectObject):
+            refd = obj.get_object()
+            return self.add_object(self.import_object(refd))
+        elif isinstance(obj, generic.DictionaryObject):
+            raw_dict = {k: self.import_object(v) for k, v in obj.items()}
+            if isinstance(obj, generic.StreamObject):
+                # In the vast majority of use cases, I'd expect the content
+                # to be available in encoded form by default.
+                # By initialising the stream object in this way, we avoid
+                # a potentially costly decoding operation.
+                return generic.StreamObject(
+                    raw_dict, encoded_data=obj.encoded_data
+                )
+            else:
+                return generic.DictionaryObject(raw_dict)
+        elif isinstance(obj, generic.ArrayObject):
+            return generic.ArrayObject(self.import_object(v) for v in obj)
+        else:
+            return obj
+
+    def import_page_as_xobject(self, other: PdfHandler, page_ix=0,
+                               content_stream=0, inherit_filters=True):
+        """
+        Import a page content stream from some other PdfHandler into the
+        current one as a form XObject.
+
+        :param other:
+            A PdfHandler
+        :param page_ix:
+            Index of the page to copy (default: 0)
+        :param content_stream:
+            Index of the page's content stream to copy, if multiple are present
+            (default: 0)
+        :param inherit_filters:
+            Inherit the content stream's filters, if present.
+        :return:
+        """
+        page_ref, resources = other.find_page_for_modification(page_ix)
+        page_obj = page_ref.get_object()
+
+        # TODO deal with the case where /MediaBox is inherited
+        mb = page_obj['/MediaBox']
+        stream_dict = {
+            pdf_name('/BBox'): mb,
+            pdf_name('/Resources'): self.import_object(resources),
+            pdf_name('/Type'): pdf_name('/XObject'),
+            pdf_name('/Subtype'): pdf_name('/Form')
+        }
+        command_stream = page_obj['/Contents']
+        # if the page /Contents is an array, retrieve the content stream
+        # with the appropriate index
+        if isinstance(command_stream, generic.ArrayObject):
+            command_stream = command_stream[content_stream].get_object()
+        assert isinstance(command_stream, generic.StreamObject)
+        filters = None
+        if inherit_filters:
+            try:
+                # try to inherit filters from the original command stream
+                filters = command_stream['/Filter']
+            except KeyError:
+                pass
+
+        if filters is not None:
+            stream_dict[pdf_name('/Filter')] = self.import_object(filters)
+            result = generic.StreamObject(
+                stream_dict, encoded_data=command_stream.encoded_data
+            )
+        else:
+            result = generic.StreamObject(
+                stream_dict, stream_data=command_stream.data
+            )
+
+        return self.add_object(result)
+
+
 
 class PageObject(generic.DictionaryObject):
 

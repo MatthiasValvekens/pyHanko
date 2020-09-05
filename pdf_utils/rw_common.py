@@ -112,7 +112,7 @@ class PdfHandler:
         :param page_ix:
             The (zero-indexed) number of the page to retrieve.
         :return:
-            A with a reference to the page object and a
+            A tuple with a reference to the page object and a
             (possibly inherited) resource dictionary.
         """
         return self._walk_page_tree(page_ix, retrieve_parent=False)

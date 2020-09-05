@@ -248,3 +248,21 @@ def test_historical_read():
     assert (0, 6) in reader.xrefs.explicit_refs_in_revision(1)
     assert (0, 2) in reader.xrefs.explicit_refs_in_revision(0)
     assert (0, 2) not in reader.xrefs.explicit_refs_in_revision(1)
+
+
+# TODO actually attempt to render the XObject
+
+@pytest.mark.parametrize('file_no, inherit_filters',
+                         [[0, True], [0, False], [1, True], [1, False]])
+def test_page_import(file_no, inherit_filters):
+    fbytes = (VECTOR_IMAGE_PDF, VECTOR_IMAGE_PDF_DECOMP)[file_no]
+    image_input = PdfFileReader(BytesIO(fbytes))
+    w = writer.PdfFileWriter()
+    xobj_ref = w.import_page_as_xobject(
+        image_input, inherit_filters=inherit_filters
+    )
+    xobj: generic.StreamObject = xobj_ref.get_object()
+    assert '/ExtGState' in xobj['/Resources']
+    # just a piece of data I know occurs in the decoded content stream
+    # of the (only) page in VECTOR_IMAGE_PDF
+    assert b'0 1 0 rg /a0 gs' in xobj.data
