@@ -313,10 +313,8 @@ def enumerate_sig_fields(reader: PdfFileReader, filled_status=None):
         A generator producing signature fields.
     """
 
-    root = reader.trailer['/Root']
     try:
-        form = root['/AcroForm']
-        fields = form['/Fields']
+        fields = reader.root['/AcroForm']['/Fields']
     except KeyError:
         return
 

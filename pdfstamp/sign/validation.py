@@ -247,7 +247,7 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
 
 def read_certification_data(reader: PdfFileReader):
     try:
-        docmdp = reader.trailer['/Root']['/Perms'].raw_get('/DocMDP')
+        docmdp = reader.root['/Perms'].raw_get('/DocMDP')
     except KeyError:
         return
 

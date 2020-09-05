@@ -11,6 +11,8 @@ from .crypt import _alg33_1, _alg34, _alg35, derive_key, rc4_encrypt
 
 import logging
 
+from .rw_common import PdfHandler
+
 logger = logging.getLogger(__name__)
 
 """
@@ -280,7 +282,7 @@ def read_object_header(stream, strict):
     return int(idnum), int(generation)
 
 
-class PdfFileReader:
+class PdfFileReader(PdfHandler):
     last_startxref = None
     has_xref_stream = False
 
@@ -367,6 +369,10 @@ class PdfFileReader:
             return self.get_object(encrypt_ref, never_decrypt=True)
         else:
             return encrypt_ref
+
+    @property
+    def root_ref(self) -> generic.IndirectObject:
+        return self.trailer.raw_get('/Root', decrypt=False)
 
     @property
     def total_revisions(self):

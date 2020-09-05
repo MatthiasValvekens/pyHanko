@@ -24,7 +24,7 @@ def test_create_fresh(zip1, zip2):
     out.seek(0)
 
     r = PdfFileReader(out)
-    pages = r.trailer['/Root']['/Pages']
+    pages = r.root['/Pages']
     assert pages['/Count'] == 2
     kids = pages['/Kids']
     assert b'world' in kids[0].get_object()['/Contents'].data
@@ -63,7 +63,7 @@ def test_add_stream():
     out.seek(0)
     r = PdfFileReader(out)
     # check if the content stream was added
-    page_obj_ref = r.trailer['/Root']['/Pages']['/Kids'][0]
+    page_obj_ref = r.root['/Pages']['/Kids'][0]
     assert isinstance(page_obj_ref, generic.IndirectObject)
     page_obj = page_obj_ref.get_object()
     conts = page_obj['/Contents']
@@ -85,7 +85,7 @@ def test_add_stream():
     out.seek(0)
     r = PdfFileReader(out)
     # check if the content stream was added
-    page_obj_ref = r.trailer['/Root']['/Pages']['/Kids'][0]
+    page_obj_ref = r.root['/Pages']['/Kids'][0]
     assert isinstance(page_obj_ref, generic.IndirectObject)
     page_obj = page_obj_ref.get_object()
     conts = page_obj['/Contents']
@@ -112,7 +112,7 @@ def test_add_stream_to_direct_arr():
     out.seek(0)
     r = PdfFileReader(out)
     # check if the content stream was added
-    page_obj_ref = r.trailer['/Root']['/Pages']['/Kids'][0]
+    page_obj_ref = r.root['/Pages']['/Kids'][0]
     assert isinstance(page_obj_ref, generic.IndirectObject)
     page_obj = page_obj_ref.get_object()
     conts = page_obj['/Contents']
@@ -144,7 +144,7 @@ def test_write_embedded_string():
     w.write(out)
     out.seek(0)
     r = PdfFileReader(out)
-    page_obj = r.trailer['/Root']['/Pages']['/Kids'][0].get_object()
+    page_obj = r.root['/Pages']['/Kids'][0].get_object()
     conts = page_obj['/Contents']
     assert len(conts) == 2
     assert stream_ref.idnum in (c.idnum for c in conts)
@@ -165,7 +165,7 @@ def test_mildly_malformed_xref_read():
     reader = PdfFileReader(malformed)
 
     # try something
-    root = reader.trailer['/Root']
+    root = reader.root
     assert '/Pages' in root
 
 
@@ -192,7 +192,7 @@ def test_write_embedded_string_objstream():
     w.write(out)
     out.seek(0)
     r = PdfFileReader(out)
-    page_obj = r.trailer['/Root']['/Pages']['/Kids'][0].get_object()
+    page_obj = r.root['/Pages']['/Kids'][0].get_object()
     conts = page_obj['/Contents']
     assert len(conts) == 2
     assert stream_ref.idnum in (c.idnum for c in conts)
@@ -237,7 +237,7 @@ def test_historical_read():
 
     # current value
     current_root = reader.get_object(root_ref, revision=1)
-    assert current_root == reader.trailer['/Root']
+    assert current_root == reader.root
     reader.get_object(acroform_ref, revision=1)
 
     previous_root = reader.get_object(root_ref, revision=0)
