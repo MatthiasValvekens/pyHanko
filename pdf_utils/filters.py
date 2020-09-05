@@ -195,7 +195,6 @@ class ASCII85Decode(Decoder):
             # Finally, pack the integer into a 4-byte unsigned int
             # (potentially need to cut off some excess digits)
             decoded = struct.pack('>L', grp_result)
-            print(decoded.hex())
             out.write(decoded[:len(grp) - 1])
         return out.getvalue()
 
