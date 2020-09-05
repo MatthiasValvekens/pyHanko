@@ -399,6 +399,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     # TODO generate an error when DocMDP doesn't allow extra signatures.
 
     # TODO how hard is it to get CAdES/PAdES compliance?
+    #  I think I just need DSS support with OCSPs etc. to get PAdES B-LT
+    #   (i.e. level 3) compliance.
 
     # TODO explicitly disallow multiple certification signatures
 

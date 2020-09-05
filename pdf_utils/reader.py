@@ -57,6 +57,17 @@ def read_next_end_line(stream):
     return bytes(reversed(tuple(_build())))
 
 
+# TODO for validation purposes, it is interesting to keep track of "out of
+#  bounds" XRefs, i.e. XRefs that refer to "orphan" objects in earlier
+#  revisions. This is a pattern commonly exploited in replacement attacks.
+# Detecting orphaned objects before they are referenced is difficult
+# (since nothing prevents the attacker from "hiding" them in a content stream,
+# for example), but we can at least try to prevent them from being referenced.
+# This requires finding all instances of EOF sequences in the file, and
+# forbidding cross-reference streams/tables from referring to objects outside of
+# the region in which they are defined. (see https://pdf-insecurity.org/)
+
+
 TRAILER_KEYS = "/Root", "/Encrypt", "/Info", "/ID", "/Size"
 
 

@@ -285,3 +285,8 @@ def read_certification_data(reader: PdfFileReader):
         permission_bits = DocMDPPerm.FILL_FORMS
 
     return sig_dict, permission_bits
+
+# TODO validate DocMDP compliance and PAdES compliance
+#  There are some compatibility subtleties here: e.g. valid (!) cryptographic
+#  data covered by DSS and/or DocumentTimeStamps should never trigger the DocMDP
+#  policy.
