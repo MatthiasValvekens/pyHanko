@@ -140,15 +140,18 @@ class Signer:
 
     @classmethod
     def signed_attrs(cls, data_digest: bytes, timestamp: datetime = None):
-        timestamp = timestamp or datetime.now(tz=tzlocal.get_localzone())
-        return cms.CMSAttributes([
+        attrs = [
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
-            simple_cms_attribute(
+            # TODO support adding Adobe-style revocation information
+        ]
+        if timestamp is not None:
+            # NOTE: PAdES actually forbids this!
+            st = simple_cms_attribute(
                 'signing_time', cms.Time({'utc_time': core.UTCTime(timestamp)})
             )
-            # TODO support adding Adobe-style revocation information
-        ])
+            attrs.append(st)
+        return cms.CMSAttributes(attrs)
 
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
         digest_algorithm_obj = algos.DigestAlgorithm(
@@ -236,6 +239,10 @@ class PdfSignatureMetadata:
     reason: str = None
     name: str = None
     certify: bool = False
+
+    # PAdES compliance disallows this in favour of more robust timestamping
+    # strategies
+    include_signedtime_attr: bool = False
     # only relevant for certification
     docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
 
@@ -391,7 +398,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     # TODO generate an error when DocMDP doesn't allow extra signatures.
 
-    # TODO how hard is it to get CAdES compliance?
+    # TODO how hard is it to get CAdES/PAdES compliance?
 
     # TODO explicitly disallow multiple certification signatures
 
@@ -406,11 +413,13 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
+    include_signedtime_attr = signature_meta.include_signedtime_attr
 
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
         test_signature = signer.sign(
-            test_md, signature_meta.md_algorithm, timestamp=timestamp,
+            test_md, signature_meta.md_algorithm,
+            timestamp=timestamp if include_signedtime_attr else None,
             dry_run=True
         ).hex().encode('ascii')
         # External actors such as timestamping servers can't be relied on to
@@ -519,7 +528,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     output_buffer.release()
 
     signature_bytes = signer.sign(
-        md.digest(), signature_meta.md_algorithm, timestamp=timestamp
+        md.digest(), signature_meta.md_algorithm,
+        timestamp=timestamp if include_signedtime_attr else None
     )
     signature = binascii.hexlify(signature_bytes)
     # NOTE: the PDF spec is not completely clear on this, but
