@@ -99,9 +99,7 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         field_name=field, location=location, reason=reason, name=name,
         certify=certify
     )
-    ctx.obj[OCSP] = None if no_ocsp else signers.OCSPClient(
-        response_required=True
-    )
+    ctx.obj[OCSP] = None if no_ocsp else signers.OCSPClient()
 
 
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,

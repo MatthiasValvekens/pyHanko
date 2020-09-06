@@ -248,9 +248,15 @@ class Signer:
         # https://github.com/m32/endesive/.
 
         ocsp_responses = None
-        if self.ocsp_handler is not None:
+        ocsp_handler = self.ocsp_handler
+        cert = self.signing_cert
+        # if response_required is True, attempt an OCSP check anyway,
+        # maybe a response is available through out-of-band means
+        # (e.g. cache, test mocking, ...)
+        if ocsp_handler is not None and \
+                (ocsp_handler.response_required or cert.ocsp_urls):
             try:
-                resp = self.ocsp_handler.get_for_cert(
+                resp = ocsp_handler.get_for_cert(
                     self.signing_cert, self.issuer_cert
                 )
                 ocsp_responses = [resp]
