@@ -36,6 +36,11 @@ def open_beid_session(lib_location, slot_no=None):
 
 
 class BEIDSigner(sign_pkcs11.PKCS11Signer):
+    _issuer = None
+
+    @property
+    def issuer_cert(self):
+        return self._issuer
 
     def _load_ca_chain(self):
 
@@ -52,4 +57,5 @@ class BEIDSigner(sign_pkcs11.PKCS11Signer):
         })
         cert_obj, = list(q)
         root_ca = keys.parse_certificate(cert_obj[Attribute.VALUE])
+        self._issuer = intermediate_ca
         return [intermediate_ca, root_ca]

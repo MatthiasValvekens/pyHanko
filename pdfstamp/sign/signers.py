@@ -8,7 +8,8 @@ from io import BytesIO
 from typing import List
 
 import tzlocal
-from asn1crypto import x509, cms, core, algos, pem, keys
+from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
+from certvalidator import ocsp_client
 from oscrypto import asymmetric, keys as oskeys
 
 from pdf_utils import generic
@@ -118,14 +119,64 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
 
+class OCSPHandler:
+    """
+    Abstract interface, mainly for easy mocking in tests.
+    """
+
+    # TODO When/if I decide to support the full PAdES standard, it would be
+    #  convenient to provide an implementation that sources archived OCSP
+    #  responses from a document's DSS data.
+
+    def __init__(self, response_required=False):
+        self.response_required = response_required
+
+    def get_for_cert(self, cert: x509.Certificate, issuer: x509.Certificate,
+                     hash_algo='sha256'):
+        raise NotImplementedError
+
+
+class OCSPClient(OCSPHandler):   # pragma: nocover
+    """
+    Thin wrapper around ocsp_client.fetch().
+    """
+
+    def get_for_cert(self, cert: x509.Certificate, issuer: x509.Certificate,
+                     hash_algo='sha256', **kwargs):
+        if not cert.ocsp_urls:
+            raise ValueError('No OCSP urls')
+        return ocsp_client.fetch(cert, issuer, hash_algo=hash_algo, **kwargs)
+
+
+class DummyOCSPClient(OCSPHandler):
+
+    def __init__(self, fixed_response):
+        super().__init__(response_required=True)
+        self.fixed_response = fixed_response
+
+    def get_for_cert(self, cert: x509.Certificate, issuer: x509.Certificate,
+                     hash_algo='sha256'):
+        return self.fixed_response
+
+
 class Signer:
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
     timestamper: TimeStamper = None
+    ocsp_handler: OCSPHandler = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
+
+    @property
+    def issuer_cert(self):
+        issuer_name = self.signing_cert.issuer
+        for cert in self.ca_chain:
+            if cert.subject == issuer_name:
+                return cert
+
+        raise ValueError('Could not find issuer cert in CA chain')
 
     @property
     def subject_name(self):
@@ -139,11 +190,11 @@ class Signer:
         return result
 
     @classmethod
-    def signed_attrs(cls, data_digest: bytes, timestamp: datetime = None):
+    def signed_attrs(cls, data_digest: bytes, timestamp: datetime = None,
+                     ocsp_responses: list = None):
         attrs = [
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
-            # TODO support adding Adobe-style revocation information
         ]
         if timestamp is not None:
             # NOTE: PAdES actually forbids this!
@@ -151,6 +202,11 @@ class Signer:
                 'signing_time', cms.Time({'utc_time': core.UTCTime(timestamp)})
             )
             attrs.append(st)
+        if ocsp_responses is not None:
+            revinfo = asn1_pdf.RevocationInfoArchival({'ocsp': ocsp_responses})
+            attrs.append(
+                simple_cms_attribute('adobe_revocation_info_archival', revinfo)
+            )
         return cms.CMSAttributes(attrs)
 
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
@@ -191,9 +247,24 @@ class Signer:
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
 
+        ocsp_responses = None
+        if self.ocsp_handler is not None:
+            try:
+                resp = self.ocsp_handler.get_for_cert(
+                    self.signing_cert, self.issuer_cert
+                )
+                ocsp_responses = [resp]
+            except Exception as e:  # pragma: nocover
+                if self.ocsp_handler.response_required:
+                    raise e
+                else:
+                    logger.warning('Could not obtain OCSP response', e)
+
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
-        signed_attrs = self.signed_attrs(data_digest, timestamp)
+        signed_attrs = self.signed_attrs(
+            data_digest, timestamp, ocsp_responses=ocsp_responses
+        )
         signature = self.sign_raw(
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
         )
@@ -279,6 +350,7 @@ class SimpleSigner(Signer):
     signing_key: keys.PrivateKeyInfo
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
     timestamper: TimeStamper = None
+    ocsp_handler: OCSPHandler = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         return asymmetric.rsa_pkcs1v15_sign(

@@ -1,6 +1,7 @@
 import pytest
 from io import BytesIO
 
+from asn1crypto import ocsp
 from certvalidator import ValidationContext
 from oscrypto import keys as oskeys
 
@@ -60,6 +61,16 @@ FROM_CA_HTTP_TS = signers.SimpleSigner(
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
 )
 
+OCSP_DUMMY = signers.DummyOCSPClient(
+    ocsp.OCSPResponse.load(read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der'))
+)
+
+FROM_CA_OCSP = signers.SimpleSigner(
+    signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
+    signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS,
+    ocsp_handler=OCSP_DUMMY
+)
+
 
 def val_trusted(r, sig_obj, extd=False):
     val_status = validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
@@ -86,11 +97,13 @@ def val_untrusted(r, sig_obj, extd=False):
     return val_status
 
 
-def test_simple_sign():
+@pytest.mark.parametrize('incl_signed_time', [True, False])
+def test_simple_sign(incl_signed_time):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=SELF_SIGN
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', include_signedtime_attr=incl_signed_time
     )
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
@@ -428,3 +441,24 @@ def test_certify():
     sig_obj2, permission_bits = read_certification_data(r)
     assert sig_obj2 == sig_obj.get_object()
     assert permission_bits == signers.DocMDPPerm.NO_CHANGES
+
+
+# TODO to test stapled OCSP validation (not implemented yet)
+#  we need to spoof the date to be close enough to the generated OCSP request
+def test_ocsp_embed():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA_OCSP
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    status = val_untrusted(r, sig_obj)
+    assert not status.trusted
+
+    val_trusted(r, sig_obj)
+
+    # TODO implement a function to read back the Adobe-style revocation data
+    #  from the signature object.
