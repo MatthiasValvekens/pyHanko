@@ -1,14 +1,18 @@
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
 
-from asn1crypto import x509, cms
+import hashlib
+from asn1crypto import x509, cms, tsp
 from certvalidator import (
     CertificateValidator, InvalidCertificateError,
     PathBuildingError,
 )
 from certvalidator.errors import RevokedError, PathValidationError
 
-__all__ = ['SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute']
+__all__ = [
+    'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
+    'as_signing_certificate'
+]
 
 
 @dataclass(frozen=True)
@@ -76,3 +80,12 @@ def find_cms_attribute(attrs, name):
         if attr['type'].native == name:
             return attr['values']
     raise KeyError(f'Unable to locate attribute {name}.')
+
+
+def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
+    # see RFC 2634, § 5.4.1
+    return tsp.SigningCertificate({
+        'certs': [
+            tsp.ESSCertID({'cert_hash': hashlib.sha1(cert.dump()).digest()})
+        ]
+    })

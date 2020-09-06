@@ -15,6 +15,7 @@ from oscrypto import asymmetric, keys as oskeys
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdfstamp.sign import general
 from pdfstamp.sign.fields import enumerate_sig_fields, _prepare_sig_field
 from pdfstamp.sign.timestamps import TimeStamper
 from pdfstamp.sign.general import simple_cms_attribute
@@ -189,12 +190,16 @@ class Signer:
             pass
         return result
 
-    @classmethod
-    def signed_attrs(cls, data_digest: bytes, timestamp: datetime = None,
+    def signed_attrs(self, data_digest: bytes, timestamp: datetime = None,
                      ocsp_responses: list = None):
         attrs = [
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
+            # required by PAdES
+            simple_cms_attribute(
+                'signing_certificate',
+                general.as_signing_certificate(self.signing_cert)
+            )
         ]
         if timestamp is not None:
             # NOTE: PAdES actually forbids this!

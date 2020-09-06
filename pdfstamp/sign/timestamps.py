@@ -10,6 +10,7 @@ import tzlocal
 from asn1crypto import tsp, algos, cms, x509, keys, core
 from oscrypto import asymmetric
 
+from . import general
 from .general import SignatureStatus, simple_cms_attribute
 
 __all__ = [
@@ -144,15 +145,8 @@ class DummyTimeStamper(TimeStamper):
                 'signing_time', cms.Time({'utc_time': core.UTCTime(dt)})
             ),
             simple_cms_attribute(
-                'signing_certificate', tsp.SigningCertificate({
-                    'certs': [
-                        # see RFC 2634, § 5.4.1
-                        tsp.ESSCertID({
-                            'cert_hash':
-                                hashlib.sha1(self.tsa_cert.dump()).digest()
-                        })
-                    ]
-                })
+                'signing_certificate',
+                general.as_signing_certificate(self.tsa_cert)
             ),
             simple_cms_attribute('message_digest', message_digest),
         ])
