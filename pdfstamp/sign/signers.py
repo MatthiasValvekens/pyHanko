@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
 from io import BytesIO
-from typing import List
+from typing import List, Set
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
@@ -162,7 +162,7 @@ class DummyOCSPClient(OCSPHandler):
 
 class Signer:
     signing_cert: x509.Certificate
-    ca_chain: List[x509.Certificate]
+    ca_chain: Set[x509.Certificate]
     pkcs7_signature_mechanism: str
     timestamper: TimeStamper = None
     ocsp_handler: OCSPHandler = None
@@ -290,7 +290,7 @@ class Signer:
             'version': 'v1',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': {'content_type': 'data'},
-            'certificates': [self.signing_cert] + self.ca_chain,
+            'certificates': [self.signing_cert] + list(self.ca_chain),
             'signer_infos': [sig_info]
         }
 
@@ -372,7 +372,7 @@ class SimpleSigner(Signer):
     @classmethod
     def _load_ca_chain(cls, ca_chain_files=None):
         try:
-            return list(load_ca_chain(ca_chain_files))
+            return set(load_ca_chain(ca_chain_files))
         except (IOError, ValueError) as e:  # pragma: nocover
             logger.error('Could not load CA chain', e)
             return None

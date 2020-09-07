@@ -1,3 +1,6 @@
+from typing import Set
+
+from asn1crypto import x509
 from oscrypto import keys
 
 from . import pkcs11 as sign_pkcs11
@@ -42,7 +45,7 @@ class BEIDSigner(sign_pkcs11.PKCS11Signer):
     def issuer_cert(self):
         return self._issuer
 
-    def _load_ca_chain(self):
+    def _load_ca_chain(self) -> Set[x509.Certificate]:
 
         q = self.pkcs11_session.get_objects({
             Attribute.LABEL: 'CA',
@@ -58,4 +61,4 @@ class BEIDSigner(sign_pkcs11.PKCS11Signer):
         cert_obj, = list(q)
         root_ca = keys.parse_certificate(cert_obj[Attribute.VALUE])
         self._issuer = intermediate_ca
-        return [intermediate_ca, root_ca]
+        return {intermediate_ca, root_ca}

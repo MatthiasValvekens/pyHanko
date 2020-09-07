@@ -1,3 +1,6 @@
+from typing import Set
+
+from asn1crypto import x509
 from oscrypto import keys as oskeys
 
 from pdfstamp.sign.signers import Signer
@@ -50,8 +53,8 @@ class PKCS11Signer(Signer):
         }[digest_algorithm.lower()]
         return kh.sign(data, mechanism=mech)
 
-    def _load_ca_chain(self):
-        return []
+    def _load_ca_chain(self) -> Set[x509.Certificate]:
+        return set()
 
     def _load_objects(self):
         if self._loaded:

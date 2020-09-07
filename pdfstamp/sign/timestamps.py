@@ -104,7 +104,7 @@ class DummyTimeStamper(TimeStamper):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
         self.md_algorithm = md_algorithm
-        self.ca_chain = ca_chain or []
+        self.ca_chain = ca_chain or set()
         self.fixed_dt = fixed_dt
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
@@ -177,7 +177,7 @@ class DummyTimeStamper(TimeStamper):
                 'content_type': cms.ContentType('tst_info'),
                 'content': cms.ParsableOctetString(tst_info_data)
             }),
-            'certificates': [self.tsa_cert] + self.ca_chain,
+            'certificates': [self.tsa_cert] + list(self.ca_chain),
             'signer_infos': [sig_info]
         }
         tst = cms.ContentInfo({
