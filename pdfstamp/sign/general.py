@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
+from certvalidator import crl_client
+
 
 import hashlib
 
@@ -100,3 +102,13 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
 
 def cert_registry_as_set(cr: CertificateRegistry):
     return set(cr._key_identifier_map.values())
+
+
+# FIXME there has to be a better way to only enable OCSP fetching
+
+def dummy_fetch(*_args, **_kwargs):
+    return []
+
+
+crl_client.fetch = dummy_fetch
+

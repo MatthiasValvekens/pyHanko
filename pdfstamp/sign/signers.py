@@ -7,9 +7,11 @@ from enum import IntFlag
 from io import BytesIO
 from typing import Set
 
+import certvalidator
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
 from certvalidator import ValidationContext
+from certvalidator.path import ValidationPath
 from oscrypto import asymmetric, keys as oskeys
 
 from pdf_utils import generic
@@ -222,9 +224,6 @@ class Signer:
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
              validation_context: ValidationContext = None) -> bytes:
-        # TODO right now, we use the validation context as a vehicle
-        #  for OCSP/CRL info, but we should actually validate the signer's cert
-        #  before proceeding
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
@@ -467,9 +466,23 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     include_signedtime_attr = (
         signature_meta.include_signedtime_attr and not signature_meta.use_pades
     )
+    # TODO adding intermediate certs as trust roots is silly, need to
+    #  rework ca_chain to only provide trust roots etc., and put intermediate
+    #  certificates somewhere else
     validation_context = signature_meta.validation_context or ValidationContext(
-        trust_roots=list(signer.ca_chain), allow_fetching=True
+        trust_roots=list(signer.ca_chain), allow_fetching=True, crls=[],
     )
+    cert = signer.signing_cert
+    # FIXME there seems to be an issue with the OCSP checking here. Either the
+    #  BEID OCSP responder is noncompliant, or there is a rounding bug in
+    #  the certvalidator library.
+    paths = validation_context.certificate_registry.build_paths(cert)
+    if not paths:
+        raise ValueError(
+            'Could not build path from signing cert to trust roots'
+        )
+    path: ValidationPath = paths[0]
+    validation_context.retrieve_ocsps(cert, path.find_issuer(cert))
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
         test_signature = signer.sign(
