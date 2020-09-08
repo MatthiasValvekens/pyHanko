@@ -14,12 +14,11 @@ class PKCS11Signer(Signer):
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
     def __init__(self, pkcs11_session, cert_label, ca_chain=None,
-                 key_label=None, timestamper=None, ocsp_handler=None):
+                 key_label=None, timestamper=None):
         self.cert_label = cert_label
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
         self.timestamper = timestamper
-        self.ocsp_handler = ocsp_handler
         self._ca_chain = ca_chain
         self._signing_cert = self._key_handle = None
         self._loaded = False

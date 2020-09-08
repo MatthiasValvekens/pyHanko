@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from typing import List, ClassVar, Set
 
 import hashlib
-from asn1crypto import x509, cms, tsp, ocsp
+
+from asn1crypto import x509, cms, tsp
 from certvalidator import (
     CertificateValidator, InvalidCertificateError,
     PathBuildingError,
@@ -13,6 +14,8 @@ __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
     'as_signing_certificate'
 ]
+
+from certvalidator.registry import CertificateRegistry
 
 
 @dataclass(frozen=True)
@@ -95,8 +98,5 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
     })
 
 
-def get_ocsp_certs(resp: ocsp.OCSPResponse) -> Set[x509.Certificate]:
-    if resp['response_status'].native != 'successful':
-        raise ValueError('OCSP request was not successful.')
-    basic_resp: ocsp.BasicOCSPResponse = resp.basic_ocsp_response
-    return set(basic_resp['certs'])
+def cert_registry_as_set(cr: CertificateRegistry):
+    return set(cr._key_identifier_map.values())

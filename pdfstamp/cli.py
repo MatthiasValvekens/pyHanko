@@ -72,7 +72,6 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
 SIG_META = 'SIG_META'
 EXISTING_ONLY = 'EXISTING_ONLY'
 TIMESTAMP_URL = 'TIMESTAMP_URL'
-OCSP = 'OCSP'
 
 
 @signing.group(name='addsig', help='add a signature')
@@ -87,11 +86,9 @@ OCSP = 'OCSP'
               show_default=True)
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
-@click.option('--no-ocsp', help='Disable OCSP', is_flag=True, default=False,
-              type=bool, show_default=True)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, no_ocsp):
+           timestamp_url):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
@@ -99,15 +96,12 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         field_name=field, location=location, reason=reason, name=name,
         certify=certify
     )
-    ctx.obj[OCSP] = None if no_ocsp else signers.OCSPClient()
 
 
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
-                         timestamp_url, signature_meta, existing_fields_only,
-                         ocsp):
+                         timestamp_url, signature_meta, existing_fields_only):
     if timestamp_url is not None:
         signer.timestamper = HTTPTimeStamper(timestamp_url)
-    signer.ocsp_handler = ocsp
     writer = IncrementalPdfFileWriter(infile)
 
     # TODO make this an option higher up the tree
@@ -165,7 +159,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
-        existing_fields_only=existing_fields_only, ocsp=ctx.obj[OCSP]
+        existing_fields_only=existing_fields_only
     )
 
 
@@ -203,7 +197,7 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
-        existing_fields_only=existing_fields_only, ocsp=ctx.obj[OCSP]
+        existing_fields_only=existing_fields_only
     )
 
 
@@ -229,7 +223,7 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     else:
         timestamper = None
     signer = beid.BEIDSigner(
-        session, label, timestamper=timestamper, ocsp_handler=ctx.obj[OCSP]
+        session, label, timestamper=timestamper
     )
 
     result = signers.sign_pdf(

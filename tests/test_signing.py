@@ -61,14 +61,12 @@ FROM_CA_HTTP_TS = signers.SimpleSigner(
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
 )
 
-OCSP_DUMMY = signers.DummyOCSPClient(
-    ocsp.OCSPResponse.load(read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der'))
+FIXED_OCSP = ocsp.OCSPResponse.load(
+    read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der')
 )
 
-FROM_CA_OCSP = signers.SimpleSigner(
-    signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
-    signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS,
-    ocsp_handler=OCSP_DUMMY
+FIXED_OCSP_VC = ValidationContext(
+    trust_roots=list(FROM_CA.ca_chain), crls=[], ocsps=[FIXED_OCSP]
 )
 
 
@@ -449,8 +447,9 @@ def test_ocsp_embed():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'),
-        signer=FROM_CA_OCSP
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=FIXED_OCSP_VC
+        ), signer=FROM_CA
     )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))

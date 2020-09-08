@@ -5,11 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
 from io import BytesIO
-from typing import List, Set
+from typing import Set
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
-from certvalidator import ocsp_client
+from certvalidator import ValidationContext
 from oscrypto import asymmetric, keys as oskeys
 
 from pdf_utils import generic
@@ -123,47 +123,6 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
 
-class OCSPHandler:
-    """
-    Abstract interface, mainly for easy mocking in tests.
-    """
-
-    # TODO When/if I decide to support the full PAdES standard, it would be
-    #  convenient to provide an implementation that sources archived OCSP
-    #  responses from a document's DSS data.
-
-    def __init__(self, response_required=False):
-        self.response_required = response_required
-
-    def get_for_cert(self, cert: x509.Certificate, issuer: x509.Certificate,
-                     hash_algo='sha256'):
-        raise NotImplementedError
-
-
-class OCSPClient(OCSPHandler):   # pragma: nocover
-    """
-    Thin wrapper around ocsp_client.fetch().
-    """
-
-    def get_for_cert(self, cert: x509.Certificate, issuer: x509.Certificate,
-                     hash_algo='sha256', **kwargs):
-        if not cert.ocsp_urls:
-            raise ValueError('No OCSP urls')
-        return ocsp_client.fetch(cert, issuer, hash_algo=hash_algo, **kwargs)
-
-
-class DummyOCSPClient(OCSPHandler):
-
-    def __init__(self, fixed_response):
-        super().__init__(response_required=True)
-        self.fixed_response = fixed_response
-
-    def get_for_cert(self, cert: x509.Certificate, issuer: x509.Certificate,
-                     hash_algo='sha256'):
-        return self.fixed_response
-
-
-# TODO rename ca_chain field to 'other_certs' or something
 # TODO check if deduplication works properly
 
 class Signer:
@@ -171,7 +130,6 @@ class Signer:
     ca_chain: Set[x509.Certificate]
     pkcs7_signature_mechanism: str
     timestamper: TimeStamper = None
-    ocsp_handler: OCSPHandler = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
@@ -197,7 +155,7 @@ class Signer:
         return result
 
     def signed_attrs(self, data_digest: bytes, timestamp: datetime = None,
-                     ocsp_responses: list = None):
+                     ocsp_responses: list = None, crls: list = None):
         attrs = [
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
@@ -213,11 +171,20 @@ class Signer:
                 'signing_time', cms.Time({'utc_time': core.UTCTime(timestamp)})
             )
             attrs.append(st)
-        if ocsp_responses is not None:
-            revinfo = asn1_pdf.RevocationInfoArchival({'ocsp': ocsp_responses})
+
+        revinfo_dict = {}
+        if ocsp_responses:
+            revinfo_dict['ocsp'] = ocsp_responses
+
+        if crls:
+            revinfo_dict['crl'] = crls
+
+        if revinfo_dict:
+            revinfo = asn1_pdf.RevocationInfoArchival(revinfo_dict)
             attrs.append(
                 simple_cms_attribute('adobe_revocation_info_archival', revinfo)
             )
+
         return cms.CMSAttributes(attrs)
 
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
@@ -253,35 +220,22 @@ class Signer:
         return sig_info
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
-             timestamp: datetime = None, dry_run=False) -> bytes:
+             timestamp: datetime = None, dry_run=False,
+             validation_context: ValidationContext = None) -> bytes:
+        # TODO right now, we use the validation context as a vehicle
+        #  for OCSP/CRL info, but we should actually validate the signer's cert
+        #  before proceeding
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
 
-        ocsp_responses = None
-        ocsp_handler = self.ocsp_handler
-        cert = self.signing_cert
-        # if response_required is True, attempt an OCSP check anyway,
-        # maybe a response is available through out-of-band means
-        # (e.g. cache, test mocking, ...)
-        if ocsp_handler is not None and \
-                (ocsp_handler.response_required or cert.ocsp_urls):
-            try:
-                resp = ocsp_handler.get_for_cert(
-                    self.signing_cert, self.issuer_cert
-                )
-                self.ca_chain.update(general.get_ocsp_certs(resp))
-                ocsp_responses = [resp]
-            except Exception as e:  # pragma: nocover
-                if self.ocsp_handler.response_required:
-                    raise e
-                else:
-                    logger.warning('Could not obtain OCSP response', e)
+        ocsp_responses = validation_context.ocsps or None
+        crls = validation_context.crls or None
 
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
         signed_attrs = self.signed_attrs(
-            data_digest, timestamp, ocsp_responses=ocsp_responses
+            data_digest, timestamp, ocsp_responses=ocsp_responses, crls=crls
         )
         signature = self.sign_raw(
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
@@ -292,12 +246,16 @@ class Signer:
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
+        certs = general.cert_registry_as_set(
+            validation_context.certificate_registry
+        )
+        certs.add(self.signing_cert)
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
             'version': 'v1',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': {'content_type': 'data'},
-            'certificates': [self.signing_cert] + list(self.ca_chain),
+            'certificates': certs,
             'signer_infos': [sig_info]
         }
 
@@ -330,6 +288,7 @@ class PdfSignatureMetadata:
     certify: bool = False
 
     use_pades: bool = False
+    validation_context: ValidationContext = None
     # PAdES compliance disallows this in favour of more robust timestamping
     # strategies
     include_signedtime_attr: bool = True
@@ -365,11 +324,10 @@ def load_ca_chain(ca_chain_files):
 @dataclass
 class SimpleSigner(Signer):
     signing_cert: x509.Certificate
-    ca_chain: List[x509.Certificate]
+    ca_chain: Set[x509.Certificate]
     signing_key: keys.PrivateKeyInfo
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
     timestamper: TimeStamper = None
-    ocsp_handler: OCSPHandler = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         return asymmetric.rsa_pkcs1v15_sign(
@@ -509,13 +467,15 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     include_signedtime_attr = (
         signature_meta.include_signedtime_attr and not signature_meta.use_pades
     )
-
+    validation_context = signature_meta.validation_context or ValidationContext(
+        trust_roots=list(signer.ca_chain), allow_fetching=True
+    )
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
         test_signature = signer.sign(
             test_md, signature_meta.md_algorithm,
             timestamp=timestamp if include_signedtime_attr else None,
-            dry_run=True
+            dry_run=True, validation_context=validation_context
         ).hex().encode('ascii')
         # External actors such as timestamping servers can't be relied on to
         # always return exactly the same response, so we build in a 50% error
@@ -624,7 +584,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     signature_bytes = signer.sign(
         md.digest(), signature_meta.md_algorithm,
-        timestamp=timestamp if include_signedtime_attr else None
+        timestamp=timestamp if include_signedtime_attr else None,
+        validation_context=validation_context
     )
     signature = binascii.hexlify(signature_bytes)
     # NOTE: the PDF spec is not completely clear on this, but
