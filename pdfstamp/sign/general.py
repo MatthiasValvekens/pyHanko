@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, ClassVar, Set
 
 import hashlib
-from asn1crypto import x509, cms, tsp
+from asn1crypto import x509, cms, tsp, ocsp
 from certvalidator import (
     CertificateValidator, InvalidCertificateError,
     PathBuildingError,
@@ -82,6 +82,10 @@ def find_cms_attribute(attrs, name):
     raise KeyError(f'Unable to locate attribute {name}.')
 
 
+# TODO perhaps phasing this out in favour of ESS SigningCertificate V2
+#  (which allows better hash algorithms) would be preferable.
+#  See RFC 5035.
+
 def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
     # see RFC 2634, § 5.4.1
     return tsp.SigningCertificate({
@@ -89,3 +93,10 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
             tsp.ESSCertID({'cert_hash': hashlib.sha1(cert.dump()).digest()})
         ]
     })
+
+
+def get_ocsp_certs(resp: ocsp.OCSPResponse) -> Set[x509.Certificate]:
+    if resp['response_status'].native != 'successful':
+        raise ValueError('OCSP request was not successful.')
+    basic_resp: ocsp.BasicOCSPResponse = resp.basic_ocsp_response
+    return set(basic_resp['certs'])

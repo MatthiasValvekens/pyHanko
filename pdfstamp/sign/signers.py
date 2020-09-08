@@ -264,6 +264,7 @@ class Signer:
                 resp = ocsp_handler.get_for_cert(
                     self.signing_cert, self.issuer_cert
                 )
+                self.ca_chain.update(general.get_ocsp_certs(resp))
                 ocsp_responses = [resp]
             except Exception as e:  # pragma: nocover
                 if self.ocsp_handler.response_required:
