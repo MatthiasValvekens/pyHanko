@@ -95,13 +95,16 @@ class PKCS7Placeholder(generic.PdfObject):
 class SignatureObject(generic.DictionaryObject):
 
     def __init__(self, timestamp: datetime, name=None, location=None,
-                 reason=None, bytes_reserved=None):
+                 reason=None, bytes_reserved=None, use_pades=False):
         # initialise signature object
+        subfilter = (
+            '/ETSI.CAdES.detached' if use_pades else '/adbe.pkcs7.detached'
+        )
         super().__init__(
             {
                 pdf_name('/Type'): pdf_name('/Sig'),
                 pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
-                pdf_name('/SubFilter'): pdf_name('/adbe.pkcs7.detached'),
+                pdf_name('/SubFilter'): pdf_name(subfilter),
                 pdf_name('/M'): pdf_date(timestamp)
             }
         )
@@ -159,6 +162,9 @@ class DummyOCSPClient(OCSPHandler):
                      hash_algo='sha256'):
         return self.fixed_response
 
+
+# TODO rename ca_chain field to 'other_certs' or something
+# TODO check if deduplication works properly
 
 class Signer:
     signing_cert: x509.Certificate
@@ -323,9 +329,10 @@ class PdfSignatureMetadata:
     name: str = None
     certify: bool = False
 
+    use_pades: bool = False
     # PAdES compliance disallows this in favour of more robust timestamping
     # strategies
-    include_signedtime_attr: bool = False
+    include_signedtime_attr: bool = True
     # only relevant for certification
     docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
 
@@ -499,7 +506,9 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
-    include_signedtime_attr = signature_meta.include_signedtime_attr
+    include_signedtime_attr = (
+        signature_meta.include_signedtime_attr and not signature_meta.use_pades
+    )
 
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
