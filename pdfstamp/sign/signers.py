@@ -488,7 +488,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             'Could not build path from signing cert to trust roots'
         )
     path: ValidationPath = paths[0]
-    validation_context.retrieve_ocsps(cert, path.find_issuer(cert))
+    if cert.ocsp_urls:
+        validation_context.retrieve_ocsps(cert, path.find_issuer(cert))
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
         test_signature = signer.sign(
