@@ -7,7 +7,6 @@ from enum import IntFlag
 from io import BytesIO
 from typing import Set
 
-import certvalidator
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
 from certvalidator import ValidationContext
@@ -213,12 +212,6 @@ class Signer:
             'signed_attrs': signed_attrs,
             'signature': signature
         })
-        if self.timestamper is not None:
-            # the timestamp server needs to cross-sign our signature
-            md = getattr(hashlib, digest_algorithm)()
-            md.update(signature)
-            ts_token = self.timestamper.timestamp(md.digest(), digest_algorithm)
-            sig_info['unsigned_attrs'] = cms.CMSAttributes([ts_token])
         return sig_info
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
@@ -241,6 +234,19 @@ class Signer:
         )
 
         sig_info = self.signer_info(digest_algorithm, signed_attrs, signature)
+
+        if self.timestamper is not None:
+            # the timestamp server needs to cross-sign our signature
+            md = getattr(hashlib, digest_algorithm)()
+            md.update(signature)
+            ts_token = self.timestamper.timestamp(md.digest(), digest_algorithm)
+            sig_info['unsigned_attrs'] = cms.CMSAttributes([ts_token])
+            ts_certs = ts_token['values'][0]['content']['certificates']
+            # TODO add these to DSS
+            for c in ts_certs:
+                validation_context.certificate_registry.add_other_cert(
+                    c.chosen
+                )
 
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
