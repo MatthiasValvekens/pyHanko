@@ -86,15 +86,18 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
               show_default=True)
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
+@click.option('--use-pades', help='sign PAdES-style (level B-T)',
+              required=False, default=False, is_flag=True, type=bool,
+              show_default=True)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url):
+           timestamp_url, use_pades):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
         field_name=field, location=location, reason=reason, name=name,
-        certify=certify
+        certify=certify, use_pades=use_pades
     )
 
 
