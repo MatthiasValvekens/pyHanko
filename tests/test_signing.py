@@ -462,3 +462,17 @@ def test_ocsp_embed():
 
     # TODO implement a function to read back the Adobe-style revocation data
     #  from the signature object.
+
+
+def test_pades_flag():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=FIXED_OCSP_VC, use_pades=True
+        ), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
