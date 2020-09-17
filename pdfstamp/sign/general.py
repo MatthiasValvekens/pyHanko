@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
-from certvalidator import crl_client
 
 
 import hashlib
@@ -100,15 +99,64 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
     })
 
 
-def cert_registry_as_set(cr: CertificateRegistry):
-    return set(cr._key_identifier_map.values())
+class CertificateStore:
+    def register(self, cert: x509.Certificate):
+        raise NotImplementedError
+
+    def __iter__(self):
+        raise NotImplementedError
+
+    def fork(self, base_cls=None) -> 'SubordinateCertificateStore':
+        base_cls = base_cls or SubordinateCertificateStore
+        return base_cls(self)
+
+
+class SimpleCertificateStore(CertificateStore):
+    """
+    Unopinionated replacement for certvalidator's CertificateRegistry in cases
+    where we explicitly don't care about whether the certs are trusted or not.
+    """
+
+    def __init__(self, certs=None):
+        self.certs = {}
+        if certs:
+            for cert in certs:
+                self.register(cert)
+
+    def register(self, cert: x509.Certificate):
+        self.certs[cert.issuer_serial] = cert
+
+    def __getitem__(self, item):
+        return self.certs[item]
+
+    def __iter__(self):
+        return iter(self.certs.values())
+
+
+class SubordinateCertificateStore(SimpleCertificateStore):
+    """
+    Certificate store that writes both to itself and to a "backend" store.
+    Useful in cases where we want a single store accumulating certs, while still
+    keeping them grouped in some meaningful way.
+    """
+
+    def __init__(self, backend: CertificateStore):
+        self.backend = backend
+        super().__init__()
+
+    def register(self, cert: x509.Certificate):
+        self.backend.register(cert)
+        super().register(cert)
 
 
 # FIXME there has to be a better way to only enable OCSP fetching
+def monkeypatch_crl_client():
+    from certvalidator import crl_client
 
-def dummy_fetch(*_args, **_kwargs):
-    return []
+    def dummy_fetch(*_args, **_kwargs):
+        return []
+    crl_client.fetch = dummy_fetch
 
 
-crl_client.fetch = dummy_fetch
-
+# TODO find a way to do this "locally"
+monkeypatch_crl_client()

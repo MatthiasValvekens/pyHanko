@@ -31,6 +31,8 @@ FROM_CA = signers.SimpleSigner.load(
     key_passphrase=b'secret'
 )
 
+TRUST_ROOTS = list(signers.load_ca_chain((CRYPTO_DATA_DIR + '/ca.cert.pem',)))
+
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
     CRYPTO_DATA_DIR + '/signer.pfx', passphrase=b'exportsecret'
 )
@@ -46,11 +48,11 @@ DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_key=oskeys.parse_private(
         read_all(CRYPTO_DATA_DIR + '/tsa.key.pem'), password=b'secret'
     ),
-    ca_chain=FROM_CA.ca_chain,
+    cert_registry=FROM_CA.cert_registry,
 )
 
 FROM_CA_TS = signers.SimpleSigner(
-    signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
+    signing_cert=FROM_CA.signing_cert, cert_registry=FROM_CA.cert_registry,
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS
 )
 
@@ -58,7 +60,7 @@ DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
     'http://example.com/tsa', https=False
 )
 FROM_CA_HTTP_TS = signers.SimpleSigner(
-    signing_cert=FROM_CA.signing_cert, ca_chain=FROM_CA.ca_chain,
+    signing_cert=FROM_CA.signing_cert, cert_registry=FROM_CA.cert_registry,
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
 )
 
@@ -67,7 +69,7 @@ FIXED_OCSP = ocsp.OCSPResponse.load(
 )
 
 FIXED_OCSP_VC = ValidationContext(
-    trust_roots=list(FROM_CA.ca_chain), crls=[], ocsps=[FIXED_OCSP]
+    trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP]
 )
 
 

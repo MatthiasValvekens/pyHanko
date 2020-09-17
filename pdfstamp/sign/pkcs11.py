@@ -3,6 +3,7 @@ from typing import Set
 from asn1crypto import x509
 from oscrypto import keys as oskeys
 
+from pdfstamp.sign.general import CertificateStore, SimpleCertificateStore
 from pdfstamp.sign.signers import Signer
 
 __all__ = ['PKCS11Signer']
@@ -19,17 +20,18 @@ class PKCS11Signer(Signer):
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
         self.timestamper = timestamper
-        self._ca_chain = ca_chain
+        self._cert_registry: CertificateStore = SimpleCertificateStore(ca_chain)
         self._signing_cert = self._key_handle = None
         self._loaded = False
 
     @property
-    def ca_chain(self):
+    def cert_registry(self):
         # it's conceivable that one might want to load this separately from
         # the key data, so we allow for that.
-        if self._ca_chain is None:
-            self._ca_chain = self._load_ca_chain()
-        return self._ca_chain
+        if self._cert_registry is None:
+            certs = self._load_ca_chain()
+            self._cert_registry = SimpleCertificateStore(certs)
+        return self._cert_registry
 
     @property
     def signing_cert(self):

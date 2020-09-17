@@ -3,7 +3,6 @@ import struct
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
 
 import requests
 import tzlocal
@@ -11,7 +10,10 @@ from asn1crypto import tsp, algos, cms, x509, keys, core
 from oscrypto import asymmetric
 
 from . import general
-from .general import SignatureStatus, simple_cms_attribute
+from .general import (
+    SignatureStatus, simple_cms_attribute, CertificateStore,
+    SimpleCertificateStore,
+)
 
 __all__ = [
     'TimestampSignatureStatus', 'TimeStamper', 'HTTPTimeStamper',
@@ -99,12 +101,12 @@ class DummyTimeStamper(TimeStamper):
 
     def __init__(self, tsa_cert: x509.Certificate,
                  tsa_key: keys.PrivateKeyInfo,
-                 ca_chain: List[x509.Certificate] = None,
+                 cert_registry: CertificateStore = None,
                  md_algorithm='sha512', fixed_dt: datetime = None):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
         self.md_algorithm = md_algorithm
-        self.ca_chain = ca_chain or set()
+        self.cert_registry = cert_registry or SimpleCertificateStore()
         self.fixed_dt = fixed_dt
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
@@ -169,6 +171,8 @@ class DummyTimeStamper(TimeStamper):
             'signed_attrs': signed_attrs,
             'signature': signature
         })
+        certs = set(self.cert_registry)
+        certs.add(self.tsa_cert)
         signed_data = {
             # must use v3 to get access to the EncapsulatedContentInfo construct
             'version': 'v3',
@@ -177,7 +181,7 @@ class DummyTimeStamper(TimeStamper):
                 'content_type': cms.ContentType('tst_info'),
                 'content': cms.ParsableOctetString(tst_info_data)
             }),
-            'certificates': [self.tsa_cert] + list(self.ca_chain),
+            'certificates': certs,
             'signer_infos': [sig_info]
         }
         tst = cms.ContentInfo({

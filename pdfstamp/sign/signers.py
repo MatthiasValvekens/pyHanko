@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
 from io import BytesIO
-from typing import Set
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
@@ -19,7 +18,10 @@ from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdfstamp.sign import general
 from pdfstamp.sign.fields import enumerate_sig_fields, _prepare_sig_field
 from pdfstamp.sign.timestamps import TimeStamper
-from pdfstamp.sign.general import simple_cms_attribute
+from pdfstamp.sign.general import (
+    simple_cms_attribute, CertificateStore,
+    SimpleCertificateStore,
+)
 from pdfstamp.stamp import TextStampStyle, TextStamp
 
 __all__ = ['Signer', 'SimpleSigner', 'sign_pdf', 'DocMDPPerm',
@@ -124,25 +126,14 @@ class SignatureObject(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
 
-# TODO check if deduplication works properly
-
 class Signer:
     signing_cert: x509.Certificate
-    ca_chain: Set[x509.Certificate]
+    cert_registry: CertificateStore
     pkcs7_signature_mechanism: str
     timestamper: TimeStamper = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
-
-    @property
-    def issuer_cert(self):
-        issuer_name = self.signing_cert.issuer
-        for cert in self.ca_chain:
-            if cert.subject == issuer_name:
-                return cert
-
-        raise ValueError('Could not find issuer cert in CA chain')
 
     @property
     def subject_name(self):
@@ -155,9 +146,26 @@ class Signer:
             pass
         return result
 
+    @staticmethod
+    def format_revinfo(ocsp_responses: list = None, crls: list = None):
+
+        revinfo_dict = {}
+        if ocsp_responses:
+            revinfo_dict['ocsp'] = ocsp_responses
+
+        if crls:
+            revinfo_dict['crl'] = crls
+
+        if revinfo_dict:
+            revinfo = asn1_pdf.RevocationInfoArchival(revinfo_dict)
+            return simple_cms_attribute(
+                'adobe_revocation_info_archival', revinfo
+            )
+
+        return None
+
     def signed_attrs(self, data_digest: bytes, timestamp: datetime = None,
-                     ocsp_responses: list = None, crls: list = None,
-                     use_pades=False):
+                     revocation_info=None, use_pades=False):
         attrs = [
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
@@ -178,20 +186,10 @@ class Signer:
                     cms.Time({'utc_time': core.UTCTime(timestamp)})
                 )
                 attrs.append(st)
-            revinfo_dict = {}
-            if ocsp_responses:
-                revinfo_dict['ocsp'] = ocsp_responses
 
-            if crls:
-                revinfo_dict['crl'] = crls
-
-            if revinfo_dict:
-                revinfo = asn1_pdf.RevocationInfoArchival(revinfo_dict)
-                attrs.append(
-                    simple_cms_attribute(
-                        'adobe_revocation_info_archival', revinfo
-                    )
-                )
+            # this is not allowed under PAdES, should use DSS instead
+            if revocation_info:
+                attrs.append(revocation_info)
 
         return cms.CMSAttributes(attrs)
 
@@ -223,19 +221,15 @@ class Signer:
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
-             validation_context: ValidationContext = None, use_pades=False)\
-            -> bytes:
+             revocation_info=None, use_pades=False) -> bytes:
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
 
-        ocsp_responses = validation_context.ocsps or None
-        crls = validation_context.crls or None
-
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
         signed_attrs = self.signed_attrs(
-            data_digest, timestamp, ocsp_responses=ocsp_responses, crls=crls,
+            data_digest, timestamp, revocation_info=revocation_info,
             use_pades=use_pades
         )
         signature = self.sign_raw(
@@ -253,16 +247,12 @@ class Signer:
             ts_certs = ts_token['values'][0]['content']['certificates']
             # TODO add these to DSS
             for c in ts_certs:
-                validation_context.certificate_registry.add_other_cert(
-                    c.chosen
-                )
+                self.cert_registry.register(c.chosen)
 
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
-        certs = general.cert_registry_as_set(
-            validation_context.certificate_registry
-        )
+        certs = set(self.cert_registry)
         certs.add(self.signing_cert)
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
@@ -302,6 +292,7 @@ class PdfSignatureMetadata:
     certify: bool = False
 
     use_pades: bool = False
+    embed_revocation_info: bool = False
     validation_context: ValidationContext = None
     # PAdES compliance disallows this in favour of more robust timestamping
     # strategies
@@ -312,6 +303,8 @@ class PdfSignatureMetadata:
 
 logger = logging.getLogger(__name__)
 
+
+# FIXME this function should really be called "load_certs_from_pemder" or sth.
 
 def load_ca_chain(ca_chain_files):
     for ca_chain_file in ca_chain_files:
@@ -338,8 +331,8 @@ def load_ca_chain(ca_chain_files):
 @dataclass
 class SimpleSigner(Signer):
     signing_cert: x509.Certificate
-    ca_chain: Set[x509.Certificate]
     signing_key: keys.PrivateKeyInfo
+    cert_registry: CertificateStore
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
     timestamper: TimeStamper = None
 
@@ -375,12 +368,12 @@ class SimpleSigner(Signer):
         (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
         return SimpleSigner(
             signing_key=kinfo, signing_cert=cert,
-            ca_chain=ca_chain + other_certs
+            cert_registry=SimpleCertificateStore(certs=ca_chain + other_certs)
         )
 
     @classmethod
     def load(cls, key_file, cert_file, ca_chain_files=None,
-             key_passphrase=None):
+             key_passphrase=None, other_certs=None):
         try:
             # load cryptographic data (both PEM and DER are supported)
             with open(key_file, 'rb') as f:
@@ -399,9 +392,13 @@ class SimpleSigner(Signer):
         if ca_chain is None:  # pragma: nocover
             return None
 
+        other_certs = ca_chain if other_certs is None \
+            else ca_chain + other_certs
+
+        cert_reg = SimpleCertificateStore(certs=other_certs)
         return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
-            ca_chain=ca_chain
+            cert_registry=cert_reg
         )
 
 
@@ -478,33 +475,48 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
-    # TODO adding intermediate certs as trust roots is silly, need to
-    #  rework ca_chain to only provide trust roots etc., and put intermediate
-    #  certificates somewhere else
-    validation_context = signature_meta.validation_context or ValidationContext(
-        trust_roots=list(signer.ca_chain), allow_fetching=True, crls=[],
-    )
     cert = signer.signing_cert
     # FIXME there seems to be an issue with the OCSP checking here. Either the
     #  BEID OCSP responder is noncompliant, or there is a dt rounding bug in
     #  the certvalidator library.
 
-    # TODO I'm not conditioning this on use_pades, since we need this
-    #  information to write a DSS dictionary if necessary (not implemented yet)
-    paths = validation_context.certificate_registry.build_paths(cert)
-    if not paths:
+    validation_context = signature_meta.validation_context
+    if signature_meta.embed_revocation_info and validation_context is None:
         raise ValueError(
-            'Could not build path from signing cert to trust roots'
+            'A validation context must be provided if validation/revocation '
+            'info is to be embedded into the signature.'
         )
-    path: ValidationPath = paths[0]
-    if cert.ocsp_urls:
-        validation_context.retrieve_ocsps(cert, path.find_issuer(cert))
+    if validation_context is not None:
+        # add the certs from the signer's certificate store to the registry
+        # in the validation context
+        for cert in signer.cert_registry:
+            validation_context.certificate_registry.add_other_cert(cert)
+
+        paths = validation_context.certificate_registry.build_paths(cert)
+        if not paths:
+            raise ValueError(
+                'Could not build path from signing cert to trust roots'
+            )
+        path: ValidationPath = paths[0]
+        if cert.ocsp_urls and signature_meta.embed_revocation_info:
+            validation_context.retrieve_ocsps(cert, path.find_issuer(cert))
+
+    # do we need adobe-style revocation info?
+    if signature_meta.embed_revocation_info and not signature_meta.use_pades:
+        # we don't do CRLs for now, embedding those is usually a bad idea anyhow
+        revinfo = Signer.format_revinfo(
+            ocsp_responses=validation_context.ocsps, crls=[]
+        )
+    else:
+        revinfo = None
+
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
+        # PAdES prescribes another mechanism for embedding revocation info
         test_signature = signer.sign(
             test_md, signature_meta.md_algorithm,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
-            dry_run=True, validation_context=validation_context
+            dry_run=True, revocation_info=revinfo
         ).hex().encode('ascii')
         # External actors such as timestamping servers can't be relied on to
         # always return exactly the same response, so we build in a 50% error
@@ -614,9 +626,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     signature_bytes = signer.sign(
         md.digest(), signature_meta.md_algorithm,
-        timestamp=timestamp,
-        use_pades=signature_meta.use_pades,
-        validation_context=validation_context
+        timestamp=timestamp, use_pades=signature_meta.use_pades,
+        revocation_info=revinfo
     )
     signature = binascii.hexlify(signature_bytes)
     # NOTE: the PDF spec is not completely clear on this, but
