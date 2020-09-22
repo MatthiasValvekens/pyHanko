@@ -9,7 +9,6 @@ from io import BytesIO
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
 from certvalidator import ValidationContext
-from certvalidator.path import ValidationPath
 from oscrypto import asymmetric, keys as oskeys
 
 from pdf_utils import generic
@@ -292,7 +291,7 @@ class PdfSignatureMetadata:
     certify: bool = False
 
     use_pades: bool = False
-    embed_revocation_info: bool = False
+    embed_validation_info: bool = False
     validation_context: ValidationContext = None
     # PAdES compliance disallows this in favour of more robust timestamping
     # strategies
@@ -452,6 +451,18 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
+def _fetch_path_validation_info(validation_context, end_cert):
+    # ensures that the validation info for a cert and its tree is cached
+    # in the provided validation context
+    from . import validation
+
+    path = validation.build_trust_path(validation_context, end_cert)
+
+    for cert, issuer in validation.unroll_path(path):
+        if cert.ocsp_urls:
+            validation_context.retrieve_ocsps(cert, issuer)
+
+
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              existing_fields_only=False, bytes_reserved=None):
@@ -475,13 +486,12 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
-    cert = signer.signing_cert
     # FIXME there seems to be an issue with the OCSP checking here. Either the
     #  BEID OCSP responder is noncompliant, or there is a dt rounding bug in
     #  the certvalidator library.
 
     validation_context = signature_meta.validation_context
-    if signature_meta.embed_revocation_info and validation_context is None:
+    if signature_meta.embed_validation_info and validation_context is None:
         raise ValueError(
             'A validation context must be provided if validation/revocation '
             'info is to be embedded into the signature.'
@@ -491,28 +501,20 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         # in the validation context
         for cert in signer.cert_registry:
             validation_context.certificate_registry.add_other_cert(cert)
-
-        paths = validation_context.certificate_registry.build_paths(cert)
-        if not paths:
-            raise ValueError(
-                'Could not build path from signing cert to trust roots'
-            )
-        path: ValidationPath = paths[0]
-        if cert.ocsp_urls and signature_meta.embed_revocation_info:
-            validation_context.retrieve_ocsps(cert, path.find_issuer(cert))
+        _fetch_path_validation_info(validation_context, signer.signing_cert)
 
     # do we need adobe-style revocation info?
-    if signature_meta.embed_revocation_info and not signature_meta.use_pades:
+    if signature_meta.embed_validation_info and not signature_meta.use_pades:
         # we don't do CRLs for now, embedding those is usually a bad idea anyhow
         revinfo = Signer.format_revinfo(
             ocsp_responses=validation_context.ocsps, crls=[]
         )
     else:
+        # PAdES prescribes another mechanism for embedding revocation info
         revinfo = None
 
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
-        # PAdES prescribes another mechanism for embedding revocation info
         test_signature = signer.sign(
             test_md, signature_meta.md_algorithm,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
@@ -639,6 +641,16 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     # +1 to skip the '<'
     output.seek(sig_start + 1)
     output.write(signature)
+
+    if signature_meta.use_pades and signature_meta.embed_validation_info:
+        # TODO this is suboptimal, should only pass in the leaf certs
+        #  of the signer
+        from pdfstamp.sign import validation
+        validation.DocumentSecurityStore.add_dss(
+            output_stream=output, contents_hex_data=signature,
+            certs=[signer.signing_cert],
+            validation_context=validation_context
+        )
 
     output.seek(0)
     return output

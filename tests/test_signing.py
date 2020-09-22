@@ -10,7 +10,7 @@ from pdf_utils.font import pdf_name
 from pdf_utils.writer import PdfFileWriter
 from pdfstamp.sign import timestamps, fields, signers
 from pdfstamp.sign.validation import (
-    validate_pdf_signature, read_certification_data
+    validate_pdf_signature, read_certification_data, DocumentSecurityStore
 )
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -68,9 +68,13 @@ FIXED_OCSP = ocsp.OCSPResponse.load(
     read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der')
 )
 
-FIXED_OCSP_VC = ValidationContext(
-    trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP]
-)
+
+def fixed_ocsp_vc():
+    vc = ValidationContext(
+        trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP],
+        other_certs=list(FROM_CA.cert_registry), allow_fetching=False
+    )
+    return vc
 
 
 def val_trusted(r, sig_obj, extd=False):
@@ -451,7 +455,7 @@ def test_ocsp_embed():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=FIXED_OCSP_VC
+            field_name='Sig1', validation_context=fixed_ocsp_vc()
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -470,11 +474,29 @@ def test_pades_flag():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1', use_pades=True),
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
+
+
+def test_pades_revinfo():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=FIXED_OCSP_VC, use_pades=True
+            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            use_pades=True, embed_validation_info=True
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
+
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    assert dss is not None
+    assert len(dss.certs) == 4
+    assert len(dss.unindexed_ocsps) == 1

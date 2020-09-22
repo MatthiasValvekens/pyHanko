@@ -86,18 +86,27 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
               show_default=True)
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
-@click.option('--use-pades', help='sign PAdES-style (level B-T)',
+@click.option('--use-pades', help='sign PAdES-style [level B(-T)]',
+              required=False, default=False, is_flag=True, type=bool,
+              show_default=True)
+@click.option('--with-validation-info', help='embed revocation info',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, use_pades):
+           timestamp_url, use_pades, with_validation_info):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
+
+    # TODO restructure args to validate command to allow the validation
+    #  context to be modified here as well.
+    vc = ValidationContext() if with_validation_info else None
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
         field_name=field, location=location, reason=reason, name=name,
-        certify=certify, use_pades=use_pades
+        certify=certify, use_pades=use_pades,
+        embed_validation_info=with_validation_info,
+        validation_context=vc
     )
 
 
@@ -111,7 +120,7 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
     # TODO mention filename in prompt
     if writer.prev.encrypted:
         pdf_pass = getpass.getpass(
-            prompt=f'Password for encrypted file: '
+            prompt='Password for encrypted file: '
         ).encode('utf-8')
         writer.encrypt(pdf_pass)
 

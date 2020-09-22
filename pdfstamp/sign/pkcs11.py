@@ -20,7 +20,11 @@ class PKCS11Signer(Signer):
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
         self.timestamper = timestamper
-        self._cert_registry: CertificateStore = SimpleCertificateStore(ca_chain)
+        if ca_chain is not None:
+            self._cert_registry: CertificateStore = \
+                SimpleCertificateStore(ca_chain)
+        else:
+            self._cert_registry = None
         self._signing_cert = self._key_handle = None
         self._loaded = False
 
