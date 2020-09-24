@@ -220,10 +220,15 @@ class Signer:
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
-             revocation_info=None, use_pades=False) -> cms.ContentInfo:
+             revocation_info=None, use_pades=False) \
+            -> (cms.ContentInfo, CertificateStore, CertificateStore):
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
+
+        leaf_certs = SimpleCertificateStore()
+        leaf_certs.register(self.signing_cert)
+        meta_certs = self.cert_registry.fork()
 
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
@@ -243,14 +248,30 @@ class Signer:
             md.update(signature)
             ts_token = self.timestamper.timestamp(md.digest(), digest_algorithm)
             sig_info['unsigned_attrs'] = cms.CMSAttributes([ts_token])
-            ts_certs = ts_token['values'][0]['content']['certificates']
-            # TODO add these to DSS
-            for c in ts_certs:
-                self.cert_registry.register(c.chosen)
+            ts_signed_data = ts_token['values'][0]['content']
+            ts_certs = ts_signed_data['certificates']
+
+            def extract_ts_sid(si):
+                sid = si['sid'].chosen
+                # FIXME handle subject key identifier
+                assert isinstance(sid, cms.IssuerAndSerialNumber)
+                return sid['issuer'].dump(), sid['serial_number'].native
+
+            ts_leaves = set(
+                extract_ts_sid(si) for si in ts_signed_data['signer_infos']
+            )
+
+            for wrapped_c in ts_certs:
+                c: cms.Certificate = wrapped_c.chosen
+                meta_certs.register(c)
+                if (c.issuer.dump(), c.serial_number) in ts_leaves:
+                    leaf_certs.register(c)
 
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
+
+        # do not add the TS certs at this point
         certs = set(self.cert_registry)
         certs.add(self.signing_cert)
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
@@ -268,7 +289,7 @@ class Signer:
             'content': cms.SignedData(signed_data)
         })
 
-        return message
+        return message, leaf_certs, meta_certs
 
 
 class DocMDPPerm(IntFlag):
@@ -469,10 +490,6 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     # TODO generate an error when DocMDP doesn't allow extra signatures.
 
-    # TODO how hard is it to get CAdES/PAdES compliance?
-    #  I think I just need DSS support with OCSPs etc. to get PAdES B-LT
-    #   (i.e. level 3) compliance.
-
     # TODO explicitly disallow multiple certification signatures
 
     # TODO force md_algorithm to agree with the certification signature
@@ -515,11 +532,12 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
-        test_signature = signer.sign(
+        test_signature_cms, _, _ = signer.sign(
             test_md, signature_meta.md_algorithm,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
             dry_run=True, revocation_info=revinfo
-        ).dump().hex().encode('ascii')
+        )
+        test_signature = test_signature_cms.dump().hex().encode('ascii')
         # External actors such as timestamping servers can't be relied on to
         # always return exactly the same response, so we build in a 50% error
         # margin (+ ensure that bytes_reserved is even)
@@ -626,7 +644,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     md.update(output_buffer[sig_end:])
     output_buffer.release()
 
-    signature_cms = signer.sign(
+    signature_cms, leaves, meta_certs = signer.sign(
         md.digest(), signature_meta.md_algorithm,
         timestamp=timestamp, use_pades=signature_meta.use_pades,
         revocation_info=revinfo
@@ -644,11 +662,12 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     output.write(signature)
 
     if signature_meta.use_pades and signature_meta.embed_validation_info:
-        # TODO trawl the CMS object for certs
         from pdfstamp.sign import validation
+        for meta_cert in meta_certs:
+            validation_context.certificate_registry.add_other_cert(meta_cert)
         validation.DocumentSecurityStore.add_dss(
             output_stream=output, contents_hex_data=signature,
-            certs=[signer.signing_cert],
+            certs=set(leaves),
             validation_context=validation_context
         )
 

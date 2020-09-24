@@ -500,3 +500,22 @@ def test_pades_revinfo():
     assert dss is not None
     assert len(dss.certs) == 4
     assert len(dss.unindexed_ocsps) == 1
+
+
+def test_pades_revinfo_ts():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            use_pades=True, embed_validation_info=True
+        ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
+
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    assert dss is not None
+    assert len(dss.certs) == 5
+    assert len(dss.unindexed_ocsps) == 1

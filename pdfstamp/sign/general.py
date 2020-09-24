@@ -1,3 +1,4 @@
+import itertools
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
 
@@ -15,7 +16,7 @@ from certvalidator.errors import RevokedError, PathValidationError
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
     'as_signing_certificate', 'CertificateStore', 'SimpleCertificateStore',
-    'SubordinateCertificateStore'
+    'WriteThroughCertificateStore'
 ]
 
 
@@ -106,8 +107,16 @@ class CertificateStore:
     def __iter__(self):
         raise NotImplementedError
 
-    def fork(self, base_cls=None) -> 'SubordinateCertificateStore':
-        base_cls = base_cls or SubordinateCertificateStore
+    def __getitem__(self, item):
+        raise NotImplementedError
+
+    def write_through_branch(self, base_cls=None) \
+            -> 'WriteThroughCertificateStore':
+        base_cls = base_cls or WriteThroughCertificateStore
+        return base_cls(self)
+
+    def fork(self, base_cls=None) -> 'ForkedCertificateStore':
+        base_cls = base_cls or ForkedCertificateStore
         return base_cls(self)
 
 
@@ -133,9 +142,11 @@ class SimpleCertificateStore(CertificateStore):
         return iter(self.certs.values())
 
 
-class SubordinateCertificateStore(SimpleCertificateStore):
+# TODO rewrite the DSS to use this class, it's probably cleaner
+class WriteThroughCertificateStore(SimpleCertificateStore):
     """
-    Certificate store that writes both to itself and to a "backend" store.
+    Certificate store that writes both to itself and to a "backend" store, but never
+    returns data from the backend.
     Useful in cases where we want a single store accumulating certs, while still
     keeping them grouped in some meaningful way.
     """
@@ -147,6 +158,26 @@ class SubordinateCertificateStore(SimpleCertificateStore):
     def register(self, cert: x509.Certificate):
         self.backend.register(cert)
         super().register(cert)
+
+
+class ForkedCertificateStore(SimpleCertificateStore):
+    """
+    Certificate store that returns data from both itself and a "backend" store,
+    while never writing to the backend.
+    """
+
+    def __init__(self, backend: CertificateStore):
+        self.backend = backend
+        super().__init__()
+
+    def __getitem__(self, item):
+        try:
+            return self.certs[item]
+        except KeyError:
+            return self.backend[item]
+
+    def __iter__(self):
+        return itertools.chain(iter(self.backend), iter(self.certs.values()))
 
 
 # FIXME there has to be a better way to only enable OCSP fetching
