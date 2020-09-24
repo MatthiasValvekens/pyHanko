@@ -5,6 +5,7 @@ from typing import List, ClassVar, Set
 import hashlib
 
 from asn1crypto import x509, cms, tsp
+# noinspection PyProtectedMember
 from certvalidator import (
     CertificateValidator, InvalidCertificateError,
     PathBuildingError,
@@ -13,10 +14,9 @@ from certvalidator.errors import RevokedError, PathValidationError
 
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
-    'as_signing_certificate'
+    'as_signing_certificate', 'CertificateStore', 'SimpleCertificateStore',
+    'SubordinateCertificateStore'
 ]
-
-from certvalidator.registry import CertificateRegistry
 
 
 @dataclass(frozen=True)

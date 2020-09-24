@@ -20,7 +20,7 @@ __all__ = [
     'PdfObject', 'NullObject', 'BooleanObject', 'ArrayObject',
     'IndirectObject', 'FloatObject', 'NumberObject', 'pdf_name', 'pdf_string',
     'ByteStringObject', 'TextStringObject', 'NameObject', 'DictionaryObject',
-    'StreamObject', 'read_object'
+    'StreamObject', 'read_object', 'pdf_date',
 ]
 
 ObjectPrefix = b'/<[tf(n%'

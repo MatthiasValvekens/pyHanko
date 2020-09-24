@@ -220,7 +220,7 @@ class Signer:
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
-             revocation_info=None, use_pades=False) -> bytes:
+             revocation_info=None, use_pades=False) -> cms.ContentInfo:
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
@@ -268,7 +268,7 @@ class Signer:
             'content': cms.SignedData(signed_data)
         })
 
-        return message.dump()
+        return message
 
 
 class DocMDPPerm(IntFlag):
@@ -519,7 +519,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             test_md, signature_meta.md_algorithm,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
             dry_run=True, revocation_info=revinfo
-        ).hex().encode('ascii')
+        ).dump().hex().encode('ascii')
         # External actors such as timestamping servers can't be relied on to
         # always return exactly the same response, so we build in a 50% error
         # margin (+ ensure that bytes_reserved is even)
@@ -626,11 +626,12 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     md.update(output_buffer[sig_end:])
     output_buffer.release()
 
-    signature_bytes = signer.sign(
+    signature_cms = signer.sign(
         md.digest(), signature_meta.md_algorithm,
         timestamp=timestamp, use_pades=signature_meta.use_pades,
         revocation_info=revinfo
     )
+    signature_bytes = signature_cms.dump()
     signature = binascii.hexlify(signature_bytes)
     # NOTE: the PDF spec is not completely clear on this, but
     # signature contents are NOT supposed to be encrypted.
@@ -643,8 +644,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     output.write(signature)
 
     if signature_meta.use_pades and signature_meta.embed_validation_info:
-        # TODO this is suboptimal, should only pass in the leaf certs
-        #  of the signer
+        # TODO trawl the CMS object for certs
         from pdfstamp.sign import validation
         validation.DocumentSecurityStore.add_dss(
             output_stream=output, contents_hex_data=signature,

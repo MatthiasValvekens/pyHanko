@@ -13,7 +13,9 @@ from pdfstamp.stamp import AnnotAppearances
 
 __all__ = [
     'SigSeedValFlags', 'SigCertConstraints', 'SignatureFormField',
-    'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigFieldSpec'
+    'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigFieldSpec',
+    'enumerate_sig_fields_in', 'enumerate_sig_fields',
+    '_prepare_sig_field'
 ]
 
 # TODO support other seed value dict entries

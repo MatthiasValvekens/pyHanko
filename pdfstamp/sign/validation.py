@@ -458,6 +458,7 @@ class DocumentSecurityStore:
         cert_refs = [self._embed_cert(signer_cert)]
         for cert, issuer in unroll_path(path):
             cert_refs.append(self._embed_cert(issuer))
+            # noinspection PyProtectedMember
             if self.validation_context._allow_fetching:
                 ocsp_refs, extra_certs = self._embed_ocsp_responses(
                     cert, issuer
