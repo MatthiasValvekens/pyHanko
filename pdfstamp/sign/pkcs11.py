@@ -21,8 +21,9 @@ class PKCS11Signer(Signer):
         self.pkcs11_session = pkcs11_session
         self.timestamper = timestamper
         if ca_chain is not None:
-            self._cert_registry: CertificateStore = \
-                SimpleCertificateStore(ca_chain)
+            cs = SimpleCertificateStore()
+            cs.register_multiple(ca_chain)
+            self._cert_registry: CertificateStore = cs
         else:
             self._cert_registry = None
         self._signing_cert = self._key_handle = None
@@ -34,7 +35,9 @@ class PKCS11Signer(Signer):
         # the key data, so we allow for that.
         if self._cert_registry is None:
             certs = self._load_ca_chain()
-            self._cert_registry = SimpleCertificateStore(certs)
+            cs = SimpleCertificateStore()
+            cs.register_multiple(certs)
+            self._cert_registry = cs
         return self._cert_registry
 
     @property

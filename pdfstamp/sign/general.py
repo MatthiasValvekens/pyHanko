@@ -110,6 +110,10 @@ class CertificateStore:
     def __getitem__(self, item):
         raise NotImplementedError
 
+    def register_multiple(self, certs):
+        for cert in certs:
+            self.register(cert)
+
     def write_through_branch(self, base_cls=None) \
             -> 'WriteThroughCertificateStore':
         base_cls = base_cls or WriteThroughCertificateStore
@@ -126,11 +130,8 @@ class SimpleCertificateStore(CertificateStore):
     where we explicitly don't care about whether the certs are trusted or not.
     """
 
-    def __init__(self, certs=None):
+    def __init__(self):
         self.certs = {}
-        if certs:
-            for cert in certs:
-                self.register(cert)
 
     def register(self, cert: x509.Certificate):
         self.certs[cert.issuer_serial] = cert

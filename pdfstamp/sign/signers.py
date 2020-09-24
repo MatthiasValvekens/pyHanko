@@ -386,9 +386,11 @@ class SimpleSigner(Signer):
             return None
 
         (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
+        cs = SimpleCertificateStore()
+        cs.register_multiple(ca_chain + other_certs)
         return SimpleSigner(
             signing_key=kinfo, signing_cert=cert,
-            cert_registry=SimpleCertificateStore(certs=ca_chain + other_certs)
+            cert_registry=cs
         )
 
     @classmethod
@@ -415,7 +417,8 @@ class SimpleSigner(Signer):
         other_certs = ca_chain if other_certs is None \
             else ca_chain + other_certs
 
-        cert_reg = SimpleCertificateStore(certs=other_certs)
+        cert_reg = SimpleCertificateStore()
+        cert_reg.register_multiple(other_certs)
         return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
             cert_registry=cert_reg
