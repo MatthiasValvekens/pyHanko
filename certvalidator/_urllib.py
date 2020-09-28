@@ -5,7 +5,6 @@ Compatibility shims between urllib2 (Python 2) and urllib.request (Python 3)
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import sys
-import warnings
 
 from asn1crypto import util
 
@@ -19,11 +18,6 @@ else:
 
 
 if sys.version_info < (3,):
-
-    warnings.filterwarnings(
-        'ignore',
-        "object has no _reuse/_drop methods",
-    )
 
     class Request(_Request, object):
         """
@@ -59,6 +53,21 @@ if sys.version_info < (3,):
                 value.encode('iso-8859-1')
             )
 
+        def _reuse(self):
+            """
+            Makes PyPy happy
+            """
+
+            pass
+
+        def _drop(self):
+            """
+            Makes PyPy happy
+            """
+
+            pass
+
+
 else:
 
     class Request(_Request):
@@ -76,3 +85,17 @@ else:
 
             super().__init__(url)
             self.add_header('Host', self.host.split(":")[0])
+
+        def _reuse(self):
+            """
+            Makes PyPy happy
+            """
+
+            pass
+
+        def _drop(self):
+            """
+            Makes PyPy happy
+            """
+
+            pass
