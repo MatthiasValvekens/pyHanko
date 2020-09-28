@@ -24,6 +24,7 @@ install:
           (New-Object Net.WebClient).DownloadFile('https://downloads.python.org/pypy/pypy2.7-v7.3.2-win32.zip', "${env:PYTMP}\pypy2.7-v7.3.2-win32.zip");
         }
         7z x -y "${env:PYTMP}\pypy2.7-v7.3.2-win32.zip" -oC:\ | Out-Null;
+        $env:PYTHONWARNINGS = "ignore:DEPRECATION";
         & ${env:PYTHON_EXE} -m ensurepip;
       }
 cache:
