@@ -1,4 +1,5 @@
 import os
+from typing import Union
 
 from . import generic
 
@@ -73,14 +74,13 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         except KeyError:
             return self.prev.get_object(ido)
 
-    def mark_update(self, obj_ref: generic.IndirectObject):
-        assert obj_ref.pdf is self.prev or obj_ref.pdf is self
+    def mark_update(self, obj_ref: Union[generic.Reference,
+                                         generic.IndirectObject]):
         ix = (obj_ref.generation, obj_ref.idnum)
         self.objects[ix] = obj_ref.get_object()
-        return generic.IndirectObject(obj_ref.idnum, obj_ref.generation, self)
 
     def update_root(self):
-        return self.mark_update(self._root)
+        self.mark_update(self._root)
 
     def _write_header(self, stream):
 

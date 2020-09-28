@@ -231,6 +231,19 @@ class BasePdfFileWriter(PdfHandler):
     def mark_update(self, obj_ref):
         pass
 
+    # TODO: this new API allows me to simplify a lot of bookkeeping
+    #  in the library
+    def update_container(self, obj: generic.PdfObject):
+        container_ref = obj.container_ref
+        if isinstance(container_ref, generic.TrailerReference):
+            # nothing to do, the trailer is always written
+            return
+        elif not isinstance(container_ref, generic.Reference):  # pragma: nocover
+            raise ValueError(
+                f'Cannot use {container_ref} as an update reference.'
+            )
+        self.mark_update(container_ref)
+
     @property
     def root_ref(self):
         return self._root

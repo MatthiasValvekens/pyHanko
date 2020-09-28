@@ -2,11 +2,12 @@
 Implementation of generic PDF objects (dictionary, number, string, and so on).
 Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 """
-
+import os
 import re
 import binascii
 from datetime import datetime
 from typing import Iterator, Tuple, Optional
+from dataclasses import dataclass
 
 from .misc import read_non_whitespace, skip_over_comment, read_until_regex
 from .misc import PdfStreamError, PdfReadError
@@ -20,7 +21,7 @@ __all__ = [
     'PdfObject', 'NullObject', 'BooleanObject', 'ArrayObject',
     'IndirectObject', 'FloatObject', 'NumberObject', 'pdf_name', 'pdf_string',
     'ByteStringObject', 'TextStringObject', 'NameObject', 'DictionaryObject',
-    'StreamObject', 'read_object', 'pdf_date',
+    'StreamObject', 'read_object', 'pdf_date', 'Reference', 'Dereferenceable',
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -30,54 +31,119 @@ INDIRECT_PATTERN = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
 logger = logging.getLogger(__name__)
 
 
-def read_object(stream, pdf):
+class Dereferenceable:
+
+    def get_object(self):
+        raise NotImplementedError
+
+    def get_pdf_handler(self):
+        raise NotImplementedError
+
+
+class TrailerReference(Dereferenceable):
+
+    def __init__(self, reader):
+        self.reader = reader
+
+    def get_object(self):
+        return self.reader.trailer
+
+    def get_pdf_handler(self):
+        return self.reader
+
+
+@dataclass(frozen=True)
+class Reference(Dereferenceable):
+
+    idnum: int
+    generation: int
+    # FIXME can I refer to rw_common.PdfHandler without circular imports?
+    pdf: object
+
+    def get_object(self):
+        from pdf_utils.rw_common import PdfHandler
+        assert isinstance(self.pdf, PdfHandler)
+        return self.pdf.get_object(self).get_object()
+
+    def get_pdf_handler(self):
+        return self.pdf
+
+
+def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
     tok = stream.read(1)
-    stream.seek(-1, 1)  # reset to start
+    stream.seek(-1, os.SEEK_CUR)  # reset to start
     idx = OBJECT_PREFIXES.find(tok)
+    strict = container_ref.get_pdf_handler().strict
     if idx == 0:
         # name object
-        return NameObject.read_from_stream(stream, pdf)
+        result = NameObject.read_from_stream(
+            stream, strict=strict
+        )
     elif idx == 1:
         # hexadecimal string OR dictionary
         peek = stream.read(2)
-        stream.seek(-2, 1)  # reset to start
+        stream.seek(-2, os.SEEK_CUR)  # reset to start
         if peek == b'<<':
-            return DictionaryObject.read_from_stream(stream, pdf)
+            result = DictionaryObject.read_from_stream(
+                stream, container_ref
+            )
         else:
-            return read_hex_string_from_stream(stream)
+            result = read_hex_string_from_stream(stream)
     elif idx == 2:
         # array object
-        return ArrayObject.read_from_stream(stream, pdf)
+        result = ArrayObject.read_from_stream(
+            stream, container_ref
+        )
     elif idx == 3 or idx == 4:
         # boolean object
-        return BooleanObject.read_from_stream(stream)
+        result = BooleanObject.read_from_stream(stream)
     elif idx == 5:
         # string object
-        return read_string_from_stream(stream)
+        result = read_string_from_stream(stream)
     elif idx == 6:
         # null object
-        return NullObject.read_from_stream(stream)
+        result = NullObject.read_from_stream(stream)
     elif idx == 7:
         # comment
         while tok not in (b'\r', b'\n'):
             tok = stream.read(1)
         read_non_whitespace(stream)
-        stream.seek(-1, 1)
-        return read_object(stream, pdf)
+        stream.seek(-1, os.SEEK_CUR)
+        result = read_object(stream, container_ref)
     else:
         # number object OR indirect reference
         if tok in NUMBER_SIGNS:
             # number
-            return NumberObject.read_from_stream(stream)
-        peek = stream.read(20)
-        stream.seek(-len(peek), 1)  # reset to start
-        if INDIRECT_PATTERN.match(peek) is not None:
-            return IndirectObject.read_from_stream(stream, pdf)
+            result = NumberObject.read_from_stream(stream)
         else:
-            return NumberObject.read_from_stream(stream)
+            peek = stream.read(20)
+            stream.seek(-len(peek), os.SEEK_CUR)  # reset to start
+            if INDIRECT_PATTERN.match(peek) is not None:
+                result = IndirectObject.read_from_stream(stream, container_ref)
+            else:
+                result = NumberObject.read_from_stream(stream)
+
+    result.container_ref = container_ref
+    return result
 
 
-class PdfObject(object):
+class PdfObject:
+    container_ref: Dereferenceable = None
+
+    # TODO simplify a number of modification routines using this new API
+    def get_container_ref(self) -> Dereferenceable:
+        """
+        Return a reference to the closest parent object containing this object.
+        Raises an error if no such reference can be found.
+        """
+        ref = self.container_ref
+        if ref is None:  # pragma: nocover
+            raise ValueError(
+                'No container reference available. This object probably '
+                'wasn\'t read from a file.'
+            )
+        return ref
+
     def get_object(self):
         """Resolves indirect references."""
         return self
@@ -145,7 +211,7 @@ class ArrayObject(list, PdfObject):
         stream.write(b" ]")
 
     @staticmethod
-    def read_from_stream(stream, pdf):
+    def read_from_stream(stream, container_ref):
         arr = ArrayObject()
         tmp = stream.read(1)
         if tmp != b"[":
@@ -155,14 +221,14 @@ class ArrayObject(list, PdfObject):
             tok = stream.read(1)
             while tok.isspace():
                 tok = stream.read(1)
-            stream.seek(-1, 1)
+            stream.seek(-1, os.SEEK_CUR)
             # check for array ending
             peekahead = stream.read(1)
             if peekahead == b"]":
                 break
-            stream.seek(-1, 1)
+            stream.seek(-1, os.SEEK_CUR)
             # read and append obj
-            arr.append(read_object(stream, pdf))
+            arr.append(read_object(stream, container_ref))
         return arr
 
 
@@ -170,14 +236,23 @@ def is_indirect(obj):
     return isinstance(obj, IndirectObject)
 
 
-class IndirectObject(PdfObject):
+class IndirectObject(PdfObject, Dereferenceable):
     def __init__(self, idnum, generation, pdf):
-        self.idnum = idnum
-        self.generation = generation
-        self.pdf = pdf
+        self.reference = Reference(idnum, generation, pdf)
 
     def get_object(self):
-        return self.pdf.get_object(self).get_object()
+        return self.reference.get_object()
+
+    def get_pdf_handler(self):
+        return self.reference.get_pdf_handler()
+
+    @property
+    def idnum(self):
+        return self.reference.idnum
+
+    @property
+    def generation(self):
+        return self.reference.generation
 
     def __repr__(self):
         return "IndirectObject(%r, %r)" % (self.idnum, self.generation)
@@ -188,7 +263,7 @@ class IndirectObject(PdfObject):
             isinstance(other, IndirectObject) and
             self.idnum == other.idnum and
             self.generation == other.generation and
-            self.pdf is other.pdf
+            self.get_pdf_handler() is other.get_pdf_handler()
             )
 
     def __ne__(self, other):
@@ -198,7 +273,7 @@ class IndirectObject(PdfObject):
         stream.write(b"%d %d R" % (self.idnum, self.generation))
 
     @staticmethod
-    def read_from_stream(stream, pdf):
+    def read_from_stream(stream, container_ref: 'Dereferenceable'):
         idnum = b""
         while True:
             tok = stream.read(1)
@@ -225,7 +300,9 @@ class IndirectObject(PdfObject):
             raise PdfReadError(
                 "Error reading indirect object reference at byte %s" % pos
             )
-        return IndirectObject(int(idnum), int(generation), pdf)
+        return IndirectObject(
+            int(idnum), int(generation), container_ref.get_pdf_handler()
+        )
 
 
 class FloatObject(decimal.Decimal, PdfObject):
@@ -376,7 +453,7 @@ def read_string_from_stream(stream):
                 # second character:
                 tok = stream.read(1)
                 if tok not in b"\n\r":
-                    stream.seek(-1, 1)
+                    stream.seek(-1, os.SEEK_CUR)
                 # Then don't add anything to the actual string, since this
                 # line break was escaped:
                 tok = b''
@@ -470,7 +547,7 @@ class NameObject(str, PdfObject):
         stream.write(self.encode('utf-8'))
 
     @staticmethod
-    def read_from_stream(stream, pdf):
+    def read_from_stream(stream, strict=True):
         name = stream.read(1)
         if name != NameObject.surfix:
             raise PdfReadError("name read error")
@@ -481,7 +558,7 @@ class NameObject(str, PdfObject):
         except (UnicodeEncodeError, UnicodeDecodeError):
             # Name objects should represent irregular characters
             # with a '#' followed by the symbol's hex number
-            if not pdf.strict:
+            if not strict:
                 logger.warning("Illegal character in Name Object")
                 return NameObject(name)
             else:
@@ -526,7 +603,7 @@ class DictionaryObject(dict, PdfObject):
         stream.write(b">>")
 
     @staticmethod
-    def read_from_stream(stream, pdf):
+    def read_from_stream(stream, container_ref: 'Dereferenceable'):
         tmp = stream.read(2)
         if tmp != b"<<":
             raise PdfReadError(
@@ -534,12 +611,13 @@ class DictionaryObject(dict, PdfObject):
                 "stream must begin with '<<'" % hex(stream.tell())
             )
         data = {}
+        handler = container_ref.get_pdf_handler()
         while True:
             tok = read_non_whitespace(stream)
             if tok == b'\x00':
                 continue
             elif tok == b'%':
-                stream.seek(-1, 1)
+                stream.seek(-1, os.SEEK_CUR)
                 skip_over_comment(stream)
                 continue
             if not tok:
@@ -549,11 +627,11 @@ class DictionaryObject(dict, PdfObject):
             if tok == b">":
                 stream.read(1)
                 break
-            stream.seek(-1, 1)
-            key = read_object(stream, pdf)
+            stream.seek(-1, os.SEEK_CUR)
+            key = read_object(stream, container_ref)
             read_non_whitespace(stream)
-            stream.seek(-1, 1)
-            value = read_object(stream, pdf)
+            stream.seek(-1, os.SEEK_CUR)
+            value = read_object(stream, container_ref)
             if key not in data:
                 data[key] = value
             else:
@@ -561,7 +639,7 @@ class DictionaryObject(dict, PdfObject):
                     "Multiple definitions in dictionary at byte "
                     "%s for key %s" % (hex(stream.tell()), key)
                 )
-                if pdf.strict:
+                if handler.strict:
                     raise PdfReadError(err)
                 else:
                     logger.warning(err)
@@ -579,14 +657,13 @@ class DictionaryObject(dict, PdfObject):
             if eol == b"\r":
                 # read \n after
                 if stream.read(1) != b'\n':
-                    stream.seek(-1, 1)
+                    stream.seek(-1, os.SEEK_CUR)
             # this is a stream object, not a dictionary
-            assert "/Length" in data
-            length = data["/Length"]
+            length = data[pdf_name("/Length")]
             if isinstance(length, IndirectObject):
                 t = stream.tell()
-                length = pdf.get_object(length)
-                stream.seek(t, 0)
+                length = handler.get_object(length)
+                stream.seek(t)
             stream_data = stream.read(length)
             e = read_non_whitespace(stream)
             ndstream = stream.read(8)
@@ -598,19 +675,19 @@ class DictionaryObject(dict, PdfObject):
                 # we need to do this to correct the streamdata and chop off
                 # an extra character.
                 pos = stream.tell()
-                stream.seek(-10, 1)
+                stream.seek(-10, os.SEEK_CUR)
                 end = stream.read(9)
                 if end == b"endstream":
                     # we found it by looking back one character further.
                     stream_data = stream_data[:-1]
                 else:
-                    stream.seek(pos, 0)
+                    stream.seek(pos)
                     raise PdfReadError(
                         "Unable to find 'endstream' marker after "
                         "stream at byte %s." % hex(stream.tell())
                     )
         else:
-            stream.seek(pos, 0)
+            stream.seek(pos)
         if stream_data is not None:
             # pass in everything as encoded data, the StreamObject class
             # will take care of decoding as necessary
@@ -882,7 +959,8 @@ class DecryptedObjectProxy(PdfObject):
             if isinstance(obj, StreamObject):
                 # TODO add tests for this specific use case!
                 decrypted = StreamObject(
-                    decrypted_entries, encoded_data=rc4_encrypt(key, obj.encoded_data)
+                    decrypted_entries,
+                    encoded_data=rc4_encrypt(key, obj.encoded_data)
                 )
             else:
                 decrypted = DictionaryObject(decrypted_entries)

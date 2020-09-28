@@ -2,7 +2,9 @@ import struct
 import os
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from io import BytesIO
+from typing import Optional
 
 from . import generic
 from .misc import read_non_whitespace, read_until_whitespace
@@ -71,6 +73,36 @@ def read_next_end_line(stream):
 TRAILER_KEYS = "/Root", "/Encrypt", "/Info", "/ID", "/Size"
 
 
+@dataclass(frozen=True)
+class EmbeddingMetadata:
+    """
+    Metadata about the position of an object in a file.
+    """
+
+    obj_stream_num: Optional[int]
+    """
+    ID of the object stream in which this object is contained, if there is one.
+    For top-level objects, this value is always None.
+    """
+
+    obj_start: int
+    """
+    For top-level objects, this is the absolute offset in the file at which this
+    object starts. For objects in object streams, it is relative to the start of 
+    the stream (i.e. NOT /First, but the start of the stream object).
+    For top-level objects, the 'x y obj' marker is included.
+    """
+
+    obj_end: int
+    """
+    For top-level objects, this is the absolute offset in the file at which this
+    object ends.
+    For objects in object streams, it is relative to the start of 
+    the stream (i.e. NOT /First, but the start of the stream object).
+    For top level objects, the endobj marker is included.
+    """
+
+
 class XRefCache:
 
     def __init__(self):
@@ -85,6 +117,7 @@ class XRefCache:
         self.history = defaultdict(list)
         self._current_section_ids = set()
         self._refs_by_section = []
+        self.embedding_metadata_cache = {}
 
     def _next_section(self):
         self.xref_sections += 1
@@ -174,10 +207,10 @@ class XRefCache:
         read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
         while True:
-            num = generic.read_object(stream, self)
+            num = generic.NumberObject.read_from_stream(stream)
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
-            size = generic.read_object(stream, self)
+            size = generic.NumberObject.read_from_stream(stream)
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
             for cnt in range(0, size):
@@ -217,6 +250,12 @@ class XRefCache:
         stream.seek(-1, os.SEEK_CUR)
 
         self._next_section()
+
+    def get_embedding_metadata(self, ref):
+        return self.embedding_metadata_cache[(ref.generation, ref.idnum)]
+
+    def set_embedding_metadata(self, ref, meta: EmbeddingMetadata):
+        self.embedding_metadata_cache[(ref.generation, ref.idnum)] = meta
 
     def read_xref_stream(self, xrefstream):
         stream_data = BytesIO(xrefstream.data)
@@ -336,14 +375,15 @@ class PdfFileReader(PdfHandler):
     def _get_object_from_stream(self, idnum, stmnum, idx):
         # indirect reference to object in object stream
         # read the entire object stream into memory
-        stream_ref = generic.IndirectObject(stmnum, 0, self).get_object()
+        stream_ref = generic.Reference(stmnum, 0, self)
+        stream = stream_ref.get_object()
         # This is an xref to a stream, so its type better be a stream
-        assert stream_ref['/Type'] == '/ObjStm'
+        assert stream['/Type'] == '/ObjStm'
         # /N is the number of indirect objects in the stream
-        assert idx < stream_ref['/N']
-        stream_data = BytesIO(stream_ref.data)
-        first_object = stream_ref['/First']
-        for i in range(stream_ref['/N']):
+        assert idx < stream['/N']
+        stream_data = BytesIO(stream.data)
+        first_object = stream['/First']
+        for i in range(stream['/N']):
             read_non_whitespace(stream_data, seek_back=True)
             objnum = generic.NumberObject.read_from_stream(stream_data)
             read_non_whitespace(stream_data, seek_back=True)
@@ -354,9 +394,12 @@ class PdfFileReader(PdfHandler):
                 continue
             if self.strict and idx != i:
                 raise misc.PdfReadError("Object is in wrong index.")
-            stream_data.seek(first_object + offset)
+            obj_start = first_object + offset
+            stream_data.seek(obj_start)
             try:
-                obj = generic.read_object(stream_data, self)
+                obj = generic.read_object(
+                    stream_data, generic.Reference(idnum, 0, self),
+                )
             except misc.PdfStreamError as e:
                 # Stream object cannot be read. Normally, a critical error, but
                 # Adobe Reader doesn't complain, so continue (in strict mode?)
@@ -368,7 +411,12 @@ class PdfFileReader(PdfHandler):
                     raise misc.PdfReadError("Can't read object stream: %s" % e)
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
-            return obj
+            generic.read_non_whitespace(stream_data, seek_back=True)
+            meta = EmbeddingMetadata(
+                obj_stream_num=stmnum,
+                obj_start=obj_start, obj_end=stream.tell()
+            )
+            return obj, meta
 
         if self.strict:
             raise misc.PdfReadError("This is a fatal error in strict mode.")
@@ -382,8 +430,8 @@ class PdfFileReader(PdfHandler):
             return encrypt_ref
 
     @property
-    def root_ref(self) -> generic.IndirectObject:
-        return self.trailer.raw_get('/Root', decrypt=False)
+    def root_ref(self) -> generic.Reference:
+        return self.trailer.raw_get('/Root', decrypt=False).reference
 
     @property
     def total_revisions(self):
@@ -432,12 +480,15 @@ class PdfFileReader(PdfHandler):
         if isinstance(marker, tuple):
             # object in object stream
             (obj_stream_num, obj_stream_ix) = marker
-            return self._get_object_from_stream(
+            obj, metadata = self._get_object_from_stream(
                 ref.idnum, obj_stream_num, obj_stream_ix
             )
+            self.xrefs.set_embedding_metadata(ref, metadata)
+            return obj
         else:
+            obj_start = marker
             # standard indirect object
-            self.stream.seek(marker)
+            self.stream.seek(obj_start)
             idnum, generation = read_object_header(
                 self.stream, strict=self.strict
             )
@@ -446,7 +497,25 @@ class PdfFileReader(PdfHandler):
                     f"Expected object ID ({ref.idnum} {ref.generation}) "
                     f"does not match actual ({idnum} {generation})."
                 )
-            retval = generic.read_object(self.stream, self)
+            retval = generic.read_object(
+                self.stream, generic.Reference(idnum, generation, self)
+            )
+            rd = generic.read_non_whitespace(self.stream, seek_back=True)
+            obj_data_end = self.stream.tell()
+            endobj = self.stream.read(6)
+            if endobj != b'endobj':
+                if self.strict:  # pragma: nocover
+                    raise misc.PdfReadError(
+                        f'Expected endobj marker at position {obj_data_end} '
+                        f'but found {repr(endobj)}'
+                    )
+                obj_end = obj_data_end
+            else:
+                obj_end = obj_data_end + 5  # last byte of "endobj" marker
+            meta = EmbeddingMetadata(
+                obj_stream_num=None, obj_start=obj_start, obj_end=obj_end
+            )
+            self.xrefs.set_embedding_metadata(ref, meta)
 
             # override encryption is used for the /Encrypt dictionary
             if not never_decrypt and self.encrypted:
@@ -471,7 +540,9 @@ class PdfFileReader(PdfHandler):
     def _read_xref_stream(self):
         stream = self.stream
         idnum, generation = read_object_header(stream, strict=self.strict)
-        xrefstream = generic.read_object(stream, self)
+        xrefstream = generic.StreamObject.read_from_stream(
+            stream, generic.Reference(idnum, generation, self)
+        )
         assert xrefstream["/Type"] == "/XRef"
         self.cache_indirect_object(generation, idnum, xrefstream)
         self.xrefs.read_xref_stream(xrefstream)
@@ -484,7 +555,10 @@ class PdfFileReader(PdfHandler):
     def _read_xref_table(self):
         stream = self.stream
         self.xrefs.read_xref_table(stream)
-        new_trailer = generic.read_object(stream, self)
+        new_trailer = generic.DictionaryObject.read_from_stream(
+            stream, generic.TrailerReference(self)
+        )
+        assert isinstance(new_trailer, generic.DictionaryObject)
         for key, value in list(new_trailer.items()):
             if key not in self.trailer:
                 self.trailer[key] = value

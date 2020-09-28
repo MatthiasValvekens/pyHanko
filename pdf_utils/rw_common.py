@@ -3,7 +3,7 @@ from . import generic
 
 class PdfHandler:
 
-    def get_object(self, ido: generic.IndirectObject):
+    def get_object(self, ido: generic.Reference):
         raise NotImplementedError
 
     @property
