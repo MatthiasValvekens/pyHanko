@@ -5,6 +5,7 @@ Compatibility shims between urllib2 (Python 2) and urllib.request (Python 3)
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import sys
+import platform
 
 from asn1crypto import util
 
@@ -18,6 +19,19 @@ else:
 
 
 if sys.version_info < (3,):
+
+    # Workaround for https://foss.heptapod.net/pypy/pypy/-/issues/3313
+    if platform.python_implementation() == 'PyPy' and sys.pypy_version_info[0:3] == (7, 3, 2):
+        import httplib
+
+        def _drop(self):
+            pass
+
+        def _reuse(self):
+            pass
+
+        httplib.HTTPResponse._drop = _drop
+        httplib.HTTPResponse._reuse = _reuse
 
     class Request(_Request, object):
         """
@@ -53,21 +67,6 @@ if sys.version_info < (3,):
                 value.encode('iso-8859-1')
             )
 
-        def _reuse(self):
-            """
-            Makes PyPy happy
-            """
-
-            pass
-
-        def _drop(self):
-            """
-            Makes PyPy happy
-            """
-
-            pass
-
-
 else:
 
     class Request(_Request):
@@ -85,17 +84,3 @@ else:
 
             super().__init__(url)
             self.add_header('Host', self.host.split(":")[0])
-
-        def _reuse(self):
-            """
-            Makes PyPy happy
-            """
-
-            pass
-
-        def _drop(self):
-            """
-            Makes PyPy happy
-            """
-
-            pass
