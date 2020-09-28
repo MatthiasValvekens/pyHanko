@@ -23,7 +23,6 @@ if sys.version_info < (3,):
     warnings.filterwarnings(
         'ignore',
         "object has no _reuse/_drop methods",
-        module='socket'
     )
 
     class Request(_Request, object):
