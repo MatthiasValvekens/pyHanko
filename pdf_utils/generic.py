@@ -23,9 +23,9 @@ __all__ = [
     'StreamObject', 'read_object', 'pdf_date',
 ]
 
-ObjectPrefix = b'/<[tf(n%'
-NumberSigns = b'+-'
-IndirectPattern = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
+OBJECT_PREFIXES = b'/<[tf(n%'
+NUMBER_SIGNS = b'+-'
+INDIRECT_PATTERN = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 def read_object(stream, pdf):
     tok = stream.read(1)
     stream.seek(-1, 1)  # reset to start
-    idx = ObjectPrefix.find(tok)
+    idx = OBJECT_PREFIXES.find(tok)
     if idx == 0:
         # name object
         return NameObject.read_from_stream(stream, pdf)
@@ -66,12 +66,12 @@ def read_object(stream, pdf):
         return read_object(stream, pdf)
     else:
         # number object OR indirect reference
-        if tok in NumberSigns:
+        if tok in NUMBER_SIGNS:
             # number
             return NumberObject.read_from_stream(stream)
         peek = stream.read(20)
         stream.seek(-len(peek), 1)  # reset to start
-        if IndirectPattern.match(peek) is not None:
+        if INDIRECT_PATTERN.match(peek) is not None:
             return IndirectObject.read_from_stream(stream, pdf)
         else:
             return NumberObject.read_from_stream(stream)
