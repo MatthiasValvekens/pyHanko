@@ -14,16 +14,13 @@ jobs:
       xcode: 10.3.0
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - homebrew
-      - run: brew install pypy
-      - save_cache:
-          key: homebrew
-          paths:
-            - /usr/local/Homebrew
-      - run: pypy run.py deps
-      - run: pypy run.py ci
+      - run: curl --location -O https://downloads.python.org/pypy/pypy2.7-v7.3.2-osx64.tar.bz2
+      - run: tar xvf pypy2.7-v7.3.2-osx64.tar.bz2
+      - run: mv pypy2.7-v7.3.2-osx64 pypy
+      - run: xattr -rc pypy
+      - run: ./pypy/bin/pypy -m ensurepip
+      - run: ./pypy/bin/pypy run.py deps
+      - run: ./pypy/bin/pypy run.py ci
 workflows:
   version: 2
   python-26:

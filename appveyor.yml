@@ -10,8 +10,8 @@ environment:
     - PYTHON_EXE: "C:\\Python33\\python.exe"
       OSCRYPTO_USE_WINLEGACY: "true"
     - PYTHON_EXE: "C:\\Python33-x64\\python.exe"
-    - PYTHON_EXE: "C:\\pypy2-v5.10.0-win32\\pypy.exe"
-    - PYTHON_EXE: "C:\\pypy2-v5.10.0-win32\\pypy.exe"
+    - PYTHON_EXE: "C:\\pypy2.7-v7.3.2-win32\\pypy.exe"
+    - PYTHON_EXE: "C:\\pypy2.7-v7.3.2-win32\\pypy.exe"
       OSCRYPTO_USE_WINLEGACY: "true"
 install:
   - ps: |-
@@ -19,12 +19,12 @@ install:
       if (!(Test-Path "$env:PYTMP")) {
         New-Item -ItemType directory -Path "$env:PYTMP" | Out-Null;
       }
-      if ("${env:PYTHON_EXE}" -eq "C:\pypy2-v5.10.0-win32\pypy.exe") {
-        if (!(Test-Path "${env:PYTMP}\pypy2-v5.10.0-win32.zip")) {
-          (New-Object Net.WebClient).DownloadFile('https://bitbucket.org/pypy/pypy/downloads/pypy2-v5.10.0-win32.zip', "${env:PYTMP}\pypy2-v5.10.0-win32.zip");
+      if ("${env:PYTHON_EXE}" -eq "C:\pypy2.7-v7.3.2-win32\pypy.exe") {
+        if (!(Test-Path "${env:PYTMP}\pypy2.7-v7.3.2-win32.zip")) {
+          (New-Object Net.WebClient).DownloadFile('https://downloads.python.org/pypy/pypy2.7-v7.3.2-win32.zip', "${env:PYTMP}\pypy2.7-v7.3.2-win32.zip");
         }
-        7z x -y "${env:PYTMP}\pypy2-v5.10.0-win32.zip" -oC:\ | Out-Null;
-        & ${env:PYTHON_EXE} -m ensurepip --upgrade;
+        7z x -y "${env:PYTMP}\pypy2.7-v7.3.2-win32.zip" -oC:\ | Out-Null;
+        & ${env:PYTHON_EXE} -m ensurepip --upgrade --no-python-version-warning;
       }
 cache:
   - '%TMP%\py\'
