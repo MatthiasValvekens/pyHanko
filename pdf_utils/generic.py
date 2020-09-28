@@ -855,6 +855,7 @@ def proxy_encrypted_obj(encrypted_obj, key):
         return encrypted_obj
 
 
+# TODO support 2.0-style encryption
 class DecryptedObjectProxy(PdfObject):
 
     def __init__(self, raw_object: PdfObject, key):
@@ -879,8 +880,9 @@ class DecryptedObjectProxy(PdfObject):
                 for dictkey, value in obj.items()
             }
             if isinstance(obj, StreamObject):
+                # TODO add tests for this specific use case!
                 decrypted = StreamObject(
-                    decrypted_entries, stream_data=rc4_encrypt(key, obj._data)
+                    decrypted_entries, encoded_data=rc4_encrypt(key, obj.encoded_data)
                 )
             else:
                 decrypted = DictionaryObject(decrypted_entries)
