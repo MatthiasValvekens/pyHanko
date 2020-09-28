@@ -5,6 +5,7 @@ Compatibility shims between urllib2 (Python 2) and urllib.request (Python 3)
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import sys
+import warnings
 
 from asn1crypto import util
 
@@ -18,6 +19,12 @@ else:
 
 
 if sys.version_info < (3,):
+
+    warnings.filterwarnings(
+        'ignore',
+        "object has no _reuse/_drop methods",
+        module='socket'
+    )
 
     class Request(_Request, object):
         """
