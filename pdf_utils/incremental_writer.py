@@ -79,6 +79,22 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         ix = (obj_ref.generation, obj_ref.idnum)
         self.objects[ix] = obj_ref.get_object()
 
+    # TODO: this new API allows me to simplify a lot of bookkeeping
+    #  in the library
+    def update_container(self, obj: generic.PdfObject):
+        container_ref = obj.container_ref
+        if container_ref is None:
+            raise ValueError('No container reference available.')
+        if isinstance(container_ref, generic.TrailerReference):
+            # nothing to do, the trailer is always written
+            return
+        elif isinstance(container_ref, generic.Reference):  # pragma: nocover
+            self.mark_update(container_ref)
+        else:
+            raise ValueError(
+                f'Cannot use {container_ref} as an update reference.'
+            )
+
     def update_root(self):
         self.mark_update(self._root)
 

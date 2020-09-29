@@ -2,7 +2,7 @@ import os
 import struct
 from hashlib import md5
 from io import BytesIO
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
@@ -228,21 +228,12 @@ class BasePdfFileWriter(PdfHandler):
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs
 
-    def mark_update(self, obj_ref):
+    def mark_update(self, obj_ref: Union[generic.Reference,
+                                         generic.IndirectObject]):
         pass
 
-    # TODO: this new API allows me to simplify a lot of bookkeeping
-    #  in the library
     def update_container(self, obj: generic.PdfObject):
-        container_ref = obj.container_ref
-        if isinstance(container_ref, generic.TrailerReference):
-            # nothing to do, the trailer is always written
-            return
-        elif not isinstance(container_ref, generic.Reference):  # pragma: nocover
-            raise ValueError(
-                f'Cannot use {container_ref} as an update reference.'
-            )
-        self.mark_update(container_ref)
+        pass
 
     @property
     def root_ref(self):
@@ -401,20 +392,17 @@ class BasePdfFileWriter(PdfHandler):
 
         if after == -1:
             # there are no pages yet, this will be the first
-            pages_obj_ref = upd_boundary = page_tree_root_ref
+            pages_obj_ref = page_tree_root_ref
             kid_ix = -1
         else:
-            pages_obj_ref, kid_ix, _, upd_boundary \
-                = self.find_page_container(after)
+            pages_obj_ref, kid_ix, _ = self.find_page_container(after)
 
         pages_obj = pages_obj_ref.get_object()
-        kids_ref = pages_obj.raw_get('/Kids')
-        if isinstance(kids_ref, generic.IndirectObject):
-            kids_update_boundary = kids_ref
-            kids = kids_ref.get_object()
-        else:
-            kids = kids_ref
-            kids_update_boundary = upd_boundary
+        try:
+            kids = pages_obj['/Kids']
+        except KeyError:  # pragma: nocover
+            raise ValueError('/Pages must have /Kids')
+
         # increase page count for all parents
         parent = pages_obj
         while parent is not None:
@@ -425,9 +413,8 @@ class BasePdfFileWriter(PdfHandler):
         new_page_ref = self.add_object(new_page)
         kids.insert(kid_ix + 1, new_page_ref)
         new_page[pdf_name('/Parent')] = pages_obj_ref
-        self.mark_update(upd_boundary)
-        if upd_boundary != kids_update_boundary:
-            self.mark_update(kids_update_boundary)
+        self.update_container(pages_obj)
+        self.update_container(kids)
 
         return new_page_ref
 

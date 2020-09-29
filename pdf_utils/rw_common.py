@@ -30,8 +30,7 @@ class PdfHandler:
         if not (0 <= page_ix < page_count):
             raise ValueError('Page index out of range')
 
-        def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict,
-                     prev_last_indir):
+        def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict):
             pages_obj = pages_obj_ref.get_object()
             kids = pages_obj.raw_get('/Kids')
             if isinstance(kids, generic.IndirectObject):
@@ -58,18 +57,14 @@ class PdfHandler:
                     desc_count = kid['/Count']
                     if cur_page_ix <= page_ix < cur_page_ix + desc_count:
                         return _recurse(
-                            cur_page_ix, kid_ref, last_rsrc_dict,
-                            kid_ref
+                            cur_page_ix, kid_ref, last_rsrc_dict
                         )
                     cur_page_ix += desc_count
                 elif node_type == '/Page':
                     if cur_page_ix == page_ix:
                         if retrieve_parent:
                             return (
-                                pages_obj_ref, kid_index, last_rsrc_dict,
-                                # we want to ignore the potential reference to
-                                # /Kids in this case
-                                prev_last_indir
+                                pages_obj_ref, kid_index, last_rsrc_dict
                             )
                         else:
                             try:
@@ -82,9 +77,7 @@ class PdfHandler:
             # This means the PDF is not standards-compliant
             raise ValueError('Page not found')
 
-        return _recurse(
-            0, page_tree_root_ref, root_resources, page_tree_root_ref
-        )
+        return _recurse(0, page_tree_root_ref, root_resources)
 
     def find_page_container(self, page_ix):
         """
@@ -96,11 +89,9 @@ class PdfHandler:
             The (zero-indexed) number of the page for which we want to
             retrieve the parent.
         :return:
-            A quadruple with the /Pages object (or a reference to it),
-            the index of the target page in said /Pages object,
-            (possibly inherited) resource dictionary, and a reference
-            to the object that needs to be marked for an update
-            if the /Pages object is updated.
+            A triple with the /Pages object (or a reference to it),
+            the index of the target page in said /Pages object, and a
+            (possibly inherited) resource dictionary.
         """
         return self._walk_page_tree(page_ix, retrieve_parent=True)
 
