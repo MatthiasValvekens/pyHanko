@@ -1,4 +1,3 @@
-import binascii
 import hashlib
 import os
 import logging
@@ -331,10 +330,10 @@ class VRI:
     def as_pdf_object(self):
         vri = generic.DictionaryObject({pdf_name('/Type'): pdf_name('/VRI')})
         if self.ocsps:
-            vri[pdf_name('/OCSPs')] = generic.ArrayObject(self.ocsps)
+            vri[pdf_name('/OCSP')] = generic.ArrayObject(self.ocsps)
         if self.crls:
-            vri[pdf_name('/CRLs')] = generic.ArrayObject(self.crls)
-        vri[pdf_name('/Certs')] = generic.ArrayObject(self.certs)
+            vri[pdf_name('/CRL')] = generic.ArrayObject(self.crls)
+        vri[pdf_name('/Cert')] = generic.ArrayObject(self.certs)
         return vri
 
 
@@ -426,7 +425,7 @@ class DocumentSecurityStore:
             self.ocsps[cert.issuer_serial] = ocsp_refs
             cert_refs = self._embed_certs_from_ocsp(ocsps)
             return ocsp_refs, cert_refs
-        return (), ()
+        return [], []
 
     def _embed_cert(self, cert):
         if self.writer is None:
@@ -443,10 +442,12 @@ class DocumentSecurityStore:
         self.certs[cert.issuer_serial] = ref
         return ref
 
+    # FIXME according to the ETSI conformance checker, I'm not computing this
+    #  correctly
     @staticmethod
-    def sig_content_identifier(contents_hex_data):
-        ident_bytes = binascii.hexlify(hashlib.sha1(contents_hex_data).digest())
-        return pdf_name('/' + ident_bytes.decode('ascii').upper())
+    def sig_content_identifier(contents):
+        ident = hashlib.sha1(contents).digest().hex().upper()
+        return pdf_name('/' + ident)
 
     def collect_vri(self, signer_cert) -> VRI:
         path = build_trust_path(self.validation_context, signer_cert)
@@ -584,7 +585,7 @@ class DocumentSecurityStore:
         )
 
     @classmethod
-    def add_dss(cls, output_stream, contents_hex_data, certs,
+    def add_dss(cls, output_stream, sig_contents, certs,
                 validation_context):
         output_stream.seek(0)
         # TODO is it actually necessary to create a separate stream here?
@@ -599,9 +600,7 @@ class DocumentSecurityStore:
             created = True
             dss = cls(writer=writer, validation_context=validation_context)
 
-        identifier = DocumentSecurityStore.sig_content_identifier(
-            contents_hex_data
-        )
+        identifier = DocumentSecurityStore.sig_content_identifier(sig_contents)
 
         dss.register_vri(identifier=identifier, signer_certs=certs)
         dss_dict = dss.as_pdf_object()

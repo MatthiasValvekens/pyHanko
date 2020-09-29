@@ -139,7 +139,7 @@ class PdfSignedData(generic.DictionaryObject):
         signature_cms = yield md.digest()
 
         signature_bytes = signature_cms.dump()
-        signature = binascii.hexlify(signature_bytes)
+        signature = binascii.hexlify(signature_bytes).upper()
         # NOTE: the PDF spec is not completely clear on this, but
         # signature contents are NOT supposed to be encrypted.
         # Perhaps this falls under the "strings in encrypted containers"
@@ -154,7 +154,7 @@ class PdfSignedData(generic.DictionaryObject):
         output.write(signature)
 
         output.seek(0)
-        yield output, signature
+        yield output
 
 
 class SignatureObject(PdfSignedData):
@@ -311,8 +311,10 @@ class Signer:
             md = getattr(hashlib, digest_algorithm)()
             md.update(signature)
             ts_token = self.timestamper.timestamp(md.digest(), digest_algorithm)
-            sig_info['unsigned_attrs'] = cms.CMSAttributes([ts_token])
-            ts_signed_data = ts_token['values'][0]['content']
+            sig_info['unsigned_attrs'] = cms.CMSAttributes(
+                [simple_cms_attribute('signature_time_stamp_token', ts_token)]
+            )
+            ts_signed_data = ts_token['content']
             ts_certs = ts_signed_data['certificates']
 
             def extract_ts_sid(si):
@@ -701,16 +703,15 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         timestamp=timestamp, use_pades=signature_meta.use_pades,
         revocation_info=revinfo
     )
-    output, signature = wr.send(signature_cms)
+    output = wr.send(signature_cms)
 
     if signature_meta.use_pades and signature_meta.embed_validation_info:
         from pdfstamp.sign import validation
         for meta_cert in meta_certs:
             validation_context.certificate_registry.add_other_cert(meta_cert)
         validation.DocumentSecurityStore.add_dss(
-            output_stream=output, contents_hex_data=signature,
-            certs=set(leaves),
-            validation_context=validation_context
+            output_stream=output, sig_contents=signature_cms.dump(),
+            certs=set(leaves), validation_context=validation_context
         )
 
         if signer.timestamper is not None:
@@ -746,6 +747,6 @@ def timestamp_pdf(pdf_out: IncrementalPdfFileWriter, md_algorithm,
     wr = timestamp_obj.write_signature(pdf_out, md_algorithm)
     true_digest = next(wr)
     timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
-    output, _ = wr.send(timestamp_cms)
+    output = wr.send(timestamp_cms)
 
     return output

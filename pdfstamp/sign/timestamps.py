@@ -90,7 +90,7 @@ class TimeStamper:
                 f'Time stamping authority sent back bad nonce value. Expected '
                 f'{nonce}, but got {nonce_received}.'
             )
-        return simple_cms_attribute('signature_time_stamp_token', tst)
+        return tst
 
 
 class DummyTimeStamper(TimeStamper):
