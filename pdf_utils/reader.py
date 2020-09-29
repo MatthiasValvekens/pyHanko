@@ -98,8 +98,9 @@ class EmbeddingMetadata:
     For top-level objects, this is the absolute offset in the file at which this
     object ends.
     For objects in object streams, it is relative to the start of 
-    the stream (i.e. NOT /First, but the start of the stream object).
-    For top level objects, the endobj marker is included.
+    the stream (i.e. NOT /First, but the start of the stream object), including
+    trailing whitespace.
+    For top level objects, the endobj marker and any trailing whitespace is included.
     """
 
 
@@ -251,7 +252,7 @@ class XRefCache:
 
         self._next_section()
 
-    def get_embedding_metadata(self, ref):
+    def get_embedding_metadata(self, ref) -> EmbeddingMetadata:
         return self.embedding_metadata_cache[(ref.generation, ref.idnum)]
 
     def set_embedding_metadata(self, ref, meta: EmbeddingMetadata):
@@ -414,7 +415,7 @@ class PdfFileReader(PdfHandler):
             generic.read_non_whitespace(stream_data, seek_back=True)
             meta = EmbeddingMetadata(
                 obj_stream_num=stmnum,
-                obj_start=obj_start, obj_end=stream.tell()
+                obj_start=obj_start, obj_end=stream.tell() - 1
             )
             return obj, meta
 
@@ -500,8 +501,8 @@ class PdfFileReader(PdfHandler):
             retval = generic.read_object(
                 self.stream, generic.Reference(idnum, generation, self)
             )
-            rd = generic.read_non_whitespace(self.stream, seek_back=True)
-            obj_data_end = self.stream.tell()
+            generic.read_non_whitespace(self.stream, seek_back=True)
+            obj_data_end = self.stream.tell() - 1
             endobj = self.stream.read(6)
             if endobj != b'endobj':
                 if self.strict:  # pragma: nocover
@@ -511,7 +512,11 @@ class PdfFileReader(PdfHandler):
                     )
                 obj_end = obj_data_end
             else:
-                obj_end = obj_data_end + 5  # last byte of "endobj" marker
+                generic.read_non_whitespace(self.stream, seek_back=True)
+                # with seek_back the value of tell() is the offset of the
+                # next non-zero whitespace character, so we need to subtract
+                # one more to get the last whitespace character offset
+                obj_end = self.stream.tell() - 1
             meta = EmbeddingMetadata(
                 obj_stream_num=None, obj_start=obj_start, obj_end=obj_end
             )

@@ -284,12 +284,13 @@ def test_page_import_with_fonts(inherit_filters):
     assert len(font_file.data) == 1424
 
 
+# TODO test this for objects in streams
 def test_embedding_metadata():
     r = PdfFileReader(BytesIO(MINIMAL))
     assert r.root_ref.idnum == 1
     root_meta = r.xrefs.get_embedding_metadata(r.root_ref)
     assert root_meta.obj_start == 0x12
-    assert root_meta.obj_end == 0x4a
+    assert root_meta.obj_end == 0x4c
     assert r.root.container_ref == r.root_ref
 
     obj3 = generic.Reference(3, 0, r)
@@ -307,5 +308,3 @@ def test_deep_modify():
 
     w.update_container(deep_obj)
     assert (0, 3) in w.objects
-
-
