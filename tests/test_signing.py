@@ -361,25 +361,10 @@ def test_append_simple_sig_field():
 
 
 def test_append_sig_field_acro_update():
-    # test different configurations of the AcroForm
     w = PdfFileWriter()
     w.root['/AcroForm'] = generic.DictionaryObject({
         pdf_name('/Fields'): generic.ArrayObject()
     })
-    w.insert_page(simple_page(w, 'Hello world'))
-    out = BytesIO()
-    w.write(out)
-    out.seek(0)
-
-    sp = fields.SigFieldSpec('InvisibleSig')
-    w = IncrementalPdfFileWriter(out)
-    fields.append_signature_fields(w, [sp])
-    assert len(w.root['/AcroForm']['/Fields']) == 1
-
-    w = PdfFileWriter()
-    # Technically, this is not standards-compliant, but our routine
-    # shouldn't care
-    w.root['/AcroForm'] = generic.DictionaryObject()
     w.insert_page(simple_page(w, 'Hello world'))
     out = BytesIO()
     w.write(out)
