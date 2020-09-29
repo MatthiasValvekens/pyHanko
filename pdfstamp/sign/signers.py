@@ -66,7 +66,7 @@ class SigByteRangeObject(generic.PdfObject):
         stream.write(string_repr.encode('ascii'))
 
 
-class PKCS7Placeholder(generic.PdfObject):
+class DERPlaceholder(generic.PdfObject):
 
     def __init__(self, bytes_reserved=None):
         self._placeholder = True
@@ -94,35 +94,54 @@ class PKCS7Placeholder(generic.PdfObject):
             self._offsets = start, end
 
 
-class SignatureObject(generic.DictionaryObject):
+class PdfSignedData(generic.DictionaryObject):
+    def __init__(self, obj_type, subfilter, timestamp: datetime = None, bytes_reserved=None):
+        super().__init__(
+            {
+                pdf_name('/Type'): obj_type,
+                pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
+                pdf_name('/SubFilter'): subfilter,
+            }
+        )
+
+        if timestamp is not None:
+            self[pdf_name('/M')] = pdf_date(timestamp)
+
+        # initialise placeholders for /Contents and /ByteRange
+        sig_contents = DERPlaceholder(bytes_reserved=bytes_reserved)
+        self[pdf_name('/Contents')] = self.signature_contents = sig_contents
+        byte_range = SigByteRangeObject()
+        self[pdf_name('/ByteRange')] = self.byte_range = byte_range
+
+
+class SignatureObject(PdfSignedData):
 
     def __init__(self, timestamp: datetime, name=None, location=None,
                  reason=None, bytes_reserved=None, use_pades=False):
-        # initialise signature object
         subfilter = (
             '/ETSI.CAdES.detached' if use_pades else '/adbe.pkcs7.detached'
         )
         super().__init__(
-            {
-                pdf_name('/Type'): pdf_name('/Sig'),
-                pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
-                pdf_name('/SubFilter'): pdf_name(subfilter),
-                pdf_name('/M'): pdf_date(timestamp)
-            }
+            obj_type=pdf_name('/Sig'), subfilter=pdf_name(subfilter),
+            timestamp=timestamp, bytes_reserved=bytes_reserved
         )
 
         if name:
-            self[pdf_name('/Name')] = pdf_string(name),
+            self[pdf_name('/Name')] = pdf_string(name)
         if location:
-            self[pdf_name('/Location')] = pdf_string(location),
+            self[pdf_name('/Location')] = pdf_string(location)
         if reason:
-            self[pdf_name('/Reason')] = pdf_string(reason),
+            self[pdf_name('/Reason')] = pdf_string(reason)
 
-        # initialise placeholders for /Contents and /ByteRange
-        pkcs7 = PKCS7Placeholder(bytes_reserved=bytes_reserved)
-        self[pdf_name('/Contents')] = self.signature_contents = pkcs7
-        byte_range = SigByteRangeObject()
-        self[pdf_name('/ByteRange')] = self.byte_range = byte_range
+
+class DocumentTimestamp(PdfSignedData):
+
+    def __init__(self, bytes_reserved=None):
+        super().__init__(
+            obj_type=pdf_name('/DocTimeStamp'), subfilter=pdf_name('/ETSI.RFC3161'), bytes_reserved=bytes_reserved
+        )
+
+        # use of Name/Location/Reason is discouraged in document timestamps by PAdES, so we don't set those
 
 
 class Signer:

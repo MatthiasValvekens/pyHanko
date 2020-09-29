@@ -100,7 +100,7 @@ class EmbeddingMetadata:
     For objects in object streams, it is relative to the start of 
     the stream (i.e. NOT /First, but the start of the stream object), including
     trailing whitespace.
-    For top level objects, the endobj marker and any trailing whitespace is included.
+    For top level objects, the endobj marker and any trailing whitespace are included.
     """
 
 
