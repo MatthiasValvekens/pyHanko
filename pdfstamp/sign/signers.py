@@ -95,7 +95,8 @@ class DERPlaceholder(generic.PdfObject):
 
 
 class PdfSignedData(generic.DictionaryObject):
-    def __init__(self, obj_type, subfilter, timestamp: datetime = None, bytes_reserved=None):
+    def __init__(self, obj_type, subfilter, timestamp: datetime = None,
+                 bytes_reserved=None):
         super().__init__(
             {
                 pdf_name('/Type'): obj_type,
@@ -103,6 +104,8 @@ class PdfSignedData(generic.DictionaryObject):
                 pdf_name('/SubFilter'): subfilter,
             }
         )
+
+        self.bytes_reserved = bytes_reserved
 
         if timestamp is not None:
             self[pdf_name('/M')] = pdf_date(timestamp)
@@ -112,6 +115,46 @@ class PdfSignedData(generic.DictionaryObject):
         self[pdf_name('/Contents')] = self.signature_contents = sig_contents
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
+
+    def write_signature(self, writer: IncrementalPdfFileWriter, md_algorithm):
+        # Render the PDF to a byte buffer with placeholder values
+        # for the signature data
+        output = BytesIO()
+        writer.write(output)
+
+        # retcon time: write the proper values of the /ByteRange entry
+        #  in the signature object
+        eof = output.tell()
+        sig_start, sig_end = self.signature_contents.offsets
+        self.byte_range.fill_offsets(output, sig_start, sig_end, eof)
+
+        # compute the digests
+        output_buffer = output.getbuffer()
+        md = getattr(hashlib, md_algorithm)()
+        # these are memoryviews, so slices should not copy stuff around
+        md.update(output_buffer[:sig_start])
+        md.update(output_buffer[sig_end:])
+        output_buffer.release()
+
+        signature_cms = yield md.digest()
+
+        signature_bytes = signature_cms.dump()
+        signature = binascii.hexlify(signature_bytes)
+        # NOTE: the PDF spec is not completely clear on this, but
+        # signature contents are NOT supposed to be encrypted.
+        # Perhaps this falls under the "strings in encrypted containers"
+        # denominator in § 7.6.1?
+        bytes_reserved = self.bytes_reserved
+        if bytes_reserved is not None:
+            length = len(signature)
+            assert length <= bytes_reserved, (length, bytes_reserved)
+
+        # +1 to skip the '<'
+        output.seek(sig_start + 1)
+        output.write(signature)
+
+        output.seek(0)
+        yield output, signature
 
 
 class SignatureObject(PdfSignedData):
@@ -138,10 +181,12 @@ class DocumentTimestamp(PdfSignedData):
 
     def __init__(self, bytes_reserved=None):
         super().__init__(
-            obj_type=pdf_name('/DocTimeStamp'), subfilter=pdf_name('/ETSI.RFC3161'), bytes_reserved=bytes_reserved
+            obj_type=pdf_name('/DocTimeStamp'),
+            subfilter=pdf_name('/ETSI.RFC3161'), bytes_reserved=bytes_reserved
         )
 
-        # use of Name/Location/Reason is discouraged in document timestamps by PAdES, so we don't set those
+        # use of Name/Location/Reason is discouraged in document timestamps by
+        # PAdES, so we don't set those
 
 
 class Signer:
@@ -522,6 +567,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     # TODO this function is becoming rather bloated, should refactor
     #  into a class for more fine-grained control
 
+    # TODO if PAdES is requested, set the ESIC extension to the proper value
+
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
@@ -559,11 +606,10 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
             dry_run=True, revocation_info=revinfo
         )
-        test_signature = test_signature_cms.dump().hex().encode('ascii')
+        test_len = len(test_signature_cms.dump()) * 2
         # External actors such as timestamping servers can't be relied on to
         # always return exactly the same response, so we build in a 50% error
         # margin (+ ensure that bytes_reserved is even)
-        test_len = len(test_signature)
         bytes_reserved = test_len + 2 * (test_len // 4)
 
     name = signature_meta.name
@@ -647,41 +693,15 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             signature_meta.docmdp_permissions
         )
 
-    # Render the PDF to a byte buffer with placeholder values
-    # for the signature data
-    output = BytesIO()
-    pdf_out.write(output)
-
-    # retcon time: write the proper values of the /ByteRange entry
-    #  in the signature object
-    eof = output.tell()
-    sig_start, sig_end = sig_obj.signature_contents.offsets
-    sig_obj.byte_range.fill_offsets(output, sig_start, sig_end, eof)
-
-    # compute the digests
-    output_buffer = output.getbuffer()
-    md = getattr(hashlib, signature_meta.md_algorithm)()
-    # these are memoryviews, so slices should not copy stuff around
-    md.update(output_buffer[:sig_start])
-    md.update(output_buffer[sig_end:])
-    output_buffer.release()
+    wr = sig_obj.write_signature(pdf_out, signature_meta.md_algorithm)
+    true_digest = next(wr)
 
     signature_cms, leaves, meta_certs = signer.sign(
-        md.digest(), signature_meta.md_algorithm,
+        true_digest, signature_meta.md_algorithm,
         timestamp=timestamp, use_pades=signature_meta.use_pades,
         revocation_info=revinfo
     )
-    signature_bytes = signature_cms.dump()
-    signature = binascii.hexlify(signature_bytes)
-    # NOTE: the PDF spec is not completely clear on this, but
-    # signature contents are NOT supposed to be encrypted.
-    # Perhaps this falls under the "strings in encrypted containers"
-    # denominator in § 7.6.1?
-    assert len(signature) <= bytes_reserved, (len(signature), bytes_reserved)
-
-    # +1 to skip the '<'
-    output.seek(sig_start + 1)
-    output.write(signature)
+    output, signature = wr.send(signature_cms)
 
     if signature_meta.use_pades and signature_meta.embed_validation_info:
         from pdfstamp.sign import validation
@@ -693,5 +713,39 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             validation_context=validation_context
         )
 
-    output.seek(0)
+        if signer.timestamper is not None:
+            # append an LTV document timestamp
+            output.seek(0)
+            w = IncrementalPdfFileWriter(output)
+            # TODO to save a round trip to the TSA, we could attempt to cache
+            #  the length of the first timestamp response.
+            output = timestamp_pdf(
+                w, md_algorithm=signature_meta.md_algorithm,
+                timestamper=signer.timestamper
+            )
+
+    return output
+
+
+def timestamp_pdf(pdf_out: IncrementalPdfFileWriter, md_algorithm,
+                  timestamper: TimeStamper, bytes_reserved=None):
+    # TODO support adding validation information for the timestamp as well
+
+    if bytes_reserved is None:
+        test_md = getattr(hashlib, md_algorithm)().digest()
+        test_signature_cms = timestamper.timestamp(
+            test_md, md_algorithm
+        )
+        test_len = len(test_signature_cms.dump()) * 2
+        # see sign_pdf comments
+        bytes_reserved = test_len + 2 * (test_len // 4)
+
+    timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
+    pdf_out.add_object(timestamp_obj)
+
+    wr = timestamp_obj.write_signature(pdf_out, md_algorithm)
+    true_digest = next(wr)
+    timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
+    output, _ = wr.send(timestamp_cms)
+
     return output

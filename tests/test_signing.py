@@ -268,16 +268,17 @@ def test_dummy_timestamp():
     assert validity.timestamp_validity.trusted
 
 
-def test_http_timestamp(requests_mock):
+def ts_response_callback(request, _context):
     from asn1crypto import tsp
+    req = tsp.TimeStampReq.load(request.body)
+    return DUMMY_TS.request_tsa_response(req=req).dump()
+
+
+def test_http_timestamp(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
-    def response_callback(request, _context):
-        req = tsp.TimeStampReq.load(request.body)
-        return DUMMY_TS.request_tsa_response(req=req).dump()
-
     # bad content-type
-    requests_mock.post(DUMMY_HTTP_TS.url, content=response_callback)
+    requests_mock.post(DUMMY_HTTP_TS.url, content=ts_response_callback)
     from pdfstamp.sign.timestamps import TimestampRequestError
     with pytest.raises(TimestampRequestError):
         signers.sign_pdf(
@@ -286,7 +287,7 @@ def test_http_timestamp(requests_mock):
         )
 
     requests_mock.post(
-        DUMMY_HTTP_TS.url, content=response_callback,
+        DUMMY_HTTP_TS.url, content=ts_response_callback,
         headers={'Content-Type': 'application/timestamp-reply'}
     )
     out = signers.sign_pdf(
@@ -509,6 +510,29 @@ def test_pades_revinfo_ts():
             field_name='Sig1', validation_context=fixed_ocsp_vc(),
             use_pades=True, embed_validation_info=True
         ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
+
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    assert dss is not None
+    assert len(dss.certs) == 5
+    assert len(dss.unindexed_ocsps) == 1
+
+
+def test_pades_revinfo_http_ts(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    requests_mock.post(
+        DUMMY_HTTP_TS.url, content=ts_response_callback,
+        headers={'Content-Type': 'application/timestamp-reply'}
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            use_pades=True, embed_validation_info=True
+        ), signer=FROM_CA_HTTP_TS
     )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
