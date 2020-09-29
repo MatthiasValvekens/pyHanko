@@ -969,6 +969,7 @@ class DecryptedObjectProxy(PdfObject):
             decrypted = ArrayObject(decrypted_map)
         else:
             raise TypeError(f'Object of type {type(obj)} is not proxyable.')
+        decrypted.container_ref = obj.container_ref
         self._decrypted = decrypted
         return decrypted
 
@@ -981,6 +982,10 @@ class DecryptedObjectProxy(PdfObject):
 
     def get_object(self):
         return self.decrypted
+
+    @property
+    def container_ref(self):
+        return self.raw_object.container_ref
 
 
 ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
