@@ -97,6 +97,9 @@ class DERPlaceholder(generic.PdfObject):
 class PdfSignedData(generic.DictionaryObject):
     def __init__(self, obj_type, subfilter, timestamp: datetime = None,
                  bytes_reserved=None):
+        if bytes_reserved is not None and bytes_reserved % 2 == 1:
+            raise ValueError('bytes_reserved must be even')
+
         super().__init__(
             {
                 pdf_name('/Type'): obj_type,
@@ -104,8 +107,6 @@ class PdfSignedData(generic.DictionaryObject):
                 pdf_name('/SubFilter'): subfilter,
             }
         )
-
-        self.bytes_reserved = bytes_reserved
 
         if timestamp is not None:
             self[pdf_name('/M')] = pdf_date(timestamp)
@@ -140,21 +141,23 @@ class PdfSignedData(generic.DictionaryObject):
 
         signature_bytes = signature_cms.dump()
         signature = binascii.hexlify(signature_bytes).upper()
+
+        # might as well compute this
+        bytes_reserved = sig_end - sig_start - 2
+        length = len(signature)
+        assert length <= bytes_reserved, (length, bytes_reserved)
+
+        # +1 to skip the '<'
+        output.seek(sig_start + 1)
         # NOTE: the PDF spec is not completely clear on this, but
         # signature contents are NOT supposed to be encrypted.
         # Perhaps this falls under the "strings in encrypted containers"
         # denominator in § 7.6.1?
-        bytes_reserved = self.bytes_reserved
-        if bytes_reserved is not None:
-            length = len(signature)
-            assert length <= bytes_reserved, (length, bytes_reserved)
-
-        # +1 to skip the '<'
-        output.seek(sig_start + 1)
         output.write(signature)
 
         output.seek(0)
-        yield output
+        padding = bytes(bytes_reserved // 2 - len(signature_bytes))
+        yield output, signature_bytes + padding
 
 
 class SignatureObject(PdfSignedData):
@@ -703,14 +706,14 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         timestamp=timestamp, use_pades=signature_meta.use_pades,
         revocation_info=revinfo
     )
-    output = wr.send(signature_cms)
+    output, sig_contents = wr.send(signature_cms)
 
     if signature_meta.use_pades and signature_meta.embed_validation_info:
         from pdfstamp.sign import validation
         for meta_cert in meta_certs:
             validation_context.certificate_registry.add_other_cert(meta_cert)
         validation.DocumentSecurityStore.add_dss(
-            output_stream=output, sig_contents=signature_cms.dump(),
+            output_stream=output, sig_contents=sig_contents,
             certs=set(leaves), validation_context=validation_context
         )
 
@@ -747,6 +750,6 @@ def timestamp_pdf(pdf_out: IncrementalPdfFileWriter, md_algorithm,
     wr = timestamp_obj.write_signature(pdf_out, md_algorithm)
     true_digest = next(wr)
     timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
-    output = wr.send(timestamp_cms)
+    output, _ = wr.send(timestamp_cms)
 
     return output

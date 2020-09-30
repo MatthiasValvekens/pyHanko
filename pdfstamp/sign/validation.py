@@ -442,8 +442,6 @@ class DocumentSecurityStore:
         self.certs[cert.issuer_serial] = ref
         return ref
 
-    # FIXME according to the ETSI conformance checker, I'm not computing this
-    #  correctly
     @staticmethod
     def sig_content_identifier(contents):
         ident = hashlib.sha1(contents).digest().hex().upper()
