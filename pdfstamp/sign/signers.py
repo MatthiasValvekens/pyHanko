@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
+from fractions import Fraction
 from io import BytesIO
 
 import tzlocal
@@ -14,6 +15,7 @@ from oscrypto import asymmetric, keys as oskeys
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdf_utils.misc import BoxConstraints
 from pdfstamp.sign import general
 from pdfstamp.sign.fields import enumerate_sig_fields, _prepare_sig_field
 from pdfstamp.sign.timestamps import TimeStamper
@@ -682,7 +684,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         # TODO allow customisation
         tss = TextStampStyle(
             stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
-            fixed_aspect_ratio=float(w/h)
+            text_box_constraints=BoxConstraints(aspect_ratio=Fraction(w, h))
         )
         text_params = {
             'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)

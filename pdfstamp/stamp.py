@@ -1,14 +1,13 @@
 import os
-from typing import Optional, Union
 
 import qrcode
 import tzlocal
-from fontTools.ttLib import TTFont
-from pdf_utils.font import GlyphAccumulator
 
 from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter,
 )
+from pdf_utils.misc import BoxConstraints, BoxSpecificationError
+from pdf_utils.text import TextStyle
 from pdf_utils.writer import init_xobject_dictionary
 from dataclasses import dataclass
 from datetime import datetime
@@ -35,6 +34,7 @@ class AnnotAppearances:
         if self.down is not None:
             res[pdf_name('/D')] = self.down
         return res
+
 
 class PdfStreamImage(BaseImage):
     """
@@ -69,15 +69,9 @@ class PdfStreamImage(BaseImage):
 
 
 @dataclass(frozen=True)
-class TextStampStyle:
-    stamp_text: str
-    font: Optional[Union[str, TTFont]] = None
-    font_size: int = 10
-    leading: int = None
-    textsep: int = 10
-    avg_char_width: int = None
-    # AR initialises the height as a fraction of the width
-    fixed_aspect_ratio: float = None
+class TextStampStyle(TextStyle):
+    stamp_text: str = '%(ts)s'
+    text_box_constraints: BoxConstraints = None
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
 
 
@@ -104,28 +98,13 @@ class TextStamp(generic.StreamObject):
             pdf_name('/Subtype'): pdf_name('/Form')
         })
         self._resources_ready = False
-        self.font = font = self.style.font or 'Courier'
         self._wrapped_lines = None
         self._max_line_len = None
         self._stamp_ref = None
 
-        if isinstance(font, TTFont):
-            self.glyph_accumulator = GlyphAccumulator(font)
-        elif isinstance(font, str):
-            self.glyph_accumulator = None
-        else:
-            raise ValueError(
-                "Invalid type '%s' for font parameter" % type(font)
-            )
-
     def wrap_string(self, txt):
-        if self.glyph_accumulator is not None:
-            hex_str, width_em = self.glyph_accumulator.feed_string(txt)
-            return '<%s>' % hex_str, width_em * self.style.font_size
-        else:
-            # FIXME This is a very crappy estimate for non-monospaced fonts
-            char_width = self.style.avg_char_width or 0.6 * self.style.font_size
-            return '(%s)' % txt, len(txt) * char_width
+        wrapped, width_em = self.style.font.render_and_measure(txt)
+        return wrapped, width_em * self.style.font_size
 
     def add_resources(self, resources):
         pass
@@ -136,19 +115,7 @@ class TextStamp(generic.StreamObject):
     def _format_resources(self):
         if self._resources_ready:
             return
-        if self.glyph_accumulator is None:
-            # assume that self.font is the name of a PDF standard font
-            # TODO enforce that
-            font_dict = generic.DictionaryObject({
-                pdf_name('/Type'): pdf_name('/Font'),
-                pdf_name('/BaseFont'): pdf_name('/' + self.font),
-                pdf_name('/Subtype'): pdf_name('/Type1'),
-                pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
-            })
-            font_ref = self.writer.add_object(font_dict)
-        else:
-            font_ref = self.glyph_accumulator.embed_subset(self.writer)
-
+        font_ref = self.style.font.as_resource(self.writer)
         raw_resource_dict = {
             pdf_name('/Font'): generic.DictionaryObject({
                 pdf_name('/F1'): font_ref
@@ -176,12 +143,17 @@ class TextStamp(generic.StreamObject):
         return self.get_text_xstart() + self._max_line_len + self.get_text_sep()
 
     def get_stamp_height(self):
-        ar = self.style.fixed_aspect_ratio
-        if ar is None:
-            return self.get_text_height() + 2 * self.get_text_sep()
-        else:
-            stamp_width = self.get_stamp_width()
-            return int(stamp_width / ar)
+        try:
+            height = self.style.text_box_constraints.height
+        except BoxSpecificationError:
+            try:
+                ar = self.style.text_box_constraints.aspect_ratio
+                stamp_width = self.get_stamp_width()
+                height = int(stamp_width / ar)
+            except BoxSpecificationError:
+                height = self.get_text_height() + 2 * self.get_text_sep()
+            self.style.text_box_constraints.height = height
+        return height
 
     def get_text_xstart(self):
         return self.get_text_sep()

@@ -1,7 +1,10 @@
+from fractions import Fraction
+
 import pytest
 from io import BytesIO
 
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdf_utils.misc import BoxConstraints, BoxSpecificationError
 from pdf_utils.reader import PdfFileReader
 from pdf_utils import writer, generic, misc
 from fontTools import ttLib
@@ -308,3 +311,67 @@ def test_deep_modify():
 
     w.update_container(deep_obj)
     assert (0, 3) in w.objects
+
+
+def test_box_constraint_over_underspecify():
+    w = 1600
+    h = 900
+    ar = Fraction(16, 9)
+
+    with pytest.raises(BoxSpecificationError):
+        BoxConstraints()
+    with pytest.raises(BoxSpecificationError):
+        BoxConstraints(width=w, height=h, aspect_ratio=ar)
+
+    bc = BoxConstraints(width=w)
+    assert not bc.aspect_ratio_defined
+    assert not bc.height_defined
+
+    bc = BoxConstraints(width=w, height=h)
+    assert bc.aspect_ratio == ar
+
+    bc = BoxConstraints(width=w, aspect_ratio=ar)
+    assert bc.height == h
+
+    with pytest.raises(BoxSpecificationError):
+        bc.height += 1
+
+    bc = BoxConstraints(height=h, aspect_ratio=ar)
+    assert bc.width == w
+
+    with pytest.raises(BoxSpecificationError):
+        bc.width += 1
+
+
+def test_box_constraint_recalc():
+    w = 1600
+    h = 900
+    ar = Fraction(16, 9)
+
+    bc = BoxConstraints(aspect_ratio=ar)
+    assert bc.aspect_ratio == ar
+
+    with pytest.raises(BoxSpecificationError):
+        # noinspection PyStatementEffect
+        bc.height
+
+    with pytest.raises(BoxSpecificationError):
+        # noinspection PyStatementEffect
+        bc.width
+
+    bc.width = w
+    assert bc.height_defined
+    assert bc.height == h
+
+    bc = BoxConstraints(aspect_ratio=ar)
+    bc.height = h
+    assert bc.width_defined
+    assert bc.width == w
+
+    bc = BoxConstraints(width=w)
+    with pytest.raises(BoxSpecificationError):
+        # noinspection PyStatementEffect
+        bc.aspect_ratio
+
+    bc.height = h
+    assert bc.aspect_ratio == ar

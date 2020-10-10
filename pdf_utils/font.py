@@ -19,7 +19,51 @@ def generate_subset_prefix():
     return ''.join(ALPHABET[random.randint(0, 25)] for _ in range(6))
 
 
-class GlyphAccumulator:
+class FontEngine:
+
+    def measure(self, txt):
+        raise NotImplementedError
+
+    def render(self, txt):
+        raise NotImplementedError
+
+    def render_and_measure(self, txt):
+        return self.render(txt), self.measure(txt)
+
+    def as_resource(self, writer):
+        raise NotImplementedError
+
+
+# FIXME replace with something that knows the metrics for the standard PDF fonts
+class SimpleFontEngine(FontEngine):
+
+    @staticmethod
+    def default_engine():
+        return SimpleFontEngine('Courier', 0.6)
+
+    def __init__(self, name, avg_width):
+        self.avg_width = avg_width
+        self.name = name
+
+    def render(self, txt):
+        return f'({txt})'
+
+    def measure(self, txt):
+        return len(txt) * self.avg_width
+
+    def as_resource(self, writer):
+        # assume that self.font is the name of a PDF standard font
+        # TODO enforce that
+        font_dict = generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/Font'),
+            pdf_name('/BaseFont'): pdf_name('/' + self.name),
+            pdf_name('/Subtype'): pdf_name('/Type1'),
+            pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
+        })
+        return writer.add_object(font_dict)
+
+
+class GlyphAccumulator(FontEngine):
 
     def __init__(self, tt: ttLib.TTFont):
         self.tt = tt
@@ -79,7 +123,6 @@ class GlyphAccumulator:
             The width computation ignores kerning, but takes the width of all
             characters into account.
         """
-
         total_width = 0
 
         def _gen():
@@ -92,6 +135,13 @@ class GlyphAccumulator:
 
         hex_encoded = ''.join(_gen())
         return hex_encoded, total_width / self.units_per_em
+
+    def render(self, txt):
+        hex_encoded, _ = self.feed_string(txt)
+        return f'<{hex_encoded}>'
+
+    def measure(self, txt):
+        return self.feed_string(txt)[1]
 
     def extract_subset(self, options=None):
         options = options or subset.Options()
@@ -113,7 +163,6 @@ class GlyphAccumulator:
         )
         cidfont_obj.embed(writer, obj_stream=obj_stream)
         cidfont_ref = writer.add_object(cidfont_obj)
-        # TODO add ToUnicode cmap? See 9.7.6 in ISO-32000
         to_unicode = self.format_tounicode_cmap(*cidfont_obj.ros)
         type0 = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/Font'),
@@ -147,6 +196,9 @@ class GlyphAccumulator:
 
         cidfont_obj[pdf_name('/W')] = generic.ArrayObject(list(_widths()))
         return writer.add_object(type0, obj_stream=obj_stream)
+
+    def as_resource(self, writer):
+        return self.embed_subset(writer)
 
     def format_tounicode_cmap(self, registry, ordering, supplement):
         def _pairs():
