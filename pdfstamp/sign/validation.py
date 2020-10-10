@@ -6,7 +6,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import TypeVar, Type, Optional
 
-from asn1crypto import cms, tsp, ocsp as asn1_ocsp
+from asn1crypto import cms, tsp, ocsp as asn1_ocsp, crl as asn1_crl
 from asn1crypto.x509 import Certificate
 from certvalidator import ValidationContext, CertificateValidator
 from certvalidator.path import ValidationPath
@@ -375,14 +375,17 @@ def enumerate_ocsp_certs(ocsp_response):
 class DocumentSecurityStore:
 
     def __init__(self, writer, validation_context: ValidationContext,
-                 certs=None, ocsps=None,
-                 unindexed_ocsps=None, vri_entries=None,
+                 certs=None, ocsps=None, crls=None, unindexed_ocsps=None,
+                 unindexed_crls=None, vri_entries=None,
                  backing_pdf_object=None):
         self.vri_entries = vri_entries if vri_entries is not None else {}
         self.ocsps = ocsps if ocsps is not None else {}
+        self.crls = crls if crls is not None else {}
         self.certs = certs if certs is not None else {}
         self.unindexed_ocsps = \
             unindexed_ocsps if unindexed_ocsps is not None else []
+        self.unindexed_crls = \
+            unindexed_crls if unindexed_crls is not None else []
 
         self.validation_context = validation_context
         self.writer = writer
@@ -391,10 +394,13 @@ class DocumentSecurityStore:
             else generic.DictionaryObject()
         )
 
-        # embed any hardcoded ocsp responses, if applicable
+        # embed any hardcoded ocsp responses and CRLs, if applicable
         if writer is not None:
             self.unindexed_ocsps.extend(
                 cms_objects_to_streams(writer, validation_context.ocsps)
+            )
+            self.unindexed_crls.extend(
+                cms_objects_to_streams(writer, validation_context.crls)
             )
             self._embed_certs_from_ocsp(validation_context.ocsps)
 
@@ -405,27 +411,38 @@ class DocumentSecurityStore:
 
         return [self._embed_cert(cert_) for cert_ in extra_certs()]
 
-    def _embed_ocsp_responses(self, cert, issuer):
+    def _embed_ocsp_and_crl_info(self, cert, issuer):
         if self.writer is None:
             raise TypeError('This DSS does not support updates.')
 
         try:
-            return self.ocsps[cert.issuer_serial]
+            ocsp_refs = self.ocsps[cert.issuer_serial]
         except KeyError:
-            pass
+            ocsp_refs = None
+
+        try:
+            crl_refs = self.crls[cert.issuer_serial]
+        except KeyError:
+            crl_refs = None
 
         # FIXME there seems to be an issue with the OCSP checking here.
         #  Either the BEID OCSP responder is noncompliant, or there is a dt
         #  rounding bug in the certvalidator library.
         # anyway, for now, we just retrieve the OCSP responses without checking
         # them, which is NOT allowed by PAdES.
+        cert_refs = []
         if cert.ocsp_urls:
-            ocsps = self.validation_context.retrieve_ocsps(cert, issuer)
-            ocsp_refs = cms_objects_to_streams(self.writer, ocsps)
-            self.ocsps[cert.issuer_serial] = ocsp_refs
-            cert_refs = self._embed_certs_from_ocsp(ocsps)
-            return ocsp_refs, cert_refs
-        return [], []
+            if ocsp_refs is None:
+                ocsps = self.validation_context.retrieve_ocsps(cert, issuer)
+                ocsp_refs = cms_objects_to_streams(self.writer, ocsps)
+                self.ocsps[cert.issuer_serial] = ocsp_refs
+                cert_refs = self._embed_certs_from_ocsp(ocsps)
+        elif cert.crl_distribution_points:
+            if crl_refs is None:
+                crls = self.validation_context.retrieve_crls(cert)
+                crl_refs = cms_objects_to_streams(self.writer, crls)
+                self.crls[cert.issuer_serial] = crl_refs
+        return ocsp_refs or [], crl_refs or [], cert_refs
 
     def _embed_cert(self, cert):
         if self.writer is None:
@@ -452,6 +469,7 @@ class DocumentSecurityStore:
         # unindexed ocsps should be available for use in every VRI, unless
         # otherwise specified
         ocsp_refs = list(self.unindexed_ocsps)
+        crl_refs = list(self.unindexed_crls)
         # we also add the root & leaf, even though it shouldn't be required, but
         # it can't hurt
         cert_refs = [self._embed_cert(signer_cert)]
@@ -459,13 +477,13 @@ class DocumentSecurityStore:
             cert_refs.append(self._embed_cert(issuer))
             # noinspection PyProtectedMember
             if self.validation_context._allow_fetching:
-                ocsp_refs, extra_certs = self._embed_ocsp_responses(
-                    cert, issuer
-                )
-                ocsp_refs.extend(ocsp_refs)
+                extra_ocsp_refs, extra_crl_refs, extra_certs = \
+                    self._embed_ocsp_and_crl_info(cert, issuer)
+                ocsp_refs.extend(extra_ocsp_refs)
                 cert_refs.extend(extra_certs)
+                crl_refs.extend(extra_crl_refs)
 
-        return VRI(ocsps=ocsp_refs, certs=cert_refs)
+        return VRI(ocsps=ocsp_refs, certs=cert_refs, crls=crl_refs)
 
     def register_vri(self, identifier, signer_certs):
         """
@@ -504,6 +522,14 @@ class DocumentSecurityStore:
 
         if self.ocsps or self.unindexed_ocsps:
             pdf_dict[pdf_name('/OCSPs')] = generic.ArrayObject(flat_ocsps())
+
+        def flat_crls():
+            for fetched in self.crls.values():
+                yield from fetched
+            yield from self.unindexed_crls
+
+        if self.crls or self.unindexed_crls:
+            pdf_dict[pdf_name('/CRLs')] = generic.ArrayObject(flat_crls())
 
         return pdf_dict
 

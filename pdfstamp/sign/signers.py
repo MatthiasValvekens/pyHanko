@@ -554,6 +554,9 @@ def _fetch_path_validation_info(validation_context, end_cert):
     for cert, issuer in validation.unroll_path(path):
         if cert.ocsp_urls:
             validation_context.retrieve_ocsps(cert, issuer)
+        elif cert.crl_distribution_points:
+            # only retrieve CRLs if OCSP is not available
+            validation_context.retrieve_crls(cert)
 
 
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
@@ -596,9 +599,9 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     # do we need adobe-style revocation info?
     if signature_meta.embed_validation_info and not signature_meta.use_pades:
-        # we don't do CRLs for now, embedding those is usually a bad idea anyhow
         revinfo = Signer.format_revinfo(
-            ocsp_responses=validation_context.ocsps, crls=[]
+            ocsp_responses=validation_context.ocsps,
+            crls=validation_context.crls
         )
     else:
         # PAdES prescribes another mechanism for embedding revocation info
