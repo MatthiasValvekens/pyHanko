@@ -319,8 +319,6 @@ def test_box_constraint_over_underspecify():
     ar = Fraction(16, 9)
 
     with pytest.raises(BoxSpecificationError):
-        BoxConstraints()
-    with pytest.raises(BoxSpecificationError):
         BoxConstraints(width=w, height=h, aspect_ratio=ar)
 
     bc = BoxConstraints(width=w)
@@ -341,6 +339,15 @@ def test_box_constraint_over_underspecify():
 
     with pytest.raises(BoxSpecificationError):
         bc.width += 1
+
+    bc = BoxConstraints()
+    bc.width = w
+    assert bc.width_defined
+    assert not bc.height_defined
+    assert not bc.aspect_ratio_defined
+
+    bc.height = h
+    assert bc.aspect_ratio == ar
 
 
 def test_box_constraint_recalc():
