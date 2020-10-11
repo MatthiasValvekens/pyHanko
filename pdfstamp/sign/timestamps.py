@@ -9,7 +9,6 @@ import tzlocal
 from asn1crypto import tsp, algos, cms, x509, keys, core
 from oscrypto import asymmetric
 
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from . import general
 from .general import (
     SignatureStatus, simple_cms_attribute, CertificateStore,
