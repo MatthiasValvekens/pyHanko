@@ -145,8 +145,8 @@ class BoxConstraints:
     _fully_specified: bool
 
     def __init__(self, width=None, height=None, aspect_ratio: Fraction=None):
-        self._width = width
-        self._height = height
+        self._width = int(width) if width is not None else None
+        self._height = int(height) if height is not None else None
 
         fully_specified = False
 
@@ -173,10 +173,10 @@ class BoxConstraints:
             self._fully_specified = True
         elif self._ar is not None:
             if self._height is not None:
-                self._width = self._height * self._ar
+                self._width = int(self._height * self._ar)
                 self._fully_specified = True
             elif self._width is not None:
-                self._height = self._width / self._ar
+                self._height = int(self._width / self._ar)
                 self._fully_specified = True
 
     @property

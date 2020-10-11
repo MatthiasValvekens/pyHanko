@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
-from fractions import Fraction
 from io import BytesIO
 
 import tzlocal
@@ -684,12 +683,14 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         # TODO allow customisation
         tss = TextStampStyle(
             stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
-            text_box_constraints=BoxConstraints(aspect_ratio=Fraction(w, h))
         )
         text_params = {
             'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
         }
-        stamp = TextStamp(pdf_out, tss, text_params=text_params)
+        stamp = TextStamp(
+            pdf_out, tss, text_params=text_params,
+            box=BoxConstraints(width=w, height=h)
+        )
         sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
         try:
             # if there was an entry like this, it's meaningless now

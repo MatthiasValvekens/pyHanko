@@ -1,4 +1,5 @@
 import os
+from binascii import hexlify
 
 import qrcode
 import tzlocal
@@ -7,15 +8,14 @@ from pdf_utils.incremental_writer import (
     IncrementalPdfFileWriter,
 )
 from pdf_utils.misc import BoxConstraints, BoxSpecificationError
-from pdf_utils.text import TextStyle
+from pdf_utils.text import TextBoxStyle, TextBox
 from pdf_utils.writer import init_xobject_dictionary
 from dataclasses import dataclass
 from datetime import datetime
 
 from qrcode.image.base import BaseImage
 from pdf_utils import generic
-from pdf_utils.generic import pdf_name, pdf_string
-
+from pdf_utils.generic import pdf_name, pdf_string, PdfContent
 
 rd = lambda x: round(x, 4)
 
@@ -69,9 +69,10 @@ class PdfStreamImage(BaseImage):
 
 
 @dataclass(frozen=True)
-class TextStampStyle(TextStyle):
+class TextStampStyle:
+    text_box_style: TextBoxStyle = TextBoxStyle()
+    border_width: int = 3
     stamp_text: str = '%(ts)s'
-    text_box_constraints: BoxConstraints = None
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
 
 
@@ -83,88 +84,64 @@ class QRStampStyle(TextStampStyle):
         "this url: %(url)s\n"
         "Timestamp: %(ts)s"
     )
-    stamp_qrsize: int = 100
+    stamp_qrsize: float = 0.25
 
 
-class TextStamp(generic.StreamObject):
+class TextStamp(PdfContent):
     def __init__(self, writer: IncrementalPdfFileWriter, style,
-                 text_params=None):
-        super().__init__()
+                 text_params=None, box: BoxConstraints = None):
+        super().__init__(parent=None, box=box)
         self.writer = writer
         self.style = style
         self.text_params = text_params
-        self.update({
-            pdf_name('/Type'): pdf_name('/XObject'),
-            pdf_name('/Subtype'): pdf_name('/Form')
-        })
         self._resources_ready = False
-        self._wrapped_lines = None
-        self._max_line_len = None
         self._stamp_ref = None
 
-    def wrap_string(self, txt):
-        wrapped, width_em = self.style.font.render_and_measure(txt)
-        return wrapped, width_em * self.style.font_size
+        self.text_box = None
 
-    def add_resources(self, resources):
-        pass
+    def init_text_box(self):
+        # if necessary, try to adjust the text box's bounding box
+        #  to the stamp's
+
+        box = self.box
+        if box.width_defined:
+            expected_w = box.width - self.text_box_x()
+        else:
+            expected_w = None
+
+        self.text_box = TextBox(
+            self, self.style.text_box_style,
+            box=BoxConstraints(width=expected_w)
+        )
 
     def extra_commands(self):
         return []
 
-    def _format_resources(self):
-        if self._resources_ready:
-            return
-        font_ref = self.style.font.as_resource(self.writer)
-        raw_resource_dict = {
-            pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/F1'): font_ref
-            }),
-        }
-        self.add_resources(raw_resource_dict)
-        resources = generic.DictionaryObject(raw_resource_dict)
-        self[pdf_name('/Resources')] = self.writer.add_object(resources)
-        self._resouces_ready = True
-
-    def get_text_sep(self):
-        return self.style.textsep
-
-    def get_leading(self):
-        style = self.style
-        return style.font_size if style.leading is None else style.leading
-
-    def get_text_height(self):
-        return len(self.style.stamp_text.split('\n')) * self.get_leading()
-
     def get_stamp_width(self):
-        if self._max_line_len is None:
-            self._preprocess_text()
-
-        return self.get_text_xstart() + self._max_line_len + self.get_text_sep()
+        try:
+            return self.box.width
+        except BoxSpecificationError:
+            width = self.text_box_x() + self.text_box.box.width
+            self.box.width = width
+            return width
 
     def get_stamp_height(self):
         try:
-            height = self.style.text_box_constraints.height
+            return self.box.height
         except BoxSpecificationError:
-            try:
-                ar = self.style.text_box_constraints.aspect_ratio
-                stamp_width = self.get_stamp_width()
-                height = int(stamp_width / ar)
-            except BoxSpecificationError:
-                height = self.get_text_height() + 2 * self.get_text_sep()
-            self.style.text_box_constraints.height = height
-        return height
+            height = self.box.height = self.text_box.box.height
+            return height
 
-    def get_text_xstart(self):
-        return self.get_text_sep()
+    def text_box_x(self):
+        return 0
 
-    def get_text_ystart(self):
-        th = self.get_text_height()
+    def text_box_y(self):
         sh = self.get_stamp_height()
-        if th < sh:
-            return (th + sh) // 2
+        th = self.text_box.box.height
+        if sh >= th:
+            return (sh - th) // 2
         else:
-            return sh
+            return 0
 
     def get_default_text_params(self):
         ts = datetime.now(tz=tzlocal.get_localzone())
@@ -172,91 +149,54 @@ class TextStamp(generic.StreamObject):
             'ts': ts.strftime(self.style.timestamp_format),
         }
 
-    def _render_stream(self):
-        command_stream = ['q']
+    def render(self):
+        command_stream = [b'q']
 
-        stamp_height = self.get_stamp_height()
-        stamp_width = self.get_stamp_width()
         # text rendering
-        text_commands = self._text_stream()
-        command_stream.append(text_commands)
-
-        # append additional drawing commands
-        command_stream.extend(self.extra_commands())
-
-        # draw border around stamp and set bounding box
-        self[pdf_name('/BBox')] = generic.ArrayObject(list(
-            map(generic.FloatObject, [0, 0, stamp_width, stamp_height])
-        ))
-        command_stream.append(
-            '3 w 0 0 %g %g re S' % (stamp_width, stamp_height)
-        )
-        command_stream.append('Q')
-        self._data = ' '.join(command_stream).encode('latin-1')
-        return stamp_width, stamp_height
-
-    def _preprocess_text(self):
-        # compute line lengths, wrap strings
-        max_line_len = 0
+        self.init_text_box()
         _text_params = self.get_default_text_params()
         if self.text_params is not None:
             _text_params.update(self.text_params)
         text = self.style.stamp_text % _text_params
+        self.text_box.content = text
 
-        lines = []
-        for line in text.split('\n'):
-            wrapped_line, line_len = self.wrap_string(line)
-            max_line_len = max(max_line_len, line_len)
-            lines.append(wrapped_line)
-        self._wrapped_lines = lines
-        self._max_line_len = max_line_len
+        stamp_height = self.get_stamp_height()
+        stamp_width = self.get_stamp_width()
+        text_commands = self.text_box.render()
+        command_stream.append(
+            b'q 1 0 0 1 %g %g cm' % (self.text_box_x(), self.text_box_y())
+        )
+        command_stream.append(text_commands)
+        command_stream.append(b'Q')
 
-    def _text_stream(self):
-        style = self.style
-        leading = style.font_size if style.leading is None else style.leading
-        xstart = self.get_text_xstart()
-        ystart = self.get_text_ystart()
+        # append additional drawing commands
+        command_stream.extend(self.extra_commands())
 
-        # TODO Auto word-wrap is probably too much trouble, but
-        #  perhaps it's worth experimenting a little
-        command_stream = [
-            'BT', '/F1 %d Tf' % self.style.font_size,
-            '%d TL' % leading, '%d %d Td' % (xstart, ystart)
-        ]
-        if self._wrapped_lines is None:
-            self._preprocess_text()
-        command_stream.extend("%s '" % wl for wl in self._wrapped_lines)
-        command_stream.append('ET')
-        return ' '.join(command_stream)
-
-    def render_all(self):
-        w, h = self._render_stream()
-        self._format_resources()
-        return w, h
-
-    def write_to_stream(self, stream, key):
-        if self._data is None:
-            raise ValueError(
-                'Stamp stream needs to be rendered before calling .write()'
+        # draw border around stamp
+        command_stream.append(
+            b'%g w 0 0 %g %g re S' % (
+                self.style.border_width, stamp_width, stamp_height
             )
-        return super().write_to_stream(stream, key)
+        )
+        command_stream.append(b'Q')
+        return b' '.join(command_stream)
 
     def register(self):
         stamp_ref = self._stamp_ref
         if stamp_ref is None:
-            self._stamp_ref = stamp_ref = self.writer.add_object(self)
+            form_xobj = self.as_form_xobject()
+            self._stamp_ref = stamp_ref = self.writer.add_object(form_xobj)
         return stamp_ref
 
     def apply(self, dest_page, x, y):
         stamp_ref = self.register()
         # randomise resource name to avoid conflicts
-        resource_name = '/Stamp' + os.urandom(16).hex()
-        stamp_paint = 'q 1 0 0 1 %g %g cm %s Do Q' % (
+        # TODO handle this properly
+        resource_name = b'/Stamp' + hexlify(os.urandom(16))
+        stamp_paint = b'q 1 0 0 1 %g %g cm %s Do Q' % (
             rd(x), rd(y), resource_name
         )
-        stamp_wrapper_stream = generic.StreamObject(
-            stream_data=stamp_paint.encode('ascii')
-        )
+        stamp_wrapper_stream = generic.StreamObject(stream_data=stamp_paint)
         resources = generic.DictionaryObject({
             pdf_name('/XObject'): generic.DictionaryObject({
                 pdf_name(resource_name): stamp_ref
@@ -266,33 +206,54 @@ class TextStamp(generic.StreamObject):
         page_ref = wr.add_stream_to_page(
             dest_page, wr.add_object(stamp_wrapper_stream), resources
         )
-        return page_ref, self.render_all()
+        dims = (self.box.width, self.box.height)
+        return page_ref, dims
 
     def as_appearances(self) -> AnnotAppearances:
         # TODO support defining overrides/extra's for the rollover/down
         #  appearances in some form
         stamp_ref = self.register()
-        self.render_all()
         return AnnotAppearances(normal=stamp_ref)
 
 
 class QRStamp(TextStamp):
+    qr_default_width = 30
 
     def __init__(self, writer: IncrementalPdfFileWriter, url: str,
-                 style: QRStampStyle, text_params=None):
-        super().__init__(writer, style, text_params=text_params)
+                 style: QRStampStyle, text_params=None,
+                 box: BoxConstraints = None):
+        super().__init__(writer, style, text_params=text_params, box=box)
         self.url = url
+        self._qr_size = None
 
-    def add_resources(self, raw_resource_dict):
-        raw_resource_dict[pdf_name('/XObject')] = generic.DictionaryObject({
-            pdf_name('/QR'): self._qr_xobject()
-        })
+    @property
+    def qr_size(self):
+        if self._qr_size is None:
+            style = self.style
+            if self.box.width_defined:
+                width = style.stamp_qrsize * self.box.width
+            else:
+                width = self.qr_default_width
+
+            if self.box.height_defined:
+                # in this case, the box might not be high enough to contain
+                # the full QR code
+                height = self.box.height
+                size = min(width,  height - 2 * style.innsep)
+            else:
+                size = width
+            self._qr_size = size
+        return self._qr_size
 
     def extra_commands(self):
+        self.set_resource(
+            category=pdf_name('/XObject'), name=pdf_name('/QR'),
+            value=self._qr_xobject()
+        )
         height = self.get_stamp_height()
-        qr_y_sep = (height - self.style.stamp_qrsize) // 2
+        qr_y_sep = (height - self.qr_size) // 2
         # paint the QR code, translated and with y axis inverted
-        draw_qr_command = 'q 1 0 0 -1 %g %g cm /QR Do Q' % (
+        draw_qr_command = b'q 1 0 0 -1 %g %g cm /QR Do Q' % (
             rd(self.style.innsep),
             rd(height - max(self.style.innsep, qr_y_sep)),
         )
@@ -305,29 +266,33 @@ class QRStamp(TextStamp):
 
         # fit the QR code in a square of the requested size
         qr_num_boxes = len(qr.modules) + 2 * qr.border
-        qr.box_size = int(round(self.style.stamp_qrsize / qr_num_boxes))
+        qr.box_size = int(round(self.qr_size / qr_num_boxes))
 
         img = qr.make_image(image_factory=PdfStreamImage)
         command_stream = img.render_command_stream()
 
-        box_size = self.style.stamp_qrsize
+        box_size = self.qr_size
         qr_xobj = init_xobject_dictionary(
             command_stream, box_size, box_size
         )
         qr_xobj.compress()
         return self.writer.add_object(qr_xobj)
 
-    def get_text_xstart(self):
-        return 2 * self.style.innsep + self.style.stamp_qrsize
+    def text_box_x(self):
+        return 2 * self.style.innsep + self.qr_size
 
     def get_stamp_height(self):
-        # height is determined by the height of the text,
-        # or the QR code, whichever is greater
-        # This potentially breaks the fixed AR logic, but since QR codes
-        # should have a certain minimal size anyway, I think I'm
-        # willing to pay that price
-        sh = super().get_stamp_height()
-        return max(sh, self.style.stamp_qrsize + 2 * self.style.innsep)
+        try:
+            return self.box.height
+        except BoxSpecificationError:
+            style = self.style
+            # if the box does not define a height
+            # height is determined by the height of the text,
+            # or the QR code, whichever is greater
+            text_height = self.text_box.box.height
+            height = max(text_height, self.qr_size + 2 * style.innsep)
+            self.box.height = height
+            return height
 
     def get_default_text_params(self):
         tp = super().get_default_text_params()

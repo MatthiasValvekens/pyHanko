@@ -30,7 +30,7 @@ class FontEngine:
     def render_and_measure(self, txt):
         return self.render(txt), self.measure(txt)
 
-    def as_resource(self, writer):
+    def as_resource(self):
         raise NotImplementedError
 
 
@@ -51,7 +51,7 @@ class SimpleFontEngine(FontEngine):
     def measure(self, txt):
         return len(txt) * self.avg_width
 
-    def as_resource(self, writer):
+    def as_resource(self):
         # assume that self.font is the name of a PDF standard font
         # TODO enforce that
         font_dict = generic.DictionaryObject({
@@ -60,7 +60,7 @@ class SimpleFontEngine(FontEngine):
             pdf_name('/Subtype'): pdf_name('/Type1'),
             pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
         })
-        return writer.add_object(font_dict)
+        return font_dict
 
 
 class GlyphAccumulator(FontEngine):
@@ -70,7 +70,7 @@ class GlyphAccumulator(FontEngine):
         self.cmap = tt.getBestCmap()
         self.glyph_set = self.tt.getGlyphSet(preferCFF=True)
         self._glyphs = {}
-        self._extracted = False
+        self._font_ref = None
         try:
             self.units_per_em = tt['head'].unitsPerEm
         except KeyError:
@@ -149,11 +149,11 @@ class GlyphAccumulator(FontEngine):
         gids = map(lambda x: x[1], self._glyphs.values())
         subsetter.populate(gids=list(gids))
         subsetter.subset(self.tt)
-        self._extracted = True
 
     def embed_subset(self, writer: IncrementalPdfFileWriter, obj_stream=None):
-        if not self._extracted:
-            self.extract_subset()
+        if self._font_ref is not None:
+            return self._font_ref
+        self.extract_subset()
         cidfont_obj = CIDFontType0(self.tt)
         # TODO keep track of used subset prefixes in the writer!
         cff_topdict = self.tt['CFF '].cff[0]
@@ -195,10 +195,14 @@ class GlyphAccumulator(FontEngine):
                 prev_cid = cid
 
         cidfont_obj[pdf_name('/W')] = generic.ArrayObject(list(_widths()))
-        return writer.add_object(type0, obj_stream=obj_stream)
+        self._font_ref = ref = writer.add_object(type0, obj_stream=obj_stream)
+        return ref
 
-    def as_resource(self, writer):
-        return self.embed_subset(writer)
+    def as_resource(self):
+        if self._font_ref is not None:
+            return self._font_ref
+        else:
+            raise ValueError
 
     def format_tounicode_cmap(self, registry, ordering, supplement):
         def _pairs():

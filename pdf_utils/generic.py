@@ -9,7 +9,10 @@ from datetime import datetime
 from typing import Iterator, Tuple, Optional
 from dataclasses import dataclass
 
-from .misc import read_non_whitespace, skip_over_comment, read_until_regex
+from .misc import (
+    read_non_whitespace, skip_over_comment, read_until_regex,
+    BoxConstraints,
+)
 from .misc import PdfStreamError, PdfReadError
 import logging
 from . import filters
@@ -1013,3 +1016,48 @@ def pdf_date(dt: datetime):
             utc_offset_string = sign + ("%02d'%02d'" % (hrs, mins))
 
     return pdf_string(base_dt + utc_offset_string)
+
+
+class PdfContent:
+
+    def __init__(self, parent: Optional['PdfContent'],
+                 box: BoxConstraints = None):
+        self._resources = parent.resources if parent is not None \
+            else DictionaryObject()
+        self.box = box or BoxConstraints()
+
+    # TODO support a set-if-not-taken mechanism, that suggests alternative names
+    #  if necessary.
+    def set_resource(self, category: NameObject, name: NameObject,
+                     value: PdfObject):
+        try:
+            cat_dict = self._resources[category]
+        except KeyError:
+            self._resources[category] = cat_dict = DictionaryObject()
+        cat_dict[name] = value
+
+    @property
+    def resources(self):
+        return self._resources
+
+    def render(self) -> bytes:
+        """
+        Compile the content to graphics operators and return the width and
+        height, in whatever the currently relevant units are.
+        """
+        raise NotImplementedError
+
+    # TODO allow the bounding box to be overridden/refitted
+    #  (using matrix transforms)
+    def as_form_xobject(self):
+        from pdf_utils.writer import init_xobject_dictionary
+        command_stream = self.render()
+        return init_xobject_dictionary(
+            command_stream=command_stream, box_width=self.box.width,
+            box_height=self.box.height, resources=self._resources
+        )
+
+    # TODO add methods to append to a page, as a separate content stream
+    #  or to an existing one
+
+    # TODO override __add__ method: concat streams and merge all resources
