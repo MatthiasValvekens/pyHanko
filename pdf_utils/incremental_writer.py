@@ -84,7 +84,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
     def update_container(self, obj: generic.PdfObject):
         container_ref = obj.container_ref
         if container_ref is None:
-            raise ValueError('No container reference available.')
+            # this means that in all likelihood, the object was added by this
+            # writer, and is therefore about to be written anyway.
+            return
         if isinstance(container_ref, generic.TrailerReference):
             # nothing to do, the trailer is always written
             return
