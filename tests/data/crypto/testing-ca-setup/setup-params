@@ -1,0 +1,42 @@
+# Testing certificate parameters
+# Note that some of these values are coupled to the behaviour
+# of the test suite, so take care when modifying these.
+
+# Base directory to store the CA's files
+BASE_DIR=../testing-ca
+# Set to 'yes' if you want all keys to be
+#  regenerated even if they already exist.
+FORCE_NEW_KEYS=no
+# Regenerate config from defaultson every run
+FORCE_CONFIG_REWRITE=no
+# Value used to initialise the certificate counter
+INITIAL_SERIAL=1000
+# dummy password
+DUMMY_PASSWORD=secret
+# "flavour values" for the certificate
+COUNTRY=BE
+ORG="Example Inc"
+ORG_UNIT="Testing Authority"
+
+LOGFILE="ca-setup.log"
+
+SIGNER_NAME="Lord Testerino"
+SIGNER_EMAIL="test@example.com"
+
+
+# validity timeframes
+ROOT_START=20000101000000Z
+ROOT_END=25000101000000Z
+
+INTERM_START=20010101000000Z
+INTERM_END=24000101000000Z
+
+
+OCSP_START=20020101000000Z
+OCSP_END=23000101000000Z
+
+TSA_START=20020101000000Z
+TSA_END=23000101000000Z
+
+SIGNER_START=20200101000000Z
+SIGNER_END=20210101000000Z

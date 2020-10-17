@@ -1,0 +1,117 @@
+[ ca ]
+default_ca = CA_intermediate
+
+[ CA_root ]
+dir               = TESTING_CA_BASE_DIR/root
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/.rand
+private_key       = $dir/ca.key.pem
+certificate       = $dir/certs/ca.cert.pem
+
+crlnumber         = $dir/crlnumber
+crl               = $dir/crl/ca.crl.pem
+crl_extensions    = crl_ext
+
+default_md        = sha256
+name_opt          = ca_default
+cert_opt          = ca_default
+preserve          = no
+policy            = testing_policy
+
+[ CA_intermediate ]
+dir               = TESTING_CA_BASE_DIR/intermediate
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/.rand
+private_key       = $dir/ca.key.pem
+certificate       = $dir/certs/ca.cert.pem
+
+crlnumber         = $dir/crlnumber
+crl               = $dir/crl/ca.crl.pem
+crl_extensions    = crl_ext
+
+default_md        = sha256
+name_opt          = ca_default
+cert_opt          = ca_default
+preserve          = no
+policy            = testing_policy
+
+[ testing_policy ]
+countryName            = supplied
+organizationName       = supplied
+organizationalUnitName = supplied
+commonName             = supplied
+emailAddress           = optional
+
+[ req ]
+default_bits        = 2048
+distinguished_name  = req_distinguished_name
+string_mask         = utf8only
+default_md          = sha256
+x509_extensions     = v3_ca
+
+[ req_distinguished_name ]
+countryName                     = Country Name (2 letter code)
+commonName                      = Common Name
+emailAddress                    = Email Address
+0.organizationName              = Org
+organizationalUnitName          = Org Unit
+
+# The test suite will serve files from BASE_DIR under http://ca.example.com/
+# and will respond to OCSP at http://ocsp.example.com
+
+[ v3_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+[ v3_intermediate_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true, pathlen:0
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+authorityInfoAccess = caIssuers;URI:http://ca.example.com/root/certs/ca.cert.pem
+crlDistributionPoints = URI:http://ca.example.com/root/crl/ca.crl.pem
+
+[ usr_cert ]
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, emailProtection
+authorityInfoAccess = @aia_intermediate
+crlDistributionPoints = URI:http://ca.example.com/root/crl/ca.crl.pem
+
+[ aia_intermediate ]
+OCSP;URI.1 = http://ocsp.example.com/intermediate
+caIssuers;URI.2 = http://ca.example.com/intermediate/certs/ca.cert.pem
+
+
+[ tsa_cert ]
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature
+extendedKeyUsage = critical, timeStamping
+authorityInfoAccess = caIssuers;URI:http://ca.example.com/root/certs/ca.cert.pem
+crlDistributionPoints = URI:http://ca.example.com/root/crl/ca.crl.pem
+
+[ crl_ext ]
+authorityKeyIdentifier=keyid:always
+
+[ ocsp ]
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, digitalSignature
+authorityInfoAccess = caIssuers;URI:http://ca.example.com/intermediate/certs/ca.cert.pem
+extendedKeyUsage = critical, OCSPSigning
+extendedKeyUsage = OCSP No Check
