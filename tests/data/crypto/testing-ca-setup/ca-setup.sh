@@ -140,20 +140,46 @@ openssl ca -batch -config openssl.cnf -name CA_root \
 
 
 echo "Signing end-user certificate for $SIGNER_NAME..."
-ensure_key keys/signer.key.pem
-openssl req -config openssl.cnf -key keys/signer.key.pem \
+ensure_key keys/$SIGNER_IDENT.key.pem
+openssl req -config openssl.cnf -key keys/$SIGNER_IDENT.key.pem \
     -passin "pass:$DUMMY_PASSWORD" \
     -subj "$subj_prefix/CN=$SIGNER_NAME/emailAddress=$SIGNER_EMAIL" \
-    -out intermediate/csr/signer.csr.pem -new -sha256 \
+    -out intermediate/csr/$SIGNER_IDENT.csr.pem -new -sha256 \
     2>> "$LOGFILE" >/dev/null
 
 openssl ca -batch -config openssl.cnf -name CA_intermediate \
     -extensions usr_cert -md sha256 -notext \
     -startdate $SIGNER_START -enddate $SIGNER_END \
     -passin "pass:$DUMMY_PASSWORD" \
-    -in intermediate/csr/signer.csr.pem \
-    -out intermediate/newcerts/signer.cert.pem \
+    -in intermediate/csr/$SIGNER_IDENT.csr.pem \
+    -out intermediate/newcerts/$SIGNER_IDENT.cert.pem \
     2>> "$LOGFILE" >/dev/null
+
+
+echo "Signing end-user certificate for $SIGNER2_NAME..."
+ensure_key keys/$SIGNER2_IDENT.key.pem
+openssl req -config openssl.cnf -key keys/$SIGNER2_IDENT.key.pem \
+    -passin "pass:$DUMMY_PASSWORD" \
+    -subj "$subj_prefix/CN=$SIGNER2_NAME/emailAddress=$SIGNER2_EMAIL" \
+    -out intermediate/csr/$SIGNER2_IDENT.csr.pem -new -sha256 \
+    2>> "$LOGFILE" >/dev/null
+
+openssl ca -batch -config openssl.cnf -name CA_intermediate \
+    -extensions usr_cert -md sha256 -notext \
+    -startdate $SIGNER2_START -enddate $SIGNER2_END \
+    -passin "pass:$DUMMY_PASSWORD" \
+    -in intermediate/csr/$SIGNER2_IDENT.csr.pem \
+    -out intermediate/newcerts/$SIGNER2_IDENT.cert.pem \
+    2>> "$LOGFILE" >/dev/null
+
+echo "Revoking certificate for $SIGNER2_NAME..."
+# don't do this using -revoke, because that doesn't allow timestamps
+# to be specified
+
+# R	210101000000Z	201017111503Z	1002	unknown	/C=BE/O=Example Inc/OU=Testing Authority/CN=Bob Revoked/emailAddress=bob@example.com
+cp intermediate/index.txt intermediate/index.txt.tmp
+sed 3s/V/R/ intermediate/index.txt.tmp | sed "3s/		/	$SIGNER2_REVO	/" > intermediate/index.txt
+rm intermediate/index.txt.tmp
 
 
 echo "Setup complete"
