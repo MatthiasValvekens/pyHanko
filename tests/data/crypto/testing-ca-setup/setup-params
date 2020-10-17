@@ -13,6 +13,7 @@ FORCE_CONFIG_REWRITE=no
 INITIAL_SERIAL=1000
 # dummy password
 DUMMY_PASSWORD=secret
+DUMMY_PFX_PASSWORD=exportsecret
 # "flavour values" for the certificate
 COUNTRY=BE
 ORG="Example Inc"

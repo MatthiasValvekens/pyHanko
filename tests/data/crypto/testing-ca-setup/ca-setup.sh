@@ -155,6 +155,13 @@ openssl ca -batch -config openssl.cnf -name CA_intermediate \
     -out intermediate/newcerts/$SIGNER_IDENT.cert.pem \
     2>> "$LOGFILE" >/dev/null
 
+openssl pkcs12 -export -out intermediate/newcerts/$SIGNER_IDENT.pfx \
+    -inkey keys/$SIGNER_IDENT.key.pem \
+    -in intermediate/newcerts/$SIGNER_IDENT.cert.pem \
+    -certfile intermediate/certs/ca-chain.cert.pem \
+    -passin "pass:$DUMMY_PASSWORD" -passout "pass:$DUMMY_PFX_PASSWORD" \
+    2>> "$LOGFILE" >/dev/null
+
 
 echo "Signing end-user certificate for $SIGNER2_NAME..."
 ensure_key keys/$SIGNER2_IDENT.key.pem
@@ -170,6 +177,13 @@ openssl ca -batch -config openssl.cnf -name CA_intermediate \
     -passin "pass:$DUMMY_PASSWORD" \
     -in intermediate/csr/$SIGNER2_IDENT.csr.pem \
     -out intermediate/newcerts/$SIGNER2_IDENT.cert.pem \
+    2>> "$LOGFILE" >/dev/null
+
+openssl pkcs12 -export -out intermediate/newcerts/$SIGNER2_IDENT.pfx \
+    -inkey keys/$SIGNER2_IDENT.key.pem \
+    -in intermediate/newcerts/$SIGNER2_IDENT.cert.pem \
+    -certfile intermediate/certs/ca-chain.cert.pem \
+    -passin "pass:$DUMMY_PASSWORD" -passout "pass:$DUMMY_PFX_PASSWORD" \
     2>> "$LOGFILE" >/dev/null
 
 echo "Revoking certificate for $SIGNER2_NAME..."
