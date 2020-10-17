@@ -25,28 +25,30 @@ SELF_SIGN = signers.SimpleSigner.load(
 )
 
 FROM_CA = signers.SimpleSigner.load(
-    CRYPTO_DATA_DIR + '/signer.key.pem',
-    CRYPTO_DATA_DIR + '/signer.cert.pem',
-    ca_chain_files=(CRYPTO_DATA_DIR + '/ca-chain.pem',),
+    TESTING_CA_DIR + '/keys/signer.key.pem',
+    TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
+    ca_chain_files=(TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
     key_passphrase=b'secret'
 )
 
-TRUST_ROOTS = list(signers.load_ca_chain((CRYPTO_DATA_DIR + '/ca.cert.pem',)))
+ROOT_PATH = TESTING_CA_DIR + '/root/certs/ca.cert.pem'
+TRUST_ROOTS = list(signers.load_ca_chain((ROOT_PATH,)))
 
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
-    CRYPTO_DATA_DIR + '/signer.pfx', passphrase=b'exportsecret'
+    TESTING_CA_DIR + '/intermediate/newcerts/signer.pfx',
+    passphrase=b'exportsecret'
 )
 
-ROOT_CERT = oskeys.parse_certificate(read_all(CRYPTO_DATA_DIR + '/ca.cert.pem'))
+ROOT_CERT = oskeys.parse_certificate(read_all(ROOT_PATH))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
 
 DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=oskeys.parse_certificate(
-        read_all(CRYPTO_DATA_DIR + '/tsa.cert.pem')
+        read_all(TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem')
     ),
     tsa_key=oskeys.parse_private(
-        read_all(CRYPTO_DATA_DIR + '/tsa.key.pem'), password=b'secret'
+        read_all(TESTING_CA_DIR + '/keys/tsa.key.pem'), password=b'secret'
     ),
     cert_registry=FROM_CA.cert_registry,
 )
@@ -64,6 +66,8 @@ FROM_CA_HTTP_TS = signers.SimpleSigner(
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
 )
 
+# FIXME with the testing CA setup update, this OCSP response is totally
+#  unrelated to the keys being used, so it will fail any sort of real validation
 FIXED_OCSP = ocsp.OCSPResponse.load(
     read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der')
 )

@@ -4,6 +4,7 @@ def read_all(fname):
 
 
 CRYPTO_DATA_DIR = 'tests/data/crypto'
+TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'
 PDF_DATA_DIR = 'tests/data/pdf'
 MINIMAL = read_all(PDF_DATA_DIR + '/minimal.pdf')
 MINIMAL_XREF = read_all(PDF_DATA_DIR + '/minimal-xref.pdf')
