@@ -146,8 +146,8 @@ class SimpleCertificateStore(CertificateStore):
 # TODO rewrite the DSS to use this class, it's probably cleaner
 class WriteThroughCertificateStore(SimpleCertificateStore):
     """
-    Certificate store that writes both to itself and to a "backend" store, but never
-    returns data from the backend.
+    Certificate store that writes both to itself and to a "backend" store, but
+    never returns data from the backend.
     Useful in cases where we want a single store accumulating certs, while still
     keeping them grouped in some meaningful way.
     """
@@ -179,16 +179,3 @@ class ForkedCertificateStore(SimpleCertificateStore):
 
     def __iter__(self):
         return itertools.chain(iter(self.backend), iter(self.certs.values()))
-
-
-# FIXME there has to be a better way to only enable OCSP fetching
-def monkeypatch_crl_client():
-    from certvalidator import crl_client
-
-    def dummy_fetch(*_args, **_kwargs):
-        return []
-    crl_client.fetch = dummy_fetch
-
-
-# TODO find a way to do this "locally"
-monkeypatch_crl_client()

@@ -9,7 +9,7 @@ tzlocal==2.1
 python-pkcs11==0.6.0
 fonttools==4.13.0
 click==7.1.2
-certvalidator==0.11.1
+-e git+https://github.com/wbond/certvalidator@27283e4657456d6d3e266e019800e33c853d6068#egg=certvalidator
 requests~=2.24.0
 pytest~=6.0.1
 requests-mock~=1.8.0

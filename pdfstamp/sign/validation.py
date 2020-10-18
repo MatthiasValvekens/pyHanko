@@ -6,7 +6,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import TypeVar, Type, Optional
 
-from asn1crypto import cms, tsp, ocsp as asn1_ocsp, crl as asn1_crl
+from asn1crypto import cms, tsp, ocsp as asn1_ocsp
 from asn1crypto.x509 import Certificate
 from certvalidator import ValidationContext, CertificateValidator
 from certvalidator.path import ValidationPath
