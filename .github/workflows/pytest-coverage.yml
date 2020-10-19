@@ -27,8 +27,8 @@ jobs:
         pip install --upgrade pytest pytest-cov
     - name: Generate coverage report
       run: |
-        python -c 'import sys; print(sys.path)'
-        pytest --cov=./ --cov-report=xml
+        python -c 'import sys, os; print("sys.path: " + str(sys.path)); print("CWD: " + str(os.getcwd()))'
+        python -m pytest --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
