@@ -34,7 +34,7 @@ def test_create_fresh(zip1, zip2):
     assert b'Page 2' in kids[1].get_object()['/Contents'].data
 
 
-NOTO_SERIF_JP = 'tests/data/fonts/NotoSerifJP-Regular.otf'
+NOTO_SERIF_JP = 'pdfstamp_tests/data/fonts/NotoSerifJP-Regular.otf'
 
 
 def test_embed_subset():
