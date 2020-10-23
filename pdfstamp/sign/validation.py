@@ -3,6 +3,7 @@ import os
 import logging
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
+from enum import IntEnum
 from io import BytesIO
 from typing import TypeVar, Type, Optional
 
@@ -155,85 +156,119 @@ MECHANISMS = (
 )
 
 
+
+class EmbeddedPdfSignature:
+
+    def __init__(self, reader: PdfFileReader, sig_object):
+        self.reader = reader
+
+        if isinstance(sig_object, generic.IndirectObject):
+            sig_object = sig_object.get_object()
+        self.sig_object = sig_object
+        assert isinstance(sig_object, generic.DictionaryObject)
+        try:
+            pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
+            byte_range = sig_object['/ByteRange']
+        except KeyError:
+            raise ValueError('Signature PDF object is not correctly formatted')
+
+        # we need the pkcs7_content raw, so we need to deencapsulate a couple
+        # pieces of data here.
+        if isinstance(pkcs7_content, generic.DecryptedObjectProxy):
+            # it was a direct reference, so just grab the raw one
+            pkcs7_content = pkcs7_content.raw_object
+        elif isinstance(pkcs7_content, generic.IndirectObject):
+            pkcs7_content = reader.get_object(
+                pkcs7_content, transparent_decrypt=False
+            )
+            pkcs7_content.get_container_ref()
+
+        message = cms.ContentInfo.load(pkcs7_content)
+        signed_data = message['content']
+        self.signed_data: cms.SignedData = signed_data
+        sd_digest = signed_data['digest_algorithms'][0]
+        md_algorithm = sd_digest['algorithm'].native.lower()
+        md = getattr(hashlib, md_algorithm)()
+        stream = reader.stream
+
+        # compute the digest
+        old_seek = stream.tell()
+        total_len = 0
+        covered_regions = []
+        for lo, chunk_len in misc.pair_iter(byte_range):
+            covered_regions.append((lo, chunk_len))
+            stream.seek(lo)
+            md.update(stream.read(chunk_len))
+            total_len += chunk_len
+
+        self.covered_regions = covered_regions
+
+        # compute file size
+        stream.seek(0, os.SEEK_END)
+        # the * 2 is because of the ASCII hex encoding, and the + 2
+        # is the wrapping <>
+        embedded_sig_content = len(pkcs7_content) * 2 + 2
+        # TODO this ignores PAdES-LTA rules about document timestamps
+        self.complete_document = (
+            stream.tell() == total_len + embedded_sig_content
+        )
+        stream.seek(old_seek)
+
+        self.raw_digest = md.digest()
+
+        try:
+            self.signer_info, = signed_data['signer_infos']
+        except ValueError:
+            raise ValueError('signer_infos should contain exactly one entry')
+
+    @property
+    def self_reported_signed_timestamp(self) -> datetime:
+        try:
+            sa = self.signer_info['signed_attrs']
+            st = find_cms_attribute(sa, 'signed_time')[0]
+            return st.native
+        except KeyError:
+            pass
+
+    @property
+    def timestamp_token(self) -> cms.SignedData:
+        try:
+            ua = self.signer_info['unsigned_attrs']
+            tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
+            tst_signed_data = tst['content']
+            return tst_signed_data
+        except KeyError:
+            pass
+
+
 def validate_pdf_signature(reader: PdfFileReader, sig_object,
-                           signer_validation_context=None,
-                           ts_validation_context=None) -> PDFSignatureStatus:
+                           signer_validation_context: ValidationContext = None,
+                           ts_validation_context: ValidationContext = None) \
+                           -> PDFSignatureStatus:
     if sig_object is None:
         raise ValueError('Signature is empty')
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
-    if isinstance(sig_object, generic.IndirectObject):
-        sig_object = sig_object.get_object()
-    assert isinstance(sig_object, generic.DictionaryObject)
-    try:
-        pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
-        byte_range = sig_object['/ByteRange']
-    except KeyError:
-        raise ValueError('Signature PDF object is not correctly formatted')
-
-    # we need the pkcs7_content raw, so we need to deencapsulate a couple
-    # pieces of data here.
-    if isinstance(pkcs7_content, generic.DecryptedObjectProxy):
-        # it was a direct reference, so just grab the raw one
-        pkcs7_content = pkcs7_content.raw_object
-    elif isinstance(pkcs7_content, generic.IndirectObject):
-        pkcs7_content = reader.get_object(
-            pkcs7_content, transparent_decrypt=False
-        )
-
-    message = cms.ContentInfo.load(pkcs7_content)
-    signed_data = message['content']
-    sd_digest = signed_data['digest_algorithms'][0]
-    md_algorithm = sd_digest['algorithm'].native.lower()
-    md = getattr(hashlib, md_algorithm)()
-    stream = reader.stream
-
-    # compute the digest
-    old_seek = stream.tell()
-    total_len = 0
-    for lo, chunk_len in misc.pair_iter(byte_range):
-        stream.seek(lo)
-        md.update(stream.read(chunk_len))
-        total_len += chunk_len
-    # compute file size
-    stream.seek(0, os.SEEK_END)
-    # the * 2 is because of the ASCII hex encoding, and the + 2
-    # is the wrapping <>
-    embedded_sig_content = len(pkcs7_content) * 2 + 2
-    complete_document = stream.tell() == total_len + embedded_sig_content
-    stream.seek(old_seek)
+    embedded_sig = EmbeddedPdfSignature(reader, sig_object)
 
     # TODO implement logic to detect whether
     #  the modifications made are permissible
 
     # TODO validate /SV constraints if present!
 
-    raw_digest = md.digest()
-
-    status_kwargs = {'complete_document': complete_document}
-    try:
-        signer_info, = signed_data['signer_infos']
-    except ValueError:
-        raise ValueError('signer_infos should contain exactly one entry')
+    status_kwargs = {'complete_document': embedded_sig.complete_document}
 
     # try to find an embedded timestamp
-    try:
-        sa = signer_info['signed_attrs']
-        st = find_cms_attribute(sa, 'signed_time')[0]
-        status_kwargs['signed_dt'] = st.native
-    except KeyError:
-        pass
+    signed_dt = embedded_sig.self_reported_signed_timestamp
+    if signed_dt is not None:
+        status_kwargs['signed_dt'] = signed_dt
+
     # if there's a signed timestamp, find that one too
-    try:
-        ua = signer_info['unsigned_attrs']
-        tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
-    except KeyError:
-        tst = None
 
     # if we managed to find a signed timestamp, we now proceed to validate it
-    if tst is not None:
-        tst_signed_data = tst['content']
+    tst_signed_data = embedded_sig.timestamp_token
+    if tst_signed_data is not None:
         tst_info = tst_signed_data['encap_content_info']['content'].parsed
         assert isinstance(tst_info, tsp.TSTInfo)
         timestamp = tst_info['gen_time'].native
@@ -244,8 +279,9 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
         )
 
     return validate_cms_signature(
-        signed_data, status_cls=PDFSignatureStatus,
-        raw_digest=raw_digest, validation_context=signer_validation_context,
+        embedded_sig.signed_data, status_cls=PDFSignatureStatus,
+        raw_digest=embedded_sig.raw_digest,
+        validation_context=signer_validation_context,
         status_kwargs=status_kwargs
     )
 
