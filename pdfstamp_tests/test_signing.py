@@ -10,7 +10,8 @@ from pdf_utils.font import pdf_name
 from pdf_utils.writer import PdfFileWriter
 from pdfstamp.sign import timestamps, fields, signers
 from pdfstamp.sign.validation import (
-    validate_pdf_signature, read_certification_data, DocumentSecurityStore
+    validate_pdf_signature, read_certification_data, DocumentSecurityStore,
+    EmbeddedPdfSignature, read_adobe_revocation_info,
 )
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -460,7 +461,8 @@ def test_ocsp_embed():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=fixed_ocsp_vc()
+            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            embed_validation_info=True
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -471,8 +473,9 @@ def test_ocsp_embed():
 
     val_trusted(r, sig_obj)
 
-    # TODO implement a function to read back the Adobe-style revocation data
-    #  from the signature object.
+    embedded_sig = EmbeddedPdfSignature(r, sig_obj)
+    vc = read_adobe_revocation_info(embedded_sig.signer_info)
+    assert len(vc.ocsps) == 1
 
 
 def test_pades_flag():

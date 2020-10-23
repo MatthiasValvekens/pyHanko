@@ -3,11 +3,10 @@ import os
 import logging
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
-from enum import IntEnum
 from io import BytesIO
 from typing import TypeVar, Type, Optional
 
-from asn1crypto import cms, tsp, ocsp as asn1_ocsp
+from asn1crypto import cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf
 from asn1crypto.x509 import Certificate
 from certvalidator import ValidationContext, CertificateValidator
 from certvalidator.path import ValidationPath
@@ -156,7 +155,6 @@ MECHANISMS = (
 )
 
 
-
 class EmbeddedPdfSignature:
 
     def __init__(self, reader: PdfFileReader, sig_object):
@@ -231,7 +229,7 @@ class EmbeddedPdfSignature:
             pass
 
     @property
-    def timestamp_token(self) -> cms.SignedData:
+    def external_timestamp_data(self) -> cms.SignedData:
         try:
             ua = self.signer_info['unsigned_attrs']
             tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
@@ -267,7 +265,7 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
     # if there's a signed timestamp, find that one too
 
     # if we managed to find a signed timestamp, we now proceed to validate it
-    tst_signed_data = embedded_sig.timestamp_token
+    tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is not None:
         tst_info = tst_signed_data['encap_content_info']['content'].parsed
         assert isinstance(tst_info, tsp.TSTInfo)
@@ -283,6 +281,20 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
         raw_digest=embedded_sig.raw_digest,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs
+    )
+
+
+def read_adobe_revocation_info(signer_info: cms.SignerInfo,
+                               validation_context_kwargs=None) \
+                               -> ValidationContext:
+    validation_context_kwargs = validation_context_kwargs or {}
+    revinfo: asn1_pdf.RevocationInfoArchival = find_cms_attribute(
+        signer_info['signed_attrs'], "adobe_revocation_info_archival"
+    )[0]
+    ocsps = list(revinfo['ocsp'] or ())
+    crls = list(revinfo['crl'] or ())
+    return ValidationContext(
+        ocsps=ocsps, crls=crls, **validation_context_kwargs
     )
 
 
