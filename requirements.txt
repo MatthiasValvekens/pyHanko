@@ -1,15 +1,12 @@
 asn1crypto==1.4.0
-cffi==1.14.2
 oscrypto==1.2.1
-pycparser==2.20
 pytz==2020.1
 qrcode==6.1
-six==1.15.0
 tzlocal==2.1
 python-pkcs11==0.6.0
 fonttools==4.13.0
 click==7.1.2
 -e git+https://github.com/wbond/certvalidator@27283e4657456d6d3e266e019800e33c853d6068#egg=certvalidator
 requests~=2.24.0
-pytest~=6.0.1
+pytest~=6.1.1
 requests-mock~=1.8.0
