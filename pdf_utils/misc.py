@@ -8,6 +8,9 @@ Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 """
 
 
+rd = lambda x: round(x, 4)
+
+
 def pair_iter(lst):
     i = iter(lst)
     while True:

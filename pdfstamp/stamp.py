@@ -4,20 +4,16 @@ from binascii import hexlify
 import qrcode
 import tzlocal
 
-from pdf_utils.incremental_writer import (
-    IncrementalPdfFileWriter,
-)
-from pdf_utils.misc import BoxConstraints, BoxSpecificationError
+from pdf_utils.barcodes import PdfStreamQRImage
+from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdf_utils.misc import BoxConstraints, BoxSpecificationError, rd
 from pdf_utils.text import TextBoxStyle, TextBox
 from pdf_utils.writer import init_xobject_dictionary
 from dataclasses import dataclass
 from datetime import datetime
 
-from qrcode.image.base import BaseImage
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string, PdfContent
-
-rd = lambda x: round(x, 4)
 
 
 class AnnotAppearances:
@@ -34,38 +30,6 @@ class AnnotAppearances:
         if self.down is not None:
             res[pdf_name('/D')] = self.down
         return res
-
-
-class PdfStreamImage(BaseImage):
-    """
-    Quick-and-dirty implementation of the Image interface required
-    by the qrcode package.
-    """
-
-    kind = "PDF"
-    allowed_kinds = ("PDF",)
-
-    def new_image(self, **kwargs):
-        return []
-
-    def drawrect(self, row, col):
-        self._img.append((row, col))
-
-    def render_command_stream(self):
-        # start a command stream with fill colour set to black
-        command_stream = ['0 0 0 rg']
-        for row, col in self._img:
-            (x, y), _ = self.pixel_box(row, col)
-            # paint a rectangle
-            command_stream.append(
-                '%g %g %g %g re f' % (
-                    rd(x), rd(y), rd(self.box_size), rd(self.box_size)
-                )
-            )
-        return ' '.join(command_stream).encode('ascii')
-
-    def save(self, stream, kind=None): 
-        stream.write(self.render_command_stream())
 
 
 @dataclass(frozen=True)
@@ -268,7 +232,7 @@ class QRStamp(TextStamp):
         qr_num_boxes = len(qr.modules) + 2 * qr.border
         qr.box_size = int(round(self.qr_size / qr_num_boxes))
 
-        img = qr.make_image(image_factory=PdfStreamImage)
+        img = qr.make_image(image_factory=PdfStreamQRImage)
         command_stream = img.render_command_stream()
 
         box_size = self.qr_size
