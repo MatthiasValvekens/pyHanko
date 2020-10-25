@@ -26,13 +26,11 @@ def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # https://brendanzagaeski.appspot.com/0004.html
     from pdf_utils import writer, generic
     from pdf_utils.generic import pdf_name
+    from pdf_utils.misc import get_courier
+
     resources = generic.DictionaryObject({
         pdf_name('/Font'): generic.DictionaryObject({
-            pdf_name('/F1'): generic.DictionaryObject({
-                pdf_name('/Type'): pdf_name('/Font'),
-                pdf_name('/Subtype'): pdf_name('/Type1'),
-                pdf_name('/BaseFont'): pdf_name('/Courier')
-            })
+            pdf_name('/F1'): get_courier()
         })
     })
     media_box = generic.ArrayObject(

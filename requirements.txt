@@ -10,3 +10,4 @@ click==7.1.2
 requests~=2.24.0
 pytest~=6.1.1
 requests-mock~=1.8.0
+python-barcode>=0.13.1

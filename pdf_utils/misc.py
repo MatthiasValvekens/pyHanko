@@ -230,3 +230,12 @@ class BoxConstraints:
     @property
     def aspect_ratio_defined(self) -> bool:
         return self._ar is not None
+
+
+def get_courier():
+    from .generic import pdf_name, DictionaryObject
+    return DictionaryObject({
+        pdf_name('/Type'): pdf_name('/Font'),
+        pdf_name('/Subtype'): pdf_name('/Type1'),
+        pdf_name('/BaseFont'): pdf_name('/Courier')
+    })
