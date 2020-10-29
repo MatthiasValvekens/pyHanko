@@ -113,5 +113,4 @@ subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid,issuer
 keyUsage = critical, digitalSignature
 authorityInfoAccess = caIssuers;URI:http://ca.example.com/intermediate/certs/ca.cert.pem
-extendedKeyUsage = critical, OCSPSigning
-extendedKeyUsage = OCSP No Check
+extendedKeyUsage = critical, OCSPSigning, OCSP No Check
