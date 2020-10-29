@@ -8,18 +8,6 @@ set -o pipefail
 . setup-params
 subj_prefix="/C=$COUNTRY/O=$ORG/OU=$ORG_UNIT"
 
-ensure_dir () {
-    if [ -e "$1" ] ; then
-        if [ ! -d "$1" ] ; then
-            >&2 echo "$1 exists and is not a directory"
-            exit 1
-        fi
-    else 
-        mkdir -p "$1"
-    fi
-}
-
-
 ensure_key () {
     if [[ "$FORCE_NEW_KEYS" = yes || ! -f "$1" ]] ; then
         echo -n "Generating RSA key for $1... "
@@ -55,13 +43,7 @@ setup_ca_dir () {
 ensure_dir "$BASE_DIR"
 echo "Starting run of ca-setup.sh at $(date)" >> "$BASE_DIR/$LOGFILE"
 
-
-if [[ "$FORCE_CONFIG_REWRITE" = yes || ! -f "$BASE_DIR/openssl.cnf" ]] ; then
-    # I'm assuming that the BASE_DIR never contains a colon
-    #  which is good enough as far as I'm concerned
-    real_base_dir=$(realpath $BASE_DIR)
-    sed "s:TESTING_CA_BASE_DIR:$real_base_dir:g" openssl.base.cnf > "$BASE_DIR/openssl.cnf"
-fi
+init_config
 
 cd "$BASE_DIR"
 ensure_dir keys
