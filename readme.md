@@ -16,12 +16,6 @@ revocation checks.
  - [Development](#development)
  - [CI Tasks](#ci-tasks)
 
-[![GitHub Actions CI](https://github.com/wbond/certvalidator/workflows/CI/badge.svg)](https://github.com/wbond/certvalidator/actions?workflow=CI)
-[![Travis CI](https://api.travis-ci.org/wbond/certvalidator.svg?branch=master)](https://travis-ci.org/wbond/certvalidator)
-[![AppVeyor](https://ci.appveyor.com/api/projects/status/github/wbond/certvalidator?branch=master&svg=true)](https://ci.appveyor.com/project/wbond/certvalidator)
-[![CircleCI](https://circleci.com/gh/wbond/certvalidator.svg?style=shield)](https://circleci.com/gh/wbond/certvalidator)
-[![PyPI](https://img.shields.io/pypi/v/certvalidator.svg)](https://pypi.python.org/pypi/certvalidator)
-
 ## Features
 
  - X.509 path building
@@ -214,17 +208,3 @@ Releases are created by:
 
 Existing releases can be found at https://pypi.org/project/certvalidator.
 
-## CI Tasks
-
-A task named `deps` exists to ensure a modern version of `pip` is installed,
-along with all necessary testing dependencies.
-
-The `ci` task runs `lint` (if flake8 is avaiable for the version of Python) and
-`coverage` (or `tests` if coverage is not available for the version of Python).
-If the current directory is a clean git working copy, the coverage data is
-submitted to codecov.io.
-
-```bash
-python run.py deps
-python run.py ci
-```
