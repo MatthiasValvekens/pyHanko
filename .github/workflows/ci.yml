@@ -12,8 +12,8 @@ jobs:
           - macOS-latest
           - windows-2019
         python:
-          - '2.7'
           - '3.7'
+          - '3.8'
         arch:
           - 'x86'
           - 'x64'
