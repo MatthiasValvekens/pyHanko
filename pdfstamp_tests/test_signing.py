@@ -1,8 +1,13 @@
+import re
+from datetime import datetime
+
 import pytest
 from io import BytesIO
 
-from asn1crypto import ocsp
+import pytz
+from asn1crypto import ocsp, tsp
 from certvalidator import ValidationContext
+from ocspbuilder import OCSPResponseBuilder
 from oscrypto import keys as oskeys
 
 from pdf_utils import generic
@@ -12,6 +17,7 @@ from pdfstamp.sign import timestamps, fields, signers
 from pdfstamp.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, read_adobe_revocation_info,
+    validate_pdf_ltv_signature, RevocationInfoValidationType
 )
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -33,6 +39,9 @@ FROM_CA = signers.SimpleSigner.load(
 )
 
 ROOT_PATH = TESTING_CA_DIR + '/root/certs/ca.cert.pem'
+INTERM_PATH = TESTING_CA_DIR + '/intermediate/certs/ca.cert.pem'
+OCSP_PATH = TESTING_CA_DIR + '/intermediate/newcerts/ocsp.cert.pem'
+REVOKED_CERT_PATH = TESTING_CA_DIR + '/intermediate/newcerts/1002.pem'
 TRUST_ROOTS = list(signers.load_ca_chain((ROOT_PATH,)))
 
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
@@ -41,8 +50,14 @@ FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
 )
 
 ROOT_CERT = oskeys.parse_certificate(read_all(ROOT_PATH))
+INTERM_CERT = oskeys.parse_certificate(read_all(INTERM_PATH))
+OCSP_CERT = oskeys.parse_certificate(read_all(OCSP_PATH))
+REVOKED_CERT = oskeys.parse_certificate(read_all(REVOKED_CERT_PATH))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
+OCSP_KEY = oskeys.parse_private(
+    read_all(TESTING_CA_DIR + '/keys/ocsp.key.pem'), b"secret"
+)
 
 DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=oskeys.parse_certificate(
@@ -67,18 +82,69 @@ FROM_CA_HTTP_TS = signers.SimpleSigner(
     signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
 )
 
-# FIXME with the testing CA setup update, this OCSP response is totally
-#  unrelated to the keys being used, so it will fail any sort of real validation
+# with the testing CA setup update, this OCSP response is totally
+#  unrelated to the keys being used, so it should fail any sort of real
+#  validation
 FIXED_OCSP = ocsp.OCSPResponse.load(
     read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der')
 )
 
 
-def fixed_ocsp_vc():
+def dummy_ocsp_vc():
     vc = ValidationContext(
         trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP],
         other_certs=list(FROM_CA.cert_registry), allow_fetching=False
     )
+    return vc
+
+
+def live_testing_vc(requests_mock):
+    vc = ValidationContext(
+        trust_roots=TRUST_ROOTS, allow_fetching=True,
+        other_certs=[]
+    )
+
+    def serve_ca_file(request, _context):
+        fpath = request.url.replace("http://ca.example.com", TESTING_CA_DIR)
+        with open(fpath, 'rb') as f:
+            content = f.read()
+        return content
+
+    requests_mock.register_uri(
+        'GET', re.compile(r"^http://ca\.example\.com/"), content=serve_ca_file
+    )
+    # FIXME this is all moot since certvalidator uses urlopen()
+
+    def serve_ocsp_response(request, _context):
+        req: ocsp.OCSPRequest = ocsp.OCSPRequest.load(request.body)
+        nonce = req.nonce_value.native
+        # we only look at the serial number, this is a dummy responder
+        # the return data is hardcoded (for now)
+        # TODO read it off from the OpenSSL CA index
+        for req_item in req['tbs_request']['request_list']:
+            serial = req_item['req_cert']['serial_number'].native
+            if serial == 0x1001:
+                bld = OCSPResponseBuilder('successful', FROM_CA.signing_cert,
+                                           'good')
+            elif serial == 0x1002:
+                revocation_date = datetime(2021, 1, 1, 0, 0, 0, tzinfo=pytz.utc)
+                bld = OCSPResponseBuilder('successful', REVOKED_CERT,
+                                           'key_compromise', revocation_date)
+            else:
+                bld = OCSPResponseBuilder('unauthorized')
+
+            bld.nonce = nonce
+            bld.certificate_issuer = INTERM_CERT
+            return bld.build(
+                responder_certificate=OCSP_CERT, responder_private_key=OCSP_KEY
+            ).dump()
+        raise ValueError
+
+    requests_mock.register_uri(
+        'POST', re.compile(r"^http://ocsp\.example\.com/"),
+        content=serve_ocsp_response
+    )
+
     return vc
 
 
@@ -274,7 +340,6 @@ def test_dummy_timestamp():
 
 
 def ts_response_callback(request, _context):
-    from asn1crypto import tsp
     req = tsp.TimeStampReq.load(request.body)
     return DUMMY_TS.request_tsa_response(req=req).dump()
 
@@ -461,7 +526,7 @@ def test_ocsp_embed():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            field_name='Sig1', validation_context=dummy_ocsp_vc(),
             embed_validation_info=True
         ), signer=FROM_CA
     )
@@ -491,11 +556,11 @@ def test_pades_flag():
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
 
-def test_pades_revinfo():
+def test_pades_revinfo_dummydata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            field_name='Sig1', validation_context=dummy_ocsp_vc(),
             use_pades=True, embed_validation_info=True
         ), signer=FROM_CA
     )
@@ -510,11 +575,11 @@ def test_pades_revinfo():
     assert len(dss.unindexed_ocsps) == 1
 
 
-def test_pades_revinfo_ts():
+def test_pades_revinfo_ts_dummydata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            field_name='Sig1', validation_context=dummy_ocsp_vc(),
             use_pades=True, embed_validation_info=True
         ), signer=FROM_CA_TS
     )
@@ -529,7 +594,7 @@ def test_pades_revinfo_ts():
     assert len(dss.unindexed_ocsps) == 1
 
 
-def test_pades_revinfo_http_ts(requests_mock):
+def test_pades_revinfo_http_ts_dummydata(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     requests_mock.post(
         DUMMY_HTTP_TS.url, content=ts_response_callback,
@@ -537,7 +602,7 @@ def test_pades_revinfo_http_ts(requests_mock):
     )
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=fixed_ocsp_vc(),
+            field_name='Sig1', validation_context=dummy_ocsp_vc(),
             use_pades=True, embed_validation_info=True
         ), signer=FROM_CA_HTTP_TS
     )
@@ -550,3 +615,58 @@ def test_pades_revinfo_http_ts(requests_mock):
     assert dss is not None
     assert len(dss.certs) == 5
     assert len(dss.unindexed_ocsps) == 1
+
+
+# TODO freeze time for these tests, test revocation
+
+def test_pades_revinfo_live_no_timestamp(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=vc,
+            use_pades=True, embed_validation_info=True
+        ), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    rivt_pades = RevocationInfoValidationType.pades_lt
+    with pytest.raises(ValueError):
+        validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
+
+
+def test_pades_revinfo_live(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=vc,
+            use_pades=True, embed_validation_info=True
+        ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    assert dss is not None
+    assert len(dss.certs) == 5
+    # FIXME the CRL / OCSP count is all over the place
+    assert len(dss.unindexed_ocsps)
+    assert len(dss.unindexed_crls)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    rivt_pades = RevocationInfoValidationType.pades_lt
+    status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
+    assert status.valid and status.trusted
+
+
+def test_pades_revinfo_live_nofullchain():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=dummy_ocsp_vc(),
+            use_pades=True, embed_validation_info=True
+        ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    rivt_pades = RevocationInfoValidationType.pades_lt
+    status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
+    assert status.valid and not status.trusted

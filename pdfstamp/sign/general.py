@@ -1,4 +1,5 @@
 import itertools
+import logging
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
 
@@ -18,6 +19,9 @@ __all__ = [
     'as_signing_certificate', 'CertificateStore', 'SimpleCertificateStore',
     'WriteThroughCertificateStore'
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -63,13 +67,13 @@ class SignatureStatus:
                 key_usage=cls.key_usage, extended_key_usage=cls.extd_key_usage
             )
             usage_ok = trusted = True
-        except InvalidCertificateError:
-            trusted = True
+        except InvalidCertificateError as e:
+            # TODO accumulate these somewhere
+            logger.warning(e)
         except RevokedError:
             revoked = True
-        except (PathValidationError, PathBuildingError):
-            # catch-all
-            pass
+        except (PathValidationError, PathBuildingError) as e:
+            logger.warning(e)
         return trusted, revoked, usage_ok
 
 

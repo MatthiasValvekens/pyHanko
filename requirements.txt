@@ -6,8 +6,11 @@ tzlocal==2.1
 python-pkcs11==0.6.0
 fonttools==4.13.0
 click==7.1.2
--e git+https://github.com/wbond/certvalidator@27283e4657456d6d3e266e019800e33c853d6068#egg=certvalidator
+-e git+https://github.com/MatthiasValvekens/certvalidator@cabd3331967910b2caa67a908269fa145041e502#egg=certvalidator
 requests~=2.24.0
 pytest~=6.1.1
 requests-mock~=1.8.0
 python-barcode>=0.13.1
+freezegun
+ocspbuilder
+crlbuilder
