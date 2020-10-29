@@ -1,11 +1,11 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import requests
 from asn1crypto import crl, x509, cms, pem
 
 from ._types import str_cls, type_name
 from .version import __version__
-from ._urllib import Request, urlopen
 
 
 def fetch(cert, use_deltas=True, user_agent=None, timeout=10):
@@ -70,11 +70,12 @@ def _grab_crl(user_agent, url, timeout):
     :return:
         An asn1crypto.crl.CertificateList object
     """
-    request = Request(url)
-    request.add_header('Accept', 'application/pkix-crl')
-    request.add_header('User-Agent', user_agent)
-    response = urlopen(request, None, timeout)
-    data = response.read()
+    headers = {
+        'Accept': 'application/pkix-crl',
+        'User-Agent': user_agent
+    }
+    response = requests.get(url=url, timeout=timeout, headers=headers)
+    data = response.content
     if pem.detect(data):
         _, _, data = pem.unarmor(data)
     return crl.CertificateList.load(data)
@@ -112,13 +113,14 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
         raise TypeError('user_agent must be a unicode string, not %s' % type_name(user_agent))
 
     for url in certificate_list.issuer_cert_urls:
-        request = Request(url)
-        request.add_header('Accept', 'application/pkix-cert,application/pkcs7-mime')
-        request.add_header('User-Agent', user_agent)
-        response = urlopen(request, None, timeout)
+        headers = {
+            'Accept': 'application/pkix-cert,application/pkcs7-mime',
+            'User-Agent': user_agent
+        }
+        response = requests.get(url=url, timeout=timeout, headers=headers)
 
         content_type = response.headers['Content-Type'].strip()
-        response_data = response.read()
+        response_data = response.content
 
         if content_type == 'application/pkix-cert':
             output.append(x509.Certificate.load(response_data))

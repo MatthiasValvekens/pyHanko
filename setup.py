@@ -127,6 +127,7 @@ setup(
     keywords='crypto pki x509 certificate crl ocsp',
 
     install_requires=[
+        'requests~=2.24.0',
         'asn1crypto>=1.2.0',
         'oscrypto>=1.1.0'
     ],

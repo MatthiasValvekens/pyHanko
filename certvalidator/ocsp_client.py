@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import requests
 import os
 
 from asn1crypto import core, ocsp, x509, algos
@@ -8,7 +9,6 @@ from asn1crypto import core, ocsp, x509, algos
 from . import errors
 from ._types import str_cls, type_name
 from .version import __version__
-from ._urllib import Request, urlopen, URLError
 
 
 def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=10):
@@ -89,12 +89,23 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
     last_e = None
     for ocsp_url in cert.ocsp_urls:
         try:
-            request = Request(ocsp_url)
-            request.add_header('Accept', 'application/ocsp-response')
-            request.add_header('Content-Type', 'application/ocsp-request')
-            request.add_header('User-Agent', user_agent)
-            response = urlopen(request, ocsp_request.dump(), timeout)
-            ocsp_response = ocsp.OCSPResponse.load(response.read())
+            headers = {
+                'Accept': 'application/ocsp-response',
+                'Content-Type': 'application/ocsp-request',
+                'User-Agent': user_agent
+            }
+            response = requests.post(
+                url=ocsp_url, timeout=timeout, headers=headers,
+                data=ocsp_request.dump()
+            )
+            ocsp_response = ocsp.OCSPResponse.load(response.content)
+            status = ocsp_response['response_status'].native
+            if status != 'successful':
+                raise errors.OCSPValidationError(
+                    'OCSP server at %s returned an error. Status was \'%s\'.'
+                    % (ocsp_url, status)
+                )
+
             request_nonce = ocsp_request.nonce_value
             response_nonce = ocsp_response.nonce_value
             if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
