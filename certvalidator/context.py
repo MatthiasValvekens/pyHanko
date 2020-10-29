@@ -2,12 +2,12 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import socket
-import sys
 from datetime import datetime
 import binascii
 
 from asn1crypto import crl, ocsp
 from asn1crypto.util import timezone
+from requests import RequestException
 
 from . import ocsp_client, crl_client
 from ._errors import pretty_message
@@ -15,11 +15,6 @@ from ._types import type_name, byte_cls, str_cls
 from .errors import SoftFailError
 from .path import ValidationPath
 from .registry import CertificateRegistry
-
-if sys.version_info < (3,):
-    from urllib2 import URLError
-else:
-    from urllib.error import URLError
 
 
 class ValidationContext():
@@ -462,9 +457,9 @@ class ValidationContext():
                         for cert_ in certs:
                             if self.certificate_registry.add_other_cert(cert_):
                                 self._revocation_certs[cert_.issuer_serial] = cert_
-                    except (URLError, socket.error):
+                    except (RequestException, socket.error):
                         pass
-            except (URLError, socket.error) as e:
+            except (RequestException, socket.error) as e:
                 self._fetched_crls[cert.issuer_serial] = []
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)
@@ -503,7 +498,7 @@ class ValidationContext():
                 # response itself. We can use these since they will be validated using
                 # the local trust roots.
                 self._extract_ocsp_certs(ocsp_response)
-            except (URLError, socket.error) as e:
+            except (RequestException, socket.error) as e:
                 self._fetched_ocsps[cert.issuer_serial] = []
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)

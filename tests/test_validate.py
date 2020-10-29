@@ -5,7 +5,6 @@ from datetime import datetime
 import base64
 import unittest
 import os
-import sys
 
 from asn1crypto import crl, ocsp, pem, x509
 from asn1crypto.util import timezone
@@ -18,10 +17,7 @@ from certvalidator.errors import PathValidationError, RevokedError
 from ._unittest_compat import patch
 from .unittest_data import data_decorator, data
 
-if sys.version_info < (3,):
-    from urllib2 import URLError
-else:
-    from urllib.error import URLError
+from urllib.error import URLError
 
 patch()
 

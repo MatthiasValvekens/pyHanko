@@ -5,6 +5,7 @@ import requests
 import os
 
 from asn1crypto import core, ocsp, x509, algos
+from requests import RequestException
 
 from . import errors
 from ._types import str_cls, type_name
@@ -36,7 +37,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
         The number of seconds after which an HTTP request should timeout
 
     :raises:
-        urllib.error.URLError/urllib2.URLError - when a URL/HTTP error occurs
+        RequestException - when a URL/HTTP error occurs
         socket.error - when a socket error occurs
 
     :return:
@@ -114,7 +115,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
                 )
             return ocsp_response
 
-        except (URLError) as e:
+        except RequestException as e:
             last_e = e
 
     raise last_e
