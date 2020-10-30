@@ -37,10 +37,54 @@ class TimestampSignatureStatus(SignatureStatus):
     timestamp: datetime
 
 
+def extract_ts_certs(ts_token, store: CertificateStore):
+    ts_signed_data = ts_token['content']
+    ts_certs = ts_signed_data['certificates']
+
+    def extract_ts_sid(si):
+        sid = si['sid'].chosen
+        # FIXME handle subject key identifier
+        assert isinstance(sid, cms.IssuerAndSerialNumber)
+        return sid['issuer'].dump(), sid['serial_number'].native
+
+    ts_leaves = set(
+        extract_ts_sid(si) for si in ts_signed_data['signer_infos']
+    )
+
+    for wrapped_c in ts_certs:
+        c: cms.Certificate = wrapped_c.chosen
+        store.register(c)
+        if (c.issuer.dump(), c.serial_number) in ts_leaves:
+            yield c
+
+
 class TimeStamper:
     """
     Class to make RFC3161 timestamp requests
     """
+
+    def __init__(self):
+        self._dummy_response_cache = {}
+        self._certs = {}
+        self.cert_registry = SimpleCertificateStore()
+
+    def dummy_response(self, md_algorithm):
+        # different hashes have different sizes, so the dummy responses
+        # might differ in size
+        try:
+            return self._dummy_response_cache[md_algorithm]
+        except KeyError:
+            pass
+        md = getattr(hashlib, md_algorithm)()
+        dummy = self.timestamp(md.digest(), md_algorithm)
+        self._dummy_response_cache[md_algorithm] = dummy
+        for cert in extract_ts_certs(dummy, self.cert_registry):
+            self._certs[cert.issuer_serial] = cert
+        return dummy
+
+    @property
+    def entity_certificates(self):
+        return list(self._certs.values())
 
     def request_cms(self, message_digest, md_algorithm):
         # see also
@@ -101,13 +145,14 @@ class DummyTimeStamper(TimeStamper):
 
     def __init__(self, tsa_cert: x509.Certificate,
                  tsa_key: keys.PrivateKeyInfo,
-                 cert_registry: CertificateStore = None,
+                 certs_to_embed: CertificateStore = None,
                  md_algorithm='sha512', fixed_dt: datetime = None):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
         self.md_algorithm = md_algorithm
-        self.cert_registry = cert_registry or SimpleCertificateStore()
+        self.certs_to_embed = list(certs_to_embed) or []
         self.fixed_dt = fixed_dt
+        super().__init__()
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
         # We pretend that certReq is always true in the request
@@ -171,7 +216,7 @@ class DummyTimeStamper(TimeStamper):
             'signed_attrs': signed_attrs,
             'signature': signature
         })
-        certs = set(self.cert_registry)
+        certs = set(self.certs_to_embed)
         certs.add(self.tsa_cert)
         signed_data = {
             # must use v3 to get access to the EncapsulatedContentInfo construct
@@ -199,6 +244,7 @@ class HTTPTimeStamper(TimeStamper):
         self.timeout = timeout
         self.auth = auth
         self.headers = headers
+        super().__init__()
 
     def request_headers(self):
         headers = self.headers or {}

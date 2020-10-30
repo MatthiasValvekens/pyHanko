@@ -8,7 +8,7 @@ from io import BytesIO
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
-from certvalidator import ValidationContext
+from certvalidator import ValidationContext, CertificateValidator
 from oscrypto import asymmetric, keys as oskeys
 
 from pdf_utils import generic
@@ -288,15 +288,10 @@ class Signer:
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
-             revocation_info=None, use_pades=False) \
-            -> (cms.ContentInfo, CertificateStore, CertificateStore):
+             revocation_info=None, use_pades=False) -> cms.ContentInfo:
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
-
-        leaf_certs = SimpleCertificateStore()
-        leaf_certs.register(self.signing_cert)
-        meta_certs = self.cert_registry.fork()
 
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
@@ -314,28 +309,15 @@ class Signer:
             # the timestamp server needs to cross-sign our signature
             md = getattr(hashlib, digest_algorithm)()
             md.update(signature)
-            ts_token = self.timestamper.timestamp(md.digest(), digest_algorithm)
+            if dry_run:
+                ts_token = self.timestamper.dummy_response(digest_algorithm)
+            else:
+                ts_token = self.timestamper.timestamp(
+                    md.digest(), digest_algorithm
+                )
             sig_info['unsigned_attrs'] = cms.CMSAttributes(
                 [simple_cms_attribute('signature_time_stamp_token', ts_token)]
             )
-            ts_signed_data = ts_token['content']
-            ts_certs = ts_signed_data['certificates']
-
-            def extract_ts_sid(si):
-                sid = si['sid'].chosen
-                # FIXME handle subject key identifier
-                assert isinstance(sid, cms.IssuerAndSerialNumber)
-                return sid['issuer'].dump(), sid['serial_number'].native
-
-            ts_leaves = set(
-                extract_ts_sid(si) for si in ts_signed_data['signer_infos']
-            )
-
-            for wrapped_c in ts_certs:
-                c: cms.Certificate = wrapped_c.chosen
-                meta_certs.register(c)
-                if (c.issuer.dump(), c.serial_number) in ts_leaves:
-                    leaf_certs.register(c)
 
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
@@ -354,12 +336,10 @@ class Signer:
         }
 
         # time to pack up
-        message = cms.ContentInfo({
+        return cms.ContentInfo({
             'content_type': cms.ContentType('signed_data'),
             'content': cms.SignedData(signed_data)
         })
-
-        return message, leaf_certs, meta_certs
 
 
 class DocMDPPerm(IntFlag):
@@ -545,21 +525,6 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
-def _fetch_path_validation_info(validation_context, end_cert):
-    # ensures that the validation info for a cert and its tree is cached
-    # in the provided validation context
-    from . import validation
-
-    path = validation.build_trust_path(validation_context, end_cert)
-
-    for cert, issuer in validation.unroll_path(path):
-        if cert.ocsp_urls:
-            validation_context.retrieve_ocsps(cert, issuer)
-        elif cert.crl_distribution_points:
-            # only retrieve CRLs if OCSP is not available
-            validation_context.retrieve_crls(cert)
-
-
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              existing_fields_only=False, bytes_reserved=None):
@@ -581,9 +546,6 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     root = pdf_out.root
 
     timestamp = datetime.now(tz=tzlocal.get_localzone())
-    # FIXME there seems to be an issue with the OCSP checking here. Either the
-    #  BEID OCSP responder is noncompliant, or there is a dt rounding bug in
-    #  the certvalidator library.
 
     validation_context = signature_meta.validation_context
     if signature_meta.embed_validation_info and validation_context is None:
@@ -591,12 +553,31 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
             'A validation context must be provided if validation/revocation '
             'info is to be embedded into the signature.'
         )
+    validation_paths = []
     if validation_context is not None:
-        # add the certs from the signer's certificate store to the registry
-        # in the validation context
-        for cert in signer.cert_registry:
-            validation_context.certificate_registry.add_other_cert(cert)
-        _fetch_path_validation_info(validation_context, signer.signing_cert)
+        # validate cert
+        # (this also keeps track of any validation data automagically)
+        validator = CertificateValidator(
+            signer.signing_cert, intermediate_certs=signer.cert_registry,
+            validation_context=validation_context
+        )
+        # TODO allow customisation of key usage parameters
+        validation_paths.append(validator.validate_usage({"non_repudiation"}))
+
+    ts_dummy = None
+    if signer.timestamper is not None:
+        # this might hit the TS server, but the response is cached
+        # and it collects the certificates we need to verify the TS response
+        ts_dummy = signer.timestamper.dummy_response(signature_meta.md_algorithm)
+        if validation_context is not None:
+            for cert in signer.timestamper.entity_certificates:
+                validator = CertificateValidator(
+                    cert, intermediate_certs=signer.timestamper.cert_registry,
+                    validation_context=validation_context
+                )
+                validation_paths.append(
+                    validator.validate_usage(set(), {"time_stamping"})
+                )
 
     # do we need adobe-style revocation info?
     if signature_meta.embed_validation_info and not signature_meta.use_pades:
@@ -610,7 +591,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     if bytes_reserved is None:
         test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
-        test_signature_cms, _, _ = signer.sign(
+        test_signature_cms = signer.sign(
             test_md, signature_meta.md_algorithm,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
             dry_run=True, revocation_info=revinfo
@@ -707,7 +688,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     wr = sig_obj.write_signature(pdf_out, signature_meta.md_algorithm)
     true_digest = next(wr)
 
-    signature_cms, leaves, meta_certs = signer.sign(
+    signature_cms = signer.sign(
         true_digest, signature_meta.md_algorithm,
         timestamp=timestamp, use_pades=signature_meta.use_pades,
         revocation_info=revinfo
@@ -716,19 +697,15 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
     if signature_meta.use_pades and signature_meta.embed_validation_info:
         from pdfstamp.sign import validation
-        for meta_cert in meta_certs:
-            validation_context.certificate_registry.add_other_cert(meta_cert)
         validation.DocumentSecurityStore.add_dss(
             output_stream=output, sig_contents=sig_contents,
-            certs=set(leaves), validation_context=validation_context
+            paths=validation_paths, validation_context=validation_context
         )
 
         if signer.timestamper is not None:
             # append an LTV document timestamp
             output.seek(0)
             w = IncrementalPdfFileWriter(output)
-            # TODO to save a round trip to the TSA, we could attempt to cache
-            #  the length of the first timestamp response.
             output = timestamp_pdf(
                 w, md_algorithm=signature_meta.md_algorithm,
                 timestamper=signer.timestamper
@@ -742,10 +719,7 @@ def timestamp_pdf(pdf_out: IncrementalPdfFileWriter, md_algorithm,
     # TODO support adding validation information for the timestamp as well
 
     if bytes_reserved is None:
-        test_md = getattr(hashlib, md_algorithm)().digest()
-        test_signature_cms = timestamper.timestamp(
-            test_md, md_algorithm
-        )
+        test_signature_cms = timestamper.dummy_response(md_algorithm)
         test_len = len(test_signature_cms.dump()) * 2
         # see sign_pdf comments
         bytes_reserved = test_len + 2 * (test_len // 4)

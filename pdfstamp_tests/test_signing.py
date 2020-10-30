@@ -66,7 +66,7 @@ DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_key=oskeys.parse_private(
         read_all(TESTING_CA_DIR + '/keys/tsa.key.pem'), password=b'secret'
     ),
-    cert_registry=FROM_CA.cert_registry,
+    certs_to_embed=FROM_CA.cert_registry,
 )
 
 FROM_CA_TS = signers.SimpleSigner(
@@ -569,10 +569,10 @@ def test_pades_revinfo_dummydata():
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
-    dss = DocumentSecurityStore.read_dss(handler=r)
+    dss, vc = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 4
-    assert len(dss.unindexed_ocsps) == 1
+    assert len(dss.ocsps) == 1
 
 
 def test_pades_revinfo_ts_dummydata():
@@ -588,10 +588,10 @@ def test_pades_revinfo_ts_dummydata():
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
-    dss = DocumentSecurityStore.read_dss(handler=r)
+    dss, vc = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 5
-    assert len(dss.unindexed_ocsps) == 1
+    assert len(dss.ocsps) == 1
 
 
 def test_pades_revinfo_http_ts_dummydata(requests_mock):
@@ -611,10 +611,10 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
-    dss = DocumentSecurityStore.read_dss(handler=r)
+    dss, vc = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 5
-    assert len(dss.unindexed_ocsps) == 1
+    assert len(dss.ocsps) == 1
 
 
 # TODO freeze time for these tests, test revocation
@@ -645,12 +645,12 @@ def test_pades_revinfo_live(requests_mock):
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
-    dss = DocumentSecurityStore.read_dss(handler=r)
+    dss, vc = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 5
-    # FIXME the CRL / OCSP count is all over the place
-    assert len(dss.unindexed_ocsps)
-    assert len(dss.unindexed_crls)
+    # FIXME the CRL / OCSP count is all over the place, should cache better
+    assert len(dss.ocsps)
+    assert len(dss.crls)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.pades_lt
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})

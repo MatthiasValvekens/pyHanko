@@ -318,10 +318,9 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
     if validation_type == RevocationInfoValidationType.adobe_style:
         vc = read_adobe_revocation_info(embedded_sig.signer_info)
     else:
-        dss = DocumentSecurityStore.read_dss(
+        dss, vc = DocumentSecurityStore.read_dss(
             reader, validation_context_kwargs=validation_context_kwargs
         )
-        vc = dss.validation_context
 
     status_kwargs = {
         'complete_document': embedded_sig.complete_document,
@@ -395,23 +394,6 @@ def read_certification_data(reader: PdfFileReader):
     return sig_dict, permission_bits
 
 
-def unroll_path(path: ValidationPath):
-    # TODO this isn't particularly efficient, but unless ValidationPath
-    #  starts supporting some kind of read-only slicing mechanism, this is
-    #  by far the simplest
-
-    if len(path) == 1:
-        return
-
-    end_cert = path[len(path) - 1]
-
-    # path.pop() does not record the last cert, as one might expect, but the
-    #  path object itself
-    new_path = path.copy().pop()
-    yield end_cert, new_path.find_issuer(end_cert)
-    yield from unroll_path(new_path)
-
-
 # TODO validate DocMDP compliance and PAdES compliance
 #  There are some compatibility subtleties here: e.g. valid (!) cryptographic
 #  data covered by DSS and/or DocumentTimeStamps should never trigger the DocMDP
@@ -440,20 +422,6 @@ class VRI:
         return vri
 
 
-def build_trust_path(validation_context, cert) -> ValidationPath:
-    """
-    Thin wrapper around build_paths to select one valid path.
-    """
-
-    paths = validation_context.certificate_registry.build_paths(cert)
-    if not paths:
-        raise ValueError(
-            'Could not build path from signing cert to trust roots'
-        )
-
-    return paths[0]
-
-
 def cms_objects_to_streams(writer, objs):
     return [
         writer.add_object(
@@ -477,35 +445,18 @@ def enumerate_ocsp_certs(ocsp_response):
 
 class DocumentSecurityStore:
 
-    def __init__(self, writer, validation_context: ValidationContext,
-                 certs=None, ocsps=None, crls=None, unindexed_ocsps=None,
-                 unindexed_crls=None, vri_entries=None,
-                 backing_pdf_object=None):
+    def __init__(self, writer, certs=None, ocsps=None, crls=None,
+                 vri_entries=None, backing_pdf_object=None):
         self.vri_entries = vri_entries if vri_entries is not None else {}
-        self.ocsps = ocsps if ocsps is not None else {}
-        self.crls = crls if crls is not None else {}
         self.certs = certs if certs is not None else {}
-        self.unindexed_ocsps = \
-            unindexed_ocsps if unindexed_ocsps is not None else []
-        self.unindexed_crls = \
-            unindexed_crls if unindexed_crls is not None else []
+        self.ocsps = ocsps if ocsps is not None else []
+        self.crls = crls if crls is not None else []
 
-        self.validation_context = validation_context
         self.writer = writer
         self.backing_pdf_object = (
             backing_pdf_object if backing_pdf_object is not None
             else generic.DictionaryObject()
         )
-
-        # embed any hardcoded ocsp responses and CRLs, if applicable
-        if writer is not None:
-            self.unindexed_ocsps.extend(
-                cms_objects_to_streams(writer, validation_context.ocsps)
-            )
-            self.unindexed_crls.extend(
-                cms_objects_to_streams(writer, validation_context.crls)
-            )
-            self._embed_certs_from_ocsp(validation_context.ocsps)
 
     def _embed_certs_from_ocsp(self, ocsps):
         def extra_certs():
@@ -513,39 +464,6 @@ class DocumentSecurityStore:
                 yield from enumerate_ocsp_certs(resp)
 
         return [self._embed_cert(cert_) for cert_ in extra_certs()]
-
-    def _embed_ocsp_and_crl_info(self, cert, issuer):
-        if self.writer is None:
-            raise TypeError('This DSS does not support updates.')
-
-        try:
-            ocsp_refs = self.ocsps[cert.issuer_serial]
-        except KeyError:
-            ocsp_refs = None
-
-        try:
-            crl_refs = self.crls[cert.issuer_serial]
-        except KeyError:
-            crl_refs = None
-
-        # FIXME there seems to be an issue with the OCSP checking here.
-        #  Either the BEID OCSP responder is noncompliant, or there is a dt
-        #  rounding bug in the certvalidator library.
-        # anyway, for now, we just retrieve the OCSP responses without checking
-        # them, which is NOT allowed by PAdES.
-        cert_refs = []
-        if cert.ocsp_urls:
-            if ocsp_refs is None:
-                ocsps = self.validation_context.retrieve_ocsps(cert, issuer)
-                ocsp_refs = cms_objects_to_streams(self.writer, ocsps)
-                self.ocsps[cert.issuer_serial] = ocsp_refs
-                cert_refs = self._embed_certs_from_ocsp(ocsps)
-        elif cert.crl_distribution_points:
-            if crl_refs is None:
-                crls = self.validation_context.retrieve_crls(cert)
-                crl_refs = cms_objects_to_streams(self.writer, crls)
-                self.crls[cert.issuer_serial] = crl_refs
-        return ocsp_refs or [], crl_refs or [], cert_refs
 
     def _embed_cert(self, cert):
         if self.writer is None:
@@ -567,28 +485,7 @@ class DocumentSecurityStore:
         ident = hashlib.sha1(contents).digest().hex().upper()
         return pdf_name('/' + ident)
 
-    def collect_vri(self, signer_cert) -> VRI:
-        path = build_trust_path(self.validation_context, signer_cert)
-        # unindexed ocsps should be available for use in every VRI, unless
-        # otherwise specified
-        ocsp_refs = list(self.unindexed_ocsps)
-        crl_refs = list(self.unindexed_crls)
-        # we also add the root & leaf, even though it shouldn't be required, but
-        # it can't hurt
-        cert_refs = [self._embed_cert(signer_cert)]
-        for cert, issuer in unroll_path(path):
-            cert_refs.append(self._embed_cert(issuer))
-            # noinspection PyProtectedMember
-            if self.validation_context._allow_fetching:
-                extra_ocsp_refs, extra_crl_refs, extra_certs = \
-                    self._embed_ocsp_and_crl_info(cert, issuer)
-                ocsp_refs.extend(extra_ocsp_refs)
-                cert_refs.extend(extra_certs)
-                crl_refs.extend(extra_crl_refs)
-
-        return VRI(ocsps=ocsp_refs, certs=cert_refs, crls=crl_refs)
-
-    def register_vri(self, identifier, signer_certs):
+    def register_vri(self, identifier, paths, validation_context):
         """
         Register validation information for a set of signing certificates
         associated with a particular signature.
@@ -598,15 +495,29 @@ class DocumentSecurityStore:
 
         :param identifier:
             Identifier of the signature object (see `sig_content_identifier`)
-        :param signer_certs:
-            All certificates of entities that provided some signature embedded
-            into the signature object being referenced.
+        :param paths:
+            Validation paths to add.
+        :param validation_context:
+            Validation context to source CRLs and OCSP responses from.
         """
 
-        vri = VRI()
-        for cert in signer_certs:
-            vri += self.collect_vri(cert)
+        if self.writer is None:
+            raise TypeError('This DSS does not support updates.')
 
+        # embed any hardcoded ocsp responses and CRLs, if applicable
+        ocsps = cms_objects_to_streams(self.writer, validation_context.ocsps)
+        self.ocsps.extend(ocsps)
+        crls = cms_objects_to_streams(self.writer, validation_context.crls)
+        self.crls.extend(crls)
+        path: ValidationPath
+        # TODO while somewhat less common, CRL signing can also be delegated
+        #  we should take that into account
+        cert_refs = self._embed_certs_from_ocsp(validation_context.ocsps)
+        for path in paths:
+            for cert in path:
+                cert_refs.append(self._embed_cert(cert))
+
+        vri = VRI(certs=cert_refs, ocsps=ocsps, crls=crls)
         self.vri_entries[identifier] = self.writer.add_object(
             vri.as_pdf_object()
         )
@@ -618,21 +529,11 @@ class DocumentSecurityStore:
             pdf_name('/Certs'): generic.ArrayObject(list(self.certs.values())),
         })
 
-        def flat_ocsps():
-            for fetched in self.ocsps.values():
-                yield from fetched
-            yield from self.unindexed_ocsps
+        if self.ocsps:
+            pdf_dict[pdf_name('/OCSPs')] = generic.ArrayObject(self.ocsps)
 
-        if self.ocsps or self.unindexed_ocsps:
-            pdf_dict[pdf_name('/OCSPs')] = generic.ArrayObject(flat_ocsps())
-
-        def flat_crls():
-            for fetched in self.crls.values():
-                yield from fetched
-            yield from self.unindexed_crls
-
-        if self.crls or self.unindexed_crls:
-            pdf_dict[pdf_name('/CRLs')] = generic.ArrayObject(flat_crls())
+        if self.crls:
+            pdf_dict[pdf_name('/CRLs')] = generic.ArrayObject(self.crls)
 
         return pdf_dict
 
@@ -650,14 +551,14 @@ class DocumentSecurityStore:
             NOTE: OCSP responses will not be added, only certificates.
         :return:
             A DocumentSecurityStore object describing the current state of the
-            DSS, or None if none was found.
+            DSS, and a validation context.
         """
         # TODO remember where we're reading from for modification detection
         #  purposes
         try:
             dss_ref = handler.root.raw_get(pdf_name('/DSS'))
         except KeyError:
-            return None
+            raise ValueError("No DSS found")
 
         dss_dict = dss_ref.get_object()
 
@@ -713,14 +614,14 @@ class DocumentSecurityStore:
         # the DSS returned will be backed by the original DSS object, so CRLs
         # are automagically preserved if they happened to be included in
         # the original file
-        return cls(
-            writer=writer, validation_context=validation_context,
-            certs=cert_refs, unindexed_ocsps=ocsp_refs, vri_entries=vri_entries,
-            unindexed_crls=crl_refs, backing_pdf_object=dss_dict
+        dss = cls(
+            writer=writer, certs=cert_refs, ocsps=ocsp_refs,
+            vri_entries=vri_entries, crls=crl_refs, backing_pdf_object=dss_dict
         )
+        return dss, validation_context
 
     @classmethod
-    def add_dss(cls, output_stream, sig_contents, certs,
+    def add_dss(cls, output_stream, sig_contents, paths,
                 validation_context):
         output_stream.seek(0)
         # TODO is it actually necessary to create a separate stream here?
@@ -729,15 +630,18 @@ class DocumentSecurityStore:
         #  already?
         writer = IncrementalPdfFileWriter(BytesIO(output_stream.read()))
 
-        dss = cls.read_dss(writer, validation_context=validation_context)
-        created = False
-        if dss is None:
+        try:
+            # we're not interested in this validation context
+            dss, vc = cls.read_dss(writer)
+            created = False
+        except ValueError:
+            # FIXME ValueError is way too general
             created = True
-            dss = cls(writer=writer, validation_context=validation_context)
+            dss = cls(writer=writer)
 
         identifier = DocumentSecurityStore.sig_content_identifier(sig_contents)
 
-        dss.register_vri(identifier=identifier, signer_certs=certs)
+        dss.register_vri(identifier, paths, validation_context)
         dss_dict = dss.as_pdf_object()
         # if we're updating the DSS, this is all we need to do.
         # if we're adding a fresh DSS, we need to register it.
