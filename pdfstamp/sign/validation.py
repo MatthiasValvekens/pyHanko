@@ -84,7 +84,9 @@ def validate_cms_signature(signed_data: cms.SignedData,
     md_algorithm = \
         signer_info['digest_algorithm']['algorithm'].native.lower()
     signature = signer_info['signature'].native
-    signed_attrs = signer_info['signed_attrs']
+    # signed_attrs comes with some context-specific tagging
+    # because it's an implicit field. This breaks validation
+    signed_attrs = signer_info['signed_attrs'].untag()
 
     # TODO What to do if signed_attrs is absent?
     # I guess I'll wait until someone complains that a valid signature
@@ -96,12 +98,6 @@ def validate_cms_signature(signed_data: cms.SignedData,
         raw = signed_data['encap_content_info']['content'].parsed.dump()
         raw_digest = getattr(hashlib, md_algorithm)(raw).digest()
 
-    # XXX for some reason, these values are sometimes set wrongly
-    # when asn1crypto loads things. No clue why, but they mess up
-    # the header byte (and hence the signature) of the DER-encoded
-    # message object. Needs investigation.
-    signed_attrs.class_ = 0
-    signed_attrs.tag = 17
     signed_blob = signed_attrs.dump(force=True)
     try:
         embedded_digest = find_cms_attribute(signed_attrs, 'message_digest')
