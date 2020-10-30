@@ -648,9 +648,8 @@ def test_pades_revinfo_live(requests_mock):
     dss, vc = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 5
-    # FIXME the CRL / OCSP count is all over the place, should cache better
-    assert len(dss.ocsps)
-    assert len(dss.crls)
+    assert len(dss.ocsps) == len(vc.ocsps) == 1
+    assert len(dss.crls) == len(vc.crls) == 1
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.pades_lt
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
@@ -670,3 +669,6 @@ def test_pades_revinfo_live_nofullchain():
     rivt_pades = RevocationInfoValidationType.pades_lt
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
     assert status.valid and not status.trusted
+
+# TODO test multiple signatures
+# TODO test classical Adobe-style LTV verification

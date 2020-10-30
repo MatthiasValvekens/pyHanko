@@ -402,14 +402,14 @@ def read_certification_data(reader: PdfFileReader):
 
 @dataclass
 class VRI:
-    certs: list = data_field(default_factory=list)
-    ocsps: list = data_field(default_factory=list)
-    crls: list = data_field(default_factory=list)
+    certs: set = data_field(default_factory=set)
+    ocsps: set = data_field(default_factory=set)
+    crls: set = data_field(default_factory=set)
 
     def __iadd__(self, other):
-        self.certs.extend(other.certs)
-        self.crls.extend(other.crls)
-        self.ocsps.extend(other.ocsps)
+        self.certs.update(other.certs)
+        self.crls.update(other.crls)
+        self.ocsps.update(other.ocsps)
         return self
 
     def as_pdf_object(self):
@@ -420,14 +420,6 @@ class VRI:
             vri[pdf_name('/CRL')] = generic.ArrayObject(self.crls)
         vri[pdf_name('/Cert')] = generic.ArrayObject(self.certs)
         return vri
-
-
-def cms_objects_to_streams(writer, objs):
-    return [
-        writer.add_object(
-            generic.StreamObject(stream_data=obj.dump())
-        ) for obj in objs
-    ]
 
 
 def enumerate_ocsp_certs(ocsp_response):
@@ -457,6 +449,31 @@ class DocumentSecurityStore:
             backing_pdf_object if backing_pdf_object is not None
             else generic.DictionaryObject()
         )
+
+        ocsps_seen = {}
+        for ocsp_ref in self.ocsps:
+            ocsp_bytes = ocsp_ref.get_object().data
+            ocsps_seen[ocsp_bytes] = ocsp_ref
+        self._ocsps_seen = ocsps_seen
+
+        crls_seen = {}
+        for crl_ref in self.crls:
+            crl_bytes = crl_ref.get_object().data
+            crls_seen[crl_bytes] = crl_ref
+        self._crls_seen = crls_seen
+
+    def _cms_objects_to_streams(self, objs, seen, dest):
+        for obj in objs:
+            obj_bytes = obj.dump()
+            try:
+                yield seen[obj_bytes]
+            except KeyError:
+                ref = self.writer.add_object(
+                    generic.StreamObject(stream_data=obj_bytes)
+                )
+                seen[obj_bytes] = ref
+                dest.append(ref)
+                yield ref
 
     def _embed_certs_from_ocsp(self, ocsps):
         def extra_certs():
@@ -505,17 +522,23 @@ class DocumentSecurityStore:
             raise TypeError('This DSS does not support updates.')
 
         # embed any hardcoded ocsp responses and CRLs, if applicable
-        ocsps = cms_objects_to_streams(self.writer, validation_context.ocsps)
-        self.ocsps.extend(ocsps)
-        crls = cms_objects_to_streams(self.writer, validation_context.crls)
-        self.crls.extend(crls)
+        ocsps = set(
+            self._cms_objects_to_streams(
+                validation_context.ocsps, self._ocsps_seen, self.ocsps
+            )
+        )
+        crls = set(
+            self._cms_objects_to_streams(
+                validation_context.crls, self._crls_seen, self.crls
+            )
+        )
         path: ValidationPath
         # TODO while somewhat less common, CRL signing can also be delegated
         #  we should take that into account
-        cert_refs = self._embed_certs_from_ocsp(validation_context.ocsps)
+        cert_refs = set(self._embed_certs_from_ocsp(validation_context.ocsps))
         for path in paths:
             for cert in path:
-                cert_refs.append(self._embed_cert(cert))
+                cert_refs.add(self._embed_cert(cert))
 
         vri = VRI(certs=cert_refs, ocsps=ocsps, crls=crls)
         self.vri_entries[identifier] = self.writer.add_object(
