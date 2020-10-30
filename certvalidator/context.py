@@ -2,7 +2,7 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 import binascii
 
 from asn1crypto import crl, ocsp
@@ -97,7 +97,8 @@ class ValidationContext():
     def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None,
                  whitelisted_certs=None, moment=None, allow_fetching=False, crls=None,
                  crl_fetch_params=None, ocsps=None, ocsp_fetch_params=None,
-                 revocation_mode="soft-fail", weak_hash_algos=None):
+                 revocation_mode="soft-fail", weak_hash_algos=None,
+                 time_tolerance=timedelta(seconds=1)):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -172,6 +173,10 @@ class ValidationContext():
         :param weak_hash_algos:
             A set of unicode strings of hash algorithms that should be
             considered weak. Valid options include: "md2", "md5", "sha1"
+
+        :param time_tolerance:
+            Time delta tolerance allowed in validity checks.
+            Defaults to one second.
         """
 
         if crls is not None:
@@ -357,6 +362,9 @@ class ValidationContext():
         self._revocation_mode = revocation_mode
         self._soft_fail_exceptions = []
         self.weak_hash_algos = weak_hash_algos
+        self.time_tolerance = (
+            abs(time_tolerance) if time_tolerance else timedelta(0)
+        )
 
     @property
     def crls(self):
