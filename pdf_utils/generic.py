@@ -260,6 +260,9 @@ class IndirectObject(PdfObject, Dereferenceable):
     def __repr__(self):
         return "IndirectObject(%r, %r)" % (self.idnum, self.generation)
 
+    def __hash__(self):
+        return hash((self.idnum, self.generation))
+
     def __eq__(self, other):
         return (
             other is not None and
