@@ -647,6 +647,7 @@ def test_pades_revinfo_live(requests_mock):
     r = PdfFileReader(out)
     dss, vc = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
+    assert len(dss.vri_entries) == 1
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == len(vc.ocsps) == 1
     assert len(dss.crls) == len(vc.crls) == 1
@@ -669,6 +670,33 @@ def test_pades_revinfo_live_nofullchain():
     rivt_pades = RevocationInfoValidationType.pades_lt
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
     assert status.valid and not status.trusted
+
+def test_pades_revinfo_live_lta(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=vc,
+            use_pades=True, embed_validation_info=True,
+            use_pades_lta=True
+        ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    dss, vc = DocumentSecurityStore.read_dss(handler=r)
+    assert dss is not None
+    assert len(dss.vri_entries) == 2
+    assert len(dss.certs) == 5
+    assert len(dss.ocsps) == len(vc.ocsps) == 1
+    assert len(dss.crls) == len(vc.crls) == 1
+    field_iter = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, _ = next(field_iter)
+    rivt_pades = RevocationInfoValidationType.pades_lt
+    status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
+    assert status.valid and status.trusted
+
+    field_name, sig_obj, _ = next(field_iter)
+    assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
+    # TODO implement and run actual LTA verification checks
 
 # TODO test multiple signatures
 # TODO test classical Adobe-style LTV verification

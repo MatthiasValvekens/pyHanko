@@ -1,6 +1,7 @@
 import binascii
 import hashlib
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntFlag
@@ -360,10 +361,11 @@ class PdfSignatureMetadata:
     reason: str = None
     name: str = None
     certify: bool = False
-    timestamp_field_name: str = None
 
     use_pades: bool = False
     embed_validation_info: bool = False
+    use_pades_lta: bool = False
+    timestamp_field_name: str = None
     validation_context: ValidationContext = None
     # PAdES compliance disallows this in favour of more robust timestamping
     # strategies
@@ -535,53 +537,62 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     )
 
 
+# Wrapper around _prepare_sig_fields with some error reporting
+
+def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
+                            is_timestamp):
+    root = pdf_out.root
+    # for feedback reasons
+    if is_timestamp:
+        attribute = 'timestamp_field_name'
+    else:
+        attribute = 'field_name'
+    if field_name is None:
+        if not existing_fields_only:
+            raise ValueError(
+                'Not specifying %s is only allowed '
+                'when existing_fields_only=True' % attribute
+            )
+
+        # most of the logic in _prepare_sig_field has to do with preparing
+        # for the potential addition of a new field. That is completely
+        # irrelevant in this special case, so we might as well short circuit
+        # things.
+        field_created = False
+        empty_fields = enumerate_sig_fields(
+            pdf_out.prev, filled_status=False
+        )
+        try:
+            found_field_name, _, sig_field_ref = next(empty_fields)
+        except StopIteration:
+            raise ValueError('There are no empty signature fields.')
+
+        others = ', '.join(
+            fn for fn, _, _ in empty_fields if fn is not None
+        )
+        if others:
+            raise ValueError(
+                'There are several empty signature fields. Please specify '
+                '%s. The options are %s, %s.' % (
+                    attribute, found_field_name, others
+                )
+            )
+    else:
+        # grab or create a sig field
+        field_created, sig_field_ref = _prepare_sig_field(
+            field_name, root, update_writer=pdf_out,
+            existing_fields_only=existing_fields_only,
+            lock_sig_flags=True
+        )
+
+    return field_created, sig_field_ref
+
+
 class PdfSigner:
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer):
         self.signature_meta = signature_meta
         self.signer = signer
 
-    def _get_or_create_sigfield(self, attribute, pdf_out, existing_fields_only):
-        root = pdf_out.root
-        field_name: str = getattr(self.signature_meta, attribute)
-        if field_name is None:
-            if not existing_fields_only:
-                raise ValueError(
-                    'Not specifying %s is only allowed '
-                    'when existing_fields_only=True' % attribute
-                )
-
-            # most of the logic in _prepare_sig_field has to do with preparing
-            # for the potential addition of a new field. That is completely
-            # irrelevant in this special case, so we might as well short circuit
-            # things.
-            field_created = False
-            empty_fields = enumerate_sig_fields(
-                pdf_out.prev, filled_status=False
-            )
-            try:
-                found_field_name, _, sig_field_ref = next(empty_fields)
-            except StopIteration:
-                raise ValueError('There are no empty signature fields.')
-
-            others = ', '.join(
-                fn for fn, _, _ in empty_fields if fn is not None
-            )
-            if others:
-                raise ValueError(
-                    'There are several empty signature fields. Please specify '
-                    '%s. The options are %s, %s.' % (
-                        attribute, found_field_name, others
-                    )
-                )
-        else:
-            # grab or create a sig field
-            field_created, sig_field_ref = _prepare_sig_field(
-                field_name, root, update_writer=pdf_out,
-                existing_fields_only=existing_fields_only,
-                lock_sig_flags=True
-            )
-
-        return field_created, sig_field_ref
 
     def _sig_field_appearance(self, sig_field, pdf_out, timestamp):
 
@@ -649,20 +660,16 @@ class PdfSigner:
                 validator.validate_usage({"non_repudiation"})
             )
 
+        ts_validation_paths = None
         if signer.timestamper is not None:
             # this might hit the TS server, but the response is cached
             # and it collects the certificates we need to verify the TS response
             signer.timestamper.dummy_response(signature_meta.md_algorithm)
             if validation_context is not None:
-                for cert in signer.timestamper.entity_certificates:
-                    validator = CertificateValidator(
-                        cert,
-                        intermediate_certs=signer.timestamper.cert_registry,
-                        validation_context=validation_context
-                    )
-                    validation_paths.append(
-                        validator.validate_usage(set(), {"time_stamping"})
-                    )
+                ts_validation_paths = list(
+                    signer.timestamper.validation_paths(validation_context)
+                )
+                validation_paths += ts_validation_paths
 
         # do we need adobe-style revocation info?
         if signature_meta.embed_validation_info \
@@ -701,8 +708,9 @@ class PdfSigner:
         )
         sig_obj_ref = pdf_out.add_object(sig_obj)
 
-        field_created, sig_field_ref = self._get_or_create_sigfield(
-            'field_name', pdf_out, existing_fields_only
+        field_created, sig_field_ref = _get_or_create_sigfield(
+            signature_meta.field_name, pdf_out,
+            existing_fields_only, is_timestamp=False
         )
 
         sig_field = sig_field_ref.get_object()
@@ -739,37 +747,60 @@ class PdfSigner:
                 paths=validation_paths, validation_context=validation_context
             )
 
-            if signer.timestamper is not None:
+            if signer.timestamper is not None and signature_meta.use_pades_lta:
                 # append an LTV document timestamp
                 output.seek(0)
                 w = IncrementalPdfFileWriter(output)
-                output = timestamp_pdf(
-                    w, md_algorithm=signature_meta.md_algorithm,
-                    timestamper=signer.timestamper
+                output = self.timestamp_pdf(
+                    w, validation_context, validation_paths=ts_validation_paths
                 )
 
         return output
 
+    def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
+                      validation_context, bytes_reserved=None,
+                      validation_paths=None):
+        timestamper = self.signer.timestamper
+        md_algorithm = self.signature_meta.md_algorithm
+        field_name = self.signature_meta.timestamp_field_name or (
+            'Timestamp-' + str(uuid.uuid4())
+        )
+        if validation_paths is None:
+            validation_paths = list(
+                timestamper.validation_paths(validation_context)
+            )
+        if bytes_reserved is None:
+            test_signature_cms = timestamper.dummy_response(md_algorithm)
+            test_len = len(test_signature_cms.dump()) * 2
+            # see sign_pdf comments
+            bytes_reserved = test_len + 2 * (test_len // 4)
 
-# TODO does this timestamp also need to be attached to an AcroForm field?
-#  I can't find a clear statement in the PAdES specifications, but section
-#  12.8.5.2 in ISO 32000-2 seems to at least suggest it.
-def timestamp_pdf(pdf_out: IncrementalPdfFileWriter, md_algorithm,
-                  timestamper: TimeStamper, bytes_reserved=None):
-    # TODO support adding validation information for the timestamp as well
+        timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
+        field_created, sig_field_ref = _get_or_create_sigfield(
+            field_name, pdf_out,
+            # for LTA, requiring existing_fields_only doesn't make sense
+            # since we should in principle be able to add document timestamps
+            # ad infinitum.
+            existing_fields_only=False, is_timestamp=True
+        )
+        sig_field = sig_field_ref.get_object()
+        timestamp_obj_ref = pdf_out.add_object(timestamp_obj)
+        sig_field[pdf_name('/V')] = timestamp_obj_ref
+        # this update is unnecessary in the vast majority of cases, but
+        #  let's do it anyway for consistency.
+        if not field_created:  # pragma: nocover
+            pdf_out.mark_update(timestamp_obj_ref)
 
-    if bytes_reserved is None:
-        test_signature_cms = timestamper.dummy_response(md_algorithm)
-        test_len = len(test_signature_cms.dump()) * 2
-        # see sign_pdf comments
-        bytes_reserved = test_len + 2 * (test_len // 4)
+        wr = timestamp_obj.write_signature(pdf_out, md_algorithm)
+        true_digest = next(wr)
+        timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
+        output, sig_contents = wr.send(timestamp_cms)
 
-    timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
-    pdf_out.add_object(timestamp_obj)
+        # update the DSS
+        from pdfstamp.sign import validation
+        validation.DocumentSecurityStore.add_dss(
+            output_stream=output, sig_contents=sig_contents,
+            paths=validation_paths, validation_context=validation_context
+        )
 
-    wr = timestamp_obj.write_signature(pdf_out, md_algorithm)
-    true_digest = next(wr)
-    timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
-    output, _ = wr.send(timestamp_cms)
-
-    return output
+        return output

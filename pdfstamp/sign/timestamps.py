@@ -7,6 +7,7 @@ from datetime import datetime
 import requests
 import tzlocal
 from asn1crypto import tsp, algos, cms, x509, keys, core
+from certvalidator import CertificateValidator
 from oscrypto import asymmetric
 
 from . import general
@@ -82,9 +83,14 @@ class TimeStamper:
             self._certs[cert.issuer_serial] = cert
         return dummy
 
-    @property
-    def entity_certificates(self):
-        return list(self._certs.values())
+    def validation_paths(self, validation_context):
+        for cert in self._certs.values():
+            validator = CertificateValidator(
+                cert,
+                intermediate_certs=self.cert_registry,
+                validation_context=validation_context
+            )
+            yield validator.validate_usage(set(), {"time_stamping"})
 
     def request_cms(self, message_digest, md_algorithm):
         # see also
