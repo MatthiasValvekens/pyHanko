@@ -137,8 +137,9 @@ class SigCertConstraints:
         url = pdf_dict.get('/URL')
         url_type = pdf_dict.get('/URLType')
         kwargs = {
-            'flags': flags, 'subjects': subjects, 'subject_dns': subject_dns,
-            'issuers': issuers, 'info_url': url
+            'flags': flags, 'subjects': subjects or None,
+            'subject_dns': subject_dns or None,
+            'issuers': issuers or None, 'info_url': url
         }
         if url is not None and url_type is not None:
             kwargs['url_type'] = url_type
@@ -201,6 +202,28 @@ class SigSeedValueSpec:
         if self.cert is not None:
             result[pdf_name('/Cert')] = self.cert.as_pdf_object()
         return result
+
+    @classmethod
+    def from_pdf_object(cls, pdf_dict):
+        try:
+            if pdf_dict['/Type'] != '/SV':
+                raise ValueError('Object /Type entry is not /SV')
+        except KeyError:
+            pass
+
+        flags = SigSeedValFlags(pdf_dict.get('/Ff', 0))
+        reasons = pdf_dict.get('/Reasons', None)
+        timestamp_server_url = pdf_dict.get('/TimeStamp', {}).get('/URL', None)
+        cert_constraints = pdf_dict.get('/Cert', None)
+        if cert_constraints is not None:
+            cert_constraints = SigCertConstraints.from_pdf_object(
+                cert_constraints
+            )
+        return cls(
+            flags=flags, reasons=reasons,
+            timestamp_server_url=timestamp_server_url,
+            cert=cert_constraints
+        )
 
 
 @dataclass(frozen=True)

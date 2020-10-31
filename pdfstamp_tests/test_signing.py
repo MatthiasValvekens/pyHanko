@@ -431,6 +431,32 @@ def test_append_simple_sig_field():
     assert len(w.root['/AcroForm']['/Fields']) == 3
 
 
+def test_append_sig_field_with_simple_sv():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    from asn1crypto import x509
+    sv = fields.SigSeedValueSpec(
+        reasons=['a', 'b', 'c'],
+        cert=fields.SigCertConstraints(
+            subject_dns=[x509.Name.build({
+                'country_name': 'BE', 'organization_name': 'Test',
+                'common_name': 'Test Test'
+            })]
+        )
+    )
+    sp = fields.SigFieldSpec('InvisibleSig', seed_value_dict=sv)
+    fields.append_signature_fields(w, [sp])
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    r = PdfFileReader(out)
+    _, _, sig_field_ref = next(fields.enumerate_sig_fields(r))
+    sv_dict = sig_field_ref.get_object()['/SV']
+    recovered_sv = fields.SigSeedValueSpec.from_pdf_object(sv_dict)
+    assert recovered_sv == sv
+
+
+
 def test_append_sig_field_acro_update():
     # test different configurations of the AcroForm
     w = PdfFileWriter()
