@@ -24,8 +24,8 @@ from pdfstamp.sign.general import (
 )
 from pdfstamp.stamp import TextStampStyle, TextStamp
 
-__all__ = ['Signer', 'SimpleSigner', 'sign_pdf', 'DocMDPPerm',
-           'SignatureObject']
+__all__ = ['Signer', 'SimpleSigner', 'PdfSigner', 'sign_pdf',
+           'DocMDPPerm', 'SignatureObject']
 
 
 class SigByteRangeObject(generic.PdfObject):
@@ -360,6 +360,7 @@ class PdfSignatureMetadata:
     reason: str = None
     name: str = None
     certify: bool = False
+    timestamp_field_name: str = None
 
     use_pades: bool = False
     embed_validation_info: bool = False
@@ -528,189 +529,226 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              existing_fields_only=False, bytes_reserved=None):
-
-    # TODO generate an error when DocMDP doesn't allow extra signatures.
-
-    # TODO explicitly disallow multiple certification signatures
-
-    # TODO force md_algorithm to agree with the certification signature
-    #  if present
-
-    # TODO deal with SV dictionaries properly
-
-    # TODO this function is becoming rather bloated, should refactor
-    #  into a class for more fine-grained control
-
-    # TODO if PAdES is requested, set the ESIC extension to the proper value
-
-    root = pdf_out.root
-
-    timestamp = datetime.now(tz=tzlocal.get_localzone())
-
-    validation_context = signature_meta.validation_context
-    if signature_meta.embed_validation_info and validation_context is None:
-        raise ValueError(
-            'A validation context must be provided if validation/revocation '
-            'info is to be embedded into the signature.'
-        )
-    validation_paths = []
-    if validation_context is not None:
-        # validate cert
-        # (this also keeps track of any validation data automagically)
-        validator = CertificateValidator(
-            signer.signing_cert, intermediate_certs=signer.cert_registry,
-            validation_context=validation_context
-        )
-        # TODO allow customisation of key usage parameters
-        validation_paths.append(validator.validate_usage({"non_repudiation"}))
-
-    if signer.timestamper is not None:
-        # this might hit the TS server, but the response is cached
-        # and it collects the certificates we need to verify the TS response
-        signer.timestamper.dummy_response(signature_meta.md_algorithm)
-        if validation_context is not None:
-            for cert in signer.timestamper.entity_certificates:
-                validator = CertificateValidator(
-                    cert, intermediate_certs=signer.timestamper.cert_registry,
-                    validation_context=validation_context
-                )
-                validation_paths.append(
-                    validator.validate_usage(set(), {"time_stamping"})
-                )
-
-    # do we need adobe-style revocation info?
-    if signature_meta.embed_validation_info and not signature_meta.use_pades:
-        revinfo = Signer.format_revinfo(
-            ocsp_responses=validation_context.ocsps,
-            crls=validation_context.crls
-        )
-    else:
-        # PAdES prescribes another mechanism for embedding revocation info
-        revinfo = None
-
-    if bytes_reserved is None:
-        test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
-        test_signature_cms = signer.sign(
-            test_md, signature_meta.md_algorithm,
-            timestamp=timestamp, use_pades=signature_meta.use_pades,
-            dry_run=True, revocation_info=revinfo
-        )
-        test_len = len(test_signature_cms.dump()) * 2
-        # External actors such as timestamping servers can't be relied on to
-        # always return exactly the same response, so we build in a 50% error
-        # margin (+ ensure that bytes_reserved is even)
-        bytes_reserved = test_len + 2 * (test_len // 4)
-
-    name = signature_meta.name
-    if name is None:
-        name = signer.subject_name
-    # we need to add a signature object and a corresponding form field
-    # to the PDF file
-    # Here, we pass in the name as specified in the signature metadata.
-    # When it's None, the reader will/should derive it from the contents
-    # of the certificate.
-    sig_obj = SignatureObject(
-        timestamp, name=signature_meta.name, location=signature_meta.location,
-        reason=signature_meta.reason, bytes_reserved=bytes_reserved,
-        use_pades=signature_meta.use_pades
+    return PdfSigner(signature_meta, signer).sign_pdf(
+        pdf_out, existing_fields_only=existing_fields_only,
+        bytes_reserved=bytes_reserved
     )
-    sig_obj_ref = pdf_out.add_object(sig_obj)
 
-    if signature_meta.field_name is None:
-        if not existing_fields_only:
-            raise ValueError('Not specifying a signature field name is only '
-                             'allowed when existing_fields_only=True')
 
-        # most of the logic in _prepare_sig_field has to do with preparing
-        # for the potential addition of a new field. That is completely
-        # irrelevant in this special case, so we might as well short circuit
-        # things.
-        field_created = False
-        empty_fields = enumerate_sig_fields(pdf_out.prev, filled_status=False)
-        try:
-            field_name, _, sig_field_ref = next(empty_fields)
-        except StopIteration:
-            raise ValueError('There are no empty signature fields.')
+class PdfSigner:
+    def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer):
+        self.signature_meta = signature_meta
+        self.signer = signer
 
-        others = ', '.join(fn for fn, _, _ in empty_fields if fn is not None)
-        if others:
-            raise ValueError(
-                'There are several empty signature fields. Please specify '
-                'a field name. The options are %s, %s.' % (
-                    field_name, others
+    def _get_or_create_sigfield(self, attribute, pdf_out, existing_fields_only):
+        root = pdf_out.root
+        field_name: str = getattr(self.signature_meta, attribute)
+        if field_name is None:
+            if not existing_fields_only:
+                raise ValueError(
+                    'Not specifying %s is only allowed '
+                    'when existing_fields_only=True' % attribute
                 )
+
+            # most of the logic in _prepare_sig_field has to do with preparing
+            # for the potential addition of a new field. That is completely
+            # irrelevant in this special case, so we might as well short circuit
+            # things.
+            field_created = False
+            empty_fields = enumerate_sig_fields(
+                pdf_out.prev, filled_status=False
             )
-    else:
-        # grab or create a sig field
-        field_created, sig_field_ref = _prepare_sig_field(
-            signature_meta.field_name, root, update_writer=pdf_out,
-            existing_fields_only=existing_fields_only, lock_sig_flags=True
-        )
-    sig_field = sig_field_ref.get_object()
-    # fill in a reference to the (empty) signature object
-    sig_field[pdf_name('/V')] = sig_obj_ref
+            try:
+                found_field_name, _, sig_field_ref = next(empty_fields)
+            except StopIteration:
+                raise ValueError('There are no empty signature fields.')
 
-    if not field_created:
-        # still need to mark it for updating
-        pdf_out.mark_update(sig_field_ref)
+            others = ', '.join(
+                fn for fn, _, _ in empty_fields if fn is not None
+            )
+            if others:
+                raise ValueError(
+                    'There are several empty signature fields. Please specify '
+                    '%s. The options are %s, %s.' % (
+                        attribute, found_field_name, others
+                    )
+                )
+        else:
+            # grab or create a sig field
+            field_created, sig_field_ref = _prepare_sig_field(
+                field_name, root, update_writer=pdf_out,
+                existing_fields_only=existing_fields_only,
+                lock_sig_flags=True
+            )
 
-    x1, y1, x2, y2 = sig_field[pdf_name('/Rect')]
-    w = abs(x1 - x2)
-    h = abs(y1 - y2)
-    if w and h:
-        # the field is probably a visible one, so we change its appearance
-        # stream to show some data about the signature
-        # TODO allow customisation
-        tss = TextStampStyle(
-            stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
-        )
-        text_params = {
-            'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
-        }
-        stamp = TextStamp(
-            pdf_out, tss, text_params=text_params,
-            box=BoxConstraints(width=w, height=h)
-        )
-        sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
-        try:
-            # if there was an entry like this, it's meaningless now
-            del sig_field[pdf_name('/AS')]
-        except KeyError:
-            pass
+        return field_created, sig_field_ref
 
-    if signature_meta.certify:
-        _certification_setup(
-            pdf_out, sig_obj_ref, signature_meta.md_algorithm,
-            signature_meta.docmdp_permissions
-        )
+    def _sig_field_appearance(self, sig_field, pdf_out, timestamp):
 
-    wr = sig_obj.write_signature(pdf_out, signature_meta.md_algorithm)
-    true_digest = next(wr)
+        name = self.signature_meta.name
+        if name is None:
+            name = self.signer.subject_name
+        x1, y1, x2, y2 = sig_field[pdf_name('/Rect')]
+        w = abs(x1 - x2)
+        h = abs(y1 - y2)
+        if w and h:
+            # the field is probably a visible one, so we change its appearance
+            # stream to show some data about the signature
+            # TODO allow customisation
+            tss = TextStampStyle(
+                stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
+            )
+            text_params = {
+                'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
+            }
+            stamp = TextStamp(
+                pdf_out, tss, text_params=text_params,
+                box=BoxConstraints(width=w, height=h)
+            )
+            sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
+            try:
+                # if there was an entry like this, it's meaningless now
+                del sig_field[pdf_name('/AS')]
+            except KeyError:
+                pass
 
-    signature_cms = signer.sign(
-        true_digest, signature_meta.md_algorithm,
-        timestamp=timestamp, use_pades=signature_meta.use_pades,
-        revocation_info=revinfo
-    )
-    output, sig_contents = wr.send(signature_cms)
+    def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
+                 existing_fields_only=False, bytes_reserved=None):
 
-    if signature_meta.use_pades and signature_meta.embed_validation_info:
-        from pdfstamp.sign import validation
-        validation.DocumentSecurityStore.add_dss(
-            output_stream=output, sig_contents=sig_contents,
-            paths=validation_paths, validation_context=validation_context
-        )
+        # TODO generate an error when DocMDP doesn't allow extra signatures.
+
+        # TODO explicitly disallow multiple certification signatures
+
+        # TODO force md_algorithm to agree with the certification signature
+        #  if present
+
+        # TODO deal with SV dictionaries properly
+
+        # TODO if PAdES is requested, set the ESIC extension to the proper value
+
+        timestamp = datetime.now(tz=tzlocal.get_localzone())
+        signature_meta: PdfSignatureMetadata = self.signature_meta
+        signer: Signer = self.signer
+        validation_context = signature_meta.validation_context
+        if signature_meta.embed_validation_info and validation_context is None:
+            raise ValueError(
+                'A validation context must be provided if '
+                'validation/revocation info is to be embedded into the '
+                'signature.'
+            )
+        validation_paths = []
+        if validation_context is not None:
+            # validate cert
+            # (this also keeps track of any validation data automagically)
+            validator = CertificateValidator(
+                signer.signing_cert, intermediate_certs=signer.cert_registry,
+                validation_context=validation_context
+            )
+            # TODO allow customisation of key usage parameters
+            validation_paths.append(
+                validator.validate_usage({"non_repudiation"})
+            )
 
         if signer.timestamper is not None:
-            # append an LTV document timestamp
-            output.seek(0)
-            w = IncrementalPdfFileWriter(output)
-            output = timestamp_pdf(
-                w, md_algorithm=signature_meta.md_algorithm,
-                timestamper=signer.timestamper
+            # this might hit the TS server, but the response is cached
+            # and it collects the certificates we need to verify the TS response
+            signer.timestamper.dummy_response(signature_meta.md_algorithm)
+            if validation_context is not None:
+                for cert in signer.timestamper.entity_certificates:
+                    validator = CertificateValidator(
+                        cert,
+                        intermediate_certs=signer.timestamper.cert_registry,
+                        validation_context=validation_context
+                    )
+                    validation_paths.append(
+                        validator.validate_usage(set(), {"time_stamping"})
+                    )
+
+        # do we need adobe-style revocation info?
+        if signature_meta.embed_validation_info \
+                and not signature_meta.use_pades:
+            revinfo = Signer.format_revinfo(
+                ocsp_responses=validation_context.ocsps,
+                crls=validation_context.crls
+            )
+        else:
+            # PAdES prescribes another mechanism for embedding revocation info
+            revinfo = None
+
+        if bytes_reserved is None:
+            test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
+            test_signature_cms = signer.sign(
+                test_md, signature_meta.md_algorithm,
+                timestamp=timestamp, use_pades=signature_meta.use_pades,
+                dry_run=True, revocation_info=revinfo
+            )
+            test_len = len(test_signature_cms.dump()) * 2
+            # External actors such as timestamping servers can't be relied on to
+            # always return exactly the same response, so we build in a 50%
+            # error margin (+ ensure that bytes_reserved is even)
+            bytes_reserved = test_len + 2 * (test_len // 4)
+
+        # we need to add a signature object and a corresponding form field
+        # to the PDF file
+        # Here, we pass in the name as specified in the signature metadata.
+        # When it's None, the reader will/should derive it from the contents
+        # of the certificate.
+        sig_obj = SignatureObject(
+            timestamp, name=signature_meta.name,
+            location=signature_meta.location,
+            reason=signature_meta.reason, bytes_reserved=bytes_reserved,
+            use_pades=signature_meta.use_pades
+        )
+        sig_obj_ref = pdf_out.add_object(sig_obj)
+
+        field_created, sig_field_ref = self._get_or_create_sigfield(
+            'field_name', pdf_out, existing_fields_only
+        )
+
+        sig_field = sig_field_ref.get_object()
+        # fill in a reference to the (empty) signature object
+        sig_field[pdf_name('/V')] = sig_obj_ref
+
+        if not field_created:
+            # still need to mark it for updating
+            pdf_out.mark_update(sig_field_ref)
+
+        # take care of the field's visual appearance (if applicable)
+        self._sig_field_appearance(sig_field, pdf_out, timestamp)
+
+        if signature_meta.certify:
+            _certification_setup(
+                pdf_out, sig_obj_ref, signature_meta.md_algorithm,
+                signature_meta.docmdp_permissions
             )
 
-    return output
+        wr = sig_obj.write_signature(pdf_out, signature_meta.md_algorithm)
+        true_digest = next(wr)
+
+        signature_cms = signer.sign(
+            true_digest, signature_meta.md_algorithm,
+            timestamp=timestamp, use_pades=signature_meta.use_pades,
+            revocation_info=revinfo
+        )
+        output, sig_contents = wr.send(signature_cms)
+
+        if signature_meta.use_pades and signature_meta.embed_validation_info:
+            from pdfstamp.sign import validation
+            validation.DocumentSecurityStore.add_dss(
+                output_stream=output, sig_contents=sig_contents,
+                paths=validation_paths, validation_context=validation_context
+            )
+
+            if signer.timestamper is not None:
+                # append an LTV document timestamp
+                output.seek(0)
+                w = IncrementalPdfFileWriter(output)
+                output = timestamp_pdf(
+                    w, md_algorithm=signature_meta.md_algorithm,
+                    timestamper=signer.timestamper
+                )
+
+        return output
 
 
 # TODO does this timestamp also need to be attached to an AcroForm field?
