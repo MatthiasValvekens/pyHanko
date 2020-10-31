@@ -564,11 +564,10 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         # TODO allow customisation of key usage parameters
         validation_paths.append(validator.validate_usage({"non_repudiation"}))
 
-    ts_dummy = None
     if signer.timestamper is not None:
         # this might hit the TS server, but the response is cached
         # and it collects the certificates we need to verify the TS response
-        ts_dummy = signer.timestamper.dummy_response(signature_meta.md_algorithm)
+        signer.timestamper.dummy_response(signature_meta.md_algorithm)
         if validation_context is not None:
             for cert in signer.timestamper.entity_certificates:
                 validator = CertificateValidator(
@@ -714,6 +713,9 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     return output
 
 
+# TODO does this timestamp also need to be attached to an AcroForm field?
+#  I can't find a clear statement in the PAdES specifications, but section
+#  12.8.5.2 in ISO 32000-2 seems to at least suggest it.
 def timestamp_pdf(pdf_out: IncrementalPdfFileWriter, md_algorithm,
                   timestamper: TimeStamper, bytes_reserved=None):
     # TODO support adding validation information for the timestamp as well
