@@ -107,9 +107,9 @@ class SigCertConstraints:
     @classmethod
     def from_pdf_object(cls, pdf_dict):
         try:
-            if pdf_dict['/Type'] != '/SVCert':
+            if pdf_dict['/Type'] != '/SVCert':  # pragma: nocover
                 raise ValueError('Object /Type entry is not /SVCert')
-        except KeyError:
+        except KeyError: # pragma: nocover
             pass
         flags = pdf_dict.get('/Ff', 0)
         subjects = [
@@ -206,9 +206,9 @@ class SigSeedValueSpec:
     @classmethod
     def from_pdf_object(cls, pdf_dict):
         try:
-            if pdf_dict['/Type'] != '/SV':
+            if pdf_dict['/Type'] != '/SV':  # pragma: nocover
                 raise ValueError('Object /Type entry is not /SV')
-        except KeyError:
+        except KeyError:  # pragma: nocover
             pass
 
         flags = SigSeedValFlags(pdf_dict.get('/Ff', 0))

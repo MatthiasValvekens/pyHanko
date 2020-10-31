@@ -438,11 +438,11 @@ def test_append_sig_field_with_simple_sv():
     sv = fields.SigSeedValueSpec(
         reasons=['a', 'b', 'c'],
         cert=fields.SigCertConstraints(
-            subject_dns=[x509.Name.build({
-                'country_name': 'BE', 'organization_name': 'Test',
-                'common_name': 'Test Test'
-            })]
-        )
+            subject_dns=[FROM_CA.signing_cert.subject],
+            issuers=[INTERM_CERT],
+            subjects=[FROM_CA.signing_cert]
+        ),
+        timestamp_server_url='https://tsa.example.com',
     )
     sp = fields.SigFieldSpec('InvisibleSig', seed_value_dict=sv)
     fields.append_signature_fields(w, [sp])
@@ -453,8 +453,18 @@ def test_append_sig_field_with_simple_sv():
     _, _, sig_field_ref = next(fields.enumerate_sig_fields(r))
     sv_dict = sig_field_ref.get_object()['/SV']
     recovered_sv = fields.SigSeedValueSpec.from_pdf_object(sv_dict)
-    assert recovered_sv == sv
+    # x509.Certificate doesn't have an __eq__ implementation apparently,
+    # so for the purposes of the test, we replace them by byte dumps
+    issuers1 = recovered_sv.cert.issuers
+    issuers2 = sv.cert.issuers
+    issuers1[0] = issuers1[0].dump()
+    issuers2[0] = issuers2[0].dump()
 
+    subjects1 = recovered_sv.cert.subjects
+    subjects2 = sv.cert.subjects
+    subjects1[0] = subjects1[0].dump()
+    subjects2[0] = subjects2[0].dump()
+    assert recovered_sv == sv
 
 
 def test_append_sig_field_acro_update():
