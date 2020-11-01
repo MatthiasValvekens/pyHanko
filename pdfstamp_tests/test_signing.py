@@ -6,7 +6,7 @@ from io import BytesIO
 
 import pytz
 from asn1crypto import ocsp, tsp
-from certvalidator import ValidationContext
+from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
 from oscrypto import keys as oskeys
 
@@ -14,6 +14,7 @@ from pdf_utils import generic
 from pdf_utils.font import pdf_name
 from pdf_utils.writer import PdfFileWriter
 from pdfstamp.sign import timestamps, fields, signers
+from pdfstamp.sign.fields import UnacceptableSignerError
 from pdfstamp.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, read_adobe_revocation_info,
@@ -434,11 +435,10 @@ def test_append_simple_sig_field():
 def test_append_sig_field_with_simple_sv():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
-    from asn1crypto import x509
     sv = fields.SigSeedValueSpec(
         reasons=['a', 'b', 'c'],
         cert=fields.SigCertConstraints(
-            subject_dns=[FROM_CA.signing_cert.subject],
+            subject_dn=FROM_CA.signing_cert.subject,
             issuers=[INTERM_CERT],
             subjects=[FROM_CA.signing_cert]
         ),
@@ -465,6 +465,140 @@ def test_append_sig_field_with_simple_sv():
     subjects1[0] = subjects1[0].dump()
     subjects2[0] = subjects2[0].dump()
     assert recovered_sv == sv
+
+
+def test_cert_constraint_subject_dn():
+
+    from asn1crypto import x509
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.SUBJECT_DN,
+        subject_dn=x509.Name.build({'common_name': 'Lord Testerino'}),
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, None)
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.SUBJECT_DN,
+        subject_dn=x509.Name.build(
+            {'common_name': 'Lord Testerino', 'country_name': 'BE'}
+        )
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, None)
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.SUBJECT_DN,
+        subject_dn=x509.Name.build(
+            {'common_name': 'Alice & Bob', 'country_name': 'BE'}
+        )
+    )
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(FROM_CA.signing_cert, None)
+
+    # without the SUBJECT_DN flag, this should pass
+    scc = fields.SigCertConstraints(
+        subject_dn=x509.Name.build(
+            {'common_name': 'Alice & Bob', 'country_name': 'BE'}
+        )
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+
+
+def test_cert_constraint_subject():
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.SUBJECT,
+        subjects=[FROM_CA.signing_cert]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, None)
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.SUBJECT,
+        subjects=[FROM_CA.signing_cert, SELF_SIGN.signing_cert]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, None)
+
+    scc = fields.SigCertConstraints(
+        subjects=[FROM_CA.signing_cert, SELF_SIGN.signing_cert]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+    scc.satisfied_by(DUMMY_TS.tsa_cert, None)
+
+
+def test_cert_constraint_issuer(requests_mock):
+    vc = live_testing_vc(requests_mock)
+    signer_validation_path = CertificateValidator(
+        FROM_CA.signing_cert, FROM_CA.cert_registry, validation_context=vc
+    ).validate_usage(set())
+    tsa_validation_path = CertificateValidator(
+        DUMMY_TS.tsa_cert, FROM_CA.cert_registry, validation_context=vc
+    ).validate_usage(set())
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.ISSUER,
+        issuers=[ROOT_CERT]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
+    scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.ISSUER,
+        issuers=[INTERM_CERT]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
+
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.ISSUER,
+        issuers=[INTERM_CERT, SELF_SIGN.signing_cert]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
+
+    scc = fields.SigCertConstraints(issuers=[INTERM_CERT])
+    scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
+    scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
+
+
+def test_cert_constraint_composite(requests_mock):
+    vc = live_testing_vc(requests_mock)
+    signer_validation_path = CertificateValidator(
+        FROM_CA.signing_cert, FROM_CA.cert_registry, validation_context=vc
+    ).validate_usage(set())
+    tsa_validation_path = CertificateValidator(
+        DUMMY_TS.tsa_cert, FROM_CA.cert_registry, validation_context=vc
+    ).validate_usage(set())
+
+    from asn1crypto import x509
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.ISSUER | fields.SigCertConstraintFlags.SUBJECT_DN,
+        issuers=[INTERM_CERT],
+        subject_dn=x509.Name.build(
+            {'common_name': 'Lord Testerino', 'country_name': 'BE'}
+        )
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
+
+    from asn1crypto import x509
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.ISSUER | fields.SigCertConstraintFlags.SUBJECT_DN,
+        issuers=[INTERM_CERT],
+        subject_dn=x509.Name.build(
+            {'common_name': 'Alice & Bob', 'country_name': 'BE'}
+        )
+    )
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
 
 
 def test_append_sig_field_acro_update():
@@ -521,12 +655,11 @@ def test_cert_constraint_deserialisation():
     assert issuer2_parsed.dump() == issuer2.dump()
     assert not constr_parsed.subjects
 
-    constr = fields.SigCertConstraints(subject_dns=[signer1.subject])
+    constr = fields.SigCertConstraints(subject_dn=signer1.subject)
     constr_ser = constr.as_pdf_object()
     assert '/C' in constr_ser['/SubjectDN'][0]
     constr_parsed = fields.SigCertConstraints.from_pdf_object(constr_ser)
-    assert constr_parsed.subject_dns[0].dump() == signer1.subject.dump()
-    assert len(constr_parsed.subject_dns) == 1
+    assert constr_parsed.subject_dn == signer1.subject
 
 
 def test_certify_blank():

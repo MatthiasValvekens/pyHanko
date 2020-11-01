@@ -3,6 +3,7 @@ from enum import IntFlag
 from typing import List, Optional
 
 from asn1crypto import x509
+from certvalidator.path import ValidationPath
 from oscrypto import keys as oskeys
 
 from pdf_utils import generic
@@ -15,11 +16,15 @@ __all__ = [
     'SigSeedValFlags', 'SigCertConstraints', 'SignatureFormField',
     'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigFieldSpec',
     'enumerate_sig_fields_in', 'enumerate_sig_fields',
-    '_prepare_sig_field'
+    '_prepare_sig_field', 'UnacceptableSignerError'
 ]
 
 # TODO support other seed value dict entries
 # TODO add more customisability appearance-wise
+
+
+class UnacceptableSignerError(ValueError):
+    pass
 
 
 class SigSeedValFlags(IntFlag):
@@ -40,7 +45,7 @@ class SigSeedValFlags(IntFlag):
     DIGEST_METHOD = 64
 
 
-class SigCertConstraintFlags:
+class SigCertConstraintFlags(IntFlag):
     """
     Flags for the /Ff entry in the certificate seed value dictionary for
     a dictionary field. These mark which of the constraints are to be
@@ -71,7 +76,7 @@ name_type_abbrevs_rev = {
 }
 
 
-def x509_name_keyval_pairs(name: x509.Name):
+def x509_name_keyval_pairs(name: x509.Name, abbreviate_oids=False):
     rdns: x509.RDNSequence = name.chosen
     for rdn in rdns:
         for type_and_value in rdn:
@@ -81,10 +86,8 @@ def x509_name_keyval_pairs(name: x509.Name):
             # so we just have asn1crypto convert everything to strings
             value = type_and_value['value']
             key = oid.dotted
-            try:
-                key = name_type_abbrevs[key]
-            except KeyError:
-                pass
+            if abbreviate_oids:
+                key = name_type_abbrevs.get(key, key)
 
             yield key, value.native
             # these should be strings
@@ -97,7 +100,7 @@ class SigCertConstraints:
     """
     flags: SigCertConstraintFlags = 0
     subjects: List[x509.Certificate] = None
-    subject_dns: List[x509.Name] = None
+    subject_dn: x509.Name = None
     issuers: List[x509.Certificate] = None
     info_url: str = None
     url_type: generic.NameObject = pdf_name('/Browser')
@@ -109,7 +112,7 @@ class SigCertConstraints:
         try:
             if pdf_dict['/Type'] != '/SVCert':  # pragma: nocover
                 raise ValueError('Object /Type entry is not /SVCert')
-        except KeyError: # pragma: nocover
+        except KeyError:  # pragma: nocover
             pass
         flags = pdf_dict.get('/Ff', 0)
         subjects = [
@@ -128,17 +131,17 @@ class SigCertConstraints:
             # takes OIDs
             return name_type_abbrevs_rev.get(attr.upper(), attr)
 
-        subject_dns = [
-            x509.Name.build(
-                {format_attr(attr): value for attr, value in dn_dir.items()}
-            ) for dn_dir in pdf_dict.get('/SubjectDN', ())
-        ]
+        subject_dns = x509.Name.build({
+            format_attr(attr): value
+            for dn_dir in pdf_dict.get('/SubjectDN', ())
+            for attr, value in dn_dir.items()
+        })
 
         url = pdf_dict.get('/URL')
         url_type = pdf_dict.get('/URLType')
         kwargs = {
             'flags': flags, 'subjects': subjects or None,
-            'subject_dns': subject_dns or None,
+            'subject_dn': subject_dns or None,
             'issuers': issuers or None, 'info_url': url
         }
         if url is not None and url_type is not None:
@@ -150,21 +153,23 @@ class SigCertConstraints:
             pdf_name('/Type'): pdf_name('/SVCert'),
             pdf_name('/Ff'): generic.NumberObject(self.flags),
         })
-        if self.subjects:
+        if self.subjects is not None:
             result[pdf_name('/Subject')] = generic.ArrayObject(
                 generic.ByteStringObject(cert.dump())
                 for cert in self.subjects
             )
-        if self.subject_dns:
+        if self.subject_dn:
             # FIXME Adobe Reader seems to ignore this for some reason.
             #  Should try to figure out what I'm doing wrong
-            result[pdf_name('/SubjectDN')] = generic.ArrayObject(
+            result[pdf_name('/SubjectDN')] = generic.ArrayObject([
                 generic.DictionaryObject({
                     pdf_name('/' + key): pdf_string(value)
-                    for key, value in x509_name_keyval_pairs(subj_dn)
-                }) for subj_dn in self.subject_dns
-            )
-        if self.issuers:
+                    for key, value in x509_name_keyval_pairs(
+                        self.subject_dn, abbreviate_oids=True
+                    )
+                })
+            ])
+        if self.issuers is not None:
             result[pdf_name('/Issuer')] = generic.ArrayObject(
                 generic.ByteStringObject(cert.dump())
                 for cert in self.issuers
@@ -174,6 +179,58 @@ class SigCertConstraints:
             result[pdf_name('/URLType')] = self.url_type
 
         return result
+
+    def satisfied_by(self, signer: x509.Certificate,
+                     validation_path: Optional[ValidationPath]):
+        # this function assumes that key usage & trust checks have
+        #  passed already.
+        flags = self.flags
+        if (flags & SigCertConstraintFlags.SUBJECT) \
+                and self.subjects is not None:
+            # Explicit whitelist of approved signer certificates
+            # compare using issuer_serial
+            acceptable = (s.issuer_serial for s in self.subjects)
+            if signer.issuer_serial not in acceptable:
+                raise UnacceptableSignerError(
+                    "Signer certificate not on SVCert whitelist."
+                )
+        if (flags & SigCertConstraintFlags.ISSUER) \
+                and self.issuers is not None:
+            if validation_path is None:
+                raise UnacceptableSignerError("Validation path not provided.")
+            # Here, we need to match any issuer in the chain of trust to
+            #  any of the issuers on the approved list.
+
+            # To do so, we collect all issuer_serial identifiers in the chain
+            # for all certificates except the last one (i.e. the current signer)
+            path_iss_serials = {
+                entry.issuer_serial for entry in validation_path.copy().pop()
+            }
+            for issuer in self.issuers:
+                if issuer.issuer_serial in path_iss_serials:
+                    break
+            else:
+                # raise error if the loop runs to completion
+                raise UnacceptableSignerError(
+                    "Signer certificate cannot be traced back to approved "
+                    "issuer."
+                )
+        if (flags & SigCertConstraintFlags.SUBJECT_DN) and self.subject_dn:
+            # I'm not entirely sure whether my reading of the standard is
+            #  is correct, but I believe that this is the intention:
+            # A DistinguishedName object is a sequence of
+            #  relative distinguished names (RDNs). The contents of the
+            #  /SubjectDN specify a list of constraints that might apply to each
+            #  of these RDNs. I believe the requirement is that each of the
+            #  SubjectDN entries must match one of these RDNs.
+
+            requirement_list = list(x509_name_keyval_pairs(self.subject_dn))
+            subject_name = list(x509_name_keyval_pairs(signer.subject))
+            if not all(attr in subject_name for attr in requirement_list):
+                raise UnacceptableSignerError(
+                    "Subject does not have some of the following required "
+                    "attributes: " + self.subject_dn.human_friendly
+                )
 
 
 @dataclass(frozen=True)
