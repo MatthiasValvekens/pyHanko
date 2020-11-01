@@ -546,6 +546,8 @@ def test_cert_constraint_issuer(requests_mock):
     )
     scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
     scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(FROM_CA.signing_cert, None)
 
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.ISSUER,
