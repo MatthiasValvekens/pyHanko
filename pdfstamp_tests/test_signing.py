@@ -801,7 +801,7 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
     )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
-    rivt_pades = RevocationInfoValidationType.pades_lt
+    rivt_pades = RevocationInfoValidationType.PADES_LT
     with pytest.raises(ValueError):
         validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
 
@@ -823,7 +823,7 @@ def test_pades_revinfo_live(requests_mock):
     assert len(dss.ocsps) == len(vc.ocsps) == 1
     assert len(dss.crls) == len(vc.crls) == 1
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
-    rivt_pades = RevocationInfoValidationType.pades_lt
+    rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
@@ -838,9 +838,10 @@ def test_pades_revinfo_live_nofullchain():
     )
     r = PdfFileReader(out)
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
-    rivt_pades = RevocationInfoValidationType.pades_lt
+    rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
     assert status.valid and not status.trusted
+
 
 def test_pades_revinfo_live_lta(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -861,7 +862,7 @@ def test_pades_revinfo_live_lta(requests_mock):
     assert len(dss.crls) == len(vc.crls) == 1
     field_iter = fields.enumerate_sig_fields(r)
     field_name, sig_obj, _ = next(field_iter)
-    rivt_pades = RevocationInfoValidationType.pades_lt
+    rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 

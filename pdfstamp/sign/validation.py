@@ -3,7 +3,7 @@ import os
 import logging
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
-from enum import IntEnum
+from enum import Enum, auto
 from io import BytesIO
 from typing import TypeVar, Type, Optional
 
@@ -284,12 +284,12 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
     )
 
 
-class RevocationInfoValidationType(IntEnum):
-    adobe_style = 1
-    pades_lt = 2
+class RevocationInfoValidationType(Enum):
+    ADOBE_STYLE = auto()
+    PADES_LT = auto()
     # TODO add support for PAdES-LTA verification
     #  (i.e. timestamp chain verification)
-    # pades_lta = 3
+    # PADES_LTA = auto()
 
 
 # TODO verify formal PAdES requirements for timestamps
@@ -315,7 +315,7 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
     timestamp = tst_info['gen_time'].native
     validation_context_kwargs['moment'] = timestamp
 
-    if validation_type == RevocationInfoValidationType.adobe_style:
+    if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
         vc = read_adobe_revocation_info(embedded_sig.signer_info)
     else:
         dss, vc = DocumentSecurityStore.read_dss(
