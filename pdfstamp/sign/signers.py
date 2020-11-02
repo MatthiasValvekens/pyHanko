@@ -4,7 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from enum import IntFlag
+from enum import Flag
 from io import BytesIO
 
 import tzlocal
@@ -343,7 +343,7 @@ class Signer:
         })
 
 
-class DocMDPPerm(IntFlag):
+class DocMDPPerm(Flag):
     """
     Cf. Table 254  in ISO 32000
     """
@@ -479,14 +479,15 @@ class SimpleSigner(Signer):
 
 
 def _certification_setup(writer: IncrementalPdfFileWriter,
-                         sig_obj_ref, md_algorithm, permission_level):
+                         sig_obj_ref, md_algorithm,
+                         permission_level: DocMDPPerm):
     """
     Cf. Tables 252, 253 and 254 in ISO 32000
     """
     transform_params = generic.DictionaryObject({
         pdf_name('/Type'): pdf_name('/TransformParams'),
         pdf_name('/V'): pdf_name('/1.2'),
-        pdf_name('/P'): generic.NumberObject(permission_level)
+        pdf_name('/P'): generic.NumberObject(permission_level.value)
     })
     tp_ref = writer.add_object(transform_params)
 
@@ -592,7 +593,6 @@ class PdfSigner:
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer):
         self.signature_meta = signature_meta
         self.signer = signer
-
 
     def _sig_field_appearance(self, sig_field, pdf_out, timestamp):
 

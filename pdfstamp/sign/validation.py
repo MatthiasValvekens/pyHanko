@@ -387,7 +387,7 @@ def read_certification_data(reader: PdfFileReader):
         raise ValueError('Could not find signature reference dictionary.')
 
     try:
-        permission_bits = sig_ref['/TransformParams']['/P']
+        permission_bits = DocMDPPerm(sig_ref['/TransformParams']['/P'])
     except KeyError:
         permission_bits = DocMDPPerm.FILL_FORMS
 

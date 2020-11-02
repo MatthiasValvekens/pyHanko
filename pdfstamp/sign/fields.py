@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import IntFlag
+from enum import Flag
 from typing import List, Optional
 
 from asn1crypto import x509
@@ -27,7 +27,7 @@ class UnacceptableSignerError(ValueError):
     pass
 
 
-class SigSeedValFlags(IntFlag):
+class SigSeedValFlags(Flag):
     """
     Flags for the /Ff entry in the seed value dictionary for a dictionary field.
     These mark which of the constraints are to be strictly enforced, as opposed
@@ -45,7 +45,7 @@ class SigSeedValFlags(IntFlag):
     DIGEST_METHOD = 64
 
 
-class SigCertConstraintFlags(IntFlag):
+class SigCertConstraintFlags(Flag):
     """
     Flags for the /Ff entry in the certificate seed value dictionary for
     a dictionary field. These mark which of the constraints are to be
@@ -98,7 +98,7 @@ class SigCertConstraints:
     """
     See Table 235 in ISO 32000-1
     """
-    flags: SigCertConstraintFlags = 0
+    flags: SigCertConstraintFlags = SigCertConstraintFlags(0)
     subjects: List[x509.Certificate] = None
     subject_dn: x509.Name = None
     issuers: List[x509.Certificate] = None
@@ -114,7 +114,7 @@ class SigCertConstraints:
                 raise ValueError('Object /Type entry is not /SVCert')
         except KeyError:  # pragma: nocover
             pass
-        flags = pdf_dict.get('/Ff', 0)
+        flags = SigCertConstraintFlags(pdf_dict.get('/Ff', 0))
         subjects = [
             oskeys.parse_certificate(cert.original_bytes) for cert in
             pdf_dict.get('/Subject', ())
@@ -151,7 +151,7 @@ class SigCertConstraints:
     def as_pdf_object(self):
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SVCert'),
-            pdf_name('/Ff'): generic.NumberObject(self.flags),
+            pdf_name('/Ff'): generic.NumberObject(self.flags.value),
         })
         if self.subjects is not None:
             result[pdf_name('/Subject')] = generic.ArrayObject(
@@ -235,7 +235,7 @@ class SigCertConstraints:
 
 @dataclass(frozen=True)
 class SigSeedValueSpec:
-    flags: SigSeedValFlags = 0
+    flags: SigSeedValFlags = SigSeedValFlags(0)
     reasons: List[str] = None
     timestamp_server_url: str = None
     cert: SigCertConstraints = None
@@ -243,7 +243,7 @@ class SigSeedValueSpec:
     def as_pdf_object(self):
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SV'),
-            pdf_name('/Ff'): generic.NumberObject(self.flags),
+            pdf_name('/Ff'): generic.NumberObject(self.flags.value),
         })
         if self.reasons is not None:
             result[pdf_name('/Reasons')] = generic.ArrayObject(
