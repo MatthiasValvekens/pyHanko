@@ -10,21 +10,18 @@ from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.reader import PdfFileReader
+from pdfstamp.sign.general import UnacceptableSignerError, SigningError
 from pdfstamp.stamp import AnnotAppearances
 
 __all__ = [
     'SigSeedValFlags', 'SigCertConstraints', 'SignatureFormField',
     'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigFieldSpec',
     'enumerate_sig_fields_in', 'enumerate_sig_fields',
-    '_prepare_sig_field', 'UnacceptableSignerError'
+    '_prepare_sig_field'
 ]
 
 # TODO support other seed value dict entries
 # TODO add more customisability appearance-wise
-
-
-class UnacceptableSignerError(ValueError):
-    pass
 
 
 class SigSeedValFlags(Flag):
@@ -315,13 +312,13 @@ def _prepare_sig_field(sig_field_name, root,
         try:
             field_name, value, sig_field_ref = next(candidates)
             if value is not None:
-                raise ValueError(
+                raise SigningError(
                     'Signature field with name %s appears to be filled already.'
                     % sig_field_name
                 )
         except StopIteration:
             if existing_fields_only:
-                raise ValueError(
+                raise SigningError(
                     'No empty signature field with name %s found.'
                     % sig_field_name
                 )
@@ -329,7 +326,7 @@ def _prepare_sig_field(sig_field_name, root,
     except KeyError:
         # we have to create the form
         if existing_fields_only:
-            raise ValueError('This file does not contain a form.')
+            raise SigningError('This file does not contain a form.')
         # no AcroForm present, so create one
         form = generic.DictionaryObject()
         root[pdf_name('/AcroForm')] = update_writer.add_object(form)
@@ -345,7 +342,7 @@ def _prepare_sig_field(sig_field_name, root,
 
     # no signature field exists, so create one
     if existing_fields_only:
-        raise ValueError('Could not find signature field')
+        raise SigningError('Could not find signature field')
     sig_form_kwargs = {
         'include_on_page': root['/Pages']['/Kids'][0],
     }
@@ -402,7 +399,7 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None):
         field_type = field.get('/FT')
         if field_type != ft_sig:
             if with_name is not None and field_name == with_name:
-                raise ValueError(
+                raise SigningError(
                     'Field with name %s exists but is not a signature field'
                     % field_name
                 )

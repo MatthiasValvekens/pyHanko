@@ -16,12 +16,13 @@ from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.misc import BoxConstraints
+from pdf_utils.reader import PdfFileReader
 from pdfstamp.sign import general
 from pdfstamp.sign.fields import enumerate_sig_fields, _prepare_sig_field
 from pdfstamp.sign.timestamps import TimeStamper
 from pdfstamp.sign.general import (
     simple_cms_attribute, CertificateStore,
-    SimpleCertificateStore,
+    SimpleCertificateStore, SigningError,
 )
 from pdfstamp.stamp import TextStampStyle, TextStamp
 
@@ -353,10 +354,13 @@ class DocMDPPerm(Flag):
     ANNOTATE = 3
 
 
+DEFAULT_MD = 'sha512'
+
+
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
     field_name: str = None
-    md_algorithm: str = 'sha512'
+    md_algorithm: str = None
     location: str = None
     reason: str = None
     name: str = None
@@ -550,7 +554,7 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
         attribute = 'field_name'
     if field_name is None:
         if not existing_fields_only:
-            raise ValueError(
+            raise SigningError(
                 'Not specifying %s is only allowed '
                 'when existing_fields_only=True' % attribute
             )
@@ -566,13 +570,13 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
         try:
             found_field_name, _, sig_field_ref = next(empty_fields)
         except StopIteration:
-            raise ValueError('There are no empty signature fields.')
+            raise SigningError('There are no empty signature fields.')
 
         others = ', '.join(
             fn for fn, _, _ in empty_fields if fn is not None
         )
         if others:
-            raise ValueError(
+            raise SigningError(
                 'There are several empty signature fields. Please specify '
                 '%s. The options are %s, %s.' % (
                     attribute, found_field_name, others
@@ -623,6 +627,26 @@ class PdfSigner:
             except KeyError:
                 pass
 
+    def _enforce_certification_constraints(self, reader: PdfFileReader):
+        from .validation import read_certification_data, DocMDPPerm
+        cd = read_certification_data(reader)
+        # if there is no author signature, we don't have to do anything
+        if cd is None:
+            return
+        if self.signature_meta.certify:
+            raise SigningError(
+                "Document already contains a certification signature"
+            )
+        if cd.permission_bits == DocMDPPerm.NO_CHANGES:
+            raise SigningError("Author signature forbids all changes")
+        requested_md = self.signature_meta.md_algorithm
+        if requested_md is not None and requested_md != cd.md_algorithm:
+            raise SigningError(
+                "Requested message digest algorithm '%s', but author signature "
+                "mandates '%s'." % (requested_md, cd.md_algorithm)
+            )
+        return cd.md_algorithm
+
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None):
 
@@ -630,19 +654,19 @@ class PdfSigner:
 
         # TODO explicitly disallow multiple certification signatures
 
-        # TODO force md_algorithm to agree with the certification signature
-        #  if present
-
         # TODO deal with SV dictionaries properly
 
         # TODO if PAdES is requested, set the ESIC extension to the proper value
 
         timestamp = datetime.now(tz=tzlocal.get_localzone())
+        md_algorithm = self._enforce_certification_constraints(pdf_out.prev)
+        if md_algorithm is None:
+            md_algorithm = self.signature_meta.md_algorithm or DEFAULT_MD
         signature_meta: PdfSignatureMetadata = self.signature_meta
         signer: Signer = self.signer
         validation_context = signature_meta.validation_context
         if signature_meta.embed_validation_info and validation_context is None:
-            raise ValueError(
+            raise SigningError(
                 'A validation context must be provided if '
                 'validation/revocation info is to be embedded into the '
                 'signature.'
@@ -664,7 +688,7 @@ class PdfSigner:
         if signer.timestamper is not None:
             # this might hit the TS server, but the response is cached
             # and it collects the certificates we need to verify the TS response
-            signer.timestamper.dummy_response(signature_meta.md_algorithm)
+            signer.timestamper.dummy_response(md_algorithm)
             if validation_context is not None:
                 ts_validation_paths = list(
                     signer.timestamper.validation_paths(validation_context)
@@ -683,9 +707,9 @@ class PdfSigner:
             revinfo = None
 
         if bytes_reserved is None:
-            test_md = getattr(hashlib, signature_meta.md_algorithm)().digest()
+            test_md = getattr(hashlib, md_algorithm)().digest()
             test_signature_cms = signer.sign(
-                test_md, signature_meta.md_algorithm,
+                test_md, md_algorithm,
                 timestamp=timestamp, use_pades=signature_meta.use_pades,
                 dry_run=True, revocation_info=revinfo
             )
@@ -726,15 +750,15 @@ class PdfSigner:
 
         if signature_meta.certify:
             _certification_setup(
-                pdf_out, sig_obj_ref, signature_meta.md_algorithm,
+                pdf_out, sig_obj_ref, md_algorithm,
                 signature_meta.docmdp_permissions
             )
 
-        wr = sig_obj.write_signature(pdf_out, signature_meta.md_algorithm)
+        wr = sig_obj.write_signature(pdf_out, md_algorithm)
         true_digest = next(wr)
 
         signature_cms = signer.sign(
-            true_digest, signature_meta.md_algorithm,
+            true_digest, md_algorithm,
             timestamp=timestamp, use_pades=signature_meta.use_pades,
             revocation_info=revinfo
         )
@@ -752,16 +776,16 @@ class PdfSigner:
                 output.seek(0)
                 w = IncrementalPdfFileWriter(output)
                 output = self.timestamp_pdf(
-                    w, validation_context, validation_paths=ts_validation_paths
+                    w, md_algorithm, validation_context,
+                    validation_paths=ts_validation_paths
                 )
 
         return output
 
     def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                      validation_context, bytes_reserved=None,
+                      md_algorithm, validation_context, bytes_reserved=None,
                       validation_paths=None):
         timestamper = self.signer.timestamper
-        md_algorithm = self.signature_meta.md_algorithm
         field_name = self.signature_meta.timestamp_field_name or (
             'Timestamp-' + str(uuid.uuid4())
         )

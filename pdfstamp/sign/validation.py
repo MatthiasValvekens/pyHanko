@@ -165,7 +165,7 @@ class EmbeddedPdfSignature:
         assert isinstance(sig_object, generic.DictionaryObject)
         try:
             pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
-            byte_range = sig_object['/ByteRange']
+            self.byte_range = sig_object['/ByteRange']
         except KeyError:
             raise ValueError('Signature PDF object is not correctly formatted')
 
@@ -178,21 +178,32 @@ class EmbeddedPdfSignature:
             pkcs7_content = reader.get_object(
                 pkcs7_content, transparent_decrypt=False
             )
-            pkcs7_content.get_container_ref()
+        self.pkcs7_content = pkcs7_content
 
         message = cms.ContentInfo.load(pkcs7_content)
         signed_data = message['content']
         self.signed_data: cms.SignedData = signed_data
         sd_digest = signed_data['digest_algorithms'][0]
-        md_algorithm = sd_digest['algorithm'].native.lower()
-        md = getattr(hashlib, md_algorithm)()
-        stream = reader.stream
+        self.md_algorithm = sd_digest['algorithm'].native.lower()
+
+        try:
+            self.signer_info, = self.signed_data['signer_infos']
+        except ValueError:
+            raise ValueError('signer_infos should contain exactly one entry')
+
+        self.covered_regions = None
+        self.complete_document = None
+        self.raw_digest = None
+
+    def compute_integrity_info(self):
+        md = getattr(hashlib, self.md_algorithm)()
+        stream = self.reader.stream
 
         # compute the digest
         old_seek = stream.tell()
         total_len = 0
         covered_regions = []
-        for lo, chunk_len in misc.pair_iter(byte_range):
+        for lo, chunk_len in misc.pair_iter(self.byte_range):
             covered_regions.append((lo, chunk_len))
             stream.seek(lo)
             md.update(stream.read(chunk_len))
@@ -204,7 +215,7 @@ class EmbeddedPdfSignature:
         stream.seek(0, os.SEEK_END)
         # the * 2 is because of the ASCII hex encoding, and the + 2
         # is the wrapping <>
-        embedded_sig_content = len(pkcs7_content) * 2 + 2
+        embedded_sig_content = len(self.pkcs7_content) * 2 + 2
         # TODO this ignores PAdES-LTA rules about document timestamps
         self.complete_document = (
             stream.tell() == total_len + embedded_sig_content
@@ -212,11 +223,6 @@ class EmbeddedPdfSignature:
         stream.seek(old_seek)
 
         self.raw_digest = md.digest()
-
-        try:
-            self.signer_info, = signed_data['signer_infos']
-        except ValueError:
-            raise ValueError('signer_infos should contain exactly one entry')
 
     @property
     def self_reported_signed_timestamp(self) -> datetime:
@@ -242,12 +248,13 @@ def validate_pdf_signature(reader: PdfFileReader, sig_object,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None) \
                            -> PDFSignatureStatus:
-    if sig_object is None:
+    if sig_object is None:  # pragma: nocover
         raise ValueError('Signature is empty')
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
     embedded_sig = EmbeddedPdfSignature(reader, sig_object)
+    embedded_sig.compute_integrity_info()
 
     # TODO implement logic to detect whether
     #  the modifications made are permissible
@@ -307,6 +314,7 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
         raise ValueError('Signature is empty')
 
     embedded_sig = EmbeddedPdfSignature(reader, sig_object)
+    embedded_sig.compute_integrity_info()
     tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is None:
         raise ValueError('LTV signatures require a trusted timestamp.')
@@ -358,7 +366,24 @@ def read_adobe_revocation_info(signer_info: cms.SignerInfo,
     )
 
 
-def read_certification_data(reader: PdfFileReader):
+@dataclass(frozen=True)
+class DocMDPInfo:
+    author_sig: EmbeddedPdfSignature
+    sig_ref: generic.DictionaryObject
+
+    @property
+    def permission_bits(self) -> DocMDPPerm:
+        try:
+            return DocMDPPerm(self.sig_ref['/TransformParams']['/P'])
+        except KeyError:
+            return DocMDPPerm.FILL_FORMS
+
+    @property
+    def md_algorithm(self) -> str:
+        return self.author_sig.md_algorithm
+
+
+def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
     try:
         docmdp = reader.root['/Perms'].raw_get('/DocMDP')
     except KeyError:
@@ -392,12 +417,7 @@ def read_certification_data(reader: PdfFileReader):
     except KeyError:  # pragma: nocover
         raise ValueError('Could not find signature reference dictionary.')
 
-    try:
-        permission_bits = DocMDPPerm(sig_ref['/TransformParams']['/P'])
-    except KeyError:
-        permission_bits = DocMDPPerm.FILL_FORMS
-
-    return sig_dict, permission_bits
+    return DocMDPInfo(EmbeddedPdfSignature(reader, sig_dict), sig_ref)
 
 
 # TODO validate DocMDP compliance and PAdES compliance

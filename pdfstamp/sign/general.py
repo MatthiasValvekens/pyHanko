@@ -17,7 +17,7 @@ from certvalidator.errors import RevokedError, PathValidationError
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
     'as_signing_certificate', 'CertificateStore', 'SimpleCertificateStore',
-    'WriteThroughCertificateStore'
+    'WriteThroughCertificateStore', 'SigningError', 'UnacceptableSignerError'
 ]
 
 
@@ -183,3 +183,11 @@ class ForkedCertificateStore(SimpleCertificateStore):
 
     def __iter__(self):
         return itertools.chain(iter(self.backend), iter(self.certs.values()))
+
+
+class SigningError(ValueError):
+    pass
+
+
+class UnacceptableSignerError(SigningError):
+    pass
