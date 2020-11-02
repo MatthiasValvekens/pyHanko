@@ -243,6 +243,12 @@ def test_sign_field_unclear():
             existing_fields_only=True
         )
 
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='SigExtra'),
+            signer=FROM_CA, existing_fields_only=True
+        )
+
 
 def test_sign_field_infer():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -322,6 +328,22 @@ def test_sign_new(file):
     while field_name != 'SigNew':
         field_name, sig_obj, _ = next(sig_fields)
     val_trusted(r, sig_obj)
+
+
+def test_enumerate_empty():
+
+    with pytest.raises(StopIteration):
+        next(fields.enumerate_sig_fields(PdfFileReader(BytesIO(MINIMAL))))
+
+
+@pytest.mark.parametrize('file', [0, 1])
+def test_sign_new_existingonly(file):
+    w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='SigNew'),
+            signer=FROM_CA, existing_fields_only=True
+        )
 
 
 def test_dummy_timestamp():
@@ -418,6 +440,26 @@ def test_append_simple_sig_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     sp = fields.SigFieldSpec('InvisibleSig')
+    fields.append_signature_fields(w, [sp])
+    assert len(w.root['/AcroForm']['/Fields']) == 1
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    w = IncrementalPdfFileWriter(out)
+    with pytest.raises(ValueError):
+        fields.append_signature_fields(w, [sp])
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    fields.append_signature_fields(w, [sp])
+    assert len(w.root['/AcroForm']['/Fields']) == 3
+
+
+def test_append_visible_sig_field():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    sp = fields.SigFieldSpec(
+        'VisibleSig', box=(10, 0, 50, 8)
+    )
     fields.append_signature_fields(w, [sp])
     assert len(w.root['/AcroForm']['/Fields']) == 1
     out = BytesIO()
@@ -700,7 +742,6 @@ def test_no_double_certify():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
-            docmdp_permissions=signers.DocMDPPerm.FILL_FORMS
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -729,7 +770,6 @@ def test_approval_sig():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
-            docmdp_permissions=signers.DocMDPPerm.FILL_FORMS
         ), signer=FROM_CA
     )
     out.seek(0)
@@ -761,7 +801,6 @@ def test_approval_sig_md_match_author_sig():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
-            docmdp_permissions=signers.DocMDPPerm.FILL_FORMS,
             md_algorithm='sha256'
         ), signer=FROM_CA
     )
@@ -783,7 +822,6 @@ def test_approval_sig_md_match_author_sig():
     next(sigs)
     field_name, sig_obj, _ = next(sigs)
     assert EmbeddedPdfSignature(r, sig_obj).md_algorithm == 'sha256'
-
 
 
 def test_ocsp_embed():
@@ -838,6 +876,18 @@ def test_pades_revinfo_dummydata():
     assert dss is not None
     assert len(dss.certs) == 4
     assert len(dss.ocsps) == 1
+
+
+def test_pades_revinfo_nodata():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    with pytest.raises(SigningError):
+        # noinspection PyTypeChecker
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=None,
+                use_pades=True, embed_validation_info=True
+            ), signer=FROM_CA
+        )
 
 
 def test_pades_revinfo_ts_dummydata():

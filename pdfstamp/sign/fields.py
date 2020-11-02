@@ -296,7 +296,7 @@ def _prepare_sig_field(sig_field_name, root,
     Returns a tuple of a boolean and a reference to a signature field.
     The boolean is True if the field was created, and False otherwise.
     """
-    if sig_field_name is None:
+    if sig_field_name is None:  # pragma: nocover
         raise ValueError
 
     try:
@@ -341,8 +341,6 @@ def _prepare_sig_field(sig_field_name, root,
         return False, sig_field_ref
 
     # no signature field exists, so create one
-    if existing_fields_only:
-        raise SigningError('Could not find signature field')
     sig_form_kwargs = {
         'include_on_page': root['/Pages']['/Kids'][0],
     }
