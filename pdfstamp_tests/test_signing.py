@@ -827,6 +827,26 @@ def test_pades_revinfo_live(requests_mock):
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
+    rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
+    with pytest.raises(ValueError):
+        validate_pdf_ltv_signature(r, sig_obj, rivt_adobe, {'trust_roots': TRUST_ROOTS})
+
+
+def test_adobe_revinfo_live(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=vc,
+            use_pades=False, embed_validation_info=True
+        ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
+    status = validate_pdf_ltv_signature(r, sig_obj, rivt_adobe, {'trust_roots': TRUST_ROOTS})
+    assert status.valid and status.trusted
+
 
 def test_pades_revinfo_live_nofullchain():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -840,6 +860,21 @@ def test_pades_revinfo_live_nofullchain():
     field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
+    assert status.valid and not status.trusted
+
+
+def test_adobe_revinfo_live_nofullchain():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=dummy_ocsp_vc(),
+            use_pades=False, embed_validation_info=True
+        ), signer=FROM_CA_TS
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
+    status = validate_pdf_ltv_signature(r, sig_obj, rivt_adobe)
     assert status.valid and not status.trusted
 
 

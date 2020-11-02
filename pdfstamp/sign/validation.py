@@ -316,7 +316,10 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
     validation_context_kwargs['moment'] = timestamp
 
     if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
-        vc = read_adobe_revocation_info(embedded_sig.signer_info)
+        vc = read_adobe_revocation_info(
+            embedded_sig.signer_info,
+            validation_context_kwargs=validation_context_kwargs
+        )
     else:
         dss, vc = DocumentSecurityStore.read_dss(
             reader, validation_context_kwargs=validation_context_kwargs
@@ -342,9 +345,12 @@ def read_adobe_revocation_info(signer_info: cms.SignerInfo,
                                validation_context_kwargs=None) \
                                -> ValidationContext:
     validation_context_kwargs = validation_context_kwargs or {}
-    revinfo: asn1_pdf.RevocationInfoArchival = find_cms_attribute(
-        signer_info['signed_attrs'], "adobe_revocation_info_archival"
-    )[0]
+    try:
+        revinfo: asn1_pdf.RevocationInfoArchival = find_cms_attribute(
+            signer_info['signed_attrs'], "adobe_revocation_info_archival"
+        )[0]
+    except KeyError:
+        raise ValueError("No revocation info found")
     ocsps = list(revinfo['ocsp'] or ())
     crls = list(revinfo['crl'] or ())
     return ValidationContext(
