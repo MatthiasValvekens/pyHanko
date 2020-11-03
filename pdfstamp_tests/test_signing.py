@@ -474,6 +474,39 @@ def test_append_visible_sig_field():
     assert len(w.root['/AcroForm']['/Fields']) == 3
 
 
+def test_sv_deserialisation():
+    sv = fields.SigSeedValueSpec.from_pdf_object(
+        generic.DictionaryObject(
+            {'/SubFilter': ['/foo', '/adbe.pkcs7.detached', '/bleh']}
+        )
+    )
+    assert len(sv.subfilters) == 1
+    bad_filter = generic.DictionaryObject(
+        {'/Filter': pdf_name('/unsupported')}
+    )
+    # this should run
+    fields.SigSeedValueSpec.from_pdf_object(bad_filter)
+    with pytest.raises(SigningError):
+        bad_filter[pdf_name('/Ff')] = \
+            generic.NumberObject(fields.SigSeedValFlags.FILTER.value)
+        fields.SigSeedValueSpec.from_pdf_object(bad_filter)
+
+    fields.SigSeedValueSpec.from_pdf_object(
+        generic.DictionaryObject(
+            {'/Ff': fields.SigSeedValFlags.V, '/V': generic.NumberObject(1)}
+        )
+    )
+    fields.SigSeedValueSpec.from_pdf_object(
+        generic.DictionaryObject({'/Ff': fields.SigSeedValFlags.V})
+    )
+    with pytest.raises(SigningError):
+        fields.SigSeedValueSpec.from_pdf_object(
+            generic.DictionaryObject(
+                {'/Ff': fields.SigSeedValFlags.V, '/V': generic.NumberObject(2)}
+            )
+        )
+
+
 def test_append_sig_field_with_simple_sv():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
@@ -484,6 +517,9 @@ def test_append_sig_field_with_simple_sv():
             issuers=[INTERM_CERT],
             subjects=[FROM_CA.signing_cert]
         ),
+        digest_methods=['ssh256'],
+        add_rev_info=True,
+        subfilters=[fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED],
         timestamp_server_url='https://tsa.example.com',
     )
     sp = fields.SigFieldSpec('InvisibleSig', seed_value_dict=sv)

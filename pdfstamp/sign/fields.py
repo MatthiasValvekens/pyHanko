@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import Flag
+from enum import Flag, Enum, unique
 from typing import List, Optional
 
 from asn1crypto import x509
@@ -40,6 +40,9 @@ class SigSeedValFlags(Flag):
     LEGAL_ATTESTATION = 16
     ADD_REV_INFO = 32
     DIGEST_METHOD = 64
+    LOCK_DOCUMENT = 128
+    APPEARANCE_FILTER = 256
+    UNSUPPORTED = LEGAL_ATTESTATION | LOCK_DOCUMENT | APPEARANCE_FILTER
 
 
 class SigCertConstraintFlags(Flag):
@@ -230,18 +233,43 @@ class SigCertConstraints:
                 )
 
 
+@unique
+class SigSeedSubFilter(Enum):
+    ADOBE_PKCS7_DETACHED = pdf_name("/adbe.pkcs7.detached")
+    PADES = pdf_name("/ETSI.CAdES.detached")
+
+
+# TODO support /V version indicator, other fields
+
 @dataclass(frozen=True)
 class SigSeedValueSpec:
     flags: SigSeedValFlags = SigSeedValFlags(0)
     reasons: List[str] = None
     timestamp_server_url: str = None
+    timestamp_required: bool = False
     cert: SigCertConstraints = None
+    subfilters: List[SigSeedSubFilter] = None
+    digest_methods: List[str] = None
+    add_rev_info: bool = None
 
     def as_pdf_object(self):
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SV'),
             pdf_name('/Ff'): generic.NumberObject(self.flags.value),
         })
+
+        if self.subfilters is not None:
+            result[pdf_name('/SubFilter')] = generic.ArrayObject(
+                sf.value for sf in self.subfilters
+            )
+        if self.add_rev_info is not None:
+            result[pdf_name('/AddRevInfo')] = generic.BooleanObject(
+                self.add_rev_info
+            )
+        if self.digest_methods is not None:
+            result[pdf_name('/DigestMethod')] = generic.ArrayObject(
+                map(pdf_string, self.digest_methods)
+            )
         if self.reasons is not None:
             result[pdf_name('/Reasons')] = generic.ArrayObject(
                 pdf_string(reason) for reason in self.reasons
@@ -249,9 +277,9 @@ class SigSeedValueSpec:
         if self.timestamp_server_url is not None:
             result[pdf_name('/TimeStamp')] = generic.DictionaryObject({
                 pdf_name('/URL'): pdf_string(self.timestamp_server_url),
-                # why would you bother including a TSA URL and then make the
-                # timestamp optional?
-                pdf_name('/Ff'): generic.NumberObject(1)
+                pdf_name('/Ff'): generic.NumberObject(
+                    1 if self.timestamp_required else 0
+                )
             })
         if self.cert is not None:
             result[pdf_name('/Cert')] = self.cert.as_pdf_object()
@@ -266,8 +294,49 @@ class SigSeedValueSpec:
             pass
 
         flags = SigSeedValFlags(pdf_dict.get('/Ff', 0))
+        try:
+            sig_filter = pdf_dict['/Filter']
+            if (flags & SigSeedValFlags.FILTER) and \
+                    (sig_filter != '/Adobe.PPKLite'):
+                raise SigningError(
+                    "Signature handler '%s' is not available, only the "
+                    "default /Adobe.PPKLite is supported." % sig_filter
+                )
+        except KeyError:
+            pass
+
+        # TODO support all PDF 2.0 values
+        min_version = pdf_dict.get('/V', 1)
+        if flags & SigSeedValFlags.V and min_version > 1:
+            raise SigningError(
+                "Seed value dictionary version %s not supported." % min_version
+            )
+
+        try:
+            add_rev_info = bool(pdf_dict['/AddRevInfo'])
+        except KeyError:
+            add_rev_info = None
+
+        subfilter_reqs = pdf_dict.get('/SubFilter', None)
+        subfilters = None
+        if subfilter_reqs is not None:
+            def _subfilters():
+                for s in subfilter_reqs:
+                    try:
+                        yield SigSeedSubFilter(s)
+                    except ValueError:
+                        pass
+            subfilters = list(_subfilters())
+
+        try:
+            digest_methods = [s.lower() for s in pdf_dict['/DigestMethod']]
+        except KeyError:
+            digest_methods = None
+
         reasons = pdf_dict.get('/Reasons', None)
-        timestamp_server_url = pdf_dict.get('/TimeStamp', {}).get('/URL', None)
+        timestamp_dict = pdf_dict.get('/TimeStamp', {})
+        timestamp_server_url = timestamp_dict.get('/URL', None)
+        timestamp_required = bool(timestamp_dict.get('/Ff', 0))
         cert_constraints = pdf_dict.get('/Cert', None)
         if cert_constraints is not None:
             cert_constraints = SigCertConstraints.from_pdf_object(
@@ -276,7 +345,9 @@ class SigSeedValueSpec:
         return cls(
             flags=flags, reasons=reasons,
             timestamp_server_url=timestamp_server_url,
-            cert=cert_constraints
+            cert=cert_constraints, subfilters=subfilters,
+            digest_methods=digest_methods, add_rev_info=add_rev_info,
+            timestamp_required=timestamp_required
         )
 
 
