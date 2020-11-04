@@ -9,7 +9,7 @@ from oscrypto import keys as oskeys
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.reader import PdfFileReader
+from pdf_utils.rw_common import PdfHandler
 from pdfstamp.sign.general import UnacceptableSignerError, SigningError
 from pdfstamp.stamp import AnnotAppearances
 
@@ -109,6 +109,8 @@ class SigCertConstraints:
 
     @classmethod
     def from_pdf_object(cls, pdf_dict):
+        if isinstance(pdf_dict, generic.IndirectObject):
+            pdf_dict = pdf_dict.get_object()
         try:
             if pdf_dict['/Type'] != '/SVCert':  # pragma: nocover
                 raise ValueError('Object /Type entry is not /SVCert')
@@ -237,6 +239,7 @@ class SigCertConstraints:
 class SigSeedSubFilter(Enum):
     ADOBE_PKCS7_DETACHED = pdf_name("/adbe.pkcs7.detached")
     PADES = pdf_name("/ETSI.CAdES.detached")
+    ETSI_RFC3161 = pdf_name("/ETSI.RFC3161")
 
 
 # TODO support /V version indicator, other fields
@@ -287,6 +290,8 @@ class SigSeedValueSpec:
 
     @classmethod
     def from_pdf_object(cls, pdf_dict):
+        if isinstance(pdf_dict, generic.IndirectObject):
+            pdf_dict = pdf_dict.get_object()
         try:
             if pdf_dict['/Type'] != '/SV':  # pragma: nocover
                 raise ValueError('Object /Type entry is not /SV')
@@ -349,6 +354,11 @@ class SigSeedValueSpec:
             digest_methods=digest_methods, add_rev_info=add_rev_info,
             timestamp_required=timestamp_required
         )
+
+    def build_timestamper(self):
+        from pdfstamp.sign.timestamps import HTTPTimeStamper
+        if self.timestamp_server_url:
+            return HTTPTimeStamper(self.timestamp_server_url)
 
 
 @dataclass(frozen=True)
@@ -431,7 +441,7 @@ def _prepare_sig_field(sig_field_name, root,
     return True, sig_field_ref
 
 
-def enumerate_sig_fields(reader: PdfFileReader, filled_status=None):
+def enumerate_sig_fields(reader: PdfHandler, filled_status=None):
     """
     Enumerate signature fields.
 

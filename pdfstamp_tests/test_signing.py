@@ -882,11 +882,13 @@ def test_ocsp_embed():
     assert len(vc.ocsps) == 1
 
 
+PADES = fields.SigSeedSubFilter.PADES
+
 def test_pades_flag():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1', use_pades=True),
+        w, signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
         signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -900,7 +902,7 @@ def test_pades_revinfo_dummydata():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            use_pades=True, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -921,7 +923,7 @@ def test_pades_revinfo_nodata():
         signers.sign_pdf(
             w, signers.PdfSignatureMetadata(
                 field_name='Sig1', validation_context=None,
-                use_pades=True, embed_validation_info=True
+                subfilter=PADES, embed_validation_info=True
             ), signer=FROM_CA
         )
 
@@ -931,7 +933,7 @@ def test_pades_revinfo_ts_dummydata():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            use_pades=True, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
@@ -954,7 +956,7 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            use_pades=True, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True
         ), signer=FROM_CA_HTTP_TS
     )
     r = PdfFileReader(out)
@@ -976,7 +978,7 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
-            use_pades=True, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -992,7 +994,7 @@ def test_pades_revinfo_live(requests_mock):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
-            use_pades=True, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
@@ -1018,7 +1020,8 @@ def test_adobe_revinfo_live(requests_mock):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
-            use_pades=False, embed_validation_info=True
+            subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
+            embed_validation_info=True
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
@@ -1033,7 +1036,7 @@ def test_pades_revinfo_live_nofullchain():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            use_pades=True, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
@@ -1048,7 +1051,8 @@ def test_adobe_revinfo_live_nofullchain():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            use_pades=False, embed_validation_info=True
+            subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
+            embed_validation_info=True
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
@@ -1064,7 +1068,7 @@ def test_pades_revinfo_live_lta(requests_mock):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
-            use_pades=True, embed_validation_info=True,
+            subfilter=PADES, embed_validation_info=True,
             use_pades_lta=True
         ), signer=FROM_CA_TS
     )
@@ -1085,5 +1089,285 @@ def test_pades_revinfo_live_lta(requests_mock):
     assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
     # TODO implement and run actual LTA verification checks
 
-# TODO test multiple signatures
-# TODO test classical Adobe-style LTV verification
+# TODO test multiple PAdES signatures
+
+
+def prepare_sv_field(sv_spec):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    sp = fields.SigFieldSpec('Sig', seed_value_dict=sv_spec)
+    fields.append_signature_fields(w, [sp])
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    return out
+
+
+def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA_TS):
+    w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
+    out = signers.sign_pdf(w, sig_meta, signer=signer)
+    r = PdfFileReader(out)
+    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    return EmbeddedPdfSignature(r, sig_obj)
+
+
+def test_sv_sign_md_req():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.DIGEST_METHOD,
+        digest_methods=['sha256', 'sha512'],
+    )
+    with pytest.raises(SigningError):
+        sign_with_sv(
+            sv, signers.PdfSignatureMetadata(
+                md_algorithm='sha1', field_name='Sig'
+            )
+        )
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig')
+    )
+    assert emb_sig.md_algorithm == 'sha256'
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(
+            md_algorithm='sha512', field_name='Sig'
+        )
+    )
+    assert emb_sig.md_algorithm == 'sha512'
+
+
+def test_sv_sign_md_hint():
+    sv = fields.SigSeedValueSpec(digest_methods=['sha256', 'sha512'])
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(
+            md_algorithm='sha1', field_name='Sig'
+        )
+    )
+    assert emb_sig.md_algorithm == 'sha1'
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig')
+    )
+    assert emb_sig.md_algorithm == 'sha256'
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(
+            md_algorithm='sha512', field_name='Sig'
+        )
+    )
+    assert emb_sig.md_algorithm == 'sha512'
+
+
+def test_sv_sign_subfilter_req():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.SUBFILTER, subfilters=[PADES]
+    )
+    with pytest.raises(SigningError):
+        sign_with_sv(
+            sv, signers.PdfSignatureMetadata(
+                md_algorithm='sha1', field_name='Sig',
+                subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+            )
+        )
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig')
+    )
+    assert emb_sig.sig_object['/SubFilter'] == PADES.value
+
+
+def test_sv_sign_subfilter_hint():
+    sv = fields.SigSeedValueSpec(subfilters=[PADES])
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(
+            md_algorithm='sha1', field_name='Sig',
+            subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+        )
+    )
+    assert emb_sig.sig_object['/SubFilter'] == '/adbe.pkcs7.detached'
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig')
+    )
+    assert emb_sig.sig_object['/SubFilter'] == PADES.value
+
+
+def test_sv_sign_addrevinfo_req(requests_mock):
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.ADD_REV_INFO,
+        add_rev_info=True
+    )
+    vc = live_testing_vc(requests_mock)
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', validation_context=vc,
+        subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
+        embed_validation_info=True
+    )
+    emb_sig = sign_with_sv(sv, meta)
+    status = validate_pdf_ltv_signature(
+        emb_sig.reader, emb_sig.sig_object,
+        RevocationInfoValidationType.ADOBE_STYLE,
+        {'trust_roots': TRUST_ROOTS}
+    )
+    assert status.valid and status.trusted
+    assert emb_sig.sig_object['/SubFilter'] == '/adbe.pkcs7.detached'
+
+    with pytest.raises(SigningError):
+        meta = signers.PdfSignatureMetadata(
+            field_name='Sig', validation_context=vc,
+            subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
+            embed_validation_info=False
+        )
+        sign_with_sv(sv, meta)
+
+    # this shouldn't work with PAdES
+    with pytest.raises(SigningError):
+        meta = signers.PdfSignatureMetadata(
+            field_name='Sig', validation_context=vc,
+            subfilter=fields.SigSeedSubFilter.PADES,
+            embed_validation_info=True
+        )
+        sign_with_sv(sv, meta)
+
+
+def test_sv_sign_addrevinfo_subfilter_conflict():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.ADD_REV_INFO,
+        subfilters=[PADES], add_rev_info=True
+    )
+    with pytest.raises(SigningError):
+        meta = signers.PdfSignatureMetadata(
+            field_name='Sig', validation_context=dummy_ocsp_vc(),
+            embed_validation_info=True
+        )
+        sign_with_sv(sv, meta)
+
+    revinfo_and_subfilter = (
+        fields.SigSeedValFlags.ADD_REV_INFO | fields.SigSeedValFlags.SUBFILTER
+    )
+    sv = fields.SigSeedValueSpec(
+        flags=revinfo_and_subfilter, subfilters=[PADES], add_rev_info=True
+    )
+    with pytest.raises(SigningError):
+        meta = signers.PdfSignatureMetadata(
+            field_name='Sig', validation_context=dummy_ocsp_vc(),
+            embed_validation_info=True
+        )
+        sign_with_sv(sv, meta)
+
+
+def test_sv_sign_cert_constraint():
+    # this is more thoroughly unit tested at a lower level (see further up),
+    # so we simply try two basic scenarios here for now
+    from asn1crypto import x509
+    sv = fields.SigSeedValueSpec(
+        cert=fields.SigCertConstraints(
+            flags=fields.SigCertConstraintFlags.SUBJECT_DN,
+            subject_dn=x509.Name.build({'common_name': 'Lord Testerino'}),
+        )
+    )
+    sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+    sv = fields.SigSeedValueSpec(
+        cert=fields.SigCertConstraints(
+            flags=fields.SigCertConstraintFlags.SUBJECT_DN,
+            subject_dn=x509.Name.build({'common_name': 'Not Lord Testerino'}),
+        )
+    )
+    with pytest.raises(SigningError):
+        sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+
+
+def test_sv_flag_unsupported():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.APPEARANCE_FILTER,
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    with pytest.raises(SigningError):
+        sign_with_sv(sv, meta)
+
+
+def test_sv_subfilter_unsupported():
+    sv_spec = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.SUBFILTER,
+        subfilters=[PADES]
+    )
+    w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
+    field_name, _, sig_field = next(fields.enumerate_sig_fields(w))
+    sig_field = sig_field.get_object()
+    sv_ref = sig_field.raw_get('/SV')
+    w.mark_update(sv_ref)
+    sv_ref.get_object()['/SubFilter'][0] = pdf_name('/this.doesnt.exist')
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    frozen = out.getvalue()
+
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            IncrementalPdfFileWriter(BytesIO(frozen)),
+            signers.PdfSignatureMetadata(field_name='Sig'),
+            signer=FROM_CA_TS
+        )
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            IncrementalPdfFileWriter(BytesIO(frozen)),
+            signers.PdfSignatureMetadata(
+                field_name='Sig', subfilter=PADES
+            ),
+            signer=FROM_CA_TS
+        )
+
+
+def test_sv_subfilter_unsupported_partial():
+    sv_spec = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.SUBFILTER,
+        subfilters=[fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED, PADES]
+    )
+    w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
+    field_name, _, sig_field = next(fields.enumerate_sig_fields(w))
+    sig_field = sig_field.get_object()
+    sv_ref = sig_field.raw_get('/SV')
+    w.mark_update(sv_ref)
+    sv_ref.get_object()['/SubFilter'][0] = pdf_name('/this.doesnt.exist')
+    out = BytesIO()
+    w.write(out)
+    out.seek(0)
+    frozen = out.getvalue()
+
+    signers.sign_pdf(
+        IncrementalPdfFileWriter(BytesIO(frozen)),
+        signers.PdfSignatureMetadata(field_name='Sig'),
+        signer=FROM_CA_TS
+    )
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            IncrementalPdfFileWriter(BytesIO(frozen)),
+            signers.PdfSignatureMetadata(
+                field_name='Sig',
+                subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+            ),
+            signer=FROM_CA_TS
+        )
+
+
+def test_sv_timestamp_url(requests_mock):
+    # state issues (see comment in signers.py), so create a fresh signer
+    signer = signers.SimpleSigner.load(
+        TESTING_CA_DIR + '/keys/signer.key.pem',
+        TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
+        ca_chain_files=(
+            TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+        key_passphrase=b'secret'
+    )
+    sv = fields.SigSeedValueSpec(
+        timestamp_server_url=DUMMY_HTTP_TS.url,
+        timestamp_required=True
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    ts_requested = False
+
+    def ts_callback(*args, **kwargs):
+        nonlocal ts_requested
+        ts_requested = True
+        return ts_response_callback(*args, **kwargs)
+
+    requests_mock.post(
+        DUMMY_HTTP_TS.url, content=ts_callback,
+        headers={'Content-Type': 'application/timestamp-reply'}
+    )
+    sign_with_sv(sv, meta, signer=signer)
+    assert ts_requested

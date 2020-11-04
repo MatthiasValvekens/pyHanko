@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Flag
 from io import BytesIO
+from typing import Optional
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
@@ -18,7 +19,10 @@ from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.misc import BoxConstraints
 from pdf_utils.reader import PdfFileReader
 from pdfstamp.sign import general
-from pdfstamp.sign.fields import enumerate_sig_fields, _prepare_sig_field
+from pdfstamp.sign.fields import (
+    enumerate_sig_fields, _prepare_sig_field,
+    SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter,
+)
 from pdfstamp.sign.timestamps import TimeStamper
 from pdfstamp.sign.general import (
     simple_cms_attribute, CertificateStore,
@@ -28,6 +32,9 @@ from pdfstamp.stamp import TextStampStyle, TextStamp
 
 __all__ = ['Signer', 'SimpleSigner', 'PdfSigner', 'sign_pdf',
            'DocMDPPerm', 'SignatureObject']
+
+
+logger = logging.getLogger(__name__)
 
 
 class SigByteRangeObject(generic.PdfObject):
@@ -98,8 +105,8 @@ class DERPlaceholder(generic.PdfObject):
 
 
 class PdfSignedData(generic.DictionaryObject):
-    def __init__(self, obj_type, subfilter, timestamp: datetime = None,
-                 bytes_reserved=None):
+    def __init__(self, obj_type, subfilter: SigSeedSubFilter,
+                 timestamp: datetime = None, bytes_reserved=None):
         if bytes_reserved is not None and bytes_reserved % 2 == 1:
             raise ValueError('bytes_reserved must be even')
 
@@ -107,7 +114,7 @@ class PdfSignedData(generic.DictionaryObject):
             {
                 pdf_name('/Type'): obj_type,
                 pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
-                pdf_name('/SubFilter'): subfilter,
+                pdf_name('/SubFilter'): subfilter.value,
             }
         )
 
@@ -165,13 +172,10 @@ class PdfSignedData(generic.DictionaryObject):
 
 class SignatureObject(PdfSignedData):
 
-    def __init__(self, timestamp: datetime, name=None, location=None,
-                 reason=None, bytes_reserved=None, use_pades=False):
-        subfilter = (
-            '/ETSI.CAdES.detached' if use_pades else '/adbe.pkcs7.detached'
-        )
+    def __init__(self, timestamp: datetime, subfilter, name=None, location=None,
+                 reason=None, bytes_reserved=None):
         super().__init__(
-            obj_type=pdf_name('/Sig'), subfilter=pdf_name(subfilter),
+            obj_type=pdf_name('/Sig'), subfilter=subfilter,
             timestamp=timestamp, bytes_reserved=bytes_reserved
         )
 
@@ -188,7 +192,8 @@ class DocumentTimestamp(PdfSignedData):
     def __init__(self, bytes_reserved=None):
         super().__init__(
             obj_type=pdf_name('/DocTimeStamp'),
-            subfilter=pdf_name('/ETSI.RFC3161'), bytes_reserved=bytes_reserved
+            subfilter=SigSeedSubFilter.ETSI_RFC3161,
+            bytes_reserved=bytes_reserved
         )
 
         # use of Name/Location/Reason is discouraged in document timestamps by
@@ -366,7 +371,7 @@ class PdfSignatureMetadata:
     name: str = None
     certify: bool = False
 
-    use_pades: bool = False
+    subfilter: SigSeedSubFilter = None
     embed_validation_info: bool = False
     use_pades_lta: bool = False
     timestamp_field_name: str = None
@@ -376,9 +381,6 @@ class PdfSignatureMetadata:
     include_signedtime_attr: bool = True
     # only relevant for certification
     docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
-
-
-logger = logging.getLogger(__name__)
 
 
 # FIXME this function should really be called "load_certs_from_pemder" or sth.
@@ -647,21 +649,86 @@ class PdfSigner:
             )
         return cd.md_algorithm
 
+    def _enforce_seed_value_constraints(self, sig_field, validation_path) \
+            -> Optional[SigSeedValueSpec]:
+        # TODO enforce constraints on /Reason
+
+        sv_dict = sig_field.get('/SV')
+        if sv_dict is None:
+            return None
+        sv_spec: SigSeedValueSpec = SigSeedValueSpec.from_pdf_object(sv_dict)
+        flags: SigSeedValFlags = sv_spec.flags
+
+        if sv_spec.cert is not None:
+            sv_spec.cert.satisfied_by(self.signer.signing_cert, validation_path)
+
+        if not flags:
+            return sv_spec
+
+        if flags & SigSeedValFlags.UNSUPPORTED:
+            raise SigningError(
+                "Unsupported mandatory seed value items: " + repr(
+                    flags & SigSeedValFlags.UNSUPPORTED
+                )
+            )
+        selected_sf = self.signature_meta.subfilter
+        if (flags & SigSeedValFlags.SUBFILTER) \
+                and sv_spec.subfilters is not None:
+            # empty array = no supported subfilters
+            if not sv_spec.subfilters:
+                raise SigningError(
+                    "The signature encodings mandated by the seed value "
+                    "dictionary are not supported."
+                )
+            # standard mandates that we take the first available subfilter
+            mandated_sf: SigSeedSubFilter = sv_spec.subfilters[0]
+            if selected_sf is not None and mandated_sf != selected_sf:
+                raise SigningError(
+                    "The seed value dictionary mandates subfilter '%s', "
+                    "but '%s' was requested." % (
+                        mandated_sf.value, selected_sf.value
+                    )
+                )
+
+        # SV dict serves as a source of defaults as well
+        if selected_sf is None and sv_spec.subfilters is not None:
+            selected_sf = sv_spec.subfilters[0]
+
+        if (flags & SigSeedValFlags.ADD_REV_INFO) \
+                and sv_spec.add_rev_info is not None:
+            if sv_spec.add_rev_info != \
+                    self.signature_meta.embed_validation_info:
+                raise SigningError(
+                    "The seed value dict mandates that revocation info %sbe "
+                    "added; adjust PdfSignatureMetadata settings accordingly."
+                    % ("" if sv_spec.add_rev_info else "not ")
+                )
+            if selected_sf != SigSeedSubFilter.ADOBE_PKCS7_DETACHED:
+                raise SigningError(
+                    "The seed value dict mandates that Adobe-style revocation "
+                    "info be added; this requires subfilter '%s'" % (
+                        SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value
+                    )
+                )
+        if (flags & SigSeedValFlags.DIGEST_METHOD) \
+                and sv_spec.digest_methods is not None:
+            selected_md = self.signature_meta.md_algorithm
+            if selected_md is not None:
+                selected_md = selected_md.lower()
+                if selected_md not in sv_spec.digest_methods:
+                    raise SigningError(
+                        "The selected message digest %s is not allowed by the "
+                        "seed value dictionary. Please select one of %s."
+                        % (selected_md, ", ".join(sv_spec.digest_methods))
+                    )
+        return sv_spec
+
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None):
-
-        # TODO generate an error when DocMDP doesn't allow extra signatures.
-
-        # TODO explicitly disallow multiple certification signatures
-
-        # TODO deal with SV dictionaries properly
 
         # TODO if PAdES is requested, set the ESIC extension to the proper value
 
         timestamp = datetime.now(tz=tzlocal.get_localzone())
-        md_algorithm = self._enforce_certification_constraints(pdf_out.prev)
-        if md_algorithm is None:
-            md_algorithm = self.signature_meta.md_algorithm or DEFAULT_MD
         signature_meta: PdfSignatureMetadata = self.signature_meta
         signer: Signer = self.signer
         validation_context = signature_meta.validation_context
@@ -672,6 +739,7 @@ class PdfSigner:
                 'signature.'
             )
         validation_paths = []
+        signer_cert_validation_path = None
         if validation_context is not None:
             # validate cert
             # (this also keeps track of any validation data automagically)
@@ -680,11 +748,57 @@ class PdfSigner:
                 validation_context=validation_context
             )
             # TODO allow customisation of key usage parameters
-            validation_paths.append(
-                validator.validate_usage({"non_repudiation"})
+            signer_cert_validation_path = validator.validate_usage(
+                {"non_repudiation"}
             )
+            validation_paths.append(signer_cert_validation_path)
+
+        field_created, sig_field_ref = _get_or_create_sigfield(
+            signature_meta.field_name, pdf_out,
+            existing_fields_only, is_timestamp=False
+        )
+
+        sig_field = sig_field_ref.get_object()
+
+        # process the signature's seed value dictionary
+        sv_spec = self._enforce_seed_value_constraints(
+            sig_field, signer_cert_validation_path
+        )
+
+        # priority order for the message digest algorithm
+        #  (1) If there is a certification signature, use the digest method
+        #      specified there (mandatory).
+        #  (2) If signature_meta specifies a message digest algorithm, use it
+        #  (3) Use the algorithm specified in the seed value dictionary
+        #  (4) fall back to DEFAULT_MD
+        md_algorithm = self._enforce_certification_constraints(pdf_out.prev)
+        if md_algorithm is None:
+            md_algorithm = self.signature_meta.md_algorithm
+        if md_algorithm is None:
+            if sv_spec is not None and sv_spec.digest_methods:
+                md_algorithm = sv_spec.digest_methods[0]
+            else:
+                md_algorithm = DEFAULT_MD
+
+        # same for the subfilter: try signature_meta and SV dict, fall back
+        #  to /adbe.pkcs7.detached by default
+        subfilter = signature_meta.subfilter
+        if subfilter is None:
+            if sv_spec is not None and sv_spec.subfilters:
+                subfilter = sv_spec.subfilters[0]
+            else:
+                subfilter = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+        use_pades = subfilter == SigSeedSubFilter.PADES
 
         ts_validation_paths = None
+        ts_required = sv_spec is not None and sv_spec.timestamp_required
+        if ts_required and signer.timestamper is None:
+            # TODO since the signer class needs access to a timestamper
+            #  internally, setting the timestamper attribute is the only option,
+            #  but this changes the state of the signer object, which is
+            #  undesirable. I should perhaps restructure things a little.
+            signer.timestamper = sv_spec.build_timestamper()
+
         if signer.timestamper is not None:
             # this might hit the TS server, but the response is cached
             # and it collects the certificates we need to verify the TS response
@@ -696,8 +810,7 @@ class PdfSigner:
                 validation_paths += ts_validation_paths
 
         # do we need adobe-style revocation info?
-        if signature_meta.embed_validation_info \
-                and not signature_meta.use_pades:
+        if signature_meta.embed_validation_info and not use_pades:
             revinfo = Signer.format_revinfo(
                 ocsp_responses=validation_context.ocsps,
                 crls=validation_context.crls
@@ -710,7 +823,7 @@ class PdfSigner:
             test_md = getattr(hashlib, md_algorithm)().digest()
             test_signature_cms = signer.sign(
                 test_md, md_algorithm,
-                timestamp=timestamp, use_pades=signature_meta.use_pades,
+                timestamp=timestamp, use_pades=use_pades,
                 dry_run=True, revocation_info=revinfo
             )
             test_len = len(test_signature_cms.dump()) * 2
@@ -728,16 +841,10 @@ class PdfSigner:
             timestamp, name=signature_meta.name,
             location=signature_meta.location,
             reason=signature_meta.reason, bytes_reserved=bytes_reserved,
-            use_pades=signature_meta.use_pades
+            subfilter=subfilter
         )
         sig_obj_ref = pdf_out.add_object(sig_obj)
 
-        field_created, sig_field_ref = _get_or_create_sigfield(
-            signature_meta.field_name, pdf_out,
-            existing_fields_only, is_timestamp=False
-        )
-
-        sig_field = sig_field_ref.get_object()
         # fill in a reference to the (empty) signature object
         sig_field[pdf_name('/V')] = sig_obj_ref
 
@@ -759,12 +866,12 @@ class PdfSigner:
 
         signature_cms = signer.sign(
             true_digest, md_algorithm,
-            timestamp=timestamp, use_pades=signature_meta.use_pades,
+            timestamp=timestamp, use_pades=use_pades,
             revocation_info=revinfo
         )
         output, sig_contents = wr.send(signature_cms)
 
-        if signature_meta.use_pades and signature_meta.embed_validation_info:
+        if use_pades and signature_meta.embed_validation_info:
             from pdfstamp.sign import validation
             validation.DocumentSecurityStore.add_dss(
                 output_stream=output, sig_contents=sig_contents,
