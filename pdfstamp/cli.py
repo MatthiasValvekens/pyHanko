@@ -101,10 +101,15 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
 
     # TODO restructure args to validate command to allow the validation
     #  context to be modified here as well.
-    vc = ValidationContext(allow_fetching=True) if with_validation_info else None
+    if use_pades:
+        subfilter = fields.SigSeedSubFilter.PADES
+    else:
+        subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+    vc = ValidationContext(allow_fetching=True) \
+        if with_validation_info else None
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
         field_name=field, location=location, reason=reason, name=name,
-        certify=certify, use_pades=use_pades,
+        certify=certify, subfilter=subfilter,
         embed_validation_info=with_validation_info,
         validation_context=vc
     )
