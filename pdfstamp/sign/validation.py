@@ -22,15 +22,26 @@ from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.rw_common import PdfHandler
 from . import DocMDPPerm
-from .general import SignatureStatus, find_cms_attribute
+from .general import (
+    SignatureStatus, find_cms_attribute,
+    UnacceptableSignerError,
+)
 from .timestamps import TimestampSignatureStatus
 
 __all__ = [
-    'PDFSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
+    'PdfSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
     'read_certification_data'
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class SignatureValidationError(ValueError):
+    pass
+
+
+class SigSeedValueValidationError(SignatureValidationError):
+    pass
 
 
 def partition_certs(certs, signer_info):
@@ -41,7 +52,7 @@ def partition_certs(certs, signer_info):
     iss_sn = signer_info['sid']
     # TODO Figure out how the subject key identifier thing works
     if iss_sn.name != 'issuer_and_serial_number':
-        raise ValueError(
+        raise NotImplementedError(
             'Can only look up certificates by issuer and serial number'
         )
     issuer = iss_sn.chosen['issuer']
@@ -54,18 +65,20 @@ def partition_certs(certs, signer_info):
         else:
             ca_chain.append(c)
     if cert is None:
-        raise ValueError('signer certificate not included in signature')
+        raise SignatureValidationError(
+            'signer certificate not included in signature'
+        )
     return cert, ca_chain
 
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 
-def validate_cms_signature(signed_data: cms.SignedData,
-                           status_cls: Type[StatusType] = SignatureStatus,
-                           raw_digest: bytes = None,
-                           validation_context: ValidationContext = None,
-                           status_kwargs: dict = None):
+def _validate_cms_signature(signed_data: cms.SignedData,
+                            status_cls: Type[StatusType] = SignatureStatus,
+                            raw_digest: bytes = None,
+                            validation_context: ValidationContext = None,
+                            status_kwargs: dict = None):
     """
     Validate CMS and PKCS#7 signatures.
     """
@@ -75,7 +88,9 @@ def validate_cms_signature(signed_data: cms.SignedData,
     try:
         signer_info, = signed_data['signer_infos']
     except ValueError:
-        raise ValueError('signer_infos should contain exactly one entry')
+        raise SignatureValidationError(
+            'signer_infos should contain exactly one entry'
+        )
 
     cert, ca_chain = partition_certs(certs, signer_info)
 
@@ -102,7 +117,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
     try:
         embedded_digest = find_cms_attribute(signed_attrs, 'message_digest')
     except KeyError:
-        raise ValueError('Message digest not found in signature')
+        raise SignatureValidationError('Message digest not found in signature')
     intact = raw_digest == embedded_digest[0].native
 
     # finally validate the signature
@@ -124,23 +139,41 @@ def validate_cms_signature(signed_data: cms.SignedData,
             valid = False
 
     trusted = revoked = usage_ok = False
+    path = None
     if valid:
         validator = CertificateValidator(
             cert, intermediate_certs=ca_chain,
             validation_context=validation_context
         )
-        trusted, revoked, usage_ok = status_cls.validate_cert_usage(validator)
-    return status_cls(
+        trusted, revoked, usage_ok, path = \
+            status_cls.validate_cert_usage(validator)
+
+    status_kwargs = status_kwargs or {}
+    status_kwargs.update(
         intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
         revoked=revoked, usage_ok=usage_ok, trusted=trusted,
-        **(status_kwargs or {})
+        validation_path=path
     )
+    return status_kwargs
+
+
+def validate_cms_signature(signed_data: cms.SignedData,
+                           status_cls: Type[StatusType] = SignatureStatus,
+                           raw_digest: bytes = None,
+                           validation_context: ValidationContext = None,
+                           status_kwargs: dict = None):
+    status_kwargs = _validate_cms_signature(
+        signed_data, status_cls, raw_digest, validation_context,
+        status_kwargs
+    )
+    return status_cls(**status_kwargs)
 
 
 @dataclass(frozen=True)
-class PDFSignatureStatus(SignatureStatus):
+class PdfSignatureStatus(SignatureStatus):
     complete_document: bool
+    seed_value_ok: bool
     signed_dt: Optional[datetime] = None
     timestamp_validity: Optional[TimestampSignatureStatus] = None
 
@@ -244,14 +277,137 @@ class EmbeddedPdfSignature:
             pass
 
 
+def _validate_sv_constraints(sig_field, emb_sig: EmbeddedPdfSignature,
+                             signing_cert, validation_path, timestamp_found):
+    from pdfstamp.sign.fields import (
+        SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter
+    )
+    sig_field = sig_field.get_object()
+    try:
+        sig_sv_dict = sig_field['/SV']
+    except KeyError:
+        return
+    sv_spec = SigSeedValueSpec.from_pdf_object(sig_sv_dict)
+
+    if sv_spec.cert is not None:
+        try:
+            sv_spec.cert.satisfied_by(signing_cert, validation_path)
+        except UnacceptableSignerError as e:
+            raise SigSeedValueValidationError(e)
+
+    if not timestamp_found and sv_spec.timestamp_required:
+        raise SigSeedValueValidationError(
+            "The seed value dictionary requires a trusted timestamp, but "
+            "none was found, or the timestamp did not validate."
+        )
+
+    flags = sv_spec.flags
+    if not flags:
+        return
+
+    sig_obj = sig_field['/V']
+
+    if flags & SigSeedValFlags.UNSUPPORTED:
+        raise NotImplementedError(
+            "Unsupported mandatory seed value items: " + repr(
+                flags & SigSeedValFlags.UNSUPPORTED
+            )
+        )
+
+    selected_sf_str = sig_obj['/SubFilter']
+    selected_sf = SigSeedSubFilter(selected_sf_str)
+    if (flags & SigSeedValFlags.SUBFILTER) \
+            and sv_spec.subfilters is not None:
+        # empty array = no supported subfilters
+        if not sv_spec.subfilters:
+            raise NotImplementedError(
+                "The signature encodings mandated by the seed value "
+                "dictionary are not supported."
+            )
+        # standard mandates that we take the first available subfilter
+        mandated_sf: SigSeedSubFilter = sv_spec.subfilters[0]
+        if selected_sf is not None and mandated_sf != selected_sf:
+            raise SigSeedValueValidationError(
+                "The seed value dictionary mandates subfilter '%s', "
+                "but '%s' was used in the signature." % (
+                    mandated_sf.value, selected_sf.value
+                )
+            )
+
+    signer_info = emb_sig.signer_info
+    if (flags & SigSeedValFlags.ADD_REV_INFO) \
+            and sv_spec.add_rev_info is not None:
+        try:
+            read_adobe_revocation_info(signer_info)
+            revinfo_found = True
+        except ValueError:
+            revinfo_found = False
+
+        if sv_spec.add_rev_info != revinfo_found:
+            raise SigSeedValueValidationError(
+                "The seed value dict mandates that revocation info %sbe "
+                "added, but it was %sfound in the signature." % (
+                    "" if sv_spec.add_rev_info else "not ",
+                    "" if revinfo_found else "not "
+                )
+            )
+        if sv_spec.add_rev_info and \
+                selected_sf != SigSeedSubFilter.ADOBE_PKCS7_DETACHED:
+            raise SigSeedValueValidationError(
+                "The seed value dict mandates that Adobe-style revocation "
+                "info be added; this requires subfilter '%s'" % (
+                    SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value
+                )
+            )
+
+    if (flags & SigSeedValFlags.DIGEST_METHOD) \
+            and sv_spec.digest_methods is not None:
+        selected_md = emb_sig.md_algorithm.lower()
+        if selected_md not in sv_spec.digest_methods:
+            raise SigSeedValueValidationError(
+                "The selected message digest %s is not allowed by the "
+                "seed value dictionary."
+                % selected_md
+            )
+
+    if flags & SigSeedValFlags.REASONS:
+        # standard says that omission of the /Reasons key amounts to
+        #  a prohibition in this case
+        must_omit = not sv_spec.reasons or sv_spec.reasons == ["."]
+        reason_given = sig_obj.get('/Reason')
+        if must_omit and reason_given is not None:
+            raise SigSeedValueValidationError(
+                "The seed value dictionary prohibits giving a reason "
+                "for signing."
+            )
+        if not must_omit and reason_given not in sv_spec.reasons:
+            raise SigSeedValueValidationError(
+                "The reason for signing \"%s\" is not accepted by the "
+                "seed value dictionary." % (
+                    reason_given,
+                )
+            )
+
+
 def validate_pdf_signature(reader: PdfFileReader, sig_field,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None) \
-                           -> PDFSignatureStatus:
+                           -> PdfSignatureStatus:
     try:
         sig_object = sig_field.get_object()['/V']
     except KeyError:
-        raise ValueError('Signature is empty')
+        raise SignatureValidationError('Signature is empty')
+
+    # check whether the subfilter type is one we support
+    subfilter_str = sig_object['/SubFilter']
+    try:
+        from pdfstamp.sign.fields import SigSeedSubFilter
+        SigSeedSubFilter(subfilter_str)
+    except ValueError:
+        raise NotImplementedError(
+            "%s is not a recognized SubFilter type." % subfilter_str
+        )
+
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
@@ -260,8 +416,6 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
 
     # TODO implement logic to detect whether
     #  the modifications made are permissible
-
-    # TODO validate /SV constraints if present!
 
     status_kwargs = {'complete_document': embedded_sig.complete_document}
 
@@ -275,22 +429,38 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
     tst_signed_data = embedded_sig.external_timestamp_data
     # TODO compare value of embedded timestamp token with the timestamp
     #  attribute if both are present
+    tst_validity: Optional[SignatureStatus] = None
     if tst_signed_data is not None:
         tst_info = tst_signed_data['encap_content_info']['content'].parsed
         assert isinstance(tst_info, tsp.TSTInfo)
         timestamp = tst_info['gen_time'].native
-        status_kwargs['timestamp_validity'] = validate_cms_signature(
+        tst_validity = validate_cms_signature(
             tst_signed_data, status_cls=TimestampSignatureStatus,
             validation_context=ts_validation_context,
             status_kwargs={'timestamp': timestamp}
         )
+        status_kwargs['timestamp_validity'] = tst_validity
 
-    return validate_cms_signature(
-        embedded_sig.signed_data, status_cls=PDFSignatureStatus,
+    status_kwargs = _validate_cms_signature(
+        embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.raw_digest,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs
     )
+    timestamp_found = (
+        tst_validity is not None
+        and tst_validity.valid and tst_validity.trusted
+    )
+    try:
+        _validate_sv_constraints(
+            sig_field, embedded_sig, status_kwargs['signing_cert'],
+            status_kwargs['validation_path'], timestamp_found
+        )
+        seed_value_ok = True
+    except SigSeedValueValidationError as e:
+        logger.warning(e)
+        seed_value_ok = False
+    return PdfSignatureStatus(seed_value_ok=seed_value_ok, **status_kwargs)
 
 
 class RevocationInfoValidationType(Enum):
@@ -303,7 +473,7 @@ class RevocationInfoValidationType(Enum):
 
 # TODO verify formal PAdES requirements for timestamps
 # TODO verify other formal PAdES requirements (coverage, etc.)
-def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
+def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
                                validation_type: RevocationInfoValidationType,
                                validation_context_kwargs=None):
     validation_context_kwargs = validation_context_kwargs or {}
@@ -311,6 +481,11 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
     # certs with OCSP/CRL endpoints should have the relevant revocation data
     # embedded.
     validation_context_kwargs['revocation_mode'] = "hard-fail"
+
+    try:
+        sig_object = sig_field.get_object()['/V']
+    except KeyError:
+        raise SignatureValidationError('Signature is empty')
 
     if sig_object is None:
         raise ValueError('Signature is empty')
@@ -343,12 +518,22 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_object,
             validation_context=vc, status_kwargs={'timestamp': timestamp}
         )
     }
-
-    return validate_cms_signature(
-        embedded_sig.signed_data, status_cls=PDFSignatureStatus,
+    status_kwargs = _validate_cms_signature(
+        embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.raw_digest,
         validation_context=vc, status_kwargs=status_kwargs
     )
+
+    try:
+        _validate_sv_constraints(
+            sig_field, embedded_sig, status_kwargs['signing_cert'],
+            status_kwargs['validation_path'], timestamp_found=True
+        )
+        seed_value_ok = True
+    except SigSeedValueValidationError as e:
+        logger.warning(e)
+        seed_value_ok = False
+    return PdfSignatureStatus(seed_value_ok=seed_value_ok, **status_kwargs)
 
 
 def read_adobe_revocation_info(signer_info: cms.SignerInfo,

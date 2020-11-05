@@ -8,6 +8,8 @@ import hashlib
 
 from asn1crypto import x509, cms, tsp
 # noinspection PyProtectedMember
+from certvalidator.path import ValidationPath
+
 from certvalidator import (
     CertificateValidator, InvalidCertificateError,
     PathBuildingError,
@@ -35,6 +37,7 @@ class SignatureStatus:
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
     md_algorithm: str
+    validation_path: ValidationPath
 
     # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
     #  (probably legacy behaviour)
@@ -62,8 +65,9 @@ class SignatureStatus:
     def validate_cert_usage(cls, validator: CertificateValidator):
 
         usage_ok = revoked = trusted = False
+        path = None
         try:
-            validator.validate_usage(
+            path = validator.validate_usage(
                 key_usage=cls.key_usage, extended_key_usage=cls.extd_key_usage
             )
             usage_ok = trusted = True
@@ -74,7 +78,7 @@ class SignatureStatus:
             revoked = True
         except (PathValidationError, PathBuildingError) as e:
             logger.warning(e)
-        return trusted, revoked, usage_ok
+        return trusted, revoked, usage_ok, path
 
 
 def simple_cms_attribute(attr_type, value):

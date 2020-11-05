@@ -206,6 +206,10 @@ def test_null_sign():
     assert field_name == 'Sig1'
     with pytest.raises(ValueError):
         val_untrusted(r, sig_field)
+    with pytest.raises(ValueError):
+        validate_pdf_ltv_signature(
+            r, sig_field, RevocationInfoValidationType.ADOBE_STYLE
+        )
 
 
 def test_sign_with_trust():
@@ -993,7 +997,7 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     with pytest.raises(ValueError):
-        validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
+        validate_pdf_ltv_signature(r, sig_field, rivt_pades)
 
 
 def test_pades_revinfo_live(requests_mock):
@@ -1014,12 +1018,12 @@ def test_pades_revinfo_live(requests_mock):
     assert len(dss.crls) == len(vc.crls) == 1
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
+    status = validate_pdf_ltv_signature(r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
     with pytest.raises(ValueError):
-        validate_pdf_ltv_signature(r, sig_obj, rivt_adobe, {'trust_roots': TRUST_ROOTS})
+        validate_pdf_ltv_signature(r, sig_field, rivt_adobe, {'trust_roots': TRUST_ROOTS})
 
 
 def test_adobe_revinfo_live(requests_mock):
@@ -1035,7 +1039,7 @@ def test_adobe_revinfo_live(requests_mock):
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-    status = validate_pdf_ltv_signature(r, sig_obj, rivt_adobe, {'trust_roots': TRUST_ROOTS})
+    status = validate_pdf_ltv_signature(r, sig_field, rivt_adobe, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
 
@@ -1050,7 +1054,7 @@ def test_pades_revinfo_live_nofullchain():
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
+    status = validate_pdf_ltv_signature(r, sig_field, rivt_pades)
     assert status.valid and not status.trusted
 
 
@@ -1066,7 +1070,7 @@ def test_adobe_revinfo_live_nofullchain():
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-    status = validate_pdf_ltv_signature(r, sig_obj, rivt_adobe)
+    status = validate_pdf_ltv_signature(r, sig_field, rivt_adobe)
     assert status.valid and not status.trusted
 
 
@@ -1090,7 +1094,7 @@ def test_pades_revinfo_live_lta(requests_mock):
     field_iter = fields.enumerate_sig_fields(r)
     field_name, sig_obj, sig_field = next(field_iter)
     rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
+    status = validate_pdf_ltv_signature(r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
     field_name, sig_obj, sig_field = next(field_iter)
@@ -1111,11 +1115,22 @@ def prepare_sv_field(sv_spec):
     return out
 
 
-def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA_TS):
+# passing test_violation=False tests the signer, while test_violation=True
+#  instructs the signer to ignore all SV requirements, thus testing whether
+#  the validator catches the violations properly
+def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA_TS, test_violation=False):
     w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
-    out = signers.sign_pdf(w, sig_meta, signer=signer)
+
+    pdf_signer = signers.PdfSigner(sig_meta, signer)
+    pdf_signer._ignore_sv = test_violation
+    out = pdf_signer.sign_pdf(w)
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    status = validate_pdf_signature(r, sig_field, dummy_ocsp_vc())
+    if test_violation:
+        assert not status.seed_value_ok
+    else:
+        assert status.seed_value_ok
     return EmbeddedPdfSignature(r, sig_obj)
 
 
@@ -1130,6 +1145,10 @@ def test_sv_sign_md_req():
                 md_algorithm='sha1', field_name='Sig'
             )
         )
+    sign_with_sv(
+        sv, signers.PdfSignatureMetadata(md_algorithm='sha1', field_name='Sig'),
+        test_violation=True
+    )
     emb_sig = sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
@@ -1173,6 +1192,12 @@ def test_sv_sign_subfilter_req():
                 subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
             )
         )
+    sign_with_sv(
+        sv, signers.PdfSignatureMetadata(
+            md_algorithm='sha1', field_name='Sig',
+            subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+        ), test_violation=True
+    )
     emb_sig = sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
@@ -1206,30 +1231,32 @@ def test_sv_sign_addrevinfo_req(requests_mock):
         embed_validation_info=True
     )
     emb_sig = sign_with_sv(sv, meta)
+    _, _, sig_field = next(fields.enumerate_sig_fields(emb_sig.reader))
     status = validate_pdf_ltv_signature(
-        emb_sig.reader, emb_sig.sig_object,
+        emb_sig.reader, sig_field,
         RevocationInfoValidationType.ADOBE_STYLE,
         {'trust_roots': TRUST_ROOTS}
     )
     assert status.valid and status.trusted
     assert emb_sig.sig_object['/SubFilter'] == '/adbe.pkcs7.detached'
 
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', validation_context=vc,
+        subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
+        embed_validation_info=False
+    )
     with pytest.raises(SigningError):
-        meta = signers.PdfSignatureMetadata(
-            field_name='Sig', validation_context=vc,
-            subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
-            embed_validation_info=False
-        )
         sign_with_sv(sv, meta)
-
+    sign_with_sv(sv, meta, test_violation=True)
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', validation_context=vc,
+        subfilter=fields.SigSeedSubFilter.PADES,
+        embed_validation_info=True
+    )
     # this shouldn't work with PAdES
     with pytest.raises(SigningError):
-        meta = signers.PdfSignatureMetadata(
-            field_name='Sig', validation_context=vc,
-            subfilter=fields.SigSeedSubFilter.PADES,
-            embed_validation_info=True
-        )
         sign_with_sv(sv, meta)
+    sign_with_sv(sv, meta, test_violation=True)
 
 
 def test_sv_sign_addrevinfo_subfilter_conflict():
@@ -1250,12 +1277,13 @@ def test_sv_sign_addrevinfo_subfilter_conflict():
     sv = fields.SigSeedValueSpec(
         flags=revinfo_and_subfilter, subfilters=[PADES], add_rev_info=True
     )
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', validation_context=dummy_ocsp_vc(),
+        embed_validation_info=True
+    )
     with pytest.raises(SigningError):
-        meta = signers.PdfSignatureMetadata(
-            field_name='Sig', validation_context=dummy_ocsp_vc(),
-            embed_validation_info=True
-        )
         sign_with_sv(sv, meta)
+    sign_with_sv(sv, meta, test_violation=True)
 
     sv = fields.SigSeedValueSpec(
         flags=revinfo_and_subfilter, subfilters=[PADES], add_rev_info=False
@@ -1264,6 +1292,7 @@ def test_sv_sign_addrevinfo_subfilter_conflict():
         field_name='Sig', validation_context=dummy_ocsp_vc(),
     )
     sign_with_sv(sv, meta)
+
 
 def test_sv_sign_cert_constraint():
     # this is more thoroughly unit tested at a lower level (see further up),
@@ -1284,6 +1313,9 @@ def test_sv_sign_cert_constraint():
     )
     with pytest.raises(SigningError):
         sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+    sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig'), test_violation=True
+    )
 
 
 def test_sv_flag_unsupported():
@@ -1291,7 +1323,7 @@ def test_sv_flag_unsupported():
         flags=fields.SigSeedValFlags.APPEARANCE_FILTER,
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
-    with pytest.raises(SigningError):
+    with pytest.raises(NotImplementedError):
         sign_with_sv(sv, meta)
 
 
@@ -1311,13 +1343,13 @@ def test_sv_subfilter_unsupported():
     out.seek(0)
     frozen = out.getvalue()
 
-    with pytest.raises(SigningError):
+    with pytest.raises(NotImplementedError):
         signers.sign_pdf(
             IncrementalPdfFileWriter(BytesIO(frozen)),
             signers.PdfSignatureMetadata(field_name='Sig'),
             signer=FROM_CA_TS
         )
-    with pytest.raises(SigningError):
+    with pytest.raises(NotImplementedError):
         signers.sign_pdf(
             IncrementalPdfFileWriter(BytesIO(frozen)),
             signers.PdfSignatureMetadata(
@@ -1393,16 +1425,17 @@ def test_sv_sign_reason_req():
         flags=fields.SigSeedValFlags.REASONS,
         reasons=['I agree', 'Works for me']
     )
+    aw_yiss = signers.PdfSignatureMetadata(reason='Aw yiss', field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(
-            sv, signers.PdfSignatureMetadata(
-                reason='Aw yiss', field_name='Sig'
-            )
-        )
+        sign_with_sv(sv, aw_yiss)
+    sign_with_sv(sv, aw_yiss, test_violation=True)
+
     with pytest.raises(SigningError):
-        sign_with_sv(
-            sv, signers.PdfSignatureMetadata(field_name='Sig')
-        )
+        sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+    sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig'),
+        test_violation=True
+    )
 
     emb_sig = sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig', reason='I agree')
@@ -1415,18 +1448,15 @@ def test_sv_sign_reason_prohibited(reasons_param):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.REASONS, reasons=reasons_param
     )
+    aw_yiss = signers.PdfSignatureMetadata(reason='Aw yiss', field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(
-            sv, signers.PdfSignatureMetadata(
-                reason='Aw yiss', field_name='Sig'
-            )
-        )
+        sign_with_sv(sv, aw_yiss)
+    sign_with_sv(sv, aw_yiss, test_violation=True)
+
+    dot = signers.PdfSignatureMetadata(reason='.', field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(
-            sv, signers.PdfSignatureMetadata(
-                reason='.', field_name='Sig'
-            )
-        )
+        sign_with_sv(sv, dot)
+    sign_with_sv(sv, dot, test_violation=True)
 
     emb_sig = sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')

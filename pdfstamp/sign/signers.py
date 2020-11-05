@@ -596,6 +596,8 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
 
 
 class PdfSigner:
+    _ignore_sv = False
+
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer):
         self.signature_meta = signature_meta
         self.signer = signer
@@ -651,6 +653,10 @@ class PdfSigner:
 
     def _enforce_seed_value_constraints(self, sig_field, validation_path) \
             -> Optional[SigSeedValueSpec]:
+        # for testing & debugging
+        if self._ignore_sv:
+            return None
+
         sv_dict = sig_field.get('/SV')
         if sv_dict is None:
             return None
@@ -664,7 +670,7 @@ class PdfSigner:
             return sv_spec
 
         if flags & SigSeedValFlags.UNSUPPORTED:
-            raise SigningError(
+            raise NotImplementedError(
                 "Unsupported mandatory seed value items: " + repr(
                     flags & SigSeedValFlags.UNSUPPORTED
                 )
@@ -674,7 +680,7 @@ class PdfSigner:
                 and sv_spec.subfilters is not None:
             # empty array = no supported subfilters
             if not sv_spec.subfilters:
-                raise SigningError(
+                raise NotImplementedError(
                     "The signature encodings mandated by the seed value "
                     "dictionary are not supported."
                 )
