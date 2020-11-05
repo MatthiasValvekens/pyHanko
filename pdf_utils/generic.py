@@ -195,6 +195,9 @@ class BooleanObject(PdfObject):
         else:
             raise PdfReadError('Could not read Boolean object')
 
+    def __bool__(self):
+        return bool(self.value)
+
 
 class ArrayObject(list, PdfObject):
 
