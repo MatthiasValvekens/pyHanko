@@ -86,7 +86,7 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
               show_default=True)
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
-@click.option('--use-pades', help='sign PAdES-style [level B(-T)]',
+@click.option('--use-pades', help='sign PAdES-style [level B/B-T/B-LT]',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
 @click.option('--with-validation-info', help='embed revocation info',
