@@ -149,8 +149,8 @@ def live_testing_vc(requests_mock):
     return vc
 
 
-def val_trusted(r, sig_obj, extd=False):
-    val_status = validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
+def val_trusted(r, sig_field, extd=False):
+    val_status = validate_pdf_signature(r, sig_field, SIMPLE_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
@@ -163,8 +163,8 @@ def val_trusted(r, sig_obj, extd=False):
 
 
 # validate a signature, don't care about trust
-def val_untrusted(r, sig_obj, extd=False):
-    val_status = validate_pdf_signature(r, sig_obj, NOTRUST_V_CONTEXT)
+def val_untrusted(r, sig_field, extd=False):
+    val_status = validate_pdf_signature(r, sig_field, NOTRUST_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     if not extd:
@@ -182,9 +182,9 @@ def test_simple_sign(incl_signed_time):
     )
     out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_untrusted(r, sig_obj)
+    val_untrusted(r, sig_field)
 
     # try tampering with the file
     out.seek(0x9d)
@@ -193,11 +193,19 @@ def test_simple_sign(incl_signed_time):
     out.write(b'4')
     out.seek(0)
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
-    tampered = validate_pdf_signature(r, sig_obj, SIMPLE_V_CONTEXT)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    tampered = validate_pdf_signature(r, sig_field, SIMPLE_V_CONTEXT)
     assert not tampered.intact
     assert not tampered.valid
     assert tampered.summary() == 'INVALID'
+
+
+def test_null_sign():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    with pytest.raises(ValueError):
+        val_untrusted(r, sig_field)
 
 
 def test_sign_with_trust():
@@ -206,12 +214,12 @@ def test_sign_with_trust():
         w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    status = val_untrusted(r, sig_obj)
+    status = val_untrusted(r, sig_field)
     assert not status.trusted
 
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
 
 def test_sign_with_trust_pkcs12():
@@ -221,12 +229,12 @@ def test_sign_with_trust_pkcs12():
         signer=FROM_CA_PKCS12
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    status = val_untrusted(r, sig_obj)
+    status = val_untrusted(r, sig_field)
     assert not status.trusted
 
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
 
 def test_sign_field_unclear():
@@ -262,9 +270,9 @@ def test_sign_field_infer():
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
 
 def test_sign_field_filled():
@@ -287,13 +295,13 @@ def test_sign_field_filled():
     def val2(out_buf):
         r = PdfFileReader(out_buf)
         sig_fields = fields.enumerate_sig_fields(r)
-        field_name, sig_obj, _ = next(sig_fields)
+        field_name, sig_obj, sig_field = next(sig_fields)
         assert field_name == 'Sig1'
-        val_trusted(r, sig_obj, extd=True)
+        val_trusted(r, sig_field, extd=True)
 
-        field_name, sig_obj, _ = next(sig_fields)
+        field_name, sig_obj, sig_field = next(sig_fields)
         assert field_name == 'Sig2'
-        val_trusted(r, sig_obj)
+        val_trusted(r, sig_field)
 
     w2 = IncrementalPdfFileWriter(out1)
     # autodetect remaining open field
@@ -323,11 +331,11 @@ def test_sign_new(file):
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    field_name = sig_obj = None
+    field_name = sig_field = None
     sig_fields = fields.enumerate_sig_fields(r)
     while field_name != 'SigNew':
-        field_name, sig_obj, _ = next(sig_fields)
-    val_trusted(r, sig_obj)
+        field_name, sig_obj, sig_field = next(sig_fields)
+    val_trusted(r, sig_field)
 
 
 def test_enumerate_empty():
@@ -355,9 +363,9 @@ def test_dummy_timestamp():
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    validity = val_trusted(r, sig_obj)
+    validity = val_trusted(r, sig_field)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
 
@@ -389,9 +397,9 @@ def test_http_timestamp(requests_mock):
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    validity = val_trusted(r, sig_obj)
+    validity = val_trusted(r, sig_field)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
 
@@ -408,8 +416,8 @@ def test_sign_crypt_rc4(password):
 
     r = PdfFileReader(out)
     r.decrypt(password)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
-    val_trusted(r, sig_obj)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    val_trusted(r, sig_field)
 
 
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
@@ -429,11 +437,11 @@ def test_sign_crypt_rc4_new(password, file):
     out.seek(0)
     r = PdfFileReader(out)
     r.decrypt(password)
-    field_name = sig_obj = None
+    field_name = sig_field = None
     sig_fields = fields.enumerate_sig_fields(r)
     while field_name != 'SigNew':
-        field_name, sig_obj, _ = next(sig_fields)
-    val_trusted(r, sig_obj)
+        field_name, sig_obj, sig_field = next(sig_fields)
+    val_trusted(r, sig_field)
 
 
 def test_append_simple_sig_field():
@@ -756,9 +764,9 @@ def test_certify():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
     info = read_certification_data(r)
     assert info.author_sig.sig_object == sig_obj.get_object()
@@ -781,9 +789,9 @@ def test_no_double_certify():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
     info = read_certification_data(r)
     assert info.author_sig.sig_object == sig_obj.get_object()
@@ -818,17 +826,17 @@ def test_approval_sig():
 
     r = PdfFileReader(out)
     sigs = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, _ = next(sigs)
+    field_name, sig_obj, sig_field = next(sigs)
     assert field_name == 'Sig1'
-    val_trusted(r, sig_obj, extd=True)
+    val_trusted(r, sig_field, extd=True)
 
     info = read_certification_data(r)
     assert info.author_sig.sig_object == sig_obj.get_object()
     assert info.permission_bits == signers.DocMDPPerm.FILL_FORMS
 
-    field_name, sig_obj, _ = next(sigs)
+    field_name, sig_obj, sig_field = next(sigs)
     assert field_name == 'Sig2'
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
 
 def test_approval_sig_md_match_author_sig():
@@ -856,7 +864,7 @@ def test_approval_sig_md_match_author_sig():
     r = PdfFileReader(out)
     sigs = fields.enumerate_sig_fields(r)
     next(sigs)
-    field_name, sig_obj, _ = next(sigs)
+    field_name, sig_obj, sig_field = next(sigs)
     assert EmbeddedPdfSignature(r, sig_obj).md_algorithm == 'sha256'
 
 
@@ -870,12 +878,12 @@ def test_ocsp_embed():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    status = val_untrusted(r, sig_obj)
+    status = val_untrusted(r, sig_field)
     assert not status.trusted
 
-    val_trusted(r, sig_obj)
+    val_trusted(r, sig_field)
 
     embedded_sig = EmbeddedPdfSignature(r, sig_obj)
     vc = read_adobe_revocation_info(embedded_sig.signer_info)
@@ -892,7 +900,7 @@ def test_pades_flag():
         signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
@@ -906,7 +914,7 @@ def test_pades_revinfo_dummydata():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
@@ -937,7 +945,7 @@ def test_pades_revinfo_ts_dummydata():
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
@@ -960,7 +968,7 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
         ), signer=FROM_CA_HTTP_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
@@ -982,7 +990,7 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     with pytest.raises(ValueError):
         validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
@@ -1004,7 +1012,7 @@ def test_pades_revinfo_live(requests_mock):
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == len(vc.ocsps) == 1
     assert len(dss.crls) == len(vc.crls) == 1
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
@@ -1025,7 +1033,7 @@ def test_adobe_revinfo_live(requests_mock):
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_adobe, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
@@ -1040,7 +1048,7 @@ def test_pades_revinfo_live_nofullchain():
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades)
     assert status.valid and not status.trusted
@@ -1056,7 +1064,7 @@ def test_adobe_revinfo_live_nofullchain():
         ), signer=FROM_CA_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_adobe)
     assert status.valid and not status.trusted
@@ -1080,12 +1088,12 @@ def test_pades_revinfo_live_lta(requests_mock):
     assert len(dss.ocsps) == len(vc.ocsps) == 1
     assert len(dss.crls) == len(vc.crls) == 1
     field_iter = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, _ = next(field_iter)
+    field_name, sig_obj, sig_field = next(field_iter)
     rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_obj, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
-    field_name, sig_obj, _ = next(field_iter)
+    field_name, sig_obj, sig_field = next(field_iter)
     assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
     # TODO implement and run actual LTA verification checks
 
@@ -1107,7 +1115,7 @@ def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA_TS):
     w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
     out = signers.sign_pdf(w, sig_meta, signer=signer)
     r = PdfFileReader(out)
-    field_name, sig_obj, _ = next(fields.enumerate_sig_fields(r))
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     return EmbeddedPdfSignature(r, sig_obj)
 
 

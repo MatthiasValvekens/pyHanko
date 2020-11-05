@@ -244,11 +244,13 @@ class EmbeddedPdfSignature:
             pass
 
 
-def validate_pdf_signature(reader: PdfFileReader, sig_object,
+def validate_pdf_signature(reader: PdfFileReader, sig_field,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None) \
                            -> PDFSignatureStatus:
-    if sig_object is None:  # pragma: nocover
+    try:
+        sig_object = sig_field.get_object()['/V']
+    except KeyError:
         raise ValueError('Signature is empty')
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context

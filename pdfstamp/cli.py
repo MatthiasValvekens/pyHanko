@@ -40,7 +40,7 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
               required=False, multiple=True, type=readable_file)
 def list_sigfields(infile, skip_status, validate, trust, trust_replace):
     r = PdfFileReader(infile)
-    for name, value, _ in fields.enumerate_sig_fields(r):
+    for name, value, field_ref in fields.enumerate_sig_fields(r):
         if skip_status:
             print(name)
             continue
@@ -60,7 +60,7 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
                         )
                 try:
                     status = validation.validate_pdf_signature(
-                        r, value, signer_validation_context=v_context
+                        r, field_ref, signer_validation_context=v_context
                     ).summary()
                 except ValueError:
                     status = 'MALFORMED'
