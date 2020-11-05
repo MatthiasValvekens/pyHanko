@@ -1257,6 +1257,13 @@ def test_sv_sign_addrevinfo_subfilter_conflict():
         )
         sign_with_sv(sv, meta)
 
+    sv = fields.SigSeedValueSpec(
+        flags=revinfo_and_subfilter, subfilters=[PADES], add_rev_info=False
+    )
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', validation_context=dummy_ocsp_vc(),
+    )
+    sign_with_sv(sv, meta)
 
 def test_sv_sign_cert_constraint():
     # this is more thoroughly unit tested at a lower level (see further up),

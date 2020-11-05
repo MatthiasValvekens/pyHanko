@@ -701,7 +701,8 @@ class PdfSigner:
                     "added; adjust PdfSignatureMetadata settings accordingly."
                     % ("" if sv_spec.add_rev_info else "not ")
                 )
-            if selected_sf != SigSeedSubFilter.ADOBE_PKCS7_DETACHED:
+            if sv_spec.add_rev_info and \
+                    selected_sf != SigSeedSubFilter.ADOBE_PKCS7_DETACHED:
                 raise SigningError(
                     "The seed value dict mandates that Adobe-style revocation "
                     "info be added; this requires subfilter '%s'" % (
