@@ -1371,3 +1371,49 @@ def test_sv_timestamp_url(requests_mock):
     )
     sign_with_sv(sv, meta, signer=signer)
     assert ts_requested
+
+
+def test_sv_sign_reason_req():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.REASONS,
+        reasons=['I agree', 'Works for me']
+    )
+    with pytest.raises(SigningError):
+        sign_with_sv(
+            sv, signers.PdfSignatureMetadata(
+                reason='Aw yiss', field_name='Sig'
+            )
+        )
+    with pytest.raises(SigningError):
+        sign_with_sv(
+            sv, signers.PdfSignatureMetadata(field_name='Sig')
+        )
+
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig', reason='I agree')
+    )
+    assert emb_sig.sig_object['/Reason'] == 'I agree'
+
+
+@pytest.mark.parametrize('reasons_param', [None, [], ["."]])
+def test_sv_sign_reason_prohibited(reasons_param):
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.REASONS, reasons=reasons_param
+    )
+    with pytest.raises(SigningError):
+        sign_with_sv(
+            sv, signers.PdfSignatureMetadata(
+                reason='Aw yiss', field_name='Sig'
+            )
+        )
+    with pytest.raises(SigningError):
+        sign_with_sv(
+            sv, signers.PdfSignatureMetadata(
+                reason='.', field_name='Sig'
+            )
+        )
+
+    emb_sig = sign_with_sv(
+        sv, signers.PdfSignatureMetadata(field_name='Sig')
+    )
+    assert pdf_name('/Reason') not in emb_sig.sig_object

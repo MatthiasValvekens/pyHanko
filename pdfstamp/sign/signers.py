@@ -651,8 +651,6 @@ class PdfSigner:
 
     def _enforce_seed_value_constraints(self, sig_field, validation_path) \
             -> Optional[SigSeedValueSpec]:
-        # TODO enforce constraints on /Reason
-
         sv_dict = sig_field.get('/SV')
         if sv_dict is None:
             return None
@@ -721,6 +719,26 @@ class PdfSigner:
                         "seed value dictionary. Please select one of %s."
                         % (selected_md, ", ".join(sv_spec.digest_methods))
                     )
+
+        if flags & SigSeedValFlags.REASONS:
+            # standard says that omission of the /Reasons key amounts to
+            #  a prohibition in this case
+            must_omit = not sv_spec.reasons or sv_spec.reasons == ["."]
+            reason_given = self.signature_meta.reason
+            if must_omit and reason_given is not None:
+                raise SigningError(
+                    "The seed value dictionary prohibits giving a reason "
+                    "for signing."
+                )
+            if not must_omit and reason_given not in sv_spec.reasons:
+                raise SigningError(
+                    "Reason \"%s\" is not a valid reason for signing, "
+                    "please choose one of the following: %s." % (
+                        reason_given,
+                        ", ".join("\"%s\"" % s for s in sv_spec.reasons)
+                    )
+                )
+
         return sv_spec
 
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
