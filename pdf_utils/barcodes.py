@@ -89,7 +89,6 @@ class PdfStreamBarcodeWriter(BaseWriter):
 
     def _finish(self) -> bytes:
         self._command_stream.append(b'Q')
-        print(self.command_stream)
         return self.command_stream
 
     @property
