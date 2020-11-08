@@ -92,9 +92,15 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
 @click.option('--with-validation-info', help='embed revocation info',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
+@click.option('--trust-replace',
+              help='listed trust roots supersede OS-provided trust store',
+              required=False,
+              type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--trust', help='list trust roots (multiple allowed)',
+              required=False, multiple=True, type=readable_file)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, use_pades, with_validation_info):
+           timestamp_url, use_pades, with_validation_info, trust_replace, trust):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
@@ -105,8 +111,24 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         subfilter = fields.SigSeedSubFilter.PADES
     else:
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
-    vc = ValidationContext(allow_fetching=True) \
-        if with_validation_info else None
+
+    if with_validation_info:
+        if trust:
+            # add trust roots to the validation context, or replace them
+            trust_certs = list(
+                signers.load_ca_chain(trust))
+            if trust_replace:
+                vc = ValidationContext(
+                    trust_roots=trust_certs, allow_fetching=True
+                )
+            else:
+                vc = ValidationContext(
+                    extra_trust_roots=trust_certs, allow_fetching=True
+                )
+        else:
+            vc = ValidationContext(allow_fetching=True)
+    else:
+        vc = None
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
         field_name=field, location=location, reason=reason, name=name,
         certify=certify, subfilter=subfilter,
