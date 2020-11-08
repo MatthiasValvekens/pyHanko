@@ -7,7 +7,7 @@ import re
 import binascii
 from datetime import datetime
 from typing import Iterator, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .misc import (
     read_non_whitespace, skip_over_comment, read_until_regex,
@@ -60,8 +60,7 @@ class Reference(Dereferenceable):
 
     idnum: int
     generation: int
-    # FIXME can I refer to rw_common.PdfHandler without circular imports?
-    pdf: object
+    pdf: object = field(repr=False, hash=False, compare=False, default=None)
 
     def get_object(self):
         from pdf_utils.rw_common import PdfHandler

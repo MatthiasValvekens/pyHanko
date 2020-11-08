@@ -18,7 +18,7 @@ It's nowhere near complete, but here is a short overview of the features:
  - Through fontTools, we have (experimental) support for auto-subsetting and embedding CFF fonts (more testing needed). These features are not available in the CLI as of yet.
  - All operations on PDF files are executed in append-only mode, to minimise the risk of unintentional mangling. This is also necessary to provide support for adding multiple signatures to a given document.
  - The signer supports PKCS11 devices too. For Belgian eID cards, this has been integrated into the CLI.
- - Through the CLI, it is possible to syntactically and cryptographically verify the validity of a signature. This means that it is possible to verify whether or not a signature is intact, cryptographically sound and whether it covers the entire document. However, the semantics are not checked (see below).
+ - Through the CLI, it is possible to syntactically and cryptographically verify the validity of a signature. This means that it is possible to verify whether or not a signature is intact, cryptographically sound and whether it covers the entire document. However, the semantics are not yet fully checked (see below).
  - There is limited support for encrypted files, based on what is available in PyPDF2 (i.e. rudimentary RC4-based encryption)
  - The signer can request and embed timestamps from RFC 3161-compliant Time Stamping Authorities. The degree to which this feature is exposed in the CLI is limited: only TSA's that don't require authentication can be used.
  
@@ -28,7 +28,7 @@ It's nowhere near complete, but here is a short overview of the features:
 
 ### Some TODOs and known limitations
 
- - Expand signature validation functionality. In case the document has been modified through incremental updates, we should judge whether these changes are allowed by the signature's document modification protection policy.
+ - Expand signature validation functionality. In case the document has been modified through incremental updates, we should judge whether these changes are allowed by the signature's document modification protection policy. This feature is currently under active development.
  - Prevent the user from shooting themselves in the foot to some degree, by explicitly disallowing obviously destructive operations on signed documents.
  - Add systematic tests, both with real-world PDF files and minimal examples from the spec.
 

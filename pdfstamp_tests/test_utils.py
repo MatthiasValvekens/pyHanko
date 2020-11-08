@@ -3,6 +3,7 @@ from fractions import Fraction
 import pytest
 from io import BytesIO
 
+from pdf_utils.generic import Reference
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.misc import BoxConstraints, BoxSpecificationError
 from pdf_utils.reader import PdfFileReader
@@ -249,9 +250,9 @@ def test_historical_read():
     with pytest.raises(misc.PdfReadError):
         reader.get_object(acroform_ref, revision=0)
 
-    assert (0, 6) in reader.xrefs.explicit_refs_in_revision(1)
-    assert (0, 2) in reader.xrefs.explicit_refs_in_revision(0)
-    assert (0, 2) not in reader.xrefs.explicit_refs_in_revision(1)
+    assert Reference(6, 0) in reader.xrefs.explicit_refs_in_revision(1)
+    assert Reference(2, 0) in reader.xrefs.explicit_refs_in_revision(0)
+    assert Reference(2, 0) not in reader.xrefs.explicit_refs_in_revision(1)
 
 
 # TODO actually attempt to render the XObjects
@@ -285,22 +286,6 @@ def test_page_import_with_fonts(inherit_filters):
     df = fonts['/FEmb']['/DescendantFonts'][0].get_object()
     font_file = df['/FontDescriptor']['/FontFile3']
     assert len(font_file.data) == 1424
-
-
-# TODO test this for objects in streams
-def test_embedding_metadata():
-    r = PdfFileReader(BytesIO(MINIMAL))
-    assert r.root_ref.idnum == 1
-    root_meta = r.xrefs.get_embedding_metadata(r.root_ref)
-    assert root_meta.obj_start == 0x12
-    assert root_meta.obj_end == 0x4c
-    assert r.root.container_ref == r.root_ref
-
-    obj3 = generic.Reference(3, 0, r)
-    deep_obj = r.get_object(obj3)['/Resources']['/Font']['/F1']['/Subtype']
-    assert deep_obj.container_ref == obj3
-
-    assert r.trailer['/Size'].container_ref.get_object() is r.trailer
 
 
 def test_deep_modify():

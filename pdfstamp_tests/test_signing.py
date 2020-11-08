@@ -18,7 +18,8 @@ from pdfstamp.sign.general import UnacceptableSignerError, SigningError
 from pdfstamp.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, read_adobe_revocation_info,
-    validate_pdf_ltv_signature, RevocationInfoValidationType
+    validate_pdf_ltv_signature, RevocationInfoValidationType,
+    SignatureCoverageLevel, ModificationLevel,
 )
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -158,7 +159,12 @@ def val_trusted(r, sig_field, extd=False):
     assert 'INTACT' in summ
     assert 'TRUSTED' in summ
     if not extd:
-        assert val_status.complete_document
+        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
+        assert val_status.modification_level == ModificationLevel.NONE
+    else:
+        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
+        assert val_status.modification_level <= ModificationLevel.FORM_FILLING
+
     return val_status
 
 
@@ -168,9 +174,23 @@ def val_untrusted(r, sig_field, extd=False):
     assert val_status.intact
     assert val_status.valid
     if not extd:
-        assert val_status.complete_document
+        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
+        assert val_status.modification_level == ModificationLevel.NONE
+    else:
+        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
+        assert val_status.modification_level <= ModificationLevel.FORM_FILLING
     summ = val_status.summary()
     assert 'INTACT' in summ
+    return val_status
+
+
+def val_trusted_but_modified(r, sig_field):
+    val_status = validate_pdf_signature(r, sig_field, SIMPLE_V_CONTEXT)
+    assert val_status.intact
+    assert val_status.valid
+    assert val_status.trusted
+    assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
+    assert val_status.modification_level == ModificationLevel.OTHER
     return val_status
 
 
@@ -313,15 +333,14 @@ def test_sign_field_filled():
         w2, signers.PdfSignatureMetadata(), signer=FROM_CA,
         existing_fields_only=True
     )
-    out1.seek(0)
     val2(out2)
 
+    out1.seek(0)
     w2 = IncrementalPdfFileWriter(out1)
     out2 = signers.sign_pdf(
         w2, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
         existing_fields_only=True
     )
-    out1.seek(0)
     val2(out2)
 
 
@@ -339,6 +358,29 @@ def test_sign_new(file):
     sig_fields = fields.enumerate_sig_fields(r)
     while field_name != 'SigNew':
         field_name, sig_obj, sig_field = next(sig_fields)
+    val_trusted(r, sig_field)
+
+
+def test_double_sig_add_field():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    sig_fields = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig1'
+    status = val_trusted(r, sig_field, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'SigNew'
     val_trusted(r, sig_field)
 
 
@@ -1020,6 +1062,7 @@ def test_pades_revinfo_live(requests_mock):
     rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
 
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
     with pytest.raises(ValueError):
@@ -1096,6 +1139,7 @@ def test_pades_revinfo_live_lta(requests_mock):
     rivt_pades = RevocationInfoValidationType.PADES_LT
     status = validate_pdf_ltv_signature(r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
 
     field_name, sig_obj, sig_field = next(field_iter)
     assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
@@ -1462,3 +1506,324 @@ def test_sv_sign_reason_prohibited(reasons_param):
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert pdf_name('/Reason') not in emb_sig.sig_object
+
+
+# helper function for filling in the text field in the SIMPLE_FORM example
+def set_text_field(writer, val):
+    tf = writer.root['/AcroForm']['/Fields'][1].get_object()
+
+    appearance = generic.RawContent(
+        parent=None, box=generic.BoxConstraints(height=60, width=130),
+        data=b'''q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q''' % val.encode(
+            'ascii')
+    )
+    tf['/V'] = generic.pdf_string(val)
+
+    tf['/AP'] = generic.DictionaryObject({
+        generic.pdf_name('/N'): writer.add_object(
+            appearance.as_form_xobject()
+        )
+    })
+    writer.update_container(tf)
+
+
+def test_form_field_postsign_fill():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+
+    # sign, then fill
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field(w, "Some text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_field, extd=True)
+
+
+def test_form_field_postsign_modify():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+
+    # fill in, then sign
+    set_text_field(w, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field(w, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted_but_modified(r, sig_field)
+
+
+# helper function for filling in the text field in the TEXTFIELD_GROUP example
+def set_text_field_in_group(writer, ix, val):
+    tf_parent = writer.root['/AcroForm']['/Fields'][1].get_object()
+    tf = tf_parent['/Kids'][ix].get_object()
+    appearance = generic.RawContent(
+        parent=None, box=generic.BoxConstraints(height=60, width=130),
+        data=b'''q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q''' % val.encode(
+            'ascii')
+    )
+    tf['/V'] = generic.pdf_string(val)
+
+    tf['/AP'] = generic.DictionaryObject({
+        generic.pdf_name('/N'): writer.add_object(
+            appearance.as_form_xobject()
+        )
+    })
+    writer.update_container(tf)
+
+
+GROUP_VARIANTS = (TEXTFIELD_GROUP, TEXTFIELD_GROUP_VAR)
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+def test_form_field_in_group_postsign_fill(variant):
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
+
+    # sign, then fill
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_in_group(w, 0, "Some text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_field, extd=True)
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+def test_form_field_in_group_postsign_fill_other_field(variant):
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
+
+    # fill in, then sign, then fill other field
+    set_text_field_in_group(w, 0, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_in_group(w, 1, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_field, extd=True)
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+def test_form_field_in_group_postsign_modify(variant):
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
+
+    # fill in, then sign, then override
+    set_text_field_in_group(w, 0, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_in_group(w, 0, "Some other text")
+    set_text_field_in_group(w, 1, "Yet other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted_but_modified(r, sig_field)
+
+
+def test_form_field_postsign_fill_pades_lt(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+    vc = live_testing_vc(requests_mock)
+    meta =signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=vc,
+        subfilter=PADES, embed_validation_info=True,
+    )
+
+    # sign, then fill
+    out = signers.sign_pdf(w, meta, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field(w, "Some text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_field, extd=True)
+
+
+def test_form_field_postsign_modify_pades_lt(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+    vc = live_testing_vc(requests_mock)
+    meta =signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=vc,
+        subfilter=PADES, embed_validation_info=True,
+    )
+
+    # sign, then fill
+    set_text_field(w, "Some text")
+    out = signers.sign_pdf(w, meta, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field(w, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted_but_modified(r, sig_field)
+
+
+def test_pades_double_sign(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    meta2 = signers.PdfSignatureMetadata(
+        field_name='Sig2', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA_TS)
+
+    r = PdfFileReader(out)
+    sig_fields = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig1'
+    val_trusted(r, sig_field, extd=True)
+
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig2'
+    val_trusted(r, sig_field, extd=True)
+
+
+def test_pades_double_sign_delete_dss(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    meta2 = signers.PdfSignatureMetadata(
+        field_name='Sig2', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    # DSS is now covered by the second signature, so this is illegal
+    del w.root['/DSS']
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    assert '/DSS' not in r.root
+    sig_fields = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig1'
+    # first signature is still valid, since the DSS was initialised after
+    # it was created.
+    val_trusted(r, sig_field, extd=True)
+
+    field_name, sig_obj, sig_field = next(sig_fields)
+    # however, the second signature is violated by the deletion of the /DSS key
+    assert field_name == 'Sig2'
+    val_trusted_but_modified(r, sig_field)
+
+
+def test_pades_dss_object_clobber(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    dummy_ref = w.add_object(generic.pdf_string("Hi there")).reference
+
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    # We're going to reassign the DSS object to another object ID, namely
+    #  one that clobbers the dummy_ref object. This should be ample cause
+    #  for suspicion.
+    dss = w.root['/DSS']
+    w.objects[(dummy_ref.generation, dummy_ref.idnum)] = dss
+    w.root['/DSS'] = generic.IndirectObject(
+        idnum=dummy_ref.idnum, generation=dummy_ref.generation, pdf=w
+    )
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    sig_fields = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig1'
+    val_trusted_but_modified(r, sig_field)
+
+
+def test_form_field_structure_modification():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+    meta =signers.PdfSignatureMetadata(field_name='Sig1')
+
+    out = signers.sign_pdf(w, meta, signer=FROM_CA_TS)
+    w = IncrementalPdfFileWriter(out)
+    field_arr = w.root['/AcroForm']['/Fields']
+    # shallow copy the text field
+    tf = generic.DictionaryObject(field_arr[1].get_object())
+    field_arr.append(w.add_object(tf))
+    w.update_container(field_arr)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    val_trusted_but_modified(r, sig_field)
+
+
+def test_delete_signature():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+
+    # first, we simply sign the two fields
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    w = IncrementalPdfFileWriter(out)
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    # after that, we add an incremental update that deletes the first signature
+    # This should invalidate the remaining one.
+    w = IncrementalPdfFileWriter(out)
+    sig_fields = fields.enumerate_sig_fields(w)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig1'
+    del sig_field.get_object()['/V']
+    w.mark_update(sig_field)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    sig_fields = fields.enumerate_sig_fields(r, filled_status=True)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig2'
+    val_trusted_but_modified(r, sig_field)

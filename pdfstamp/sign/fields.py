@@ -470,7 +470,8 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None):
         #  tolerant
         assert isinstance(field_ref, generic.IndirectObject)
         field = field_ref.get_object()
-        # /T is the field name. Required entry, but you never know.
+        # /T is the field name. If not specified, we're dealing with a bare
+        # widget, so skip it. (these should never occur in /Fields, but hey)
         try:
             field_name = field['/T']
         except KeyError:

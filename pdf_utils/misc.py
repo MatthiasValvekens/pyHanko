@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 from fractions import Fraction
 from typing import Optional
 
@@ -147,7 +148,7 @@ class BoxConstraints:
     _ar: Optional[Fraction]
     _fully_specified: bool
 
-    def __init__(self, width=None, height=None, aspect_ratio: Fraction=None):
+    def __init__(self, width=None, height=None, aspect_ratio: Fraction = None):
         self._width = int(width) if width is not None else None
         self._height = int(height) if height is not None else None
 
@@ -239,3 +240,29 @@ def get_courier():
         pdf_name('/Subtype'): pdf_name('/Type1'),
         pdf_name('/BaseFont'): pdf_name('/Courier')
     })
+
+
+class OrderedEnum(Enum):
+    """
+    Ordered enum (from the Python documentation)
+    """
+
+    def __ge__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value >= other.value
+        return NotImplemented
+
+    def __gt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value > other.value
+        return NotImplemented
+
+    def __le__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value <= other.value
+        return NotImplemented
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented

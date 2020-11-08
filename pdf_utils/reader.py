@@ -2,9 +2,8 @@ import struct
 import os
 import re
 from collections import defaultdict
-from dataclasses import dataclass
 from io import BytesIO
-from typing import Optional
+from typing import Set
 
 from . import generic
 from .misc import read_non_whitespace, read_until_whitespace
@@ -73,42 +72,13 @@ def read_next_end_line(stream):
 TRAILER_KEYS = "/Root", "/Encrypt", "/Info", "/ID", "/Size"
 
 
-@dataclass(frozen=True)
-class EmbeddingMetadata:
-    """
-    Metadata about the position of an object in a file.
-    """
-
-    obj_stream_num: Optional[int]
-    """
-    ID of the object stream in which this object is contained, if there is one.
-    For top-level objects, this value is always None.
-    """
-
-    obj_start: int
-    """
-    For top-level objects, this is the absolute offset in the file at which this
-    object starts. For objects in object streams, it is relative to the start of 
-    the stream (i.e. NOT /First, but the start of the stream object).
-    For top-level objects, the 'x y obj' marker is included.
-    """
-
-    obj_end: int
-    """
-    For top-level objects, this is the absolute offset in the file at which this
-    object ends.
-    For objects in object streams, it is relative to the start of 
-    the stream (i.e. NOT /First, but the start of the stream object), including
-    trailing whitespace.
-    For top level objects, the endobj marker and any trailing whitespace are included.
-    """
-
-
 class XRefCache:
 
-    def __init__(self):
+    def __init__(self, reader):
         super().__init__()
+        self.reader = reader
         self.xref_sections = 0
+        self.xref_locations = []
         self.in_obj_stream = {}
         self.standard_xrefs = {}
         # keep track of the xref section that last changed an entry
@@ -118,7 +88,9 @@ class XRefCache:
         self.history = defaultdict(list)
         self._current_section_ids = set()
         self._refs_by_section = []
-        self.embedding_metadata_cache = {}
+        self.xref_container_info = []
+        # keep track of the historical position of the document catalog
+        self.historical_roots = []
 
     def _next_section(self):
         self.xref_sections += 1
@@ -136,7 +108,9 @@ class XRefCache:
             self.standard_xrefs[ix] = start
             self.last_change[idnum] = self.xref_sections
         self.history[ix].append((self.xref_sections, start))
-        self._current_section_ids.add(ix)
+        self._current_section_ids.add(
+            generic.Reference(idnum, generation, self.reader)
+        )
 
     def put_obj_stream_ref(self, idnum, obj_stream_num, obj_stream_ix):
         marker = (obj_stream_num, obj_stream_ix)
@@ -144,15 +118,20 @@ class XRefCache:
             self.in_obj_stream[idnum] = marker
             self.last_change[idnum] = self.xref_sections
 
-        ix = (0, idnum)
-        self.history[ix].append((self.xref_sections, marker))
-        self._current_section_ids.add(ix)
+        self.history[(0, idnum)].append((self.xref_sections, marker))
+        self._current_section_ids.add(generic.Reference(idnum, 0, self.reader))
 
     @property
     def total_revisions(self):
         return self.xref_sections
 
-    def explicit_refs_in_revision(self, revision):
+    def get_last_change(self, idnum):
+        return self.xref_sections - 1 - self.last_change[idnum]
+
+    def get_xref_container_info(self, revision):
+        return self.xref_container_info[self.xref_sections - 1 - revision]
+
+    def explicit_refs_in_revision(self, revision) -> Set[generic.Reference]:
         """
         Look up the object refs for all objects explicitly added or overwritten
         in a given revision.
@@ -160,10 +139,22 @@ class XRefCache:
         :param revision:
             A revision number. The oldest revision is zero.
         :return:
-            A set of (generation, idnum) pairs.
+            A set of Reference objects.
         """
         rbs = self._refs_by_section
         return rbs[self.xref_sections - 1 - revision]
+
+    def get_startxref_for_revision(self, revision):
+        """
+        Look up the location of the XRef table/stream associated with a specific
+        revision, as indicated by startxref or /Prev.
+
+        :param revision:
+            A revision number. The oldest revision is zero.
+        :return:
+            An integer pointer
+        """
+        return self.xref_locations[self.xref_sections - 1 - revision]
 
     def get_historical_ref(self, ref, revision):
         """
@@ -193,6 +184,23 @@ class XRefCache:
             f'in history at revision {revision}'
         )
 
+    def get_historical_root_ref(self, revision):
+        """
+        Look up the object ID of the document catalog in a specific revision.
+
+        :param revision:
+            A revision number. The oldest revision is zero.
+        :return:
+            An indirect object reference.
+        """
+        max_index = self.xref_sections - 1
+
+        for rev_index, ref in self.historical_roots:
+            if revision >= max_index - rev_index:
+                return ref
+        # this shouldn't happen
+        raise ValueError  # pragma: nocover
+
     def __getitem__(self, ref):
         ix = (ref.generation, ref.idnum)
         if ref.generation == 0 and \
@@ -204,7 +212,8 @@ class XRefCache:
             except KeyError:
                 raise misc.PdfReadError("Could not find object.")
 
-    def read_xref_table(self, stream):
+    def read_xref_table(self):
+        stream = self.reader.stream
         read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
         while True:
@@ -236,8 +245,9 @@ class XRefCache:
                 if line[-1] in b"0123456789t":
                     stream.seek(-1, os.SEEK_CUR)
 
-                offset, generation = line[:16].split(b" ")
-                self.put_ref(num, int(generation), int(offset))
+                offset, generation, marker = line[:18].split(b" ")
+                if marker == b'n':
+                    self.put_ref(num, int(generation), int(offset))
                 num += 1
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
@@ -251,12 +261,6 @@ class XRefCache:
         stream.seek(-1, os.SEEK_CUR)
 
         self._next_section()
-
-    def get_embedding_metadata(self, ref) -> EmbeddingMetadata:
-        return self.embedding_metadata_cache[(ref.generation, ref.idnum)]
-
-    def set_embedding_metadata(self, ref, meta: EmbeddingMetadata):
-        self.embedding_metadata_cache[(ref.generation, ref.idnum)] = meta
 
     def read_xref_stream(self, xrefstream):
         stream_data = BytesIO(xrefstream.data)
@@ -333,6 +337,43 @@ def read_object_header(stream, strict):
     return int(idnum), int(generation)
 
 
+def process_data_at_eof(stream) -> int:
+    """
+    Auxiliary function that reads backwards from the current position
+    in a stream to find the EOF marker and startxref value
+    :param stream:
+        A stream to read from
+    :return:
+        The value of the startxref pointer, if found.
+        Otherwise a PdfReadError is raised.
+    """
+
+    # offset of last 1024 bytes of stream
+    last_1k = stream.tell() - 1024 + 1
+    line = b''
+    while line[:5] != b"%%EOF":
+        if stream.tell() < last_1k:
+            raise misc.PdfReadError("EOF marker not found")
+        line = read_next_end_line(stream)
+
+    # find startxref entry - the location of the xref table
+    line = read_next_end_line(stream)
+    try:
+        startxref = int(line)
+    except ValueError:
+        # 'startxref' may be on the same line as the location
+        if not line.startswith(b"startxref"):
+            raise misc.PdfReadError("startxref not found")
+        startxref = int(line[9:].strip())
+        logger.warning("startxref on same line as offset")
+    else:
+        line = read_next_end_line(stream)
+        if line[:9] != b"startxref":
+            raise misc.PdfReadError("startxref not found")
+
+    return startxref
+
+
 class PdfFileReader(PdfHandler):
     last_startxref = None
     has_xref_stream = False
@@ -352,7 +393,8 @@ class PdfFileReader(PdfHandler):
         self.strict = strict
         self.resolved_objects = {}
         self.input_version = None
-        self.xrefs = XRefCache()
+        self.xrefs = XRefCache(self)
+        self._historical_resolver_cache = {}
         self.stream = stream
         self.read()
         # override version if necessary
@@ -413,11 +455,7 @@ class PdfFileReader(PdfHandler):
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
             generic.read_non_whitespace(stream_data, seek_back=True)
-            meta = EmbeddingMetadata(
-                obj_stream_num=stmnum,
-                obj_start=obj_start, obj_end=stream.tell() - 1
-            )
-            return obj, meta
+            return obj
 
         if self.strict:
             raise misc.PdfReadError("This is a fatal error in strict mode.")
@@ -433,6 +471,19 @@ class PdfFileReader(PdfHandler):
     @property
     def root_ref(self) -> generic.Reference:
         return self.trailer.raw_get('/Root', decrypt=False).reference
+
+    def get_historical_root(self, revision):
+        """
+        Get the document catalog for a specific revision.
+
+        :param revision:
+            The revision to query, the oldest one being zero.
+        :return:
+            The value of the root dictionary for that revision.
+        """
+        ref = self.xrefs.get_historical_root_ref(revision)
+        marker = self.xrefs.get_historical_ref(ref, revision)
+        return self._read_object(ref, marker)
 
     @property
     def total_revisions(self):
@@ -481,10 +532,9 @@ class PdfFileReader(PdfHandler):
         if isinstance(marker, tuple):
             # object in object stream
             (obj_stream_num, obj_stream_ix) = marker
-            obj, metadata = self._get_object_from_stream(
+            obj = self._get_object_from_stream(
                 ref.idnum, obj_stream_num, obj_stream_ix
             )
-            self.xrefs.set_embedding_metadata(ref, metadata)
             return obj
         else:
             obj_start = marker
@@ -510,17 +560,8 @@ class PdfFileReader(PdfHandler):
                         f'Expected endobj marker at position {obj_data_end} '
                         f'but found {repr(endobj)}'
                     )
-                obj_end = obj_data_end
             else:
                 generic.read_non_whitespace(self.stream, seek_back=True)
-                # with seek_back the value of tell() is the offset of the
-                # next non-zero whitespace character, so we need to subtract
-                # one more to get the last whitespace character offset
-                obj_end = self.stream.tell() - 1
-            meta = EmbeddingMetadata(
-                obj_stream_num=None, obj_start=obj_start, obj_end=obj_end
-            )
-            self.xrefs.set_embedding_metadata(ref, meta)
 
             # override encryption is used for the /Encrypt dictionary
             if not never_decrypt and self.encrypted:
@@ -545,13 +586,26 @@ class PdfFileReader(PdfHandler):
     def _read_xref_stream(self):
         stream = self.stream
         idnum, generation = read_object_header(stream, strict=self.strict)
+        xrefstream_ref = generic.Reference(idnum, generation, self)
         xrefstream = generic.StreamObject.read_from_stream(
-            stream, generic.Reference(idnum, generation, self)
+            stream, xrefstream_ref
         )
+        xrefstream.container_ref = xrefstream_ref
         assert xrefstream["/Type"] == "/XRef"
+        xref_cache = self.xrefs
+        xref_cache.xref_container_info.append((xrefstream_ref, stream.tell()))
         self.cache_indirect_object(generation, idnum, xrefstream)
-        self.xrefs.read_xref_stream(xrefstream)
+        xref_cache.read_xref_stream(xrefstream)
 
+        try:
+            root_ref = xrefstream.raw_get('/Root', decrypt=False)
+            assert isinstance(root_ref, generic.IndirectObject)
+            xref_cache.historical_roots.append(
+                (xref_cache.xref_sections, root_ref)
+            )
+        except KeyError:
+            # root wasn't updated in this revision, that's OK
+            pass
         for key in TRAILER_KEYS:
             if key in xrefstream and key not in self.trailer:
                 self.trailer[generic.NameObject(key)] = xrefstream.raw_get(key)
@@ -559,11 +613,25 @@ class PdfFileReader(PdfHandler):
 
     def _read_xref_table(self):
         stream = self.stream
-        self.xrefs.read_xref_table(stream)
+        xref_cache = self.xrefs
+        xref_start = stream.tell()
+        xref_cache.read_xref_table()
+        xref_end = stream.tell()
+        xref_cache.xref_container_info.append((xref_start, xref_end))
         new_trailer = generic.DictionaryObject.read_from_stream(
             stream, generic.TrailerReference(self)
         )
         assert isinstance(new_trailer, generic.DictionaryObject)
+        try:
+            root_ref = new_trailer.raw_get('/Root', decrypt=False)
+            assert isinstance(root_ref, generic.IndirectObject)
+            xref_cache.historical_roots.append(
+                (xref_cache.xref_sections, root_ref)
+            )
+        except KeyError:
+            # root wasn't updated in this revision, that's OK
+            pass
+
         for key, value in list(new_trailer.items()):
             if key not in self.trailer:
                 self.trailer[key] = value
@@ -574,7 +642,9 @@ class PdfFileReader(PdfHandler):
         stream = self.stream
         self.trailer = generic.DictionaryObject()
         startxref = self.last_startxref
+        xref_location_log = self.xrefs.xref_locations
         while startxref is not None:
+            xref_location_log.append(startxref)
             # load the xref table
             stream.seek(startxref)
             x = stream.read(1)
@@ -639,31 +709,9 @@ class PdfFileReader(PdfHandler):
         stream.seek(-1, os.SEEK_END)
         if not stream.tell():
             raise misc.PdfReadError('Cannot read an empty file')
-        # offset of last 1024 bytes of stream
-        last_1k = stream.tell() - 1024 + 1
-        line = b''
-        while line[:5] != b"%%EOF":
-            if stream.tell() < last_1k:
-                raise misc.PdfReadError("EOF marker not found")
-            line = read_next_end_line(stream)
-
-        # find startxref entry - the location of the xref table
-        line = read_next_end_line(stream)
-        try:
-            startxref = int(line)
-        except ValueError:
-            # 'startxref' may be on the same line as the location
-            if not line.startswith(b"startxref"):
-                raise misc.PdfReadError("startxref not found")
-            startxref = int(line[9:].strip())
-            logger.warning("startxref on same line as offset")
-        else:
-            line = read_next_end_line(stream)
-            if line[:9] != b"startxref":
-                raise misc.PdfReadError("startxref not found")
 
         # This needs to be recorded for incremental update purposes
-        self.last_startxref = startxref
+        self.last_startxref = process_data_at_eof(stream)
         self._read_xrefs()
 
     def decrypt(self, password):
@@ -753,6 +801,15 @@ class PdfFileReader(PdfHandler):
     def encrypted(self):
         return "/Encrypt" in self.trailer
 
+    def get_historical_resolver(self, revision) -> 'HistoricalResolver':
+        cache = self._historical_resolver_cache
+        try:
+            return cache[revision]
+        except KeyError:
+            res = HistoricalResolver(self, revision)
+            cache[revision] = res
+            return res
+
 
 def convert_to_int(d, size):
     if size <= 8:
@@ -760,3 +817,41 @@ def convert_to_int(d, size):
         return struct.unpack(">q", padding + d)[0]
     else:
         return sum(digit ** (size - ix - 1) for ix, digit in enumerate(d))
+
+
+class HistoricalResolver:
+    """
+    Caching resolver for probing the history of a PDF document.
+    """
+    def __init__(self, reader: PdfFileReader, revision):
+        self.cache = {}
+        self.reader = reader
+        self.revision = revision
+
+    def __call__(self, ref: generic.Reference):
+        cache = self.cache
+        try:
+            return cache[ref]
+        except KeyError:
+            # if the object wasn't modified after this revision
+            # we can grab it from the "normal" shared cache.
+            reader = self.reader
+            revision = self.revision
+            if reader.xrefs.get_last_change(ref.idnum) <= revision:
+                obj = ref.get_object()
+            else:
+                obj = reader.get_object(ref, revision)
+            cache[ref] = obj
+            return obj
+
+    def collect_indirect_references(self, obj):
+        if isinstance(obj, generic.IndirectObject):
+            ref = obj.reference
+            yield ref
+            obj = self(ref)
+        if isinstance(obj, generic.DictionaryObject):
+            for v in obj.values():
+                yield from self.collect_indirect_references(v)
+        elif isinstance(obj, generic.ArrayObject):
+            for v in obj:
+                yield from self.collect_indirect_references(v)
