@@ -1,4 +1,5 @@
 import click
+import logging
 import getpass
 
 from certvalidator import ValidationContext
@@ -10,6 +11,16 @@ from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 __all__ = ['cli']
+
+# noinspection PyTypeChecker
+root_logger = logging.getLogger(None)
+root_logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+sh.setFormatter(formatter)
+root_logger.addHandler(sh)
 
 
 # group everything under this entry point for easy exporting
@@ -26,7 +37,8 @@ def signing():
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
-def init_validation_context(trust, trust_replace, other_certs, allow_fetching=None):
+def init_validation_context(trust, trust_replace, other_certs,
+                            allow_fetching=None):
     vc_kwargs = {}
     if allow_fetching is not None:
         vc_kwargs['allow_fetching'] = allow_fetching
