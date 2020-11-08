@@ -277,6 +277,10 @@ class PdfSignatureStatus(SignatureStatus):
             yield 'EXTENDED_WITH_' + self.modification_level.name
         else:
             yield 'NONSTANDARD_COVERAGE'
+        if self.timestamp_validity is not None:
+            yield 'TIMESTAMP_TOKEN<%s>' % (
+                '|'.join(self.timestamp_validity.summary_fields())
+            )
 
 
 MECHANISMS = (
