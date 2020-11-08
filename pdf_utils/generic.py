@@ -1048,8 +1048,7 @@ class PdfContent:
 
     def render(self) -> bytes:
         """
-        Compile the content to graphics operators and return the width and
-        height, in whatever the currently relevant units are.
+        Compile the content to graphics operators.
         """
         raise NotImplementedError
 
@@ -1067,3 +1066,14 @@ class PdfContent:
     #  or to an existing one
 
     # TODO override __add__ method: concat streams and merge all resources
+
+
+class RawContent(PdfContent):
+
+    def __init__(self, parent: Optional[PdfContent],
+                 data: bytes, box: BoxConstraints = None):
+        super().__init__(parent, box)
+        self.data = data
+
+    def render(self) -> bytes:
+        return self.data
