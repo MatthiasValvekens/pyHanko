@@ -507,7 +507,7 @@ def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
         field_created, sig_field_ref = _prepare_sig_field(
             sp.sig_field_name, root, update_writer=pdf_out,
             existing_fields_only=False, box=sp.box,
-            include_on_page=page_list[sp.on_page]
+            include_on_page=page_list[sp.on_page], lock_sig_flags=False
         )
         if not field_created:
             raise ValueError(
