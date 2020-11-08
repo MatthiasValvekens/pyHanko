@@ -26,6 +26,24 @@ def signing():
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
+def init_validation_context(trust, trust_replace, other_certs, allow_fetching=None):
+    vc_kwargs = {}
+    if allow_fetching is not None:
+        vc_kwargs['allow_fetching'] = allow_fetching
+    if trust:
+        # add trust roots to the validation context, or replace them
+        trust_certs = list(
+            signers.load_ca_chain(trust)
+        )
+        if trust_replace:
+            vc_kwargs['trust_roots'] = trust_certs
+        else:
+            vc_kwargs['extra_trust_roots'] = trust_certs
+    if other_certs:
+        vc_kwargs['other_certs'] = list(signers.load_ca_chain(other_certs))
+    return ValidationContext(**vc_kwargs)
+
+
 @signing.command(name='list', help='list signature fields')
 @click.argument('infile', type=click.File('rb'))
 @click.option('--skip-status', help='do not print status', required=False,
@@ -38,7 +56,11 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--trust', help='list trust roots (multiple allowed)',
               required=False, multiple=True, type=readable_file)
-def list_sigfields(infile, skip_status, validate, trust, trust_replace):
+@click.option('--other-certs',
+              help='other certs relevant for validation',
+              required=False, multiple=True, type=readable_file)
+def list_sigfields(infile, skip_status, validate, trust, trust_replace,
+                   other_certs):
     r = PdfFileReader(infile)
     for name, value, field_ref in fields.enumerate_sig_fields(r):
         if skip_status:
@@ -47,20 +69,10 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace):
         status = 'EMPTY'
         if value is not None:
             if validate:
-                v_context = None
-                if trust:
-                    # add trust roots to the validation context, or replace them
-                    trust_certs = list(
-                        signers.load_ca_chain(trust))
-                    if trust_replace:
-                        v_context = ValidationContext(trust_roots=trust_certs)
-                    else:
-                        v_context = ValidationContext(
-                            extra_trust_roots=trust_certs
-                        )
+                vc = init_validation_context(trust, trust_replace, other_certs)
                 try:
                     status = validation.validate_pdf_signature(
-                        r, field_ref, signer_validation_context=v_context
+                        r, field_ref, signer_validation_context=vc
                     ).summary()
                 except ValueError:
                     status = 'MALFORMED'
@@ -98,35 +110,26 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--trust', help='list trust roots (multiple allowed)',
               required=False, multiple=True, type=readable_file)
+@click.option('--other-certs',
+              help='other certs relevant for validation',
+              required=False, multiple=True, type=readable_file)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, use_pades, with_validation_info, trust_replace, trust):
+           timestamp_url, use_pades, with_validation_info, trust_replace, trust,
+           other_certs):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
 
-    # TODO restructure args to validate command to allow the validation
-    #  context to be modified here as well.
     if use_pades:
         subfilter = fields.SigSeedSubFilter.PADES
     else:
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
     if with_validation_info:
-        if trust:
-            # add trust roots to the validation context, or replace them
-            trust_certs = list(
-                signers.load_ca_chain(trust))
-            if trust_replace:
-                vc = ValidationContext(
-                    trust_roots=trust_certs, allow_fetching=True
-                )
-            else:
-                vc = ValidationContext(
-                    extra_trust_roots=trust_certs, allow_fetching=True
-                )
-        else:
-            vc = ValidationContext(allow_fetching=True)
+        vc = init_validation_context(
+            trust, trust_replace, other_certs, allow_fetching=True
+        )
     else:
         vc = None
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
