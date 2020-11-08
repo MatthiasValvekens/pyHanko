@@ -359,7 +359,10 @@ class DocMDPPerm(Flag):
     ANNOTATE = 3
 
 
-DEFAULT_MD = 'sha512'
+# TODO I've encountered TSAs that will spew invalid timestamps when presented
+#  with a sha512 req (Adobe Reader agrees).
+#  Should get to the bottom of that. In the meantime, default to sha256
+DEFAULT_MD = 'sha256'
 
 
 @dataclass(frozen=True)
