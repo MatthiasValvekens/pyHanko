@@ -97,8 +97,9 @@ def _validate_cms_signature(signed_data: cms.SignedData,
 
     cert, ca_chain = partition_certs(certs, signer_info)
 
-    mechanism = \
-        signer_info['signature_algorithm']['algorithm'].native.lower()
+    signature_algorithm: cms.SignedDigestAlgorithm = \
+        signer_info['signature_algorithm']
+    mechanism = signature_algorithm['algorithm'].native.lower()
     md_algorithm = \
         signer_info['digest_algorithm']['algorithm'].native.lower()
     signature = signer_info['signature'].native
@@ -133,9 +134,13 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     valid = False
     if intact:
         try:
+            try:
+                verify_md = signature_algorithm.hash_algo
+            except ValueError:
+                verify_md = md_algorithm
             asymmetric.rsa_pkcs1v15_verify(
                 asymmetric.load_public_key(cert.public_key), signature,
-                signed_blob, hash_algorithm=md_algorithm
+                signed_blob, hash_algorithm=verify_md
             )
             valid = True
         except SignatureError:
