@@ -34,6 +34,7 @@ def get_nonce():
 
 @dataclass(frozen=True)
 class TimestampSignatureStatus(SignatureStatus):
+    key_usage = set()
     extd_key_usage = {'time_stamping'}
     timestamp: datetime
 
