@@ -17,9 +17,10 @@ __all__ = ['IncrementalPdfFileWriter']
 
 class IncrementalPdfFileWriter(BasePdfFileWriter):
 
-    def __init__(self, input_stream):
+    def __init__(self, input_stream, skip_original=False):
         self.input_stream = input_stream
         self.prev = prev = PdfFileReader(input_stream)
+        self.skip_original = skip_original
         trailer = prev.trailer
         root_ref = trailer.raw_get('/Root')
         try:
@@ -101,6 +102,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.mark_update(self._root)
 
     def _write_header(self, stream):
+
+        if self.skip_original:
+            return
 
         # copy the original data to the output
         input_pos = self.input_stream.tell()

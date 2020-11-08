@@ -864,7 +864,9 @@ class DocumentSecurityStore:
         #  and if so, can we somehow do this in a way that doesn't require the
         #  data to be copied around, provided the output_stream is BytesIO
         #  already?
-        writer = IncrementalPdfFileWriter(BytesIO(output_stream.read()))
+        writer = IncrementalPdfFileWriter(
+            BytesIO(output_stream.read()), skip_original=True
+        )
 
         try:
             # we're not interested in this validation context
