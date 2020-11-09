@@ -1061,12 +1061,14 @@ class RevocationInfoValidationType(Enum):
 # TODO verify other formal PAdES requirements (coverage, etc.)
 def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
                                validation_type: RevocationInfoValidationType,
-                               validation_context_kwargs=None):
+                               validation_context_kwargs=None,
+                               force_revinfo=False):
     validation_context_kwargs = validation_context_kwargs or {}
     validation_context_kwargs['allow_fetching'] = False
     # certs with OCSP/CRL endpoints should have the relevant revocation data
     # embedded.
-    validation_context_kwargs['revocation_mode'] = "hard-fail"
+    validation_context_kwargs['revocation_mode'] = \
+        "require" if force_revinfo else "hard-fail"
 
     try:
         sig_object = sig_field.get_object()['/V']

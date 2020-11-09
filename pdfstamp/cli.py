@@ -9,6 +9,7 @@ from pdfstamp.sign.timestamps import HTTPTimeStamper
 from pdfstamp.sign import validation, beid, fields
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdfstamp.sign.validation import SignatureValidationError
 
 __all__ = ['cli']
 
@@ -37,8 +38,8 @@ def signing():
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
-def init_validation_context(trust, trust_replace, other_certs,
-                            allow_fetching=None):
+def init_validation_context_kwargs(trust, trust_replace, other_certs,
+                                   allow_fetching=None):
     vc_kwargs = {}
     if allow_fetching is not None:
         vc_kwargs['allow_fetching'] = allow_fetching
@@ -53,9 +54,10 @@ def init_validation_context(trust, trust_replace, other_certs,
             vc_kwargs['extra_trust_roots'] = trust_certs
     if other_certs:
         vc_kwargs['other_certs'] = list(signers.load_ca_chain(other_certs))
-    return ValidationContext(**vc_kwargs)
+    return vc_kwargs
 
 
+# TODO add an option to do LTV, but guess the profile
 @signing.command(name='list', help='list signature fields')
 @click.argument('infile', type=click.File('rb'))
 @click.option('--skip-status', help='do not print status', required=False,
@@ -71,26 +73,51 @@ def init_validation_context(trust, trust_replace, other_certs,
 @click.option('--other-certs',
               help='other certs relevant for validation',
               required=False, multiple=True, type=readable_file)
+@click.option('--ltv-profile',
+              help='LTV signature validation profile',
+              type=click.Choice(('pades', 'adobe')), required=False)
+@click.option('--ltv-obsessive',
+              help='Fail trust validation if a certificate has no known CRL '
+                   'or OCSP endpoints.',
+              type=bool, is_flag=True, default=False, show_default=True)
 def list_sigfields(infile, skip_status, validate, trust, trust_replace,
-                   other_certs):
+                   other_certs, ltv_profile, ltv_obsessive):
     r = PdfFileReader(infile)
+    if validate and ltv_profile is not None:
+        if ltv_profile == 'pades':
+            ltv_profile = validation.RevocationInfoValidationType.PADES_LT
+        else:
+            ltv_profile = validation.RevocationInfoValidationType.ADOBE_STYLE
+    vc_kwargs = init_validation_context_kwargs(
+        trust, trust_replace, other_certs
+    )
     for name, value, field_ref in fields.enumerate_sig_fields(r):
         if skip_status:
             print(name)
             continue
-        status = 'EMPTY'
+        status_str = 'EMPTY'
         if value is not None:
             if validate:
-                vc = init_validation_context(trust, trust_replace, other_certs)
                 try:
-                    status = validation.validate_pdf_signature(
-                        r, field_ref, signer_validation_context=vc
-                    ).summary()
+                    if ltv_profile is None:
+                        vc = ValidationContext(**vc_kwargs)
+                        status = validation.validate_pdf_signature(
+                            r, field_ref, signer_validation_context=vc
+                        )
+                    else:
+                        status = validation.validate_pdf_ltv_signature(
+                            r, field_ref, ltv_profile,
+                            force_revinfo=ltv_obsessive,
+                            validation_context_kwargs=vc_kwargs
+                        )
+                    status_str = status.summary()
+                except SignatureValidationError:
+                    status_str = 'INVALID'
                 except ValueError:
-                    status = 'MALFORMED'
+                    status_str = 'MALFORMED'
             else:
-                status = 'FILLED'
-        print('%s:%s' % (name, status))
+                status_str = 'FILLED'
+        print('%s:%s' % (name, status_str))
 
 
 SIG_META = 'SIG_META'
@@ -139,9 +166,10 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
     if with_validation_info:
-        vc = init_validation_context(
+        vc_kwargs = init_validation_context_kwargs(
             trust, trust_replace, other_certs, allow_fetching=True
         )
+        vc = ValidationContext(**vc_kwargs)
     else:
         vc = None
     ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
