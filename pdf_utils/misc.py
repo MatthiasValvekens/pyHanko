@@ -160,7 +160,7 @@ class BoxConstraints:
         elif width is not None and height is not None:
             if aspect_ratio is not None:
                 raise BoxSpecificationError  # overspecified
-            self._ar = Fraction(width, height)
+            self._ar = Fraction(self._width, self._height)
             fully_specified = True
         elif aspect_ratio is not None:
             self._ar = aspect_ratio
