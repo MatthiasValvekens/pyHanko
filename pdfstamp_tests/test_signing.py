@@ -384,6 +384,34 @@ def test_double_sig_add_field():
     val_trusted(r, sig_field)
 
 
+def test_double_sig_add_visible_field():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134)
+    )
+    fields.append_signature_fields(w, [sp])
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    sig_fields = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'Sig1'
+    status = val_trusted(r, sig_field, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'SigNew'
+    val_trusted(r, sig_field)
+
+
 def test_enumerate_empty():
 
     with pytest.raises(StopIteration):

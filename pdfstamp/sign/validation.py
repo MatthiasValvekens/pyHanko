@@ -245,11 +245,11 @@ class ModificationLevel(OrderedEnum):
 
     ANNOTATIONS = 3
     """
-    In addition to the previous levels, annotations are also allowed at this
-    level.
+    In addition to the previous levels, manipulating annotations is also allowed 
+    at this level.
     
-    (NOTE: this value is currently never returned, but included for 
-    compatibility with DocMDP permissions)
+    (NOTE: this level is currently unused, and modifications to annotations
+    other than those permitted to fill in forms are treated as suspicious)
     """
 
     OTHER = 4
@@ -503,13 +503,13 @@ class EmbeddedPdfSignature:
         # first, compare the entries that aren't /Fields
         _compare_dicts(signed_acroform, current_acroform, {'/Fields'})
 
-        # next, walk the field tree
-        _diff_field_tree(
+        # next, walk the field tree, and collect newly added signature fields
+        new_sigfield_refs = set(_diff_field_tree(
             signed_acroform.raw_get('/Fields'),
             current_acroform.raw_get('/Fields'),
             signed_resolver, current_resolver, explained_refs_lta,
             explained_refs_formfill
-        )
+        ))
 
         # for the DSS, we only have to be careful not to allow non-DSS
         # objects to be overridden.
@@ -520,6 +520,28 @@ class EmbeddedPdfSignature:
             signed_root, current_root, '/DSS', signed_resolver,
             current_resolver, explained_refs_lta, allow_removal=False
         )
+
+        # Next, check annotations: newly added signature fields may be added
+        #  to the /Annots entry of any page. These are processed as LTA updates,
+        #  because even invisible signature fields / timestamps are sometimes
+        #  added to /Annots, unnecessary as that may be.
+        # Note: we don't descend into the annotation dictionaries themselves.
+        #  For modifications to form field values, this has been taken care of
+        #  already.
+        # TODO allow other annotation modifications, but at level ANNOTATIONS
+        if new_sigfield_refs:
+            # if no new sigfields were added, we skip this step.
+            #  Any modifications to /Annots will be flagged by the xref
+            #  crawler later.
+
+            # note: this is guaranteed to be equal to its signed counterpart,
+            # since we already checked the document catalog for unauthorised
+            # modifications
+            current_page_root = current_root.raw_get('/Pages').reference
+            _walk_page_tree_annots(
+                current_page_root, new_sigfield_refs, signed_resolver,
+                current_resolver, explained_refs_lta
+            )
 
         # finally, verify that there are no xrefs in the revision's xref table
         # other than the ones we can justify.
@@ -535,6 +557,80 @@ class EmbeddedPdfSignature:
             return ModificationLevel.FORM_FILLING
         else:
             return ModificationLevel.LTA_UPDATES
+
+
+def _walk_page_tree_annots(page_root_ref, new_sigfield_refs, signed_resolver,
+                           current_resolver, explained_refs):
+    signed_pages_obj = signed_resolver(page_root_ref)
+    current_pages_obj = current_resolver(page_root_ref)
+    signed_kids = signed_pages_obj.raw_get('/Kids')
+    if isinstance(signed_kids, generic.IndirectObject):
+        signed_kids = signed_resolver(signed_kids.reference)
+    current_kids = current_pages_obj.raw_get('/Kids')
+    if isinstance(current_kids, generic.IndirectObject):
+        current_kids = current_resolver(current_kids.reference)
+    # /Kids should only contain indirect refs, so direct comparison is
+    # appropriate.
+    if current_kids != current_kids:
+        raise SuspiciousModification(
+            "Unexpected change to page tree structure."
+        )
+    for kid_ref in signed_kids:
+        kid_ref = kid_ref.reference
+        signed_kid = signed_resolver(kid_ref)
+        node_type = signed_kid['/Type']
+        if node_type == '/Pages':
+            _walk_page_tree_annots(
+                kid_ref, new_sigfield_refs, signed_resolver, current_resolver,
+                explained_refs
+            )
+        elif node_type == '/Page':
+            current_kid = current_resolver(kid_ref)
+            current_annots_ref = None
+            try:
+                current_annots = current_kid.raw_get('/Annots')
+                if isinstance(current_annots, generic.IndirectObject):
+                    current_annots_ref = current_annots.reference
+                    current_annots = current_resolver(current_annots_ref)
+                current_annots = set(c.reference for c in current_annots)
+            except KeyError:
+                # no annotations, continue
+                continue
+            signed_annots = signed_kid.raw_get('/Annots')
+            signed_annots_ref = None
+            if isinstance(signed_annots, generic.IndirectObject):
+                signed_annots_ref = signed_annots.reference
+                signed_annots = signed_resolver(signed_annots.reference)
+            signed_annots = set(c.reference for c in signed_annots)
+
+            # check if annotations were added
+            if not (signed_annots <= current_annots):
+                continue
+            annots_diff = current_annots - signed_annots
+            if not annots_diff or not (annots_diff <= new_sigfield_refs):
+                continue
+            # there are new annotations, and they're all for new
+            # signature fields. => cleared to edit
+            # Make sure the page dictionaries are the same, so that we
+            #  can safely clear them for modification
+            #  (not necessary if both /Annots entries are indirect references,
+            #   but adding even more cases is pushing things)
+            _compare_dicts(signed_kid, current_kid, {'/Annots'})
+            explained_refs.add(kid_ref)
+            if current_annots_ref:
+                # current /Annots entry is an indirect reference
+                if signed_annots_ref == current_annots_ref:
+                    explained_refs.add(current_annots_ref)
+                else:
+                    # either the /Annots array got reassigned to another
+                    # object ID, or it was moved from a direct object to an
+                    # indirect one. This is fine, provided that the new  object
+                    # ID doesn't clobber an existing one.
+                    whitelist_if_fresh = _whitelist_callback(
+                        explained_refs, signed_resolver.revision,
+                        signed_resolver.reader.xrefs
+                    )
+                    whitelist_if_fresh(current_annots_ref)
 
 
 # mark a dictionary key in a revision as safely updatable.
@@ -617,7 +713,8 @@ def _split_sig_fields(resolver, field_list):
 
 def _diff_field_tree(signed_fields, current_fields,
                      signed_resolver, current_resolver,
-                     explained_refs_lta, explained_refs_formfill):
+                     explained_refs_lta, explained_refs_formfill,
+                     parent_name=""):
     # compare & resolve
     signed_fields, current_fields = _compare_values(
         signed_fields, current_fields, signed_resolver,
@@ -633,12 +730,17 @@ def _diff_field_tree(signed_fields, current_fields,
     nonsig_field_names = set(signed_fields_other.keys())
     if nonsig_field_names != set(current_fields_other.keys()):
         raise SuspiciousModification(
-            "Unexpected change in form hierarchy."
+            "Unexpected change in form hierarchy at %s." % {
+                "form tree root" if not parent_name else
+                f"node {repr(parent_name)}"
+            }
         )
     for name in nonsig_field_names:
+        fq_name = parent_name + "." + name if parent_name else name
         signed_field, current_field = _diff_field(
             signed_fields_other[name], current_fields_other[name],
-            signed_resolver, current_resolver, explained_refs_formfill
+            signed_resolver, current_resolver, explained_refs_formfill,
+            fq_name=fq_name
         )
         _diff_field_value(
             signed_field, current_field, signed_resolver,
@@ -662,9 +764,10 @@ def _diff_field_tree(signed_fields, current_fields,
                 # two arrays contain the same values.
                 signed_kids = current_kids = kids_ref
             # recurse!
-            _diff_field_tree(
+            yield from _diff_field_tree(
                 signed_kids, current_kids, signed_resolver,
-                current_resolver, explained_refs_lta, explained_refs_formfill
+                current_resolver, explained_refs_lta, explained_refs_formfill,
+                parent_name=fq_name
             )
         except KeyError:
             pass
@@ -675,6 +778,7 @@ def _diff_field_tree(signed_fields, current_fields,
         raise SuspiciousModification("Some signature fields were removed.")
 
     for name, sigfield_ref in current_fields_sigfields.items():
+        fq_name = parent_name + "." + name if parent_name else name
         explained_refs_lta.add(sigfield_ref)
         # The treatment of the value depends on whether it's a document
         #  time stamp or a signature: document timestamps are allowed at
@@ -690,7 +794,22 @@ def _diff_field_tree(signed_fields, current_fields,
         except KeyError:
             current_value_ref = None
 
-        if name in old_sigfield_set:
+        if name not in old_sigfield_set:
+            # new sigfield added, signal to caller
+            yield sigfield_ref
+            # now clear the appearance stream's dependencies, if necessary
+            try:
+                ap = current_field.raw_get('/AP')
+                wl_if_fresh = _whitelist_callback(
+                    explained_refs_formfill, signed_resolver.revision,
+                    signed_resolver.reader.xrefs
+                )
+                for ref in current_resolver.collect_indirect_references(ap):
+                    wl_if_fresh(ref)
+            except KeyError:
+                # invisible sig
+                pass
+        else:
             old_sigfield_ref = signed_fields_sigfields[name]
             if old_sigfield_ref != sigfield_ref:
                 raise SuspiciousModification(
@@ -701,7 +820,7 @@ def _diff_field_tree(signed_fields, current_fields,
             #  explained_refs_lta rather than explained_refs_formfill.
             signed_field, _ = _diff_field(
                 sigfield_ref, sigfield_ref, signed_resolver,
-                current_resolver, explained_refs_lta
+                current_resolver, explained_refs_lta, fq_name=fq_name
             )
 
             try:
@@ -709,11 +828,13 @@ def _diff_field_tree(signed_fields, current_fields,
                 signed_value_ref = signed_field.raw_get('/V').reference
                 if current_value_ref is None:
                     raise SuspiciousModification(
-                        "A filled-in signature was deleted between revisions."
+                        f"A filled-in signature in {fq_name} was deleted "
+                        f"between revisions."
                     )
                 elif signed_value_ref != current_value_ref:
                     raise SuspiciousModification(
-                        "A filled-in signature was replaced between revisions."
+                        f"A filled-in signature in {fq_name} was replaced "
+                        f"between revisions."
                     )
             except KeyError:
                 # if neither revision includes a value for this signature field,
@@ -727,18 +848,25 @@ def _diff_field_tree(signed_fields, current_fields,
         # modification at level LTA_UPDATES. If it's a normal signature, it
         # requires FORM_FILLING.
         sig_obj = current_resolver(current_value_ref)
-        if sig_obj.raw_get('/Type') == '/DocTimeStamp':
+        x1, y1, x2, y2 = current_field['/Rect']
+        area = abs(x1 - x2) * abs(y1 - y2)
+        # /DocTimeStamps added for LTA validation purposes shouldn't have
+        # an appearance (as per the recommendation in ISO 32000-2, which we
+        # enforce as a rigid rule here)
+        if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
             explained_refs_lta.add(current_value_ref)
         else:
             explained_refs_formfill.add(current_value_ref)
 
 
 def _diff_field(signed_ref, current_ref, signed_resolver,
-                current_resolver, explained_refs):
+                current_resolver, explained_refs, fq_name):
     # the indirect references should be the same
     if current_ref != signed_ref:
         raise SuspiciousModification(
-            "Unexpected modification to form field structure."
+            f"Unexpected modification to form field structure: "
+            f"object ID of field {fq_name} changed from {repr(signed_ref)}"
+            f"to {repr(current_ref)}."
         )
     signed_field, current_field = _compare_values(
         signed_ref, current_ref, signed_resolver, current_resolver,
@@ -774,7 +902,7 @@ def _diff_field_value(signed_field, current_field, signed_resolver,
         signed_value = signed_field.raw_get('/V')
         if signed_value != current_value:
             raise SuspiciousModification(
-                "Form fields that were filled in prior to signing cannot be"
+                "Form fields that were filled in prior to signing cannot be "
                 "modified."
             )
         return
