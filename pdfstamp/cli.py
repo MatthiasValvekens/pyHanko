@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import click
 import logging
 import getpass
@@ -40,7 +42,7 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 def init_validation_context_kwargs(trust, trust_replace, other_certs,
                                    allow_fetching=None):
-    vc_kwargs = {}
+    vc_kwargs = {'time_tolerance': timedelta(seconds=10)}
     if allow_fetching is not None:
         vc_kwargs['allow_fetching'] = allow_fetching
     if trust:
