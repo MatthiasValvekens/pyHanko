@@ -24,7 +24,7 @@ from pdf_utils.reader import (
     PdfFileReader, XRefCache, process_data_at_eof,
 )
 from pdf_utils.rw_common import PdfHandler
-from . import DocMDPPerm
+from .fields import MDPPerm
 from .general import (
     SignatureStatus, find_cms_attribute,
     UnacceptableSignerError,
@@ -1276,11 +1276,11 @@ class DocMDPInfo:
     sig_ref: generic.DictionaryObject
 
     @property
-    def permission_bits(self) -> DocMDPPerm:
+    def permission_bits(self) -> MDPPerm:
         try:
-            return DocMDPPerm(self.sig_ref['/TransformParams']['/P'])
+            return MDPPerm(self.sig_ref['/TransformParams']['/P'])
         except KeyError:
-            return DocMDPPerm.FILL_FORMS
+            return MDPPerm.FILL_FORMS
 
     @property
     def md_algorithm(self) -> str:

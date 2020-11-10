@@ -361,6 +361,16 @@ class SigSeedValueSpec:
             return HTTPTimeStamper(self.timestamp_server_url)
 
 
+class MDPPerm(Flag):
+    """
+    Cf. Table 254  in ISO 32000
+    """
+
+    NO_CHANGES = 0
+    FILL_FORMS = 2
+    ANNOTATE = 3
+
+
 @dataclass(frozen=True)
 class SigFieldSpec:
     sig_field_name: str

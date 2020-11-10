@@ -6,6 +6,8 @@ from io import BytesIO
 
 import pytz
 from asn1crypto import ocsp, tsp
+
+import pdfstamp.sign.fields
 from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
 from oscrypto import keys as oskeys
@@ -834,7 +836,7 @@ def test_certify():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
-            docmdp_permissions=signers.DocMDPPerm.NO_CHANGES
+            docmdp_permissions=pdfstamp.sign.fields.MDPPerm.NO_CHANGES
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -844,7 +846,7 @@ def test_certify():
 
     info = read_certification_data(r)
     assert info.author_sig.sig_object == sig_obj.get_object()
-    assert info.permission_bits == signers.DocMDPPerm.NO_CHANGES
+    assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.NO_CHANGES
 
     # with NO_CHANGES, we shouldn't be able to append an approval signature
     out.seek(0)
@@ -869,7 +871,7 @@ def test_no_double_certify():
 
     info = read_certification_data(r)
     assert info.author_sig.sig_object == sig_obj.get_object()
-    assert info.permission_bits == signers.DocMDPPerm.FILL_FORMS
+    assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
 
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
@@ -877,7 +879,7 @@ def test_no_double_certify():
         signers.sign_pdf(
             w, signers.PdfSignatureMetadata(
                 field_name='Sig2', certify=True,
-                docmdp_permissions=signers.DocMDPPerm.FILL_FORMS
+                docmdp_permissions=pdfstamp.sign.fields.MDPPerm.FILL_FORMS
             ), signer=FROM_CA
         )
 
@@ -906,7 +908,7 @@ def test_approval_sig():
 
     info = read_certification_data(r)
     assert info.author_sig.sig_object == sig_obj.get_object()
-    assert info.permission_bits == signers.DocMDPPerm.FILL_FORMS
+    assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
 
     field_name, sig_obj, sig_field = next(sigs)
     assert field_name == 'Sig2'

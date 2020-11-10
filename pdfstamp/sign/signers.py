@@ -4,7 +4,6 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Flag
 from io import BytesIO
 from typing import Optional
 
@@ -21,7 +20,7 @@ from pdf_utils.reader import PdfFileReader
 from pdfstamp.sign import general
 from pdfstamp.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
-    SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter,
+    SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm,
 )
 from pdfstamp.sign.timestamps import TimeStamper
 from pdfstamp.sign.general import (
@@ -31,7 +30,7 @@ from pdfstamp.sign.general import (
 from pdfstamp.stamp import TextStampStyle, TextStamp
 
 __all__ = ['Signer', 'SimpleSigner', 'PdfSigner', 'sign_pdf',
-           'DocMDPPerm', 'SignatureObject']
+           'SignatureObject']
 
 
 logger = logging.getLogger(__name__)
@@ -349,16 +348,6 @@ class Signer:
         })
 
 
-class DocMDPPerm(Flag):
-    """
-    Cf. Table 254  in ISO 32000
-    """
-
-    NO_CHANGES = 0
-    FILL_FORMS = 2
-    ANNOTATE = 3
-
-
 # TODO I've encountered TSAs that will spew invalid timestamps when presented
 #  with a sha512 req (Adobe Reader agrees).
 #  Should get to the bottom of that. In the meantime, default to sha256
@@ -383,7 +372,7 @@ class PdfSignatureMetadata:
     # strategies
     include_signedtime_attr: bool = True
     # only relevant for certification
-    docmdp_permissions: DocMDPPerm = DocMDPPerm.FILL_FORMS
+    docmdp_permissions: MDPPerm = MDPPerm.FILL_FORMS
 
 
 # FIXME this function should really be called "load_certs_from_pemder" or sth.
@@ -489,7 +478,7 @@ class SimpleSigner(Signer):
 
 def _certification_setup(writer: IncrementalPdfFileWriter,
                          sig_obj_ref, md_algorithm,
-                         permission_level: DocMDPPerm):
+                         permission_level: MDPPerm):
     """
     Cf. Tables 252, 253 and 254 in ISO 32000
     """
@@ -635,7 +624,7 @@ class PdfSigner:
                 pass
 
     def _enforce_certification_constraints(self, reader: PdfFileReader):
-        from .validation import read_certification_data, DocMDPPerm
+        from .validation import read_certification_data, MDPPerm
         cd = read_certification_data(reader)
         # if there is no author signature, we don't have to do anything
         if cd is None:
@@ -644,7 +633,7 @@ class PdfSigner:
             raise SigningError(
                 "Document already contains a certification signature"
             )
-        if cd.permission_bits == DocMDPPerm.NO_CHANGES:
+        if cd.permission_bits == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
         requested_md = self.signature_meta.md_algorithm
         if requested_md is not None and requested_md != cd.md_algorithm:
