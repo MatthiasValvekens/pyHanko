@@ -589,6 +589,8 @@ class DictionaryObject(dict, PdfObject):
                 raise ValueError("key must be PdfObject")
         if not isinstance(value, PdfObject):
             raise ValueError("value must be PdfObject")
+        if self.container_ref is not None:
+            value.container_ref = self.container_ref
         return dict.__setitem__(self, key, value)
 
     def setdefault(self, key, value=None):
@@ -596,6 +598,8 @@ class DictionaryObject(dict, PdfObject):
             raise ValueError("key must be PdfObject")
         if not isinstance(value, PdfObject):
             raise ValueError("value must be PdfObject")
+        if self.container_ref is not None:
+            value.container_ref = self.container_ref
         return dict.setdefault(self, key, value)
 
     def __getitem__(self, key):
