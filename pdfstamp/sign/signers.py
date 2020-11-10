@@ -20,7 +20,7 @@ from pdf_utils.reader import PdfFileReader
 from pdfstamp.sign import general
 from pdfstamp.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
-    SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm,
+    SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm, FieldMDPSpec,
 )
 from pdfstamp.sign.timestamps import TimeStamper
 from pdfstamp.sign.general import (
@@ -476,49 +476,31 @@ class SimpleSigner(Signer):
         )
 
 
-def _certification_setup(writer: IncrementalPdfFileWriter,
-                         sig_obj_ref, md_algorithm,
-                         permission_level: MDPPerm):
-    """
-    Cf. Tables 252, 253 and 254 in ISO 32000
-    """
-    transform_params = generic.DictionaryObject({
-        pdf_name('/Type'): pdf_name('/TransformParams'),
-        pdf_name('/V'): pdf_name('/1.2'),
-        pdf_name('/P'): generic.NumberObject(permission_level.value)
-    })
-    tp_ref = writer.add_object(transform_params)
-
-    # not to be confused with our indirect reference *to* the signature object--
+def docmdp_reference_dictionary(md_algorithm, permission_level: MDPPerm):
     # this is part of the /Reference entry of the signature object.
-    sigref_object = generic.DictionaryObject({
+    return generic.DictionaryObject({
         pdf_name('/Type'): pdf_name('/SigRef'),
         pdf_name('/TransformMethod'): pdf_name('/DocMDP'),
         pdf_name('/DigestMethod'): pdf_name('/' + md_algorithm.upper()),
-        pdf_name('/TransformParams'): tp_ref
+        pdf_name('/TransformParams'): generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/TransformParams'),
+            pdf_name('/V'): pdf_name('/1.2'),
+            pdf_name('/P'): generic.NumberObject(permission_level.value)
+        })
     })
 
-    # after preparing the sigref object, insert it into the actual signature
-    # object under /Reference (for some reason this is supposed to be an array)
-    sigref_list = generic.ArrayObject([writer.add_object(sigref_object)])
-    sig_obj_ref.get_object()[pdf_name('/Reference')] = sigref_list
 
-    # finally, register a /DocMDP permission entry in the document catalog
-    root = writer.root
-    # the usual song and dance to grab a reference to /Perms, or create it
-    # TODO I've done this enough times to factor it out, I suppose
-    try:
-        perms_ref = root.raw_get('/Perms')
-        if isinstance(perms_ref, generic.IndirectObject):
-            perms = perms_ref.get_object()
-            writer.mark_update(perms_ref)
-        else:
-            perms = perms_ref
-            writer.update_root()
-    except KeyError:
-        root[pdf_name('/Perms')] = perms = generic.DictionaryObject()
-        writer.update_root()
-    perms[pdf_name('/DocMDP')] = sig_obj_ref
+def fieldmdp_reference_dictionary(field_mdp_spec: FieldMDPSpec,
+                                  md_algorithm: str,
+                                  data_ref: generic.IndirectObject):
+    # this is part of the /Reference entry of the signature object.
+    return generic.DictionaryObject({
+        pdf_name('/Type'): pdf_name('/SigRef'),
+        pdf_name('/TransformMethod'): pdf_name('/FieldMDP'),
+        pdf_name('/Data'): data_ref,
+        pdf_name('/DigestMethod'): pdf_name('/' + md_algorithm.upper()),
+        pdf_name('/TransformParams'): field_mdp_spec.as_transform_params()
+    })
 
 
 SIG_DETAILS_DEFAULT_TEMPLATE = (
@@ -594,6 +576,56 @@ class PdfSigner:
         self.signature_meta = signature_meta
         self.signer = signer
 
+    def _apply_locking_rules(self, sig_field, sig_obj_ref, md_algorithm,
+                             pdf_out):
+        # this helper method handles /Lock dictionary and certification
+        #  semantics.
+
+        lock = None
+        docmdp_perms = None
+        try:
+            lock_dict = sig_field['/Lock']
+            lock = FieldMDPSpec.from_pdf_object(lock_dict)
+            docmdp_value = lock_dict['/P']
+            docmdp_perms = MDPPerm(docmdp_value)
+        except KeyError:
+            pass
+        except ValueError as e:
+            raise SigningError("Failed to read /Lock dictionary", e)
+
+        if self.signature_meta.certify:
+            meta_perms = self.signature_meta.docmdp_permissions
+            assert meta_perms is not None
+            # choose the stricter option if both are available
+            docmdp_perms = meta_perms if docmdp_perms is None else (
+                min(docmdp_perms, meta_perms)
+            )
+
+            # To make a certification signature, we need to leave a record
+            #  in the document catalog.
+            root = pdf_out.root
+            try:
+                perms = root['/Perms']
+            except KeyError:
+                root['/Perms'] = perms = generic.DictionaryObject()
+            perms[pdf_name('/DocMDP')] = sig_obj_ref
+            pdf_out.update_container(perms)
+
+        reference_array = generic.ArrayObject()
+        if lock is not None:
+            reference_array.append(
+                fieldmdp_reference_dictionary(
+                    lock, md_algorithm, data_ref=pdf_out.root_ref
+                )
+            )
+
+        if docmdp_perms is not None:
+            reference_array.append(
+                docmdp_reference_dictionary(md_algorithm, docmdp_perms)
+            )
+
+        sig_obj_ref.get_object()['/Reference'] = reference_array
+
     def _sig_field_appearance(self, sig_field, pdf_out, timestamp):
 
         name = self.signature_meta.name
@@ -624,7 +656,7 @@ class PdfSigner:
                 pass
 
     def _enforce_certification_constraints(self, reader: PdfFileReader):
-        from .validation import read_certification_data, MDPPerm
+        from .validation import read_certification_data
         cd = read_certification_data(reader)
         # if there is no author signature, we don't have to do anything
         if cd is None:
@@ -872,11 +904,7 @@ class PdfSigner:
         # take care of the field's visual appearance (if applicable)
         self._sig_field_appearance(sig_field, pdf_out, timestamp)
 
-        if signature_meta.certify:
-            _certification_setup(
-                pdf_out, sig_obj_ref, md_algorithm,
-                signature_meta.docmdp_permissions
-            )
+        self._apply_locking_rules(sig_field, sig_obj_ref, md_algorithm, pdf_out)
 
         wr = sig_obj.write_signature(pdf_out, md_algorithm)
         true_digest = next(wr)

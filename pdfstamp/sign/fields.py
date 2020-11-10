@@ -9,6 +9,7 @@ from oscrypto import keys as oskeys
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pdf_utils.misc import OrderedEnum
 from pdf_utils.rw_common import PdfHandler
 from pdfstamp.sign.general import UnacceptableSignerError, SigningError
 from pdfstamp.stamp import AnnotAppearances
@@ -361,15 +362,66 @@ class SigSeedValueSpec:
             return HTTPTimeStamper(self.timestamp_server_url)
 
 
-class MDPPerm(Flag):
+class MDPPerm(OrderedEnum):
     """
-    Cf. Table 254  in ISO 32000
+    Cf. Table 254  in ISO 32000-1
     """
 
-    NO_CHANGES = 0
+    NO_CHANGES = 1
     FILL_FORMS = 2
     ANNOTATE = 3
 
+
+class FieldMDPAction(Enum):
+    ALL = pdf_name('/All')
+    INCLUDE = pdf_name('/Include')
+    EXCLUDE = pdf_name('/Exclude')
+
+
+@dataclass(frozen=True)
+class FieldMDPSpec:
+    action: FieldMDPAction
+    fields: List[str]
+
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        result = generic.DictionaryObject({
+            pdf_name('/Action'): self.action.value,
+        })
+        if self.action != FieldMDPAction.ALL:
+            result['/Fields'] = generic.ArrayObject(
+                map(pdf_string, self.fields)
+            )
+        return result
+
+    def as_transform_params(self) -> generic.DictionaryObject:
+        result = self.as_pdf_object()
+        result['/Type'] = pdf_name('/TransformParams')
+        result['/V'] = pdf_name('/1.2')
+        return result
+
+    def as_sig_field_lock(self) -> generic.DictionaryObject:
+        result = self.as_pdf_object()
+        result['/Type'] = pdf_name('/SigFieldLock')
+        return result
+
+    @classmethod
+    def from_pdf_object(cls, pdf_dict) -> 'FieldMDPSpec':
+        try:
+            action = FieldMDPAction(pdf_dict['/Action'])
+        except KeyError:  # pragma: nocover
+            raise ValueError("/Action is required.")
+
+        if action != FieldMDPAction.ALL:
+            try:
+                fields = pdf_dict['/Fields']
+            except KeyError:  # pragma: nocover
+                raise ValueError("/Fields is required when /Action is not /All")
+        else:
+            fields = None
+        return cls(action=action, fields=fields)
+
+
+# TODO deal with fully qualified field names for the signature field
 
 @dataclass(frozen=True)
 class SigFieldSpec:
@@ -377,6 +429,18 @@ class SigFieldSpec:
     on_page: int = 0
     box: (int, int, int, int) = None
     seed_value_dict: SigSeedValueSpec = None
+    field_mdp_spec: FieldMDPSpec = None
+    doc_mdp_update_value: MDPPerm = None
+
+    def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
+        if self.field_mdp_spec is None:
+            return
+        result = self.field_mdp_spec.as_sig_field_lock()
+        # this requires PDF 2.0 in principle, but meh, noncompliant
+        # readers will ignore it anyway
+        if self.doc_mdp_update_value is not None:
+            result['/P'] = generic.NumberObject(self.doc_mdp_update_value.value)
+        return result
 
 
 def _prepare_sig_field(sig_field_name, root,
@@ -526,11 +590,15 @@ def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
                 % sp.sig_field_name
             )
 
+        sig_field = sig_field_ref.get_object()
         if sp.seed_value_dict is not None:
-            sig_field = sig_field_ref.get_object()
             # /SV must be an indirect reference as per the spec
             sv_ref = pdf_out.add_object(sp.seed_value_dict.as_pdf_object())
             sig_field[pdf_name('/SV')] = sv_ref
+
+        lock = sp.format_lock_dictionary()
+        if lock is not None:
+            sig_field[pdf_name('/Lock')] = pdf_out.add_object(lock)
 
 
 class SignatureFormField(generic.DictionaryObject):

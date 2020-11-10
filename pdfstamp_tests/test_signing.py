@@ -414,6 +414,40 @@ def test_double_sig_add_visible_field():
     val_trusted(r, sig_field)
 
 
+@pytest.mark.parametrize('include_docmdp', [True, False])
+def test_add_sigfield_with_lock(include_docmdp):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134),
+        field_mdp_spec=fields.FieldMDPSpec(
+            fields.FieldMDPAction.INCLUDE, fields=['blah']
+        ),
+        doc_mdp_update_value=(
+            fields.MDPPerm.NO_CHANGES if include_docmdp else None
+        )
+    )
+    fields.append_signature_fields(w, [sp])
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    sig_fields = fields.enumerate_sig_fields(r)
+    field_name, sig_obj, sig_field = next(sig_fields)
+    assert field_name == 'SigNew'
+    refs = sig_obj.get_object()['/Reference']
+    assert len(refs) == (2 if include_docmdp else 1)
+    ref = refs[0]
+    assert ref['/TransformMethod'] == '/FieldMDP'
+    assert ref['/TransformParams']['/Fields'] == ['blah']
+    assert ref.raw_get('/Data').reference == r.root_ref
+    assert '/Perms' not in r.root
+    if include_docmdp:
+        ref = refs[1]
+        assert ref['/TransformMethod'] == '/DocMDP'
+        assert ref['/TransformParams']['/P'] == 1
+    val_trusted(r, sig_field)
+
+
 def test_enumerate_empty():
 
     with pytest.raises(StopIteration):
