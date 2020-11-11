@@ -669,7 +669,7 @@ def _walk_page_tree_annots(page_root_ref, new_sigfield_refs, signed_resolver,
         current_kids = current_resolver(current_kids.reference)
     # /Kids should only contain indirect refs, so direct comparison is
     # appropriate.
-    if current_kids != current_kids:
+    if current_kids != signed_kids:
         raise SuspiciousModification(
             "Unexpected change to page tree structure."
         )
