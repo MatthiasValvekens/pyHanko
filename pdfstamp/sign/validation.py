@@ -340,12 +340,13 @@ class SuspiciousModification(ValueError):
 class EmbeddedPdfSignature:
 
     def __init__(self, reader: PdfFileReader,
-                 sig_object: generic.DictionaryObject):
+                 sig_field: generic.DictionaryObject):
         self.reader = reader
-
-        if isinstance(sig_object, generic.IndirectObject):
-            sig_object = sig_object.get_object()
-        self.sig_object = sig_object
+        if isinstance(sig_field, generic.IndirectObject):
+            sig_field = sig_field.get_object()
+        self.sig_field = sig_field
+        sig_object_ref = sig_field.raw_get('/V')
+        self.sig_object = sig_object = sig_object_ref.get_object()
         assert isinstance(sig_object, generic.DictionaryObject)
         try:
             pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
@@ -375,16 +376,20 @@ class EmbeddedPdfSignature:
         except ValueError:
             raise ValueError('signer_infos should contain exactly one entry')
 
-        xref_cache: XRefCache = self.reader.xrefs
-        sig_ref = self.sig_object.get_container_ref()
-        assert isinstance(sig_ref, generic.Reference)
         # grab the revision to which the signature applies
-        self.signed_revision = xref_cache.get_last_change(sig_ref.idnum)
+        self.signed_revision = self.reader.xrefs.get_introducing_revision(
+            sig_object_ref.reference
+        )
         self.coverage = None
         self.modification_level = None
         self.raw_digest = None
+        self.total_len = None
         self._docmdp = self._fieldmdp = None
         self._docmdp_queried = self._fieldmdp_queried = False
+
+    @property
+    def field_name(self):
+        return self.sig_field['/T']
 
     @property
     def self_reported_signed_timestamp(self) -> datetime:
@@ -472,6 +477,7 @@ class EmbeddedPdfSignature:
             md.update(stream.read(chunk_len))
             total_len += chunk_len
 
+        self.total_len = total_len
         self.raw_digest = md.digest()
 
     def evaluate_signature_coverage(self):
@@ -1194,7 +1200,7 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
-    embedded_sig = EmbeddedPdfSignature(reader, sig_object)
+    embedded_sig = EmbeddedPdfSignature(reader, sig_field)
     status_kwargs = embedded_sig.summarise_integrity_info()
 
     # try to find an embedded timestamp
@@ -1270,7 +1276,7 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
     if sig_object is None:
         raise ValueError('Signature is empty')
 
-    embedded_sig = EmbeddedPdfSignature(reader, sig_object)
+    embedded_sig = EmbeddedPdfSignature(reader, sig_field)
     status_kwargs = embedded_sig.summarise_integrity_info()
     tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is None:

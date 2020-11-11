@@ -206,9 +206,9 @@ def test_simple_sign(incl_signed_time):
     )
     out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_untrusted(r, sig_field)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(r, emb.sig_field)
 
     # try tampering with the file
     out.seek(0x9d)
@@ -217,8 +217,8 @@ def test_simple_sign(incl_signed_time):
     out.write(b'4')
     out.seek(0)
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    tampered = validate_pdf_signature(r, sig_field, SIMPLE_V_CONTEXT)
+    emb = r.embedded_signatures[0]
+    tampered = validate_pdf_signature(r, emb.sig_field, SIMPLE_V_CONTEXT)
     assert not tampered.intact
     assert not tampered.valid
     assert tampered.summary() == 'INVALID'
@@ -980,7 +980,7 @@ def test_approval_sig_md_match_author_sig():
     sigs = fields.enumerate_sig_fields(r)
     next(sigs)
     field_name, sig_obj, sig_field = next(sigs)
-    assert EmbeddedPdfSignature(r, sig_obj).md_algorithm == 'sha256'
+    assert EmbeddedPdfSignature(r, sig_field).md_algorithm == 'sha256'
 
 
 def test_ocsp_embed():
@@ -1000,7 +1000,7 @@ def test_ocsp_embed():
 
     val_trusted(r, sig_field)
 
-    embedded_sig = EmbeddedPdfSignature(r, sig_obj)
+    embedded_sig = EmbeddedPdfSignature(r, sig_field)
     vc = read_adobe_revocation_info(embedded_sig.signer_info)
     assert len(vc.ocsps) == 1
 
@@ -1244,7 +1244,7 @@ def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA_TS, test_violation=False):
         assert not status.seed_value_ok
     else:
         assert status.seed_value_ok
-    return EmbeddedPdfSignature(r, sig_obj)
+    return EmbeddedPdfSignature(r, sig_field)
 
 
 def test_sv_sign_md_req():

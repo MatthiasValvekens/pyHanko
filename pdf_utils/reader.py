@@ -128,6 +128,10 @@ class XRefCache:
     def get_last_change(self, idnum):
         return self.xref_sections - 1 - self.last_change[idnum]
 
+    def get_introducing_revision(self, ref: generic.Reference):
+        section, _ = self.history[(ref.generation, ref.idnum)][0]
+        return self.xref_sections - 1 - section
+
     def get_xref_container_info(self, revision):
         return self.xref_container_info[self.xref_sections - 1 - revision]
 
@@ -384,8 +388,7 @@ class PdfFileReader(PdfHandler):
         as the PDF stream's cross-reference tables are read into memory.
 
         :param stream: A File object or an object that supports the standard
-            read and seek methods similar to a File object. Could also be a
-            string representing a path to a PDF file.
+            read and seek methods similar to a File object.
         :param bool strict: Determines whether user should be warned of all
             problems and also causes some correctable problems to be fatal.
             Defaults to ``True``.
@@ -414,6 +417,8 @@ class PdfFileReader(PdfHandler):
                 self.input_version = (major, minor)
         except KeyError:
             pass
+
+        self._embedded_signatures = None
 
     def _get_object_from_stream(self, idnum, stmnum, idx):
         # indirect reference to object in object stream
@@ -809,6 +814,23 @@ class PdfFileReader(PdfHandler):
             res = HistoricalResolver(self, revision)
             cache[revision] = res
             return res
+
+    @property
+    def embedded_signatures(self):
+        if self._embedded_signatures is not None:
+            return self._embedded_signatures
+        from pdfstamp.sign.fields import enumerate_sig_fields
+        from pdfstamp.sign.validation import EmbeddedPdfSignature
+        sig_fields = enumerate_sig_fields(self, filled_status=True)
+
+        result = sorted(
+            (
+                EmbeddedPdfSignature(self, sig_field)
+                for _, sig_obj, sig_field in sig_fields
+            ), key=lambda emb: emb.signed_revision
+        )
+        self._embedded_signatures = result
+        return result
 
 
 def convert_to_int(d, size):
