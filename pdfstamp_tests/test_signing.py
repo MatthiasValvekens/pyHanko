@@ -1628,7 +1628,7 @@ def test_form_field_postsign_modify():
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_trusted_but_modified(r, sig_field)
+    val_trusted(r, sig_field, extd=True)
 
 
 # helper function for filling in the text field in the TEXTFIELD_GROUP example
@@ -1707,8 +1707,98 @@ def test_form_field_in_group_postsign_modify(variant):
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
+    val_trusted(r, sig_field, extd=True)
+
+
+test_form_field_in_group_postsign_modify_failure_matrix = [
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE,
+                            fields=['TextInput.TextField1'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE,
+                            fields=['TextInput.TextField1'])),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE,
+                            fields=['TextInput.TextField2'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE,
+                            fields=['TextInput.TextField2'])),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE,
+                            fields=['TextInput'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE,
+                            fields=['TextInput'])),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.ALL)),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.ALL)),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE, fields=['Sig1'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE, fields=['Sig1'])),
+]
+
+@pytest.mark.parametrize('field_filled, fieldmdp_spec', test_form_field_in_group_postsign_modify_failure_matrix)
+def test_form_field_in_group_locked_postsign_modify_failure(field_filled, fieldmdp_spec):
+    # the field that is filled in after signing is always the same,
+    # but the initial one varies
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[0]))
+
+
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134),
+        field_mdp_spec=fieldmdp_spec,
+        doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
+    )
+    fields.append_signature_fields(w, [sp])
+    set_text_field_in_group(w, field_filled, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='SigNew')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_in_group(w, 0, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r, filled_status=True))
+    assert field_name == 'SigNew'
     val_trusted_but_modified(r, sig_field)
 
+
+test_form_field_in_group_postsign_modify_success_matrix = [
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE,
+                            fields=['TextInput.TextField1'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE,
+                            fields=['TextInput.TextField1'])),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE,
+                            fields=['TextInput.TextField2'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE,
+                            fields=['TextInput.TextField2'])),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE,
+                            fields=['TextInput'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.EXCLUDE,
+                            fields=['TextInput'])),
+    (0, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE, fields=['Sig1'])),
+    (1, fields.FieldMDPSpec(fields.FieldMDPAction.INCLUDE, fields=['Sig1'])),
+]
+
+
+@pytest.mark.parametrize('field_filled, fieldmdp_spec', test_form_field_in_group_postsign_modify_success_matrix)
+def test_form_field_in_group_locked_postsign_modify_success(field_filled, fieldmdp_spec):
+    # the field that is filled in after signing is always the same,
+    # but the initial one varies
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[0]))
+
+
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134),
+        field_mdp_spec=fieldmdp_spec,
+        doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
+    )
+    fields.append_signature_fields(w, [sp])
+    set_text_field_in_group(w, field_filled, "Some text")
+    meta = signers.PdfSignatureMetadata(field_name='SigNew')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    set_text_field_in_group(w, 1, "Some other text")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r, filled_status=True))
+    assert field_name == 'SigNew'
+    val_trusted(r, sig_field, extd=True)
 
 def test_form_field_postsign_fill_pades_lt(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
@@ -1750,7 +1840,7 @@ def test_form_field_postsign_modify_pades_lt(requests_mock):
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
-    val_trusted_but_modified(r, sig_field)
+    val_trusted(r, sig_field, extd=True)
 
 
 def test_pades_double_sign(requests_mock):

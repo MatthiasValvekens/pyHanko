@@ -6,7 +6,7 @@ from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, auto, unique
 from io import BytesIO
-from typing import TypeVar, Type, Optional
+from typing import TypeVar, Type, Optional, Set
 
 from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl
@@ -25,7 +25,7 @@ from pdf_utils.reader import (
     PdfFileReader, XRefCache, process_data_at_eof,
 )
 from pdf_utils.rw_common import PdfHandler
-from .fields import MDPPerm
+from .fields import MDPPerm, FieldMDPSpec
 from .general import (
     SignatureStatus, find_cms_attribute,
     UnacceptableSignerError,
@@ -306,7 +306,8 @@ MECHANISMS = (
 )
 
 
-def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
+def _extract_reference_dict(signature_obj, method) \
+        -> Optional[generic.DictionaryObject]:
     # all queries are raw because we don't want to trigger object resolution
     #  (this has to work for historic queries as well, and signature_obj
     #   shouldn't contain any indirect refs anyway)
@@ -315,14 +316,21 @@ def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
     except KeyError:
         return
     for ref in sig_refs:
-        if ref.raw_get('/TransformMethod') == '/DocMDP':
-            raw_perms = ref.raw_get('/TransformParams').raw_get('/P')
-            try:
-                return MDPPerm(raw_perms)
-            except ValueError:
-                raise SignatureValidationError(
-                    "Failed to read document permissions"
-                )
+        if ref.raw_get('/TransformMethod') == method:
+            return ref
+
+
+def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
+    ref = _extract_reference_dict(signature_obj, '/DocMDP')
+    if ref is None:
+        return
+    try:
+        raw_perms = ref.raw_get('/TransformParams').raw_get('/P')
+        return MDPPerm(raw_perms)
+    except (ValueError, KeyError) as e:  # pragma: nocover
+        raise SignatureValidationError(
+            "Failed to read document permissions", e
+        )
 
 
 class SuspiciousModification(ValueError):
@@ -375,7 +383,8 @@ class EmbeddedPdfSignature:
         self.coverage = None
         self.modification_level = None
         self.raw_digest = None
-        self._docmdp = None
+        self._docmdp = self._fieldmdp = None
+        self._docmdp_queried = self._fieldmdp_queried = False
 
     @property
     def self_reported_signed_timestamp(self) -> datetime:
@@ -422,12 +431,33 @@ class EmbeddedPdfSignature:
         return status_kwargs
 
     @property
-    def docmdp_level(self) -> MDPPerm:
-        if self._docmdp is not None:
+    def docmdp_level(self) -> Optional[MDPPerm]:
+        # TODO fall back to reading /Lock in case the signing software
+        #  ignored the /Lock dictionary when building up the signature object
+        if self._docmdp_queried:
             return self._docmdp
         docmdp = _extract_docmdp_for_sig(signature_obj=self.sig_object)
         self._docmdp = docmdp
+        self._docmdp_queried = True
         return docmdp
+
+    @property
+    def fieldmdp(self) -> Optional[FieldMDPSpec]:
+        # TODO as above, fall back to /Lock
+        if self._fieldmdp_queried:
+            return self._fieldmdp
+        ref_dict = _extract_reference_dict(self.sig_object, '/FieldMDP')
+        self._fieldmdp_queried = True
+        if ref_dict is None:
+            return
+        try:
+            sp = FieldMDPSpec.from_pdf_object(ref_dict['/TransformParams'])
+        except (ValueError, KeyError) as e:  # pragma: nocover
+            raise SignatureValidationError(
+                "Failed to read /FieldMDP settings", e
+            )
+        self._fieldmdp = sp
+        return sp
 
     def compute_digest(self):
         md = getattr(hashlib, self.md_algorithm)()
@@ -570,7 +600,7 @@ class EmbeddedPdfSignature:
             signed_acroform.raw_get('/Fields'),
             current_acroform.raw_get('/Fields'),
             signed_resolver, current_resolver, explained_refs_lta,
-            explained_refs_formfill
+            explained_refs_formfill, field_mdp_spec=self.fieldmdp
         ))
 
         # for the DSS, we only have to be careful not to allow non-DSS
@@ -776,7 +806,7 @@ def _split_sig_fields(resolver, field_list):
 def _diff_field_tree(signed_fields, current_fields,
                      signed_resolver, current_resolver,
                      explained_refs_lta, explained_refs_formfill,
-                     parent_name=""):
+                     field_mdp_spec: Optional[FieldMDPSpec], parent_name=""):
     # compare & resolve
     signed_fields, current_fields = _compare_values(
         signed_fields, current_fields, signed_resolver,
@@ -799,16 +829,16 @@ def _diff_field_tree(signed_fields, current_fields,
         )
     for name in nonsig_field_names:
         fq_name = parent_name + "." + name if parent_name else name
+        locked = (
+            field_mdp_spec is not None and field_mdp_spec.is_locked(fq_name)
+        )
         signed_field, current_field = _diff_field(
             signed_fields_other[name], current_fields_other[name],
             signed_resolver, current_resolver, explained_refs_formfill,
-            fq_name=fq_name
-        )
-        _diff_field_value(
-            signed_field, current_field, signed_resolver,
-            current_resolver, explained_refs_formfill
+            fq_name=fq_name, locked=locked
         )
 
+        # even a locked field might still have unlocked descendant fields
         try:
             # we know from the diff check that it doesn't matter
             # whether we look up this reference value on the signed field
@@ -829,7 +859,7 @@ def _diff_field_tree(signed_fields, current_fields,
             yield from _diff_field_tree(
                 signed_kids, current_kids, signed_resolver,
                 current_resolver, explained_refs_lta, explained_refs_formfill,
-                parent_name=fq_name
+                field_mdp_spec=field_mdp_spec, parent_name=fq_name
             )
         except KeyError:
             pass
@@ -851,6 +881,10 @@ def _diff_field_tree(signed_fields, current_fields,
         #  indirect object, and signature dictionaries can only contain
         #  direct objects as per ISO 32000 => no deep-fetching necessary.
         current_field = current_resolver(sigfield_ref)
+
+        if field_mdp_spec is not None and field_mdp_spec.is_locked(fq_name):
+            continue
+
         try:
             current_value_ref = current_field.raw_get('/V').reference
         except KeyError:
@@ -922,7 +956,7 @@ def _diff_field_tree(signed_fields, current_fields,
 
 
 def _diff_field(signed_ref, current_ref, signed_resolver,
-                current_resolver, explained_refs, fq_name):
+                current_resolver, explained_refs, fq_name, locked=False):
     # the indirect references should be the same
     if current_ref != signed_ref:
         raise SuspiciousModification(
@@ -939,48 +973,21 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
     #  to change if the value was provided in this exact revision, but
     #  that's a bit more involved to verify.
     # TODO double check the standard for other appearance-manipulating keys
-    _compare_dicts(signed_field, current_field, {'/V', '/AP', '/AS'})
-    for key in ('/AP', '/AS'):
-        _allow_dict_key_update(
-            signed_field, current_field, key, signed_resolver,
-            current_resolver, explained_refs, allow_removal=True
-        )
+    if not locked:
+        value_update_keys = {'/V', '/AP', '/AS'}
+        _compare_dicts(signed_field, current_field, value_update_keys)
+        for key in value_update_keys:
+            _allow_dict_key_update(
+                signed_field, current_field, key, signed_resolver,
+                current_resolver, explained_refs, allow_removal=True
+            )
+    else:
+        _compare_dicts(signed_field, current_field)
 
     return signed_field, current_field
 
 
-def _diff_field_value(signed_field, current_field, signed_resolver,
-                      current_resolver, explained_refs):
-
-    # finally, we deal with the field's value (if present)
-    # TODO FieldMDP and /Lock support for more granular control
-    try:
-        current_value = current_field.raw_get('/V')
-    except KeyError:
-        current_value = None
-    if '/V' in signed_field:
-        # shallow comparison + non-whitelisting of deeper structures
-        # should suffice to prevent modification
-        signed_value = signed_field.raw_get('/V')
-        if signed_value != current_value:
-            raise SuspiciousModification(
-                "Form fields that were filled in prior to signing cannot be "
-                "modified."
-            )
-        return
-    if current_value is None:
-        return
-    # it's not up to this function to judge whether or not form filling
-    # is permitted, we just have to report the object IDs.
-    value_refs = current_resolver.collect_indirect_references(current_value)
-    whitelist = _whitelist_callback(
-        explained_refs, signed_resolver.revision, signed_resolver.reader.xrefs
-    )
-    for ref in value_refs:
-        whitelist(ref)
-
-
-def _compare_dicts(signed_dict, current_dict, ignored):
+def _compare_dicts(signed_dict, current_dict, ignored: Set[str] = frozenset()):
     current_dict_keys = set(current_dict.keys()) - ignored
     signed_dict_keys = set(signed_dict.keys()) - ignored
     if current_dict_keys != signed_dict_keys:

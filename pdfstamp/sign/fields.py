@@ -381,7 +381,7 @@ class FieldMDPAction(Enum):
 @dataclass(frozen=True)
 class FieldMDPSpec:
     action: FieldMDPAction
-    fields: List[str]
+    fields: Optional[List[str]] = None
 
     def as_pdf_object(self) -> generic.DictionaryObject:
         result = generic.DictionaryObject({
@@ -419,6 +419,18 @@ class FieldMDPSpec:
         else:
             fields = None
         return cls(action=action, fields=fields)
+
+    def is_locked(self, field_name: str) -> bool:
+        if self.action == FieldMDPAction.ALL:
+            return True
+
+        lock_result = self.action == FieldMDPAction.INCLUDE
+        for scoped_field_name in self.fields:
+            # treat non-terminal field in/exclusions as including the whole
+            # tree beneath them
+            if field_name.startswith(scoped_field_name):
+                return lock_result
+        return not lock_result
 
 
 # TODO deal with fully qualified field names for the signature field
