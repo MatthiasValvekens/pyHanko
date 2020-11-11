@@ -1,6 +1,7 @@
 import hashlib
 import os
 import logging
+from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, auto, unique
@@ -288,6 +289,25 @@ MECHANISMS = (
 )
 
 
+def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
+    # all queries are raw because we don't want to trigger object resolution
+    #  (this has to work for historic queries as well, and signature_obj
+    #   shouldn't contain any indirect refs anyway)
+    try:
+        sig_refs = signature_obj.raw_get('/Reference')
+    except KeyError:
+        return
+    for ref in sig_refs:
+        if ref.raw_get('/TransformMethod') == '/DocMDP':
+            raw_perms = ref.raw_get('/TransformParams').raw_get('/P')
+            try:
+                return MDPPerm(raw_perms)
+            except ValueError:
+                raise SignatureValidationError(
+                    "Failed to read document permissions"
+                )
+
+
 class SuspiciousModification(ValueError):
     pass
 
@@ -330,10 +350,15 @@ class EmbeddedPdfSignature:
         except ValueError:
             raise ValueError('signer_infos should contain exactly one entry')
 
+        xref_cache: XRefCache = self.reader.xrefs
+        sig_ref = self.sig_object.get_container_ref()
+        assert isinstance(sig_ref, generic.Reference)
+        # grab the revision to which the signature applies
+        self.signed_revision = xref_cache.get_last_change(sig_ref.idnum)
         self.coverage = None
         self.modification_level = None
-        self.signed_revision = None
         self.raw_digest = None
+        self._docmdp = None
 
     @property
     def self_reported_signed_timestamp(self) -> datetime:
@@ -362,6 +387,14 @@ class EmbeddedPdfSignature:
         self.coverage = self.evaluate_signature_coverage()
         self.modification_level = self.evaluate_modifications()
 
+    @property
+    def docmdp_level(self) -> MDPPerm:
+        if self._docmdp is not None:
+            return self._docmdp
+        docmdp = _extract_docmdp_for_sig(signature_obj=self.sig_object)
+        self._docmdp = docmdp
+        return docmdp
+
     def compute_digest(self):
         md = getattr(hashlib, self.md_algorithm)()
         stream = self.reader.stream
@@ -378,13 +411,8 @@ class EmbeddedPdfSignature:
         self.raw_digest = md.digest()
 
     def evaluate_signature_coverage(self):
+
         xref_cache: XRefCache = self.reader.xrefs
-
-        sig_ref = self.sig_object.get_container_ref()
-        assert isinstance(sig_ref, generic.Reference)
-        # grab the revision to which the signature applies
-        self.signed_revision = xref_cache.get_last_change(sig_ref.idnum)
-
         # for the coverage check, we're more strict with regards to the byte
         #  range
         stream = self.reader.stream
@@ -1270,58 +1298,18 @@ def read_adobe_revocation_info(signer_info: cms.SignerInfo,
     )
 
 
-@dataclass(frozen=True)
-class DocMDPInfo:
-    author_sig: EmbeddedPdfSignature
-    sig_ref: generic.DictionaryObject
-
-    @property
-    def permission_bits(self) -> MDPPerm:
-        try:
-            return MDPPerm(self.sig_ref['/TransformParams']['/P'])
-        except KeyError:
-            return MDPPerm.FILL_FORMS
-
-    @property
-    def md_algorithm(self) -> str:
-        return self.author_sig.md_algorithm
+DocMDPInfo = namedtuple('DocMDPInfo', ['permission_bits', 'author_sig'])
 
 
-def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
+def read_certification_data(reader: PdfFileReader):
     try:
-        docmdp = reader.root['/Perms'].raw_get('/DocMDP')
+        certification_sig = reader.root['/Perms']['/DocMDP']
     except KeyError:
         return
 
-    if not isinstance(docmdp, generic.IndirectObject):  # pragma: nocover
-        raise ValueError('/DocMDP entry in /Perms should be an indirect ref')
+    perm = _extract_docmdp_for_sig(certification_sig)
 
-    sig_dict = docmdp.get_object()
-    # look up the relevant signature reference dictionary
-    try:
-        sig_refs = sig_dict['/Reference']
-        sig_ref = None
-        # not compliant, but meh
-        if isinstance(sig_refs, generic.DictionaryObject):  # pragma: nocover
-            logger.warning(
-                '/Reference entry should be an array of dictionaries'
-            )
-            if sig_refs['/TransformMethod'] == pdf_name('/DocMDP'):
-                sig_ref = sig_refs
-        elif isinstance(sig_refs, generic.ArrayObject):
-            for ref in sig_refs:
-                ref = ref.get_object()
-                if ref['/TransformMethod'] == pdf_name('/DocMDP'):
-                    sig_ref = ref
-                    break
-        else:  # pragma: nocover
-            logger.warning('Illegal type in /Reference, bailing.')
-        if sig_ref is None:  # pragma: nocover
-            raise ValueError('Could not parse signature reference dictionary.')
-    except KeyError:  # pragma: nocover
-        raise ValueError('Could not find signature reference dictionary.')
-
-    return DocMDPInfo(EmbeddedPdfSignature(reader, sig_dict), sig_ref)
+    return DocMDPInfo(perm, certification_sig)
 
 
 # TODO validate DocMDP compliance and PAdES compliance

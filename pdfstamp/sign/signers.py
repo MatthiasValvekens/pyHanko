@@ -656,6 +656,9 @@ class PdfSigner:
                 pass
 
     def _enforce_certification_constraints(self, reader: PdfFileReader):
+        # TODO we really should take into account the /DocMDP constraints
+        #  of _all_ previous signatures
+
         from .validation import read_certification_data
         cd = read_certification_data(reader)
         # if there is no author signature, we don't have to do anything
@@ -667,13 +670,10 @@ class PdfSigner:
             )
         if cd.permission_bits == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
-        requested_md = self.signature_meta.md_algorithm
-        if requested_md is not None and requested_md != cd.md_algorithm:
-            raise SigningError(
-                "Requested message digest algorithm '%s', but author signature "
-                "mandates '%s'." % (requested_md, cd.md_algorithm)
-            )
-        return cd.md_algorithm
+        author_sig_md = cd.author_sig.get('/DigestAlgorithm', None)
+        if author_sig_md is not None:
+            return author_sig_md
+        return None
 
     def _enforce_seed_value_constraints(self, sig_field, validation_path) \
             -> Optional[SigSeedValueSpec]:
@@ -814,20 +814,30 @@ class PdfSigner:
             sig_field, signer_cert_validation_path
         )
 
+        author_sig_md_algorithm = self._enforce_certification_constraints(
+            pdf_out.prev
+        )
         # priority order for the message digest algorithm
-        #  (1) If there is a certification signature, use the digest method
-        #      specified there (mandatory).
-        #  (2) If signature_meta specifies a message digest algorithm, use it
-        #  (3) Use the algorithm specified in the seed value dictionary
+        #  (1) If signature_meta specifies a message digest algorithm, use it
+        #      (it has been cleared by the SV dictionary checker already)
+        #  (2) Use the first algorithm specified in the seed value dictionary,
+        #      if a suggestion is present
+        #  (3) If there is a certification signature, use the digest method
+        #      specified there.
         #  (4) fall back to DEFAULT_MD
-        md_algorithm = self._enforce_certification_constraints(pdf_out.prev)
-        if md_algorithm is None:
+        if sv_spec is not None and sv_spec.digest_methods:
+            sv_md_algorithm = sv_spec.digest_methods[0]
+        else:
+            sv_md_algorithm = None
+
+        if self.signature_meta.md_algorithm is not None:
             md_algorithm = self.signature_meta.md_algorithm
-        if md_algorithm is None:
-            if sv_spec is not None and sv_spec.digest_methods:
-                md_algorithm = sv_spec.digest_methods[0]
-            else:
-                md_algorithm = DEFAULT_MD
+        elif sv_md_algorithm is not None:
+            md_algorithm = sv_md_algorithm
+        elif author_sig_md_algorithm is not None:
+            md_algorithm = author_sig_md_algorithm
+        else:
+            md_algorithm = DEFAULT_MD
 
         # same for the subfilter: try signature_meta and SV dict, fall back
         #  to /adbe.pkcs7.detached by default

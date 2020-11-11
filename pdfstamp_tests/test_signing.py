@@ -879,7 +879,7 @@ def test_certify():
     val_trusted(r, sig_field)
 
     info = read_certification_data(r)
-    assert info.author_sig.sig_object == sig_obj.get_object()
+    assert info.author_sig == sig_obj.get_object()
     assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.NO_CHANGES
 
     # with NO_CHANGES, we shouldn't be able to append an approval signature
@@ -904,7 +904,7 @@ def test_no_double_certify():
     val_trusted(r, sig_field)
 
     info = read_certification_data(r)
-    assert info.author_sig.sig_object == sig_obj.get_object()
+    assert info.author_sig == sig_obj.get_object()
     assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
 
     out.seek(0)
@@ -941,7 +941,7 @@ def test_approval_sig():
     val_trusted(r, sig_field, extd=True)
 
     info = read_certification_data(r)
-    assert info.author_sig.sig_object == sig_obj.get_object()
+    assert info.author_sig == sig_obj.get_object()
     assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
 
     field_name, sig_obj, sig_field = next(sigs)
@@ -960,12 +960,6 @@ def test_approval_sig_md_match_author_sig():
     )
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
-    with pytest.raises(SigningError):
-        signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig2', md_algorithm='sha1'
-            ), signer=FROM_CA
-        )
 
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA
