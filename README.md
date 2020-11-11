@@ -3,6 +3,7 @@ pdfstamp
 ![status](https://github.com/MatthiasValvekens/pdf-stamp/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pdf-stamp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp?ref=badge_shield)
 
 
 
@@ -35,3 +36,7 @@ It's nowhere near complete, but here is a short overview of the features:
 ### Acknowledgement
 
 This repository includes code from `PyPDF2` (with both minor and major modifications); the original license has been included [here](pdf_utils/LICENSE.PyPDF2).
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp?ref=badge_large)
