@@ -193,6 +193,7 @@ def val_trusted_but_modified(r, sig_field):
     assert val_status.trusted
     assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
     assert val_status.modification_level == ModificationLevel.OTHER
+    assert not val_status.docmdp_ok
     return val_status
 
 
@@ -366,7 +367,11 @@ def test_sign_new(file):
 def test_double_sig_add_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA,
     )
 
     # create a new signature field after signing
@@ -380,6 +385,7 @@ def test_double_sig_add_field():
     assert field_name == 'Sig1'
     status = val_trusted(r, sig_field, extd=True)
     assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
 
     field_name, sig_obj, sig_field = next(sig_fields)
     assert field_name == 'SigNew'
@@ -389,7 +395,10 @@ def test_double_sig_add_field():
 def test_double_sig_add_visible_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ), signer=FROM_CA
     )
 
     # create a new signature field after signing
@@ -408,6 +417,7 @@ def test_double_sig_add_visible_field():
     assert field_name == 'Sig1'
     status = val_trusted(r, sig_field, extd=True)
     assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
 
     field_name, sig_obj, sig_field = next(sig_fields)
     assert field_name == 'SigNew'

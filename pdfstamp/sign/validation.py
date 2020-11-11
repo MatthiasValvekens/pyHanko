@@ -266,6 +266,7 @@ class PdfSignatureStatus(SignatureStatus):
     coverage: SignatureCoverageLevel
     modification_level: ModificationLevel
     seed_value_ok: bool
+    docmdp_ok: bool
     signed_dt: Optional[datetime] = None
     timestamp_validity: Optional[TimestampSignatureStatus] = None
 
@@ -274,10 +275,13 @@ class PdfSignatureStatus(SignatureStatus):
         if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
             yield 'UNTOUCHED'
         elif self.coverage == SignatureCoverageLevel.ENTIRE_REVISION:
-            # TODO integrate with DocMDP permission check
             yield 'EXTENDED_WITH_' + self.modification_level.name
         else:
             yield 'NONSTANDARD_COVERAGE'
+        if self.docmdp_ok:
+            yield 'ACCEPTABLE_MODIFICATIONS'
+        else:
+            yield 'ILLEGAL_MODIFICATIONS'
         if self.timestamp_validity is not None:
             yield 'TIMESTAMP_TOKEN<%s>' % (
                 '|'.join(self.timestamp_validity.summary_fields())
@@ -386,6 +390,23 @@ class EmbeddedPdfSignature:
         #  doing a lot of double work here. This could be improved.
         self.coverage = self.evaluate_signature_coverage()
         self.modification_level = self.evaluate_modifications()
+
+    def summarise_integrity_info(self):
+
+        self.compute_integrity_info()
+
+        mod_level = self.modification_level
+        docmdp = self.docmdp_level
+        docmdp_ok = not (
+            mod_level == ModificationLevel.OTHER
+            or (docmdp is not None and mod_level.value > docmdp.value)
+        )
+        status_kwargs = {
+            'coverage': self.coverage,
+            'modification_level': mod_level,
+            'docmdp_ok': docmdp_ok
+        }
+        return status_kwargs
 
     @property
     def docmdp_level(self) -> MDPPerm:
@@ -1154,12 +1175,7 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
         ts_validation_context = signer_validation_context
 
     embedded_sig = EmbeddedPdfSignature(reader, sig_object)
-    embedded_sig.compute_integrity_info()
-
-    status_kwargs = {
-        'coverage': embedded_sig.coverage,
-        'modification_level': embedded_sig.modification_level
-    }
+    status_kwargs = embedded_sig.summarise_integrity_info()
 
     # try to find an embedded timestamp
     signed_dt = embedded_sig.self_reported_signed_timestamp
@@ -1235,7 +1251,7 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
         raise ValueError('Signature is empty')
 
     embedded_sig = EmbeddedPdfSignature(reader, sig_object)
-    embedded_sig.compute_integrity_info()
+    status_kwargs = embedded_sig.summarise_integrity_info()
     tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is None:
         raise ValueError('LTV signatures require a trusted timestamp.')
@@ -1254,15 +1270,13 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
             reader, validation_context_kwargs=validation_context_kwargs
         )
 
-    status_kwargs = {
-        'coverage': embedded_sig.coverage,
-        'modification_level': embedded_sig.modification_level,
+    status_kwargs.update({
         'signed_dt': timestamp,
         'timestamp_validity': validate_cms_signature(
             tst_signed_data, status_cls=TimestampSignatureStatus,
             validation_context=vc, status_kwargs={'timestamp': timestamp}
         )
-    }
+    })
     status_kwargs = _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.raw_digest,
