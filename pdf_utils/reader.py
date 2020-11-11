@@ -844,14 +844,19 @@ class HistoricalResolver:
             cache[ref] = obj
             return obj
 
-    def collect_indirect_references(self, obj):
+    def collect_indirect_references(self, obj, seen=None):
+        if seen is None:
+            seen = set()
         if isinstance(obj, generic.IndirectObject):
             ref = obj.reference
+            if ref in seen:
+                return
+            seen.add(ref)
             yield ref
             obj = self(ref)
         if isinstance(obj, generic.DictionaryObject):
             for v in obj.values():
-                yield from self.collect_indirect_references(v)
+                yield from self.collect_indirect_references(v, seen)
         elif isinstance(obj, generic.ArrayObject):
             for v in obj:
-                yield from self.collect_indirect_references(v)
+                yield from self.collect_indirect_references(v, seen)
