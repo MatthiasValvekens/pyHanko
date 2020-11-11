@@ -1,4 +1,6 @@
 # certvalidator
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fcertvalidator.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fcertvalidator?ref=badge_shield)
+
 
 A Python library for validating X.509 certificates or paths. Supports various
 options, including: validation at a specific moment in time, whitelisting and
@@ -15,6 +17,9 @@ revocation checks.
  - [Testing](#testing)
  - [Development](#development)
  - [CI Tasks](#ci-tasks)
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fcertvalidator.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fcertvalidator?ref=badge_large)
 
 ## Features
 
@@ -207,4 +212,3 @@ Releases are created by:
    ```
 
 Existing releases can be found at https://pypi.org/project/certvalidator.
-
