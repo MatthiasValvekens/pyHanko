@@ -270,6 +270,18 @@ class PdfSignatureStatus(SignatureStatus):
     signed_dt: Optional[datetime] = None
     timestamp_validity: Optional[TimestampSignatureStatus] = None
 
+    @property
+    def bottom_line(self) -> bool:
+        ts = self.timestamp_validity
+        if ts is None:
+            timestamp_ok = True
+        else:
+            timestamp_ok = ts.valid and ts.trusted
+        return (
+            self.valid and self.trusted and self.seed_value_ok
+            and self.docmdp_ok and timestamp_ok
+        )
+
     def summary_fields(self):
         yield from super().summary_fields()
         if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
@@ -279,7 +291,8 @@ class PdfSignatureStatus(SignatureStatus):
         else:
             yield 'NONSTANDARD_COVERAGE'
         if self.docmdp_ok:
-            yield 'ACCEPTABLE_MODIFICATIONS'
+            if self.coverage != SignatureCoverageLevel.ENTIRE_FILE:
+                yield 'ACCEPTABLE_MODIFICATIONS'
         else:
             yield 'ILLEGAL_MODIFICATIONS'
         if self.timestamp_validity is not None:

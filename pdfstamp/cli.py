@@ -66,6 +66,9 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--validate', help='validate signatures', required=False,
               type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--executive-summary',
+              help='only print final judgment on signature validity',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--trust-replace',
               help='listed trust roots supersede OS-provided trust store',
               required=False,
@@ -82,8 +85,8 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
               help='Fail trust validation if a certificate has no known CRL '
                    'or OCSP endpoints.',
               type=bool, is_flag=True, default=False, show_default=True)
-def list_sigfields(infile, skip_status, validate, trust, trust_replace,
-                   other_certs, ltv_profile, ltv_obsessive):
+def list_sigfields(infile, skip_status, validate, executive_summary, trust,
+                   trust_replace, other_certs, ltv_profile, ltv_obsessive):
     r = PdfFileReader(infile)
     if validate and ltv_profile is not None:
         if ltv_profile == 'pades':
@@ -112,7 +115,12 @@ def list_sigfields(infile, skip_status, validate, trust, trust_replace,
                             force_revinfo=ltv_obsessive,
                             validation_context_kwargs=vc_kwargs
                         )
-                    status_str = status.summary()
+                    if executive_summary:
+                        status_str = (
+                            'VALID' if status.bottom_line else 'INVALID'
+                        )
+                    else:
+                        status_str = status.summary()
                 except SignatureValidationError:
                     status_str = 'INVALID'
                 except ValueError:

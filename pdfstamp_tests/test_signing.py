@@ -166,7 +166,7 @@ def val_trusted(r, sig_field, extd=False):
     else:
         assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
         assert val_status.modification_level <= ModificationLevel.FORM_FILLING
-
+    assert val_status.bottom_line
     return val_status
 
 
@@ -194,6 +194,7 @@ def val_trusted_but_modified(r, sig_field):
     assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
     assert val_status.modification_level == ModificationLevel.OTHER
     assert not val_status.docmdp_ok
+    assert not val_status.bottom_line
     return val_status
 
 
