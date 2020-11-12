@@ -1991,3 +1991,23 @@ def test_delete_signature():
     field_name, sig_obj, sig_field = next(sig_fields)
     assert field_name == 'Sig2'
     val_trusted_but_modified(r, sig_field)
+
+
+def test_tamper_sig_obj():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1'
+    )
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    w = IncrementalPdfFileWriter(out)
+    sig_obj = w.prev.embedded_signatures[0].sig_object
+    sig_obj['/Bleh'] = generic.BooleanObject(False)
+    w.update_container(sig_obj)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    emb.compute_integrity_info()
+    assert emb.modification_level == ModificationLevel.OTHER

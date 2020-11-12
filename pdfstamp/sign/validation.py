@@ -580,6 +580,11 @@ class EmbeddedPdfSignature:
             explained_refs_lta, signed_revision, self.reader.xrefs
         )
 
+        # whitelist the xref stream, if there is one
+        xref_start, _ = self.reader.xrefs.get_xref_container_info(revision)
+        if isinstance(xref_start, generic.Reference):
+            whitelist_lta_if_fresh(xref_start)
+
         # updates to /Info are always OK (and must be through indirect objects)
         # if the /Info dict is direct, we ignore the resulting error
         # Removing the /Info dictionary is also no big deal, since most readers
@@ -615,7 +620,7 @@ class EmbeddedPdfSignature:
             explained_refs_lta.add(current_root_ref)
 
         # first, check if the keys in the document catalog are unchanged
-        catalog_permitted_changes_lta = {'/DSS', '/Extensions'}
+        catalog_permitted_changes_lta = {'/DSS', '/Extensions', '/Metadata'}
         catalog_permitted_changes_formfill = {'/MarkInfo'}
         _compare_dicts(
             signed_root, current_root, 
@@ -851,7 +856,7 @@ def _diff_field_tree(signed_fields, current_fields,
                      explained_refs_lta, explained_refs_formfill,
                      field_mdp_spec: Optional[FieldMDPSpec], parent_name=""):
     # compare & resolve
-    signed_fields, current_fields = _compare_values(
+    signed_fields, current_fields = _resolve_updatable_refs(
         signed_fields, current_fields, signed_resolver,
         current_resolver, explained_refs_lta
     )
@@ -912,9 +917,17 @@ def _diff_field_tree(signed_fields, current_fields,
     if not (old_sigfield_set <= set(current_fields_sigfields.keys())):
         raise SuspiciousModification("Some signature fields were removed.")
 
+    wl_if_fresh_formfill = _whitelist_callback(
+        explained_refs_formfill, signed_resolver.revision,
+        signed_resolver.reader.xrefs
+    )
+    wl_if_fresh_lta = _whitelist_callback(
+        explained_refs_lta, signed_resolver.revision,
+        signed_resolver.reader.xrefs
+    )
+
     for name, sigfield_ref in current_fields_sigfields.items():
         fq_name = parent_name + "." + name if parent_name else name
-        explained_refs_lta.add(sigfield_ref)
         # The treatment of the value depends on whether it's a document
         #  time stamp or a signature: document timestamps are allowed at
         #  all DocMDP levels, while "normal" signatures are more strictly
@@ -936,50 +949,63 @@ def _diff_field_tree(signed_fields, current_fields,
         if name not in old_sigfield_set:
             # new sigfield added, signal to caller
             yield sigfield_ref
-            # now clear the appearance stream's dependencies, if necessary
-            try:
-                ap = current_field.raw_get('/AP')
-                wl_if_fresh = _whitelist_callback(
-                    explained_refs_formfill, signed_resolver.revision,
-                    signed_resolver.reader.xrefs
-                )
-                for ref in current_resolver.collect_indirect_references(ap):
-                    wl_if_fresh(ref)
-            except KeyError:
-                # invisible sig
-                pass
+
+            # new field, so all it's dependencies are good to go
+            # that said, only the field itself is cleared at LTA update level,
+            # the other deps bump the modification level up to FORM_FILL
+            # TODO am I being too strict here?
+            wl_if_fresh_lta(sigfield_ref)
+
+            def _deps():
+                for _key in APPEARANCE_KEYS | {'/Lock', '/SV'}:
+                    try:
+                        yield from current_resolver.collect_indirect_references(
+                            current_field.raw_get(_key)
+                        )
+                    except KeyError:
+                        pass
+            for ref in _deps():
+                wl_if_fresh_formfill(ref)
         else:
             old_sigfield_ref = signed_fields_sigfields[name]
             if old_sigfield_ref != sigfield_ref:
                 raise SuspiciousModification(
                     "Object ID of signature field changed between revisions."
                 )
-            # for existing sigfields, we verify that both "incarnations"
-            #  are the same. Note the fact that we record refs to
-            #  explained_refs_lta rather than explained_refs_formfill.
-            signed_field, _ = _diff_field(
-                sigfield_ref, sigfield_ref, signed_resolver,
-                current_resolver, explained_refs_lta, fq_name=fq_name
-            )
+            signed_field = signed_resolver(sigfield_ref)
 
-            try:
-                # case where the field is filled in in both revisions
-                signed_value_ref = signed_field.raw_get('/V').reference
-                if current_value_ref is None:
-                    raise SuspiciousModification(
-                        f"A filled-in signature in {fq_name} was deleted "
-                        f"between revisions."
+            was_signed = '/V' in current_field and '/V' not in signed_field
+
+            if was_signed:
+                # here, we check that the form field didn't change
+                # beyond the keys that we expect to change when updating
+                # a signature field. Don't use _diff_field, it's too lenient
+                # with recursion for signature field updates.
+                _compare_dicts(signed_field, current_field, VALUE_UPDATE_KEYS)
+                # the signature object itself will be evaluated later
+                explained_refs_lta.add(sigfield_ref)
+                # whitelist appearance updates at FORM_FILL level
+                for key in APPEARANCE_KEYS:
+                    _allow_dict_key_update(
+                        signed_field, current_field, key, signed_resolver,
+                        current_resolver, explained_refs_formfill,
+                        allow_removal=True
                     )
-                elif signed_value_ref != current_value_ref:
-                    raise SuspiciousModification(
-                        f"A filled-in signature in {fq_name} was replaced "
-                        f"between revisions."
-                    )
-            except KeyError:
-                # if neither revision includes a value for this signature field,
-                #  there's nothing left to do.
-                if current_value_ref is None:
-                    continue
+            else:
+                # case where the field was already signed, or is still
+                # not signed in the current revision.
+                # in this case, the state of the field better didn't change
+                # at all!
+                # ... but Acrobat apparently sometimes sets /Ff rather
+                #  liberally, so let's allow that one to change
+                _compare_dicts(
+                    signed_field, current_field, FORMFIELD_ALWAYS_MODIFIABLE
+                )
+                explained_refs_lta.add(sigfield_ref)
+                # Skip the comparison logic on /V. In particular, if
+                # the signature object in question was overridden,
+                # it should trigger a suspicious modification later.
+                continue
 
         # We're now in the case where the form field did not exist or did not
         # have a value in the signed revision, but does have one in the revision
@@ -993,9 +1019,14 @@ def _diff_field_tree(signed_fields, current_fields,
         # an appearance (as per the recommendation in ISO 32000-2, which we
         # enforce as a rigid rule here)
         if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
-            explained_refs_lta.add(current_value_ref)
+            wl_if_fresh_lta(current_value_ref)
         else:
-            explained_refs_formfill.add(current_value_ref)
+            wl_if_fresh_formfill(current_value_ref)
+
+
+FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
+APPEARANCE_KEYS = {'/AP', '/AS'}
+VALUE_UPDATE_KEYS = APPEARANCE_KEYS | FORMFIELD_ALWAYS_MODIFIABLE | {'/V'}
 
 
 def _diff_field(signed_ref, current_ref, signed_resolver,
@@ -1007,7 +1038,7 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
             f"object ID of field {fq_name} changed from {repr(signed_ref)}"
             f"to {repr(current_ref)}."
         )
-    signed_field, current_field = _compare_values(
+    signed_field, current_field = _resolve_updatable_refs(
         signed_ref, current_ref, signed_resolver, current_resolver,
         explained_refs
     )
@@ -1017,15 +1048,16 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
     #  that's a bit more involved to verify.
     # TODO double check the standard for other appearance-manipulating keys
     if not locked:
-        value_update_keys = {'/V', '/AP', '/AS', '/Ff'}
-        _compare_dicts(signed_field, current_field, value_update_keys)
-        for key in value_update_keys:
+        _compare_dicts(signed_field, current_field, VALUE_UPDATE_KEYS)
+        for key in VALUE_UPDATE_KEYS:
             _allow_dict_key_update(
                 signed_field, current_field, key, signed_resolver,
                 current_resolver, explained_refs, allow_removal=True
             )
     else:
-        _compare_dicts(signed_field, current_field)
+        _compare_dicts(
+            signed_field, current_field, FORMFIELD_ALWAYS_MODIFIABLE
+        )
 
     return signed_field, current_field
 
@@ -1050,14 +1082,21 @@ def _compare_key_refs(key, signed_dict, current_dict,
     signed_value_ref = signed_dict.raw_get(key)
     current_value_ref = current_dict.raw_get(key)
 
-    return _compare_values(
+    return _resolve_updatable_refs(
         signed_value_ref, current_value_ref, signed_resolver,
         current_resolver, explained_refs
     )
 
 
-def _compare_values(signed_ref, current_ref,
-                    signed_resolver, current_resolver, explained_refs):
+def _resolve_updatable_refs(signed_ref, current_ref,
+                            signed_resolver, current_resolver, explained_refs):
+    """
+    This function resolves two updatable references in different revisions.
+    If the references are equal, they are added to explained_refs
+    If the references are not equal, current_ref is added to explained_refs,
+    provided that it doesn't conflict with any refs that exist in the signed
+    revision.
+    """
     whitelist_if_fresh = _whitelist_callback(
         explained_refs, signed_resolver.revision, signed_resolver.reader.xrefs
     )
@@ -1089,7 +1128,7 @@ def _compare_values(signed_ref, current_ref,
 # closure for whitelisting objects in validation logic
 def _whitelist_callback(explained_refs, signed_revision, xref_cache):
     def _wl(ref):
-        assert isinstance(ref, generic.Reference)
+        assert isinstance(ref, generic.Reference), ref
         # Whitelist a reference *if* the new object reference doesn't
         # override an object that existed in the signed revision
         try:
