@@ -951,6 +951,8 @@ def _diff_field_tree(signed_fields, current_fields,
         #  of a general field: the value of a signature field must be an
         #  indirect object, and signature dictionaries can only contain
         #  direct objects as per ISO 32000 => no deep-fetching necessary.
+        # BUT: Acrobat doesn't respect this rule, so the signature reference
+        # array does need some extra care.
         current_field = current_resolver(sigfield_ref)
 
         if field_mdp_spec is not None and field_mdp_spec.is_locked(fq_name):
@@ -1034,9 +1036,27 @@ def _diff_field_tree(signed_fields, current_fields,
         # an appearance (as per the recommendation in ISO 32000-2, which we
         # enforce as a rigid rule here)
         if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
-            wl_if_fresh_lta(current_value_ref)
+            sig_whitelist = wl_if_fresh_lta
         else:
-            wl_if_fresh_formfill(current_value_ref)
+            sig_whitelist = wl_if_fresh_formfill
+
+        # first, whitelist the actual signature object
+        sig_whitelist(current_value_ref)
+        # since apparently Acrobat didn't get the memo about not having
+        # indirect references in signature objects, we have to do some tweaking
+        # to whitelist /TransformParams if necessary
+        current_value = current_resolver(current_value_ref)
+        try:
+            # the issue is with signature reference dictionaries
+            for sigref_dict in current_value.raw_get('/Reference'):
+                try:
+                    sig_whitelist(
+                        sigref_dict.raw_get('/TransformParams').reference
+                    )
+                except (KeyError, AttributeError):
+                    continue
+        except KeyError:
+            pass
 
 
 FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
