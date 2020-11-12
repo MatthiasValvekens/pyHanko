@@ -377,9 +377,14 @@ def test_double_sig_add_field():
 
     # create a new signature field after signing
     w = IncrementalPdfFileWriter(out)
+    # throw in an /Info update for good measure
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
+    info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
+    w.trailer['/Info'] = w.add_object(info)
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
+
     r = PdfFileReader(out)
     sig_fields = fields.enumerate_sig_fields(r)
     field_name, sig_obj, sig_field = next(sig_fields)

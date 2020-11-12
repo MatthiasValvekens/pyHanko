@@ -579,6 +579,31 @@ class EmbeddedPdfSignature:
         whitelist_lta_if_fresh = _whitelist_callback(
             explained_refs_lta, signed_revision, self.reader.xrefs
         )
+
+        # updates to /Info are always OK (and must be through indirect objects)
+        # if the /Info dict is direct, we ignore the resulting error
+        # Removing the /Info dictionary is also no big deal, since most readers
+        # will fall back to older revisions regardless
+        try:
+            current_info = self.reader.trailer.raw_get(
+                '/Info', revision=revision
+            )
+            current_info = current_info.reference
+            try:
+                signed_info = self.reader.trailer.raw_get(
+                    '/Info', revision=signed_revision
+                )
+                signed_info = signed_info.reference
+            except KeyError:
+                signed_info = None
+
+            if current_info == signed_info:
+                explained_refs_lta.add(current_info)
+            else:
+                whitelist_lta_if_fresh(current_info)
+        except (KeyError, AttributeError):
+            pass
+
         # we're about to vet changes to the root, so this object ID
         #  will be whitelisted when we go over object updates later.
         current_root_ref = current_root.get_container_ref()
@@ -590,7 +615,13 @@ class EmbeddedPdfSignature:
             explained_refs_lta.add(current_root_ref)
 
         # first, check if the keys in the document catalog are unchanged
-        _compare_dicts(signed_root, current_root, {'/AcroForm', '/DSS'})
+        catalog_permitted_changes_lta = {'/DSS', '/Extensions'}
+        catalog_permitted_changes_formfill = {'/MarkInfo'}
+        _compare_dicts(
+            signed_root, current_root, 
+            {'/AcroForm'} | catalog_permitted_changes_lta 
+            | catalog_permitted_changes_formfill
+        )
 
         # Now we compare the /AcroForm entries
         signed_acroform, current_acroform = _compare_key_refs(
@@ -614,10 +645,16 @@ class EmbeddedPdfSignature:
         #  -> collect refs from both, and whitelist all references in the
         #  current DSS that either (a) occur in the previous DSS, or (b)
         #  are fresh.
-        _allow_dict_key_update(
-            signed_root, current_root, '/DSS', signed_resolver,
-            current_resolver, explained_refs_lta, allow_removal=False
-        )
+        for key in catalog_permitted_changes_lta:
+            _allow_dict_key_update(
+                signed_root, current_root, key, signed_resolver,
+                current_resolver, explained_refs_lta, allow_removal=False
+            )
+        for key in catalog_permitted_changes_formfill:
+            _allow_dict_key_update(
+                signed_root, current_root, key, signed_resolver,
+                current_resolver, explained_refs_formfill, allow_removal=False
+            )
 
         # Next, check annotations: newly added signature fields may be added
         #  to the /Annots entry of any page. These are processed as LTA updates,
@@ -980,7 +1017,7 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
     #  that's a bit more involved to verify.
     # TODO double check the standard for other appearance-manipulating keys
     if not locked:
-        value_update_keys = {'/V', '/AP', '/AS'}
+        value_update_keys = {'/V', '/AP', '/AS', '/Ff'}
         _compare_dicts(signed_field, current_field, value_update_keys)
         for key in value_update_keys:
             _allow_dict_key_update(
@@ -1057,10 +1094,8 @@ def _whitelist_callback(explained_refs, signed_revision, xref_cache):
         # override an object that existed in the signed revision
         try:
             xref_cache.get_historical_ref(ref, signed_revision)
-            # no error -> suspicious
-            raise SuspiciousModification(
-                "Suspicious object override: " + repr(ref)
-            )
+            # no error -> suspicious -> do not whitelist
+            return
         except misc.PdfReadError:
             explained_refs.add(ref)
     return _wl
