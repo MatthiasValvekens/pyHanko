@@ -459,7 +459,9 @@ class PdfFileReader(PdfHandler):
                     raise misc.PdfReadError("Can't read object stream: %s" % e)
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
-            generic.read_non_whitespace(stream_data, seek_back=True)
+            generic.read_non_whitespace(
+                stream_data, seek_back=True, allow_eof=True
+            )
             return obj
 
         if self.strict:
