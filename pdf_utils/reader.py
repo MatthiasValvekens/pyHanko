@@ -91,6 +91,8 @@ class XRefCache:
         self._refs_by_section = []
         self.xref_container_info = []
 
+        self._obj_streams_by_revision = defaultdict(set)
+
     def _next_section(self):
         self.xref_sections += 1
         self._refs_by_section.append(self._current_section_ids)
@@ -112,6 +114,9 @@ class XRefCache:
         )
 
     def put_obj_stream_ref(self, idnum, obj_stream_num, obj_stream_ix):
+        self._obj_streams_by_revision[self.xref_sections].add(
+            generic.Reference(obj_stream_num, 0, self.reader)
+        )
         marker = (obj_stream_num, obj_stream_ix)
         if not self.used_before(idnum, 0):
             self.in_obj_stream[idnum] = marker
@@ -126,6 +131,9 @@ class XRefCache:
 
     def get_last_change(self, idnum):
         return self.xref_sections - 1 - self.last_change[idnum]
+
+    def object_streams_used_in(self, revision):
+        return self._obj_streams_by_revision[self.xref_sections - 1 - revision]
 
     def get_introducing_revision(self, ref: generic.Reference):
         ref_hist = self.history[(ref.generation, ref.idnum)]

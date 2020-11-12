@@ -686,6 +686,11 @@ class EmbeddedPdfSignature:
         # finally, verify that there are no xrefs in the revision's xref table
         # other than the ones we can justify.
         new_xrefs = self.reader.xrefs.explicit_refs_in_revision(revision)
+
+        # object streams are OK, but overriding object streams is not.
+        for objstm_ref in self.reader.xrefs.object_streams_used_in(revision):
+            whitelist_lta_if_fresh(objstm_ref)
+
         unexplained_lta = new_xrefs - explained_refs_lta
         unexplained_formfill = unexplained_lta - explained_refs_formfill
         if unexplained_formfill:
