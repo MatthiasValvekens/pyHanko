@@ -1,7 +1,10 @@
+import datetime
 from fractions import Fraction
 
 import pytest
 from io import BytesIO
+
+import pytz
 
 from pdf_utils.generic import Reference
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -367,3 +370,15 @@ def test_box_constraint_recalc():
 
     bc.height = h
     assert bc.aspect_ratio == ar
+
+
+def test_trailer_update():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    dt = generic.pdf_date(datetime.datetime(2020, 10, 10, tzinfo=pytz.utc))
+
+    info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
+    w.trailer['/Info'] = w.add_object(info)
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.trailer['/Info']['/CreationDate'] == dt

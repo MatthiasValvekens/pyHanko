@@ -3,7 +3,8 @@ import os
 import re
 from collections import defaultdict
 from io import BytesIO
-from typing import Set
+from itertools import chain
+from typing import Set, List
 
 from . import generic
 from .misc import read_non_whitespace, read_until_whitespace
@@ -89,8 +90,6 @@ class XRefCache:
         self._current_section_ids = set()
         self._refs_by_section = []
         self.xref_container_info = []
-        # keep track of the historical position of the document catalog
-        self.historical_roots = []
 
     def _next_section(self):
         self.xref_sections += 1
@@ -187,23 +186,6 @@ class XRefCache:
             f'Could not find object ({ref.idnum} {ref.generation}) '
             f'in history at revision {revision}'
         )
-
-    def get_historical_root_ref(self, revision):
-        """
-        Look up the object ID of the document catalog in a specific revision.
-
-        :param revision:
-            A revision number. The oldest revision is zero.
-        :return:
-            An indirect object reference.
-        """
-        max_index = self.xref_sections - 1
-
-        for rev_index, ref in self.historical_roots:
-            if revision >= max_index - rev_index:
-                return ref
-        # this shouldn't happen
-        raise ValueError  # pragma: nocover
 
     def __getitem__(self, ref):
         ix = (ref.generation, ref.idnum)
@@ -378,6 +360,76 @@ def process_data_at_eof(stream) -> int:
     return startxref
 
 
+class TrailerDictionary(generic.PdfObject):
+    """
+    The standard mandates that each trailer shall contain
+    at least all keys used in the preceding trailer, even if unmodified.
+    Of course, we cannot trust documents to actually follow this rule, so
+    this class implements fallbacks.
+    """
+
+    def __init__(self):
+        # trailer revisions, numbered backwards (i.e. in processing order)
+        # The element at index 0 is the most recent one.
+        self._trailer_revisions: List[generic.DictionaryObject] = []
+        self._new_changes = generic.DictionaryObject()
+
+    def add_trailer_revision(self, trailer_dict: generic.DictionaryObject):
+        self._trailer_revisions.append(trailer_dict)
+
+    def __getitem__(self, item):
+        # the decrypt parameter doesn't matter, get_object() decrypts
+        # as necessary.
+        return self.raw_get(item).get_object()
+
+    def raw_get(self, key, decrypt=True, revision=None):
+        revisions = self._trailer_revisions
+        if revision is None:
+            try:
+                return self._new_changes.raw_get(key, decrypt)
+            except KeyError:
+                pass
+        else:
+            # xref sections are numbered backwards
+            section = len(revisions) - 1 - revision
+            revisions = revisions[section:]
+
+        for revision in revisions:
+            try:
+                return revision.raw_get(key, decrypt)
+            except KeyError:
+                continue
+        raise KeyError(key)
+
+    def __setitem__(self, item, value):
+        self._new_changes[item] = value
+
+    def flatten(self) -> generic.DictionaryObject:
+        trailer = generic.DictionaryObject({
+            k: v for revision in reversed(self._trailer_revisions)
+            for k, v in revision.items()
+        })
+        trailer.update(self._new_changes)
+        return trailer
+
+    def __contains__(self, item):
+        if item in self._new_changes:
+            return True
+        return any(item in revision for revision in self._trailer_revisions)
+
+    def keys(self):
+        return frozenset(chain(self._new_changes, *self._trailer_revisions))
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def items(self):
+        return self.flatten().items()
+
+    def write_to_stream(self, stream, encryption_key):
+        return self.flatten().write_to_stream(stream, encryption_key)
+
+
 class PdfFileReader(PdfHandler):
     last_startxref = None
     has_xref_stream = False
@@ -488,7 +540,7 @@ class PdfFileReader(PdfHandler):
         :return:
             The value of the root dictionary for that revision.
         """
-        ref = self.xrefs.get_historical_root_ref(revision)
+        ref = self.trailer.raw_get('/Root', revision=revision)
         marker = self.xrefs.get_historical_ref(ref, revision)
         return self._read_object(ref, marker)
 
@@ -604,18 +656,7 @@ class PdfFileReader(PdfHandler):
         self.cache_indirect_object(generation, idnum, xrefstream)
         xref_cache.read_xref_stream(xrefstream)
 
-        try:
-            root_ref = xrefstream.raw_get('/Root', decrypt=False)
-            assert isinstance(root_ref, generic.IndirectObject)
-            xref_cache.historical_roots.append(
-                (xref_cache.xref_sections, root_ref)
-            )
-        except KeyError:
-            # root wasn't updated in this revision, that's OK
-            pass
-        for key in TRAILER_KEYS:
-            if key in xrefstream and key not in self.trailer:
-                self.trailer[generic.NameObject(key)] = xrefstream.raw_get(key)
+        self.trailer.add_trailer_revision(xrefstream)
         return xrefstream.get('/Prev')
 
     def _read_xref_table(self):
@@ -629,25 +670,15 @@ class PdfFileReader(PdfHandler):
             stream, generic.TrailerReference(self)
         )
         assert isinstance(new_trailer, generic.DictionaryObject)
-        try:
-            root_ref = new_trailer.raw_get('/Root', decrypt=False)
-            assert isinstance(root_ref, generic.IndirectObject)
-            xref_cache.historical_roots.append(
-                (xref_cache.xref_sections, root_ref)
-            )
-        except KeyError:
-            # root wasn't updated in this revision, that's OK
-            pass
 
-        for key, value in list(new_trailer.items()):
-            if key not in self.trailer:
-                self.trailer[key] = value
+        self.trailer.add_trailer_revision(new_trailer)
         return new_trailer.get('/Prev')
 
     def _read_xrefs(self):
         # read all cross reference tables and their trailers
         stream = self.stream
-        self.trailer = generic.DictionaryObject()
+        self.trailer = TrailerDictionary()
+        self.trailer.container_ref = generic.TrailerReference(self)
         startxref = self.last_startxref
         xref_location_log = self.xrefs.xref_locations
         while startxref is not None:

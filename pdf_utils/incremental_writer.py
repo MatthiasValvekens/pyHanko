@@ -21,7 +21,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.input_stream = input_stream
         self.prev = prev = PdfFileReader(input_stream)
         self.skip_original = skip_original
-        trailer = prev.trailer
+        self.trailer = trailer = prev.trailer
         root_ref = trailer.raw_get('/Root')
         try:
             info_ref = trailer.raw_get('/Info')
@@ -115,6 +115,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.input_stream.seek(input_pos)
 
     def _populate_trailer(self, trailer):
+        trailer.update(self.trailer.flatten())
         super()._populate_trailer(trailer)
         trailer[pdf_name('/Prev')] = generic.NumberObject(
             self.prev.last_startxref
