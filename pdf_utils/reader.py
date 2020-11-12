@@ -128,7 +128,8 @@ class XRefCache:
         return self.xref_sections - 1 - self.last_change[idnum]
 
     def get_introducing_revision(self, ref: generic.Reference):
-        section, _ = self.history[(ref.generation, ref.idnum)][0]
+        ref_hist = self.history[(ref.generation, ref.idnum)]
+        section, _ = ref_hist[len(ref_hist) - 1]
         return self.xref_sections - 1 - section
 
     def get_xref_container_info(self, revision):
