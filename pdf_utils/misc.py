@@ -266,3 +266,13 @@ class OrderedEnum(Enum):
         if self.__class__ is other.__class__:
             return self.value < other.value
         return NotImplemented
+
+
+class LazyJoin:
+
+    def __init__(self, sep, iterator):
+        self.sep = sep
+        self.iterator = iterator
+
+    def __str__(self):
+        return self.sep.join(self.iterator)

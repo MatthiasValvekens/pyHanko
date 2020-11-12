@@ -20,7 +20,7 @@ from oscrypto.errors import SignatureError
 from pdf_utils import generic, misc
 from pdf_utils.generic import pdf_name
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.misc import OrderedEnum
+from pdf_utils.misc import OrderedEnum, LazyJoin
 from pdf_utils.reader import (
     PdfFileReader, XRefCache, process_data_at_eof,
 )
@@ -689,6 +689,16 @@ class EmbeddedPdfSignature:
         unexplained_lta = new_xrefs - explained_refs_lta
         unexplained_formfill = unexplained_lta - explained_refs_formfill
         if unexplained_formfill:
+            msg = LazyJoin(
+                '\n', (
+                    repr(x) + ':' + repr(current_resolver(x))
+                    for x in unexplained_formfill
+                )
+            )
+            logger.debug(
+                "Unexplained xrefs in revision %d:\n%s",
+                revision, msg
+            )
             raise SuspiciousModification(
                 f"There are unexplained xrefs in revision {revision}: "
                 f"{', '.join(repr(x) for x in unexplained_formfill)}."
