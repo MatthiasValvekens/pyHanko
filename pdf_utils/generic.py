@@ -394,7 +394,10 @@ HEX_DIGITS = b'0123456789abcdefABCDEF'
 def read_hex_string_from_stream(stream):
     stream.read(1)
 
+    odd = False
+
     def read_tokens():
+        nonlocal odd
         while True:
             tok = read_non_whitespace(stream)
             if not tok:
@@ -407,7 +410,10 @@ def read_hex_string_from_stream(stream):
                     "Unexpected token in hex string: " + repr(tok)
                 )
             yield tok
-    result = binascii.unhexlify(b''.join(read_tokens()))
+            odd = not odd
+    result = binascii.unhexlify(
+        b''.join(read_tokens()) + (b'0' if odd else b'')
+    )
     return pdf_string(result)
 
 
