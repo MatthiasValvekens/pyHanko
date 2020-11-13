@@ -1713,14 +1713,7 @@ class DocumentSecurityStore:
     @classmethod
     def add_dss(cls, output_stream, sig_contents, paths,
                 validation_context):
-        output_stream.seek(0)
-        # TODO is it actually necessary to create a separate stream here?
-        #  and if so, can we somehow do this in a way that doesn't require the
-        #  data to be copied around, provided the output_stream is BytesIO
-        #  already?
-        writer = IncrementalPdfFileWriter(
-            BytesIO(output_stream.read()), skip_original=True
-        )
+        writer = IncrementalPdfFileWriter(output_stream)
 
         try:
             # we're not interested in this validation context
@@ -1742,5 +1735,4 @@ class DocumentSecurityStore:
             dss_ref = writer.add_object(dss_dict)
             writer.root[pdf_name('/DSS')] = dss_ref
             writer.update_root()
-        output_stream.seek(0, os.SEEK_END)
-        writer.write(output_stream)
+        writer.write_in_place()

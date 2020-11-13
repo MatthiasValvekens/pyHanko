@@ -126,11 +126,16 @@ class PdfSignedData(generic.DictionaryObject):
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
-    def write_signature(self, writer: IncrementalPdfFileWriter, md_algorithm):
-        # Render the PDF to a byte buffer with placeholder values
-        # for the signature data
-        output = BytesIO()
-        writer.write(output)
+    def write_signature(self, writer: IncrementalPdfFileWriter, md_algorithm,
+                        in_place=False):
+        if in_place:
+            output = writer.prev.stream
+            writer.write_in_place()
+        else:
+            # Render the PDF to a byte buffer with placeholder values
+            # for the signature data
+            output = BytesIO()
+            writer.write(output)
 
         # retcon time: write the proper values of the /ByteRange entry
         #  in the signature object
@@ -139,12 +144,19 @@ class PdfSignedData(generic.DictionaryObject):
         self.byte_range.fill_offsets(output, sig_start, sig_end, eof)
 
         # compute the digests
-        output_buffer = output.getbuffer()
         md = getattr(hashlib, md_algorithm)()
-        # these are memoryviews, so slices should not copy stuff around
-        md.update(output_buffer[:sig_start])
-        md.update(output_buffer[sig_end:])
-        output_buffer.release()
+        if isinstance(output, BytesIO):
+            output_buffer = output.getbuffer()
+            # these are memoryviews, so slices should not copy stuff around
+            md.update(output_buffer[:sig_start])
+            md.update(output_buffer[sig_end:])
+            output_buffer.release()
+        else:
+            # TODO chunk these reads
+            output.seek(0)
+            md.update(output.read(sig_start))
+            output.seek(sig_end)
+            md.update(output.read())
 
         signature_cms = yield md.digest()
 
@@ -511,10 +523,10 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
-             existing_fields_only=False, bytes_reserved=None):
+             existing_fields_only=False, bytes_reserved=None, in_place=False):
     return PdfSigner(signature_meta, signer).sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
-        bytes_reserved=bytes_reserved
+        bytes_reserved=bytes_reserved, in_place=in_place
     )
 
 
@@ -773,7 +785,8 @@ class PdfSigner:
         return sv_spec
 
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                 existing_fields_only=False, bytes_reserved=None):
+                 existing_fields_only=False, bytes_reserved=None,
+                 in_place=False):
 
         # TODO if PAdES is requested, set the ESIC extension to the proper value
 
@@ -916,7 +929,7 @@ class PdfSigner:
 
         self._apply_locking_rules(sig_field, sig_obj_ref, md_algorithm, pdf_out)
 
-        wr = sig_obj.write_signature(pdf_out, md_algorithm)
+        wr = sig_obj.write_signature(pdf_out, md_algorithm, in_place=in_place)
         true_digest = next(wr)
 
         signature_cms = signer.sign(
@@ -935,18 +948,17 @@ class PdfSigner:
 
             if signer.timestamper is not None and signature_meta.use_pades_lta:
                 # append an LTV document timestamp
-                output.seek(0)
                 w = IncrementalPdfFileWriter(output)
                 output = self.timestamp_pdf(
                     w, md_algorithm, validation_context,
-                    validation_paths=ts_validation_paths
+                    validation_paths=ts_validation_paths, in_place=True
                 )
 
         return output
 
     def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
                       md_algorithm, validation_context, bytes_reserved=None,
-                      validation_paths=None):
+                      validation_paths=None, in_place=False):
         timestamper = self.signer.timestamper
         field_name = self.signature_meta.timestamp_field_name or (
             'Timestamp-' + str(uuid.uuid4())
@@ -977,7 +989,9 @@ class PdfSigner:
         if not field_created:  # pragma: nocover
             pdf_out.mark_update(timestamp_obj_ref)
 
-        wr = timestamp_obj.write_signature(pdf_out, md_algorithm)
+        wr = timestamp_obj.write_signature(
+            pdf_out, md_algorithm, in_place=in_place
+        )
         true_digest = next(wr)
         timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
         output, sig_contents = wr.send(timestamp_cms)

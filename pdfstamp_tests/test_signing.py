@@ -94,6 +94,8 @@ FIXED_OCSP = ocsp.OCSPResponse.load(
 )
 
 
+# TODO rewrite tests using new in-place signing mechanism
+
 def dummy_ocsp_vc():
     vc = ValidationContext(
         trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP],
@@ -1194,12 +1196,26 @@ def test_adobe_revinfo_live_nofullchain():
 def test_pades_revinfo_live_lta(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
+    _test_pades_revinfo_live_lta(w, vc, in_place=False)
+
+
+def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
+    from pathlib import Path
+    inout_file: Path = tmp_path / "test.pdf"
+    inout_file.write_bytes(MINIMAL_ONE_FIELD)
+    vc = live_testing_vc(requests_mock)
+    with inout_file.open('r+b') as f:
+        w = IncrementalPdfFileWriter(f)
+        _test_pades_revinfo_live_lta(w, vc, in_place=True)
+
+
+def _test_pades_revinfo_live_lta(w, vc, in_place):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
             subfilter=PADES, embed_validation_info=True,
             use_pades_lta=True
-        ), signer=FROM_CA_TS
+        ), signer=FROM_CA_TS, in_place=in_place
     )
     r = PdfFileReader(out)
     dss, vc = DocumentSecurityStore.read_dss(handler=r)
@@ -1218,6 +1234,7 @@ def test_pades_revinfo_live_lta(requests_mock):
     field_name, sig_obj, sig_field = next(field_iter)
     assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
     # TODO implement and run actual LTA verification checks
+
 
 # TODO test multiple PAdES signatures
 

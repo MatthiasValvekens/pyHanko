@@ -313,6 +313,9 @@ class BasePdfFileWriter(PdfHandler):
         trailer[pdf_name('/ID')] = self._document_id
 
     def write(self, stream):
+        self._write(stream)
+
+    def _write(self, stream, skip_header=False):
 
         object_positions = {}
 
@@ -322,7 +325,8 @@ class BasePdfFileWriter(PdfHandler):
         else:
             trailer = generic.DictionaryObject()
 
-        self._write_header(stream)
+        if not skip_header:
+            self._write_header(stream)
         self._populate_trailer(trailer)
         self._write_objects(stream, object_positions)
 
