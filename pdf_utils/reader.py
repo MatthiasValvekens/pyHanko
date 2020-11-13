@@ -908,19 +908,32 @@ class HistoricalResolver:
             cache[ref] = obj
             return obj
 
-    def collect_indirect_references(self, obj, seen=None):
-        if seen is None:
-            seen = set()
+    def collect_dependencies(self, obj, since_revision=None):
+        result_set = set()
+        self._collect_indirect_references(obj, result_set, since_revision)
+        return result_set
+
+    def _collect_indirect_references(self, obj, seen, since_revision=None):
         if isinstance(obj, generic.IndirectObject):
             ref = obj.reference
             if ref in seen:
                 return
-            seen.add(ref)
-            yield ref
+            xrefs = self.reader.xrefs
+            relevant = (
+                since_revision is None
+                or xrefs.get_introducing_revision(ref) >= since_revision
+            )
+            if relevant:
+                seen.add(ref)
+            elif since_revision is not None:
+                # do not recurse into objects that already existed before the
+                # target revision, since we won't (shouldn't!) find any new refs
+                # there.
+                return
             obj = self(ref)
         if isinstance(obj, generic.DictionaryObject):
             for v in obj.values():
-                yield from self.collect_indirect_references(v, seen)
+                self._collect_indirect_references(v, seen, since_revision)
         elif isinstance(obj, generic.ArrayObject):
             for v in obj:
-                yield from self.collect_indirect_references(v, seen)
+                self._collect_indirect_references(v, seen, since_revision)

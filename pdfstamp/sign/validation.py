@@ -1,11 +1,11 @@
 import hashlib
 import os
 import logging
+import re
 from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, auto, unique
-from io import BytesIO
 from typing import TypeVar, Type, Optional, Set
 
 from asn1crypto import (
@@ -620,12 +620,9 @@ class EmbeddedPdfSignature:
             explained_refs_lta.add(current_root_ref)
 
         # first, check if the keys in the document catalog are unchanged
-        catalog_permitted_changes_lta = {'/DSS', '/Extensions', '/Metadata'}
-        catalog_permitted_changes_formfill = {'/MarkInfo'}
         _compare_dicts(
             signed_root, current_root, 
-            {'/AcroForm'} | catalog_permitted_changes_lta 
-            | catalog_permitted_changes_formfill
+            {'/AcroForm', '/DSS', '/Extensions', '/Metadata', '/MarkInfo'}
         )
 
         # Now we compare the /AcroForm entries
@@ -635,30 +632,46 @@ class EmbeddedPdfSignature:
         )
 
         # first, compare the entries that aren't /Fields
+        # TODO check possible values for keys
         _compare_dicts(signed_acroform, current_acroform, {'/Fields'})
 
         # next, walk the field tree, and collect newly added signature fields
+        signed_fields = signed_acroform.raw_get('/Fields')
+        current_fields = current_acroform.raw_get('/Fields')
+        if isinstance(current_fields, generic.IndirectObject):
+            explained_refs_lta.add(current_fields.reference)
+            current_fields = current_resolver(current_fields.reference)
+        if isinstance(signed_fields, generic.IndirectObject):
+            signed_fields = signed_resolver(signed_fields.reference)
+
         new_sigfield_refs = set(_diff_field_tree(
-            signed_acroform.raw_get('/Fields'),
-            current_acroform.raw_get('/Fields'),
+            signed_fields, current_fields,
             signed_resolver, current_resolver, explained_refs_lta,
             explained_refs_formfill, field_mdp_spec=self.fieldmdp
         ))
+
+        # As for the keys in the root dictionary that are allowed to change:
+        #  - /Extensions requires no further processing since it must consist
+        #    of direct objects anyway.
+        #  - /MarkInfo: if it's an indirect reference (probably not) we can
+        #    whitelist it if the key set makes sense. TODO do this
+        #  - /Metadata: TODO check if this can be indirect
 
         # for the DSS, we only have to be careful not to allow non-DSS
         # objects to be overridden.
         #  -> collect refs from both, and whitelist all references in the
         #  current DSS that either (a) occur in the previous DSS, or (b)
         #  are fresh.
-        for key in catalog_permitted_changes_lta:
-            _allow_dict_key_update(
-                signed_root, current_root, key, signed_resolver,
-                current_resolver, explained_refs_lta, allow_removal=False
-            )
-        for key in catalog_permitted_changes_formfill:
-            _allow_dict_key_update(
-                signed_root, current_root, key, signed_resolver,
-                current_resolver, explained_refs_formfill, allow_removal=False
+        # HOWEVER, we must be careful to do some structural analysis as well!
+
+        if '/DSS' in signed_root:
+            if '/DSS' not in current_root:
+                raise SuspiciousModification('DSS was deleted')
+
+        if '/DSS' in current_root:
+            _manage_dss_change(
+                signed_root, current_root,
+                signed_resolver, current_resolver, explained_refs_lta
             )
 
         # Next, check annotations: newly added signature fields may be added
@@ -700,7 +713,7 @@ class EmbeddedPdfSignature:
                     for x in unexplained_formfill
                 )
             )
-            logger.debug(
+            logger.info(
                 "Unexplained xrefs in revision %d:\n%s",
                 revision, msg
             )
@@ -751,12 +764,16 @@ def _walk_page_tree_annots(page_root_ref, new_sigfield_refs, signed_resolver,
             except KeyError:
                 # no annotations, continue
                 continue
-            signed_annots = signed_kid.raw_get('/Annots')
-            signed_annots_ref = None
-            if isinstance(signed_annots, generic.IndirectObject):
-                signed_annots_ref = signed_annots.reference
-                signed_annots = signed_resolver(signed_annots.reference)
-            signed_annots = set(c.reference for c in signed_annots)
+            try:
+                signed_annots = signed_kid.raw_get('/Annots')
+                signed_annots_ref = None
+                if isinstance(signed_annots, generic.IndirectObject):
+                    signed_annots_ref = signed_annots.reference
+                    signed_annots = signed_resolver(signed_annots.reference)
+                signed_annots = set(c.reference for c in signed_annots)
+            except KeyError:
+                signed_annots_ref = None
+                signed_annots = set()
 
             # check if annotations were added
             if not (signed_annots <= current_annots):
@@ -788,52 +805,98 @@ def _walk_page_tree_annots(page_root_ref, new_sigfield_refs, signed_resolver,
                     whitelist_if_fresh(current_annots_ref)
 
 
-# mark a dictionary key in a revision as safely updatable.
-#  This whitelists all objects resulting from said update, if they do not
-#  override existing objects.
-def _allow_dict_key_update(signed_dict, current_dict, key,
-                           signed_resolver, current_resolver, explained_refs,
-                           allow_removal=False):
-    whitelist_if_fresh = _whitelist_callback(
+VRI_KEY_PATTERN = re.compile('/[A-Z0-9]{40}')
+
+
+def _manage_dss_change(signed_root, current_root, signed_resolver,
+                       current_resolver, explained_refs):
+    wl_if_fresh = _whitelist_callback(
         explained_refs, signed_resolver.revision, signed_resolver.reader.xrefs
     )
-    current_val = None
-    old_val_refs = ()
-    if key in signed_dict:
-        if key not in current_dict:
-            if not allow_removal:
-                raise SuspiciousModification(
-                    f"{key} reference removed from dictionary in update."
-                )
-            return
-        signed_val, current_val = _compare_key_refs(
-            key, signed_dict, current_dict,
-            signed_resolver, current_resolver, explained_refs
-        )
-        # ... and collect indirect references from the old DSS
-        old_val_refs = set(
-            signed_resolver.collect_indirect_references(signed_val)
-        )
-    elif key in current_dict:
-        # collect indirect references from the current version
-        current_val = current_dict.raw_get(key)
-        if isinstance(current_val, generic.IndirectObject):
-            ref = current_val.reference
-            whitelist_if_fresh(ref)
-            current_val = current_resolver(ref)
+    signed_dss, current_dss = _compare_key_refs(
+        '/DSS', signed_root, current_root, signed_resolver, current_resolver,
+        explained_refs
+    )
 
-    if current_val is not None:
-        current_val_refs = current_resolver.collect_indirect_references(
-            current_val
+    # check that there are no strange keys
+    dss_der_stream_keys = {'/Certs', '/CRLs', '/OCSPs'}
+    dss_expected_keys = {'/Type', '/VRI'} | dss_der_stream_keys
+    dss_keys = set(current_dss.keys())
+    if not (dss_keys <= dss_expected_keys):
+        raise SuspiciousModification(
+            f"Unexpected keys in DSS: {dss_keys - dss_expected_keys}."
         )
-        for ref in current_val_refs:
-            # allow these to be overwritten unconditionally
-            if ref in old_val_refs:
-                explained_refs.add(ref)
-            else:
-                # we consider these OK if they don't override objects
-                # that already existed in the signed portion
-                whitelist_if_fresh(ref)
+
+    for der_obj_type in dss_der_stream_keys:
+        try:
+            value = current_dss.raw_get(der_obj_type)
+        except KeyError:
+            continue
+        new_deps = current_resolver.collect_dependencies(
+            value, since_revision=signed_resolver.revision + 1
+        )
+        explained_refs.update(new_deps)
+
+    # check that the /VRI dictionary still contains all old keys, unchanged.
+    signed_vri, current_vri = _compare_key_refs(
+        '/VRI', signed_dss, current_dss, signed_resolver, current_resolver,
+        explained_refs
+    )
+    current_vri_hashes = set(current_vri.keys())
+
+    for key, signed_vri_value in signed_vri.items():
+        if not VRI_KEY_PATTERN.match(key):
+            raise SuspiciousModification(
+                f"VRI key {key} is not formatted correctly."
+            )
+
+        try:
+            current_vri_dict = current_vri.raw_get(key)
+        except KeyError:
+            current_vri_dict = None
+
+        if current_vri_dict != signed_vri_value:
+            # indirect or direct doesn't matter, they have to be the same
+            raise SuspiciousModification(
+                f"VRI key {key} was modified or deleted."
+            )
+
+    # check the newly added entries
+    vri_der_stream_keys = {'/Cert', '/CRL', '/OCSP'}
+    vri_expected_keys = {'/Type', '/TU', '/TS'} | vri_der_stream_keys
+    for key in current_vri_hashes - signed_vri.keys():
+        if not VRI_KEY_PATTERN.match(key):
+            raise SuspiciousModification(
+                f"VRI key {key} is not formatted correctly."
+            )
+
+        current_vri_dict = current_vri.raw_get(key)
+        if isinstance(current_vri_dict, generic.IndirectObject):
+            wl_if_fresh(current_vri_dict.reference)
+            current_vri_dict = current_resolver(current_vri_dict.reference)
+        _assert_not_stream(current_vri_dict)
+
+        current_vri_value_keys = current_vri_dict.keys()
+        if not (current_vri_value_keys <= vri_expected_keys):
+            raise SuspiciousModification(
+                "Unexpected keys in VRI dictionary: "
+                f"{current_vri_value_keys - vri_expected_keys}."
+            )
+        for der_obj_type in vri_der_stream_keys:
+            try:
+                value = current_vri_dict.raw_get(der_obj_type)
+            except KeyError:
+                continue
+            new_deps = current_resolver.collect_dependencies(
+                value, since_revision=signed_resolver.revision + 1
+            )
+            explained_refs.update(new_deps)
+        # /TS is also a DER stream
+        try:
+            wl_if_fresh(current_vri.raw_get('/TS').reference)
+        except (KeyError, AttributeError):
+            pass
+
 
 
 # TODO confirm the rules on name uniqueness
@@ -870,11 +933,10 @@ def _diff_field_tree(signed_fields, current_fields,
                      signed_resolver, current_resolver,
                      explained_refs_lta, explained_refs_formfill,
                      field_mdp_spec: Optional[FieldMDPSpec], parent_name=""):
-    # compare & resolve
-    signed_fields, current_fields = _resolve_updatable_refs(
-        signed_fields, current_fields, signed_resolver,
-        current_resolver, explained_refs_lta
-    )
+    if not isinstance(signed_fields, generic.ArrayObject):
+        raise SuspiciousModification("Field list is not an array.")
+    if not isinstance(current_fields, generic.ArrayObject):
+        raise SuspiciousModification("Field list is not an array.")
     # set signature fields aside for separate processing
     signed_fields_sigfields, signed_fields_other = \
         _split_sig_fields(signed_resolver, signed_fields)
@@ -907,6 +969,16 @@ def _diff_field_tree(signed_fields, current_fields,
             # whether we look up this reference value on the signed field
             # or the current version
             kids_ref = signed_field.raw_get('/Kids')
+            try:
+                # if there is a /Type entry, it better be /Fields
+                node_type = signed_field.raw_get('/Type')
+                if node_type != '/Fields':
+                    raise SuspiciousModification(
+                        f"Node at {fq_name} may not be a field tree node!"
+                    )
+            except KeyError:
+                pass
+
             if isinstance(kids_ref, generic.IndirectObject):
                 # register at LTA_UPDATES level, it's hypothetically still
                 #  possible that this field is a container for document
@@ -974,15 +1046,20 @@ def _diff_field_tree(signed_fields, current_fields,
             wl_if_fresh_lta(sigfield_ref)
 
             def _deps():
-                for _key in APPEARANCE_KEYS | {'/Lock', '/SV'}:
+                for _key in ('/AP', '/Lock', '/SV'):
                     try:
-                        yield from current_resolver.collect_indirect_references(
-                            current_field.raw_get(_key)
+                        raw_value = current_field.raw_get(_key)
+                        yield from current_resolver.collect_dependencies(
+                            raw_value,
+                            since_revision=signed_resolver.revision + 1
                         )
                     except KeyError:
                         pass
-            for ref in _deps():
-                wl_if_fresh_formfill(ref)
+            explained_refs_formfill.update(_deps())
+
+            # the field we just scanned is empty, so move on
+            if current_value_ref is None:
+                continue
         else:
             old_sigfield_ref = signed_fields_sigfields[name]
             if old_sigfield_ref != sigfield_ref:
@@ -996,18 +1073,15 @@ def _diff_field_tree(signed_fields, current_fields,
             if was_signed:
                 # here, we check that the form field didn't change
                 # beyond the keys that we expect to change when updating
-                # a signature field. Don't use _diff_field, it's too lenient
-                # with recursion for signature field updates.
+                # a signature field.
                 _compare_dicts(signed_field, current_field, VALUE_UPDATE_KEYS)
                 # the signature object itself will be evaluated later
                 explained_refs_lta.add(sigfield_ref)
                 # whitelist appearance updates at FORM_FILL level
-                for key in APPEARANCE_KEYS:
-                    _allow_dict_key_update(
-                        signed_field, current_field, key, signed_resolver,
-                        current_resolver, explained_refs_formfill,
-                        allow_removal=True
-                    )
+                _allow_appearance_update(
+                    signed_field, current_field, signed_resolver,
+                    current_resolver, explained_refs_formfill
+                )
             else:
                 # case where the field was already signed, or is still
                 # not signed in the current revision.
@@ -1059,9 +1133,60 @@ def _diff_field_tree(signed_fields, current_fields,
             pass
 
 
+def _allow_appearance_update(signed_field, current_field, signed_resolver,
+                             current_resolver, explained_refs):
+    try:
+        signed_ap_val = signed_field.raw_get('/AP')
+    except KeyError:
+        signed_ap_val = None
+
+    try:
+        current_ap_val = current_field.raw_get('/AP')
+    except KeyError:
+        current_ap_val = None
+
+    # if the appearance dictionaries are the same
+    common_ap_ref = None
+    if current_ap_val == signed_ap_val:
+        if isinstance(current_ap_val, generic.IndirectObject):
+            common_ap_ref = current_ap_val.reference
+            current_ap_val = current_resolver(common_ap_ref)
+        else:
+            # note: this is triggered when both are none, but also when both
+            # are direct objects and equal. This is intentional:
+            # we *never* want to whitelist an update for an existing
+            # stream object (too much potential for abuse), so we insist on
+            # modifying the /N, /R, /D keys to point to new streams
+            # TODO this could be worked around with a reference counter for
+            #  streams, in which case we could allow the stream to be overridden
+            #  on the condition that it isn't used anywhere else.
+            return
+
+    _assert_not_stream(common_ap_ref)
+
+    if common_ap_ref is not None:
+        explained_refs.add(common_ap_ref)
+
+    for key in ('/N', '/R', '/D'):
+        try:
+            appearance_spec = current_ap_val.raw_get(key)
+        except KeyError:
+            continue
+        appearance_deps = current_resolver.collect_dependencies(
+            appearance_spec, since_revision=signed_resolver.revision + 1
+        )
+        explained_refs.update(appearance_deps)
+
+
+def _assert_not_stream(dict_obj):
+    if isinstance(dict_obj, generic.StreamObject):
+        raise SuspiciousModification(
+            f"Unexpected stream encountered at f{dict_obj.container_ref}!"
+        )
+
+
 FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
-APPEARANCE_KEYS = {'/AP', '/AS'}
-VALUE_UPDATE_KEYS = APPEARANCE_KEYS | FORMFIELD_ALWAYS_MODIFIABLE | {'/V'}
+VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V'}
 
 
 def _diff_field(signed_ref, current_ref, signed_resolver,
@@ -1073,10 +1198,11 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
             f"object ID of field {fq_name} changed from {repr(signed_ref)}"
             f"to {repr(current_ref)}."
         )
-    signed_field, current_field = _resolve_updatable_refs(
-        signed_ref, current_ref, signed_resolver, current_resolver,
-        explained_refs
-    )
+    signed_field = signed_resolver(signed_ref)
+    current_field = current_resolver(current_ref)
+    _assert_not_stream(signed_field)
+    _assert_not_stream(current_field)
+    explained_refs.add(current_ref)
 
     # TODO it's perhaps more prudent to only allow appearance streams
     #  to change if the value was provided in this exact revision, but
@@ -1084,11 +1210,26 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
     # TODO double check the standard for other appearance-manipulating keys
     if not locked:
         _compare_dicts(signed_field, current_field, VALUE_UPDATE_KEYS)
-        for key in VALUE_UPDATE_KEYS:
-            _allow_dict_key_update(
-                signed_field, current_field, key, signed_resolver,
-                current_resolver, explained_refs, allow_removal=True
+        _allow_appearance_update(
+            signed_field, current_field, signed_resolver,
+            current_resolver, explained_refs
+        )
+        try:
+            current_value = current_field.raw_get('/V')
+        except KeyError:
+            return signed_field, current_field
+        try:
+            signed_value = signed_field.raw_get('/V')
+        except KeyError:
+            signed_value = None
+
+        # if the value was changed, pull in newly defined objects.
+        # TODO is this sufficient?
+        if current_value != signed_value:
+            new_refs = current_resolver.collect_dependencies(
+                current_value, since_revision=signed_resolver.revision + 1
             )
+            explained_refs.update(new_refs)
     else:
         _compare_dicts(
             signed_field, current_field, FORMFIELD_ALWAYS_MODIFIABLE
@@ -1098,6 +1239,8 @@ def _diff_field(signed_ref, current_ref, signed_resolver,
 
 
 def _compare_dicts(signed_dict, current_dict, ignored: Set[str] = frozenset()):
+    _assert_not_stream(signed_dict)
+    _assert_not_stream(current_dict)
     current_dict_keys = set(current_dict.keys()) - ignored
     signed_dict_keys = set(signed_dict.keys()) - ignored
     if current_dict_keys != signed_dict_keys:
@@ -1113,50 +1256,43 @@ def _compare_dicts(signed_dict, current_dict, ignored: Set[str] = frozenset()):
 
 def _compare_key_refs(key, signed_dict, current_dict,
                       signed_resolver, current_resolver, explained_refs):
+    """
+    Note: this routine is only safe to use if the structure of the resulting
+    values is also checked. Otherwise, it can lead to reference leaks if
+    one is not careful.
+    """
 
-    signed_value_ref = signed_dict.raw_get(key)
+    try:
+        signed_value_ref = signed_dict.raw_get(key)
+    except KeyError:
+        signed_value_ref = generic.DictionaryObject()
     current_value_ref = current_dict.raw_get(key)
 
-    return _resolve_updatable_refs(
-        signed_value_ref, current_value_ref, signed_resolver,
-        current_resolver, explained_refs
-    )
-
-
-def _resolve_updatable_refs(signed_ref, current_ref,
-                            signed_resolver, current_resolver, explained_refs):
-    """
-    This function resolves two updatable references in different revisions.
-    If the references are equal, they are added to explained_refs
-    If the references are not equal, current_ref is added to explained_refs,
-    provided that it doesn't conflict with any refs that exist in the signed
-    revision.
-    """
     whitelist_if_fresh = _whitelist_callback(
         explained_refs, signed_resolver.revision, signed_resolver.reader.xrefs
     )
     # normalize IndirectObjects to References
-    if isinstance(signed_ref, generic.IndirectObject):
-        signed_ref = signed_ref.reference
-    if isinstance(current_ref, generic.IndirectObject):
-        current_ref = current_ref.reference
-
-    if isinstance(signed_ref, generic.Reference):
-        signed_value = signed_resolver(signed_ref)
+    if isinstance(signed_value_ref, generic.IndirectObject):
+        signed_value_ref = signed_value_ref.reference
+        signed_value = signed_resolver(signed_value_ref)
     else:
-        signed_value = signed_ref
+        signed_value = signed_value_ref
 
-    if isinstance(current_ref, generic.Reference):
-        if current_ref != signed_ref:
+    if isinstance(current_value_ref, generic.IndirectObject):
+        current_value_ref = current_value_ref.reference
+        if current_value_ref != signed_value_ref:
             # These two not agreeing is perhaps a bit weird, but not prima facie
             # illegal => apply standard whitelisting logic
-            whitelist_if_fresh(current_ref)
+            whitelist_if_fresh(current_value_ref)
         else:
             # whitelist the reference unconditionally
-            explained_refs.add(current_ref)
-        current_value = current_resolver(current_ref)
+            explained_refs.add(current_value_ref)
+        current_value = current_resolver(current_value_ref)
     else:
-        current_value = current_ref
+        current_value = current_value_ref
+
+    _assert_not_stream(signed_value)
+    _assert_not_stream(current_value)
     return signed_value, current_value
 
 

@@ -2028,3 +2028,37 @@ def test_tamper_sig_obj():
     emb = r.embedded_signatures[0]
     emb.compute_integrity_info()
     assert emb.modification_level == ModificationLevel.OTHER
+
+
+def test_rogue_backreferences():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    # intentionally refer back to the contents of the first page
+    w.root['/DSS'] = w.root['/Pages']['/Kids'][0].get_object().raw_get('/Contents')
+    w.update_root()
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+    )
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    # pretend to add a new form field, but actually secretly do a page
+    #  tree modification.
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134),
+        doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
+    )
+    w = IncrementalPdfFileWriter(out)
+    fields.append_signature_fields(w, [sp])
+    w.write_in_place()
+
+    w = IncrementalPdfFileWriter(out)
+    contents_ref = w.root['/Pages']['/Kids'][0].get_object().raw_get('/Contents')
+    content_stream: generic.StreamObject = contents_ref.get_object()
+    content_stream._data = content_stream.data + b"q Q"
+    content_stream._encoded_data = None
+    w.mark_update(contents_ref)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    emb.compute_integrity_info()
+    assert emb.modification_level == ModificationLevel.OTHER
