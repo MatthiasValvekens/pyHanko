@@ -632,7 +632,6 @@ class EmbeddedPdfSignature:
         )
 
         # first, compare the entries that aren't /Fields
-        # TODO check possible values for keys
         _compare_dicts(signed_acroform, current_acroform, {'/Fields'})
 
         # next, walk the field tree, and collect newly added signature fields
@@ -655,7 +654,13 @@ class EmbeddedPdfSignature:
         #    of direct objects anyway.
         #  - /MarkInfo: if it's an indirect reference (probably not) we can
         #    whitelist it if the key set makes sense. TODO do this
-        #  - /Metadata: TODO check if this can be indirect
+        #  - /Metadata: is a stream ---> don't allow overrides, only new refs
+        try:
+            explained_refs_lta.add(
+                signed_root.raw_get('/Metadata').reference
+            )
+        except (KeyError, AttributeError):
+            pass
 
         # for the DSS, we only have to be careful not to allow non-DSS
         # objects to be overridden.
@@ -896,7 +901,6 @@ def _manage_dss_change(signed_root, current_root, signed_resolver,
             wl_if_fresh(current_vri.raw_get('/TS').reference)
         except (KeyError, AttributeError):
             pass
-
 
 
 # TODO confirm the rules on name uniqueness
