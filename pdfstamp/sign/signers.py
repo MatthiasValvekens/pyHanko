@@ -215,7 +215,6 @@ class Signer:
     signing_cert: x509.Certificate
     cert_registry: CertificateStore
     pkcs7_signature_mechanism: str
-    timestamper: TimeStamper = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         raise NotImplementedError
@@ -306,7 +305,8 @@ class Signer:
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
-             revocation_info=None, use_pades=False) -> cms.ContentInfo:
+             revocation_info=None, use_pades=False,
+             timestamper=None) -> cms.ContentInfo:
 
         # Implementation loosely based on similar functionality in
         # https://github.com/m32/endesive/.
@@ -323,14 +323,14 @@ class Signer:
 
         sig_info = self.signer_info(digest_algorithm, signed_attrs, signature)
 
-        if self.timestamper is not None:
+        if timestamper is not None:
             # the timestamp server needs to cross-sign our signature
             md = getattr(hashlib, digest_algorithm)()
             md.update(signature)
             if dry_run:
-                ts_token = self.timestamper.dummy_response(digest_algorithm)
+                ts_token = timestamper.dummy_response(digest_algorithm)
             else:
-                ts_token = self.timestamper.timestamp(
+                ts_token = timestamper.timestamp(
                     md.digest(), digest_algorithm
                 )
             sig_info['unsigned_attrs'] = cms.CMSAttributes(
@@ -417,7 +417,6 @@ class SimpleSigner(Signer):
     signing_key: keys.PrivateKeyInfo
     cert_registry: CertificateStore
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
-    timestamper: TimeStamper = None
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
         return asymmetric.rsa_pkcs1v15_sign(
@@ -523,8 +522,9 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
+             timestamper: TimeStamper=None,
              existing_fields_only=False, bytes_reserved=None, in_place=False):
-    return PdfSigner(signature_meta, signer).sign_pdf(
+    return PdfSigner(signature_meta, signer, timestamper).sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
         bytes_reserved=bytes_reserved, in_place=in_place
     )
@@ -581,12 +581,75 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
     return field_created, sig_field_ref
 
 
-class PdfSigner:
+class PdfTimestamper:
+
+    def __init__(self, timestamper: TimeStamper):
+        self.default_timestamper = timestamper
+
+    def generate_timestmp_field_name(self):
+        return 'Timestamp-' + str(uuid.uuid4())
+
+    def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
+                      md_algorithm, validation_context, bytes_reserved=None,
+                      validation_paths=None, in_place=False, timestamper=None):
+        timestamper = timestamper or self.default_timestamper
+        field_name = self.generate_timestmp_field_name()
+        if validation_paths is None:
+            validation_paths = list(
+                timestamper.validation_paths(validation_context)
+            )
+        if bytes_reserved is None:
+            test_signature_cms = timestamper.dummy_response(md_algorithm)
+            test_len = len(test_signature_cms.dump()) * 2
+            # see sign_pdf comments
+            bytes_reserved = test_len + 2 * (test_len // 4)
+
+        timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
+        field_created, sig_field_ref = _get_or_create_sigfield(
+            field_name, pdf_out,
+            # for LTA, requiring existing_fields_only doesn't make sense
+            # since we should in principle be able to add document timestamps
+            # ad infinitum.
+            existing_fields_only=False, is_timestamp=True
+        )
+        sig_field = sig_field_ref.get_object()
+        timestamp_obj_ref = pdf_out.add_object(timestamp_obj)
+        sig_field[pdf_name('/V')] = timestamp_obj_ref
+        # this update is unnecessary in the vast majority of cases, but
+        #  let's do it anyway for consistency.
+        if not field_created:  # pragma: nocover
+            pdf_out.mark_update(timestamp_obj_ref)
+
+        wr = timestamp_obj.write_signature(
+            pdf_out, md_algorithm, in_place=in_place
+        )
+        true_digest = next(wr)
+        timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
+        output, sig_contents = wr.send(timestamp_cms)
+
+        # update the DSS
+        from pdfstamp.sign import validation
+        validation.DocumentSecurityStore.add_dss(
+            output_stream=output, sig_contents=sig_contents,
+            paths=validation_paths, validation_context=validation_context
+        )
+
+        return output
+
+
+class PdfSigner(PdfTimestamper):
     _ignore_sv = False
 
-    def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer):
+    def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
+                 timestamper: TimeStamper = None):
         self.signature_meta = signature_meta
         self.signer = signer
+        super().__init__(timestamper)
+
+    def generate_timestmp_field_name(self):
+        return self.signature_meta.timestamp_field_name or (
+            super().generate_timestmp_field_name()
+        )
 
     def _apply_locking_rules(self, sig_field, sig_obj_ref, md_algorithm,
                              pdf_out):
@@ -788,6 +851,8 @@ class PdfSigner:
                  existing_fields_only=False, bytes_reserved=None,
                  in_place=False):
 
+        timestamper = self.default_timestamper
+
         # TODO if PAdES is requested, set the ESIC extension to the proper value
 
         timestamp = datetime.now(tz=tzlocal.get_localzone())
@@ -864,20 +929,16 @@ class PdfSigner:
 
         ts_validation_paths = None
         ts_required = sv_spec is not None and sv_spec.timestamp_required
-        if ts_required and signer.timestamper is None:
-            # TODO since the signer class needs access to a timestamper
-            #  internally, setting the timestamper attribute is the only option,
-            #  but this changes the state of the signer object, which is
-            #  undesirable. I should perhaps restructure things a little.
-            signer.timestamper = sv_spec.build_timestamper()
+        if ts_required and timestamper is None:
+            timestamper = sv_spec.build_timestamper()
 
-        if signer.timestamper is not None:
+        if timestamper is not None:
             # this might hit the TS server, but the response is cached
             # and it collects the certificates we need to verify the TS response
-            signer.timestamper.dummy_response(md_algorithm)
+            timestamper.dummy_response(md_algorithm)
             if validation_context is not None:
                 ts_validation_paths = list(
-                    signer.timestamper.validation_paths(validation_context)
+                    timestamper.validation_paths(validation_context)
                 )
                 validation_paths += ts_validation_paths
 
@@ -896,7 +957,8 @@ class PdfSigner:
             test_signature_cms = signer.sign(
                 test_md, md_algorithm,
                 timestamp=timestamp, use_pades=use_pades,
-                dry_run=True, revocation_info=revinfo
+                dry_run=True, revocation_info=revinfo,
+                timestamper=timestamper
             )
             test_len = len(test_signature_cms.dump()) * 2
             # External actors such as timestamping servers can't be relied on to
@@ -935,7 +997,7 @@ class PdfSigner:
         signature_cms = signer.sign(
             true_digest, md_algorithm,
             timestamp=timestamp, use_pades=use_pades,
-            revocation_info=revinfo
+            revocation_info=revinfo, timestamper=timestamper
         )
         output, sig_contents = wr.send(signature_cms)
 
@@ -946,61 +1008,13 @@ class PdfSigner:
                 paths=validation_paths, validation_context=validation_context
             )
 
-            if signer.timestamper is not None and signature_meta.use_pades_lta:
+            if timestamper is not None and signature_meta.use_pades_lta:
                 # append an LTV document timestamp
                 w = IncrementalPdfFileWriter(output)
                 output = self.timestamp_pdf(
                     w, md_algorithm, validation_context,
-                    validation_paths=ts_validation_paths, in_place=True
+                    validation_paths=ts_validation_paths, in_place=True,
+                    timestamper=timestamper
                 )
-
-        return output
-
-    def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                      md_algorithm, validation_context, bytes_reserved=None,
-                      validation_paths=None, in_place=False):
-        timestamper = self.signer.timestamper
-        field_name = self.signature_meta.timestamp_field_name or (
-            'Timestamp-' + str(uuid.uuid4())
-        )
-        if validation_paths is None:
-            validation_paths = list(
-                timestamper.validation_paths(validation_context)
-            )
-        if bytes_reserved is None:
-            test_signature_cms = timestamper.dummy_response(md_algorithm)
-            test_len = len(test_signature_cms.dump()) * 2
-            # see sign_pdf comments
-            bytes_reserved = test_len + 2 * (test_len // 4)
-
-        timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
-        field_created, sig_field_ref = _get_or_create_sigfield(
-            field_name, pdf_out,
-            # for LTA, requiring existing_fields_only doesn't make sense
-            # since we should in principle be able to add document timestamps
-            # ad infinitum.
-            existing_fields_only=False, is_timestamp=True
-        )
-        sig_field = sig_field_ref.get_object()
-        timestamp_obj_ref = pdf_out.add_object(timestamp_obj)
-        sig_field[pdf_name('/V')] = timestamp_obj_ref
-        # this update is unnecessary in the vast majority of cases, but
-        #  let's do it anyway for consistency.
-        if not field_created:  # pragma: nocover
-            pdf_out.mark_update(timestamp_obj_ref)
-
-        wr = timestamp_obj.write_signature(
-            pdf_out, md_algorithm, in_place=in_place
-        )
-        true_digest = next(wr)
-        timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
-        output, sig_contents = wr.send(timestamp_cms)
-
-        # update the DSS
-        from pdfstamp.sign import validation
-        validation.DocumentSecurityStore.add_dss(
-            output_stream=output, sig_contents=sig_contents,
-            paths=validation_paths, validation_context=validation_context
-        )
 
         return output

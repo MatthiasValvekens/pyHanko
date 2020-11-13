@@ -73,17 +73,8 @@ DUMMY_TS = timestamps.DummyTimeStamper(
     certs_to_embed=FROM_CA.cert_registry,
 )
 
-FROM_CA_TS = signers.SimpleSigner(
-    signing_cert=FROM_CA.signing_cert, cert_registry=FROM_CA.cert_registry,
-    signing_key=FROM_CA.signing_key, timestamper=DUMMY_TS
-)
-
 DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
     'http://example.com/tsa', https=False
-)
-FROM_CA_HTTP_TS = signers.SimpleSigner(
-    signing_cert=FROM_CA.signing_cert, cert_registry=FROM_CA.cert_registry,
-    signing_key=FROM_CA.signing_key, timestamper=DUMMY_HTTP_TS
 )
 
 # with the testing CA setup update, this OCSP response is totally
@@ -486,7 +477,7 @@ def test_dummy_timestamp():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA_TS,
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA, timestamper=DUMMY_TS,
         existing_fields_only=True,
     )
 
@@ -511,7 +502,7 @@ def test_http_timestamp(requests_mock):
     from pdfstamp.sign.timestamps import TimestampRequestError
     with pytest.raises(TimestampRequestError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(), signer=FROM_CA_HTTP_TS,
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA, timestamper=DUMMY_HTTP_TS,
             existing_fields_only=True,
         )
 
@@ -520,7 +511,7 @@ def test_http_timestamp(requests_mock):
         headers={'Content-Type': 'application/timestamp-reply'}
     )
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA_HTTP_TS,
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA, timestamper=DUMMY_HTTP_TS,
         existing_fields_only=True,
     )
 
@@ -1064,7 +1055,7 @@ def test_pades_revinfo_ts_dummydata():
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
             subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA_TS
+        ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -1087,7 +1078,7 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
             subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA_HTTP_TS
+        ), signer=FROM_CA, timestamper=DUMMY_HTTP_TS
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -1125,7 +1116,7 @@ def test_pades_revinfo_live(requests_mock):
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
             subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA_TS
+        ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
     dss, vc = DocumentSecurityStore.read_dss(handler=r)
@@ -1153,7 +1144,7 @@ def test_adobe_revinfo_live(requests_mock):
             field_name='Sig1', validation_context=vc,
             subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
             embed_validation_info=True
-        ), signer=FROM_CA_TS
+        ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -1168,7 +1159,7 @@ def test_pades_revinfo_live_nofullchain():
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
             subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA_TS
+        ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -1184,7 +1175,7 @@ def test_adobe_revinfo_live_nofullchain():
             field_name='Sig1', validation_context=dummy_ocsp_vc(),
             subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
             embed_validation_info=True
-        ), signer=FROM_CA_TS
+        ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -1215,7 +1206,7 @@ def _test_pades_revinfo_live_lta(w, vc, in_place):
             field_name='Sig1', validation_context=vc,
             subfilter=PADES, embed_validation_info=True,
             use_pades_lta=True
-        ), signer=FROM_CA_TS, in_place=in_place
+        ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=in_place
     )
     r = PdfFileReader(out)
     dss, vc = DocumentSecurityStore.read_dss(handler=r)
@@ -1253,10 +1244,10 @@ def prepare_sv_field(sv_spec):
 # passing test_violation=False tests the signer, while test_violation=True
 #  instructs the signer to ignore all SV requirements, thus testing whether
 #  the validator catches the violations properly
-def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA_TS, test_violation=False):
+def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, test_violation=False):
     w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
 
-    pdf_signer = signers.PdfSigner(sig_meta, signer)
+    pdf_signer = signers.PdfSigner(sig_meta, signer, timestamper=timestamper)
     pdf_signer._ignore_sv = test_violation
     out = pdf_signer.sign_pdf(w)
     r = PdfFileReader(out)
@@ -1482,7 +1473,7 @@ def test_sv_subfilter_unsupported():
         signers.sign_pdf(
             IncrementalPdfFileWriter(BytesIO(frozen)),
             signers.PdfSignatureMetadata(field_name='Sig'),
-            signer=FROM_CA_TS
+            signer=FROM_CA, timestamper=DUMMY_TS
         )
     with pytest.raises(NotImplementedError):
         signers.sign_pdf(
@@ -1490,7 +1481,7 @@ def test_sv_subfilter_unsupported():
             signers.PdfSignatureMetadata(
                 field_name='Sig', subfilter=PADES
             ),
-            signer=FROM_CA_TS
+            signer=FROM_CA, timestamper=DUMMY_TS
         )
 
 
@@ -1513,7 +1504,7 @@ def test_sv_subfilter_unsupported_partial():
     signers.sign_pdf(
         IncrementalPdfFileWriter(BytesIO(frozen)),
         signers.PdfSignatureMetadata(field_name='Sig'),
-        signer=FROM_CA_TS
+        signer=FROM_CA, timestamper=DUMMY_TS
     )
     with pytest.raises(SigningError):
         signers.sign_pdf(
@@ -1522,19 +1513,12 @@ def test_sv_subfilter_unsupported_partial():
                 field_name='Sig',
                 subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
             ),
-            signer=FROM_CA_TS
+            signer=FROM_CA, timestamper=DUMMY_TS
         )
 
 
 def test_sv_timestamp_url(requests_mock):
     # state issues (see comment in signers.py), so create a fresh signer
-    signer = signers.SimpleSigner.load(
-        TESTING_CA_DIR + '/keys/signer.key.pem',
-        TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
-        ca_chain_files=(
-            TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
-        key_passphrase=b'secret'
-    )
     sv = fields.SigSeedValueSpec(
         timestamp_server_url=DUMMY_HTTP_TS.url,
         timestamp_required=True
@@ -1551,7 +1535,8 @@ def test_sv_timestamp_url(requests_mock):
         DUMMY_HTTP_TS.url, content=ts_callback,
         headers={'Content-Type': 'application/timestamp-reply'}
     )
-    sign_with_sv(sv, meta, signer=signer)
+    # noinspection PyTypeChecker
+    sign_with_sv(sv, meta, timestamper=None)
     assert ts_requested
 
 
@@ -1831,7 +1816,7 @@ def test_form_field_postsign_fill_pades_lt(requests_mock):
     )
 
     # sign, then fill
-    out = signers.sign_pdf(w, meta, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
     set_text_field(w, "Some text")
     out = BytesIO()
@@ -1853,7 +1838,7 @@ def test_form_field_postsign_modify_pades_lt(requests_mock):
 
     # sign, then fill
     set_text_field(w, "Some text")
-    out = signers.sign_pdf(w, meta, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
     set_text_field(w, "Some other text")
     out = BytesIO()
@@ -1876,9 +1861,9 @@ def test_pades_double_sign(requests_mock):
         subfilter=PADES, embed_validation_info=True,
     )
 
-    out = signers.sign_pdf(w, meta1, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
-    out = signers.sign_pdf(w, meta2, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
 
     r = PdfFileReader(out)
     sig_fields = fields.enumerate_sig_fields(r)
@@ -1902,9 +1887,9 @@ def test_pades_double_sign_delete_dss(requests_mock):
         subfilter=PADES, embed_validation_info=True,
     )
 
-    out = signers.sign_pdf(w, meta1, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
-    out = signers.sign_pdf(w, meta2, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
     # DSS is now covered by the second signature, so this is illegal
     del w.root['/DSS']
@@ -1935,7 +1920,7 @@ def test_pades_dss_object_clobber(requests_mock):
     )
     dummy_ref = w.add_object(generic.pdf_string("Hi there")).reference
 
-    out = signers.sign_pdf(w, meta1, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
     # We're going to reassign the DSS object to another object ID, namely
     #  one that clobbers the dummy_ref object. This should be ample cause
@@ -1960,7 +1945,7 @@ def test_form_field_structure_modification():
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
     meta =signers.PdfSignatureMetadata(field_name='Sig1')
 
-    out = signers.sign_pdf(w, meta, signer=FROM_CA_TS)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
     w = IncrementalPdfFileWriter(out)
     field_arr = w.root['/AcroForm']['/Fields']
     # shallow copy the text field
