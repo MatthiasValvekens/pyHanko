@@ -721,7 +721,6 @@ class StreamObject(DictionaryObject):
         super().__init__(dict_data, **kwargs)
         self._data = stream_data
         self._encoded_data = encoded_data
-        self.decodedSelf = None
 
     def _filters(self) -> Iterator[Tuple[str, Optional[dict]]]:
         try:
