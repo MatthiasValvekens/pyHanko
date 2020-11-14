@@ -1590,7 +1590,7 @@ def set_text_field(writer, val):
 
     appearance = generic.RawContent(
         parent=None, box=generic.BoxConstraints(height=60, width=130),
-        data=b'''q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q''' % val.encode(
+        data=b'q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q' % val.encode(
             'ascii')
     )
     tf['/V'] = generic.pdf_string(val)
@@ -1658,6 +1658,27 @@ def set_text_field_in_group(writer, ix, val):
 
 
 GROUP_VARIANTS = (TEXTFIELD_GROUP, TEXTFIELD_GROUP_VAR)
+
+
+@pytest.mark.parametrize('variant, existing_only', [(0, True), (1, True), (0, False), (1, False)])
+def test_deep_non_sig_field(variant, existing_only):
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
+    meta = signers.PdfSignatureMetadata(field_name='TextInput.TextField1')
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, meta, signer=FROM_CA, existing_fields_only=existing_only
+        )
+
+
+@pytest.mark.parametrize('variant', [0, 1])
+def test_deep_non_sig_field_nocreate(variant):
+    # this case might be supported in the future, but for now we check for
+    # a NotImplementedError (since creating fields with dots in their (partial)
+    # names is not compliant with the standard)
+    w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
+    meta = signers.PdfSignatureMetadata(field_name='TextInput.NewSig')
+    with pytest.raises(NotImplementedError):
+        signers.sign_pdf(w, meta, signer=FROM_CA)
 
 
 @pytest.mark.parametrize('variant', [0, 1])

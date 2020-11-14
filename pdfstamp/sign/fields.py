@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from enum import Flag, Enum, unique
 from typing import List, Optional
@@ -20,6 +21,8 @@ __all__ = [
     'enumerate_sig_fields_in', 'enumerate_sig_fields',
     '_prepare_sig_field'
 ]
+
+logger = logging.getLogger(__name__)
 
 # TODO support other seed value dict entries
 # TODO add more customisability appearance-wise
@@ -507,6 +510,12 @@ def _prepare_sig_field(sig_field_name, root,
     if sig_field_ref is not None:
         return False, sig_field_ref
 
+    if '.' in sig_field_name:
+        raise NotImplementedError(
+            "Creating fields deep in the form hierarchy is not supported"
+            "right now."
+        )
+
     # no signature field exists, so create one
     sig_form_kwargs = {
         'include_on_page': root['/Pages']['/Kids'][0],
@@ -549,8 +558,9 @@ def enumerate_sig_fields(reader: PdfHandler, filled_status=None):
     yield from enumerate_sig_fields_in(fields, filled_status)
 
 
-def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None):
-    ft_sig = pdf_name('/Sig')
+def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
+                            parent_name="", parents=None):
+    parents = parents or ()
     for field_ref in field_list:
         # TODO the spec mandates this, but perhaps we should be a bit more
         #  tolerant
@@ -562,26 +572,47 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None):
             field_name = field['/T']
         except KeyError:
             continue
-        field_type = field.get('/FT')
-        if field_type != ft_sig:
-            if with_name is not None and field_name == with_name:
-                raise SigningError(
-                    'Field with name %s exists but is not a signature field'
-                    % field_name
-                )
-            continue
-        field_value = field.get('/V')
-        # "cast" to a regular string object
-        filled = field_value is not None
-        status_check = filled_status is None or filled == filled_status
-        name_check = with_name is None or with_name == field_name
-        if status_check and name_check:
-            yield str(field_name), field_value, field_ref
+        fq_name = field_name if not parent_name else (
+                "%s.%s" % (parent_name, field_name)
+        )
+        explicitly_requested = with_name is not None and fq_name == with_name
+        child_requested = explicitly_requested or (
+            with_name is not None and with_name.startswith(fq_name)
+        )
+        # /FT is inheritable, so go up the chain
+        current_path = (field,) + parents
+        for parent_field in current_path:
+            try:
+                field_type = parent_field['/FT']
+                break
+            except KeyError:
+                continue
+        else:
+            field_type = None
 
-        try:
-            yield from enumerate_sig_fields_in(field['/Kids'])
-        except KeyError:
-            continue
+        if field_type == '/Sig':
+            field_value = field.get('/V')
+            # "cast" to a regular string object
+            filled = field_value is not None
+            status_check = filled_status is None or filled == filled_status
+            name_check = with_name is None or explicitly_requested
+            if status_check and name_check:
+                yield fq_name, field_value, field_ref
+        elif explicitly_requested:
+            raise SigningError(
+                'Field with name %s exists but is not a signature field'
+                % fq_name
+            )
+
+        # if necessary, descend into the field hierarchy
+        if with_name is None or (child_requested and not explicitly_requested):
+            try:
+                yield from enumerate_sig_fields_in(
+                    field['/Kids'], parent_name=fq_name, parents=current_path,
+                    with_name=with_name
+                )
+            except KeyError:
+                continue
 
 
 def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
