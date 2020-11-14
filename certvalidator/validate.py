@@ -371,6 +371,9 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             matched = False
             soft_fail = False
             failures = []
+            expect_revinfo = bool(
+                cert.ocsp_urls or cert.crl_distribution_points
+            )
 
             if cert.ocsp_urls or validation_context.revocation_mode == 'require':
                 try:
@@ -419,17 +422,19 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 except (CRLNoMatchesError):
                     pass
 
+            # The certificate has CRL/OCSP entries but we couldn't query any of
+            # them. This should fail the validation if hard-fail is turned on.
+            expected_revinfo_not_found = not matched and (
+                # with 'require' the fact that there's no match (irrespective
+                # of certificate properties) is enough to cause a failure.
+                validation_context.revocation_mode == 'require'
+                or (
+                    expect_revinfo
+                    and validation_context.revocation_mode == 'hard-fail'
+                )
+            )
             if not soft_fail:
-                if not matched and validation_context.revocation_mode == 'require':
-                    raise PathValidationError(pretty_message(
-                        '''
-                        The path could not be validated because no revocation
-                        information could be found for %s
-                        ''',
-                        _cert_type(index, last_index, end_entity_name_override, definite=True)
-                    ))
-
-                if not status_good and revocation_check_failed:
+                if not status_good and matched and revocation_check_failed:
                     raise PathValidationError(pretty_message(
                         '''
                         The path could not be validated because the %s revocation
@@ -437,6 +442,14 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                         ''',
                         _cert_type(index, last_index, end_entity_name_override),
                         '; '.join(failures)
+                    ))
+                if expected_revinfo_not_found:
+                    raise PathValidationError(pretty_message(
+                        '''
+                        The path could not be validated because no revocation
+                        information could be found for %s
+                        ''',
+                        _cert_type(index, last_index, end_entity_name_override, definite=True)
                     ))
 
         # Step 2 a 4
