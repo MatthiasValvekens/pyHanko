@@ -78,6 +78,11 @@ class SignatureStatus:
             revoked = True
         except (PathValidationError, PathBuildingError) as e:
             logger.warning(e)
+        if not trusted:
+            subj = validator._certificate.subject.human_friendly
+            logger.warning(
+                f"Chain of trust validation for {subj} failed."
+            )
         return trusted, revoked, usage_ok, path
 
 

@@ -6,7 +6,7 @@ tzlocal==2.1
 python-pkcs11==0.6.0
 fonttools==4.13.0
 click==7.1.2
--e git+https://github.com/MatthiasValvekens/certvalidator@6f3cabfdb3307b00d3b0c68fac970bba91ea3ea1#egg=certvalidator
+-e git+https://github.com/MatthiasValvekens/certvalidator@328c59faf4ba5fcc22ac3771d66f31f614f12443#egg=certvalidator
 requests~=2.24.0
 pytest~=6.1.1
 requests-mock~=1.8.0

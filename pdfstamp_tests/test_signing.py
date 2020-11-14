@@ -6,6 +6,7 @@ from io import BytesIO
 
 import pytz
 from asn1crypto import ocsp, tsp
+from certvalidator.errors import PathValidationError
 
 import pdfstamp.sign.fields
 from certvalidator import ValidationContext, CertificateValidator
@@ -19,9 +20,9 @@ from pdfstamp.sign import timestamps, fields, signers
 from pdfstamp.sign.general import UnacceptableSignerError, SigningError
 from pdfstamp.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
-    EmbeddedPdfSignature, read_adobe_revocation_info,
+    EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, ModificationLevel,
+    SignatureCoverageLevel, ModificationLevel, SignatureValidationError,
 )
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -63,10 +64,11 @@ OCSP_KEY = oskeys.parse_private(
     read_all(TESTING_CA_DIR + '/keys/ocsp.key.pem'), b"secret"
 )
 
+TSA_CERT = oskeys.parse_certificate(
+    read_all(TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem')
+)
 DUMMY_TS = timestamps.DummyTimeStamper(
-    tsa_cert=oskeys.parse_certificate(
-        read_all(TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem')
-    ),
+    tsa_cert=TSA_CERT,
     tsa_key=oskeys.parse_private(
         read_all(TESTING_CA_DIR + '/keys/tsa.key.pem'), password=b'secret'
     ),
@@ -110,7 +112,6 @@ def live_testing_vc(requests_mock):
     requests_mock.register_uri(
         'GET', re.compile(r"^http://ca\.example\.com/"), content=serve_ca_file
     )
-    # FIXME this is all moot since certvalidator uses urlopen()
 
     def serve_ocsp_response(request, _context):
         req: ocsp.OCSPRequest = ocsp.OCSPRequest.load(request.body)
@@ -999,7 +1000,7 @@ def test_ocsp_embed():
     val_trusted(r, sig_field)
 
     embedded_sig = EmbeddedPdfSignature(r, sig_field)
-    vc = read_adobe_revocation_info(embedded_sig.signer_info)
+    vc = apply_adobe_revocation_info(embedded_sig.signer_info)
     assert len(vc.ocsps) == 1
 
 
@@ -1031,7 +1032,7 @@ def test_pades_revinfo_dummydata():
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
-    dss, vc = DocumentSecurityStore.read_dss(handler=r)
+    dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 4
     assert len(dss.ocsps) == 1
@@ -1062,7 +1063,7 @@ def test_pades_revinfo_ts_dummydata():
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
-    dss, vc = DocumentSecurityStore.read_dss(handler=r)
+    dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == 1
@@ -1085,7 +1086,7 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
-    dss, vc = DocumentSecurityStore.read_dss(handler=r)
+    dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == 1
@@ -1106,7 +1107,9 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     with pytest.raises(ValueError):
-        validate_pdf_ltv_signature(r, sig_field, rivt_pades)
+        validate_pdf_ltv_signature(
+            r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS}
+        )
 
 
 def test_pades_revinfo_live(requests_mock):
@@ -1119,7 +1122,8 @@ def test_pades_revinfo_live(requests_mock):
         ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
-    dss, vc = DocumentSecurityStore.read_dss(handler=r)
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    vc = dss.as_validation_context({})
     assert dss is not None
     assert len(dss.vri_entries) == 1
     assert len(dss.certs) == 5
@@ -1164,8 +1168,40 @@ def test_pades_revinfo_live_nofullchain():
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r, sig_field, rivt_pades)
-    assert status.valid and not status.trusted
+
+    # with the same dumb settings, the timestamp doesn't validate at all,
+    # which causes LTV validation to fail to bootstrap
+    with pytest.raises(SignatureValidationError):
+        validate_pdf_ltv_signature(
+            r, sig_field, rivt_pades,
+            {'trust_roots': TRUST_ROOTS, 'ocsps': [FIXED_OCSP],
+             'allow_fetching': False}
+        )
+
+    # now set up live testing
+    from requests_mock import Mocker
+    with Mocker() as m:
+        live_testing_vc(m)
+        status = validate_pdf_ltv_signature(
+            r, sig_field, rivt_pades, {
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': True
+            }
+        )
+        # .. which should still fail because the chain of trust is broken, but
+        # at least the timestamp should initially validate
+        assert status.valid and not status.trusted, status.summary()
+
+
+def test_meta_tsa_verify():
+    # check if my testing setup works
+    vc = ValidationContext(
+        trust_roots=TRUST_ROOTS, allow_fetching=False, crls=[],
+        ocsps=[FIXED_OCSP], revocation_mode='hard-fail'
+    )
+    with pytest.raises(PathValidationError):
+        CertificateValidator(TSA_CERT, validation_context=vc).validate_usage(
+            {'time_stamping'}
+        )
 
 
 def test_adobe_revinfo_live_nofullchain():
@@ -1180,8 +1216,23 @@ def test_adobe_revinfo_live_nofullchain():
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-    status = validate_pdf_ltv_signature(r, sig_field, rivt_adobe)
-    assert status.valid and not status.trusted
+    # same as for the pades test above
+    with pytest.raises(SignatureValidationError):
+        validate_pdf_ltv_signature(
+            r, sig_field, rivt_adobe, {
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+                'ocsps': [FIXED_OCSP]
+            }
+        )
+    from requests_mock import Mocker
+    with Mocker() as m:
+        live_testing_vc(m)
+        status = validate_pdf_ltv_signature(
+            r, sig_field, rivt_adobe, {
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': True
+            }
+        )
+        assert status.valid and not status.trusted, status.summary()
 
 
 def test_pades_revinfo_live_lta(requests_mock):
@@ -1209,7 +1260,8 @@ def _test_pades_revinfo_live_lta(w, vc, in_place):
         ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=in_place
     )
     r = PdfFileReader(out)
-    dss, vc = DocumentSecurityStore.read_dss(handler=r)
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    vc = dss.as_validation_context({'trust_roots': TRUST_ROOTS})
     assert dss is not None
     assert len(dss.vri_entries) == 2
     assert len(dss.certs) == 5
