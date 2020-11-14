@@ -224,10 +224,6 @@ def test_null_sign():
     assert field_name == 'Sig1'
     with pytest.raises(ValueError):
         val_untrusted(r, sig_field)
-    with pytest.raises(ValueError):
-        validate_pdf_ltv_signature(
-            r, sig_field, RevocationInfoValidationType.ADOBE_STYLE
-        )
 
 
 def test_sign_with_trust():
@@ -1104,11 +1100,10 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
     with pytest.raises(ValueError):
         validate_pdf_ltv_signature(
-            r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS}
+            r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
         )
 
 
@@ -1129,15 +1124,14 @@ def test_pades_revinfo_live(requests_mock):
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == len(vc.ocsps) == 1
     assert len(dss.crls) == len(vc.crls) == 1
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS})
+    status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
     with pytest.raises(ValueError):
-        validate_pdf_ltv_signature(r, sig_field, rivt_adobe, {'trust_roots': TRUST_ROOTS})
+        validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
 
 
 def test_adobe_revinfo_live(requests_mock):
@@ -1151,9 +1145,8 @@ def test_adobe_revinfo_live(requests_mock):
         ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-    status = validate_pdf_ltv_signature(r, sig_field, rivt_adobe, {'trust_roots': TRUST_ROOTS})
+    status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
     assert status.valid and status.trusted
 
 
@@ -1166,14 +1159,13 @@ def test_pades_revinfo_live_nofullchain():
         ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_pades = RevocationInfoValidationType.PADES_LT
 
     # with the same dumb settings, the timestamp doesn't validate at all,
     # which causes LTV validation to fail to bootstrap
     with pytest.raises(SignatureValidationError):
         validate_pdf_ltv_signature(
-            r, sig_field, rivt_pades,
+            r.embedded_signatures[0], rivt_pades,
             {'trust_roots': TRUST_ROOTS, 'ocsps': [FIXED_OCSP],
              'allow_fetching': False}
         )
@@ -1183,7 +1175,7 @@ def test_pades_revinfo_live_nofullchain():
     with Mocker() as m:
         live_testing_vc(m)
         status = validate_pdf_ltv_signature(
-            r, sig_field, rivt_pades, {
+            r.embedded_signatures[0], rivt_pades, {
                 'trust_roots': TRUST_ROOTS, 'allow_fetching': True
             }
         )
@@ -1219,7 +1211,7 @@ def test_adobe_revinfo_live_nofullchain():
     # same as for the pades test above
     with pytest.raises(SignatureValidationError):
         validate_pdf_ltv_signature(
-            r, sig_field, rivt_adobe, {
+            r.embedded_signatures[0], rivt_adobe, {
                 'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
                 'ocsps': [FIXED_OCSP]
             }
@@ -1228,7 +1220,7 @@ def test_adobe_revinfo_live_nofullchain():
     with Mocker() as m:
         live_testing_vc(m)
         status = validate_pdf_ltv_signature(
-            r, sig_field, rivt_adobe, {
+            r.embedded_signatures[0], rivt_adobe, {
                 'trust_roots': TRUST_ROOTS, 'allow_fetching': True
             }
         )
@@ -1267,16 +1259,22 @@ def _test_pades_revinfo_live_lta(w, vc, in_place):
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == len(vc.ocsps) == 1
     assert len(dss.crls) == len(vc.crls) == 1
-    field_iter = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(field_iter)
     rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r, sig_field, rivt_pades, {'trust_roots': TRUST_ROOTS})
+    status = validate_pdf_ltv_signature(
+        r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
+    )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 
-    field_name, sig_obj, sig_field = next(field_iter)
+    sig_obj = r.embedded_signatures[1].sig_object
     assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
-    # TODO implement and run actual LTA verification checks
+
+    rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+    status = validate_pdf_ltv_signature(
+        r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
+    )
+    assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
 # TODO test multiple PAdES signatures
@@ -1409,10 +1407,8 @@ def test_sv_sign_addrevinfo_req(requests_mock):
         embed_validation_info=True
     )
     emb_sig = sign_with_sv(sv, meta)
-    _, _, sig_field = next(fields.enumerate_sig_fields(emb_sig.reader))
     status = validate_pdf_ltv_signature(
-        emb_sig.reader, sig_field,
-        RevocationInfoValidationType.ADOBE_STYLE,
+        emb_sig, RevocationInfoValidationType.ADOBE_STYLE,
         {'trust_roots': TRUST_ROOTS}
     )
     assert status.valid and status.trusted

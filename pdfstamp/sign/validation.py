@@ -410,13 +410,14 @@ class EmbeddedPdfSignature:
         except KeyError:
             pass
 
-    def compute_integrity_info(self):
+    def compute_integrity_info(self, skip_diff=False):
         self.compute_digest()
 
         # TODO in scenarios where we have to verify multiple signatures, we're
         #  doing a lot of double work here. This could be improved.
         self.coverage = self.evaluate_signature_coverage()
-        self.modification_level = self.evaluate_modifications()
+        if not skip_diff:
+            self.modification_level = self.evaluate_modifications()
 
     def summarise_integrity_info(self):
 
@@ -709,11 +710,12 @@ class EmbeddedPdfSignature:
         if unexplained_formfill:
             msg = LazyJoin(
                 '\n', (
-                    repr(x) + ':' + repr(current_resolver(x))
-                    for x in unexplained_formfill
+                    '%s:%s...' % (
+                        repr(x), repr(current_resolver(x))[:300]
+                    ) for x in unexplained_formfill
                 )
             )
-            logger.info(
+            logger.debug(
                 "Unexplained xrefs in revision %d:\n%s",
                 revision, msg
             )
@@ -1494,19 +1496,83 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
 class RevocationInfoValidationType(Enum):
     ADOBE_STYLE = auto()
     PADES_LT = auto()
-    # TODO add support for PAdES-LTA verification
-    #  (i.e. timestamp chain verification)
-    # PADES_LTA = auto()
+    PADES_LTA = auto()
+
+
+def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
+    # create a new validation context using the timestamp value as the time
+    # of evaluation, turn off fetching and load OCSP responses / CRL data
+    # from the DSS / revocation info object
+    validation_context_kwargs['allow_fetching'] = False
+    validation_context_kwargs['moment'] = timestamp
+
+    # Certs with OCSP/CRL endpoints should have the relevant revocation data
+    # embedded, if no stricter revocation_mode policy is in place already
+    rm = validation_context_kwargs.get('revocation_mode', None)
+    if not rm or rm == 'soft-fail':
+        validation_context_kwargs['revocation_mode'] = 'hard-fail'
+
+
+def _establish_timestamp_trust(tst_signed_data, bootstrap_validation_context):
+
+    tst_info = tst_signed_data['encap_content_info']['content'].parsed
+    assert isinstance(tst_info, tsp.TSTInfo)
+    timestamp = tst_info['gen_time'].native
+    timestamp_status: TimestampSignatureStatus = validate_cms_signature(
+        tst_signed_data, status_cls=TimestampSignatureStatus,
+        validation_context=bootstrap_validation_context,
+        status_kwargs={'timestamp': timestamp}
+    )
+
+    if not timestamp_status.valid or not timestamp_status.trusted:
+        logger.warning(
+            "Could not validate embedded timestamp token: %s.",
+            timestamp_status.summary()
+        )
+        raise SignatureValidationError(
+            "Could not establish time of signing, timestamp token did not "
+            "validate with current settings."
+        )
+    return timestamp_status
+
+
+def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
+                                   validation_context_kwargs, until_revision):
+    timestamps = [
+        emb_sig for emb_sig in reader.embedded_signatures
+        if emb_sig.sig_object['/Type'] == '/DocTimeStamp'
+    ]
+    validation_context_kwargs = dict(validation_context_kwargs)
+    current_vc = bootstrap_validation_context
+    for emb_timestamp in reversed(timestamps):
+        if emb_timestamp.signed_revision < until_revision:
+            break
+        ts_status = _establish_timestamp_trust(
+            emb_timestamp.signed_data, current_vc
+        )
+        # set up the validation kwargs for the next iteration
+        _strict_vc_context_kwargs(
+            ts_status.timestamp, validation_context_kwargs
+        )
+        # read the DSS at the current revision into a new
+        # validation context object
+        current_vc = DocumentSecurityStore.read_dss(
+            reader.get_historical_resolver(emb_timestamp.signed_revision)
+        ).as_validation_context(validation_context_kwargs)
+
+    return current_vc
 
 
 # TODO verify formal PAdES requirements for timestamps
 # TODO verify other formal PAdES requirements (coverage, etc.)
-def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
+def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                validation_type: RevocationInfoValidationType,
                                validation_context_kwargs=None,
+                               bootstrap_validation_context=None,
                                force_revinfo=False):
+    sig_field = embedded_sig.sig_field
     # create a fresh copy of the validation_kwargs
-    validation_context_kwargs = dict(validation_context_kwargs or {})
+    validation_context_kwargs: dict = dict(validation_context_kwargs or {})
 
     # To validate the first timestamp, allow fetching by default
     # we'll turn it off later
@@ -1519,66 +1585,55 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
     else:
         validation_context_kwargs.setdefault('revocation_mode', 'hard-fail')
 
-    try:
-        sig_object = sig_field.get_object()['/V']
-    except KeyError:
-        raise SignatureValidationError('Signature is empty')
-
-    if sig_object is None:
-        raise ValueError('Signature is empty')
-
-    embedded_sig = EmbeddedPdfSignature(reader, sig_field)
-
-    if validation_type != RevocationInfoValidationType.ADOBE_STYLE:
-        dss = DocumentSecurityStore.read_dss(reader)
-        # for now, just read the additional certs from the DSS
-        current_vc = dss.as_validation_context(
-            validation_context_kwargs, include_revinfo=False
+    reader = embedded_sig.reader
+    if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
+        dss = None
+        current_vc = bootstrap_validation_context or ValidationContext(
+            **validation_context_kwargs
         )
     else:
-        dss = None
-        current_vc = ValidationContext(**validation_context_kwargs)
+        # If there's a DSS, there's no harm in reading additional certs from it
+        dss = DocumentSecurityStore.read_dss(reader)
+        if bootstrap_validation_context is None:
+            current_vc = dss.as_validation_context(
+                validation_context_kwargs, include_revinfo=False
+            )
+        else:
+            current_vc = bootstrap_validation_context
+            # add the certs from the DSS
+            for cert in dss.load_certs():
+                current_vc.certificate_registry.add_other_cert(cert)
 
-    status_kwargs = embedded_sig.summarise_integrity_info()
+    # first, we need to validate the timestamp (or timestamp chain) *now*
+    # in particular, this implies that we can't just use revocation info
+    # from the DSS yet, since we don't yet trust the timestamp to be accurate
+    # There are two main cases:
+    #  (a) We're doing PAdES B-LT or Adobe-style verification.
+    #      In that case, we simply attempt to validate the timestamp as-is.
+    #  (b) We're doing PAdES B-LTA. In this case, we first verify the document
+    #      timestamp chain until the revision in which the signature appears.
+    #      This is bootstrapped using the current validation context.
+    #      If successful, we obtain a new validation context set to a new
+    #      "known good" verification time. We then proceed as in (a) using this
+    #      new validation context instead of the current one.
+    if validation_type == RevocationInfoValidationType.PADES_LTA:
+        current_vc = _establish_timestamp_trust_lta(
+            reader, current_vc, validation_context_kwargs,
+            until_revision=embedded_sig.signed_revision
+        )
+
     tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is None:
         raise ValueError('LTV signatures require a trusted timestamp.')
 
-    # first, we need to validate the timestamp *now*
-    # in particular, this implies that we can't just use revocation info
-    # from the DSS yet, since we don't yet trust the timestamp to be accurate
-    tst_info = tst_signed_data['encap_content_info']['content'].parsed
-    assert isinstance(tst_info, tsp.TSTInfo)
-    timestamp = tst_info['gen_time'].native
-    timestamp_status: TimestampSignatureStatus = validate_cms_signature(
-        tst_signed_data, status_cls=TimestampSignatureStatus,
-        validation_context=current_vc, status_kwargs={'timestamp': timestamp}
-    )
-
-    if not timestamp_status.valid or not timestamp_status.trusted:
-        logger.warning(
-            "Could not validate embedded timestamp token: %s.",
-            timestamp_status.summary()
-        )
-        raise SignatureValidationError(
-            "Could not establish time of signing, timestamp token did not "
-            "validate with current settings."
-        )
-
-    # create a new validation context using the timestamp value as the time
-    # of evaluation, turn off fetching and load OCSP responses / CRL data
-    # from the DSS / revocation info object
-    validation_context_kwargs['allow_fetching'] = False
-    validation_context_kwargs['moment'] = timestamp
-
-    # Certs with OCSP/CRL endpoints should have the relevant revocation data
-    # embedded. If force_revinfo=True, this has been taken care of already.
-    if not force_revinfo:
-        validation_context_kwargs['revocation_mode'] = "hard-fail"
+    ts_result = _establish_timestamp_trust(tst_signed_data, current_vc)
+    timestamp = ts_result.timestamp
+    _strict_vc_context_kwargs(timestamp, validation_context_kwargs)
 
     if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
-        ocsps, crls = retrieve_adobe_revocation_info(embedded_sig.signer_info)
-        # save results for later
+        ocsps, crls = retrieve_adobe_revocation_info(
+            embedded_sig.signer_info
+        )
         validation_context_kwargs['ocsps'] = ocsps
         validation_context_kwargs['crls'] = crls
         stored_vc = ValidationContext(**validation_context_kwargs)
@@ -1592,6 +1647,7 @@ def validate_pdf_ltv_signature(reader: PdfFileReader, sig_field,
         validation_context=stored_vc, status_kwargs={'timestamp': timestamp}
     )
 
+    status_kwargs = embedded_sig.summarise_integrity_info()
     status_kwargs.update({
         'signed_dt': timestamp,
         'timestamp_validity': timestamp_status
@@ -1817,16 +1873,18 @@ class DocumentSecurityStore:
 
         return pdf_dict
 
+    def load_certs(self):
+        for cert_ref in self.certs.values():
+            cert_stream: generic.StreamObject = cert_ref.get_object()
+            cert = Certificate.load(cert_stream.data)
+            yield cert
+
     def as_validation_context(self, validation_context_kwargs,
                               include_revinfo=True):
 
         validation_context_kwargs = dict(validation_context_kwargs)
-        certs = list(validation_context_kwargs.pop('other_certs', []))
-
-        for cert_ref in self.certs.values():
-            cert_stream: generic.StreamObject = cert_ref.get_object()
-            cert: Certificate = Certificate.load(cert_stream.data)
-            certs.append(cert)
+        extra_certs = validation_context_kwargs.pop('other_certs', [])
+        certs = list(self.load_certs()) + extra_certs
 
         if include_revinfo:
             ocsps = validation_context_kwargs['ocsps'] = []
@@ -1854,8 +1912,6 @@ class DocumentSecurityStore:
             A DocumentSecurityStore object describing the current state of the
             DSS.
         """
-        # TODO remember where we're reading from for modification detection
-        #  purposes
         try:
             dss_ref = handler.root.raw_get(pdf_name('/DSS'))
         except KeyError:
@@ -1864,7 +1920,6 @@ class DocumentSecurityStore:
         dss_dict = dss_ref.get_object()
 
         cert_refs = {}
-        certs = []
         for cert_ref in dss_dict.get('/Certs', ()):
             cert_stream: generic.StreamObject = cert_ref.get_object()
             cert: Certificate = Certificate.load(cert_stream.data)

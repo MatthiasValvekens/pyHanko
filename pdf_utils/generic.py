@@ -269,10 +269,8 @@ class IndirectObject(PdfObject, Dereferenceable):
         return (
             other is not None and
             isinstance(other, IndirectObject) and
-            self.idnum == other.idnum and
-            self.generation == other.generation and
-            self.get_pdf_handler() is other.get_pdf_handler()
-            )
+            self.reference == other.reference
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)

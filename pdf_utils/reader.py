@@ -883,7 +883,7 @@ def convert_to_int(d, size):
         return sum(digit ** (size - ix - 1) for ix, digit in enumerate(d))
 
 
-class HistoricalResolver:
+class HistoricalResolver(PdfHandler):
     """
     Caching resolver for probing the history of a PDF document.
     """
@@ -892,7 +892,7 @@ class HistoricalResolver:
         self.reader = reader
         self.revision = revision
 
-    def __call__(self, ref: generic.Reference):
+    def get_object(self, ref: generic.Reference):
         cache = self.cache
         try:
             return cache[ref]
@@ -902,11 +902,49 @@ class HistoricalResolver:
             reader = self.reader
             revision = self.revision
             if reader.xrefs.get_last_change(ref.idnum) <= revision:
-                obj = ref.get_object()
+                obj = reader.get_object(ref)
             else:
                 obj = reader.get_object(ref, revision)
-            cache[ref] = obj
+
+            # replace all PDF handler references in the object with references
+            # to this one, so that indirect references will resolve within
+            # this historical revision
+            # TODO now that this little trick is in place, I should probably
+            #  take another look at simplifying some of the /DocMDP diffing code
+            cache[ref] = self.subsume_object(obj)
             return obj
+
+    def subsume_object(self, obj):
+        if isinstance(obj, generic.IndirectObject):
+            return generic.IndirectObject(
+                idnum=obj.idnum, generation=obj.generation, pdf=self
+            )
+        elif isinstance(obj, generic.StreamObject):
+            return generic.StreamObject({
+                k: self.subsume_object(v) for k, v in obj.items()
+            }, encoded_data=obj.encoded_data)
+        elif isinstance(obj, generic.DictionaryObject):
+            return generic.DictionaryObject({
+                k: self.subsume_object(v) for k, v in obj.items()
+            })
+        elif isinstance(obj, generic.ArrayObject):
+            return generic.ArrayObject(
+                self.subsume_object(v) for v in obj
+            )
+        else:
+            return obj
+
+    @property
+    def root_ref(self) -> generic.IndirectObject:
+        ref: generic.IndirectObject = self.reader.trailer.raw_get(
+            '/Root', revision=self.revision
+        )
+        return generic.IndirectObject(
+            idnum=ref.idnum, generation=ref.generation, pdf=self
+        )
+
+    def __call__(self, ref: generic.Reference):
+        return self.get_object(ref)
 
     def collect_dependencies(self, obj, since_revision=None):
         result_set = set()
