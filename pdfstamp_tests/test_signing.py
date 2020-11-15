@@ -18,6 +18,7 @@ from pdf_utils.font import pdf_name
 from pdf_utils.writer import PdfFileWriter
 from pdfstamp.sign import timestamps, fields, signers
 from pdfstamp.sign.general import UnacceptableSignerError, SigningError
+from pdfstamp.sign.signers import PdfTimestamper
 from pdfstamp.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
@@ -1140,6 +1141,37 @@ def test_pades_revinfo_live(requests_mock):
         validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
 
 
+def test_pades_revinfo_live_update(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=vc,
+            subfilter=PADES, embed_validation_info=True
+        ), signer=FROM_CA, timestamper=DUMMY_TS
+    )
+    r = PdfFileReader(out)
+    rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+    # check if updates work
+    out = PdfTimestamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
+    r = PdfFileReader(out)
+    status = validate_pdf_ltv_signature(
+        r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
+    )
+    assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+def test_update_no_sigs():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+    # check if updates work
+    with pytest.raises(SigningError):
+        PdfTimestamper(DUMMY_TS).update_archival_timestamp_chain(
+            r, dummy_ocsp_vc()
+        )
+
+
 def test_adobe_revinfo_live(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -1276,6 +1308,15 @@ def _test_pades_revinfo_live_lta(w, vc, in_place):
     assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
 
     rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+    status = validate_pdf_ltv_signature(
+        r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
+    )
+    assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+    # check if updates work
+    out = PdfTimestamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
+    r = PdfFileReader(out)
     status = validate_pdf_ltv_signature(
         r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
     )

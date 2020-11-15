@@ -523,7 +523,7 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
-             timestamper: TimeStamper=None,
+             timestamper: TimeStamper = None,
              existing_fields_only=False, bytes_reserved=None, in_place=False):
     return PdfSigner(signature_meta, signer, timestamper).sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
@@ -595,15 +595,16 @@ class PdfTimestamper:
                       validation_paths=None, in_place=False, timestamper=None):
         timestamper = timestamper or self.default_timestamper
         field_name = self.generate_timestmp_field_name()
-        if validation_paths is None:
-            validation_paths = list(
-                timestamper.validation_paths(validation_context)
-            )
         if bytes_reserved is None:
             test_signature_cms = timestamper.dummy_response(md_algorithm)
             test_len = len(test_signature_cms.dump()) * 2
             # see sign_pdf comments
             bytes_reserved = test_len + 2 * (test_len // 4)
+
+        if validation_paths is None:
+            validation_paths = list(
+                timestamper.validation_paths(validation_context)
+            )
 
         timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
         field_created, sig_field_ref = _get_or_create_sigfield(
@@ -636,6 +637,60 @@ class PdfTimestamper:
         )
 
         return output
+
+    def update_archival_timestamp_chain(self, reader: PdfFileReader,
+                                        validation_context, in_place=True):
+        # In principle, we only have to validate that the last timestamp token
+        # in the current chain is valid.
+        # TODO: add an option to validate the entire timestamp chain
+        #  plus all signatures
+        from .validation import (
+            EmbeddedPdfSignature, _establish_timestamp_trust,
+            DocumentSecurityStore
+        )
+
+        all_signatures = reader.embedded_signatures
+        if not all_signatures:
+            raise SigningError("No signatures found.")
+        last_signature: EmbeddedPdfSignature = \
+            all_signatures[len(all_signatures) - 1]
+        last_signature.compute_digest()
+
+        # two cases: either the signature is a normal signature,
+        # or it is a document timestamp
+        if last_signature.sig_object['/Type'] == '/DocTimeStamp':
+            tst_token = last_signature.signed_data
+            expected_imprint = last_signature.raw_digest
+        else:
+            # normal signature
+            tst_token = last_signature.external_timestamp_data
+            if tst_token is None:  # pragma: nocover
+                raise SigningError("Final signature does not have a timestamp.")
+            expected_imprint = last_signature.tst_signature_digest
+
+        # run validation logic
+        tst_status = _establish_timestamp_trust(
+            tst_token, validation_context, expected_imprint
+        )
+
+        if in_place:
+            output = reader.stream
+        else:  # pragma: nocover
+            output = BytesIO()
+            output.write(reader.stream.read())
+
+        # update the DSS
+        DocumentSecurityStore.add_dss(
+            output, last_signature.pkcs7_content,
+            paths=(tst_status.validation_path,),
+            validation_context=validation_context
+        )
+
+        # append a new timestamp
+        return self.timestamp_pdf(
+            IncrementalPdfFileWriter(output), tst_status.md_algorithm,
+            validation_context, in_place=True
+        )
 
 
 class PdfSigner(PdfTimestamper):
