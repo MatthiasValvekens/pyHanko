@@ -34,7 +34,7 @@ from .timestamps import TimestampSignatureStatus
 
 __all__ = [
     'PdfSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
-    'read_certification_data'
+    'read_certification_data', 'validate_pdf_ltv_signature'
 ]
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,8 @@ def _validate_cms_signature(signed_data: cms.SignedData,
                             status_cls: Type[StatusType] = SignatureStatus,
                             raw_digest: bytes = None,
                             validation_context: ValidationContext = None,
-                            status_kwargs: dict = None):
+                            status_kwargs: dict = None,
+                            externally_invalid=False):
     """
     Validate CMS and PKCS#7 signatures.
     """
@@ -147,6 +148,9 @@ def _validate_cms_signature(signed_data: cms.SignedData,
         except SignatureError:
             valid = False
 
+    # if the signature is invalid for some external reason, this flag is set
+    #  (e.g. when the thing being signed is itself wrong)
+    valid &= not externally_invalid
     trusted = revoked = usage_ok = False
     path = None
     if valid:
@@ -171,10 +175,11 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            status_cls: Type[StatusType] = SignatureStatus,
                            raw_digest: bytes = None,
                            validation_context: ValidationContext = None,
-                           status_kwargs: dict = None):
+                           status_kwargs: dict = None,
+                           externally_invalid=False):
     status_kwargs = _validate_cms_signature(
         signed_data, status_cls, raw_digest, validation_context,
-        status_kwargs
+        status_kwargs, externally_invalid
     )
     return status_cls(**status_kwargs)
 
@@ -369,6 +374,10 @@ class EmbeddedPdfSignature:
         signed_data = message['content']
         self.signed_data: cms.SignedData = signed_data
         sd_digest = signed_data['digest_algorithms'][0]
+        # FIXME I don't think this is always the correct choice.
+        #  It's the MD algorithm used within the CMS object to compute the
+        #  hash of all signed attributes, but the document hash may have
+        #  been computed using a different algorithm!
         self.md_algorithm = sd_digest['algorithm'].native.lower()
 
         try:
@@ -386,6 +395,7 @@ class EmbeddedPdfSignature:
         self.total_len = None
         self._docmdp = self._fieldmdp = None
         self._docmdp_queried = self._fieldmdp_queried = False
+        self.tst_signature_digest = None
 
     @property
     def field_name(self):
@@ -466,6 +476,9 @@ class EmbeddedPdfSignature:
         return sp
 
     def compute_digest(self):
+        if self.raw_digest is not None:
+            return
+
         md = getattr(hashlib, self.md_algorithm)()
         stream = self.reader.stream
 
@@ -475,11 +488,23 @@ class EmbeddedPdfSignature:
         total_len = 0
         for lo, chunk_len in misc.pair_iter(self.byte_range):
             stream.seek(lo)
-            md.update(stream.read(chunk_len))
+            chunk = stream.read(chunk_len)
+            assert len(chunk) == chunk_len
+            md.update(chunk)
             total_len += chunk_len
 
         self.total_len = total_len
         self.raw_digest = md.digest()
+
+        # for timestamp validation: compute the digest of the signature
+        #  (as embedded in the CMS object)
+        tst_data = self.external_timestamp_data
+        if tst_data is None:
+            return
+
+        signature_bytes = self.signer_info['signature'].native
+        md = getattr(hashlib, self.md_algorithm)(signature_bytes)
+        self.tst_signature_digest = md.digest()
 
     def evaluate_signature_coverage(self):
 
@@ -1461,13 +1486,10 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
     #  attribute if both are present
     tst_validity: Optional[SignatureStatus] = None
     if tst_signed_data is not None:
-        tst_info = tst_signed_data['encap_content_info']['content'].parsed
-        assert isinstance(tst_info, tsp.TSTInfo)
-        timestamp = tst_info['gen_time'].native
-        tst_validity = validate_cms_signature(
-            tst_signed_data, status_cls=TimestampSignatureStatus,
-            validation_context=ts_validation_context,
-            status_kwargs={'timestamp': timestamp}
+        assert embedded_sig.tst_signature_digest is not None
+        tst_validity = _validate_timestamp(
+            tst_signed_data, ts_validation_context,
+            embedded_sig.tst_signature_digest
         )
         status_kwargs['timestamp_validity'] = tst_validity
 
@@ -1513,15 +1535,37 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
         validation_context_kwargs['revocation_mode'] = 'hard-fail'
 
 
-def _establish_timestamp_trust(tst_signed_data, bootstrap_validation_context):
+def _validate_timestamp(tst_signed_data, validation_context,
+                        expected_tst_imprint):
 
+    assert expected_tst_imprint is not None
     tst_info = tst_signed_data['encap_content_info']['content'].parsed
     assert isinstance(tst_info, tsp.TSTInfo)
+    # compare the expected TST digest against the message imprint
+    # inside the signed data
+    tst_imprint = tst_info['message_imprint']['hashed_message'].native
+    if expected_tst_imprint != tst_imprint:
+        logger.warning(
+            f"Timestamp token imprint is {tst_imprint.hex()}, but expected "
+            f"{expected_tst_imprint.hex()}."
+        )
+        externally_invalid = True
+    else:
+        externally_invalid = False
     timestamp = tst_info['gen_time'].native
     timestamp_status: TimestampSignatureStatus = validate_cms_signature(
         tst_signed_data, status_cls=TimestampSignatureStatus,
-        validation_context=bootstrap_validation_context,
-        status_kwargs={'timestamp': timestamp}
+        validation_context=validation_context,
+        status_kwargs={'timestamp': timestamp},
+        externally_invalid=externally_invalid
+    )
+    return timestamp_status
+
+
+def _establish_timestamp_trust(tst_signed_data, bootstrap_validation_context,
+                               expected_tst_imprint):
+    timestamp_status = _validate_timestamp(
+        tst_signed_data, bootstrap_validation_context, expected_tst_imprint
     )
 
     if not timestamp_status.valid or not timestamp_status.trusted:
@@ -1547,8 +1591,10 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
     for emb_timestamp in reversed(timestamps):
         if emb_timestamp.signed_revision < until_revision:
             break
+
+        emb_timestamp.compute_digest()
         ts_status = _establish_timestamp_trust(
-            emb_timestamp.signed_data, current_vc
+            emb_timestamp.signed_data, current_vc, emb_timestamp.raw_digest
         )
         # set up the validation kwargs for the next iteration
         _strict_vc_context_kwargs(
@@ -1604,6 +1650,8 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
             for cert in dss.load_certs():
                 current_vc.certificate_registry.add_other_cert(cert)
 
+    embedded_sig.compute_digest()
+
     # first, we need to validate the timestamp (or timestamp chain) *now*
     # in particular, this implies that we can't just use revocation info
     # from the DSS yet, since we don't yet trust the timestamp to be accurate
@@ -1622,11 +1670,15 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
             until_revision=embedded_sig.signed_revision
         )
 
+    # FIXME in the LTA case, this is an unreasonable requirement (since the
+    #  /DocTimeStamps can serve this purpose)
     tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is None:
         raise ValueError('LTV signatures require a trusted timestamp.')
 
-    ts_result = _establish_timestamp_trust(tst_signed_data, current_vc)
+    ts_result = _establish_timestamp_trust(
+        tst_signed_data, current_vc, embedded_sig.tst_signature_digest
+    )
     timestamp = ts_result.timestamp
     _strict_vc_context_kwargs(timestamp, validation_context_kwargs)
 
@@ -1967,7 +2019,6 @@ class DocumentSecurityStore:
         writer = IncrementalPdfFileWriter(output_stream)
 
         try:
-            # we're not interested in this validation context
             dss = cls.read_dss(writer)
             created = False
         except ValueError:

@@ -199,6 +199,12 @@ def test_simple_sign(incl_signed_time):
         field_name='Sig1', include_signedtime_attr=incl_signed_time
     )
     out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    emb.compute_integrity_info(skip_diff=True)
+    assert emb.modification_level is None
+
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'

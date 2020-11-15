@@ -153,10 +153,9 @@ class DummyTimeStamper(TimeStamper):
     def __init__(self, tsa_cert: x509.Certificate,
                  tsa_key: keys.PrivateKeyInfo,
                  certs_to_embed: CertificateStore = None,
-                 md_algorithm='sha512', fixed_dt: datetime = None):
+                 fixed_dt: datetime = None):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
-        self.md_algorithm = md_algorithm
         self.certs_to_embed = list(certs_to_embed) or []
         self.fixed_dt = fixed_dt
         super().__init__()
@@ -166,8 +165,10 @@ class DummyTimeStamper(TimeStamper):
 
         # TODO generalise my detached signature logic to include cases like this
         #  (see § 5.4 in RFC 5652)
+        # TODO does the RFC
         status = tsp.PKIStatusInfo({'status': tsp.PKIStatus('granted')})
-        md_algorithm = self.md_algorithm.lower()
+        message_imprint: tsp.MessageImprint = req['message_imprint']
+        md_algorithm = message_imprint['hash_algorithm']['algorithm'].native
         digest_algorithm_obj = algos.DigestAlgorithm({
             'algorithm': md_algorithm
         })
@@ -177,7 +178,7 @@ class DummyTimeStamper(TimeStamper):
             # See http://oidref.com/1.3.6.1.4.1.4146.2.2
             # I don't really care too much, this is a testing device anyway
             'policy': tsp.ObjectIdentifier('1.3.6.1.4.1.4146.2.2'),
-            'message_imprint': req['message_imprint'],
+            'message_imprint': message_imprint,
             # should be sufficiently random (again, this is a testing class)
             'serial_number': get_nonce(),
             'gen_time': dt,

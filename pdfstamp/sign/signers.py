@@ -149,7 +149,7 @@ class PdfSignedData(generic.DictionaryObject):
             output_buffer = output.getbuffer()
             # these are memoryviews, so slices should not copy stuff around
             md.update(output_buffer[:sig_start])
-            md.update(output_buffer[sig_end:])
+            md.update(output_buffer[sig_end:eof])
             output_buffer.release()
         else:
             # TODO chunk these reads
@@ -158,7 +158,8 @@ class PdfSignedData(generic.DictionaryObject):
             output.seek(sig_end)
             md.update(output.read())
 
-        signature_cms = yield md.digest()
+        digest_value = md.digest()
+        signature_cms = yield digest_value
 
         signature_bytes = signature_cms.dump()
         signature = binascii.hexlify(signature_bytes).upper()
@@ -1011,7 +1012,7 @@ class PdfSigner(PdfTimestamper):
             if timestamper is not None and signature_meta.use_pades_lta:
                 # append an LTV document timestamp
                 w = IncrementalPdfFileWriter(output)
-                output = self.timestamp_pdf(
+                self.timestamp_pdf(
                     w, md_algorithm, validation_context,
                     validation_paths=ts_validation_paths, in_place=True,
                     timestamper=timestamper
