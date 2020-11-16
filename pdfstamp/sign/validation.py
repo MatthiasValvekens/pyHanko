@@ -5,7 +5,7 @@ import re
 from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
-from enum import Enum, auto, unique
+from enum import Enum, unique
 from typing import TypeVar, Type, Optional, Set
 
 from asn1crypto import (
@@ -38,6 +38,10 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class ValidationInfoReadingError(ValueError):
+    pass
 
 
 class SignatureValidationError(ValueError):
@@ -1512,9 +1516,13 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
 
 
 class RevocationInfoValidationType(Enum):
-    ADOBE_STYLE = auto()
-    PADES_LT = auto()
-    PADES_LTA = auto()
+    ADOBE_STYLE = 'adobe'
+    PADES_LT = 'pades'
+    PADES_LTA = 'pades-lta'
+
+    @classmethod
+    def as_tuple(cls):
+        return tuple(m.value for m in cls)
 
 
 def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
@@ -1669,7 +1677,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     #  /DocTimeStamps can serve this purpose)
     tst_signed_data = embedded_sig.external_timestamp_data
     if tst_signed_data is None:
-        raise ValueError('LTV signatures require a trusted timestamp.')
+        raise SignatureValidationError(
+            'LTV signatures require a trusted timestamp.'
+        )
 
     ts_result = _establish_timestamp_trust(
         tst_signed_data, current_vc, embedded_sig.tst_signature_digest
@@ -1723,7 +1733,7 @@ def retrieve_adobe_revocation_info(signer_info: cms.SignerInfo):
             signer_info['signed_attrs'], "adobe_revocation_info_archival"
         )[0]
     except KeyError:
-        raise ValueError("No revocation info found")
+        raise ValidationInfoReadingError("No revocation info found")
 
     ocsps = list(revinfo['ocsp'] or ())
     crls = list(revinfo['crl'] or ())
@@ -1962,7 +1972,7 @@ class DocumentSecurityStore:
         try:
             dss_ref = handler.root.raw_get(pdf_name('/DSS'))
         except KeyError:
-            raise ValueError("No DSS found")
+            raise ValidationInfoReadingError("No DSS found")
 
         dss_dict = dss_ref.get_object()
 
@@ -2016,8 +2026,7 @@ class DocumentSecurityStore:
         try:
             dss = cls.read_dss(writer)
             created = False
-        except ValueError:
-            # FIXME ValueError is way too general
+        except ValidationInfoReadingError:
             created = True
             dss = cls(writer=writer)
 
