@@ -147,8 +147,8 @@ def live_testing_vc(requests_mock):
     return vc
 
 
-def val_trusted(r, sig_field, extd=False):
-    val_status = validate_pdf_signature(r, sig_field, SIMPLE_V_CONTEXT)
+def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False):
+    val_status = validate_pdf_signature(embedded_sig, SIMPLE_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
@@ -166,8 +166,8 @@ def val_trusted(r, sig_field, extd=False):
 
 
 # validate a signature, don't care about trust
-def val_untrusted(r, sig_field, extd=False):
-    val_status = validate_pdf_signature(r, sig_field, NOTRUST_V_CONTEXT)
+def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
+    val_status = validate_pdf_signature(embedded_sig, NOTRUST_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     if not extd:
@@ -181,8 +181,8 @@ def val_untrusted(r, sig_field, extd=False):
     return val_status
 
 
-def val_trusted_but_modified(r, sig_field):
-    val_status = validate_pdf_signature(r, sig_field, SIMPLE_V_CONTEXT)
+def val_trusted_but_modified(embedded_sig: EmbeddedPdfSignature):
+    val_status = validate_pdf_signature(embedded_sig, SIMPLE_V_CONTEXT)
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
@@ -209,7 +209,7 @@ def test_simple_sign(incl_signed_time):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_untrusted(r, emb.sig_field)
+    val_untrusted(emb)
 
     # try tampering with the file
     out.seek(0x9d)
@@ -219,18 +219,10 @@ def test_simple_sign(incl_signed_time):
     out.seek(0)
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    tampered = validate_pdf_signature(r, emb.sig_field, SIMPLE_V_CONTEXT)
+    tampered = validate_pdf_signature(emb, SIMPLE_V_CONTEXT)
     assert not tampered.intact
     assert not tampered.valid
     assert tampered.summary() == 'INVALID'
-
-
-def test_null_sign():
-    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    with pytest.raises(ValueError):
-        val_untrusted(r, sig_field)
 
 
 def test_sign_with_trust():
@@ -239,12 +231,12 @@ def test_sign_with_trust():
         w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    status = val_untrusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_untrusted(s)
     assert not status.trusted
 
-    val_trusted(r, sig_field)
+    val_trusted(s)
 
 
 def test_sign_with_trust_pkcs12():
@@ -254,12 +246,12 @@ def test_sign_with_trust_pkcs12():
         signer=FROM_CA_PKCS12
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    status = val_untrusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_untrusted(s)
     assert not status.trusted
 
-    val_trusted(r, sig_field)
+    val_trusted(s)
 
 
 def test_sign_field_unclear():
@@ -295,9 +287,9 @@ def test_sign_field_infer():
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s)
 
 
 def test_sign_field_filled():
@@ -320,13 +312,13 @@ def test_sign_field_filled():
     def val2(out_buf):
         r = PdfFileReader(out_buf)
         sig_fields = fields.enumerate_sig_fields(r)
-        field_name, sig_obj, sig_field = next(sig_fields)
-        assert field_name == 'Sig1'
-        val_trusted(r, sig_field, extd=True)
+        s = r.embedded_signatures[0]
+        assert s.field_name == 'Sig1'
+        val_trusted(s, extd=True)
 
-        field_name, sig_obj, sig_field = next(sig_fields)
-        assert field_name == 'Sig2'
-        val_trusted(r, sig_field)
+        s = r.embedded_signatures[1]
+        assert s.field_name == 'Sig2'
+        val_trusted(s)
 
     w2 = IncrementalPdfFileWriter(out1)
     # autodetect remaining open field
@@ -355,11 +347,9 @@ def test_sign_new(file):
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    field_name = sig_field = None
-    sig_fields = fields.enumerate_sig_fields(r)
-    while field_name != 'SigNew':
-        field_name, sig_obj, sig_field = next(sig_fields)
-    val_trusted(r, sig_field)
+    e = r.embedded_signatures[0]
+    assert e.field_name == 'SigNew'
+    val_trusted(e)
 
 
 def test_double_sig_add_field():
@@ -383,16 +373,15 @@ def test_double_sig_add_field():
     )
 
     r = PdfFileReader(out)
-    sig_fields = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig1'
-    status = val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
     assert status.modification_level == ModificationLevel.FORM_FILLING
     assert status.docmdp_ok
 
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'SigNew'
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'SigNew'
+    val_trusted(s)
 
 
 def test_double_sig_add_visible_field():
@@ -415,16 +404,15 @@ def test_double_sig_add_visible_field():
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    sig_fields = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig1'
-    status = val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
     assert status.modification_level == ModificationLevel.FORM_FILLING
     assert status.docmdp_ok
 
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'SigNew'
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'SigNew'
+    val_trusted(s)
 
 
 @pytest.mark.parametrize('include_docmdp', [True, False])
@@ -444,10 +432,9 @@ def test_add_sigfield_with_lock(include_docmdp):
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
     r = PdfFileReader(out)
-    sig_fields = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'SigNew'
-    refs = sig_obj.get_object()['/Reference']
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'SigNew'
+    refs = s.sig_object.get_object()['/Reference']
     assert len(refs) == (2 if include_docmdp else 1)
     ref = refs[0]
     assert ref['/TransformMethod'] == '/FieldMDP'
@@ -458,7 +445,7 @@ def test_add_sigfield_with_lock(include_docmdp):
         ref = refs[1]
         assert ref['/TransformMethod'] == '/DocMDP'
         assert ref['/TransformParams']['/P'] == 1
-    val_trusted(r, sig_field)
+    val_trusted(s)
 
 
 def test_enumerate_empty():
@@ -486,9 +473,9 @@ def test_dummy_timestamp():
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    validity = val_trusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    validity = val_trusted(s)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
 
@@ -520,9 +507,9 @@ def test_http_timestamp(requests_mock):
     )
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    validity = val_trusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    validity = val_trusted(s)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
 
@@ -539,8 +526,8 @@ def test_sign_crypt_rc4(password):
 
     r = PdfFileReader(out)
     r.decrypt(password)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    validity = val_trusted(s)
 
 
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
@@ -560,11 +547,9 @@ def test_sign_crypt_rc4_new(password, file):
     out.seek(0)
     r = PdfFileReader(out)
     r.decrypt(password)
-    field_name = sig_field = None
-    sig_fields = fields.enumerate_sig_fields(r)
-    while field_name != 'SigNew':
-        field_name, sig_obj, sig_field = next(sig_fields)
-    val_trusted(r, sig_field)
+
+    s = r.embedded_signatures[0]
+    val_trusted(s)
 
 
 def test_append_simple_sig_field():
@@ -887,12 +872,12 @@ def test_certify():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s)
 
     info = read_certification_data(r)
-    assert info.author_sig == sig_obj.get_object()
+    assert info.author_sig == s.sig_object.get_object()
     assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.NO_CHANGES
 
     # with NO_CHANGES, we shouldn't be able to append an approval signature
@@ -912,12 +897,12 @@ def test_no_double_certify():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s)
 
     info = read_certification_data(r)
-    assert info.author_sig == sig_obj.get_object()
+    assert info.author_sig == s.sig_object.get_object()
     assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
 
     out.seek(0)
@@ -948,18 +933,17 @@ def test_approval_sig():
     out.seek(0)
 
     r = PdfFileReader(out)
-    sigs = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sigs)
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
     info = read_certification_data(r)
-    assert info.author_sig == sig_obj.get_object()
+    assert info.author_sig == s.sig_object.get_object()
     assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
 
-    field_name, sig_obj, sig_field = next(sigs)
-    assert field_name == 'Sig2'
-    val_trusted(r, sig_field)
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    val_trusted(s)
 
 
 def test_approval_sig_md_match_author_sig():
@@ -995,15 +979,14 @@ def test_ocsp_embed():
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    status = val_untrusted(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_untrusted(s)
     assert not status.trusted
 
-    val_trusted(r, sig_field)
+    val_trusted(s)
 
-    embedded_sig = EmbeddedPdfSignature(r, sig_field)
-    vc = apply_adobe_revocation_info(embedded_sig.signer_info)
+    vc = apply_adobe_revocation_info(s.signer_info)
     assert len(vc.ocsps) == 1
 
 
@@ -1348,13 +1331,13 @@ def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, test_v
     pdf_signer._ignore_sv = test_violation
     out = pdf_signer.sign_pdf(w)
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    status = validate_pdf_signature(r, sig_field, dummy_ocsp_vc())
+    s = r.embedded_signatures[0]
+    status = validate_pdf_signature(s, dummy_ocsp_vc())
     if test_violation:
         assert not status.seed_value_ok
     else:
         assert status.seed_value_ok
-    return EmbeddedPdfSignature(r, sig_field)
+    return EmbeddedPdfSignature(r, s.sig_field)
 
 
 def test_sv_sign_md_req():
@@ -1710,9 +1693,9 @@ def test_form_field_postsign_fill():
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 def test_form_field_postsign_modify():
@@ -1728,9 +1711,9 @@ def test_form_field_postsign_modify():
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 # helper function for filling in the text field in the TEXTFIELD_GROUP example
@@ -1789,9 +1772,9 @@ def test_form_field_in_group_postsign_fill(variant):
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 @pytest.mark.parametrize('variant', [0, 1])
@@ -1808,9 +1791,9 @@ def test_form_field_in_group_postsign_fill_other_field(variant):
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 @pytest.mark.parametrize('variant', [0, 1])
@@ -1828,9 +1811,9 @@ def test_form_field_in_group_postsign_modify(variant):
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 test_form_field_in_group_postsign_modify_failure_matrix = [
@@ -1874,9 +1857,9 @@ def test_form_field_in_group_locked_postsign_modify_failure(field_filled, fieldm
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r, filled_status=True))
-    assert field_name == 'SigNew'
-    val_trusted_but_modified(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'SigNew'
+    val_trusted_but_modified(s)
 
 
 test_form_field_in_group_postsign_modify_success_matrix = [
@@ -1919,9 +1902,9 @@ def test_form_field_in_group_locked_postsign_modify_success(field_filled, fieldm
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r, filled_status=True))
-    assert field_name == 'SigNew'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'SigNew'
+    val_trusted(s, extd=True)
 
 def test_form_field_postsign_fill_pades_lt(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
@@ -1939,9 +1922,9 @@ def test_form_field_postsign_fill_pades_lt(requests_mock):
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 def test_form_field_postsign_modify_pades_lt(requests_mock):
@@ -1961,9 +1944,9 @@ def test_form_field_postsign_modify_pades_lt(requests_mock):
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
 
 def test_pades_double_sign(requests_mock):
@@ -1982,14 +1965,13 @@ def test_pades_double_sign(requests_mock):
     out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
 
     r = PdfFileReader(out)
-    sig_fields = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig1'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig2'
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    val_trusted(s, extd=True)
 
 
 def test_pades_double_sign_delete_dss(requests_mock):
@@ -2015,17 +1997,14 @@ def test_pades_double_sign_delete_dss(requests_mock):
 
     r = PdfFileReader(out)
     assert '/DSS' not in r.root
-    sig_fields = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig1'
-    # first signature is still valid, since the DSS was initialised after
-    # it was created.
-    val_trusted(r, sig_field, extd=True)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
 
-    field_name, sig_obj, sig_field = next(sig_fields)
     # however, the second signature is violated by the deletion of the /DSS key
-    assert field_name == 'Sig2'
-    val_trusted_but_modified(r, sig_field)
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    val_trusted_but_modified(s)
 
 
 def test_pades_dss_object_clobber(requests_mock):
@@ -2051,10 +2030,9 @@ def test_pades_dss_object_clobber(requests_mock):
     w.write(out)
 
     r = PdfFileReader(out)
-    sig_fields = fields.enumerate_sig_fields(r)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig1'
-    val_trusted_but_modified(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
 
 
 def test_form_field_structure_modification():
@@ -2072,9 +2050,9 @@ def test_form_field_structure_modification():
     w.write(out)
 
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
-    assert field_name == 'Sig1'
-    val_trusted_but_modified(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
 
 
 def test_delete_signature():
@@ -2105,10 +2083,9 @@ def test_delete_signature():
     w.write(out)
 
     r = PdfFileReader(out)
-    sig_fields = fields.enumerate_sig_fields(r, filled_status=True)
-    field_name, sig_obj, sig_field = next(sig_fields)
-    assert field_name == 'Sig2'
-    val_trusted_but_modified(r, sig_field)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig2'
+    val_trusted_but_modified(s)
 
 
 def test_tamper_sig_obj():

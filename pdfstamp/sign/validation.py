@@ -1337,12 +1337,12 @@ def _whitelist_callback(explained_refs, signed_revision, xref_cache):
     return _wl
 
 
-def _validate_sv_constraints(sig_field, emb_sig: EmbeddedPdfSignature,
+def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
                              signing_cert, validation_path, timestamp_found):
     from pdfstamp.sign.fields import (
         SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter
     )
-    sig_field = sig_field.get_object()
+    sig_field = emb_sig.sig_field
     try:
         sig_sv_dict = sig_field['/SV']
     except KeyError:
@@ -1449,15 +1449,12 @@ def _validate_sv_constraints(sig_field, emb_sig: EmbeddedPdfSignature,
             )
 
 
-def validate_pdf_signature(reader: PdfFileReader, sig_field,
+def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None) \
                            -> PdfSignatureStatus:
-    try:
-        sig_object = sig_field.get_object()['/V']
-    except KeyError:
-        raise SignatureValidationError('Signature is empty')
 
+    sig_object = embedded_sig.sig_object
     # check whether the subfilter type is one we support
     subfilter_str = sig_object['/SubFilter']
     try:
@@ -1471,7 +1468,6 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
-    embedded_sig = EmbeddedPdfSignature(reader, sig_field)
     status_kwargs = embedded_sig.summarise_integrity_info()
 
     # try to find an embedded timestamp
@@ -1505,7 +1501,7 @@ def validate_pdf_signature(reader: PdfFileReader, sig_field,
     )
     try:
         _validate_sv_constraints(
-            sig_field, embedded_sig, status_kwargs['signing_cert'],
+            embedded_sig, status_kwargs['signing_cert'],
             status_kwargs['validation_path'], timestamp_found
         )
         seed_value_ok = True
@@ -1616,7 +1612,6 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                validation_context_kwargs=None,
                                bootstrap_validation_context=None,
                                force_revinfo=False):
-    sig_field = embedded_sig.sig_field
     # create a fresh copy of the validation_kwargs
     validation_context_kwargs: dict = dict(validation_context_kwargs or {})
 
@@ -1712,7 +1707,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
 
     try:
         _validate_sv_constraints(
-            sig_field, embedded_sig, status_kwargs['signing_cert'],
+            embedded_sig, status_kwargs['signing_cert'],
             status_kwargs['validation_path'], timestamp_found=True
         )
         seed_value_ok = True

@@ -59,6 +59,24 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
     return vc_kwargs
 
 
+def trust_options(f):
+    f = click.option(
+        '--trust', help='list trust roots (multiple allowed)',
+                     required=False, multiple=True, type=readable_file
+    )(f)
+    f = click.option(
+        '--trust-replace',
+        help='listed trust roots supersede OS-provided trust store',
+        required=False, type=bool, is_flag=True, default=False,
+        show_default=True
+    )(f)
+    f = click.option(
+        '--other-certs', help='other certs relevant for validation',
+        required=False, multiple=True, type=readable_file
+    )(f)
+    return f
+
+
 # TODO add an option to do LTV, but guess the profile
 @signing.command(name='list', help='list signature fields')
 @click.argument('infile', type=click.File('rb'))
@@ -69,15 +87,7 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
 @click.option('--executive-summary',
               help='only print final judgment on signature validity',
               type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--trust-replace',
-              help='listed trust roots supersede OS-provided trust store',
-              required=False,
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--trust', help='list trust roots (multiple allowed)',
-              required=False, multiple=True, type=readable_file)
-@click.option('--other-certs',
-              help='other certs relevant for validation',
-              required=False, multiple=True, type=readable_file)
+@trust_options
 @click.option('--ltv-profile',
               help='LTV signature validation profile',
               type=click.Choice(('pades', 'adobe')), required=False)
@@ -107,12 +117,13 @@ def list_sigfields(infile, skip_status, validate, executive_summary, trust,
                     if ltv_profile is None:
                         vc = ValidationContext(**vc_kwargs)
                         status = validation.validate_pdf_signature(
-                            r, field_ref, signer_validation_context=vc
+                            validation.EmbeddedPdfSignature(r, field_ref),
+                            signer_validation_context=vc
                         )
                     else:
                         status = validation.validate_pdf_ltv_signature(
-                            r, field_ref, ltv_profile,
-                            force_revinfo=ltv_obsessive,
+                            validation.EmbeddedPdfSignature(r, field_ref),
+                            ltv_profile, force_revinfo=ltv_obsessive,
                             validation_context_kwargs=vc_kwargs
                         )
                     if executive_summary:
@@ -153,15 +164,7 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
 @click.option('--with-validation-info', help='embed revocation info',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
-@click.option('--trust-replace',
-              help='listed trust roots supersede OS-provided trust store',
-              required=False,
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--trust', help='list trust roots (multiple allowed)',
-              required=False, multiple=True, type=readable_file)
-@click.option('--other-certs',
-              help='other certs relevant for validation',
-              required=False, multiple=True, type=readable_file)
+@trust_options
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info, trust_replace, trust,
