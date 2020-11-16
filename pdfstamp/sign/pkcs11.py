@@ -15,11 +15,10 @@ class PKCS11Signer(Signer):
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
     def __init__(self, pkcs11_session, cert_label, ca_chain=None,
-                 key_label=None, timestamper=None):
+                 key_label=None):
         self.cert_label = cert_label
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
-        self.timestamper = timestamper
         if ca_chain is not None:
             cs = SimpleCertificateStore()
             cs.register_multiple(ca_chain)

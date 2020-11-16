@@ -11,7 +11,9 @@ from pdfstamp.sign.timestamps import HTTPTimeStamper
 from pdfstamp.sign import validation, beid, fields
 from pdf_utils.reader import PdfFileReader
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdfstamp.sign.validation import SignatureValidationError
+from pdfstamp.sign.validation import (
+    SignatureValidationError, RevocationInfoValidationType
+)
 
 __all__ = ['cli']
 
@@ -62,7 +64,7 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
 def trust_options(f):
     f = click.option(
         '--trust', help='list trust roots (multiple allowed)',
-                     required=False, multiple=True, type=readable_file
+        required=False, multiple=True, type=readable_file
     )(f)
     f = click.option(
         '--trust-replace',
@@ -90,7 +92,8 @@ def trust_options(f):
 @trust_options
 @click.option('--ltv-profile',
               help='LTV signature validation profile',
-              type=click.Choice(('pades', 'adobe')), required=False)
+              type=click.Choice(RevocationInfoValidationType.as_tuple()),
+              required=False)
 @click.option('--ltv-obsessive',
               help='Fail trust validation if a certificate has no known CRL '
                    'or OCSP endpoints.',
@@ -99,10 +102,7 @@ def list_sigfields(infile, skip_status, validate, executive_summary, trust,
                    trust_replace, other_certs, ltv_profile, ltv_obsessive):
     r = PdfFileReader(infile)
     if validate and ltv_profile is not None:
-        if ltv_profile == 'pades':
-            ltv_profile = validation.RevocationInfoValidationType.PADES_LT
-        else:
-            ltv_profile = validation.RevocationInfoValidationType.ADOBE_STYLE
+        ltv_profile = RevocationInfoValidationType(ltv_profile)
     vc_kwargs = init_validation_context_kwargs(
         trust, trust_replace, other_certs
     )
@@ -132,6 +132,8 @@ def list_sigfields(infile, skip_status, validate, executive_summary, trust,
                         )
                     else:
                         status_str = status.summary()
+                except validation.ValidationInfoReadingError:
+                    status_str = 'REVINFO_FAILURE'
                 except SignatureValidationError:
                     status_str = 'INVALID'
                 except ValueError:
@@ -139,6 +141,22 @@ def list_sigfields(infile, skip_status, validate, executive_summary, trust,
             else:
                 status_str = 'FILLED'
         print('%s:%s' % (name, status_str))
+
+
+@signing.command(name='ltaupdate', help='update LTA timestamp')
+@click.argument('infile', type=click.File('r+b'))
+@click.option('--timestamp-url', help='URL for timestamp server',
+              required=False, type=str, default=None)
+@trust_options
+def lta_update(infile, trust, trust_replace, other_certs, timestamp_url):
+    vc_kwargs = init_validation_context_kwargs(
+        trust, trust_replace, other_certs
+    )
+    timestamper = HTTPTimeStamper(timestamp_url)
+    r = PdfFileReader(infile)
+    signers.PdfTimestamper(timestamper).update_archival_timestamp_chain(
+        r, ValidationContext(**vc_kwargs)
+    )
 
 
 SIG_META = 'SIG_META'
@@ -196,7 +214,9 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
                          timestamp_url, signature_meta, existing_fields_only):
     if timestamp_url is not None:
-        signer.timestamper = HTTPTimeStamper(timestamp_url)
+        timestamper = HTTPTimeStamper(timestamp_url)
+    else:
+        timestamper = None
     writer = IncrementalPdfFileWriter(infile)
 
     # TODO make this an option higher up the tree
@@ -209,6 +229,7 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
 
     result = signers.sign_pdf(
         writer, signature_meta, signer,
+        timestamper=timestamper,
         existing_fields_only=existing_fields_only
     )
     buf = result.getbuffer()
@@ -318,12 +339,12 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     else:
         timestamper = None
     signer = beid.BEIDSigner(
-        session, label, timestamper=timestamper
+        session, label
     )
 
     result = signers.sign_pdf(
         IncrementalPdfFileWriter(infile), signature_meta, signer,
-        existing_fields_only=existing_fields_only
+        existing_fields_only=existing_fields_only, timestamper=timestamper
     )
     buf = result.getbuffer()
     outfile.write(buf)
