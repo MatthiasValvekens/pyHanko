@@ -1,12 +1,17 @@
-from PIL.ImagePalette import ImagePalette
+import uuid
+from fractions import Fraction
 
-from .generic import pdf_name
+from PIL.ImagePalette import ImagePalette
+from typing import Union
+
+from pdf_utils.misc import BoxConstraints
+from .generic import pdf_name,  PdfContent
 from . import generic
 from .writer import BasePdfFileWriter
 
 from PIL import Image
 
-__all__ = ['pil_image']
+__all__ = ['pil_image', 'PdfImage']
 
 
 def pil_image(img, writer: BasePdfFileWriter):
@@ -67,3 +72,64 @@ def pil_image(img, writer: BasePdfFileWriter):
     )
     stream.compress()
     return writer.add_object(stream)
+
+
+class PdfImage(PdfContent):
+
+    def __init__(self, parent, image: Union[Image.Image, str],
+                 writer: BasePdfFileWriter, name: str = None,
+                 opacity=None, box: BoxConstraints = None):
+
+        if isinstance(image, str):
+            image = Image.open(image)
+
+        self.image: Image.Image = image
+        print(writer)
+        self.writer = writer
+        self.name = name or str(uuid.uuid4())
+        self.opacity = opacity
+
+        if box is None:
+            # assume square pixels
+            box = BoxConstraints(
+                aspect_ratio=Fraction(self.image.width, self.image.height)
+            )
+        super().__init__(parent=parent, box=box)
+        self._image_ref = None
+
+    @property
+    def image_ref(self):
+        if self._image_ref is None:
+            self._image_ref = pil_image(self.image, self.writer)
+        return self._image_ref
+
+    def render(self) -> bytes:
+        img_ref_name = '/Img' + self.name
+        self.set_resource(
+            category=pdf_name('/XObject'), name=pdf_name(img_ref_name),
+            value=self.image_ref
+        )
+
+        opacity = b''
+        if self.opacity is not None:
+            gs_name = '/GS' + str(uuid.uuid4())
+            self.set_resource(
+                category=pdf_name('/ExtGState'), name=pdf_name(gs_name),
+                value=generic.DictionaryObject({
+                    pdf_name('/ca'): generic.FloatObject(self.opacity)
+                })
+            )
+            opacity = gs_name.encode('ascii') + b' gs'
+
+        # Internally, the image is mapped to the unit square in
+        # user coordinates, irrespective of width/height.
+        # In particular, we might have to scale the x and y axes differently.
+        if not self.box.height_defined:
+            self.box.height = self.image.height
+        if not self.box.width_defined:
+            self.box.width = self.image.width
+
+        draw = b'%g 0 0 %g 0 0 cm %s Do' % (
+            self.box.width, self.box.height, img_ref_name.encode('ascii')
+        )
+        return b'q %s %s Q' % (opacity, draw)

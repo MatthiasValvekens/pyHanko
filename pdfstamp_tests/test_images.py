@@ -13,7 +13,7 @@ IMG_DIR = 'pdfstamp_tests/data/img'
 
 
 @pytest.mark.parametrize('infile', ['stamp.png', 'stamp-indexed.png'])
-def test_image_embed(infile):
+def test_image_direct_embed(infile):
     img = Image.open(os.path.join(IMG_DIR, infile))
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -24,8 +24,8 @@ def test_image_embed(infile):
     })
     w.update_container(resources)
     content_stream: generic.StreamObject = page_ref.get_object()['/Contents']
-    content_stream._data = content_stream.data \
-                           + b' q 50 0 0 50 5 5 cm /Img Do Q'
+    content_stream._data = \
+        content_stream.data + b' q 50 0 0 50 5 5 cm /Img Do Q'
     content_stream._encoded_data = None
     w.update_container(content_stream)
     w.write_in_place()
@@ -37,3 +37,17 @@ def test_image_embed(infile):
         assert '/SMask' not in image_obj
     else:
         assert '/SMask' in image_obj
+
+
+@pytest.mark.parametrize('infile', ['stamp.png', 'stamp-indexed.png'])
+def test_image_content_embed(infile):
+    path = os.path.join(IMG_DIR, infile)
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    img_content = images.PdfImage(
+        parent=None, image=path, writer=w, opacity=0.6,
+    )
+    img_content.box.height = 144
+    w.add_content_to_page(0, img_content, prepend=True)
+
+    w.write_in_place()

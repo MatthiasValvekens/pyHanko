@@ -4,7 +4,7 @@ from typing import Union
 from . import generic
 
 from .reader import PdfFileReader
-from .generic import pdf_name
+from .generic import pdf_name, PdfContent
 from .writer import BasePdfFileWriter
 
 """
@@ -161,7 +161,19 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self._encrypt_key = self.prev._decryption_key
         self._encrypt = encrypt_ref
 
-    def add_stream_to_page(self, page_ix, stream_ref, resources=None):
+    # TODO these can be simplified considerably using the new update_container
+    # TODO move these to the base writer class, perhaps
+
+    def add_content_to_page(self, page_ix, pdf_content: PdfContent,
+                            prepend=False):
+        as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
+        return self.add_stream_to_page(
+            page_ix, self.add_object(as_stream),
+            resources=pdf_content.resources, prepend=prepend
+        )
+
+    def add_stream_to_page(self, page_ix, stream_ref, resources=None,
+                           prepend=False):
         """
         Append an indirect stream object to a page in a PDF.
         Returns a reference to the page object that was modified.
@@ -171,7 +183,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
 
         page_obj = page_obj_ref.get_object()
 
-        # the spec says that this will always be an indirect reference
         contents_ref = page_obj.raw_get('/Contents')
 
         if isinstance(contents_ref, generic.IndirectObject):
@@ -180,11 +191,16 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 # This is the easy case. It suffices to mark
                 # this array for an update, and append our stream to it.
                 self.mark_update(contents_ref)
-                contents.append(stream_ref)
+                if prepend:
+                    contents.insert(0, stream_ref)
+                else:
+                    contents.append(stream_ref)
             elif isinstance(contents, generic.StreamObject):
                 # replace the old stream with an array containing
                 # a reference to the original stream, and our own stream.
-                contents = generic.ArrayObject([contents_ref, stream_ref])
+                new = [stream_ref, contents_ref] \
+                    if prepend else [contents_ref, stream_ref]
+                contents = generic.ArrayObject(new)
                 page_obj[pdf_name('/Contents')] = self.add_object(contents)
                 # mark the page to be updated as well
                 self.mark_update(page_obj_ref)
@@ -193,7 +209,10 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         elif isinstance(contents_ref, generic.ArrayObject):
             # make /Contents an indirect array, and append our stream
             contents = contents_ref
-            contents.append(stream_ref)
+            if prepend:
+                contents.insert(0, stream_ref)
+            else:
+                contents.append(stream_ref)
             page_obj[pdf_name('/Contents')] = self.add_object(contents)
             self.mark_update(page_obj_ref)
         else:

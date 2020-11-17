@@ -1068,9 +1068,6 @@ class PdfContent:
             box_height=self.box.height, resources=self._resources
         )
 
-    # TODO add methods to append to a page, as a separate content stream
-    #  or to an existing one
-
     # TODO override __add__ method: concat streams and merge all resources
 
 
