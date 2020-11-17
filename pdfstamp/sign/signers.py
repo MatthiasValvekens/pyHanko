@@ -27,7 +27,7 @@ from pdfstamp.sign.general import (
     simple_cms_attribute, CertificateStore,
     SimpleCertificateStore, SigningError,
 )
-from pdfstamp.stamp import TextStampStyle, TextStamp
+from pdfstamp.stamp import TextStampStyle, TextStamp, STAMP_ART_CONTENT
 
 __all__ = ['Signer', 'SimpleSigner', 'PdfSigner', 'sign_pdf',
            'SignatureObject']
@@ -771,6 +771,7 @@ class PdfSigner(PdfTimestamper):
             # TODO allow customisation
             tss = TextStampStyle(
                 stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
+                background=STAMP_ART_CONTENT
             )
             text_params = {
                 'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)

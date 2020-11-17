@@ -38,6 +38,8 @@ class TextStampStyle:
     border_width: int = 3
     stamp_text: str = '%(ts)s'
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
+    background: PdfContent = None
+    background_opacity: float = 0.6
 
 
 @dataclass(frozen=True)
@@ -126,6 +128,46 @@ class TextStamp(PdfContent):
 
         stamp_height = self.get_stamp_height()
         stamp_width = self.get_stamp_width()
+
+        bg = self.style.background
+        if bg is not None:
+            # TODO this is one of the places where some more clever layout
+            #  engine would really help, since all of this is pretty ad hoc and
+            #  makes a number of non-obvious choices that would be better off
+            #  delegated to somewhere else.
+
+            # scale the background
+            bg_height = 0.9 * stamp_height
+            sf = bg_height / bg.box.height
+            bg_y = 0.05 * stamp_height
+            bg_width = bg.box.width * sf
+            bg_x = 0
+            if bg_width <= stamp_width:
+                bg_x = (stamp_width - bg_width) // 2
+
+            # encapsulate resources by using XObjects
+            # TODO what about background reuse? We should take advantage of
+            #  the fact that we're using XObjects here.
+            self.set_resource(
+                pdf_name('/XObject'), pdf_name('/Background'),
+                value=self.writer.add_object(bg.as_form_xobject())
+            )
+
+            # set opacity in graphics state
+            opacity = generic.FloatObject(self.style.background_opacity)
+            self.set_resource(
+                category=pdf_name('/ExtGState'),
+                name=pdf_name('/BackgroundGS'),
+                value=generic.DictionaryObject({
+                    pdf_name('/CA'): opacity, pdf_name('/ca'): opacity
+                })
+            )
+            command_stream.append(
+                b'q /BackgroundGS gs %g 0 0 %g %g %g cm /Background Do Q' % (
+                    sf, sf, bg_x, bg_y
+                )
+            )
+
         text_commands = self.text_box.render()
         command_stream.append(
             b'q 1 0 0 1 %g %g cm' % (self.text_box_x(), self.text_box_y())
@@ -292,3 +334,23 @@ def stamp_file(input_name, output_name, style, dest_page,
 
         with open(output_name, 'wb') as out:
             pdf_out.write(out)
+
+
+STAMP_ART_CONTENT = generic.RawContent(
+    None, box=BoxConstraints(width=100, height=100),
+    data=b'''
+q 1 0 0 -1 0 100 cm 
+0.603922 0.345098 0.54902 rg
+3.699 65.215 m 3.699 65.215 2.375 57.277 7.668 51.984 c 12.957 46.695 27.512
+ 49.34 39.418 41.402 c 39.418 41.402 31.48 40.078 32.801 33.465 c 34.125
+ 26.852 39.418 28.172 39.418 24.203 c 39.418 20.234 30.156 17.59 30.156
+14.945 c 30.156 12.297 28.465 1.715 50 1.715 c 71.535 1.715 69.844 12.297
+ 69.844 14.945 c 69.844 17.59 60.582 20.234 60.582 24.203 c 60.582 28.172
+ 65.875 26.852 67.199 33.465 c 68.52 40.078 60.582 41.402 60.582 41.402
+c 72.488 49.34 87.043 46.695 92.332 51.984 c 97.625 57.277 96.301 65.215
+ 96.301 65.215 c h f
+3.801 68.734 92.398 7.391 re f
+3.801 79.512 92.398 7.391 re f
+3.801 90.289 92.398 7.391 re f
+Q
+''')
