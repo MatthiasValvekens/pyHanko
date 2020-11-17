@@ -841,7 +841,7 @@ class StreamObject(DictionaryObject):
                     return
 
             # prepend the new filter (order is important!)
-            self[pdf_name('/Filter')] = [pdf_name] + filter_names
+            self[pdf_name('/Filter')] = ArrayObject((pdf_name,) + filter_names)
 
             if params or any(param_sets):
                 self[pdf_name('/DecodeParms')] = [params or NullObject()] + [
