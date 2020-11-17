@@ -13,4 +13,4 @@ requests-mock~=1.8.0
 python-barcode>=0.13.1
 freezegun
 ocspbuilder
-crlbuilder
+Pillow~=8.0.1
