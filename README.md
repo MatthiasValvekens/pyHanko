@@ -3,7 +3,6 @@ pdf-stamp
 ![status](https://github.com/MatthiasValvekens/pdf-stamp/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pdf-stamp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp?ref=badge_shield)
 
 
 
@@ -40,7 +39,6 @@ It's nowhere near complete, but here is a short overview of the features:
 
  - Expand, polish and rigorously test the validation functionality. The test suite covers a variety of scenarios already, but obviously one can't cover everything.
  - The most lenient document modification policy (i.e. addition of comments and annotations) is not supported. Comments added to a signed PDF will therefore be considered "unsafe" changes, regardless of the policy set by the signer.
- - Improve image support, which is extremely limited right now.
 
 ### Acknowledgement
 
@@ -48,4 +46,5 @@ This repository includes code from `PyPDF2` (with both minor and major modificat
 
 
 ## License
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FMatthiasValvekens%2Fpdf-stamp?ref=badge_large)
+
+MIT License, see [LICENSE](LICENSE).
