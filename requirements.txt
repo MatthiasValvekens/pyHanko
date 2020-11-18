@@ -14,3 +14,4 @@ python-barcode>=0.13.1
 freezegun
 ocspbuilder
 Pillow~=8.0.1
+pyyaml>=5.3.1

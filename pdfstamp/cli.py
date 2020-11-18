@@ -1,10 +1,12 @@
-from datetime import timedelta
-
 import click
 import logging
 import getpass
 
 from certvalidator import ValidationContext
+from pdfstamp.config import (
+    init_validation_context_kwargs, parse_cli_config,
+    CLIConfig,
+)
 
 from pdfstamp.sign import signers
 from pdfstamp.sign.timestamps import HTTPTimeStamper
@@ -17,6 +19,8 @@ from pdfstamp.sign.validation import (
 
 __all__ = ['cli']
 
+# TODO make log level configurable
+
 # noinspection PyTypeChecker
 root_logger = logging.getLogger(None)
 root_logger.setLevel(logging.DEBUG)
@@ -26,12 +30,52 @@ formatter = logging.Formatter(
 )
 sh.setFormatter(formatter)
 root_logger.addHandler(sh)
+logger = logging.getLogger(__name__)
 
 
-# group everything under this entry point for easy exporting
+DEFAULT_CONFIG_FILE = 'pdfstamp.yml'
+
+SIG_META = 'SIG_META'
+EXISTING_ONLY = 'EXISTING_ONLY'
+TIMESTAMP_URL = 'TIMESTAMP_URL'
+CLI_CONFIG = 'CLI_CONFIG'
+
+
 @click.group()
-def cli():
-    pass
+@click.option('--config', help='YAML file to load configuration from',
+              required=False, type=click.File('r'),
+              show_default=DEFAULT_CONFIG_FILE)
+@click.pass_context
+def cli(ctx, config):
+    config_text = None
+    if config is None:
+        try:
+            with open(DEFAULT_CONFIG_FILE, 'r') as f:
+                config_text = f.read()
+            logging.debug(
+                f"Reading config from default config file "
+                f"{DEFAULT_CONFIG_FILE}..."
+            )
+        except FileNotFoundError:
+            pass
+        except IOError as e:
+            raise click.ClickException(
+                f"Failed to read {DEFAULT_CONFIG_FILE}: {str(e)}"
+            )
+    else:
+        try:
+            config_text = config.read()
+            logging.debug(
+                f"Reading config from config file {config}..."
+            )
+        except IOError as e:
+            raise click.ClickException(
+                f"Failed to read configuration: {str(e)}",
+            )
+
+    ctx.ensure_object(dict)
+    if config_text is not None:
+        ctx.obj[CLI_CONFIG] = parse_cli_config(config_text)
 
 
 @cli.group(help='sign PDF files', name='sign')
@@ -42,26 +86,39 @@ def signing():
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
-def init_validation_context_kwargs(trust, trust_replace, other_certs,
-                                   allow_fetching=None):
-    vc_kwargs = {'time_tolerance': timedelta(seconds=10)}
-    if allow_fetching is not None:
-        vc_kwargs['allow_fetching'] = allow_fetching
-    if trust:
-        # add trust roots to the validation context, or replace them
-        trust_certs = list(
-            signers.load_ca_chain(trust)
+# TODO user-friendly error handling for KeyErrors etc.
+def _build_vc_kwargs(ctx, validation_context, trust,
+                     trust_replace, other_certs, allow_fetching=None):
+    cli_config: CLIConfig = ctx.obj.get(CLI_CONFIG, None)
+    if validation_context is not None:
+        # load the desired context from config
+        if cli_config is None:
+            raise click.ClickException("No config file specified.")
+        result = cli_config.get_validation_context(
+            validation_context, as_dict=True
         )
-        if trust_replace:
-            vc_kwargs['trust_roots'] = trust_certs
-        else:
-            vc_kwargs['extra_trust_roots'] = trust_certs
-    if other_certs:
-        vc_kwargs['other_certs'] = list(signers.load_ca_chain(other_certs))
-    return vc_kwargs
+    elif trust or other_certs:
+        # load a validation profile using command line kwargs
+        result = init_validation_context_kwargs(
+            trust, trust_replace, other_certs
+        )
+    elif cli_config is not None:
+        # load the default settings from the CLI config
+        result = cli_config.get_validation_context(as_dict=True)
+    else:
+        result = {}
+
+    if allow_fetching is not None:
+        result['allow_fetching'] = allow_fetching
+
+    return result
 
 
 def trust_options(f):
+    f = click.option(
+        '--validation-context', help='use validation context from config',
+        required=False, type=str
+    )(f)
     f = click.option(
         '--trust', help='list trust roots (multiple allowed)',
         required=False, multiple=True, type=readable_file
@@ -98,13 +155,16 @@ def trust_options(f):
               help='Fail trust validation if a certificate has no known CRL '
                    'or OCSP endpoints.',
               type=bool, is_flag=True, default=False, show_default=True)
-def list_sigfields(infile, skip_status, validate, executive_summary, trust,
-                   trust_replace, other_certs, ltv_profile, ltv_obsessive):
+@click.pass_context
+def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
+                   validation_context, trust, trust_replace, other_certs,
+                   ltv_profile, ltv_obsessive):
     r = PdfFileReader(infile)
     if validate and ltv_profile is not None:
         ltv_profile = RevocationInfoValidationType(ltv_profile)
-    vc_kwargs = init_validation_context_kwargs(
-        trust, trust_replace, other_certs
+
+    vc_kwargs = _build_vc_kwargs(
+        ctx, validation_context, trust, trust_replace, other_certs
     )
     for name, value, field_ref in fields.enumerate_sig_fields(r):
         if skip_status:
@@ -148,20 +208,17 @@ def list_sigfields(infile, skip_status, validate, executive_summary, trust,
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
 @trust_options
-def lta_update(infile, trust, trust_replace, other_certs, timestamp_url):
-    vc_kwargs = init_validation_context_kwargs(
-        trust, trust_replace, other_certs
+@click.pass_context
+def lta_update(ctx, infile, validation_context, trust, trust_replace,
+               other_certs, timestamp_url):
+    vc_kwargs = _build_vc_kwargs(
+        ctx, validation_context, trust, trust_replace, other_certs
     )
     timestamper = HTTPTimeStamper(timestamp_url)
     r = PdfFileReader(infile)
     signers.PdfTimestamper(timestamper).update_archival_timestamp_chain(
         r, ValidationContext(**vc_kwargs)
     )
-
-
-SIG_META = 'SIG_META'
-EXISTING_ONLY = 'EXISTING_ONLY'
-TIMESTAMP_URL = 'TIMESTAMP_URL'
 
 
 @signing.group(name='addsig', help='add a signature')
@@ -185,8 +242,8 @@ TIMESTAMP_URL = 'TIMESTAMP_URL'
 @trust_options
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, use_pades, with_validation_info, trust_replace, trust,
-           other_certs):
+           timestamp_url, use_pades, with_validation_info,
+           validation_context, trust_replace, trust, other_certs):
     ctx.ensure_object(dict)
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
@@ -197,8 +254,9 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
     if with_validation_info:
-        vc_kwargs = init_validation_context_kwargs(
-            trust, trust_replace, other_certs, allow_fetching=True
+        vc_kwargs = _build_vc_kwargs(
+            ctx, validation_context, trust, trust_replace, other_certs,
+            allow_fetching=True
         )
         vc = ValidationContext(**vc_kwargs)
     else:
