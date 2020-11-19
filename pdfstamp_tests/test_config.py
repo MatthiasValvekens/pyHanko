@@ -2,7 +2,7 @@ import pytest
 
 from pdfstamp import config, stamp
 from pdfstamp.misc import ConfigurationError
-from pdfstamp.stamp import QRStampStyle
+from pdfstamp.stamp import QRStampStyle, TextStampStyle
 from pdfstamp_tests.samples import TESTING_CA_DIR
 
 
@@ -28,7 +28,7 @@ def test_read_vc_kwargs(trust_replace):
 
 def test_read_qr_config():
     from pdfstamp_tests.test_utils import NOTO_SERIF_JP
-    from pdf_utils.font import GlyphAccumulator
+    from pdf_utils.font import GlyphAccumulator, SimpleFontEngine
 
     config_string = f"""
     stamp-styles:
@@ -37,12 +37,35 @@ def test_read_qr_config():
                 font: {NOTO_SERIF_JP}
             type: qr
             background: __stamp__
+        alternative1:
+            text-box-style:
+                font: {NOTO_SERIF_JP}
+            type: qr
+        alternative2:
+            type: qr
+        alternative3:
+            type: text
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     default_qr_style = cli_config.get_stamp_style()
     assert isinstance(default_qr_style, QRStampStyle)
     assert default_qr_style.background is stamp.STAMP_ART_CONTENT
     assert isinstance(default_qr_style.text_box_style.font, GlyphAccumulator)
+
+    alternative1 = cli_config.get_stamp_style('alternative1')
+    assert isinstance(alternative1, QRStampStyle)
+    assert alternative1.background is None
+    assert isinstance(alternative1.text_box_style.font, GlyphAccumulator)
+
+    alternative2 = cli_config.get_stamp_style('alternative2')
+    assert isinstance(alternative2, QRStampStyle)
+    assert alternative2.background is None
+    assert isinstance(alternative2.text_box_style.font, SimpleFontEngine)
+
+    alternative3 = cli_config.get_stamp_style('alternative3')
+    assert isinstance(alternative3, TextStampStyle)
+    assert alternative3.background is None
+    assert isinstance(alternative3.text_box_style.font, SimpleFontEngine)
 
 
 def test_read_bad_config():

@@ -17,7 +17,7 @@ def test_qr_fixed_size():
     qr = stamp.QRStamp(writer, 'https://example.com', qrss, box=box)
     qr.as_form_xobject()
     qr.apply(0, 10, 10)
-    assert qr.text_box.box.width == 220
+    assert qr.text_box.box.width == 224
 
 
 def test_qr_natural_size():
