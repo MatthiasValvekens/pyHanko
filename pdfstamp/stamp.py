@@ -5,6 +5,7 @@ import qrcode
 import tzlocal
 
 from pdf_utils.barcodes import PdfStreamQRImage
+from pdf_utils.font import GlyphAccumulator
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.misc import BoxConstraints, BoxSpecificationError, rd
 from pdf_utils.text import TextBoxStyle, TextBox
@@ -14,6 +15,7 @@ from datetime import datetime
 
 from pdf_utils import generic
 from pdf_utils.generic import pdf_name, pdf_string, PdfContent
+from pdfstamp.misc import ConfigurableMixin
 
 
 class AnnotAppearances:
@@ -33,13 +35,37 @@ class AnnotAppearances:
 
 
 @dataclass(frozen=True)
-class TextStampStyle:
+class TextStampStyle(ConfigurableMixin):
     text_box_style: TextBoxStyle = TextBoxStyle()
     border_width: int = 3
     stamp_text: str = '%(ts)s'
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
     background: PdfContent = None
     background_opacity: float = 0.6
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        try:
+            tbs = config_dict['text_box_style']
+            config_dict['text_box_style'] \
+                = TextBoxStyle.from_config(tbs)
+        except KeyError:
+            pass
+
+        try:
+            bg_spec = config_dict['background']
+            # 'special' value to use the stamp vector image baked into
+            # the module
+            # TODO allow loading backgrounds from images (after I deal with the
+            #  issues surrounding relationships between PdfContent objects)
+            if bg_spec == '__stamp__':
+                config_dict['background'] = STAMP_ART_CONTENT
+            else:  # pragma: nocover
+                raise NotImplementedError(
+                    "Backgrounds other than __stamp__ haven't been implemented."
+                )
+        except KeyError:
+            pass
 
 
 @dataclass(frozen=True)
@@ -125,6 +151,13 @@ class TextStamp(PdfContent):
             _text_params.update(self.text_params)
         text = self.style.stamp_text % _text_params
         self.text_box.content = text
+
+        # FIXME this is another instance where the decoupling between
+        #  PdfContent and the writer is undesirable: we cannot delegate
+        #  font embedding to the text box since it doesn't know about
+        #  the writer.
+        if isinstance(self.text_box.style.font, GlyphAccumulator):
+            self.text_box.style.font.embed_subset(self.writer)
 
         stamp_height = self.get_stamp_height()
         stamp_width = self.get_stamp_width()

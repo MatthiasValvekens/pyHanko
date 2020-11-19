@@ -1,6 +1,8 @@
 import pytest
 
-from pdfstamp import config
+from pdfstamp import config, stamp
+from pdfstamp.misc import ConfigurationError
+from pdfstamp.stamp import QRStampStyle
 from pdfstamp_tests.samples import TESTING_CA_DIR
 
 
@@ -23,6 +25,47 @@ def test_read_vc_kwargs(trust_replace):
         assert 'trust_roots' not in vc_kwargs
         assert len(vc_kwargs['extra_trust_roots']) == 1
 
+
+def test_read_qr_config():
+    from pdfstamp_tests.test_utils import NOTO_SERIF_JP
+    from pdf_utils.font import GlyphAccumulator
+
+    config_string = f"""
+    stamp-styles:
+        default:
+            text-box-style:
+                font: {NOTO_SERIF_JP}
+            type: qr
+            background: __stamp__
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    default_qr_style = cli_config.get_stamp_style()
+    assert isinstance(default_qr_style, QRStampStyle)
+    assert default_qr_style.background is stamp.STAMP_ART_CONTENT
+    assert isinstance(default_qr_style.text_box_style.font, GlyphAccumulator)
+
+
+def test_read_bad_config():
+    config_string = f"""
+    stamp-styles:
+        default:
+            type: qr
+            blah: blah
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    with pytest.raises(ConfigurationError):
+        cli_config.get_stamp_style()
+
+
+@pytest.mark.parametrize("bad_type", ['5', '[1,2,3]'])
+def test_read_bad_config2(bad_type):
+    config_string = f"""
+    stamp-styles:
+        default: {bad_type}
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    with pytest.raises(ConfigurationError):
+        cli_config.get_stamp_style()
 
 
 def test_empty_config():

@@ -2,18 +2,36 @@ import logging
 from dataclasses import dataclass, field
 from fractions import Fraction
 
-from pdf_utils.font import FontEngine, SimpleFontEngine
+from fontTools import ttLib
+
+from pdf_utils.font import FontEngine, SimpleFontEngine, GlyphAccumulator
 from pdf_utils.generic import PdfContent, pdf_name
 from pdf_utils.misc import BoxConstraints
+from pdfstamp.misc import ConfigurableMixin, ConfigurationError
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class TextStyle:
+class TextStyle(ConfigurableMixin):
     font: FontEngine = field(default_factory=SimpleFontEngine.default_engine)
     font_size: int = 10
     leading: int = None
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        try:
+            fc = config_dict['font']
+            if not isinstance(fc, str) or \
+                    not (fc.endswith('.otf') or fc.endswith('.ttf')):
+                raise ConfigurationError(
+                    "'font' must be a path to an OpenType font file."
+                )
+
+            ffile = ttLib.TTFont(fc)
+            config_dict['font'] = GlyphAccumulator(ffile)
+        except KeyError:
+            pass
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,10 @@ from pdfstamp.sign.general import (
     simple_cms_attribute, CertificateStore,
     SimpleCertificateStore, SigningError,
 )
-from pdfstamp.stamp import TextStampStyle, TextStamp, STAMP_ART_CONTENT
+from pdfstamp.stamp import (
+    TextStampStyle, TextStamp, STAMP_ART_CONTENT,
+    QRStampStyle, QRStamp,
+)
 
 __all__ = ['Signer', 'SimpleSigner', 'PdfSigner', 'sign_pdf',
            'SignatureObject']
@@ -693,13 +696,27 @@ class PdfTimestamper:
         )
 
 
+DEFAULT_SIGNING_STAMP_STYLE = TextStampStyle(
+    stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, background=STAMP_ART_CONTENT
+)
+
+
 class PdfSigner(PdfTimestamper):
     _ignore_sv = False
 
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
-                 timestamper: TimeStamper = None):
+                 timestamper: TimeStamper = None, stamp_style=None,
+                 qr_url=None):
         self.signature_meta = signature_meta
         self.signer = signer
+        stamp_style = stamp_style or DEFAULT_SIGNING_STAMP_STYLE
+        self.stamp_style: TextStampStyle = stamp_style
+
+        if qr_url is not None and not isinstance(stamp_style, QRStampStyle):
+            raise ValueError(
+                "The qr_url parameter requires a QRStampStyle."
+            )
+        self.qr_url = qr_url
         super().__init__(timestamper)
 
     def generate_timestmp_field_name(self):
@@ -768,18 +785,23 @@ class PdfSigner(PdfTimestamper):
         if w and h:
             # the field is probably a visible one, so we change its appearance
             # stream to show some data about the signature
-            # TODO allow customisation
-            tss = TextStampStyle(
-                stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE,
-                background=STAMP_ART_CONTENT
-            )
             text_params = {
-                'signer': name, 'ts': timestamp.strftime(tss.timestamp_format)
+                'signer': name, 'ts': timestamp.strftime(
+                    self.stamp_style.timestamp_format
+                )
             }
-            stamp = TextStamp(
-                pdf_out, tss, text_params=text_params,
-                box=BoxConstraints(width=w, height=h)
-            )
+            box = BoxConstraints(width=w, height=h)
+            if self.qr_url is None:
+                stamp = TextStamp(
+                    pdf_out, style=self.stamp_style, text_params=text_params,
+                    box=box
+                )
+            else:
+                assert isinstance(self.stamp_style, QRStampStyle)
+                stamp = QRStamp(
+                    pdf_out, style=self.stamp_style, url=self.qr_url,
+                    text_params=text_params, box=box
+                )
             sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
             try:
                 # if there was an entry like this, it's meaningless now

@@ -16,6 +16,8 @@ from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdfstamp.sign.validation import (
     SignatureValidationError, RevocationInfoValidationType
 )
+from pdfstamp.stamp import QRStampStyle
+
 
 __all__ = ['cli']
 
@@ -39,6 +41,8 @@ SIG_META = 'SIG_META'
 EXISTING_ONLY = 'EXISTING_ONLY'
 TIMESTAMP_URL = 'TIMESTAMP_URL'
 CLI_CONFIG = 'CLI_CONFIG'
+STAMP_STYLE = 'STAMP_STYLE'
+QR_URL = 'QR_URL'
 
 
 @click.group()
@@ -134,6 +138,29 @@ def trust_options(f):
         required=False, multiple=True, type=readable_file
     )(f)
     return f
+
+
+def _select_style(ctx, style_name, qr_url):
+    try:
+        cli_config: CLIConfig = ctx.obj[CLI_CONFIG]
+    except KeyError:
+        if not style_name:
+            return None
+        raise click.ClickException(
+            "Using stamp styles requires a configuration file "
+            f"({DEFAULT_CONFIG_FILE} by default)."
+        )
+    style = cli_config.get_stamp_style(style_name)
+    if qr_url and not isinstance(style, QRStampStyle):
+        raise click.ClickException(
+            "The --qr-url is only meaningful for QR stamp styles."
+        )
+    elif not qr_url and isinstance(style, QRStampStyle):
+        raise click.ClickException(
+            "QR stamp styles require the --qr-url option."
+        )
+
+    return style
 
 
 # TODO add an option to do LTV, but guess the profile
@@ -239,12 +266,20 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
 @click.option('--with-validation-info', help='embed revocation info',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
+@click.option(
+    '--style-name', help='stamp style name for signature appearance',
+    required=False, type=str
+)
+@click.option(
+    '--qr-url', help='QR code URL to use in QR stamp style',
+    required=False, type=str
+)
 @trust_options
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info,
-           validation_context, trust_replace, trust, other_certs):
-    ctx.ensure_object(dict)
+           validation_context, trust_replace, trust, other_certs,
+           style_name, qr_url):
     ctx.obj[EXISTING_ONLY] = existing_only or field is None
     ctx.obj[TIMESTAMP_URL] = timestamp_url
 
@@ -267,10 +302,13 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         embed_validation_info=with_validation_info,
         validation_context=vc
     )
+    ctx.obj[STAMP_STYLE] = _select_style(ctx, style_name, qr_url)
+    ctx.obj[QR_URL] = qr_url
 
 
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
-                         timestamp_url, signature_meta, existing_fields_only):
+                         timestamp_url, signature_meta, existing_fields_only,
+                         style, qr_url):
     if timestamp_url is not None:
         timestamper = HTTPTimeStamper(timestamp_url)
     else:
@@ -285,11 +323,11 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
         ).encode('utf-8')
         writer.encrypt(pdf_pass)
 
-    result = signers.sign_pdf(
-        writer, signature_meta, signer,
-        timestamper=timestamper,
-        existing_fields_only=existing_fields_only
-    )
+    result = signers.PdfSigner(
+        signature_meta, signer=signer, timestamper=timestamper,
+        stamp_style=style, qr_url=qr_url
+    ).sign_pdf(writer, existing_fields_only=existing_fields_only)
+
     buf = result.getbuffer()
     outfile.write(buf)
     buf.release()
@@ -333,7 +371,8 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
-        existing_fields_only=existing_fields_only
+        existing_fields_only=existing_fields_only, style=ctx.obj[STAMP_STYLE],
+        qr_url=ctx.obj[STAMP_STYLE]
     )
 
 
@@ -371,7 +410,8 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
-        existing_fields_only=existing_fields_only
+        existing_fields_only=existing_fields_only, style=ctx.obj[STAMP_STYLE],
+        qr_url=ctx.obj[QR_URL]
     )
 
 
@@ -400,10 +440,11 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
         session, label
     )
 
-    result = signers.sign_pdf(
-        IncrementalPdfFileWriter(infile), signature_meta, signer,
-        existing_fields_only=existing_fields_only, timestamper=timestamper
-    )
+    writer = IncrementalPdfFileWriter(infile)
+    result = signers.PdfSigner(
+        signature_meta, signer=signer, timestamper=timestamper,
+        stamp_style=ctx.obj[STAMP_STYLE], qr_url=ctx.obj[QR_URL]
+    ).sign_pdf(writer, existing_fields_only=existing_fields_only)
     buf = result.getbuffer()
     outfile.write(buf)
     buf.release()

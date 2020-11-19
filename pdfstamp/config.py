@@ -4,16 +4,24 @@ from dataclasses import dataclass
 
 import yaml
 from certvalidator import ValidationContext
+from pdfstamp.misc import check_config_keys, ConfigurationError
 from pdfstamp.sign import signers
 
 
 # TODO add stamp styles etc.
+from pdfstamp.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
+from pdfstamp.stamp import QRStampStyle, TextStampStyle
+
 
 @dataclass
 class CLIConfig:
     validation_contexts: Dict[str, dict]
+    stamp_styles: Dict[str, dict]
     default_validation_context: str
+    default_stamp_style: str
     time_tolerance: timedelta
+
+    # TODO graceful error handling
 
     def get_validation_context(self, name=None, as_dict=False):
         name = name or self.default_validation_context
@@ -21,6 +29,15 @@ class CLIConfig:
             self.validation_contexts[name], self.time_tolerance
         )
         return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
+
+    def get_stamp_style(self, name=None) -> TextStampStyle:
+        name = name or self.default_stamp_style
+        try:
+            style_config = dict(self.stamp_styles[name])
+        except TypeError as e:
+            raise ConfigurationError(e)
+        cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
+        return cls.from_config(style_config)
 
 
 def init_validation_context_kwargs(trust, trust_replace, other_certs,
@@ -50,9 +67,11 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
 #  in some cases)
 # Time-related settings are probably better off in the CLI.
 
-# TODO set up general mechanism to verify expected config keys etc.
-
 def parse_trust_config(trust_config, time_tolerance) -> dict:
+    check_config_keys(
+        'ValidationContext', ('trust', 'trust-replace', 'other-certs'),
+        trust_config
+    )
     return init_validation_context_kwargs(
         trust=trust_config.get('trust'),
         trust_replace=trust_config.get('trust-replace', False),
@@ -61,8 +80,12 @@ def parse_trust_config(trust_config, time_tolerance) -> dict:
     )
 
 
-DEFAULT_VALIDATION_CONTEXT = 'default'
+DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
 DEFAULT_TIME_TOLERANCE = 10
+STAMP_STYLE_TYPES = {
+    'qr': QRStampStyle,
+    'text': TextStampStyle,
+}
 
 
 def parse_cli_config(yaml_str):
@@ -75,13 +98,26 @@ def parse_cli_config(yaml_str):
     except KeyError:
         pass
 
+    # TODO this style is obviously not suited for non-signing scenarios
+    #  (but it'll do for now)
+    stamp_configs = {DEFAULT_STAMP_STYLE: DEFAULT_SIGNING_STAMP_STYLE}
+    try:
+        stamp_specs = config_dict['stamp-styles']
+        stamp_configs.update(stamp_specs)
+    except KeyError:
+        pass
+
     default_vc = config_dict.get(
         'default-validation-context', DEFAULT_VALIDATION_CONTEXT
+    )
+    default_stamp_style = config_dict.get(
+        'default-stamp-style', DEFAULT_STAMP_STYLE
     )
     time_tolerance = timedelta(
         seconds=config_dict.get('time-tolerance', DEFAULT_TIME_TOLERANCE)
     )
     return CLIConfig(
         validation_contexts=vcs, default_validation_context=default_vc,
-        time_tolerance=time_tolerance
+        time_tolerance=time_tolerance, stamp_styles=stamp_configs,
+        default_stamp_style=default_stamp_style
     )
