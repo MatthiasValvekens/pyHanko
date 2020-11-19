@@ -285,37 +285,35 @@ class QRStamp(TextStamp):
         return self._qr_size
 
     def extra_commands(self):
+        qr_ref, natural_qr_size = self._qr_xobject()
         self.set_resource(
             category=pdf_name('/XObject'), name=pdf_name('/QR'),
-            value=self._qr_xobject()
+            value=qr_ref
         )
         height = self.get_stamp_height()
         qr_y_sep = (height - self.qr_size) // 2
+        qr_scale = self.qr_size / natural_qr_size
         # paint the QR code, translated and with y axis inverted
-        draw_qr_command = b'q 1 0 0 -1 %g %g cm /QR Do Q' % (
-            rd(self.style.innsep),
-            rd(height - max(self.style.innsep, qr_y_sep)),
+        draw_qr_command = b'q %g 0 0 -%g %g %g cm /QR Do Q' % (
+            rd(qr_scale), rd(qr_scale), rd(self.style.innsep),
+            rd(height - qr_y_sep),
         )
         return [draw_qr_command]
 
     def _qr_xobject(self):
-        qr = qrcode.QRCode(box_size=4)
+        qr = qrcode.QRCode()
         qr.add_data(self.url)
         qr.make()
-
-        # fit the QR code in a square of the requested size
-        qr_num_boxes = len(qr.modules) + 2 * qr.border
-        qr.box_size = int(round(self.qr_size / qr_num_boxes))
 
         img = qr.make_image(image_factory=PdfStreamQRImage)
         command_stream = img.render_command_stream()
 
-        box_size = self.qr_size
+        bbox_size = (qr.modules_count + 2 * qr.border) * qr.box_size
         qr_xobj = init_xobject_dictionary(
-            command_stream, box_size, box_size
+            command_stream, bbox_size, bbox_size
         )
         qr_xobj.compress()
-        return self.writer.add_object(qr_xobj)
+        return self.writer.add_object(qr_xobj), bbox_size
 
     def text_box_x(self):
         return 2 * self.style.innsep + self.qr_size
