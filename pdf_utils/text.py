@@ -20,6 +20,7 @@ class TextStyle(ConfigurableMixin):
 
     @classmethod
     def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
         try:
             fc = config_dict['font']
             if not isinstance(fc, str) or \

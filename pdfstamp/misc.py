@@ -11,7 +11,7 @@ class ConfigurationError(ValueError):
 class ConfigurableMixin:
 
     @classmethod
-    def process_entries(cls, config_dict):  # pragma: nocover
+    def process_entries(cls, config_dict):
         pass
 
     @classmethod

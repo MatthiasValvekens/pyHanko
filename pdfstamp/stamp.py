@@ -45,6 +45,7 @@ class TextStampStyle(ConfigurableMixin):
 
     @classmethod
     def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
         try:
             tbs = config_dict['text_box_style']
             config_dict['text_box_style'] \
