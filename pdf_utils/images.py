@@ -84,7 +84,6 @@ class PdfImage(PdfContent):
             image = Image.open(image)
 
         self.image: Image.Image = image
-        print(writer)
         self.writer = writer
         self.name = name or str(uuid.uuid4())
         self.opacity = opacity
