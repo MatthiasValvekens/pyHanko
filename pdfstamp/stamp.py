@@ -96,14 +96,12 @@ class TextStamp(PdfContent):
         #  to the stamp's
 
         box = self.box
-        if box.width_defined:
-            expected_w = box.width - self.text_box_x()
-        else:
-            expected_w = None
-
+        expected_h = None
+        if box.height_defined:
+            expected_h = box.height - self.text_box_y()
         self.text_box = TextBox(
             self, self.style.text_box_style,
-            box=BoxConstraints(width=expected_w)
+            box=BoxConstraints(height=expected_h)
         )
 
     def extra_commands(self):
@@ -121,19 +119,15 @@ class TextStamp(PdfContent):
         try:
             return self.box.height
         except BoxSpecificationError:
-            height = self.box.height = self.text_box.box.height
+            height = self.box.height \
+                = self.text_box_y() + self.text_box.box.height
             return height
 
     def text_box_x(self):
         return 0
 
     def text_box_y(self):
-        sh = self.get_stamp_height()
-        th = self.text_box.box.height
-        if sh >= th:
-            return (sh - th) // 2
-        else:
-            return 0
+        return 0
 
     def get_default_text_params(self):
         ts = datetime.now(tz=tzlocal.get_localzone())
