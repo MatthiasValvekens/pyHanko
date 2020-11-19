@@ -193,6 +193,9 @@ class GlyphAccumulator(FontEngine):
 
                 current_chunk.append(generic.NumberObject(g.width))
                 prev_cid = cid
+            if current_chunk:
+                yield generic.NumberObject(first_cid)
+                yield generic.ArrayObject(current_chunk)
 
         cidfont_obj[pdf_name('/W')] = generic.ArrayObject(list(_widths()))
         self._font_ref = ref = writer.add_object(type0, obj_stream=obj_stream)
