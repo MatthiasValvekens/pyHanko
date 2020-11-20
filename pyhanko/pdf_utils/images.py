@@ -77,7 +77,7 @@ def pil_image(img, writer: BasePdfFileWriter):
 class PdfImage(PdfContent):
 
     def __init__(self, image: Union[Image.Image, str],
-                 writer: BasePdfFileWriter,
+                 writer: BasePdfFileWriter = None,
                  resources: PdfResources = None,
                  name: str = None,
                  opacity=None, box: BoxConstraints = None):
@@ -100,7 +100,9 @@ class PdfImage(PdfContent):
     @property
     def image_ref(self):
         assert self.writer is not None
-        if self._image_ref is None:
+        # cache is invalidated if the writer changed
+        if self._image_ref is None or \
+                self._image_ref.get_pdf_handler() is not self.writer:
             self._image_ref = pil_image(self.image, self.writer)
         return self._image_ref
 

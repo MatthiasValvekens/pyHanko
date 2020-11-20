@@ -2,6 +2,7 @@ import pytest
 
 from pyhanko import config, stamp
 from pyhanko.misc import ConfigurationError
+from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 from pyhanko_tests.samples import TESTING_CA_DIR
 
@@ -40,6 +41,7 @@ def test_read_qr_config():
         alternative1:
             text-box-style:
                 font: {NOTO_SERIF_JP}
+            background: pyhanko_tests/data/img/stamp-indexed.png
             type: qr
         alternative2:
             type: qr
@@ -54,7 +56,7 @@ def test_read_qr_config():
 
     alternative1 = cli_config.get_stamp_style('alternative1')
     assert isinstance(alternative1, QRStampStyle)
-    assert alternative1.background is None
+    assert isinstance(alternative1.background, PdfImage)
     assert isinstance(alternative1.text_box_style.font, GlyphAccumulator)
 
     alternative2 = cli_config.get_stamp_style('alternative2')

@@ -13,8 +13,10 @@ from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
 from oscrypto import keys as oskeys
 
+from pyhanko import stamp
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font import pdf_name
+from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import UnacceptableSignerError, SigningError
@@ -291,6 +293,21 @@ def test_sign_field_infer():
     assert s.field_name == 'Sig1'
     val_trusted(s)
 
+
+def test_sign_with_bitmap_bg():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = signers.PdfSigner(
+        signers.PdfSignatureMetadata(), signer=FROM_CA,
+        stamp_style=stamp.TextStampStyle(
+            background=PdfImage('pyhanko_tests/data/img/stamp-indexed.png'),
+        )
+    ).sign_pdf(w, existing_fields_only=True)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s)
 
 def test_sign_field_filled():
     w1 = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))

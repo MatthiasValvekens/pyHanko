@@ -5,7 +5,7 @@ import qrcode
 import tzlocal
 
 from pyhanko.pdf_utils.barcodes import PdfStreamQRImage
-from pyhanko.pdf_utils.font import GlyphAccumulator
+from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import BoxConstraints, BoxSpecificationError, rd
 from pyhanko.pdf_utils.text import TextBoxStyle, TextBox
@@ -60,14 +60,13 @@ class TextStampStyle(ConfigurableMixin):
             bg_spec = config_dict['background']
             # 'special' value to use the stamp vector image baked into
             # the module
-            # TODO allow loading backgrounds from images (after I deal with the
-            #  issues surrounding relationships between PdfContent objects)
             if bg_spec == '__stamp__':
                 config_dict['background'] = STAMP_ART_CONTENT
-            else:  # pragma: nocover
-                raise NotImplementedError(
-                    "Backgrounds other than __stamp__ haven't been implemented."
-                )
+            elif isinstance(bg_spec, str):
+                from PIL import Image
+                img = Image.open(bg_spec)
+                # Setting the writer can be delayed
+                config_dict['background'] = PdfImage(img, writer=None)
         except KeyError:
             pass
 
@@ -159,23 +158,20 @@ class TextStamp(PdfContent):
             #  engine would really help, since all of this is pretty ad hoc and
             #  makes a number of non-obvious choices that would be better off
             #  delegated to somewhere else.
+            bg.set_writer(self.writer)
 
             # scale the background
             bg_height = 0.9 * stamp_height
-            sf = bg_height / bg.box.height
+            if bg.box.height_defined:
+                sf = bg_height / bg.box.height
+            else:
+                bg.box.height = bg_height
+                sf = 1
             bg_y = 0.05 * stamp_height
             bg_width = bg.box.width * sf
             bg_x = 0
             if bg_width <= stamp_width:
                 bg_x = (stamp_width - bg_width) // 2
-
-            # encapsulate resources by using XObjects
-            # TODO what about background reuse? We should take advantage of
-            #  the fact that we're using XObjects here.
-            self.set_resource(
-                ResourceType.XOBJECT, pdf_name('/Background'),
-                value=self.writer.add_object(bg.as_form_xobject())
-            )
 
             # set opacity in graphics state
             opacity = generic.FloatObject(self.style.background_opacity)
@@ -187,10 +183,11 @@ class TextStamp(PdfContent):
                 })
             )
             command_stream.append(
-                b'q /BackgroundGS gs %g 0 0 %g %g %g cm /Background Do Q' % (
-                    sf, sf, bg_x, bg_y
+                b'q /BackgroundGS gs %g 0 0 %g %g %g cm %s Q' % (
+                    sf, sf, bg_x, bg_y, bg.render()
                 )
             )
+            self.import_resources(bg.resources)
 
         text_commands = self.text_box.render()
         command_stream.append(
