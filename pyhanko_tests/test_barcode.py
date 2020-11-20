@@ -32,7 +32,7 @@ def test_qr_natural_size():
 
 def test_code128_render():
     writer = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    bb = barcodes.BarcodeBox(None, "code128", "this is a test")
+    bb = barcodes.BarcodeBox("code128", "this is a test")
     xobj_ref = writer.add_object(bb.as_form_xobject())
 
     stamp_wrapper_stream = generic.StreamObject(

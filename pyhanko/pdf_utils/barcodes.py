@@ -108,7 +108,7 @@ class BarcodeBox(PdfContent):
     Thin wrapper around python-barcode functionality.
     """
 
-    def __init__(self, parent, barcode_type, code):
+    def __init__(self, barcode_type, code):
 
         self.barcode_type = barcode_type
         self.code = code
@@ -123,7 +123,7 @@ class BarcodeBox(PdfContent):
         )
         self._barcode_commands = b.render()
         (w, h) = writer.size
-        super().__init__(parent, box=BoxConstraints(width=w, height=h))
+        super().__init__(box=BoxConstraints(width=w, height=h))
 
     def render(self) -> bytes:
         return self._barcode_commands

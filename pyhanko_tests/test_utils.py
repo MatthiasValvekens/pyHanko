@@ -9,7 +9,7 @@ import pytz
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import BoxConstraints, BoxSpecificationError
-from pyhanko.pdf_utils.reader import PdfFileReader, XRefCache
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils import writer, generic, misc
 from fontTools import ttLib
 from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
@@ -546,3 +546,33 @@ def test_free_unexpected_jump():
 
     with pytest.raises(misc.PdfReadError):
         PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_resource_add_test():
+    res1 = generic.PdfResources()
+    res2 = generic.PdfResources()
+    res1[generic.ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
+    res1[generic.ResourceType.PATTERN][pdf_name('/Blih')] = generic.NullObject()
+    res2[generic.ResourceType.XOBJECT][pdf_name('/Blah')] = generic.NullObject()
+    res2[generic.ResourceType.FONT][pdf_name('/Bluh')] = generic.NullObject()
+
+    res1 += res2
+    res1_dict = res1.as_pdf_object()
+    assert pdf_name('/XObject') in res1_dict
+    assert pdf_name('/Pattern') in res1_dict
+    assert pdf_name('/Font') in res1_dict
+    assert pdf_name('/Bleh') in res1_dict['/XObject']
+    assert pdf_name('/Blah') in res1_dict['/XObject']
+    assert pdf_name('/Shading') not in res1_dict
+
+
+def test_duplicate_resource():
+    res1 = generic.PdfResources()
+    res2 = generic.PdfResources()
+    res1[generic.ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
+    res1[generic.ResourceType.PATTERN][pdf_name('/Blih')] = generic.NullObject()
+    res2[generic.ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
+    res2[generic.ResourceType.FONT][pdf_name('/Bluh')] = generic.NullObject()
+
+    with pytest.raises(generic.ResourceManagementError):
+        res1 += res2

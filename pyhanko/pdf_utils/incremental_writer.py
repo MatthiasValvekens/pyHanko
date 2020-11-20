@@ -169,7 +169,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
         return self.add_stream_to_page(
             page_ix, self.add_object(as_stream),
-            resources=pdf_content.resources, prepend=prepend
+            resources=pdf_content.resources.as_pdf_object(), prepend=prepend
         )
 
     def add_stream_to_page(self, page_ix, stream_ref, resources=None,

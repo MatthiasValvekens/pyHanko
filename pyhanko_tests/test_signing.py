@@ -1667,7 +1667,7 @@ def set_text_field(writer, val):
     tf = writer.root['/AcroForm']['/Fields'][1].get_object()
 
     appearance = generic.RawContent(
-        parent=None, box=generic.BoxConstraints(height=60, width=130),
+        box=generic.BoxConstraints(height=60, width=130),
         data=b'q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q' % val.encode(
             'ascii')
     )
@@ -1721,7 +1721,7 @@ def set_text_field_in_group(writer, ix, val):
     tf_parent = writer.root['/AcroForm']['/Fields'][1].get_object()
     tf = tf_parent['/Kids'][ix].get_object()
     appearance = generic.RawContent(
-        parent=None, box=generic.BoxConstraints(height=60, width=130),
+        box=generic.BoxConstraints(height=60, width=130),
         data=b'''q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q''' % val.encode(
             'ascii')
     )

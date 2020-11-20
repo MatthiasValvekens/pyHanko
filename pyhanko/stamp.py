@@ -14,7 +14,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.generic import pdf_name, pdf_string, PdfContent
+from pyhanko.pdf_utils.generic import (
+    pdf_name, pdf_string, PdfContent,
+    ResourceType,
+)
 from pyhanko.misc import ConfigurableMixin
 
 
@@ -83,7 +86,7 @@ class QRStampStyle(TextStampStyle):
 class TextStamp(PdfContent):
     def __init__(self, writer: IncrementalPdfFileWriter, style,
                  text_params=None, box: BoxConstraints = None):
-        super().__init__(parent=None, box=box)
+        super().__init__(box=box)
         self.writer = writer
         self.style = style
         self.text_params = text_params
@@ -101,7 +104,8 @@ class TextStamp(PdfContent):
         if box.height_defined:
             expected_h = box.height - self.text_box_y()
         self.text_box = TextBox(
-            self, self.style.text_box_style,
+            self.style.text_box_style,
+            resources=self.resources,
             box=BoxConstraints(height=expected_h)
         )
 
@@ -177,14 +181,14 @@ class TextStamp(PdfContent):
             # TODO what about background reuse? We should take advantage of
             #  the fact that we're using XObjects here.
             self.set_resource(
-                pdf_name('/XObject'), pdf_name('/Background'),
+                ResourceType.XOBJECT, pdf_name('/Background'),
                 value=self.writer.add_object(bg.as_form_xobject())
             )
 
             # set opacity in graphics state
             opacity = generic.FloatObject(self.style.background_opacity)
             self.set_resource(
-                category=pdf_name('/ExtGState'),
+                category=ResourceType.EXT_G_STATE,
                 name=pdf_name('/BackgroundGS'),
                 value=generic.DictionaryObject({
                     pdf_name('/CA'): opacity, pdf_name('/ca'): opacity
@@ -282,7 +286,7 @@ class QRStamp(TextStamp):
     def extra_commands(self):
         qr_ref, natural_qr_size = self._qr_xobject()
         self.set_resource(
-            category=pdf_name('/XObject'), name=pdf_name('/QR'),
+            category=ResourceType.XOBJECT, name=pdf_name('/QR'),
             value=qr_ref
         )
         height = self.get_stamp_height()
@@ -363,7 +367,7 @@ def stamp_file(input_name, output_name, style, dest_page,
 
 
 STAMP_ART_CONTENT = generic.RawContent(
-    None, box=BoxConstraints(width=100, height=100),
+    box=BoxConstraints(width=100, height=100),
     data=b'''
 q 1 0 0 -1 0 100 cm 
 0.603922 0.345098 0.54902 rg

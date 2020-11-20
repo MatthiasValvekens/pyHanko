@@ -5,7 +5,7 @@ from PIL.ImagePalette import ImagePalette
 from typing import Union
 
 from pyhanko.pdf_utils.misc import BoxConstraints
-from .generic import pdf_name,  PdfContent
+from .generic import pdf_name, PdfContent, ResourceType, PdfResources
 from . import generic
 from .writer import BasePdfFileWriter
 
@@ -76,8 +76,10 @@ def pil_image(img, writer: BasePdfFileWriter):
 
 class PdfImage(PdfContent):
 
-    def __init__(self, parent, image: Union[Image.Image, str],
-                 writer: BasePdfFileWriter, name: str = None,
+    def __init__(self, image: Union[Image.Image, str],
+                 writer: BasePdfFileWriter,
+                 resources: PdfResources = None,
+                 name: str = None,
                  opacity=None, box: BoxConstraints = None):
 
         if isinstance(image, str):
@@ -93,7 +95,7 @@ class PdfImage(PdfContent):
             box = BoxConstraints(
                 aspect_ratio=Fraction(self.image.width, self.image.height)
             )
-        super().__init__(parent=parent, box=box)
+        super().__init__(resources, box=box)
         self._image_ref = None
 
     @property
@@ -105,7 +107,7 @@ class PdfImage(PdfContent):
     def render(self) -> bytes:
         img_ref_name = '/Img' + self.name
         self.set_resource(
-            category=pdf_name('/XObject'), name=pdf_name(img_ref_name),
+            category=ResourceType.XOBJECT, name=pdf_name(img_ref_name),
             value=self.image_ref
         )
 
@@ -113,7 +115,7 @@ class PdfImage(PdfContent):
         if self.opacity is not None:
             gs_name = '/GS' + str(uuid.uuid4())
             self.set_resource(
-                category=pdf_name('/ExtGState'), name=pdf_name(gs_name),
+                category=ResourceType.EXT_G_STATE, name=pdf_name(gs_name),
                 value=generic.DictionaryObject({
                     pdf_name('/ca'): generic.FloatObject(self.opacity)
                 })

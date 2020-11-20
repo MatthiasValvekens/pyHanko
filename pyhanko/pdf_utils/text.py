@@ -4,8 +4,13 @@ from fractions import Fraction
 
 from fontTools import ttLib
 
-from pyhanko.pdf_utils.font import FontEngine, SimpleFontEngine, GlyphAccumulator
-from pyhanko.pdf_utils.generic import PdfContent, pdf_name
+from pyhanko.pdf_utils.font import (
+    FontEngine, SimpleFontEngine, GlyphAccumulator
+)
+from pyhanko.pdf_utils.generic import (
+    PdfContent, pdf_name, ResourceType,
+    PdfResources,
+)
 from pyhanko.pdf_utils.misc import BoxConstraints
 from pyhanko.misc import ConfigurableMixin, ConfigurationError
 
@@ -44,9 +49,11 @@ class TextBoxStyle(TextStyle):
 
 class TextBox(PdfContent):
 
-    def __init__(self, parent, style: TextBoxStyle, box: BoxConstraints = None,
+    def __init__(self, style: TextBoxStyle,
+                 resources: PdfResources = None,
+                 box: BoxConstraints = None,
                  font_name='F1'):
-        super().__init__(parent=parent, box=box)
+        super().__init__(resources, box=box)
         self.style = style
         self._content = None
         self._scaling_factor = None
@@ -91,7 +98,6 @@ class TextBox(PdfContent):
         else:
             self._scaling_factor = Fraction(self.box.width, natural_width)
 
-
     @property
     def leading(self):
         style = self.style
@@ -119,7 +125,7 @@ class TextBox(PdfContent):
 
         style = self.style
         self.set_resource(
-            category=pdf_name('/Font'), name=pdf_name('/' + self.font_name),
+            category=ResourceType.FONT, name=pdf_name('/' + self.font_name),
             value=style.font.as_resource()
         )
         leading = self.leading
