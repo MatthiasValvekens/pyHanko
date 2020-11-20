@@ -19,12 +19,12 @@ import sphinx_rtd_theme
 
 # -- Project information -----------------------------------------------------
 
-project = 'pyhanko'
+project = 'pyHanko'
 copyright = '2020, Matthias Valvekens'
 author = 'Matthias Valvekens'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = '0.0.1-dev'
 
 
 # -- General configuration ---------------------------------------------------
@@ -54,3 +54,8 @@ html_theme = 'sphinx_rtd_theme'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+
+# Order module/class members by source order.
+
+autodoc_member_order = 'bysource'

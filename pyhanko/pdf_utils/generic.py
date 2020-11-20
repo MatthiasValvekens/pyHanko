@@ -1,13 +1,16 @@
 """
-Implementation of generic PDF objects (dictionary, number, string, and so on).
-Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
+Implementation of PDF object types and other generic functionality.
+The internals were imported from PyPDF2, with modifications.
+
+See :ref:`here <pypdf2-license>` for the original license
+of the PyPDF2 project.
 """
 import os
 import re
 import binascii
 from datetime import datetime
 from enum import Enum
-from typing import Iterator, Tuple, Optional
+from typing import Iterator, Tuple, Optional, Union
 from dataclasses import dataclass, field
 
 from .misc import (
@@ -26,6 +29,8 @@ __all__ = [
     'IndirectObject', 'FloatObject', 'NumberObject', 'pdf_name', 'pdf_string',
     'ByteStringObject', 'TextStringObject', 'NameObject', 'DictionaryObject',
     'StreamObject', 'read_object', 'pdf_date', 'Reference', 'Dereferenceable',
+    'TrailerReference', 'PdfContent', 'RawContent', 'PdfResources',
+    'ResourceManagementError', 'ResourceType'
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -36,20 +41,47 @@ logger = logging.getLogger(__name__)
 
 
 class Dereferenceable:
+    """Represents an opaque reference to a PDF object associated with
+    a PDF Handler (see :class:`PdfHandler <.rw_common.PdfHandler>`).
 
-    def get_object(self):
+    This can either be a reference to an object with an object ID
+    (see :class:`.Reference`) or a reference to the trailer of a PDF document
+    (see :class:`.TrailerReference`).
+    """
+
+    def get_object(self) -> 'PdfObject':
+        """Retrieve the PDF object backing this dereferenceable.
+
+        :return: A :class:`.PdfObject`.
+        """
         raise NotImplementedError
 
     def get_pdf_handler(self):
+        """Return the PDF handler associated with this dereferenceable.
+
+        :return: a :class:`.rw_common.PdfHandler`.
+        """
         raise NotImplementedError
 
 
 class TrailerReference(Dereferenceable):
+    """A reference to the trailer of a PDF document.
+
+    .. warning::
+       Since the trailer does not have a well-defined object ID in files with
+       "classical" cross-reference tables (as opposed to cross-reference
+       streams), this is not a subclass of :class:`.Reference`.
+    """
 
     def __init__(self, reader):
+        """Create a reference to the trailer of a :class:`.reader.PdfReader`
+        instance.
+
+        :param reader: A PDF reader
+        """
         self.reader = reader
 
-    def get_object(self):
+    def get_object(self) -> 'PdfObject':
         return self.reader.trailer
 
     def get_pdf_handler(self):
@@ -58,12 +90,43 @@ class TrailerReference(Dereferenceable):
 
 @dataclass(frozen=True)
 class Reference(Dereferenceable):
+    """A reference to an object with a certain ID and generation number, with
+    a PDF handler attached to it.
+
+    .. warning::
+       Contrary to what one might expect, the generation number does *not*
+       indicate the document revision in which the object was modified. In fact,
+       nonzero generation numbers are exceedingly rare these days; in most
+       real-world PDF files, objects are simply overridden without ever
+       increasing the generation number.
+
+       Except in very specific circumstances, dereferencing a
+       :class:`.Reference` will return the most recent version of the object
+       with the stated object ID and generation number.
+    """
 
     idnum: int
-    generation: int
-    pdf: object = field(repr=False, hash=False, compare=False, default=None)
+    """
+    The object's ID.
+    """
 
-    def get_object(self):
+    generation: int = 0
+    """
+    The object's generation number (usually `0`)
+    """
+
+    pdf: object = field(repr=False, hash=False, compare=False, default=None)
+    """
+    The PDF handler associated with this reference, an instance of
+    :class:`.rw_common.PdfHandler`.
+    
+    .. warning::
+       This field is ignored when hashing or comparing :class:`.Reference`
+       objects, so it is the API user's responsibility to not mix up
+       references originating from unrelated PDF handlers.
+    """
+
+    def get_object(self) -> 'PdfObject':
         from pyhanko.pdf_utils.rw_common import PdfHandler
         assert isinstance(self.pdf, PdfHandler)
         return self.pdf.get_object(self).get_object()
@@ -73,6 +136,25 @@ class Reference(Dereferenceable):
 
 
 def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
+    """Read a PDF object from an input stream.
+
+    .. note::
+       The `container_ref` parameter tells the API which reference to register
+       when the returned object is modified in an incremental update.
+       See also here :ref:`here <container-ref-example>` for further
+       information.
+
+    :param stream:
+        An input stream.
+    :param container_ref:
+        A reference to an object containing this one.
+
+        *Note:* It is perfectly possible (and common) for `container_ref` to
+        resolve to the return value of this function.
+    :return:
+        A :class:`.PdfObject`.
+    """
+
     tok = stream.read(1)
     stream.seek(-1, os.SEEK_CUR)  # reset to start
     idx = OBJECT_PREFIXES.find(tok)
@@ -131,7 +213,33 @@ def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
 
 
 class PdfObject:
+    """Superclass for all PDF objects."""
+
     container_ref: Dereferenceable = None
+    """
+    For objects read from a file, `container_ref` points to the unique
+    addressable object containing this object.
+    
+    .. _container-ref-example:
+    
+    .. note::
+        Consider the following object definition in a PDF file:
+        
+        .. code-block:: text
+        
+           4 0 obj
+           << /Foo (Bar) >>
+          
+        This declares a dictionary with ID `4`, but the values ``/Foo`` and 
+        ``(Bar)`` are also PDF objects (a name and a string, respectively).
+        All of these will have `container_ref` given by a :class:`.Reference`
+        with object ID `4` and generation number `0`.
+    
+    If an object is part of the trailer of a PDF file, `container_ref` will be
+    a :class:`.TrailerReference`.
+    For newly created objects (i.e. those not read from a file), `container_ref`
+    is always ``None``.
+    """
 
     # TODO simplify a number of modification routines using this new API
     def get_container_ref(self) -> Dereferenceable:
@@ -148,14 +256,32 @@ class PdfObject:
         return ref
 
     def get_object(self):
-        """Resolves indirect references."""
+        """Resolves indirect references.
+
+        :return: `self`, unless an instance of :class:`.IndirectObject`.
+        """
         return self
 
     def write_to_stream(self, stream, encryption_key):
+        """
+        Abstract method to render this object to an output stream.
+
+        :param stream:
+            An output stream.
+        :param encryption_key:
+            Key to encrypt the object with.
+        """
+        # TODO put a reference to the encryption docs here (as soon as I have
+        #  those), since it's worth stressing that we only support the crappy
+        #  RC4 encryption scheme of yore.
         raise NotImplementedError
 
 
 class NullObject(PdfObject):
+    """PDF `null` object.
+
+    All instances are treated as equal and falsy.
+    """
 
     def write_to_stream(self, stream, encryption_key):
         stream.write(b"null")
@@ -170,11 +296,16 @@ class NullObject(PdfObject):
     def __eq__(self, other):
         return self is other or isinstance(other, NullObject)
 
+    def __hash__(self):
+        return hash(None)
+
     def __bool__(self):
         return False
 
 
 class BooleanObject(PdfObject):
+    """PDF boolean value."""
+
     def __init__(self, value):
         self.value = value
 
@@ -200,6 +331,18 @@ class BooleanObject(PdfObject):
 
 
 class ArrayObject(list, PdfObject):
+    """PDF array object. This class extends from Python's list class,
+    and supports its interface.
+
+    .. warning::
+        Contrary to the case of dictionary objects, PyPDF2 does not
+        transparently dereference array entries when accessed using
+        :meth:`__getitem__`. I originally decided to preserve this inconsistency
+        for backwards compatibility reasons, but since the API has already
+        started to diverge from PyPDF2 in other places, this might change
+        between now and the first major release.
+
+    """
 
     # transparently decrypt, but otherwise don't dereference
     #  (keeps PyPDF2 behaviour)
@@ -238,31 +381,63 @@ class ArrayObject(list, PdfObject):
         return arr
 
 
-def is_indirect(obj):
+def is_indirect(obj) -> bool:
+    """
+    Check if an object is indirect. Alias for
+    ``isinstance(..., IndirectObject)``.
+
+
+    :param obj:
+        A PDF object.
+    """
     return isinstance(obj, IndirectObject)
 
 
 class IndirectObject(PdfObject, Dereferenceable):
+    """
+    Thin wrapper around a :class:`.Reference`, implementing both the
+    :class:`.Dereferenceable` and :class:`.PdfObject` interfaces.
+
+    .. warning::
+        For many purposes, this class is functionally interchangeable with
+        :class:`.Reference`, with one important exception:
+        :class:`.IndirectObject` instances pointing to the same reference
+        but occurring at different locations in the file may have distinct
+        `container_ref` values.
+    """
+
     def __init__(self, idnum, generation, pdf):
         self.reference = Reference(idnum, generation, pdf)
 
-    def get_object(self):
+    def get_object(self) -> PdfObject:
+        """
+        :return: The PDF object this reference points to.
+        """
         return self.reference.get_object()
 
     def get_pdf_handler(self):
         return self.reference.get_pdf_handler()
 
     @property
-    def idnum(self):
+    def idnum(self) -> int:
+        """
+        :return: the object ID of this reference.
+        """
         return self.reference.idnum
 
     @property
     def generation(self):
+        """
+        :return: the generation number of this reference.
+        """
         return self.reference.generation
 
     def __repr__(self):
         return "IndirectObject(%r, %r)" % (self.idnum, self.generation)
 
+    # TODO I'm starting to think that making indirect objects hashable
+    #  is a bad idea. Think about that for a bit, I might just be getting
+    #  overly pedantic.
     def __hash__(self):
         return hash((self.idnum, self.generation))
 
@@ -313,6 +488,11 @@ class IndirectObject(PdfObject, Dereferenceable):
 
 
 class FloatObject(decimal.Decimal, PdfObject):
+    """PDF Float object.
+
+    Internally, these are treated as decimals (and therefore actually
+    fixed-point objects, to be precise).
+    """
 
     # noinspection PyArgumentList,PyTypeChecker
     def __new__(cls, value="0", context=None):
@@ -328,6 +508,9 @@ class FloatObject(decimal.Decimal, PdfObject):
             return "%g" % self
 
     def as_numeric(self):
+        """
+        :return: a Python ``float`` value for this object.
+        """
         return float(self)
 
     def write_to_stream(self, stream, encryption_key):
@@ -335,6 +518,9 @@ class FloatObject(decimal.Decimal, PdfObject):
 
 
 class NumberObject(int, PdfObject):
+    """
+    PDF number object. This is the PDF type for integer values.
+    """
     NumberPattern = re.compile(b'[^+-.0-9]')
     ByteDot = b"."
 
@@ -347,6 +533,9 @@ class NumberObject(int, PdfObject):
             return int.__new__(cls, 0)
 
     def as_numeric(self):
+        """
+        :return: a Python ``int`` value for this object.
+        """
         return int(self)
 
     def write_to_stream(self, stream, encryption_key):
@@ -361,10 +550,16 @@ class NumberObject(int, PdfObject):
             return NumberObject(num.decode('ascii'))
 
 
-##
-# Given a string (either a "str" or "unicode"), create a ByteStringObject or a
-# TextStringObject to represent the string.
-def pdf_string(string):
+# TODO: not sure I like this behaviour of PyPDF2. Review.
+
+def pdf_string(string) -> Union['ByteStringObject', 'TextStringObject']:
+    """
+    Encode a string as a :class:`.TextStringObject` if possible,
+    or a :class:`.ByteStringObject` otherwise.
+
+    :param string:
+        A Python string.
+    """
     if isinstance(string, str):
         return TextStringObject(string)
     elif isinstance(string, (bytes, bytearray)):
@@ -390,7 +585,14 @@ def pdf_string(string):
 HEX_DIGITS = b'0123456789abcdefABCDEF'
 
 
-def read_hex_string_from_stream(stream):
+def read_hex_string_from_stream(stream) \
+        -> Union['ByteStringObject', 'TextStringObject']:
+    """
+    Read a hex string from a stream into a PDF string object.
+
+    :param stream:
+        An input stream.
+    """
     stream.read(1)
 
     odd = False
@@ -416,7 +618,18 @@ def read_hex_string_from_stream(stream):
     return pdf_string(result)
 
 
-def read_string_from_stream(stream):
+def read_string_from_stream(stream) -> Union['ByteStringObject',
+                                             'TextStringObject']:
+    """
+    Read a PDF string literal from a stream.
+
+    This method should in principle always return a :class:`TextStringObject`
+    instance if the underlying file is a valid PDF file.
+
+    :param stream:
+        An input stream.
+    """
+
     stream.read(1)
     parens = 1
     txt = b""
@@ -476,17 +689,14 @@ def read_string_from_stream(stream):
     return pdf_string(txt)
 
 
-##
-# Represents a string object where the text encoding could not be determined.
-# This occurs quite often, as the PDF spec doesn't provide an alternate way to
-# represent strings -- for example, the encryption data stored in files (like
-# /O) is clearly not text, but is still stored in a "String" object.
 class ByteStringObject(bytes, PdfObject):
+    """ PDF bytestring class.
+    """
 
-    ##
-    # For compatibility with TextStringObject.original_bytes.  This method
-    # returns self.
     original_bytes = property(lambda self: self)
+    """
+    For compatibility with :attr:`.TextStringObject.original_bytes`
+    """
 
     def write_to_stream(self, stream, encryption_key):
         bytearr = self
@@ -497,23 +707,30 @@ class ByteStringObject(bytes, PdfObject):
         stream.write(b">")
 
 
-##
-# Represents a string object that has been decoded into a real unicode string.
-# If read from a PDF document, this string appeared to match the
-# PDFDocEncoding, or contained a UTF-16BE BOM mark to cause UTF-16 decoding to
-# occur.
 class TextStringObject(str, PdfObject):
+    """
+    PDF text string object.
+    """
+
     autodetect_pdfdocencoding = False
+    """
+    If ``True``, this string was determined to be encoded in PDFDoc encoding.
+    """
+
     autodetect_utf16 = False
+    """
+    If ``True``, this string was determined to be encoded in UTF16-BE encoding.
+    """
 
-    ##
-    # It is occasionally possible that a text string object gets created where
-    # a byte string object was expected due to the autodetection mechanism --
-    # if that occurs, this "original_bytes" property can be used to
-    # back-calculate what the original encoded bytes were.
-    original_bytes = property(lambda self: self.get_original_bytes())
+    @property
+    def original_bytes(self):
+        """
+        Retrieve the original bytes of the string as specified in the
+        source file.
 
-    def get_original_bytes(self):
+        This may be necessary if this string was misidentified as a text string.
+        """
+
         # We're a text string object, but the library is trying to get our raw
         # bytes.  This can happen if we auto-detected this string as text, but
         # we were wrong.  It's pretty common.  Return the original bytes that
@@ -551,8 +768,13 @@ class TextStringObject(str, PdfObject):
 
 
 class NameObject(str, PdfObject):
-    delimiterPattern = re.compile(r"\s+|[\(\)<>\[\]{}/%]".encode('ascii'))
-    surfix = b"/"
+    """
+    PDF name object. These are valid Python strings, but names and strings
+    are treated differently in the PDF specification, so proper care is
+    required.
+    """
+
+    DELIMITER_PATTERN = re.compile(r"\s+|[\(\)<>\[\]{}/%]".encode('ascii'))
 
     def write_to_stream(self, stream, encryption_key):
         # TODO look up the correct encoding to use in the spec
@@ -562,9 +784,9 @@ class NameObject(str, PdfObject):
     @staticmethod
     def read_from_stream(stream, strict=True):
         name = stream.read(1)
-        if name != NameObject.surfix:
+        if name != b'/':
             raise PdfReadError("name read error")
-        name += read_until_regex(stream, NameObject.delimiterPattern,
+        name += read_until_regex(stream, NameObject.DELIMITER_PATTERN,
                                  ignore_eof=True)
         try:
             return NameObject(name.decode('utf-8'))
