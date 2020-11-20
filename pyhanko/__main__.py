@@ -4,7 +4,7 @@ __all__ = []
 
 
 def launch():
-    cli(prog_name='pdfstamp')
+    cli(prog_name='pyhanko')
 
 
 if __name__ == '__main__':

@@ -3,20 +3,20 @@ import logging
 import getpass
 
 from certvalidator import ValidationContext
-from pdfstamp.config import (
+from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
     CLIConfig,
 )
 
-from pdfstamp.sign import signers
-from pdfstamp.sign.timestamps import HTTPTimeStamper
-from pdfstamp.sign import validation, beid, fields
-from pdf_utils.reader import PdfFileReader
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdfstamp.sign.validation import (
+from pyhanko.sign import signers
+from pyhanko.sign.timestamps import HTTPTimeStamper
+from pyhanko.sign import validation, beid, fields
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.sign.validation import (
     SignatureValidationError, RevocationInfoValidationType
 )
-from pdfstamp.stamp import QRStampStyle
+from pyhanko.stamp import QRStampStyle
 
 
 __all__ = ['cli']
@@ -35,7 +35,7 @@ root_logger.addHandler(sh)
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_CONFIG_FILE = 'pdfstamp.yml'
+DEFAULT_CONFIG_FILE = 'pyhanko.yml'
 
 SIG_META = 'SIG_META'
 EXISTING_ONLY = 'EXISTING_ONLY'

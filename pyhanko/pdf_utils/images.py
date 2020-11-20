@@ -4,7 +4,7 @@ from fractions import Fraction
 from PIL.ImagePalette import ImagePalette
 from typing import Union
 
-from pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.misc import BoxConstraints
 from .generic import pdf_name,  PdfContent
 from . import generic
 from .writer import BasePdfFileWriter

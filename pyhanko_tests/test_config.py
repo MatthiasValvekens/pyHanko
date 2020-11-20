@@ -1,9 +1,9 @@
 import pytest
 
-from pdfstamp import config, stamp
-from pdfstamp.misc import ConfigurationError
-from pdfstamp.stamp import QRStampStyle, TextStampStyle
-from pdfstamp_tests.samples import TESTING_CA_DIR
+from pyhanko import config, stamp
+from pyhanko.misc import ConfigurationError
+from pyhanko.stamp import QRStampStyle, TextStampStyle
+from pyhanko_tests.samples import TESTING_CA_DIR
 
 
 @pytest.mark.parametrize('trust_replace', [True, False])
@@ -27,8 +27,8 @@ def test_read_vc_kwargs(trust_replace):
 
 
 def test_read_qr_config():
-    from pdfstamp_tests.test_utils import NOTO_SERIF_JP
-    from pdf_utils.font import GlyphAccumulator, SimpleFontEngine
+    from pyhanko_tests.test_utils import NOTO_SERIF_JP
+    from pyhanko.pdf_utils.font import GlyphAccumulator, SimpleFontEngine
 
     config_string = f"""
     stamp-styles:

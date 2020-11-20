@@ -32,7 +32,7 @@ It's nowhere near complete, but here is a short overview of the features:
     - LTV validation (note: the PAdES B-LT baseline profile is supported, but PAdES B-LTA isn't available yet)
  
  The CLI was implemented using `click`, so it comes with a built-in help function.
- Launch `python -m pdfstamp` to get started.
+ Launch `python -m pyhanko` to get started.
 
 
 ### Some TODOs and known limitations

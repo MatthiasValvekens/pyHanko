@@ -4,13 +4,13 @@ from dataclasses import dataclass
 
 import yaml
 from certvalidator import ValidationContext
-from pdfstamp.misc import check_config_keys, ConfigurationError
-from pdfstamp.sign import signers
+from pyhanko.misc import check_config_keys, ConfigurationError
+from pyhanko.sign import signers
 
 
 # TODO add stamp styles etc.
-from pdfstamp.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
-from pdfstamp.stamp import QRStampStyle, TextStampStyle
+from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
+from pyhanko.stamp import QRStampStyle, TextStampStyle
 
 
 @dataclass

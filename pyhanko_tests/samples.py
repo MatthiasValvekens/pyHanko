@@ -3,9 +3,9 @@ def read_all(fname):
         return f.read()
 
 
-CRYPTO_DATA_DIR = 'pdfstamp_tests/data/crypto'
+CRYPTO_DATA_DIR = 'pyhanko_tests/data/crypto'
 TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'
-PDF_DATA_DIR = 'pdfstamp_tests/data/pdf'
+PDF_DATA_DIR = 'pyhanko_tests/data/pdf'
 MINIMAL = read_all(PDF_DATA_DIR + '/minimal.pdf')
 MINIMAL_XREF = read_all(PDF_DATA_DIR + '/minimal-xref.pdf')
 MINIMAL_ONE_FIELD = read_all(PDF_DATA_DIR + '/minimal-with-field.pdf')
@@ -27,9 +27,9 @@ FILE_WITH_EMBEDDED_FONT = read_all(PDF_DATA_DIR + '/fontembed.pdf')
 def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # based on the minimal pdf file of
     # https://brendanzagaeski.appspot.com/0004.html
-    from pdf_utils import writer, generic
-    from pdf_utils.generic import pdf_name
-    from pdf_utils.misc import get_courier
+    from pyhanko.pdf_utils import writer, generic
+    from pyhanko.pdf_utils.generic import pdf_name
+    from pyhanko.pdf_utils.misc import get_courier
 
     resources = generic.DictionaryObject({
         pdf_name('/Font'): generic.DictionaryObject({

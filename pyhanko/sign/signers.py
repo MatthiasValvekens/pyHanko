@@ -12,22 +12,22 @@ from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
 from certvalidator import ValidationContext, CertificateValidator
 from oscrypto import asymmetric, keys as oskeys
 
-from pdf_utils import generic
-from pdf_utils.generic import pdf_name, pdf_date, pdf_string
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.misc import BoxConstraints
-from pdf_utils.reader import PdfFileReader
-from pdfstamp.sign import general
-from pdfstamp.sign.fields import (
+from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.sign import general
+from pyhanko.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
     SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm, FieldMDPSpec,
 )
-from pdfstamp.sign.timestamps import TimeStamper
-from pdfstamp.sign.general import (
+from pyhanko.sign.timestamps import TimeStamper
+from pyhanko.sign.general import (
     simple_cms_attribute, CertificateStore,
     SimpleCertificateStore, SigningError,
 )
-from pdfstamp.stamp import (
+from pyhanko.stamp import (
     TextStampStyle, TextStamp, STAMP_ART_CONTENT,
     QRStampStyle, QRStamp,
 )
@@ -633,7 +633,7 @@ class PdfTimestamper:
         output, sig_contents = wr.send(timestamp_cms)
 
         # update the DSS
-        from pdfstamp.sign import validation
+        from pyhanko.sign import validation
         validation.DocumentSecurityStore.add_dss(
             output_stream=output, sig_contents=sig_contents,
             paths=validation_paths, validation_context=validation_context
@@ -1081,7 +1081,7 @@ class PdfSigner(PdfTimestamper):
         output, sig_contents = wr.send(signature_cms)
 
         if use_pades and signature_meta.embed_validation_info:
-            from pdfstamp.sign import validation
+            from pyhanko.sign import validation
             validation.DocumentSecurityStore.add_dss(
                 output_stream=output, sig_contents=sig_contents,
                 paths=validation_paths, validation_context=validation_context

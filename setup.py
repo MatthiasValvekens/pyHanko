@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='pdf-stamp',
     version='0.0.1',
-    packages=['pdfstamp', 'pdfstamp.sign', 'pdf_utils'],
+    packages=['pyhanko', 'pyhanko.sign', 'pyhanko.pdf_utils'],
     url='https://github.com/MatthiasValvekens/pdf-stamp',
     license='MIT License',
     author='Matthias Valvekens',
@@ -11,7 +11,7 @@ setup(
     description='Tools for stamping and signing PDF files',
     entry_points={
         "console_scripts": [
-            "pdfstamp = pdfstamp.__main__:launch"
+            "pyhanko = pyhanko.__main__:launch"
         ]
     }
 )

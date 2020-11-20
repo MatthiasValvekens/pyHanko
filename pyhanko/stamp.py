@@ -4,18 +4,18 @@ from binascii import hexlify
 import qrcode
 import tzlocal
 
-from pdf_utils.barcodes import PdfStreamQRImage
-from pdf_utils.font import GlyphAccumulator
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.misc import BoxConstraints, BoxSpecificationError, rd
-from pdf_utils.text import TextBoxStyle, TextBox
-from pdf_utils.writer import init_xobject_dictionary
+from pyhanko.pdf_utils.barcodes import PdfStreamQRImage
+from pyhanko.pdf_utils.font import GlyphAccumulator
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import BoxConstraints, BoxSpecificationError, rd
+from pyhanko.pdf_utils.text import TextBoxStyle, TextBox
+from pyhanko.pdf_utils.writer import init_xobject_dictionary
 from dataclasses import dataclass
 from datetime import datetime
 
-from pdf_utils import generic
-from pdf_utils.generic import pdf_name, pdf_string, PdfContent
-from pdfstamp.misc import ConfigurableMixin
+from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import pdf_name, pdf_string, PdfContent
+from pyhanko.misc import ConfigurableMixin
 
 
 class AnnotAppearances:

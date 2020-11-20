@@ -8,25 +8,25 @@ import pytz
 from asn1crypto import ocsp, tsp
 from certvalidator.errors import PathValidationError
 
-import pdfstamp.sign.fields
+import pyhanko.sign.fields
 from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
 from oscrypto import keys as oskeys
 
-from pdf_utils import generic
-from pdf_utils.font import pdf_name
-from pdf_utils.writer import PdfFileWriter
-from pdfstamp.sign import timestamps, fields, signers
-from pdfstamp.sign.general import UnacceptableSignerError, SigningError
-from pdfstamp.sign.signers import PdfTimestamper
-from pdfstamp.sign.validation import (
+from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.font import pdf_name
+from pyhanko.pdf_utils.writer import PdfFileWriter
+from pyhanko.sign import timestamps, fields, signers
+from pyhanko.sign.general import UnacceptableSignerError, SigningError
+from pyhanko.sign.signers import PdfTimestamper
+from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
     SignatureCoverageLevel, ModificationLevel, SignatureValidationError,
 )
-from pdf_utils.reader import PdfFileReader
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from .samples import *
 
 
@@ -490,7 +490,7 @@ def test_http_timestamp(requests_mock):
 
     # bad content-type
     requests_mock.post(DUMMY_HTTP_TS.url, content=ts_response_callback)
-    from pdfstamp.sign.timestamps import TimestampRequestError
+    from pyhanko.sign.timestamps import TimestampRequestError
     with pytest.raises(TimestampRequestError):
         signers.sign_pdf(
             w, signers.PdfSignatureMetadata(), signer=FROM_CA, timestamper=DUMMY_HTTP_TS,
@@ -868,7 +868,7 @@ def test_certify():
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
-            docmdp_permissions=pdfstamp.sign.fields.MDPPerm.NO_CHANGES
+            docmdp_permissions=pyhanko.sign.fields.MDPPerm.NO_CHANGES
         ), signer=FROM_CA
     )
     r = PdfFileReader(out)
@@ -878,7 +878,7 @@ def test_certify():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.NO_CHANGES
+    assert info.permission_bits == pyhanko.sign.fields.MDPPerm.NO_CHANGES
 
     # with NO_CHANGES, we shouldn't be able to append an approval signature
     out.seek(0)
@@ -903,7 +903,7 @@ def test_no_double_certify():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
+    assert info.permission_bits == pyhanko.sign.fields.MDPPerm.FILL_FORMS
 
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
@@ -911,7 +911,7 @@ def test_no_double_certify():
         signers.sign_pdf(
             w, signers.PdfSignatureMetadata(
                 field_name='Sig2', certify=True,
-                docmdp_permissions=pdfstamp.sign.fields.MDPPerm.FILL_FORMS
+                docmdp_permissions=pyhanko.sign.fields.MDPPerm.FILL_FORMS
             ), signer=FROM_CA
         )
 
@@ -939,7 +939,7 @@ def test_approval_sig():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission_bits == pdfstamp.sign.fields.MDPPerm.FILL_FORMS
+    assert info.permission_bits == pyhanko.sign.fields.MDPPerm.FILL_FORMS
 
     s = r.embedded_signatures[1]
     assert s.field_name == 'Sig2'

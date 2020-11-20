@@ -4,17 +4,17 @@ from hashlib import md5
 from io import BytesIO
 from typing import Tuple, List, Union
 
-from pdf_utils import generic
-from pdf_utils.generic import pdf_name, pdf_string
-from pdf_utils.misc import peek, PdfReadError
-from pdf_utils.rw_common import PdfHandler
+from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import pdf_name, pdf_string
+from pyhanko.pdf_utils.misc import peek, PdfReadError
+from pyhanko.pdf_utils.rw_common import PdfHandler
 
 """
 Utility classes for writing PDF files.
 Contains code from the PyPDF2 project, see LICENSE.PyPDF2
 """
 
-VENDOR = 'pdfstamp'
+VENDOR = 'pyhanko'
 
 
 # TODO consider giving object streams and writers a common add_object interface

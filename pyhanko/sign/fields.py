@@ -7,13 +7,13 @@ from asn1crypto import x509
 from certvalidator.path import ValidationPath
 from oscrypto import keys as oskeys
 
-from pdf_utils import generic
-from pdf_utils.generic import pdf_name, pdf_string
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.misc import OrderedEnum
-from pdf_utils.rw_common import PdfHandler
-from pdfstamp.sign.general import UnacceptableSignerError, SigningError
-from pdfstamp.stamp import AnnotAppearances
+from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import pdf_name, pdf_string
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import OrderedEnum
+from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko.sign.general import UnacceptableSignerError, SigningError
+from pyhanko.stamp import AnnotAppearances
 
 __all__ = [
     'SigSeedValFlags', 'SigCertConstraints', 'SignatureFormField',
@@ -360,7 +360,7 @@ class SigSeedValueSpec:
         )
 
     def build_timestamper(self):
-        from pdfstamp.sign.timestamps import HTTPTimeStamper
+        from pyhanko.sign.timestamps import HTTPTimeStamper
         if self.timestamp_server_url:
             return HTTPTimeStamper(self.timestamp_server_url)
 

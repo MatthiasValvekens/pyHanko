@@ -17,14 +17,14 @@ from certvalidator.path import ValidationPath
 from oscrypto import asymmetric
 from oscrypto.errors import SignatureError
 
-from pdf_utils import generic, misc
-from pdf_utils.generic import pdf_name
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.misc import OrderedEnum, LazyJoin
-from pdf_utils.reader import (
+from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.generic import pdf_name
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import OrderedEnum, LazyJoin
+from pyhanko.pdf_utils.reader import (
     PdfFileReader, XRefCache, process_data_at_eof,
 )
-from pdf_utils.rw_common import PdfHandler
+from pyhanko.pdf_utils.rw_common import PdfHandler
 from .fields import MDPPerm, FieldMDPSpec
 from .general import (
     SignatureStatus, find_cms_attribute,
@@ -1343,7 +1343,7 @@ def _whitelist_callback(explained_refs, signed_revision, xref_cache):
 
 def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
                              signing_cert, validation_path, timestamp_found):
-    from pdfstamp.sign.fields import (
+    from pyhanko.sign.fields import (
         SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter
     )
     sig_field = emb_sig.sig_field
@@ -1462,7 +1462,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     # check whether the subfilter type is one we support
     subfilter_str = sig_object['/SubFilter']
     try:
-        from pdfstamp.sign.fields import SigSeedSubFilter
+        from pyhanko.sign.fields import SigSeedSubFilter
         SigSeedSubFilter(subfilter_str)
     except ValueError:
         raise NotImplementedError(

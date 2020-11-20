@@ -6,13 +6,13 @@ from io import BytesIO
 
 import pytz
 
-from pdf_utils.generic import Reference
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils.misc import BoxConstraints, BoxSpecificationError
-from pdf_utils.reader import PdfFileReader, XRefCache
-from pdf_utils import writer, generic, misc
+from pyhanko.pdf_utils.generic import Reference
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import BoxConstraints, BoxSpecificationError
+from pyhanko.pdf_utils.reader import PdfFileReader, XRefCache
+from pyhanko.pdf_utils import writer, generic, misc
 from fontTools import ttLib
-from pdf_utils.font import GlyphAccumulator, pdf_name
+from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
 
 from .samples import *
 
@@ -38,7 +38,7 @@ def test_create_fresh(zip1, zip2):
     assert b'Page 2' in kids[1].get_object()['/Contents'].data
 
 
-NOTO_SERIF_JP = 'pdfstamp_tests/data/fonts/NotoSerifJP-Regular.otf'
+NOTO_SERIF_JP = 'pyhanko_tests/data/fonts/NotoSerifJP-Regular.otf'
 
 
 def test_embed_subset():
@@ -217,7 +217,7 @@ TEST_STRING = b'\x74\x77\x74\x84\x66'
 
 
 def test_ascii_hex_decode():
-    from pdf_utils import filters
+    from pyhanko.pdf_utils import filters
     data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
 
     encoded = filters.ASCIIHexDecode.encode(data)
@@ -225,7 +225,7 @@ def test_ascii_hex_decode():
 
 
 def test_ascii85_decode():
-    from pdf_utils import filters
+    from pyhanko.pdf_utils import filters
     data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
 
     encoded = filters.ASCII85Decode.encode(data)

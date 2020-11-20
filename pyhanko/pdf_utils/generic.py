@@ -63,7 +63,7 @@ class Reference(Dereferenceable):
     pdf: object = field(repr=False, hash=False, compare=False, default=None)
 
     def get_object(self):
-        from pdf_utils.rw_common import PdfHandler
+        from pyhanko.pdf_utils.rw_common import PdfHandler
         assert isinstance(self.pdf, PdfHandler)
         return self.pdf.get_object(self).get_object()
 
@@ -1061,7 +1061,7 @@ class PdfContent:
     # TODO allow the bounding box to be overridden/refitted
     #  (using matrix transforms)
     def as_form_xobject(self):
-        from pdf_utils.writer import init_xobject_dictionary
+        from pyhanko.pdf_utils.writer import init_xobject_dictionary
         command_stream = self.render()
         return init_xobject_dictionary(
             command_stream=command_stream, box_width=self.box.width,

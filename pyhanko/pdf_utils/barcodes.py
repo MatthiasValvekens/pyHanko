@@ -2,8 +2,8 @@ from qrcode.image.base import BaseImage
 import barcode
 from barcode.writer import BaseWriter
 
-from pdf_utils.generic import PdfContent
-from pdf_utils.misc import rd, BoxConstraints
+from pyhanko.pdf_utils.generic import PdfContent
+from pyhanko.pdf_utils.misc import rd, BoxConstraints
 
 
 class PdfStreamQRImage(BaseImage):
@@ -60,7 +60,7 @@ class PdfStreamBarcodeWriter(BaseWriter):
     Implementation of writer class for the python-barcode library to output
     PDF graphics operators.
     Note: _paint_text is intentionally dummied out.
-    Please use the functionality implemented in pdf_utils.text instead.
+    Please use the functionality implemented in pyhanko.pdf_utils.text instead.
     """
 
     def __init__(self):

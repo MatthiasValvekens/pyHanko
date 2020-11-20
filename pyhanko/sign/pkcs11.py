@@ -3,8 +3,8 @@ from typing import Set
 from asn1crypto import x509
 from oscrypto import keys as oskeys
 
-from pdfstamp.sign.general import CertificateStore, SimpleCertificateStore
-from pdfstamp.sign.signers import Signer
+from pyhanko.sign.general import CertificateStore, SimpleCertificateStore
+from pyhanko.sign.signers import Signer
 
 __all__ = ['PKCS11Signer']
 

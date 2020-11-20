@@ -940,8 +940,8 @@ class PdfFileReader(PdfHandler):
     def embedded_signatures(self):
         if self._embedded_signatures is not None:
             return self._embedded_signatures
-        from pdfstamp.sign.fields import enumerate_sig_fields
-        from pdfstamp.sign.validation import EmbeddedPdfSignature
+        from pyhanko.sign.fields import enumerate_sig_fields
+        from pyhanko.sign.validation import EmbeddedPdfSignature
         sig_fields = enumerate_sig_fields(self, filled_status=True)
 
         result = sorted(

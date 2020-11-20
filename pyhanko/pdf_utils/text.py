@@ -4,10 +4,10 @@ from fractions import Fraction
 
 from fontTools import ttLib
 
-from pdf_utils.font import FontEngine, SimpleFontEngine, GlyphAccumulator
-from pdf_utils.generic import PdfContent, pdf_name
-from pdf_utils.misc import BoxConstraints
-from pdfstamp.misc import ConfigurableMixin, ConfigurationError
+from pyhanko.pdf_utils.font import FontEngine, SimpleFontEngine, GlyphAccumulator
+from pyhanko.pdf_utils.generic import PdfContent, pdf_name
+from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.misc import ConfigurableMixin, ConfigurationError
 
 logger = logging.getLogger(__name__)
 

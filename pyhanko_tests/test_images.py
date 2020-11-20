@@ -4,12 +4,12 @@ import pytest
 import os
 from PIL import Image
 from .samples import *
-from pdf_utils import images
-from pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pdf_utils import generic
-from pdf_utils.generic import pdf_name
+from pyhanko.pdf_utils import images
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import pdf_name
 
-IMG_DIR = 'pdfstamp_tests/data/img'
+IMG_DIR = 'pyhanko_tests/data/img'
 
 
 @pytest.mark.parametrize('infile', ['stamp.png', 'stamp-indexed.png'])
