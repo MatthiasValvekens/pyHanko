@@ -1,5 +1,5 @@
-pdf-stamp
---------
+![pyHanko](docs/images/pyhanko-logo.svg)
+
 ![status](https://github.com/MatthiasValvekens/pdf-stamp/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pdf-stamp.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python)
@@ -7,6 +7,11 @@ pdf-stamp
 
 
 The lack of open-source CLI tooling to handle digitally signing and stamping PDF files was bothering me, so I went ahead and rolled my own.
+
+*Note:* The working title of this project was `pdf-stamp`, which is still the name of the repository.
+I'll probably rename it in due time.
+
+*Note:* This project is not yet production-ready, and is currently in a pre-alpha stage.
 
 ### Overview
 The code in this repository functions both as a library and as a command-line tool.
@@ -42,7 +47,7 @@ It's nowhere near complete, but here is a short overview of the features:
 
 ### Acknowledgement
 
-This repository includes code from `PyPDF2` (with both minor and major modifications); the original license has been included [here](pdf_utils/LICENSE.PyPDF2).
+This repository includes code from `PyPDF2` (with both minor and major modifications); the original license has been included [here](pyhanko/pdf_utils/LICENSE.PyPDF2).
 
 
 ## License

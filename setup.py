@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name='pdf-stamp',
+    name='pyHanko',
     version='0.0.1',
     packages=['pyhanko', 'pyhanko.sign', 'pyhanko.pdf_utils'],
     url='https://github.com/MatthiasValvekens/pdf-stamp',

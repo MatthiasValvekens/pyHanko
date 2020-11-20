@@ -1,5 +1,6 @@
 ignore: 
     - "tests"
+    - "docs"
     - "pyhanko/sign/pkcs11.py"  # PKCS11 code is impossible to unit test without a PCKS11 mocker
     - "pyhanko/sign/beid.py"
     - "pyhanko/cli.py"  # Maybe it's not a terrible idea to do this using pytest as well (TODO)
