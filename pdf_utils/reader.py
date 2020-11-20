@@ -89,6 +89,8 @@ class XRefCache:
         self.history = defaultdict(list)
         self._current_section_ids = set()
         self._refs_by_section = []
+        self._generations = {}
+        self._previous_expected_free = {}
         self.xref_container_info = []
 
         self._obj_streams_by_revision = defaultdict(set)
@@ -98,17 +100,74 @@ class XRefCache:
         self._refs_by_section.append(self._current_section_ids)
         self._current_section_ids = set()
 
-    def used_before(self, idnum, generation):
+    def used_later(self, idnum, generation) -> bool:
         # We move backwards through the xrefs, don't replace any.
-        return (generation, idnum) in self.standard_xrefs or \
-               idnum in self.in_obj_stream
+        try:
+            return generation in self._generations[idnum]
+        except KeyError:
+            return False
+
+    def free_ref(self, idnum, next_generation):
+        if not idnum:
+            return
+        # treat this as setting idnum, next_generation-1 to null
+        prev_generation = (next_generation - 1) if next_generation else 0xffff
+        self.standard_xrefs[(prev_generation, idnum)] = None
+        self._current_section_ids.add(
+            generic.Reference(idnum, prev_generation)
+        )
+        try:
+            # check for sneaky reuse: does prev_generation (or any lower one)
+            # still occur later in the file?
+            conflicting_gen = next(
+                gen for gen in self._generations[idnum]
+                if gen <= prev_generation
+            )
+            raise misc.PdfReadError(
+                f"Generation {conflicting_gen} of object {idnum} occurs "
+                f"after generation {prev_generation} was freed."
+            )
+        except KeyError:
+            self._generations[idnum] = {prev_generation}
+        except StopIteration:
+            self._generations[idnum].add(prev_generation)
+
+        if idnum not in self.last_change:
+            # this revision is the last change
+            self.last_change[idnum] = self.xref_sections
+        try:
+            # remove from expected free dict
+            expected_generation = self._previous_expected_free.pop(idnum)
+            if expected_generation != next_generation:
+                raise misc.PdfReadError(
+                    f"Encountered freeing instruction with next generation "
+                    f"{next_generation} of object ID {idnum}, but next use of "
+                    f"this object has generation {expected_generation}."
+                )
+        except KeyError:
+            # this object might simply not have been reclaimed
+            pass
 
     def put_ref(self, idnum, generation, start):
-        ix = (generation, idnum)
-        if not self.used_before(idnum, generation):
-            self.standard_xrefs[ix] = start
+        if idnum in self._previous_expected_free:
+            raise misc.PdfReadError(
+                f"Generation {generation} of object {idnum} was "
+                "never freed, but reused later."
+            )
+        if generation > 0xffff:  # pragma: nocover
+            raise misc.PdfReadError(
+                f"Illegal generation {generation} for object ID {idnum}."
+            )
+        elif generation > 0:
+            # we must encounter a freeing instruction further back in the file
+            self._previous_expected_free[idnum] = generation
+        if not self.used_later(idnum, generation):
+            self.standard_xrefs[(generation, idnum)] = start
             self.last_change[idnum] = self.xref_sections
-        self.history[ix].append((self.xref_sections, start))
+            self._generations[idnum] = {generation}
+        else:
+            self._generations[idnum].add(generation)
+        self.history[(generation, idnum)].append((self.xref_sections, start))
         self._current_section_ids.add(
             generic.Reference(idnum, generation, self.reader)
         )
@@ -118,9 +177,10 @@ class XRefCache:
             generic.Reference(obj_stream_num, 0, self.reader)
         )
         marker = (obj_stream_num, obj_stream_ix)
-        if not self.used_before(idnum, 0):
+        if not self.used_later(idnum, 0):
             self.in_obj_stream[idnum] = marker
             self.last_change[idnum] = self.xref_sections
+            self._generations[idnum] = {0}
 
         self.history[(0, idnum)].append((self.xref_sections, marker))
         self._current_section_ids.add(generic.Reference(idnum, 0, self.reader))
@@ -197,13 +257,12 @@ class XRefCache:
         )
 
     def __getitem__(self, ref):
-        ix = (ref.generation, ref.idnum)
         if ref.generation == 0 and \
                 ref.idnum in self.in_obj_stream:
             return self.in_obj_stream[ref.idnum]
         else:
             try:
-                return self.standard_xrefs[ix]
+                return self.standard_xrefs[(ref.generation, ref.idnum)]
             except KeyError:
                 raise misc.PdfReadError("Could not find object.")
 
@@ -243,6 +302,8 @@ class XRefCache:
                 offset, generation, marker = line[:18].split(b" ")
                 if marker == b'n':
                     self.put_ref(num, int(generation), int(offset))
+                elif marker == b'f':
+                    self.free_ref(num, int(generation))
                 num += 1
             read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
@@ -298,10 +359,14 @@ class XRefCache:
                     objstr_num = get_entry(1)
                     objstr_idx = get_entry(2)
                     self.put_obj_stream_ref(num, objstr_num, objstr_idx)
+                elif xref_type == 0:
+                    # freed object
+                    # we ignore the linked list aspect anyway, so discard first
+                    get_entry(1)
+                    next_generation = get_entry(2)
+                    self.free_ref(num, next_generation)
                 else:
-                    # either xref_type = 0 (freed object)
-                    # or it's some unknown type (=> ignore).
-                    # In either case, simply advance the cursor
+                    # unknown type (=> ignore).
                     get_entry(1)
                     get_entry(2)
 
@@ -597,7 +662,11 @@ class PdfFileReader(PdfHandler):
         return obj
 
     def _read_object(self, ref, marker, never_decrypt=False):
-        if isinstance(marker, tuple):
+        if marker is None:
+            raise misc.PdfReadError(
+                f"Reference {ref} has been freed."
+            )
+        elif isinstance(marker, tuple):
             # object in object stream
             (obj_stream_num, obj_stream_ix) = marker
             obj = self._get_object_from_stream(
@@ -731,6 +800,16 @@ class PdfFileReader(PdfHandler):
                 raise misc.PdfReadError(
                     "Could not find xref table at specified location"
                 )
+
+        if self.xrefs._previous_expected_free:
+            orphans = ','.join(
+                f'{k} {v} obj'
+                for k, v in self.xrefs._previous_expected_free.items()
+            )
+            raise misc.PdfReadError(
+                "Xref table contains orphaned higher generation objects: "
+                + orphans
+            )
 
     def read(self):
         # first, read the header & PDF version number

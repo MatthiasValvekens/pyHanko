@@ -9,7 +9,7 @@ import pytz
 from pdf_utils.generic import Reference
 from pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pdf_utils.misc import BoxConstraints, BoxSpecificationError
-from pdf_utils.reader import PdfFileReader
+from pdf_utils.reader import PdfFileReader, XRefCache
 from pdf_utils import writer, generic, misc
 from fontTools import ttLib
 from pdf_utils.font import GlyphAccumulator, pdf_name
@@ -382,3 +382,167 @@ def test_trailer_update():
     w.write(out)
     r = PdfFileReader(out)
     assert r.trailer['/Info']['/CreationDate'] == dt
+
+
+def fmt_dummy_xrefs(xrefs, sep=b'\r\n'):
+    dummy_hdr = b'%PDF-1.7\n%owqi'
+
+    def _gen():
+        xrefs_iter = iter(xrefs)
+        yield dummy_hdr
+        offset = len(dummy_hdr) + 1
+        section_bytes = b'xref\n' + sep.join(next(xrefs_iter)) + sep + \
+                        b'trailer<<>>'
+        startxref = offset
+        offset += len(section_bytes) + 1
+        yield section_bytes
+        for section in xrefs_iter:
+            section_bytes = b'xref\n' + sep.join(section) + sep + \
+                            b'trailer<</Prev %d>>' % startxref
+            startxref = offset
+            offset += len(section_bytes) + 1
+            yield section_bytes
+        yield b'startxref\n%d' % startxref
+        yield b'%%EOF'
+    return b'\n'.join(_gen())
+
+
+def test_object_free():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000000 00001 f'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00001 n']
+    ]
+
+    r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+    assert r.xrefs.xref_sections == 3
+    assert r.xrefs[generic.Reference(1, 0)] is None
+    assert r.xrefs[generic.Reference(1, 1)] == 300
+
+
+def test_object_free_no_override():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000000 00001 f'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00001 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000000 00002 f']
+    ]
+
+    r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+    assert r.xrefs.xref_sections == 4
+    assert r.xrefs[generic.Reference(1, 0)] is None
+    assert r.xrefs[generic.Reference(1, 1)] is None
+
+
+def test_increase_gen_without_free():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00001 n']
+    ]
+
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_orphan_high_gen():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00000 n'],
+        [b'0 1',
+         b'0000000000 65535 f',
+         b'3 1',
+         b'0000000500 00001 n']
+    ]
+
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_generation_rollback():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000000 00001 f'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00000 n']
+    ]
+
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_free_nonexistent():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000000 00001 f'],
+    ]
+
+    # this is harmless
+    PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000000 00001 f'],
+        [b'0 1',
+         b'0000000000 65535 f',
+         b'2 1',
+         b'0000000300 00000 n'],
+    ]
+
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_free_unexpected_jump():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000200 00000 n',
+         b'0000000000 00001 f'],
+        [b'0 1',
+         b'0000000000 65535 f',
+         b'2 1',
+         b'0000000300 00005 n'],
+    ]
+
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
