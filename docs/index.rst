@@ -6,6 +6,7 @@
 .. image:: images/pyhanko-logo.svg
    :alt: pyHanko
    :align: center
+   :target: https://github.com/MatthiasValvekens/pdf-stamp
 
 pyHanko
 =======
@@ -26,10 +27,11 @@ PyHanko is a tool for signing and stamping PDF files.
    :target: https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
    modules
+   license
 
 
 
