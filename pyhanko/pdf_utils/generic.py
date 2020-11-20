@@ -1085,9 +1085,10 @@ class PdfResources:
 class PdfContent:
 
     def __init__(self, resources: PdfResources = None,
-                 box: BoxConstraints = None):
+                 box: BoxConstraints = None, writer=None):
         self._resources = resources or PdfResources()
         self.box = box or BoxConstraints()
+        self.writer = writer
 
     # TODO support a set-if-not-taken mechanism, that suggests alternative names
     #  if necessary.
@@ -1118,6 +1119,9 @@ class PdfContent:
             box_height=self.box.height,
             resources=self._resources.as_pdf_object()
         )
+
+    def set_writer(self, writer):
+        self.writer = writer
 
 
 class RawContent(PdfContent):

@@ -86,8 +86,7 @@ class QRStampStyle(TextStampStyle):
 class TextStamp(PdfContent):
     def __init__(self, writer: IncrementalPdfFileWriter, style,
                  text_params=None, box: BoxConstraints = None):
-        super().__init__(box=box)
-        self.writer = writer
+        super().__init__(box=box, writer=writer)
         self.style = style
         self.text_params = text_params
         self._resources_ready = False
@@ -104,7 +103,7 @@ class TextStamp(PdfContent):
         if box.height_defined:
             expected_h = box.height - self.text_box_y()
         self.text_box = TextBox(
-            self.style.text_box_style,
+            self.style.text_box_style, writer=self.writer,
             resources=self.resources,
             box=BoxConstraints(height=expected_h)
         )
@@ -150,13 +149,6 @@ class TextStamp(PdfContent):
             _text_params.update(self.text_params)
         text = self.style.stamp_text % _text_params
         self.text_box.content = text
-
-        # FIXME this is another instance where the decoupling between
-        #  PdfContent and the writer is undesirable: we cannot delegate
-        #  font embedding to the text box since it doesn't know about
-        #  the writer.
-        if isinstance(self.text_box.style.font, GlyphAccumulator):
-            self.text_box.style.font.embed_subset(self.writer)
 
         stamp_height = self.get_stamp_height()
         stamp_width = self.get_stamp_width()

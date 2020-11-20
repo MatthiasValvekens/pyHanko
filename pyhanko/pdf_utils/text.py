@@ -52,8 +52,9 @@ class TextBox(PdfContent):
     def __init__(self, style: TextBoxStyle,
                  resources: PdfResources = None,
                  box: BoxConstraints = None,
+                 writer=None,
                  font_name='F1'):
-        super().__init__(resources, box=box)
+        super().__init__(resources, writer=writer, box=box)
         self.style = style
         self._content = None
         self._scaling_factor = None
@@ -124,6 +125,11 @@ class TextBox(PdfContent):
     def render(self):
 
         style = self.style
+
+        if isinstance(self.style.font, GlyphAccumulator):
+            assert self.writer is not None
+            self.style.font.embed_subset(self.writer)
+
         self.set_resource(
             category=ResourceType.FONT, name=pdf_name('/' + self.font_name),
             value=style.font.as_resource()

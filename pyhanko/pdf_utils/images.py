@@ -86,7 +86,6 @@ class PdfImage(PdfContent):
             image = Image.open(image)
 
         self.image: Image.Image = image
-        self.writer = writer
         self.name = name or str(uuid.uuid4())
         self.opacity = opacity
 
@@ -95,11 +94,12 @@ class PdfImage(PdfContent):
             box = BoxConstraints(
                 aspect_ratio=Fraction(self.image.width, self.image.height)
             )
-        super().__init__(resources, box=box)
+        super().__init__(resources, writer=writer, box=box)
         self._image_ref = None
 
     @property
     def image_ref(self):
+        assert self.writer is not None
         if self._image_ref is None:
             self._image_ref = pil_image(self.image, self.writer)
         return self._image_ref
