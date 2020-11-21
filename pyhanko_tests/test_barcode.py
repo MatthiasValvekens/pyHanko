@@ -2,7 +2,7 @@ from io import BytesIO
 
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils import barcodes, generic
 from pyhanko import stamp
 from pyhanko_tests.samples import MINIMAL

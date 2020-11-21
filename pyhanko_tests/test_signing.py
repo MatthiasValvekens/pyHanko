@@ -19,7 +19,7 @@ from pyhanko import stamp
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
-from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import UnacceptableSignerError, SigningError

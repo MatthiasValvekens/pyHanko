@@ -15,7 +15,7 @@ from oscrypto import asymmetric, keys as oskeys
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import general
 from pyhanko.sign.fields import (

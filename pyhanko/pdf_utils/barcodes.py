@@ -3,7 +3,8 @@ import barcode
 from barcode.writer import BaseWriter
 
 from pyhanko.pdf_utils.content import PdfContent
-from pyhanko.pdf_utils.misc import rd, BoxConstraints
+from pyhanko.pdf_utils.misc import rd
+from pyhanko.pdf_utils.layout import BoxConstraints
 
 __all__ = ['BarcodeBox']
 

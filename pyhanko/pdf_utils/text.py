@@ -11,7 +11,7 @@ from pyhanko.pdf_utils.generic import (
     pdf_name,
 )
 from pyhanko.pdf_utils.content import ResourceType, PdfResources, PdfContent
-from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.misc import ConfigurableMixin, ConfigurationError
 
 logger = logging.getLogger(__name__)

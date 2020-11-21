@@ -1,9 +1,9 @@
 from enum import Enum
-from pyhanko.pdf_utils.generic import (
+from .generic import (
     pdf_name, DictionaryObject, NameObject,
     PdfObject, StreamObject,
 )
-from pyhanko.pdf_utils.misc import BoxConstraints
+from .layout import BoxConstraints
 
 __all__ = [
     'ResourceType', 'ResourceManagementError',

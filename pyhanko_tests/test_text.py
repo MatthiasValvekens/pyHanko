@@ -1,7 +1,7 @@
 import pytest
 
 from pyhanko.pdf_utils import text
-from pyhanko.pdf_utils.misc import BoxConstraints
+from pyhanko.pdf_utils.layout import BoxConstraints
 
 
 @pytest.mark.parametrize('with_border, natural_size', [[True, True], [False, False], [True, False]])

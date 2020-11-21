@@ -9,7 +9,7 @@ import pytz
 import pyhanko.pdf_utils.content
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import BoxConstraints, BoxSpecificationError
+from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils import writer, generic, misc
 from fontTools import ttLib
