@@ -1,3 +1,5 @@
+"""Utilities related to text rendering & layout."""
+
 import logging
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -19,9 +21,27 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TextStyle(ConfigurableMixin):
+    """Container for basic test styling settings."""
+
     font: FontEngine = field(default_factory=SimpleFontEngine.default_engine)
+    """
+    The :class:`.FontEngine` to be used for this text style.
+    Defaults to Courier (as a non-embedded standard font).
+    
+    .. caution::
+        Not all :class:`.FontEngine` implementations are reusable and/or 
+        stateless!        
+    """
+
     font_size: int = 10
+    """
+    Font size to be used.
+    """
+
     leading: int = None
+    """
+    Text leading. If ``None``, the :attr:`font_size` parameter is used instead.
+    """
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -42,12 +62,31 @@ class TextStyle(ConfigurableMixin):
 
 @dataclass(frozen=True)
 class TextBoxStyle(TextStyle):
+    """Extension of :class:`.TextStyle` for use in text boxes."""
+
     text_sep: int = 10
+    """
+    Separation of text from the box's border, in user units.
+    """
+
     border_width: int = 0
+    """
+    Border width, if applicable.
+    """
+
     vertical_center: bool = True
+    """
+    Attempt to vertically center text if the box's height is fixed.
+    """
 
 
 class TextBox(PdfContent):
+    """Implementation of a text box that implements the :class:`.PdfContent`
+    interface.
+
+    .. note::
+        Text boxes currently don't offer automatic word wrapping.
+    """
 
     def __init__(self, style: TextBoxStyle,
                  resources: PdfResources = None,
@@ -69,10 +108,22 @@ class TextBox(PdfContent):
 
     @property
     def content_lines(self):
+        """
+        :return:
+            Text content of the text box, broken up into lines.
+        """
         return self._content_lines
 
     @property
     def content(self):
+        """
+        :return:
+            The actual text content of the text box.
+            This is a modifiable property.
+
+            In textboxes that don't have a fixed size, setting this property
+            can cause the text box to be resized.
+        """
         return self._content
 
     @content.setter
@@ -103,16 +154,35 @@ class TextBox(PdfContent):
 
     @property
     def leading(self):
+        """
+        :return:
+            The effective leading value, i.e. the
+            :attr:`~.TextStyle.leading` attribute of the associated
+            :class:`.TextBoxStyle`, or :attr:`~.TextStyle.font_size` if
+            not specified.
+        """
         style = self.style
         return style.font_size if style.leading is None else style.leading
 
     def get_text_height(self):
+        """
+        :return:
+            The text height in user units.
+        """
         return len(self.content_lines) * self.leading
 
     def text_x(self):
+        """
+        :return:
+            The x-position where the text will be painted.
+        """
         return self.style.text_sep
 
     def text_y(self):
+        """
+        :return:
+            The y-position where the text will be painted.
+        """
         bh = self.box.height
         if self.style.vertical_center and self.box.height_defined:
             th = self.get_text_height()
