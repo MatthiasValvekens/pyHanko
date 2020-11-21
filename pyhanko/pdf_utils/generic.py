@@ -9,13 +9,11 @@ import os
 import re
 import binascii
 from datetime import datetime
-from enum import Enum
 from typing import Iterator, Tuple, Optional, Union
 from dataclasses import dataclass, field
 
 from .misc import (
     read_non_whitespace, skip_over_comment, read_until_regex,
-    BoxConstraints,
 )
 from .misc import PdfStreamError, PdfReadError
 import logging
@@ -25,12 +23,11 @@ import decimal
 import codecs
 
 __all__ = [
-    'PdfObject', 'NullObject', 'BooleanObject', 'ArrayObject',
-    'IndirectObject', 'FloatObject', 'NumberObject', 'pdf_name', 'pdf_string',
-    'ByteStringObject', 'TextStringObject', 'NameObject', 'DictionaryObject',
-    'StreamObject', 'read_object', 'pdf_date', 'Reference', 'Dereferenceable',
-    'TrailerReference', 'PdfContent', 'RawContent', 'PdfResources',
-    'ResourceManagementError', 'ResourceType'
+    'Dereferenceable', 'Reference', 'TrailerReference',
+    'PdfObject', 'IndirectObject', 'NullObject', 'BooleanObject', 'FloatObject',
+    'NumberObject', 'ByteStringObject', 'TextStringObject', 'NameObject',
+    'ArrayObject', 'DictionaryObject', 'StreamObject',
+    'read_object', 'pdf_name', 'pdf_string', 'pdf_date'
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -59,7 +56,7 @@ class Dereferenceable:
     def get_pdf_handler(self):
         """Return the PDF handler associated with this dereferenceable.
 
-        :return: a :class:`.rw_common.PdfHandler`.
+        :return: a :class:`~.rw_common.PdfHandler`.
         """
         raise NotImplementedError
 
@@ -74,7 +71,7 @@ class TrailerReference(Dereferenceable):
     """
 
     def __init__(self, reader):
-        """Create a reference to the trailer of a :class:`.reader.PdfReader`
+        """Create a reference to the trailer of a :class:`.reader.PdfFileReader`
         instance.
 
         :param reader: A PDF reader
@@ -118,7 +115,7 @@ class Reference(Dereferenceable):
     pdf: object = field(repr=False, hash=False, compare=False, default=None)
     """
     The PDF handler associated with this reference, an instance of
-    :class:`.rw_common.PdfHandler`.
+    :class:`~.rw_common.PdfHandler`.
     
     .. warning::
        This field is ignored when hashing or comparing :class:`.Reference`
@@ -381,18 +378,6 @@ class ArrayObject(list, PdfObject):
         return arr
 
 
-def is_indirect(obj) -> bool:
-    """
-    Check if an object is indirect. Alias for
-    ``isinstance(..., IndirectObject)``.
-
-
-    :param obj:
-        A PDF object.
-    """
-    return isinstance(obj, IndirectObject)
-
-
 class IndirectObject(PdfObject, Dereferenceable):
     """
     Thin wrapper around a :class:`.Reference`, implementing both the
@@ -409,7 +394,7 @@ class IndirectObject(PdfObject, Dereferenceable):
     def __init__(self, idnum, generation, pdf):
         self.reference = Reference(idnum, generation, pdf)
 
-    def get_object(self) -> PdfObject:
+    def get_object(self):
         """
         :return: The PDF object this reference points to.
         """
@@ -800,8 +785,48 @@ class NameObject(str, PdfObject):
                 raise PdfReadError("Illegal character in Name Object")
 
 
+def _normalise_key(key):
+    if not isinstance(key, NameObject):
+        if isinstance(key, str):
+            return NameObject(key)
+        else:
+            raise ValueError("key must be PdfName")
+    return key
+
+
 class DictionaryObject(dict, PdfObject):
+    """
+    A PDF dictionary object.
+
+    Keys in a PDF dictionary are PDF names, and values are PDF objects.
+
+    When accessing a key using the standard :meth:`__getitem__` syntax,
+    :class:`.IndirectObject` references will be resolved.
+    """
+
+    def __init__(self, dict_data=None):
+        if dict_data is not None:
+            super().__init__(
+                {_normalise_key(k): v for k, v in dict_data.items()}
+            )
+        else:
+            super().__init__()
+
     def raw_get(self, key, decrypt=True):
+        """
+        Get a value from a dictionary without dereferencing.
+        In other words, if the value corresponding to the given key is of type
+        :class:`.IndirectObject`, the indirect reference will not be resolved.
+
+        :param key:
+            Key to look up in the dictionary.
+        :param decrypt:
+            If ``False``, instances of :class:`.DecryptedObjectProxy` will
+            be returned as-is. If ``True``, they will be decrypted.
+            Default ``True``.
+        :return:
+            A :class:`.PdfObject`.
+        """
         val = dict.__getitem__(self, key)
         if decrypt and isinstance(val, DecryptedObjectProxy):
             return val.decrypted
@@ -809,11 +834,7 @@ class DictionaryObject(dict, PdfObject):
             return val
 
     def __setitem__(self, key, value):
-        if not isinstance(key, PdfObject):
-            if isinstance(key, str):
-                key = NameObject(key)
-            else:
-                raise ValueError("key must be PdfObject")
+        key = _normalise_key(key)
         if not isinstance(value, PdfObject):
             raise ValueError("value must be PdfObject")
         if self.container_ref is not None:
@@ -821,8 +842,7 @@ class DictionaryObject(dict, PdfObject):
         return dict.__setitem__(self, key, value)
 
     def setdefault(self, key, value=None):
-        if not isinstance(key, PdfObject):
-            raise ValueError("key must be PdfObject")
+        key = _normalise_key(key)
         if not isinstance(value, PdfObject):
             raise ValueError("value must be PdfObject")
         if self.container_ref is not None:
@@ -936,10 +956,37 @@ class DictionaryObject(dict, PdfObject):
 
 
 class StreamObject(DictionaryObject):
-    def __init__(self, dict_data=None, stream_data=None, encoded_data=None,
-                 **kwargs):
-        dict_data = dict_data or {}
-        super().__init__(dict_data, **kwargs)
+    """PDF stream object.
+
+    Essentially, a PDF stream is a dictionary object with a binary blob of
+    data attached. This data can be encoded by various filters (not all of which
+    are currently supported, see :mod:`.filters`).
+
+    A stream object can be initialised with encoded or decoded data.
+    The former is used by :class:`.reader.PdfFileReader` to provide on-demand
+    decoding, with :class:`.writer.BasePdfFileWriter` and its subclasses working
+    the other way around.
+
+    Note that the :class:`.StreamObject` class manages some of its dictionary
+    keys by itself. This is partly the case for the various ``/Filter``
+    and ``/DecodeParms`` entries, but also for the ``/Length`` entry.
+    The latter will be overwritten as necessary.
+    """
+
+    def __init__(self, dict_data=None, stream_data=None, encoded_data=None):
+        """Initialise a stream with dictionary data and stream data
+        (either encoded or decoded). If both `stream_data` and `encoded_data`
+        are provided, the caller is responsible for making sure that both are
+        compatible given the currently relevant filter configuration.
+
+        :param dict_data:
+            The dictionary data for this stream object.
+        :param stream_data:
+            The (unencoded) stream data.
+        :param encoded_data:
+            The encoded stream data.
+        """
+        super().__init__(dict_data)
         self._data = stream_data
         self._encoded_data = encoded_data
 
@@ -986,18 +1033,25 @@ class StreamObject(DictionaryObject):
     def strip_filters(self):
         """
         Ensure the stream is decoded, and remove any filters.
-        :return:
         """
+
         self._data = self._encoded_data = self.data
-        self.pop(pdf_name('/Filter'))
-        self.pop(pdf_name('/DecodeParms'))
+        self.pop(pdf_name('/Filter'), None)
+        self.pop(pdf_name('/DecodeParms'), None)
 
     @property
-    def data(self):
+    def data(self) -> bytes:
+        """
+        Return the decoded stream data as bytes.
+        If the stream hasn't been decoded yet, it will be decoded on-the-fly.
+
+        :raises .misc.PdfStreamError:
+            If the stream could not be decoded.
+        """
         if self._data is None:
             data = self._encoded_data
             if data is None:
-                return None
+                raise PdfStreamError("No data available.")
             for filter_cls, decode_params in self._stream_decoders():
                 data = filter_cls.decode(data, decode_params)
             if isinstance(data, memoryview):
@@ -1006,11 +1060,18 @@ class StreamObject(DictionaryObject):
         return self._data
 
     @property
-    def encoded_data(self):
+    def encoded_data(self) -> bytes:
+        """
+        Return the encoded stream data as bytes.
+        If the stream hasn't been encoded yet, it will be encoded on-the-fly.
+
+        :raises .misc.PdfStreamError:
+            If the stream could not be encoded.
+        """
         if self._encoded_data is None:
             data = self._data
             if data is None:
-                return None
+                raise PdfStreamError("No data available.")
             decoders = tuple(self._stream_decoders())
             for filter_cls, decode_params in reversed(decoders):
                 data = filter_cls.encode(data, decode_params)
@@ -1022,21 +1083,29 @@ class StreamObject(DictionaryObject):
         """
         Apply a new filter to this stream. This filter will be prepended
         to any existing filters.
-        This means that is is placed *last* in the encoding order, but first
+        This means that is is placed *last* in the encoding order, but *first*
         in the decoding order.
 
+        *Note:* Calling this method on an encoded stream will first cause the
+        stream to be decoded using the filters already present.
+        The cached value for the encoded stream data will be cleared.
+
         :param filter_name:
-            Name of the filter (see filters.DECODERS)
+            Name of the filter
+            (see :const:`~pyhanko.pdf_utils.filters.DECODERS`)
         :param params:
-            Parameters to the filter (will be written to /DecodeParms)
+            Parameters to the filter (will be written to ``/DecodeParms`` if
+            not ``None``)
         :param allow_duplicates:
-            If None, silently ignore duplicate filters.
-            If False, raise ValueError when attempting to add a duplicate
-            filter. If True (default), duplicate filters are allowed.
-        :return:
+            If ``None``, silently ignore duplicate filters.
+            If ``False``, raise ValueError when attempting to add a duplicate
+            filter. If ``True`` (default), duplicate filters are allowed.
         """
-        # first, grab a decoded copy of the data
-        data = self.data
+        # If the stream already contains (encoded) data, we have to reencode it
+        # later on, which requires a decoding operation.
+        data = self._data
+        if data is None and self._encoded_data is not None:
+            data = self.data
 
         # ... and list all current filters with their parameters.
         cur_filters = list(self._filters())
@@ -1075,9 +1144,10 @@ class StreamObject(DictionaryObject):
 
     def compress(self):
         """
-        Convenience method to add a /FlateDecode filter with default settings,
-        if one is not already present.
-        Note: compression is not actually applied until the stream is written.
+        Convenience method to add a ``/FlateDecode`` filter with default
+        settings, if one is not already present.
+
+        *Note:* compression is not actually applied until the stream is written.
         """
         self.apply_filter(pdf_name('/FlateDecode'), allow_duplicates=None)
 
@@ -1229,7 +1299,17 @@ class DecryptedObjectProxy(PdfObject):
 ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
 
 
-def pdf_date(dt: datetime):
+def pdf_date(dt: datetime) -> TextStringObject:
+    """
+    Convert a datetime object into a PDF string.
+    This funciton supports both timezone-aware and naive datetimes.
+
+    :param dt:
+        The datetime object to convert.
+    :return:
+        A :class:`TextStringObject` representing the datetime passed in.
+    """
+
     base_dt = dt.strftime(ASN_DT_FORMAT)
     utc_offset_string = ''
     if dt.tzinfo is not None:
@@ -1250,108 +1330,4 @@ def pdf_date(dt: datetime):
             #  No idea why.
             utc_offset_string = sign + ("%02d'%02d'" % (hrs, mins))
 
-    return pdf_string(base_dt + utc_offset_string)
-
-
-class ResourceType(Enum):
-    EXT_G_STATE = pdf_name('/ExtGState')
-    COLOR_SPACE = pdf_name('/ColorSpace')
-    PATTERN = pdf_name('/Pattern')
-    SHADING = pdf_name('/Shading')
-    XOBJECT = pdf_name('/XObject')
-    FONT = pdf_name('/Font')
-    PROPERTIES = pdf_name('/Properties')
-
-
-class ResourceManagementError(ValueError):
-    pass
-
-
-def _res_merge_helper(dict1, dict2):
-    for k, v2 in dict2.items():
-        if k in dict1:
-            raise ResourceManagementError(
-                f"Resource with name {k} occurs in both dictionaries."
-            )
-        dict1[k] = v2
-    return dict1
-
-
-class PdfResources:
-    def __init__(self):
-        self.ext_g_state = DictionaryObject()
-        self.color_space = DictionaryObject()
-        self.pattern = DictionaryObject()
-        self.shading = DictionaryObject()
-        self.xobject = DictionaryObject()
-        self.font = DictionaryObject()
-        self.properties = DictionaryObject()
-
-    def __getitem__(self, item: ResourceType):
-        return getattr(self, item.name.lower())
-
-    def as_pdf_object(self):
-        def _gen():
-            for k in ResourceType:
-                val = self[k]
-                if val:
-                    yield k.value, val
-        return DictionaryObject({k: v for k, v in _gen()})
-
-    def __iadd__(self, other):
-        for k in ResourceType:
-            _res_merge_helper(self[k], other[k])
-        return self
-
-
-class PdfContent:
-
-    def __init__(self, resources: PdfResources = None,
-                 box: BoxConstraints = None, writer=None):
-        self._resources = resources or PdfResources()
-        self.box = box or BoxConstraints()
-        self.writer = writer
-
-    # TODO support a set-if-not-taken mechanism, that suggests alternative names
-    #  if necessary.
-    def set_resource(self, category: ResourceType, name: NameObject,
-                     value: PdfObject):
-        self._resources[category][name] = value
-
-    def import_resources(self, resources: PdfResources):
-        self._resources += resources
-
-    @property
-    def resources(self):
-        return self._resources
-
-    def render(self) -> bytes:
-        """
-        Compile the content to graphics operators.
-        """
-        raise NotImplementedError
-
-    # TODO allow the bounding box to be overridden/refitted
-    #  (using matrix transforms)
-    def as_form_xobject(self):
-        from pyhanko.pdf_utils.writer import init_xobject_dictionary
-        command_stream = self.render()
-        return init_xobject_dictionary(
-            command_stream=command_stream, box_width=self.box.width,
-            box_height=self.box.height,
-            resources=self._resources.as_pdf_object()
-        )
-
-    def set_writer(self, writer):
-        self.writer = writer
-
-
-class RawContent(PdfContent):
-
-    def __init__(self, data: bytes, resources: PdfResources = None,
-                 box: BoxConstraints = None):
-        super().__init__(resources, box)
-        self.data = data
-
-    def render(self) -> bytes:
-        return self.data
+    return TextStringObject(base_dt + utc_offset_string)

@@ -551,6 +551,7 @@ class PdfFileReader(PdfHandler):
         # read the entire object stream into memory
         stream_ref = generic.Reference(stmnum, 0, self)
         stream = stream_ref.get_object()
+        assert isinstance(stream, generic.StreamObject)
         # This is an xref to a stream, so its type better be a stream
         assert stream['/Type'] == '/ObjStm'
         # /N is the number of indirect objects in the stream

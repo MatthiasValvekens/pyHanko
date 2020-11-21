@@ -2,7 +2,7 @@ from qrcode.image.base import BaseImage
 import barcode
 from barcode.writer import BaseWriter
 
-from pyhanko.pdf_utils.generic import PdfContent
+from pyhanko.pdf_utils.content import PdfContent
 from pyhanko.pdf_utils.misc import rd, BoxConstraints
 
 

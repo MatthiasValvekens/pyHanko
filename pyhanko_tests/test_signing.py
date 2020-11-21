@@ -6,6 +6,8 @@ from io import BytesIO
 
 import pytz
 from asn1crypto import ocsp, tsp
+
+import pyhanko.pdf_utils.content
 from certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
@@ -17,6 +19,7 @@ from pyhanko import stamp
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
+from pyhanko.pdf_utils.misc import BoxConstraints
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import UnacceptableSignerError, SigningError
@@ -1683,8 +1686,8 @@ def test_sv_sign_reason_prohibited(reasons_param):
 def set_text_field(writer, val):
     tf = writer.root['/AcroForm']['/Fields'][1].get_object()
 
-    appearance = generic.RawContent(
-        box=generic.BoxConstraints(height=60, width=130),
+    appearance = pyhanko.pdf_utils.content.RawContent(
+        box=BoxConstraints(height=60, width=130),
         data=b'q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q' % val.encode(
             'ascii')
     )
@@ -1737,8 +1740,8 @@ def test_form_field_postsign_modify():
 def set_text_field_in_group(writer, ix, val):
     tf_parent = writer.root['/AcroForm']['/Fields'][1].get_object()
     tf = tf_parent['/Kids'][ix].get_object()
-    appearance = generic.RawContent(
-        box=generic.BoxConstraints(height=60, width=130),
+    appearance = pyhanko.pdf_utils.content.RawContent(
+        box=BoxConstraints(height=60, width=130),
         data=b'''q 0 0 1 rg BT /Ti 12 Tf (%s) Tj ET Q''' % val.encode(
             'ascii')
     )

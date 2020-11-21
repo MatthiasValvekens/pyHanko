@@ -11,8 +11,10 @@ class PdfHandler:
         raise NotImplementedError
 
     @property
-    def root(self):
-        return self.root_ref.get_object()
+    def root(self) -> generic.DictionaryObject:
+        root = self.root_ref.get_object()
+        assert isinstance(root, generic.DictionaryObject)
+        return root
 
     # TODO write tests specifically for this helper function
     def _walk_page_tree(self, page_ix, retrieve_parent):
@@ -21,6 +23,7 @@ class PdfHandler:
         page_tree_root_ref = self.root.raw_get('/Pages')
         assert isinstance(page_tree_root_ref, generic.IndirectObject)
         page_tree_root = page_tree_root_ref.get_object()
+        assert isinstance(page_tree_root, generic.DictionaryObject)
         try:
             root_resources = page_tree_root['/Resources']
         except KeyError:

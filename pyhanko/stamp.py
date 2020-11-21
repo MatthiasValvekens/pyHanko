@@ -4,6 +4,7 @@ from binascii import hexlify
 import qrcode
 import tzlocal
 
+import pyhanko.pdf_utils.content
 from pyhanko.pdf_utils.barcodes import PdfStreamQRImage
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -15,9 +16,9 @@ from datetime import datetime
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import (
-    pdf_name, pdf_string, PdfContent,
-    ResourceType,
+    pdf_name, pdf_string,
 )
+from pyhanko.pdf_utils.content import ResourceType, PdfContent
 from pyhanko.misc import ConfigurableMixin
 
 
@@ -355,7 +356,7 @@ def stamp_file(input_name, output_name, style, dest_page,
             pdf_out.write(out)
 
 
-STAMP_ART_CONTENT = generic.RawContent(
+STAMP_ART_CONTENT = pyhanko.pdf_utils.content.RawContent(
     box=BoxConstraints(width=100, height=100),
     data=b'''
 q 1 0 0 -1 0 100 cm 

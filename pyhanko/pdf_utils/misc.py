@@ -12,6 +12,11 @@ Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
 rd = lambda x: round(x, 4)
 
 
+def instance_test(cls):
+
+    return lambda x: isinstance(x, cls)
+
+
 def pair_iter(lst):
     i = iter(lst)
     while True:

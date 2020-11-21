@@ -8,9 +8,9 @@ from pyhanko.pdf_utils.font import (
     FontEngine, SimpleFontEngine, GlyphAccumulator
 )
 from pyhanko.pdf_utils.generic import (
-    PdfContent, pdf_name, ResourceType,
-    PdfResources,
+    pdf_name,
 )
+from pyhanko.pdf_utils.content import ResourceType, PdfResources, PdfContent
 from pyhanko.pdf_utils.misc import BoxConstraints
 from pyhanko.misc import ConfigurableMixin, ConfigurationError
 

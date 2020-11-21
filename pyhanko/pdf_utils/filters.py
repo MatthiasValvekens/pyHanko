@@ -12,6 +12,10 @@ import struct
 
 import zlib
 
+__all__ = [
+    'Decoder', 'ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode', 'DECODERS'
+]
+
 decompress = zlib.decompress
 compress = zlib.compress
 
@@ -222,3 +226,6 @@ DECODERS = {
     '/ASCII85Decode': ASCII85Decode, '/A85': ASCII85Decode,
     '/Crypt': CryptDecoder
 }
+"""
+Dictionary mapping decoder names to implementations.
+"""

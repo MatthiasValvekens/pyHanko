@@ -6,7 +6,7 @@ from typing import Tuple, List, Union
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
-from pyhanko.pdf_utils.misc import peek, PdfReadError
+from pyhanko.pdf_utils.misc import peek, PdfReadError, instance_test
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 """
@@ -539,7 +539,7 @@ class PageObject(generic.DictionaryObject):
         resources = resources or generic.DictionaryObject()
 
         if isinstance(contents, list):
-            if not all(map(generic.is_indirect, contents)):
+            if not all(map(instance_test(generic.IndirectObject), contents)):
                 raise ValueError(
                     'Contents array must consist of indirect references'
                 )

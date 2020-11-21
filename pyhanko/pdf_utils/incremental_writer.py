@@ -4,7 +4,8 @@ from typing import Union
 from . import generic
 
 from .reader import PdfFileReader
-from .generic import pdf_name, PdfContent
+from .generic import pdf_name
+from .content import PdfContent
 from .writer import BasePdfFileWriter
 
 """
@@ -224,6 +225,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         if isinstance(res_ref, generic.IndirectObject):
             # we can get away with only updating this reference
             orig_resource_dict = res_ref.get_object()
+            assert isinstance(orig_resource_dict, generic.DictionaryObject)
             if self.merge_resources(orig_resource_dict, resources):
                 self.mark_update(res_ref)
         else:

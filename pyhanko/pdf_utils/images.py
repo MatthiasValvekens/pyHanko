@@ -5,7 +5,8 @@ from PIL.ImagePalette import ImagePalette
 from typing import Union
 
 from pyhanko.pdf_utils.misc import BoxConstraints
-from .generic import pdf_name, PdfContent, ResourceType, PdfResources
+from .generic import pdf_name
+from .content import ResourceType, PdfResources, PdfContent
 from . import generic
 from .writer import BasePdfFileWriter
 
