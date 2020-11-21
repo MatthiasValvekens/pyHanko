@@ -1,3 +1,21 @@
+"""Utilities for embedding bitmap image data into PDF files.
+
+The image data handling is done by
+`Pillow <https://github.com/python-pillow/Pillow>`_.
+
+.. note::
+    Note that also here we only support a subset of what the PDF standard
+    provides for. Most RGB and grayscale images (with or without transparency)
+    that can be read by PIL/Pillow can be used without issue.
+    PNG images with an indexed palette backed by one of these colour spaces
+    can also be used.
+
+    Currently there is no support for CMYK images or (direct) support for
+    embedding JPEG-encoded image data as such, but these features may be added
+    later.
+
+"""
+
 import uuid
 from fractions import Fraction
 
@@ -15,11 +33,20 @@ from PIL import Image
 __all__ = ['pil_image', 'PdfImage']
 
 
-def pil_image(img, writer: BasePdfFileWriter):
-    assert isinstance(img, Image.Image)
-    # TODO would PA be hard to support?
+def pil_image(img: Image.Image, writer: BasePdfFileWriter):
+    """
+    This function writes a PIL/Pillow :class:`.Image` object to a PDF file
+    writer, as an image XObject.
 
-    if img.mode not in ('RGB', 'RGBA', 'P', 'L', 'LA'):  # pragma: nocover
+    :param img:
+        A Pillow :class:`.Image` object
+    :param writer:
+        A PDF file writer
+    :return:
+        A reference to the image XObject written.
+    """
+
+    if img.mode not in ('RGB', 'RGBA', 'P', 'PA', 'L', 'LA'):  # pragma: nocover
         raise NotImplementedError
 
     dict_data = {
@@ -76,6 +103,16 @@ def pil_image(img, writer: BasePdfFileWriter):
 
 
 class PdfImage(PdfContent):
+    """Wrapper class that implements the :class:`.PdfContent` interface for
+    image objects.
+
+    .. note::
+        Instances of this class are reusable, in the sense that the
+        implementation is aware of changes to the associated :attr:`writer`
+        object. This allows the same image to be embedded into multiple files
+        without instantiating a new :class:`.PdfImage` every time.
+
+    """
 
     def __init__(self, image: Union[Image.Image, str],
                  writer: BasePdfFileWriter = None,
@@ -99,7 +136,16 @@ class PdfImage(PdfContent):
         self._image_ref = None
 
     @property
-    def image_ref(self):
+    def image_ref(self) -> generic.IndirectObject:
+        """Return a reference to the image XObject associated with this
+        :class:`.PdfImage` instance.
+        If no such reference is available, it will be created using
+        :func:`.pil_image`, and the result will be cached until the
+        :attr:`writer` attribute changes
+        (see :meth:`~pyhanko.pdf_utils.content.PdfContent.set_writer`).
+
+        :return: An indirect reference to an image XObject.
+        """
         assert self.writer is not None
         # cache is invalidated if the writer changed
         if self._image_ref is None or \
