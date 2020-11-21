@@ -8,6 +8,7 @@ Submodules
    :maxdepth: 4
 
    pyhanko.pdf_utils.barcodes
+   pyhanko.pdf_utils.config_utils
    pyhanko.pdf_utils.content
    pyhanko.pdf_utils.filters
    pyhanko.pdf_utils.font

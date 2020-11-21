@@ -19,7 +19,7 @@ from pyhanko.pdf_utils.generic import (
     pdf_name, pdf_string,
 )
 from pyhanko.pdf_utils.content import ResourceType, PdfContent, RawContent
-from pyhanko.misc import ConfigurableMixin
+from pyhanko.pdf_utils.config_utils import ConfigurableMixin
 
 
 class AnnotAppearances:

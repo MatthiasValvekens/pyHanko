@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import yaml
 from certvalidator import ValidationContext
-from pyhanko.misc import check_config_keys, ConfigurationError
+from pyhanko.pdf_utils.config_utils import check_config_keys, ConfigurationError
 from pyhanko.sign import signers
 
 

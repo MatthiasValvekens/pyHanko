@@ -18,7 +18,6 @@ Submodules
 
    pyhanko.cli
    pyhanko.config
-   pyhanko.misc
    pyhanko.stamp
 
 Module contents

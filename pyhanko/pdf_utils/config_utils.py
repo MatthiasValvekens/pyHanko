@@ -1,21 +1,61 @@
+"""
+This module contains utilities for allowing dataclasses to be populated by
+user-provided configuration (e.g. from a Yaml file).
+
+.. note::
+    On naming conventions: this module converts hyphens in key names to
+    underscores as a matter of course.
+"""
+
 import dataclasses
 
 __all__ = ['ConfigurationError', 'ConfigurableMixin']
 
 
 class ConfigurationError(ValueError):
+    """Signal configuration errors."""
     pass
 
 
 @dataclasses.dataclass(frozen=True)
 class ConfigurableMixin:
+    """General configuration mixin for dataclasses"""
 
     @classmethod
     def process_entries(cls, config_dict):
+        """
+        Hook method that can modify the configuration dictionary
+        to overwrite or tweak some of their values (e.g. to convert string
+        parameters into more complex Python objects)
+
+        Subclasses that override this method should call
+        ``super().process_entries()``, and leave keys that they do not
+        recognise untouched.
+
+        :param config_dict:
+            A dictionary containing configuration values.
+        :raises ConfigurationError:
+            when there is a problem processing a relevant entry.
+        """
         pass
 
     @classmethod
     def from_config(cls, config_dict):
+        """
+        Attempt to instantiate an object of the class on which it is called,
+        by means of the configuration settings passed in.
+
+        First, we check that the keys supplied in the dictionary correspond
+        to data fields on the current class.
+        Then, the dictionary is processed using the :meth:`process_entries`
+        method. The resulting dictionary is passed to the initialiser
+        of the current class as a kwargs dict.
+
+        :param config_dict:
+            A dictionary containing configuration values.
+        :return:
+            An instance of the class on which it is called.
+        """
         check_config_keys(
             cls.__name__, {f.name for f in dataclasses.fields(cls)},
             config_dict

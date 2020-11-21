@@ -1,7 +1,7 @@
 import pytest
 
 from pyhanko import config, stamp
-from pyhanko.misc import ConfigurationError
+from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 from pyhanko_tests.samples import TESTING_CA_DIR
