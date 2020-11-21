@@ -1,12 +1,25 @@
+"""Layout utilities (to be expanded)"""
+
 from fractions import Fraction
 from typing import Optional
 
+__all__ = ['BoxSpecificationError', 'BoxConstraints']
+
 
 class BoxSpecificationError(ValueError):
+    """Raised when a box constraint is over/underspecified."""
     pass
 
 
 class BoxConstraints:
+    """Represents a box of potentially variable width and height.
+    Among other uses, this can be leveraged to produce a variably sized
+    box with a fixed aspect ratio.
+
+    If width/height are not defined yet, they can be set by assigning to the
+    :attr:`width` and :attr:`height` attributes.
+    """
+
     _width: Optional[int]
     _height: Optional[int]
     _ar: Optional[Fraction]
@@ -49,6 +62,12 @@ class BoxConstraints:
 
     @property
     def width(self) -> int:
+        """
+        :return:
+            The width of the box.
+        :raises BoxSpecificationError:
+            if the box's width could not be determined.
+        """
         if self._width is not None:
             return self._width
         else:
@@ -64,10 +83,21 @@ class BoxConstraints:
 
     @property
     def width_defined(self) -> bool:
+        """
+        :return:
+            ``True`` if the box currently has a well-defined width,
+            ``False`` otherwise.
+        """
         return self._width is not None
 
     @property
     def height(self) -> int:
+        """
+        :return:
+            The height of the box.
+        :raises BoxSpecificationError:
+            if the box's height could not be determined.
+        """
         if self._height is not None:
             return self._height
         else:
@@ -83,10 +113,21 @@ class BoxConstraints:
 
     @property
     def height_defined(self) -> bool:
+        """
+        :return:
+            ``True`` if the box currently has a well-defined height,
+            ``False`` otherwise.
+        """
         return self._height is not None
 
     @property
     def aspect_ratio(self) -> Fraction:
+        """
+        :return:
+            The aspect ratio of the box.
+        :raises BoxSpecificationError:
+            if the box's aspect ratio could not be determined.
+        """
         if self._ar is not None:
             return self._ar
         else:
@@ -94,4 +135,9 @@ class BoxConstraints:
 
     @property
     def aspect_ratio_defined(self) -> bool:
+        """
+        :return:
+            ``True`` if the box currently has a well-defined aspect ratio,
+            ``False`` otherwise.
+        """
         return self._ar is not None
