@@ -7,7 +7,7 @@ from pyhanko.pdf_utils.misc import BoxConstraints
 
 __all__ = [
     'ResourceType', 'ResourceManagementError',
-    'PdfResources', 'PdfContent'
+    'PdfResources', 'PdfContent', 'RawContent'
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
@@ -239,6 +239,7 @@ class PdfContent:
 
 
 class RawContent(PdfContent):
+    """Raw byte sequence to be used as PDF content."""
 
     def __init__(self, data: bytes, resources: PdfResources = None,
                  box: BoxConstraints = None):
