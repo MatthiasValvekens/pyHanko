@@ -1,6 +1,11 @@
 """
 Implementation of stream filters for PDF.
-Taken from PyPDF2 with modifications (see LICENSE.PyPDF2).
+
+Taken from PyPDF2 with modifications. See :ref:`here <pypdf2-license>`
+for the original license of the PyPDF2 project.
+
+Note that not all decoders specified in the standard are supported.
+In particular ``/Crypt`` and ``/LZWDecode`` are missing.
 """
 import binascii
 import re
@@ -21,13 +26,38 @@ compress = zlib.compress
 
 
 class Decoder:
+    """
+    General filter/decoder interface.
+    """
 
     @classmethod
-    def decode(cls, data: bytes, decode_params) -> bytes:
+    def decode(cls, data: bytes, decode_params: dict) -> bytes:
+        """
+        Decode a stream.
+
+        :param data:
+            Data to decode.
+        :param decode_params:
+            Decoder parameters, sourced from the ``/DecoderParams`` entry
+            associated with this filter.
+        :return:
+            Decoded data.
+        """
         raise NotImplementedError
 
     @classmethod
-    def encode(cls, data: bytes, decode_params) -> bytes:
+    def encode(cls, data: bytes, decode_params: dict) -> bytes:
+        """
+        Encode a stream.
+
+        :param data:
+            Data to encode.
+        :param decode_params:
+            Encoder parameters, sourced from the ``/DecoderParams`` entry
+            associated with this filter.
+        :return:
+            Encoded data.
+        """
         raise NotImplementedError
 
 
@@ -65,6 +95,13 @@ def _png_decode(data: memoryview, columns):
 
 
 class FlateDecode(Decoder):
+    """
+    Implementation of the ``/FlateDecode`` filter.
+
+    .. warning::
+        Currently not all predictor values are supported. This may cause
+        problems when extracting image data from PDF files.
+    """
 
     @classmethod
     def decode(cls, data: bytes, decode_params):
@@ -104,6 +141,10 @@ ASCII_HEX_EOD_MARKER = b'>'
 
 
 class ASCIIHexDecode(Decoder):
+    """
+    Wrapper around :func:`binascii.hexlify` that implements the
+    :class:`.Decoder` interface.
+    """
 
     @classmethod
     def encode(cls, data: bytes, decode_params=None) -> bytes:
@@ -125,6 +166,9 @@ POWS = tuple(85 ** p for p in (4, 3, 2, 1, 0))
 
 
 class ASCII85Decode(Decoder):
+    """
+    Implementation of the base 85 encoding scheme specified in ISO 32000-1.
+    """
 
     @classmethod
     def encode(cls, data: bytes, decode_params=None) -> bytes:

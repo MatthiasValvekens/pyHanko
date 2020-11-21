@@ -5,6 +5,8 @@ from barcode.writer import BaseWriter
 from pyhanko.pdf_utils.content import PdfContent
 from pyhanko.pdf_utils.misc import rd, BoxConstraints
 
+__all__ = ['BarcodeBox']
+
 
 class PdfStreamQRImage(BaseImage):
     """
@@ -106,6 +108,8 @@ class PdfStreamBarcodeWriter(BaseWriter):
 class BarcodeBox(PdfContent):
     """
     Thin wrapper around python-barcode functionality.
+
+    This will render a barcode of the specified type as PDF graphics operators.
     """
 
     def __init__(self, barcode_type, code):
