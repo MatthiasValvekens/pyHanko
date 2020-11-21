@@ -55,6 +55,10 @@ class ConfigurableMixin:
             A dictionary containing configuration values.
         :return:
             An instance of the class on which it is called.
+        :raises ConfigurationError:
+            when an unexpected configuration key is encountered or left
+            unfilled, or when there is a problem processing one of the config
+            values.
         """
         check_config_keys(
             cls.__name__, {f.name for f in dataclasses.fields(cls)},
@@ -65,8 +69,11 @@ class ConfigurableMixin:
             key.replace('-', '_'): v for key, v in config_dict.items()
         }
         cls.process_entries(config_dict)
-        # noinspection PyArgumentList
-        return cls(**config_dict)
+        try:
+            # noinspection PyArgumentList
+            return cls(**config_dict)
+        except TypeError as e:  # pragma: nocover
+            raise ConfigurationError(e)
 
 
 def check_config_keys(config_name, expected_keys, config_dict):
