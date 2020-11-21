@@ -9,7 +9,6 @@ Submodules
 
    pyhanko.pdf_utils.barcodes
    pyhanko.pdf_utils.content
-   pyhanko.pdf_utils.crypt
    pyhanko.pdf_utils.filters
    pyhanko.pdf_utils.font
    pyhanko.pdf_utils.generic

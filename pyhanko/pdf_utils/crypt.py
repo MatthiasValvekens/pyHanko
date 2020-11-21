@@ -1,5 +1,12 @@
 """
 Taken from PyPDF2 see (License.PyPDF2)
+
+The members of this module are all considered internal API, and are therefore
+subject to change without notice.
+
+One should also be aware that the encryption scheme implemented here is (very)
+weak, and we only support it for compatibility reasons. Under no circumstances
+should it still be used to encrypt new files.
 """
 
 import struct
