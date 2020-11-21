@@ -1,11 +1,28 @@
+"""Basic support for font handling & subsetting.
+
+This module relies on `fontTools <https://pypi.org/project/fonttools/>`_ for
+OTF parsing and subsetting.
+
+.. warning ::
+    If/when support is added for more advanced typographical features, the
+    general :class:`FontEngine` interface might change.
+
+"""
+
 import logging
 from io import BytesIO
 
 from pyhanko.pdf_utils import generic
 from fontTools import ttLib, subset
 
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import peek
+
+
+__all__ = [
+    'FontEngine', 'SimpleFontEngine', 'GlyphAccumulator'
+]
+
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 logger = logging.getLogger(__name__)
 
@@ -20,25 +37,56 @@ def generate_subset_prefix():
 
 
 class FontEngine:
+    """General interface for glyph lookups and font metrics."""
 
-    def measure(self, txt):
+    def measure(self, txt: str) -> float:
+        """Measure the length of a string in em units.
+
+        :param txt:
+            String to measure.
+        :return:
+            A length in em units.
+        """
+
         raise NotImplementedError
 
-    def render(self, txt):
+    # FIXME this should probably return bytes
+    def render(self, txt: str):
+        """Render a string to a format suitable for inclusion in a content
+        stream.
+
+        :param txt:
+            String to render.
+        :return:
+            A string.
+        """
         raise NotImplementedError
 
-    def render_and_measure(self, txt):
-        return self.render(txt), self.measure(txt)
+    def as_resource(self) -> generic.DictionaryObject:
+        """Convert a :class:`.FontEngine` to a PDF object suitable for embedding
+        inside a resource dictionary.
 
-    def as_resource(self):
+        :return:
+            A PDF dictionary.
+        """
         raise NotImplementedError
 
 
 # FIXME replace with something that knows the metrics for the standard PDF fonts
 class SimpleFontEngine(FontEngine):
+    """
+    Simplistic font engine that only works with PDF standard fonts, and
+    does not care about font metrics. Best used with monospaced fonts such
+    as Courier.
+    """
 
     @staticmethod
     def default_engine():
+        """
+        :return:
+            A :class:`.FontEngine` instance representing the Courier
+            standard font.
+        """
         return SimpleFontEngine('Courier', 0.6)
 
     def __init__(self, name, avg_width):
@@ -64,6 +112,22 @@ class SimpleFontEngine(FontEngine):
 
 
 class GlyphAccumulator(FontEngine):
+    """
+    Utility to collect & measure glyphs from TrueType fonts.
+
+    .. warning::
+        This utility class ignores all positioning & substition information
+        in the font file, other than glyph width/height.
+        In particular, features such as kerning, ligatures, complex script
+        support and regional substitution will not work out of the box.
+
+    .. warning::
+        This functionality was only really tested with CID-keyed fonts
+        that have a CFF table. This is good enough to offer basic support
+        for CJK scripts, but as I am not an OTF expert, more testing is
+        necessary.
+
+    """
 
     def __init__(self, tt: ttLib.TTFont):
         self.tt = tt
@@ -143,17 +207,36 @@ class GlyphAccumulator(FontEngine):
     def measure(self, txt):
         return self.feed_string(txt)[1]
 
-    def extract_subset(self, options=None):
+    def _extract_subset(self, options=None):
         options = options or subset.Options()
         subsetter: subset.Subsetter = subset.Subsetter(options=options)
         gids = map(lambda x: x[1], self._glyphs.values())
         subsetter.populate(gids=list(gids))
         subsetter.subset(self.tt)
 
-    def embed_subset(self, writer: IncrementalPdfFileWriter, obj_stream=None):
+    def embed_subset(self, writer: BasePdfFileWriter, obj_stream=None):
+        """
+        Embed a subset of this glyph accumulator's font into the provided PDF
+        writer. Said subset will include all glyphs necessary to render the
+        strings provided to the accumulator via :meth:`feed_string`.
+
+        .. danger::
+            Due to the way ``fontTools`` handles subsetting, this is a
+            destructive operation. The in-memory representation of the original
+            font will be overwritten by the generated subset.
+
+        :param writer:
+            A PDF writer.
+        :param obj_stream:
+            If provided, write all relevant objects to the provided
+            `obj_stream`. If ``None`` (the default), they will simply be written
+            to the file as top-level objects.
+        :return:
+            A reference to the embedded ``/Font`` object.
+        """
         if self._font_ref is not None:
             return self._font_ref
-        self.extract_subset()
+        self._extract_subset()
         cidfont_obj = CIDFontType0(self.tt)
         # TODO keep track of used subset prefixes in the writer!
         cff_topdict = self.tt['CFF '].cff[0]
@@ -163,7 +246,7 @@ class GlyphAccumulator(FontEngine):
         )
         cidfont_obj.embed(writer, obj_stream=obj_stream)
         cidfont_ref = writer.add_object(cidfont_obj)
-        to_unicode = self.format_tounicode_cmap(*cidfont_obj.ros)
+        to_unicode = self._format_tounicode_cmap(*cidfont_obj.ros)
         type0 = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/Font'),
             pdf_name('/Subtype'): pdf_name('/Type0'),
@@ -207,7 +290,7 @@ class GlyphAccumulator(FontEngine):
         else:
             raise ValueError
 
-    def format_tounicode_cmap(self, registry, ordering, supplement):
+    def _format_tounicode_cmap(self, registry, ordering, supplement):
         def _pairs():
             for ch, (cid, _, _) in self._glyphs.items():
                 yield cid, ch
@@ -265,7 +348,7 @@ class CIDFont(generic.DictionaryObject):
         })
         self._font_descriptor = FontDescriptor(self)
 
-    def embed(self, writer: IncrementalPdfFileWriter, obj_stream=None):
+    def embed(self, writer: BasePdfFileWriter, obj_stream=None):
         fd = self._font_descriptor
         self[pdf_name('/FontDescriptor')] = fd_ref = writer.add_object(
             fd, obj_stream=obj_stream
@@ -273,7 +356,7 @@ class CIDFont(generic.DictionaryObject):
         font_stream_ref = self.set_font_file(writer)
         return fd_ref, font_stream_ref
 
-    def set_font_file(self, writer: IncrementalPdfFileWriter):
+    def set_font_file(self, writer: BasePdfFileWriter):
         raise NotImplementedError
 
 # TODO support type 2 fonts (i.e. with 'glyf' instead of 'CFF ')
@@ -299,7 +382,7 @@ class CIDFontType0(CIDFont):
             tt, ps_name, '/CIDFontType0', registry, ordering, supplement
         )
 
-    def set_font_file(self, writer: IncrementalPdfFileWriter):
+    def set_font_file(self, writer: BasePdfFileWriter):
         stream_buf = BytesIO()
         # write the CFF table to the stream
         self.cff.compile(stream_buf, self.tt)

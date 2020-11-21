@@ -62,7 +62,9 @@ class TextBox(PdfContent):
         self.font_name = font_name
 
     def wrap_string(self, txt):
-        wrapped, width_em = self.style.font.render_and_measure(txt)
+        font_engine = self.style.font
+        wrapped = font_engine.render(txt)
+        width_em = font_engine.measure(txt)
         return wrapped, width_em * self.style.font_size
 
     @property
