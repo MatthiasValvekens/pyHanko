@@ -1,17 +1,38 @@
+"""Utilities common to reading and writing PDF files."""
+
 from . import generic
+
+__all__ = ['PdfHandler']
 
 
 class PdfHandler:
+    """Abstract class providing a general interface for quering objects
+    in PDF readers and writers alike."""
 
-    def get_object(self, ido: generic.Reference):
+    def get_object(self, ref: generic.Reference):
+        """
+        Retrieve the object associated with the provided reference from
+        this PDF handler.
+
+        :param ref:
+            An instance of :class:`.generic.Reference`.
+        :return:
+            A PDF object.
+        """
         raise NotImplementedError
 
     @property
     def root_ref(self) -> generic.IndirectObject:
+        """
+        :return: A reference to the document catalog of this PDF handler.
+        """
         raise NotImplementedError
 
     @property
     def root(self) -> generic.DictionaryObject:
+        """
+        :return: The document catalog of this PDF handler.
+        """
         root = self.root_ref.get_object()
         assert isinstance(root, generic.DictionaryObject)
         return root
@@ -85,22 +106,22 @@ class PdfHandler:
     def find_page_container(self, page_ix):
         """
         Retrieve the node in the page tree containing the
-        page with index page_ix, along with the necessary objects to modify it
-        in an incremental update scenario.
+        page with index ``page_ix``, along with the necessary objects
+        to modify it in an incremental update scenario.
 
         :param page_ix:
             The (zero-indexed) number of the page for which we want to
             retrieve the parent.
         :return:
-            A triple with the /Pages object (or a reference to it),
-            the index of the target page in said /Pages object, and a
+            A triple with the ``/Pages`` object (or a reference to it),
+            the index of the target page in said ``/Pages`` object, and a
             (possibly inherited) resource dictionary.
         """
         return self._walk_page_tree(page_ix, retrieve_parent=True)
 
     def find_page_for_modification(self, page_ix):
         """
-        Retrieve the page with index page_ix from the page tree, along with
+        Retrieve the page with index ``page_ix`` from the page tree, along with
         the necessary objects to modify it in an incremental update scenario.
 
         :param page_ix:
