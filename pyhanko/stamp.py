@@ -205,6 +205,11 @@ class QRStampStyle(TextStampStyle):
 
 
 class TextStamp(PdfContent):
+    """
+    Class that renders a text stamp as specified by an instance
+    of :class:`.TextStampStyle`.
+    """
+
     def __init__(self, writer: IncrementalPdfFileWriter, style,
                  text_params=None, box: BoxConstraints = None):
         super().__init__(box=box, writer=writer)
@@ -215,7 +220,7 @@ class TextStamp(PdfContent):
 
         self.text_box = None
 
-    def init_text_box(self):
+    def _init_text_box(self):
         # if necessary, try to adjust the text box's bounding box
         #  to the stamp's
 
@@ -229,10 +234,23 @@ class TextStamp(PdfContent):
             box=BoxConstraints(height=expected_h)
         )
 
-    def extra_commands(self):
+    def extra_commands(self) -> list:
+        """
+        Render extra graphics commands to be used after painting the
+        inner text box, but before drawing the border.
+
+        :return:
+            A list of :class:`bytes` objects.
+        """
         return []
 
-    def get_stamp_width(self):
+    def get_stamp_width(self) -> int:
+        """Compute the stamp's total width.
+
+        :return:
+            The width of the stamp in user units.
+        """
+
         try:
             return self.box.width
         except BoxSpecificationError:
@@ -240,7 +258,13 @@ class TextStamp(PdfContent):
             self.box.width = width
             return width
 
-    def get_stamp_height(self):
+    def get_stamp_height(self) -> int:
+        """Compute the stamp's total height.
+
+        :return:
+            The height of the stamp in user units.
+        """
+
         try:
             return self.box.height
         except BoxSpecificationError:
@@ -248,13 +272,34 @@ class TextStamp(PdfContent):
                 = self.text_box_y() + self.text_box.box.height
             return height
 
-    def text_box_x(self):
+    def text_box_x(self) -> int:
+        """Text box x-coordinate.
+
+        :return:
+            The horizontal position of the internal text box's lower left
+            corner inside the stamp's bounding box.
+        """
         return 0
 
     def text_box_y(self):
+        """Text box y-coordinate.
+
+        :return:
+            The horizontal position of the internal text box's lower left
+            corner inside the stamp's bounding box.
+        """
         return 0
 
     def get_default_text_params(self):
+        """
+        Compute values for the default string interpolation parameters
+        to be applied to the template string string specified in the he stamp
+        style. This method does not take into account the ``text_params``
+        init parameter yet.
+
+        :return:
+            A dictionary containing the parameters and their values.
+        """
         ts = datetime.now(tz=tzlocal.get_localzone())
         return {
             'ts': ts.strftime(self.style.timestamp_format),
@@ -264,7 +309,7 @@ class TextStamp(PdfContent):
         command_stream = [b'q']
 
         # text rendering
-        self.init_text_box()
+        self._init_text_box()
         _text_params = self.get_default_text_params()
         if self.text_params is not None:
             _text_params.update(self.text_params)
@@ -330,14 +375,38 @@ class TextStamp(PdfContent):
         command_stream.append(b'Q')
         return b' '.join(command_stream)
 
-    def register(self):
+    def register(self) -> generic.IndirectObject:
+        """
+        Register the stamp with the writer coupled to this instance, and
+        cache the returned reference.
+
+        This works by calling :meth:`.PdfContent.as_form_xobject`.
+
+        :return:
+            An indirect reference to the form XObject containing the stamp.
+        """
         stamp_ref = self._stamp_ref
         if stamp_ref is None:
             form_xobj = self.as_form_xobject()
             self._stamp_ref = stamp_ref = self.writer.add_object(form_xobj)
         return stamp_ref
 
-    def apply(self, dest_page, x, y):
+    def apply(self, dest_page: int, x: int, y: int):
+        """
+        Apply a stamp to a particular page in the PDF writer attached to this
+        :class:`.TextStamp` instance.
+
+        :param dest_page:
+            Index of the page to which the stamp is to be applied
+            (starting at `0`).
+        :param x:
+            Horizontal position of the stamp's lower left corner on the page.
+        :param y:
+            Vertical position of the stamp's lower left corner on the page.
+        :return:
+            A reference to the affected page object, together with
+            a ``(width, height)`` tuple describing the dimensions of the stamp.
+        """
         stamp_ref = self.register()
         # randomise resource name to avoid conflicts
         # TODO handle this properly
@@ -359,6 +428,14 @@ class TextStamp(PdfContent):
         return page_ref, dims
 
     def as_appearances(self) -> AnnotAppearances:
+        """
+        Turn this stamp into an appearance dictionary for an annotation
+        (or a form field widget), after rendering it.
+        Only the normal appearance will be defined.
+
+        :return:
+            An instance of :class:`.AnnotAppearances`.
+        """
         # TODO support defining overrides/extra's for the rollover/down
         #  appearances in some form
         stamp_ref = self.register()
@@ -367,6 +444,14 @@ class TextStamp(PdfContent):
 
 class QRStamp(TextStamp):
     qr_default_width = 30
+    """
+    Default value for the QR code's width in user units.
+    This value is only used if the stamp's bounding box does not have a
+    defined width, in which case the :attr:`.QRStampStyle.stamp_qrsize`
+    attribute is unusable.
+    
+    You can safely override this attribute if you so desire.
+    """
 
     def __init__(self, writer: IncrementalPdfFileWriter, url: str,
                  style: QRStampStyle, text_params=None,
@@ -377,6 +462,12 @@ class QRStamp(TextStamp):
 
     @property
     def qr_size(self):
+        """
+        Compute the effective size of the QR code.
+
+        :return:
+            The size of the QR code in user units.
+        """
         if self._qr_size is None:
             style = self.style
             if self.box.width_defined:
