@@ -1,5 +1,16 @@
+"""
+Utilities for stamping PDF files.
+
+Here 'stamping' loosely refers to adding small overlays (QR codes, text boxes,
+etc.) on top of already existing content in PDF files.
+
+The code in this module is also used by the :mod:`.sign` module to render
+signature appearances.
+"""
+
 import os
 from binascii import hexlify
+from typing import Optional
 
 import qrcode
 import tzlocal
@@ -22,14 +33,50 @@ from pyhanko.pdf_utils.content import ResourceType, PdfContent, RawContent
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin
 
 
-class AnnotAppearances:
+__all__ = [
+    "AnnotAppearances", "TextStampStyle", "QRStampStyle", "STAMP_ART_CONTENT",
+    "TextStamp", "QRStamp", "qr_stamp_file",
+]
 
-    def __init__(self, normal, rollover=None, down=None):
+
+class AnnotAppearances:
+    """
+    Convenience abstraction to set up an appearance dictionary for a PDF
+    annotation.
+
+    Annotations can have three appearance streams, which can be roughly
+    characterised as follows:
+
+    * *normal*: the only required one, and the default one;
+    * *rollover*: used when mousing over the annotation;
+    * *down*: used when clicking the annotation.
+
+    These are given as references to form XObjects.
+
+    .. note::
+        This class only covers the simple case of an appearance dictionary
+        for an annotation with only one appearance state.
+
+    See § 12.5.5 in ISO 32000-1 for further information.
+    """
+
+    def __init__(self, normal: generic.IndirectObject,
+                 rollover: Optional[generic.IndirectObject] = None,
+                 down: Optional[generic.IndirectObject] = None):
         self.normal = normal
         self.rollover = rollover
         self.down = down
 
-    def as_pdf_object(self):
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Convert the :class:`.AnnotationAppearances` instance to a PDF
+        dictionary.
+
+        :return:
+            A :class:`~.pdf_utils.generic.DictionaryObject` that can be plugged
+            into the ``/AP`` entry of an annotation dictionary.
+        """
+
         res = generic.DictionaryObject({pdf_name('/N'): self.normal})
         if self.rollover is not None:
             res[pdf_name('/R')] = self.rollover
@@ -40,15 +87,67 @@ class AnnotAppearances:
 
 @dataclass(frozen=True)
 class TextStampStyle(ConfigurableMixin):
+    """
+    Style for text-based stamps.
+
+    Roughly speaking, this stamp type renders some predefined (but parametrised)
+    piece of text inside a text box, and possibly applies a background to it.
+    """
+
     text_box_style: TextBoxStyle = TextBoxStyle()
+    """
+    The text box style for the internal text box used.
+    """
+
     border_width: int = 3
+    """
+    Border width in user units (for the stamp, not the text box).
+    """
+
     stamp_text: str = '%(ts)s'
+    """
+    Text template for the stamp. The template can contain an interpolation
+    parameter ``ts`` that will be replaced by the stamping time.
+    
+    Additional parameters may be added if necessary. Values for these must be
+    passed to the :meth:`~.TextStamp.__init__` method of the 
+    :class:`.TextStamp` class in the ``text_params`` argument.
+    """
+
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
+    """
+    Datetime format used to render the timestamp.
+    """
+
     background: PdfContent = None
+    """
+    :class:`~.pdf_utils.content.PdfContent` instance that will be used to render
+    the stamp's background.
+    """
+
     background_opacity: float = 0.6
+    """
+    Opacity value to render the background at. This should be a floating-point
+    number between `0` and `1`.
+    """
 
     @classmethod
     def process_entries(cls, config_dict):
+        """
+        The implementation of :meth:`process_entries` calls
+        :meth:`.TextBoxStyle.from_config` to parse the ``text_box_style``
+        configuration entry, if present.
+
+        Then, it processes the background specified.
+        This can either be a path to an image file, in which case it will
+        be turned into an instance of :class:`~.pdf_utils.images.PdfImage`,
+        or the special value ``__stamp__``, which is an alias for
+        :const:`~pyhanko.stamp.STAMP_ART_CONTENT`.
+
+        See :meth:`.ConfigurableMixin.process_entries` for general
+        documentation about this method.
+        """
+
         super().process_entries(config_dict)
         try:
             tbs = config_dict['text_box_style']
@@ -74,13 +173,35 @@ class TextStampStyle(ConfigurableMixin):
 
 @dataclass(frozen=True)
 class QRStampStyle(TextStampStyle):
+    """
+    Style for text-based stamps together with a QR code.
+
+    This is exactly the same as a text stamp, except that the text box
+    is rendered with a QR code to the left of it.
+    """
+
     innsep: int = 3
+    """
+    Inner separation inside the stamp.
+    """
+
     stamp_text: str = (
         "Digital version available at\n"
         "this url: %(url)s\n"
         "Timestamp: %(ts)s"
     )
+    """
+    Text template for the stamp.
+    The description of :attr:`.TextStampStyle.stamp_text` still applies, but
+    an additional default interpolation parameter ``url`` is available.
+    This parameter will be replaced with the URL that the QR code points to.
+    """
+
     stamp_qrsize: float = 0.25
+    """
+    Indicates the proportion of the width of the stamp that should be taken up
+    by the QR code.
+    """
 
 
 class TextStamp(PdfContent):
@@ -344,8 +465,33 @@ class QRStamp(TextStamp):
         return page_ref, (w, h)
 
 
-def stamp_file(input_name, output_name, style, dest_page,
-               x, y, url, text_params=None):
+# TODO double-check positionining issues
+# TODO add this to the CLI.
+# TODO add an equivalent for text stamps
+
+def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
+                  dest_page: int, x: int, y: int, url: str,
+                  text_params=None):
+    """
+    Add a QR stamp to a file.
+
+    :param input_name:
+        Path to the input file.
+    :param output_name:
+        Path to the output file.
+    :param style:
+        QR stamp style to use.
+    :param dest_page:
+        Index of the page to which the stamp is to be applied (starting at `0`).
+    :param x:
+        Horizontal position of the stamp's lower left corner on the page.
+    :param y:
+        Vertical position of the stamp's lower left corner on the page.
+    :param url:
+        URL for the QR code to point to.
+    :param text_params:
+        Additional parameters for text template interpolation.
+    """
 
     with open(input_name, 'rb') as fin:
         pdf_out = IncrementalPdfFileWriter(fin)
@@ -374,3 +520,12 @@ c 72.488 49.34 87.043 46.695 92.332 51.984 c 97.625 57.277 96.301 65.215
 3.801 90.289 92.398 7.391 re f
 Q
 ''')
+"""
+Hardcoded stamp background that will render a stylised image of a stamp using 
+PDF graphics operators (see below).
+
+.. image:: images/stamp-background.svg
+   :alt: Standard stamp background
+   :align: center
+   
+"""
