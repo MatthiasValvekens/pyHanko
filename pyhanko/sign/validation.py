@@ -156,21 +156,21 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     # if the signature is invalid for some external reason, this flag is set
     #  (e.g. when the thing being signed is itself wrong)
     valid &= not externally_invalid
-    trusted = revoked = usage_ok = False
+    trusted = revoked = False
     path = None
     if valid:
         validator = CertificateValidator(
             cert, intermediate_certs=ca_chain,
             validation_context=validation_context
         )
-        trusted, revoked, usage_ok, path = \
+        trusted, revoked, path = \
             status_cls.validate_cert_usage(validator)
 
     status_kwargs = status_kwargs or {}
     status_kwargs.update(
         intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-        revoked=revoked, usage_ok=usage_ok, trusted=trusted,
+        revoked=revoked, trusted=trusted,
         validation_path=path
     )
     return status_kwargs

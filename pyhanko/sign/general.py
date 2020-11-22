@@ -1,3 +1,8 @@
+"""
+General tools related to CMS signatures, not necessarily as implemented
+in the PDF specification.
+"""
+
 import logging
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
@@ -31,7 +36,6 @@ class SignatureStatus:
     valid: bool
     trusted: bool
     revoked: bool
-    usage_ok: bool
     signing_cert: x509.Certificate
     ca_chain: List[x509.Certificate]
     pkcs7_signature_mechanism: str
@@ -51,8 +55,6 @@ class SignatureStatus:
         else:
             cert_status = 'UNTRUSTED'
         yield cert_status
-        if self.usage_ok:
-            yield 'USAGE_OK'
 
     def summary(self):
         if self.intact and self.valid:
@@ -63,13 +65,13 @@ class SignatureStatus:
     @classmethod
     def validate_cert_usage(cls, validator: CertificateValidator):
 
-        usage_ok = revoked = trusted = False
+        revoked = trusted = False
         path = None
         try:
             path = validator.validate_usage(
                 key_usage=cls.key_usage, extended_key_usage=cls.extd_key_usage
             )
-            usage_ok = trusted = True
+            trusted = True
         except InvalidCertificateError as e:
             # TODO accumulate these somewhere
             logger.warning(e)
@@ -82,7 +84,7 @@ class SignatureStatus:
             logger.warning(
                 f"Chain of trust validation for {subj} failed."
             )
-        return trusted, revoked, usage_ok, path
+        return trusted, revoked, path
 
 
 def simple_cms_attribute(attr_type, value):
