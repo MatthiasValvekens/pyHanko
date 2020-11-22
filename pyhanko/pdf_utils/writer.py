@@ -379,6 +379,13 @@ class BasePdfFileWriter(PdfHandler):
         return generic.IndirectObject(idnum, 0, self)
 
     def prepare_object_stream(self, compress=True):
+        """Prepare and return a new :class:`.ObjectStream` object.
+
+        :param compress:
+            Indicates whether the resulting object stream should be compressed.
+        :return:
+            An :class:`.ObjectStream` object.
+        """
         if not self.stream_xrefs:
             raise PdfWriteError(
                 'Object streams require Xref streams to be enabled.'
@@ -423,6 +430,12 @@ class BasePdfFileWriter(PdfHandler):
         trailer[pdf_name('/ID')] = self._document_id
 
     def write(self, stream):
+        """
+        Write the contents of this PDF writer to a stream.
+
+        :param stream:
+            A writable output stream.
+        """
         self._write(stream)
 
     def _write(self, stream, skip_header=False):
@@ -465,6 +478,16 @@ class BasePdfFileWriter(PdfHandler):
         stream.write(xref_pointer_string.encode('ascii') + b'%%EOF\n')
 
     def register_annotation(self, page_ref, annot_ref):
+        """
+        Register an annotation to be added to a page.
+        This convenience function takes care of calling :meth:`mark_update`
+        where necessary.
+
+        :param page_ref:
+            Reference to the page object involved.
+        :param annot_ref:
+            Reference to the annotation object to be added.
+        """
         page_obj = page_ref.get_object()
         try:
             annots_ref = page_obj.raw_get('/Annots')
