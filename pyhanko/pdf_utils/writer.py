@@ -1,38 +1,90 @@
+
+"""
+Utilities for writing PDF files.
+Contains code from the PyPDF2 project; see :ref:`here <pypdf2-license>`
+for the original license.
+"""
+
 import os
 import struct
 from hashlib import md5
 from io import BytesIO
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Optional
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
-from pyhanko.pdf_utils.misc import peek, PdfReadError, instance_test
+from pyhanko.pdf_utils.misc import (
+    peek, PdfReadError, instance_test,
+    PdfWriteError,
+)
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
-"""
-Utility classes for writing PDF files.
-Contains code from the PyPDF2 project, see LICENSE.PyPDF2
-"""
 
+__all__ = [
+    'ObjectStream', 'BasePdfFileWriter',
+    'PageObject', 'PdfFileWriter', 'init_xobject_dictionary'
+]
+
+# TODO include version number
 VENDOR = 'pyhanko'
 
 
 # TODO consider giving object streams and writers a common add_object interface
 
 class ObjectStream:
+    """
+    Utility class to collect objects into a PDF object stream.
+
+    Object streams are mainly useful for space efficiency reasons.
+    They allow related objects to be grouped & compressed together in a
+    more flexible manner.
+
+
+    .. warning::
+        Object streams can only be used in files with a cross-reference
+        stream, as opposed to a classical XRef table.
+        In particular, this means that incremental updates to files with a
+        legacy XRef table cannot contain object streams either.
+        See § 7.5.7 in ISO 32000-1 for further details.
+
+    .. warning::
+        The usefulness of object streams is somewhat stymied by the fact that
+        PDF stream objects cannot be embedded into object streams for
+        syntactical reasons.
+    """
 
     def __init__(self, compress=True):
         self._obj_refs: List[Tuple[int, generic.PdfObject]] = []
         self.compress = compress
 
-    def add_object(self, idnum, obj):
-        if isinstance(obj, generic.StreamObject):
+    def add_object(self, idnum: int, obj: generic.PdfObject):
+        """
+        Add an object to an object stream.
+        Note that objects in object streams always have their generation number
+        set to `0` by definition.
+
+        :param idnum:
+            The object's ID number.
+        :param obj:
+            The object to embed into the object stream.
+        :raise TypeError:
+            Raised if ``obj`` is an instance of :class:`~.generic.StreamObject`
+            or :class:`~.generic.IndirectObject`.
+        """
+
+        if isinstance(obj, (generic.StreamObject, generic.IndirectObject)):
             raise TypeError(
-                'Stream objects cannot be embedded into object streams'
-            )
+                'Stream objects and bare references cannot be embedded into '
+                'object streams.'
+            )  # pragma: nocover
         self._obj_refs.append((idnum, obj))
 
     def as_pdf_object(self) -> generic.StreamObject:
+        """
+        Render the object stream to a PDF stream object
+
+        :return: An instance of :class:`~.generic.StreamObject`.
+        """
         stream_header = BytesIO()
         main_body = BytesIO()
         for idnum, obj in self._obj_refs:
@@ -94,7 +146,7 @@ def _contiguous_xref_chunks(position_dict):
     yield first_idnum, current_chunk
 
 
-def write_xref_table(stream, position_dict):
+def _write_xref_table(stream, position_dict):
     xref_location = stream.tell()
     stream.write(b'xref\n')
     # Insert xref table subsections in contiguous chunks.
@@ -185,14 +237,27 @@ class XRefStream(generic.StreamObject):
         super().write_to_stream(stream, None)
 
 
-resource_dict_names = map(pdf_name, [
-    'ExtGState', 'ColorSpace', 'Pattern', 'Shading', 'XObject',
-    'Font', 'ProcSet', 'Properties'
-])
+# TODO move this to content.py?
+def init_xobject_dictionary(command_stream: bytes, box_width, box_height,
+                            resources: Optional[generic.DictionaryObject]
+                            = None) -> generic.StreamObject:
+    """
+    Helper function to initialise form XObject dictionaries.
 
+    .. note::
+        For utilities to handle image XObjects, see :mod:`.images`.
 
-def init_xobject_dictionary(command_stream, box_width, box_height,
-                            resources=None):
+    :param command_stream:
+        The XObject's raw appearance stream.
+    :param box_width:
+        The width of the XObject's bounding box.
+    :param box_height:
+        The height of the XObject's bounding box.
+    :param resources:
+        A resource dictionary to include with the form object.
+    :return:
+        A :class:`~.generic.StreamObject` representation of the form XObject.
+    """
     resources = resources or generic.DictionaryObject()
     return generic.StreamObject({
         pdf_name('/BBox'): generic.ArrayObject(list(
@@ -205,7 +270,20 @@ def init_xobject_dictionary(command_stream, box_width, box_height,
 
 
 class BasePdfFileWriter(PdfHandler):
+    """Base class for PDF writers."""
+
     output_version = (1, 7)
+    """Output version to be declared in the output file."""
+
+    stream_xrefs: bool
+    """
+    Boolean controlling whether or not the output file will contain 
+    its cross-references in stream format, or as a classical XRef table.
+    
+    The default for new files is ``True``. For incremental updates,
+    the writer adapts to the system used in the previous iteration of the
+    document (as mandated by the standard).
+    """
 
     def __init__(self, root, info, document_id, obj_id_start=0,
                  stream_xrefs=True):
@@ -230,9 +308,28 @@ class BasePdfFileWriter(PdfHandler):
 
     def mark_update(self, obj_ref: Union[generic.Reference,
                                          generic.IndirectObject]):
+        """
+        Mark an object reference to be updated.
+        This is only relevant for incremental updates, but is included
+        as a no-op by default for interoperability reasons.
+
+        :param obj_ref:
+            An indirect object instance or a reference.
+        """
         pass
 
     def update_container(self, obj: generic.PdfObject):
+        """
+        Mark the container of an object (as indicated by the
+        :attr:`~.generic.PdfObject.container_ref` attribute on
+        :class:`~.generic.PdfObject`) for an update.
+
+        As with :meth:`mark_update`, this only applies to incremental updates,
+        but defaults to a no-op.
+
+        :param obj:
+            The object whose top-level container needs to be rewritten.
+        """
         pass
 
     @property
@@ -254,7 +351,20 @@ class BasePdfFileWriter(PdfHandler):
                     pass
             raise KeyError(ido)
 
-    def add_object(self, obj, obj_stream: ObjectStream = None):
+    def add_object(self, obj, obj_stream: ObjectStream = None) \
+            -> generic.IndirectObject:
+        """
+        Add a new object to this writer.
+
+        :param obj:
+            The object to add.
+        :param obj_stream:
+            An object stream to add the object to.
+        :return:
+            A :class:`~.generic.IndirectObject` instance referring to
+            the object just added.
+        """
+
         idnum = self._lastobj_id + 1
         if obj_stream is None:
             self.objects[(0, idnum)] = obj
@@ -262,7 +372,7 @@ class BasePdfFileWriter(PdfHandler):
             obj_stream.add_object(idnum, obj)
             self.objs_in_streams[idnum] = obj
         else:
-            raise ValueError(
+            raise PdfWriteError(
                 f'Stream {repr(obj_stream)} is unknown to this PDF writer.'
             )
         self._lastobj_id += 1
@@ -270,7 +380,7 @@ class BasePdfFileWriter(PdfHandler):
 
     def prepare_object_stream(self, compress=True):
         if not self.stream_xrefs:
-            raise ValueError(
+            raise PdfWriteError(
                 'Object streams require Xref streams to be enabled.'
             )
         stream = ObjectStream(compress=compress)
@@ -342,7 +452,7 @@ class BasePdfFileWriter(PdfHandler):
             stream.write(b'\nendobj\n')
         else:
             # classical xref table
-            xref_location = write_xref_table(stream, object_positions)
+            xref_location = _write_xref_table(stream, object_positions)
             trailer[pdf_name('/Size')] = generic.NumberObject(
                 self._lastobj_id + 1
             )
@@ -433,7 +543,7 @@ class BasePdfFileWriter(PdfHandler):
             The object as associated with this writer.
             If the input object was an indirect reference, a dictionary
             (incl. streams) or an array, the returned value will always be
-            a new instance. In other cases, the original object is returned.
+            a new instance.
         """
 
         # TODO support collecting all relevant references into a single object
@@ -442,6 +552,8 @@ class BasePdfFileWriter(PdfHandler):
 
         # TODO check the spec for guidance on fonts. Do font identifiers have
         #  to be globally unique?
+
+        # TODO deal with container_ref
 
         if isinstance(obj, generic.IndirectObject):
             refd = obj.get_object()
@@ -466,11 +578,11 @@ class BasePdfFileWriter(PdfHandler):
     def import_page_as_xobject(self, other: PdfHandler, page_ix=0,
                                content_stream=0, inherit_filters=True):
         """
-        Import a page content stream from some other PdfHandler into the
-        current one as a form XObject.
+        Import a page content stream from some other
+        :class:`~.rw_common.PdfHandler` into the current one as a form XObject.
 
         :param other:
-            A PdfHandler
+            A :class:`~.rw_common.PdfHandler`
         :param page_ix:
             Index of the page to copy (default: 0)
         :param content_stream:
@@ -479,6 +591,8 @@ class BasePdfFileWriter(PdfHandler):
         :param inherit_filters:
             Inherit the content stream's filters, if present.
         :return:
+            An :class:`~.generic.IndirectObject` referring to the page object
+            as added to the current reader.
         """
         page_ref, resources = other.find_page_for_modification(page_ix)
         page_obj = page_ref.get_object()
@@ -531,6 +645,8 @@ class BasePdfFileWriter(PdfHandler):
 
 
 class PageObject(generic.DictionaryObject):
+    """Subclass of :class:`~.generic.DictionaryObject` that handles some of the
+    initialisation boilerplate for page objects."""
 
     # TODO be more clever with inheritable required attributes,
     #  and enforce the requirements on insertion instead
@@ -540,13 +656,13 @@ class PageObject(generic.DictionaryObject):
 
         if isinstance(contents, list):
             if not all(map(instance_test(generic.IndirectObject), contents)):
-                raise ValueError(
+                raise PdfWriteError(
                     'Contents array must consist of indirect references'
                 )
             if not isinstance(contents, generic.ArrayObject):
                 contents = generic.ArrayObject(contents)
         elif not isinstance(contents, generic.IndirectObject):
-            raise ValueError(
+            raise PdfWriteError(
                 'Contents must be either an indirect reference or an array'
             )
 
@@ -563,6 +679,7 @@ class PageObject(generic.DictionaryObject):
 
 
 class PdfFileWriter(BasePdfFileWriter):
+    """Class to write new PDF files."""
 
     def __init__(self):
         # root object

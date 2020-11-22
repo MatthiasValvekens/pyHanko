@@ -114,15 +114,15 @@ def read_until_regex(stream, regex, ignore_eof=False):
     return name
 
 
-class PyPdfError(Exception):
+class PdfError(Exception):
     pass
 
 
-class PdfReadError(PyPdfError):
+class PdfReadError(PdfError):
     pass
 
 
-class PageSizeNotDefinedError(PyPdfError):
+class PdfWriteError(PdfError):
     pass
 
 
