@@ -1,4 +1,3 @@
-import itertools
 import logging
 from dataclasses import dataclass
 from typing import List, ClassVar, Set
@@ -19,7 +18,7 @@ from certvalidator.errors import RevokedError, PathValidationError
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
     'as_signing_certificate', 'CertificateStore', 'SimpleCertificateStore',
-    'WriteThroughCertificateStore', 'SigningError', 'UnacceptableSignerError'
+    'SigningError', 'UnacceptableSignerError'
 ]
 
 
@@ -127,15 +126,6 @@ class CertificateStore:
         for cert in certs:
             self.register(cert)
 
-    def write_through_branch(self, base_cls=None) \
-            -> 'WriteThroughCertificateStore':
-        base_cls = base_cls or WriteThroughCertificateStore
-        return base_cls(self)
-
-    def fork(self, base_cls=None) -> 'ForkedCertificateStore':
-        base_cls = base_cls or ForkedCertificateStore
-        return base_cls(self)
-
 
 class SimpleCertificateStore(CertificateStore):
     """
@@ -154,44 +144,6 @@ class SimpleCertificateStore(CertificateStore):
 
     def __iter__(self):
         return iter(self.certs.values())
-
-
-# TODO rewrite the DSS to use this class, it's probably cleaner
-class WriteThroughCertificateStore(SimpleCertificateStore):
-    """
-    Certificate store that writes both to itself and to a "backend" store, but
-    never returns data from the backend.
-    Useful in cases where we want a single store accumulating certs, while still
-    keeping them grouped in some meaningful way.
-    """
-
-    def __init__(self, backend: CertificateStore):
-        self.backend = backend
-        super().__init__()
-
-    def register(self, cert: x509.Certificate):
-        self.backend.register(cert)
-        super().register(cert)
-
-
-class ForkedCertificateStore(SimpleCertificateStore):
-    """
-    Certificate store that returns data from both itself and a "backend" store,
-    while never writing to the backend.
-    """
-
-    def __init__(self, backend: CertificateStore):
-        self.backend = backend
-        super().__init__()
-
-    def __getitem__(self, item):
-        try:
-            return self.certs[item]
-        except KeyError:
-            return self.backend[item]
-
-    def __iter__(self):
-        return itertools.chain(iter(self.backend), iter(self.certs.values()))
 
 
 class SigningError(ValueError):

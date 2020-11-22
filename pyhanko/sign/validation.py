@@ -371,7 +371,7 @@ class EmbeddedPdfSignature:
             pkcs7_content = pkcs7_content.raw_object
         elif isinstance(pkcs7_content, generic.IndirectObject):
             pkcs7_content = reader.get_object(
-                pkcs7_content, transparent_decrypt=False
+                pkcs7_content.reference, transparent_decrypt=False
             )
         self.pkcs7_content = pkcs7_content
 
