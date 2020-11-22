@@ -1,22 +1,35 @@
+"""
+Utility for writing incremental updates to existing PDF files.
+"""
+
 import os
 from typing import Union
 
 from . import generic
+from .misc import PdfReadError
 
 from .reader import PdfFileReader
 from .generic import pdf_name
 from .content import PdfContent
 from .writer import BasePdfFileWriter
 
-"""
-Utility class for writing incremental updates to PDF files.
-Contains code from the PyPDF2 project, see LICENSE.PyPDF2
-"""
 
 __all__ = ['IncrementalPdfFileWriter']
 
 
 class IncrementalPdfFileWriter(BasePdfFileWriter):
+    """Class to incrementally update existing files.
+
+    This :class:`~.writer.BasePdfFileWriter` subclass encapsulates a
+    :class:`~.reader.PdfFileReader` instance in addition to exposing an
+    interface to add and modify PDF objects.
+
+    Incremental updates to a PDF file append modifications to the end of the
+    file. This is critical when the original file contents are not to be
+    modified directly (e.g. when it contains digital signatures).
+    It has the additional advantage of providing an automatic audit trail of
+    sorts.
+    """
 
     def __init__(self, input_stream):
         self.input_stream = input_stream
@@ -34,7 +47,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             stream_xrefs=prev.has_xref_stream
         )
         self._resolves_objs_from = (self, prev)
-        if self.prev.input_version != self.output_version:
+        if self.prev.input_version < self.output_version:
             root = root_ref.get_object()
             version_str = pdf_name('/%d.%d' % self.output_version)
             root[pdf_name('/Version')] = version_str
@@ -136,26 +149,51 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         super().write(stream)
 
     def write_in_place(self):
+        """
+        Write the updated file contents in-place to the same stream as
+        the input stream.
+        This obviously requires a stream supporting both reading and writing
+        operations.
+        """
         stream = self.prev.stream
         stream.seek(0, os.SEEK_END)
         self._write(stream, skip_header=True)
 
     def encrypt(self, user_pwd):
+        """Method to handle updates to RC4-encrypted files.
+
+        This method handles decrypting of the original file, and makes sure
+        the resulting updated file is encrypted in a compatible way.
+        The standard mandates that updates to encrypted files be effected using
+        the same encryption settings. In particular, incremental updates
+        cannot remove file encryption.
+
+        .. danger::
+            One should also be aware that the encryption scheme implemented here
+            is (very) weak, and we only support it for compatibility reasons.
+            Under no circumstances should it still be used to encrypt new files.
+
+        :param user_pwd:
+            The original file's user password.
+
+        :raises PdfReadError:
+            Raised when there is a problem decrypting the file.
+        """
         prev = self.prev
         # first, attempt decryption
         if prev.encrypted:
             if not prev.decrypt(user_pwd):
-                raise ValueError(
+                raise PdfReadError(
                     'Failed to decrypt original with the password supplied'
                 )
         else:
-            raise ValueError('Original file was not encrypted.')
+            raise PdfReadError('Original file was not encrypted.')
 
         # take care to use the same encryption algorithm as the underlying file
         try:
             encrypt_ref = prev.trailer.raw_get("/Encrypt")
         except KeyError:
-            raise ValueError(
+            raise PdfReadError(
                 'Original document does not have an encryption dictionary'
             )
 
@@ -165,19 +203,28 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
     # TODO these can be simplified considerably using the new update_container
     # TODO move these to the base writer class, perhaps
 
-    def add_content_to_page(self, page_ix, pdf_content: PdfContent,
-                            prepend=False):
-        as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
-        return self.add_stream_to_page(
-            page_ix, self.add_object(as_stream),
-            resources=pdf_content.resources.as_pdf_object(), prepend=prepend
-        )
-
     def add_stream_to_page(self, page_ix, stream_ref, resources=None,
                            prepend=False):
-        """
-        Append an indirect stream object to a page in a PDF.
-        Returns a reference to the page object that was modified.
+        """Append an indirect stream object to a page in a PDF as a content
+        stream.
+
+        :param page_ix:
+            Index of the page to modify.
+            The first page has index `0`.
+        :param stream_ref:
+            :class:`~.generic.IndirectObject` reference to the stream
+            object to add.
+        :param resources:
+            Resource dictionary containing resources to add to the page's
+            existing resource dictionary.
+        :param prepend:
+            Prepend the content stream to the list of content streams, as
+            opposed to appending it to the end.
+            This has the effect of causing the stream to be rendered
+            underneath the already existing content on the page.
+        :return:
+            An :class:`~.generic.IndirectObject` reference to the page object
+            that was modified.
         """
 
         page_obj_ref, res_ref = self.find_page_for_modification(page_ix)
@@ -239,10 +286,37 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
 
         return page_obj_ref
 
+    def add_content_to_page(self, page_ix, pdf_content: PdfContent,
+                            prepend=False):
+        """
+        Convenience wrapper around :meth:`add_stream_to_page` to turn a
+        :class:`~.content.PdfContent` instance into a page content stream.
+
+        :param page_ix:
+            Index of the page to modify.
+            The first page has index `0`.
+        :param pdf_content:
+            An instance of :class:`~.content.PdfContent`
+        :param prepend:
+            Prepend the content stream to the list of content streams, as
+            opposed to appending it to the end.
+            This has the effect of causing the stream to be rendered
+            underneath the already existing content on the page.
+        :return:
+            An :class:`~.generic.IndirectObject` reference to the page object
+            that was modified.
+        """
+        as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
+        return self.add_stream_to_page(
+            page_ix, self.add_object(as_stream),
+            resources=pdf_content.resources.as_pdf_object(), prepend=prepend
+        )
+
+    # TODO this doesn't really belong here
     def merge_resources(self, orig_dict, new_dict) -> bool:
         """
         Update an existing resource dictionary object with data from another
-        one. Returns `True` if the original dict object was modified directly.
+        one. Returns ``True`` if the original dict object was modified directly.
 
         The caller is responsible for avoiding name conflicts with existing
         resources.
