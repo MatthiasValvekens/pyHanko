@@ -1,11 +1,16 @@
+"""
+Utility functions for PDF library.
+Taken from PyPDF2 with modifications and additions, see
+:ref:`here <pypdf2-license>` for the original license of the PyPDF2 project.
+"""
+
+
 import os
 from enum import Enum
 
-"""
-Utility functions for PDF library.
-Taken from PyPDF2 with modifications and additions (see LICENSE.PyPDF2).
-"""
-
+__all__ = [
+    'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError'
+]
 
 rd = lambda x: round(x, 4)
 

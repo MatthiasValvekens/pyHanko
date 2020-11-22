@@ -1,3 +1,15 @@
+"""
+Utility to read PDF files.
+Contains code from the PyPDF2 project; see :ref:`here <pypdf2-license>`
+for the original license.
+
+The implementation was tweaked with the express purpose of facilitating
+historical inspection and auditing of PDF files with multiple revisions
+through incremental updates.
+This comes at a cost, and future iterations of this module may offer more
+flexibility in terms of the level of detail with which file size is scrutinised.
+"""
+
 import struct
 import os
 import re
@@ -6,9 +18,8 @@ from io import BytesIO
 from itertools import chain
 from typing import Set, List
 
-from . import generic
-from .misc import read_non_whitespace, read_until_whitespace
-from . import misc
+from . import generic, misc
+from .misc import PdfReadError
 from .crypt import _alg33_1, _alg34, _alg35, derive_key, rc4_encrypt
 
 import logging
@@ -17,11 +28,8 @@ from .rw_common import PdfHandler
 
 logger = logging.getLogger(__name__)
 
-"""
-Modified version of PdfFileReader from PyPDF2. See LICENSE.PyPDF2
-"""
 
-__all__ = ['PdfFileReader']
+__all__ = ['PdfFileReader', 'HistoricalResolver']
 
 header_regex = re.compile(b'%PDF-(\\d).(\\d)')
 catalog_version_regex = re.compile(r'/(\d).(\d)')
@@ -37,10 +45,10 @@ def read_next_end_line(stream):
         while True:
             # Prevent infinite loops in malformed PDFs
             if stream.tell() == 0:
-                raise misc.PdfReadError("Could not read malformed PDF file")
+                raise PdfReadError("Could not read malformed PDF file")
             x = stream.read(1)
             if stream.tell() < 2:
-                raise misc.PdfReadError("EOL marker not found")
+                raise PdfReadError("EOL marker not found")
             stream.seek(-2, os.SEEK_CUR)
             if x == b'\n' or x == b'\r':
                 break
@@ -52,25 +60,11 @@ def read_next_end_line(stream):
                 stream.seek(-1, os.SEEK_CUR)
                 crlf = True
             if stream.tell() < 2:
-                raise misc.PdfReadError("EOL marker not found")
+                raise PdfReadError("EOL marker not found")
             stream.seek(-2, os.SEEK_CUR)
         # if using CR+LF, go back 2 bytes, else 1
         stream.seek(2 if crlf else 1, os.SEEK_CUR)
     return bytes(reversed(tuple(_build())))
-
-
-# TODO for validation purposes, it is interesting to keep track of "out of
-#  bounds" XRefs, i.e. XRefs that refer to "orphan" objects in earlier
-#  revisions. This is a pattern commonly exploited in replacement attacks.
-# Detecting orphaned objects before they are referenced is difficult
-# (since nothing prevents the attacker from "hiding" them in a content stream,
-# for example), but we can at least try to prevent them from being referenced.
-# This requires finding all instances of EOF sequences in the file, and
-# forbidding cross-reference streams/tables from referring to objects outside of
-# the region in which they are defined. (see https://pdf-insecurity.org/)
-
-
-TRAILER_KEYS = "/Root", "/Encrypt", "/Info", "/ID", "/Size"
 
 
 class XRefCache:
@@ -123,7 +117,7 @@ class XRefCache:
                 gen for gen in self._generations[idnum]
                 if gen <= prev_generation
             )
-            raise misc.PdfReadError(
+            raise PdfReadError(
                 f"Generation {conflicting_gen} of object {idnum} occurs "
                 f"after generation {prev_generation} was freed."
             )
@@ -139,7 +133,7 @@ class XRefCache:
             # remove from expected free dict
             expected_generation = self._previous_expected_free.pop(idnum)
             if expected_generation != next_generation:
-                raise misc.PdfReadError(
+                raise PdfReadError(
                     f"Encountered freeing instruction with next generation "
                     f"{next_generation} of object ID {idnum}, but next use of "
                     f"this object has generation {expected_generation}."
@@ -150,12 +144,12 @@ class XRefCache:
 
     def put_ref(self, idnum, generation, start):
         if idnum in self._previous_expected_free:
-            raise misc.PdfReadError(
+            raise PdfReadError(
                 f"Generation {generation} of object {idnum} was "
                 "never freed, but reused later."
             )
         if generation > 0xffff:  # pragma: nocover
-            raise misc.PdfReadError(
+            raise PdfReadError(
                 f"Illegal generation {generation} for object ID {idnum}."
             )
         elif generation > 0:
@@ -251,7 +245,7 @@ class XRefCache:
         for rev_index, marker in self.history[ix]:
             if revision >= max_index - rev_index:
                 return marker
-        raise misc.PdfReadError(
+        raise PdfReadError(
             f'Could not find object ({ref.idnum} {ref.generation}) '
             f'in history at revision {revision}'
         )
@@ -264,18 +258,18 @@ class XRefCache:
             try:
                 return self.standard_xrefs[(ref.generation, ref.idnum)]
             except KeyError:
-                raise misc.PdfReadError("Could not find object.")
+                raise PdfReadError("Could not find object.")
 
     def read_xref_table(self):
         stream = self.reader.stream
-        read_non_whitespace(stream)
+        misc.read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
         while True:
             num = generic.NumberObject.read_from_stream(stream)
-            read_non_whitespace(stream)
+            misc.read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
             size = generic.NumberObject.read_from_stream(stream)
-            read_non_whitespace(stream)
+            misc.read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
             for cnt in range(0, size):
                 line = stream.read(20)
@@ -305,7 +299,7 @@ class XRefCache:
                 elif marker == b'f':
                     self.free_ref(num, int(generation))
                 num += 1
-            read_non_whitespace(stream)
+            misc.read_non_whitespace(stream)
             stream.seek(-1, os.SEEK_CUR)
             trailertag = stream.read(7)
             if trailertag != b"trailer":
@@ -313,7 +307,7 @@ class XRefCache:
                 stream.seek(-7, os.SEEK_CUR)
             else:
                 break
-        read_non_whitespace(stream)
+        misc.read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
 
         self._next_section()
@@ -387,7 +381,7 @@ def read_object_header(stream, strict):
     stream.seek(-1, os.SEEK_CUR)
     generation = misc.read_until_whitespace(stream)
     stream.read(3)
-    read_non_whitespace(stream, seek_back=True)
+    misc.read_non_whitespace(stream, seek_back=True)
 
     if extra and strict:
         logger.warning(
@@ -413,7 +407,7 @@ def process_data_at_eof(stream) -> int:
     line = b''
     while line[:5] != b"%%EOF":
         if stream.tell() < last_1k:
-            raise misc.PdfReadError("EOF marker not found")
+            raise PdfReadError("EOF marker not found")
         line = read_next_end_line(stream)
 
     # find startxref entry - the location of the xref table
@@ -423,13 +417,13 @@ def process_data_at_eof(stream) -> int:
     except ValueError:
         # 'startxref' may be on the same line as the location
         if not line.startswith(b"startxref"):
-            raise misc.PdfReadError("startxref not found")
+            raise PdfReadError("startxref not found")
         startxref = int(line[9:].strip())
         logger.warning("startxref on same line as offset")
     else:
         line = read_next_end_line(stream)
         if line[:9] != b"startxref":
-            raise misc.PdfReadError("startxref not found")
+            raise PdfReadError("startxref not found")
 
     return startxref
 
@@ -505,6 +499,9 @@ class TrailerDictionary(generic.PdfObject):
 
 
 class PdfFileReader(PdfHandler):
+    """Class implementing functionality to read a PDF file and cache
+    certain data about it."""
+
     last_startxref = None
     has_xref_stream = False
 
@@ -535,7 +532,7 @@ class PdfFileReader(PdfHandler):
             # not sure if anyone would be crazy enough to make this an indirect
             # reference, but in theory it's possible
             if isinstance(version, generic.IndirectObject):
-                version = self.get_object(version, never_decrypt=True)
+                version = self.get_object(version.reference, never_decrypt=True)
             m = catalog_version_regex.match(str(version))
             if m is not None:
                 major = int(m.group(1))
@@ -559,16 +556,16 @@ class PdfFileReader(PdfHandler):
         stream_data = BytesIO(stream.data)
         first_object = stream['/First']
         for i in range(stream['/N']):
-            read_non_whitespace(stream_data, seek_back=True)
+            misc.read_non_whitespace(stream_data, seek_back=True)
             objnum = generic.NumberObject.read_from_stream(stream_data)
-            read_non_whitespace(stream_data, seek_back=True)
+            misc.read_non_whitespace(stream_data, seek_back=True)
             offset = generic.NumberObject.read_from_stream(stream_data)
-            read_non_whitespace(stream_data, seek_back=True)
+            misc.read_non_whitespace(stream_data, seek_back=True)
             if objnum != idnum:
                 # We're only interested in one object
                 continue
             if self.strict and idx != i:
-                raise misc.PdfReadError("Object is in wrong index.")
+                raise PdfReadError("Object is in wrong index.")
             obj_start = first_object + offset
             stream_data.seek(obj_start)
             try:
@@ -583,7 +580,7 @@ class PdfFileReader(PdfHandler):
                 )
 
                 if self.strict:
-                    raise misc.PdfReadError("Can't read object stream: %s" % e)
+                    raise PdfReadError("Can't read object stream: %s" % e)
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
             generic.read_non_whitespace(
@@ -592,13 +589,13 @@ class PdfFileReader(PdfHandler):
             return obj
 
         if self.strict:
-            raise misc.PdfReadError("This is a fatal error in strict mode.")
+            raise PdfReadError("This is a fatal error in strict mode.")
         return generic.NullObject()
 
-    def get_encryption_params(self):
+    def _get_encryption_params(self):
         encrypt_ref = self.trailer.raw_get('/Encrypt')
         if isinstance(encrypt_ref, generic.IndirectObject):
-            return self.get_object(encrypt_ref, never_decrypt=True)
+            return self.get_object(encrypt_ref.reference, never_decrypt=True)
         else:
             return encrypt_ref
 
@@ -606,21 +603,25 @@ class PdfFileReader(PdfHandler):
     def root_ref(self) -> generic.Reference:
         return self.trailer.raw_get('/Root', decrypt=False).reference
 
-    def get_historical_root(self, revision):
+    def get_historical_root(self, revision: int):
         """
         Get the document catalog for a specific revision.
 
         :param revision:
-            The revision to query, the oldest one being zero.
+            The revision to query, the oldest one being `0`.
         :return:
-            The value of the root dictionary for that revision.
+            The value of the document catalog dictionary for that revision.
         """
         ref = self.trailer.raw_get('/Root', revision=revision)
         marker = self.xrefs.get_historical_ref(ref, revision)
         return self._read_object(ref, marker)
 
     @property
-    def total_revisions(self):
+    def total_revisions(self) -> int:
+        """
+        :return:
+            The total number of revisions made to this file.
+        """
         return self.xrefs.total_revisions
 
     def get_object(self, ref, revision=None, never_decrypt=False,
@@ -629,20 +630,28 @@ class PdfFileReader(PdfHandler):
         Read an object from the input stream.
 
         :param ref:
-            Reference to the object.
+            :class:`~.generic.Reference` to the object.
         :param revision:
             Revision number, to return the historical value of a reference.
             This always bypasses the cache.
-            The oldest revision is numbered zero.
+            The oldest revision is numbered `0`.
+            See also :class:`.HistoricalResolver`.
         :param never_decrypt:
-            Skip decryption step (only needed for parsing /Encrypt)
+            Skip decryption step (only needed for parsing ``/Encrypt``)
         :param transparent_decrypt:
-            If True, all encrypted objects are transparently decrypted by
+            If ``True``, all encrypted objects are transparently decrypted by
             default (in the sense that a user of the API in a PyPDF2 compatible
             way would only "see" decrypted objects).
-            If False, this method may return a proxy object that still allows
-            access to the "original".
+            If ``False``, this method may return a proxy object that still
+            allows access to the "original".
+
+            .. danger::
+                The encryption parameters are considered internal,
+                undocumented API, and subject to change without notice.
         :return:
+            A :class:`~.generic.PdfObject`.
+        :raises PdfReadError:
+            Raised if there is an issue reading the object from the file.
         """
         if revision is None:
             obj = self.cache_get_indirect_object(ref.generation, ref.idnum)
@@ -664,7 +673,7 @@ class PdfFileReader(PdfHandler):
 
     def _read_object(self, ref, marker, never_decrypt=False):
         if marker is None:
-            raise misc.PdfReadError(
+            raise PdfReadError(
                 f"Reference {ref} has been freed."
             )
         elif isinstance(marker, tuple):
@@ -682,7 +691,7 @@ class PdfFileReader(PdfHandler):
                 self.stream, strict=self.strict
             )
             if idnum != ref.idnum or generation != ref.generation:
-                raise misc.PdfReadError(
+                raise PdfReadError(
                     f"Expected object ID ({ref.idnum} {ref.generation}) "
                     f"does not match actual ({idnum} {generation})."
                 )
@@ -694,7 +703,7 @@ class PdfFileReader(PdfHandler):
             endobj = self.stream.read(6)
             if endobj != b'endobj':
                 if self.strict:  # pragma: nocover
-                    raise misc.PdfReadError(
+                    raise PdfReadError(
                         f'Expected endobj marker at position {obj_data_end} '
                         f'but found {repr(endobj)}'
                     )
@@ -706,7 +715,7 @@ class PdfFileReader(PdfHandler):
                 try:
                     shared_key = self._decryption_key
                 except AttributeError:
-                    raise misc.PdfReadError("file has not been decrypted")
+                    raise PdfReadError("file has not been decrypted")
                 key = derive_key(shared_key, ref.idnum, ref.generation)
                 # make sure the object that lands in the cache is always
                 # a proxy object
@@ -769,7 +778,7 @@ class PdfFileReader(PdfHandler):
                 # standard cross-reference table
                 ref = stream.read(4)
                 if ref[:3] != b"ref":
-                    raise misc.PdfReadError("xref table read error")
+                    raise PdfReadError("xref table read error")
                 startxref = self._read_xref_table()
             elif x.isdigit():
                 # PDF 1.5+ Cross-Reference Stream
@@ -798,7 +807,7 @@ class PdfFileReader(PdfHandler):
                 if found:
                     continue
                 # no xref table found at specified location
-                raise misc.PdfReadError(
+                raise PdfReadError(
                     "Could not find xref table at specified location"
                 )
 
@@ -807,7 +816,7 @@ class PdfFileReader(PdfHandler):
                 f'{k} {v} obj'
                 for k, v in self.xrefs._previous_expected_free.items()
             )
-            raise misc.PdfReadError(
+            raise PdfReadError(
                 "Xref table contains orphaned higher generation objects: "
                 + orphans
             )
@@ -819,7 +828,7 @@ class PdfFileReader(PdfHandler):
         stream.seek(0)
         input_version = None
         try:
-            header = read_until_whitespace(stream, maxchars=20)
+            header = misc.read_until_whitespace(stream, maxchars=20)
             # match ignores trailing chars
             m = header_regex.match(header)
             if m is not None:
@@ -835,36 +844,40 @@ class PdfFileReader(PdfHandler):
         # start at the end:
         stream.seek(-1, os.SEEK_END)
         if not stream.tell():
-            raise misc.PdfReadError('Cannot read an empty file')
+            raise PdfReadError('Cannot read an empty file')
 
         # This needs to be recorded for incremental update purposes
         self.last_startxref = process_data_at_eof(stream)
         self._read_xrefs()
 
-    def decrypt(self, password):
+    # TODO: use sane return values (leftover from PyPDF2)
+    # TODO: support AES
+    def decrypt(self, password: bytes) -> int:
         """
-        When using an encrypted / secured PDF file with the PDF Standard
+        When using an encrypted PDF file with the PDF legacy RC4-based
         encryption handler, this function will allow the file to be decrypted.
         It checks the given password against the document's user password and
         owner password, and then stores the resulting decryption key if either
         password is correct.
 
-        It does not matter which password was matched.  Both passwords provide
-        the correct decryption key that will allow the document to be used with
-        this library.
+        Supplying either user or owner password will work.
 
-        :param bytes password: The password to match.
+        .. danger::
+            One should also be aware that the encryption scheme implemented here
+            is (very) weak, and we only support it for compatibility reasons.
+            Under no circumstances should it still be used to encrypt new files.
+
+        :param password: The password to match.
         :return: ``0`` if the password failed, ``1`` if the password matched the
             user password, and ``2`` if the password matched the owner password.
-        :rtype: int
-        :raises NotImplementedError: if document uses an unsupported encryption
-            method.
+        :raises NotImplementedError:
+            Raised if the document uses an unsupported encryption method.
         """
 
         return self._decrypt(password)
 
     def _decrypt(self, password):
-        encrypt = self.get_encryption_params()
+        encrypt = self._get_encryption_params()
         if encrypt['/Filter'] != '/Standard':
             raise NotImplementedError(
                 "only Standard PDF encryption handler is available"
@@ -900,7 +913,7 @@ class PdfFileReader(PdfHandler):
         return 0
 
     def _auth_user_password(self, password):
-        encrypt = self.get_encryption_params()
+        encrypt = self._get_encryption_params()
         rev = encrypt['/R'].get_object()
         owner_entry = encrypt['/O'].get_object()
         p_entry = encrypt['/P'].get_object()
@@ -926,9 +939,21 @@ class PdfFileReader(PdfHandler):
 
     @property
     def encrypted(self):
+        """
+        :return: ``True`` if a document is encrypted, ``False`` otherwise.
+        """
         return "/Encrypt" in self.trailer
 
-    def get_historical_resolver(self, revision) -> 'HistoricalResolver':
+    def get_historical_resolver(self, revision: int) -> 'HistoricalResolver':
+        """
+        Return a :class:`~.rw_common.PdfHandler` instance that provides a view
+        on the file at a specific revision.
+
+        :param revision:
+            The revision number to use, with `0` being the oldest.
+        :return:
+            An instance of :class:`~.HistoricalResolver`.
+        """
         cache = self._historical_resolver_cache
         try:
             return cache[revision]
@@ -939,6 +964,11 @@ class PdfFileReader(PdfHandler):
 
     @property
     def embedded_signatures(self):
+        """
+        :return:
+            The signatures embedded in this document, in signing order;
+            see :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`.
+        """
         if self._embedded_signatures is not None:
             return self._embedded_signatures
         from pyhanko.sign.fields import enumerate_sig_fields
@@ -965,8 +995,23 @@ def convert_to_int(d, size):
 
 class HistoricalResolver(PdfHandler):
     """
-    Caching resolver for probing the history of a PDF document.
+    :class:`~.rw_common.PdfHandler` implementation that provides a view
+    on a particular revision of a PDF file.
+
+    Instances of :class:`.HistoricalResolver` should be created by calling the
+    :meth:`~.PdfFileReader.get_historical_resolver` method on a
+    :class:`~.PdfFileReader` object.
+
+    Instances of this class cache the result of :meth:`get_object` calls.
+
+    .. note::
+        Be aware that instances of this class transparently rewrite the PDF
+        handler associated with any reference objects returned from the reader,
+        so calling :meth:`~.generic.Reference.get_object` on an indirect
+        reference object will cause the reference to be resolved within the
+        selected revision.
     """
+
     def __init__(self, reader: PdfFileReader, revision):
         self.cache = {}
         self.reader = reader
@@ -991,25 +1036,25 @@ class HistoricalResolver(PdfHandler):
             # this historical revision
             # TODO now that this little trick is in place, I should probably
             #  take another look at simplifying some of the /DocMDP diffing code
-            cache[ref] = self.subsume_object(obj)
+            cache[ref] = self._subsume_object(obj)
             return obj
 
-    def subsume_object(self, obj):
+    def _subsume_object(self, obj):
         if isinstance(obj, generic.IndirectObject):
             return generic.IndirectObject(
                 idnum=obj.idnum, generation=obj.generation, pdf=self
             )
         elif isinstance(obj, generic.StreamObject):
             return generic.StreamObject({
-                k: self.subsume_object(v) for k, v in obj.items()
+                k: self._subsume_object(v) for k, v in obj.items()
             }, encoded_data=obj.encoded_data)
         elif isinstance(obj, generic.DictionaryObject):
             return generic.DictionaryObject({
-                k: self.subsume_object(v) for k, v in obj.items()
+                k: self._subsume_object(v) for k, v in obj.items()
             })
         elif isinstance(obj, generic.ArrayObject):
             return generic.ArrayObject(
-                self.subsume_object(v) for v in obj
+                self._subsume_object(v) for v in obj
             )
         else:
             return obj
@@ -1026,7 +1071,23 @@ class HistoricalResolver(PdfHandler):
     def __call__(self, ref: generic.Reference):
         return self.get_object(ref)
 
-    def collect_dependencies(self, obj, since_revision=None):
+    def collect_dependencies(self, obj: generic.PdfObject, since_revision=None):
+        """
+        Collect all indirect references used by an object and its descendants.
+
+        :param obj:
+            The object to inspect.
+        :param since_revision:
+            Optionally specify a revision number that tells the scanner to only
+            include objects IDs that were added in that revision or later.
+
+            .. warning::
+                In particular, this means that the scanner will not recurse
+                into older objects either.
+
+        :return:
+            A :class:`set` of :class:`~.generic.Reference` objects.
+        """
         result_set = set()
         self._collect_indirect_references(obj, result_set, since_revision)
         return result_set

@@ -16,6 +16,7 @@ Submodules
    pyhanko.pdf_utils.images
    pyhanko.pdf_utils.incremental_writer
    pyhanko.pdf_utils.layout
+   pyhanko.pdf_utils.misc
    pyhanko.pdf_utils.reader
    pyhanko.pdf_utils.rw_common
    pyhanko.pdf_utils.text

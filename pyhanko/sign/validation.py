@@ -34,7 +34,8 @@ from .timestamps import TimestampSignatureStatus
 
 __all__ = [
     'PdfSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
-    'read_certification_data', 'validate_pdf_ltv_signature'
+    'read_certification_data', 'validate_pdf_ltv_signature',
+    'EmbeddedPdfSignature'
 ]
 
 logger = logging.getLogger(__name__)
