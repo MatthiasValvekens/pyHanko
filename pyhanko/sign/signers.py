@@ -447,13 +447,14 @@ class SimpleSigner(Signer):
             logger.error(f'Could not open PKCS#12 file {pfx_file}.', e)
             return None
 
-        ca_chain = cls._load_ca_chain(ca_chain_files) if ca_chain_files else []
+        ca_chain = cls._load_ca_chain(ca_chain_files) \
+            if ca_chain_files else set()
         if ca_chain is None:  # pragma: nocover
             return None
 
         (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
         cs = SimpleCertificateStore()
-        cs.register_multiple(ca_chain + other_certs)
+        cs.register_multiple(ca_chain | set(other_certs))
         return SimpleSigner(
             signing_key=kinfo, signing_cert=cert,
             cert_registry=cs
