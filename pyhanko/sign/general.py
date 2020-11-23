@@ -1,11 +1,27 @@
 """
-General tools related to CMS signatures, not necessarily as implemented
-in the PDF specification.
+General tools related to Cryptographic Message Syntax (CMS) signatures,
+not necessarily to the extent implemented in the PDF specification.
+
+CMS is defined in `RFC 5652 <https://tools.ietf.org/html/rfc5652>`_.
+To parse CMS messages, pyHanko relies heavily on
+`asn1crypto <https://github.com/wbond/asn1crypto>`_.
+
+.. warning::
+    As written currently, the code assumes that the signature scheme being used
+    is the RSA-based PKCS1 v1.5 scheme.
+    This scheme is still very widely used, but there are of course other
+    signature schemes that might be considered superior for a variety of
+    reasons. These include mechanisms based on elliptic curve cryptography, or
+    other RSA-based mechanisms that have more robust security properties (i.e.
+    RSA with PSS).
+    Disentangling the PKCS1 v1.5 assumptions from the codebase is on the
+    roadmap.
+
 """
 
 import logging
 from dataclasses import dataclass
-from typing import List, ClassVar, Set
+from typing import ClassVar, Set
 
 
 import hashlib
@@ -32,20 +48,72 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SignatureStatus:
+    """
+    Class describing the validity of a (general) CMS signature.
+    """
+
     intact: bool
+    """
+    Reports whether the signature is *intact*, i.e. whether the hash of the 
+    message content (which may or may not be embedded inside the CMS object
+    itself) matches the hash value that was signed.
+    """
+
     valid: bool
+    """
+    Reports whether the signature is *valid*, i.e. whether the hash's signature
+    actually validates.
+    """
+
     trusted: bool
+    """
+    Reports whether the signer's certificate is trusted w.r.t. the currently 
+    relevant validation context and key usage requirements.
+    """
+
+    # TODO add a separate expired flag
+
     revoked: bool
+    """
+    Reports whether the signer's certificate has been revoked or not.
+    If this field is ``True``, then obviously :attr:`trusted` will be ``False``.
+    """
+
     signing_cert: x509.Certificate
-    ca_chain: List[x509.Certificate]
+    """
+    Contains the certificate of the signer, as embedded in the CMS object.
+    """
+
     pkcs7_signature_mechanism: str
+    """
+    PKCS7 signature mechanism used.
+    """
+
+    # TODO: also here some ambiguity analysis is in order
     md_algorithm: str
+    """
+    Message digest algorithm used.
+    """
+
     validation_path: ValidationPath
+    """
+    Validation path providing a valid chain of trust from the signer's 
+    certificate to a trusted root certificate.
+    """
 
     # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
     #  (probably legacy behaviour)
     key_usage: ClassVar[Set[str]] = {'non_repudiation'}
+    """
+    Class property indicating which key usage extensions are required to be
+    present on the signer's certificate.
+    """
+
     extd_key_usage: ClassVar[Set[str]] = set()
+    """
+    Class property indicating which extended key usage extensions are required 
+    to be present on the signer's certificate.
+    """
 
     def summary_fields(self):
         if self.trusted:
@@ -56,7 +124,11 @@ class SignatureStatus:
             cert_status = 'UNTRUSTED'
         yield cert_status
 
+    # TODO explain in more detail.
     def summary(self):
+        """
+        Provide a textual but machine-parsable summary of the validity.
+        """
         if self.intact and self.valid:
             return 'INTACT:' + ','.join(self.summary_fields())
         else:
@@ -88,6 +160,17 @@ class SignatureStatus:
 
 
 def simple_cms_attribute(attr_type, value):
+    """
+    Convenience method to quickly construct a CMS attribute object with
+    one value.
+
+    :param attr_type:
+        The attribute type, as a string or OID.
+    :param value:
+        The value.
+    :return:
+        A :class:`.cms.CMSAttribute` object.
+    """
     return cms.CMSAttribute({
         'type': cms.CMSAttributeType(attr_type),
         'values': (value,)
@@ -95,6 +178,19 @@ def simple_cms_attribute(attr_type, value):
 
 
 def find_cms_attribute(attrs, name):
+    """
+    Find and return CMS attribute values of a given type.
+
+    :param attrs:
+        The :class:`.cms.CMSAttributes` object.
+    :param name:
+        The attribute type as a string (as defined in ``asn1crypto``).
+    :return:
+        The values associated with the requested type, if present.
+    :raise KeyError:
+        Raised when no such type entry could be found in the
+        :class:`.cms.CMSAttributes` object.
+    """
     for attr in attrs:
         if attr['type'].native == name:
             return attr['values']

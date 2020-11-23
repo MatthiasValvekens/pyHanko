@@ -67,17 +67,17 @@ def partition_certs(certs, signer_info):
     issuer = iss_sn.chosen['issuer']
     serial_number = iss_sn.chosen['serial_number'].native
     cert = None
-    ca_chain = []
+    other_certs = []
     for c in certs:
         if c.issuer == issuer and c.serial_number == serial_number:
             cert = c
         else:
-            ca_chain.append(c)
+            other_certs.append(c)
     if cert is None:
         raise SignatureValidationError(
             'signer certificate not included in signature'
         )
-    return cert, ca_chain
+    return cert, other_certs
 
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
@@ -102,7 +102,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
             'signer_infos should contain exactly one entry'
         )
 
-    cert, ca_chain = partition_certs(certs, signer_info)
+    cert, other_certs = partition_certs(certs, signer_info)
 
     signature_algorithm: cms.SignedDigestAlgorithm = \
         signer_info['signature_algorithm']
@@ -160,7 +160,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     path = None
     if valid:
         validator = CertificateValidator(
-            cert, intermediate_certs=ca_chain,
+            cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
         trusted, revoked, path = \
@@ -168,7 +168,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
 
     status_kwargs = status_kwargs or {}
     status_kwargs.update(
-        intact=intact, ca_chain=ca_chain, valid=valid, signing_cert=cert,
+        intact=intact, valid=valid, signing_cert=cert,
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
         revoked=revoked, trusted=trusted,
         validation_path=path
