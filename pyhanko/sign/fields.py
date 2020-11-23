@@ -1,3 +1,7 @@
+"""
+Utilities to deal with signature form fields and their properties in PDF files.
+"""
+
 import logging
 from dataclasses import dataclass
 from enum import Flag, Enum, unique
@@ -16,10 +20,10 @@ from pyhanko.sign.general import UnacceptableSignerError, SigningError
 from pyhanko.stamp import AnnotAppearances
 
 __all__ = [
-    'SigSeedValFlags', 'SigCertConstraints', 'SignatureFormField',
-    'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigFieldSpec',
+    'SigSeedValFlags', 'SigCertConstraints', 'SigSeedValueSpec',
+    'SigCertConstraintFlags', 'SigFieldSpec', 'SigSeedSubFilter',
+    'SignatureFormField',
     'enumerate_sig_fields_in', 'enumerate_sig_fields',
-    '_prepare_sig_field'
 ]
 
 logger = logging.getLogger(__name__)
@@ -30,11 +34,13 @@ logger = logging.getLogger(__name__)
 
 class SigSeedValFlags(Flag):
     """
-    Flags for the /Ff entry in the seed value dictionary for a dictionary field.
-    These mark which of the constraints are to be strictly enforced, as opposed
-    to optional ones.
-    Note: not all constraint types (and hence not all flags) are supported by
-    this library.
+    Flags for the ``/Ff`` entry in the seed value dictionary for a signature
+    field. These mark which of the constraints are to be strictly enforced,
+    as opposed to optional ones.
+
+    .. warning::
+        While this enum records values for all flags, not all corresponding
+        constraint types have been implemented yet.
     """
 
     FILTER = 1
@@ -47,13 +53,20 @@ class SigSeedValFlags(Flag):
     LOCK_DOCUMENT = 128
     APPEARANCE_FILTER = 256
     UNSUPPORTED = LEGAL_ATTESTATION | LOCK_DOCUMENT | APPEARANCE_FILTER
+    """
+    Flags for which the corresponding constraint is unsupported.
+    """
 
 
 class SigCertConstraintFlags(Flag):
     """
-    Flags for the /Ff entry in the certificate seed value dictionary for
+    Flags for the ``/Ff`` entry in the certificate seed value dictionary for
     a dictionary field. These mark which of the constraints are to be
     strictly enforced, as opposed to optional ones.
+
+    .. warning::
+        While this enum records values for all flags, not all corresponding
+        constraint types have been implemented yet.
     """
 
     SUBJECT = 1
@@ -100,19 +113,59 @@ def x509_name_keyval_pairs(name: x509.Name, abbreviate_oids=False):
 @dataclass(frozen=True)
 class SigCertConstraints:
     """
-    See Table 235 in ISO 32000-1
+    This part of the seed value dictionary allows the document author
+    to set constraints on the signer's certificate.
+
+    See Table 235 in ISO 32000-1.
     """
     flags: SigCertConstraintFlags = SigCertConstraintFlags(0)
+    """
+    Enforcement flags. By default, all entries are optional.
+    """
+
     subjects: List[x509.Certificate] = None
+    """
+    Explicit list of certificates that can be used to sign a signature field.
+    """
+
     subject_dn: x509.Name = None
+    """
+    Certificate subject names that can be used to sign a signature field.
+    Subject DN entries that are not mentioned are unconstrained.
+    """
+
     issuers: List[x509.Certificate] = None
+    """
+    List of issuer certificates that the signer certificate can be issued by.
+    Note that these issuers do not need to be the *direct* issuer of the
+    signer's certificate; any descendant relationship will do.
+    """
+
     info_url: str = None
+    """
+    Informational URL that should be opened when an appropriate signature
+    cannot be found.
+    """
+
     url_type: generic.NameObject = pdf_name('/Browser')
+    """
+    Handler that should be used to open :attr:`info_url`.
+    ``/Browser`` is the only implementation-independent value.
+    """
 
     # TODO support key usage and OID constraints
 
     @classmethod
     def from_pdf_object(cls, pdf_dict):
+        """
+        Read a PDF dictionary into a :class:`.SigCertConstraints` object.
+
+        :param pdf_dict:
+            A :class:`~.generic.DictionaryObject`.
+        :return:
+            A :class:`.SigCertConstraints` object.
+        """
+
         if isinstance(pdf_dict, generic.IndirectObject):
             pdf_dict = pdf_dict.get_object()
         try:
@@ -155,6 +208,13 @@ class SigCertConstraints:
         return cls(**kwargs)
 
     def as_pdf_object(self):
+        """
+        Render this :class:`.SigCertConstraints` object to a PDF dictionary.
+
+        :return:
+            A :class:`~.generic.DictionaryObject`.
+        """
+
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SVCert'),
             pdf_name('/Ff'): generic.NumberObject(self.flags.value),
@@ -188,6 +248,17 @@ class SigCertConstraints:
 
     def satisfied_by(self, signer: x509.Certificate,
                      validation_path: Optional[ValidationPath]):
+        """
+        Evaluate whether a signing certificate satisfies the required
+        constraints of this :class:`.SigCertConstraints` object.
+
+        :param signer:
+            The candidate signer's certificate.
+        :param validation_path:
+            Validation path of the signer's certificate.
+        :raises UnacceptableSignerError:
+            Raised if the conditions are not met.
+        """
         # this function assumes that key usage & trust checks have
         #  passed already.
         flags = self.flags
@@ -241,6 +312,10 @@ class SigCertConstraints:
 
 @unique
 class SigSeedSubFilter(Enum):
+    """
+    Enum declaring all supported ``/SubFilter`` values.
+    """
+
     ADOBE_PKCS7_DETACHED = pdf_name("/adbe.pkcs7.detached")
     PADES = pdf_name("/ETSI.CAdES.detached")
     ETSI_RFC3161 = pdf_name("/ETSI.RFC3161")
@@ -250,16 +325,66 @@ class SigSeedSubFilter(Enum):
 
 @dataclass(frozen=True)
 class SigSeedValueSpec:
+    """
+    Python representation of a PDF seed value dictionary.
+    """
+
     flags: SigSeedValFlags = SigSeedValFlags(0)
+    """
+    Enforcement flags. By default, all entries are optional.
+    """
+
     reasons: List[str] = None
+    """
+    Acceptable reasons for signing.
+    """
+
     timestamp_server_url: str = None
+    """
+    RFC 3161 timestamp server endpoint suggestion.
+    """
+
     timestamp_required: bool = False
+    """
+    Flags whether a timestamp is required.
+    This flag is only meaningful if :attr:`timestamp_server_url` is specified.
+    """
+
     cert: SigCertConstraints = None
+    """
+    Constraints on the signer's certificate.
+    """
+
     subfilters: List[SigSeedSubFilter] = None
+    """
+    Acceptable ``/SubFilter`` values.
+    """
+
     digest_methods: List[str] = None
+    """
+    Acceptable digest methods.
+    """
+
     add_rev_info: bool = None
+    """
+    Indicates whether revocation information should be embedded.
+    
+    .. warning::
+        This flag exclusively refers to the Adobe-style revocation information
+        embedded within the CMS object that is written to the signature field.
+        PAdES-style revocation information that is saved to the document
+        security store (DSS) does *not* satisfy the requirement.
+        Additionally, the standard mandates that ``/SubFilter`` be equal to
+        ``/adbe.pkcs7.detached`` if this flag is ``True``.
+    """
 
     def as_pdf_object(self):
+        """
+        Render this :class:`.SigSeedValueSpec` object to a PDF dictionary.
+
+        :return:
+            A :class:`~.generic.DictionaryObject`.
+        """
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SV'),
             pdf_name('/Ff'): generic.NumberObject(self.flags.value),
@@ -294,6 +419,14 @@ class SigSeedValueSpec:
 
     @classmethod
     def from_pdf_object(cls, pdf_dict):
+        """
+        Read from a seed value dictionary.
+
+        :param pdf_dict:
+            A :class:`~.generic.DictionaryObject`.
+        :return:
+            A :class:`.SigSeedValueSpec` object.
+        """
         if isinstance(pdf_dict, generic.IndirectObject):
             pdf_dict = pdf_dict.get_object()
         try:
@@ -360,6 +493,13 @@ class SigSeedValueSpec:
         )
 
     def build_timestamper(self):
+        """
+        Return a timestamper object based on the :attr:`timestamp_server_url`
+        attribute of this :class:`.SigSeedValueSpec` object.
+
+        :return:
+            A :class:`~.pyhanko.sign.timestamps.HTTPTimeStamper`.
+        """
         from pyhanko.sign.timestamps import HTTPTimeStamper
         if self.timestamp_server_url:
             return HTTPTimeStamper(self.timestamp_server_url)
