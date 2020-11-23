@@ -529,7 +529,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              timestamper: TimeStamper = None,
              existing_fields_only=False, bytes_reserved=None, in_place=False):
-    return PdfSigner(signature_meta, signer, timestamper).sign_pdf(
+    return PdfSigner(signature_meta, signer, timestamper=timestamper).sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
         bytes_reserved=bytes_reserved, in_place=in_place
     )
@@ -706,7 +706,7 @@ class PdfSigner(PdfTimestamper):
     _ignore_sv = False
 
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
-                 timestamper: TimeStamper = None, stamp_style=None,
+                 *, timestamper: TimeStamper = None, stamp_style=None,
                  qr_url=None):
         self.signature_meta = signature_meta
         self.signer = signer

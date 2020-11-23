@@ -372,7 +372,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only, style=ctx.obj[STAMP_STYLE],
-        qr_url=ctx.obj[STAMP_STYLE]
+        qr_url=ctx.obj[QR_URL]
     )
 
 
