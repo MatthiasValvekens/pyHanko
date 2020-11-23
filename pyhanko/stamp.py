@@ -10,6 +10,7 @@ signature appearances.
 
 import os
 from binascii import hexlify
+from fractions import Fraction
 from typing import Optional
 
 import qrcode
@@ -219,19 +220,33 @@ class TextStamp(PdfContent):
         self._stamp_ref = None
 
         self.text_box = None
+        self.expected_text_width = None
 
     def _init_text_box(self):
         # if necessary, try to adjust the text box's bounding box
         #  to the stamp's
 
         box = self.box
+        expected_w = None
+        if box.width_defined:
+            expected_w = box.width - self.text_box_x()
+            self.expected_text_width = expected_w
+
         expected_h = None
         if box.height_defined:
             expected_h = box.height - self.text_box_y()
+
+        box = None
+        if expected_h and expected_w:
+            # text boxes do not auto-scale their font size, so
+            # we have to take care of that
+            box = BoxConstraints(
+                aspect_ratio=Fraction(expected_w, expected_h)
+            )
+
         self.text_box = TextBox(
             self.style.text_box_style, writer=self.writer,
-            resources=self.resources,
-            box=BoxConstraints(height=expected_h)
+            resources=self.resources, box=box
         )
 
     def extra_commands(self) -> list:
@@ -356,9 +371,18 @@ class TextStamp(PdfContent):
             )
             self.import_resources(bg.resources)
 
-        text_commands = self.text_box.render()
+        tb = self.text_box
+        text_commands = tb.render()
+
+        text_scale = 1
+        if self.expected_text_width is not None and tb.box.width_defined:
+            text_scale = self.expected_text_width / tb.box.width
+
         command_stream.append(
-            b'q 1 0 0 1 %g %g cm' % (self.text_box_x(), self.text_box_y())
+            b'q %g 0 0 %g %g %g cm' % (
+                text_scale, text_scale,
+                self.text_box_x(), self.text_box_y()
+            )
         )
         command_stream.append(text_commands)
         command_stream.append(b'Q')

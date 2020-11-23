@@ -141,14 +141,14 @@ class TextBox(PdfContent):
         self._wrapped_lines = lines
         self._content_lines = content.split('\n')
 
-        # we give precedence to the height if the box constraints specify
+        # we give precedence to the width if the box constraints specify
         #  a fixed aspect ratio
-        if not self.box.height_defined:
-            self.box.height = self.get_text_height() + 2 * self.style.text_sep
-
         natural_width = int(max_line_len) + 2 * self.style.text_sep
         if not self.box.width_defined:
             self.box.width = natural_width
+
+        if not self.box.height_defined:
+            self.box.height = self.get_text_height() + 2 * self.style.text_sep
         else:
             self._scaling_factor = Fraction(self.box.width, natural_width)
 
