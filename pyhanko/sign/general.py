@@ -38,8 +38,8 @@ from certvalidator.errors import RevokedError, PathValidationError
 
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
-    'as_signing_certificate', 'CertificateStore', 'SimpleCertificateStore',
-    'SigningError', 'UnacceptableSignerError'
+    'CertificateStore', 'SimpleCertificateStore', 'SigningError',
+    'UnacceptableSignerError'
 ]
 
 
@@ -211,16 +211,47 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
 
 
 class CertificateStore:
+    """
+    Bare-bones interface for modelling a collection of certificates.
+    """
+
     def register(self, cert: x509.Certificate):
+        """
+        Add a certificate to the collection.
+
+        :param cert:
+            The certificate to add.
+        """
         raise NotImplementedError
 
     def __iter__(self):
+        """
+        Iterate over all certificates in the collection.
+        """
         raise NotImplementedError
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> x509.Certificate:
+        """
+        Retrieve a certificate by its ``issuer_serial`` value.
+
+        :param item:
+            The ``issuer_serial`` value of the certificate.
+        :return:
+            The certificate corresponding to the ``issuer_serial`` key
+            passed in.
+        :raises KeyError:
+            Raised if no certificate was found.
+        """
         raise NotImplementedError
 
     def register_multiple(self, certs):
+        """
+        Register multiple certificates.
+
+        :param certs:
+            Certificates to register.
+        """
+
         for cert in certs:
             self.register(cert)
 
@@ -245,8 +276,14 @@ class SimpleCertificateStore(CertificateStore):
 
 
 class SigningError(ValueError):
+    """
+    Error encountered while signing a file.
+    """
     pass
 
 
 class UnacceptableSignerError(SigningError):
+    """
+    Error raised when a signer was judged unacceptable.
+    """
     pass
