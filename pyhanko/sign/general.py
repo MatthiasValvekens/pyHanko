@@ -6,6 +6,8 @@ CMS is defined in `RFC 5652 <https://tools.ietf.org/html/rfc5652>`_.
 To parse CMS messages, pyHanko relies heavily on
 `asn1crypto <https://github.com/wbond/asn1crypto>`_.
 
+.. _rsassa-pkcs1v15-warning:
+
 .. warning::
     As written currently, the code assumes that the signature scheme being used
     is the RSA-based PKCS1 v1.5 scheme.

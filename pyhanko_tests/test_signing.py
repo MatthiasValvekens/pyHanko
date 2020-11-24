@@ -198,12 +198,9 @@ def val_trusted_but_modified(embedded_sig: EmbeddedPdfSignature):
     return val_status
 
 
-@pytest.mark.parametrize('incl_signed_time', [True, False])
-def test_simple_sign(incl_signed_time):
+def test_simple_sign():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', include_signedtime_attr=incl_signed_time
-    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
     out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
 
     r = PdfFileReader(out)

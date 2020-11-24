@@ -220,15 +220,60 @@ class DocumentTimestamp(PdfSignedData):
 
 
 class Signer:
-    signing_cert: x509.Certificate
-    cert_registry: CertificateStore
-    pkcs7_signature_mechanism: str
+    """
+    Abstract signer object that is agnostic as to where the cryptographic
+    operations actually happen.
 
-    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
+    As of now, pyHanko provides two implementations:
+
+    * :class:`.SimpleSigner` implements the easy case where all the key material
+      can be loaded into memory.
+    * :class:`~.pkcs11.PKCS11Signer` implements a signer that is capable of
+      interfacing with a PKCS11 device (see also :class:`~.beid.BEIDSigner`).
+    """
+
+    signing_cert: x509.Certificate
+    """
+    The certificate that will be used to create the signature.
+    """
+
+    cert_registry: CertificateStore
+    """
+    Collection of certificates associated with this signer.
+    Note that this is simply a bookkeeping tool; in particular it doesn't care
+    about trust.
+    """
+
+    pkcs7_signature_mechanism: str
+    """
+    The (cryptographic) signature mechanism to use.
+    """
+
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
+            -> bytes:
+        """
+        Compute the raw cryptographic signature of the data provided, hashed
+        using the digest algorithm provided.
+
+        :param data:
+            Data to sign.
+        :param digest_algorithm:
+            Digest algorithm to use.
+        :param dry_run:
+            Do not actually create a signature, but merely output placeholder
+            bytes that would suffice to contain an actual signature.
+        :return:
+            Signature bytes.
+        """
         raise NotImplementedError
 
     @property
     def subject_name(self):
+        """
+        :return:
+            The subject's common name as a string, extracted from
+            :attr:`signing_cert`.
+        """
         name: x509.Name = self.signing_cert.subject
         result = name.native['common_name']
         try:
@@ -240,6 +285,17 @@ class Signer:
 
     @staticmethod
     def format_revinfo(ocsp_responses: list = None, crls: list = None):
+        """
+        Format Adobe-style revocation information for inclusion into a CMS
+        object.
+
+        :param ocsp_responses:
+            A list of OCSP responses to include.
+        :param crls:
+            A list of CRLs to include.
+        :return:
+            A CMS attribute containing the relevant data.
+        """
 
         revinfo_dict = {}
         if ocsp_responses:
@@ -258,6 +314,23 @@ class Signer:
 
     def signed_attrs(self, data_digest: bytes, timestamp: datetime = None,
                      revocation_info=None, use_pades=False):
+        """
+        Format the signed attributes for a CMS signature.
+
+        :param data_digest:
+            Raw digest of the data to be signed.
+        :param timestamp:
+            Current timestamp (ignored when ``use_pades`` is ``True``).
+        :param revocation_info:
+            Revocation information to embed; this should be the output
+            of a call to :meth:`.Signer.format_revinfo`
+            (ignored when ``use_pades`` is ``True``).
+        :param use_pades:
+            Respect PAdES requirements.
+        :return:
+            An :class:`.asn1crypto.cms.CMSAttributes` object.
+        """
+
         attrs = [
             simple_cms_attribute('content_type', 'data'),
             simple_cms_attribute('message_digest', data_digest),
@@ -286,6 +359,18 @@ class Signer:
         return cms.CMSAttributes(attrs)
 
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
+        """
+        Format the ``SignerInfo`` entry for a CMS signature.
+
+        :param digest_algorithm:
+            Digest algorithm to use.
+        :param signed_attrs:
+            Signed attributes (see :meth:`signed_attrs`).
+        :param signature:
+            The raw signature to embed (see :meth:`sign_raw`).
+        :return:
+            An :class:`.asn1crypto.cms.SignerInfo` object.
+        """
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
@@ -316,8 +401,44 @@ class Signer:
              revocation_info=None, use_pades=False,
              timestamper=None) -> cms.ContentInfo:
 
-        # Implementation loosely based on similar functionality in
-        # https://github.com/m32/endesive/.
+        """
+        Produce a detached CMS signature from a raw data digest.
+
+        :param data_digest:
+            Digest of the actual content being signed.
+        :param digest_algorithm:
+            Digest algorithm to use. This should be the same digest method
+            as the one used to hash the (external) content.
+        :param timestamp:
+            Current timestamp (ignored when ``use_pades`` is ``True``).
+        :param dry_run:
+            If ``True``, the actual signing step will be replaced with
+            a placeholder.
+
+            In a PDF signing context, this is necessary to estimate the size
+            of the signature container before computing the actual digest of
+            the document.
+        :param revocation_info:
+            Revocation information to embed; this should be the output
+            of a call to :meth:`.Signer.format_revinfo`
+            (ignored when ``use_pades`` is ``True``).
+        :param use_pades:
+            Respect PAdES requirements.
+        :param timestamper:
+            :class:`~.timestamps.TimeStamper` used to obtain a trusted timestamp
+            token that can be embedded into the signature container.
+
+            .. note::
+                If ``dry_run`` is true, the timestamper's
+                :meth:`~.timestamps.TimeStamper.dummy_response` method will be
+                called to obtain a placeholder token.
+                Note that with a standard :class:`~.timestamps.HTTPTimeStamper`,
+                this might still hit the timestamping server (in order to
+                produce a realistic size estimate), but the dummy response will
+                be cached.
+        :return:
+            An :class:`~.asn1crypto.cms.ContentInfo` object.
+        """
 
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
@@ -440,6 +561,7 @@ class PdfSignatureMetadata:
     Flag indicating whether validation info (OCSP responses and/or CRLs)
     should be embedded or not. This is necessary to be able to validate
     signatures long after they have been made.
+    This flag requires :attr:`validation_context` to be set.
     
     The precise manner in which the validation info is embedded depends on
     the (effective) value of :attr:`subfilter`:
@@ -470,16 +592,42 @@ class PdfSignatureMetadata:
     """
 
     timestamp_field_name: str = None
+    """
+    Name of the timestamp field created when :attr:`use_pades_lta` is ``True``.
+    If not specified, a unique name will be generated using :mod:`uuid`.
+    """
+
     validation_context: ValidationContext = None
-    # PAdES compliance disallows this in favour of more robust timestamping
-    # strategies
-    include_signedtime_attr: bool = True
-    # only relevant for certification
+    """
+    The validation context to use when validating signatures.
+    If provided, the signer's certificate and any timestamp certificates
+    will be validated before signing.
+    
+    This parameter is mandatory when :attr:`embed_validation_info` is ``True``.
+    """
+
     docmdp_permissions: MDPPerm = MDPPerm.FILL_FORMS
+    """
+    Indicates the document modification policy that will be in force after    
+    this signature is created.
+    
+    .. warning::
+        For non-certification signatures, this is only explicitly allowed since 
+        PDF 2.0 (ISO 32000-2), so older software may not respect this setting
+        on approval signatures.
+    """
 
 
-def load_certs_from_pemder(ca_chain_files):
-    for ca_chain_file in ca_chain_files:
+def load_certs_from_pemder(cert_files):
+    """
+    A convenience function to load PEM/DER-encoded certificates from files.
+
+    :param cert_files:
+        An iterable of file names.
+    :return:
+        A generator producing :class:`.asn1crypto.x509.Certificate` objects.
+    """
+    for ca_chain_file in cert_files:
         with open(ca_chain_file, 'rb') as f:
             ca_chain_bytes = f.read()
         # use the pattern from the asn1crypto docs
@@ -502,12 +650,33 @@ def load_certs_from_pemder(ca_chain_files):
 
 @dataclass
 class SimpleSigner(Signer):
+    """
+    Simple signer implementation where the key material is available in local
+    memory.
+    """
+
     signing_cert: x509.Certificate
+    """
+    The certificate that will be used to create the signature.
+    """
+
     signing_key: keys.PrivateKeyInfo
+    """
+    Private key associated with the certificate in :attr:`signing_cert`.
+    """
+
     cert_registry: CertificateStore
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
+    """
+    Signature mechanism to use.
+    
+    .. warning::
+        Only the default value ``rsassa_pkcs1v15`` is supported right now.
+        See :ref:`here <rsassa-pkcs1v15-warning>` for further comments.
+    """
 
-    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
+            -> bytes:
         return asymmetric.rsa_pkcs1v15_sign(
             asymmetric.load_private_key(self.signing_key),
             data, digest_algorithm.lower()
@@ -523,6 +692,21 @@ class SimpleSigner(Signer):
 
     @classmethod
     def load_pkcs12(cls, pfx_file, ca_chain_files=None, passphrase=None):
+        """
+        Load certificates and key material from a PCKS#12 archive
+        (usually ``.pfx`` or ``.p12`` files).
+
+        :param pfx_file:
+            Path to the PKCS#12 archive.
+        :param ca_chain_files:
+            Path to (PEM/DER) files containing other relevant certificates
+            not included in the PKCS#12 file.
+        :param passphrase:
+            Passphrase to decrypt the PKCS#12 archive, if required.
+        :return:
+            A :class:`.SimpleSigner` object initialised with key material loaded
+            from the PKCS#12 file provided.
+        """
         # TODO support MAC integrity checking?
 
         try:
@@ -548,6 +732,24 @@ class SimpleSigner(Signer):
     @classmethod
     def load(cls, key_file, cert_file, ca_chain_files=None,
              key_passphrase=None, other_certs=None):
+        """
+        Load certificates and key material from PEM/DER files.
+
+        :param key_file:
+            File containing the signer's private key.
+        :param cert_file:
+            File containing the signer's certificate.
+        :param ca_chain_files:
+            File containing other relevant certificates.
+        :param key_passphrase:
+            Passphrase to decrypt the private key (if required).
+        :param other_certs:
+            Other relevant certificates, specified as a list of
+            :class:`.asn1crypto.x509.Certificate` objects.
+        :return:
+            A :class:`.SimpleSigner` object initialised with key material loaded
+            from the files provided.
+        """
         try:
             # load cryptographic data (both PEM and DER are supported)
             with open(key_file, 'rb') as f:

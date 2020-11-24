@@ -44,7 +44,8 @@ class PKCS11Signer(Signer):
         self._load_objects()
         return self._signing_cert
 
-    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False):
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
+            -> bytes:
         if dry_run:
             # allocate 4096 bits for the fake signature
             return b'0' * 512
