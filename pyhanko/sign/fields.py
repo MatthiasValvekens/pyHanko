@@ -22,8 +22,8 @@ from pyhanko.stamp import AnnotAppearances
 __all__ = [
     'SigSeedValFlags', 'SigCertConstraints', 'SigSeedValueSpec',
     'SigCertConstraintFlags', 'SigFieldSpec', 'SigSeedSubFilter',
-    'SignatureFormField',
-    'enumerate_sig_fields_in', 'enumerate_sig_fields',
+    'FieldMDPAction', 'FieldMDPSpec',
+    'SignatureFormField', 'enumerate_sig_fields',
 ]
 
 logger = logging.getLogger(__name__)
@@ -507,26 +507,82 @@ class SigSeedValueSpec:
 
 class MDPPerm(OrderedEnum):
     """
-    Cf. Table 254  in ISO 32000-1
+    Indicates a ``/DocMDP`` level.
+
+    Cf. Table 254  in ISO 32000-1.
     """
 
     NO_CHANGES = 1
+    """
+    No changes to the document are allowed.
+    
+    .. warning::
+        This does not apply to DSS updates and the addition of document time
+        stamps.
+    """
     FILL_FORMS = 2
+    """
+    Form filling & signing is allowed.
+    """
+
     ANNOTATE = 3
+    """
+    Form filling, signing and commenting are allowed.
+    
+    .. warning::
+        Validating this ``/DocMDP`` level is not currently supported,
+        but included in the list for completeness.
+    """
 
 
 class FieldMDPAction(Enum):
+    """
+    Marker for the scope of a ``/FieldMDP`` policy.
+    """
+
     ALL = pdf_name('/All')
+    """
+    The policy locks all form fields.
+    """
+
     INCLUDE = pdf_name('/Include')
+    """
+    The policy locks all fields in the list (see :attr:`.FieldMDPSpec.fields`).
+    """
+
     EXCLUDE = pdf_name('/Exclude')
+    """
+    The policy locks all fields except those specified in the list
+    (see :attr:`.FieldMDPSpec.fields`).
+    """
 
 
 @dataclass(frozen=True)
 class FieldMDPSpec:
+    """``/FieldMDP`` policy description.
+
+    This class models both field lock dictionaries and ``/FieldMDP``
+    transformation parameters.
+    """
+
     action: FieldMDPAction
+    """
+    Indicates the scope of the policy.
+    """
+
     fields: Optional[List[str]] = None
+    """
+    Indicates the fields subject to the policy,
+    unless :attr:`action` is :attr:`.FieldMDPAction.ALL`.
+    """
 
     def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Render this ``/FieldMDP`` policy description as a PDF dictionary.
+
+        :return:
+            A :class:`~.generic.DictionaryObject`.
+        """
         result = generic.DictionaryObject({
             pdf_name('/Action'): self.action.value,
         })
@@ -537,18 +593,43 @@ class FieldMDPSpec:
         return result
 
     def as_transform_params(self) -> generic.DictionaryObject:
+        """
+        Render this ``/FieldMDP`` policy description as a PDF dictionary,
+        ready for inclusion into the ``/TransformParams`` entry of a
+        ``/FieldMDP`` dictionary associated with a signature object.
+
+        :return:
+            A :class:`~.generic.DictionaryObject`.
+        """
+
         result = self.as_pdf_object()
         result['/Type'] = pdf_name('/TransformParams')
         result['/V'] = pdf_name('/1.2')
         return result
 
     def as_sig_field_lock(self) -> generic.DictionaryObject:
+        """
+        Render this ``/FieldMDP`` policy description as a PDF dictionary,
+        ready for inclusion into the ``/Lock`` dictionary of a signature field.
+
+        :return:
+            A :class:`~.generic.DictionaryObject`.
+        """
+
         result = self.as_pdf_object()
         result['/Type'] = pdf_name('/SigFieldLock')
         return result
 
     @classmethod
     def from_pdf_object(cls, pdf_dict) -> 'FieldMDPSpec':
+        """
+        Read a PDF dictionary into a :class:`.FieldMDPSpec` object.
+
+        :param pdf_dict:
+            A :class:`~.generic.DictionaryObject`.
+        :return:
+            A :class:`.FieldMDPSpec` object.
+        """
         try:
             action = FieldMDPAction(pdf_dict['/Action'])
         except KeyError:  # pragma: nocover
@@ -564,6 +645,15 @@ class FieldMDPSpec:
         return cls(action=action, fields=fields)
 
     def is_locked(self, field_name: str) -> bool:
+        """
+        Adjudicate whether a field should be locked by the policy described by
+        this :class:`.FieldMDPSpec` object.
+
+        :param field_name:
+            The name of a form field.
+        :return:
+            ``True`` if the field should be locked, ``False`` otherwise.
+        """
         if self.action == FieldMDPAction.ALL:
             return True
 
@@ -580,12 +670,52 @@ class FieldMDPSpec:
 
 @dataclass(frozen=True)
 class SigFieldSpec:
+    """Description of a signature field to be created."""
+
     sig_field_name: str
+    """
+    Name of the signature field.
+    """
+
     on_page: int = 0
+    """
+    Index of the page on which the signature field should be included (starting
+    at `0`).
+    
+    .. note::
+        This is essentially only relevant for visible signature fields, i.e.
+        those that have a widget associated with them.
+    """
+
     box: (int, int, int, int) = None
+    """
+    Bounding box of the signature field, if applicable.
+    """
+
     seed_value_dict: SigSeedValueSpec = None
+    """
+    Specification for the seed value dictionary, if applicable.
+    """
+
     field_mdp_spec: FieldMDPSpec = None
+    """
+    Specification for the field lock dictionary, if applicable.
+    """
+
     doc_mdp_update_value: MDPPerm = None
+    """
+    Value to use for the document modification policy associated with the
+    signature in this field.
+    
+    This value will be embedded into the field lock dictionary if specified, and    
+    is meaningless if :attr:`field_mdp_spec` is not specified.
+    
+    .. warning::
+        DocMDP entries for approval signatures are a PDF 2.0 feature.
+        Older PDF software will likely ignore this part of the field lock
+        dictionary.
+    """
+    # TODO add a reference to the docs on certification once those are written.
 
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
         if self.field_mdp_spec is None:
@@ -604,7 +734,7 @@ def _prepare_sig_field(sig_field_name, root,
                        **kwargs):
     """
     Returns a tuple of a boolean and a reference to a signature field.
-    The boolean is True if the field was created, and False otherwise.
+    The boolean is ``True`` if the field was created, and ``False`` otherwise.
     """
     if sig_field_name is None:  # pragma: nocover
         raise ValueError
@@ -676,22 +806,22 @@ def _prepare_sig_field(sig_field_name, root,
     return True, sig_field_ref
 
 
-def enumerate_sig_fields(reader: PdfHandler, filled_status=None):
+def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
     """
     Enumerate signature fields.
 
-    :param reader:
-        The PDF reader to operate on.
+    :param handler:
+        The :class:`~.rw_common.PdfHandler` to operate on.
     :param filled_status:
-        Optional boolean. If True (resp. False) then all filled (resp. empty)
-        fields are returned. If left None (the default), then all fields
-        are returned.
+        Optional boolean. If ``True`` (resp. ``False``) then all filled
+        (resp. empty) fields are returned. If left ``None`` (the default), then
+        all fields are returned.
     :return:
         A generator producing signature fields.
     """
 
     try:
-        fields = reader.root['/AcroForm']['/Fields']
+        fields = handler.root['/AcroForm']['/Fields']
     except KeyError:
         return
 
