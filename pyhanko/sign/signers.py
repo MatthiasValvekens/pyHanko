@@ -32,8 +32,12 @@ from pyhanko.stamp import (
     QRStampStyle, QRStamp,
 )
 
-__all__ = ['Signer', 'SimpleSigner', 'PdfSigner', 'sign_pdf',
-           'SignatureObject']
+__all__ = [
+    'PdfSignatureMetadata',
+    'Signer', 'SimpleSigner', 'PdfTimestamper', 'PdfSigner',
+    'sign_pdf', 'load_ca_chain',
+    'DEFAULT_MD'
+]
 
 
 logger = logging.getLogger(__name__)
@@ -372,16 +376,99 @@ DEFAULT_MD = 'sha256'
 
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
+    """
+    Specification for a PDF signature.
+    """
+
     field_name: str = None
+    """
+    The name of the form field to contain the signature.
+    If there is only one available signature field, the name may be inferred.
+    """
+
     md_algorithm: str = None
+    """
+    The name of the digest algorithm to use.
+    It should be supported by :mod:`hashlib`.
+    
+    If ``None``, this will ordinarily default to the value of
+    :const:`.DEFAULT_MD`, unless a seed value dictionary and/or a prior
+    certification signature happen to be available.
+    """
+
     location: str = None
+    """
+    Location of signing.
+    """
+
     reason: str = None
+    """
+    Reason for signing (textual).
+    """
+
     name: str = None
+    """
+    Name of the signer. This value is usually not necessary to set, since
+    it should appear on the signer's certificate, but there are cases
+    where it might be useful to specify it here (e.g. in situations where 
+    signing is delegated to a trusted third party).
+    """
+
     certify: bool = False
+    """
+    Sign with an author (certification) signature, as opposed to an approval
+    signature. A document can contain at most one such signature, and it must
+    be the first one.
+    """
+    # TODO Does this restriction also apply to prior document timestamps?
 
     subfilter: SigSeedSubFilter = None
+    """
+    Signature subfilter to use.
+    
+    This should be one of 
+    :attr:`~.fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED` or
+    :attr:`~.fields.SigSeedSubFilter.PADES`.
+    If not specified, the value may be inferred from the signature field's
+    seed value dictionary. Failing that,
+    :attr:`~.fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED` is used as the
+    default value.
+    """
+
     embed_validation_info: bool = False
+    """
+    Flag indicating whether validation info (OCSP responses and/or CRLs)
+    should be embedded or not. This is necessary to be able to validate
+    signatures long after they have been made.
+    
+    The precise manner in which the validation info is embedded depends on
+    the (effective) value of :attr:`subfilter`:
+    
+    * With :attr:`~.fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED`, the
+      validation information will be embedded inside the CMS object containing
+      the signature.
+    * With :attr:`~.fields.SigSeedSubFilter.PADES`, the validation information
+      will be embedded into the document security store (DSS).
+    """
+
     use_pades_lta: bool = False
+    """
+    If ``True``, the signer will append an additional document timestamp after
+    writing the signature's validation information to the document security
+    store (DSS).
+    This flag is only meaningful if :attr:`subfilter` is 
+    :attr:`~.fields.SigSeedSubFilter.PADES`.
+    
+    The PAdES B-LTA profile solves the long-term validation problem by
+    adding a timestamp chain to the document after the regular signatures, which
+    is updated with new timestamps at regular intervals.
+    This provides an audit trail that ensures the long-term integrity of the 
+    validation information in the DSS, since OCSP responses and CRLs also have 
+    a finite lifetime.
+    
+    See also :meth:`.PdfTimestamper.update_archival_timestamp_chain`.
+    """
+
     timestamp_field_name: str = None
     validation_context: ValidationContext = None
     # PAdES compliance disallows this in favour of more robust timestamping
