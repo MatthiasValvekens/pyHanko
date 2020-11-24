@@ -53,7 +53,7 @@ ROOT_PATH = TESTING_CA_DIR + '/root/certs/ca.cert.pem'
 INTERM_PATH = TESTING_CA_DIR + '/intermediate/certs/ca.cert.pem'
 OCSP_PATH = TESTING_CA_DIR + '/intermediate/newcerts/ocsp.cert.pem'
 REVOKED_CERT_PATH = TESTING_CA_DIR + '/intermediate/newcerts/1002.pem'
-TRUST_ROOTS = list(signers.load_ca_chain((ROOT_PATH,)))
+TRUST_ROOTS = list(signers.load_certs_from_pemder((ROOT_PATH,)))
 
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
     TESTING_CA_DIR + '/intermediate/newcerts/signer.pfx',

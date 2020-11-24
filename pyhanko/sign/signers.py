@@ -35,7 +35,7 @@ from pyhanko.stamp import (
 __all__ = [
     'PdfSignatureMetadata',
     'Signer', 'SimpleSigner', 'PdfTimestamper', 'PdfSigner',
-    'sign_pdf', 'load_ca_chain',
+    'sign_pdf', 'load_certs_from_pemder',
     'DEFAULT_MD'
 ]
 
@@ -478,9 +478,7 @@ class PdfSignatureMetadata:
     docmdp_permissions: MDPPerm = MDPPerm.FILL_FORMS
 
 
-# FIXME this function should really be called "load_certs_from_pemder" or sth.
-
-def load_ca_chain(ca_chain_files):
+def load_certs_from_pemder(ca_chain_files):
     for ca_chain_file in ca_chain_files:
         with open(ca_chain_file, 'rb') as f:
             ca_chain_bytes = f.read()
@@ -518,7 +516,7 @@ class SimpleSigner(Signer):
     @classmethod
     def _load_ca_chain(cls, ca_chain_files=None):
         try:
-            return set(load_ca_chain(ca_chain_files))
+            return set(load_certs_from_pemder(ca_chain_files))
         except (IOError, ValueError) as e:  # pragma: nocover
             logger.error('Could not load CA chain', e)
             return None

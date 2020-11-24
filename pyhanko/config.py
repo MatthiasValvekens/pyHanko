@@ -51,7 +51,7 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
         if isinstance(trust, str):
             trust = (trust,)
         # add trust roots to the validation context, or replace them
-        trust_certs = list(signers.load_ca_chain(trust))
+        trust_certs = list(signers.load_certs_from_pemder(trust))
         if trust_replace:
             vc_kwargs['trust_roots'] = trust_certs
         else:
@@ -59,7 +59,7 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
     if other_certs:
         if isinstance(other_certs, str):
             other_certs = (other_certs,)
-        vc_kwargs['other_certs'] = list(signers.load_ca_chain(other_certs))
+        vc_kwargs['other_certs'] = list(signers.load_certs_from_pemder(other_certs))
     return vc_kwargs
 
 
