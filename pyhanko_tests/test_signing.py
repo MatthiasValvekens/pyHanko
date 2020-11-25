@@ -23,7 +23,7 @@ from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import UnacceptableSignerError, SigningError
-from pyhanko.sign.signers import PdfTimestamper
+from pyhanko.sign.signers import PdfTimeStamper
 from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
@@ -1153,7 +1153,7 @@ def test_pades_revinfo_live_update(requests_mock):
     r = PdfFileReader(out)
     rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
     # check if updates work
-    out = PdfTimestamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
+    out = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
     r = PdfFileReader(out)
     status = validate_pdf_ltv_signature(
         r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
@@ -1167,7 +1167,7 @@ def test_update_no_sigs():
     rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
     # check if updates work
     with pytest.raises(SigningError):
-        PdfTimestamper(DUMMY_TS).update_archival_timestamp_chain(
+        PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
             r, dummy_ocsp_vc()
         )
 
@@ -1315,7 +1315,7 @@ def _test_pades_revinfo_live_lta(w, vc, in_place):
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 
     # check if updates work
-    out = PdfTimestamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
+    out = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
     r = PdfFileReader(out)
     status = validate_pdf_ltv_signature(
         r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}

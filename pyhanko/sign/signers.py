@@ -34,7 +34,7 @@ from pyhanko.stamp import (
 
 __all__ = [
     'PdfSignatureMetadata',
-    'Signer', 'SimpleSigner', 'PdfTimestamper', 'PdfSigner',
+    'Signer', 'SimpleSigner', 'PdfTimeStamper', 'PdfSigner',
     'sign_pdf', 'load_certs_from_pemder',
     'DEFAULT_MD'
 ]
@@ -588,7 +588,7 @@ class PdfSignatureMetadata:
     validation information in the DSS, since OCSP responses and CRLs also have 
     a finite lifetime.
     
-    See also :meth:`.PdfTimestamper.update_archival_timestamp_chain`.
+    See also :meth:`.PdfTimeStamper.update_archival_timestamp_chain`.
     """
 
     timestamp_field_name: str = None
@@ -873,7 +873,11 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
     return field_created, sig_field_ref
 
 
-class PdfTimestamper:
+class PdfTimeStamper:
+    """
+    Class to encapsulate the process of appending document timestamps to
+    PDF files.
+    """
 
     def __init__(self, timestamper: TimeStamper):
         self.default_timestamper = timestamper
@@ -881,9 +885,46 @@ class PdfTimestamper:
     def generate_timestmp_field_name(self):
         return 'Timestamp-' + str(uuid.uuid4())
 
+    # TODO maybe make validation_context optional? In a PAdES context
+    #  that doesn't make sense, but document timestamps are in principle more
+    #  generally applicable.
+
+    # TODO I'm not entirely sure that allowing validation_paths to be cached
+    #  is wise. In principle, the TSA could issue their next timestamp with a
+    #  different certificate (e.g. due to load balancing), which would require
+    #  validation regardless.
+
     def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
                       md_algorithm, validation_context, bytes_reserved=None,
-                      validation_paths=None, in_place=False, timestamper=None):
+                      validation_paths=None, in_place=False,
+                      timestamper: Optional[TimeStamper]=None):
+        """Timestamp the contents of ``pdf_out``.
+        Note that ``pdf_out`` should not be written to after this operation.
+
+        :param pdf_out:
+            An :class:`.IncrementalPdfFileWriter`.
+        :param md_algorithm:
+            The hash algorithm to use when computing message digests.
+        :param validation_context:
+            The :class:`.certvalidator.ValidationContext`
+            against which the TSA response should be validated.
+            This validation context will also be used to update the DSS.
+        :param bytes_reserved:
+            Bytes to reserve for the CMS object in the PDF file.
+            If not specified, make an estimate based on a dummy signature.
+        :param validation_paths:
+            If the validation path(s) for the TSA's certificate are already
+            known, you can pass them using this parameter to avoid having to
+            run the validation logic again.
+        :param in_place:
+            Sign the input in-place. If ``False``, write output to a
+            :class:`.BytesIO` object.
+        :param timestamper:
+            Override the default :class:`.TimeStamper` associated with this
+            :class:`.PdfTimeStamper`.
+        :return:
+            The output stream containing the signed output.
+        """
         timestamper = timestamper or self.default_timestamper
         field_name = self.generate_timestmp_field_name()
         if bytes_reserved is None:
@@ -931,6 +972,21 @@ class PdfTimestamper:
 
     def update_archival_timestamp_chain(self, reader: PdfFileReader,
                                         validation_context, in_place=True):
+        """
+        Validate the last timestamp in the timestamp chain on a PDF file, and
+        write an updated version to an output stream.
+
+        :param reader:
+            A :class:`PdfReader` encapsulating the input file.
+        :param validation_context:
+            :class:`.certvalidator.ValidationContext` object to validate
+            the last timestamp.
+        :param in_place:
+            Sign the input in-place. If ``False``, write output to a
+            :class:`.BytesIO` object.
+        :return:
+            The output stream containing the signed output.
+        """
         # In principle, we only have to validate that the last timestamp token
         # in the current chain is valid.
         # TODO: add an option to validate the entire timestamp chain
@@ -989,7 +1045,7 @@ DEFAULT_SIGNING_STAMP_STYLE = TextStampStyle(
 )
 
 
-class PdfSigner(PdfTimestamper):
+class PdfSigner(PdfTimeStamper):
     _ignore_sv = False
 
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,

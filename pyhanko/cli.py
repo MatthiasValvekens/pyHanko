@@ -243,7 +243,7 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
     )
     timestamper = HTTPTimeStamper(timestamp_url)
     r = PdfFileReader(infile)
-    signers.PdfTimestamper(timestamper).update_archival_timestamp_chain(
+    signers.PdfTimeStamper(timestamper).update_archival_timestamp_chain(
         r, ValidationContext(**vc_kwargs)
     )
 
