@@ -1,19 +1,41 @@
+"""
+Sign PDF files using a Belgian eID card.
+
+This module defines a very thin convenience wrapper around
+:mod:`.pyhanko.sign.pkcs11` to set up a PKCS#11 session with an eID card and
+read the appropriate certificates on the device.
+"""
+
 from typing import Set
 
 from asn1crypto import x509
 from oscrypto import keys
 
 from . import pkcs11 as sign_pkcs11
-from pkcs11 import Attribute, ObjectClass, PKCS11Error, lib as pkcs11_lib
+from pkcs11 import (
+    Attribute, ObjectClass, PKCS11Error, lib as pkcs11_lib, Session
+)
 
 __all__ = ['open_beid_session', 'BEIDSigner']
 
-"""
-Sign PDF files using a Belgian eID card.
-"""
 
+# TODO double check DLL name (for the docstring)
 
-def open_beid_session(lib_location, slot_no=None):
+def open_beid_session(lib_location, slot_no=None) -> Session:
+    """
+    Open a PKCS#11 session
+
+    :param lib_location:
+        Path to the shared library file containing the eID PKCS#11 module.
+        Usually, the file is named ``libbeidpkcs11.so``,
+        ``libbeidpkcs11.dylib`` or ``beidpkcs11.dll``, depending on your
+        operating system.
+    :param slot_no:
+        Slot number to use. If not specified, the first slot containing a token
+        labelled ``BELPIC`` will be used.
+    :return:
+        An open PKCS#11 session object.
+    """
     lib = pkcs11_lib(lib_location)
 
     slots = lib.get_slots()
@@ -39,6 +61,13 @@ def open_beid_session(lib_location, slot_no=None):
 
 
 class BEIDSigner(sign_pkcs11.PKCS11Signer):
+    """
+    Belgian eID-specific signer implementation that automatically populates
+    the (trustless) certificate list with the relevant certificates stored
+    on the card.
+    This includes the government's (self-signed) root certificate and the
+    certificate of the appropriate intermediate CA.
+    """
 
     def _load_ca_chain(self) -> Set[x509.Certificate]:
 

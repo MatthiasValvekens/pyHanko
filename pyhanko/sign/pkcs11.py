@@ -1,3 +1,11 @@
+"""
+This module provides PKCS#11 integration for pyHanko, by providing a wrapper
+for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
+seamlessly plugged into a :class:`~.signers.PdfSigner`.
+"""
+
+import pkcs11 as python_pkcs11
+
 from typing import Set
 
 from asn1crypto import x509
@@ -10,12 +18,29 @@ __all__ = ['PKCS11Signer']
 
 
 class PKCS11Signer(Signer):
+    """
+    Signer implementation for PKCS11 devices.
+    """
 
     # TODO is this actually the correct one to use?
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
-    def __init__(self, pkcs11_session, cert_label, ca_chain=None,
-                 key_label=None):
+    def __init__(self, pkcs11_session: python_pkcs11.Session,
+                 cert_label: str, ca_chain=None, key_label=None):
+        """
+        Initialise a PKCS11 signer.
+
+        :param pkcs11_session:
+            The PKCS11 session object to use.
+        :param cert_label:
+            The label of the certificate that will be used for signing.
+        :param ca_chain:
+            Set of other relevant certificates
+            (as :class:`.asn1crypto.x509.Certificate` objects).
+        :param key_label:
+            The label of the key that will be used for signing.
+            Defaults to the value of ``cert_label`` if left unspecified.
+        """
         self.cert_label = cert_label
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
