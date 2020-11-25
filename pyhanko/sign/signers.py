@@ -36,7 +36,7 @@ __all__ = [
     'PdfSignatureMetadata',
     'Signer', 'SimpleSigner', 'PdfTimeStamper', 'PdfSigner',
     'sign_pdf', 'load_certs_from_pemder',
-    'DEFAULT_MD'
+    'DEFAULT_MD', 'DEFAULT_SIGNING_STAMP_STYLE'
 ]
 
 
@@ -493,6 +493,10 @@ class Signer:
 #  with a sha512 req (Adobe Reader agrees).
 #  Should get to the bottom of that. In the meantime, default to sha256
 DEFAULT_MD = 'sha256'
+"""
+Default message digest algorithm used when computing digests for use in
+signatures.
+"""
 
 
 @dataclass(frozen=True)
@@ -816,6 +820,32 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              timestamper: TimeStamper = None,
              existing_fields_only=False, bytes_reserved=None, in_place=False):
+    """
+    Thin convenience wrapper around :meth:`.PdfSigner.sign_pdf`.
+
+    :param pdf_out:
+        An :class:`.IncrementalPdfFileWriter`.
+    :param bytes_reserved:
+        Bytes to reserve for the CMS object in the PDF file.
+        If not specified, make an estimate based on a dummy signature.
+    :param signature_meta:
+        The specification of the signature to add.
+    :param signer:
+        :class:`.Signer` object to use to produce the signature object.
+    :param timestamper:
+        :class:`.TimeStamper` object to use to produce any time stamp tokens
+        that might be required.
+    :param in_place:
+        Sign the input in-place. If ``False``, write output to a
+        :class:`.BytesIO` object.
+    :param existing_fields_only:
+        If ``True``, never create a new empty signature field to contain
+        the signature.
+        If ``False``, a new field may be created if no field matching
+        :attr:`~.PdfSignatureMetadata.field_name` exists.
+    :return:
+        The output stream containing the signed output.
+    """
     return PdfSigner(signature_meta, signer, timestamper=timestamper).sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
         bytes_reserved=bytes_reserved, in_place=in_place
@@ -882,7 +912,13 @@ class PdfTimeStamper:
     def __init__(self, timestamper: TimeStamper):
         self.default_timestamper = timestamper
 
-    def generate_timestmp_field_name(self):
+    def generate_timestamp_field_name(self) -> str:
+        """
+        Generate a unique name for a document timestamp field using :mod:`uuid`.
+
+        :return:
+            The field name, as a (Python) string.
+        """
         return 'Timestamp-' + str(uuid.uuid4())
 
     # TODO maybe make validation_context optional? In a PAdES context
@@ -897,7 +933,7 @@ class PdfTimeStamper:
     def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
                       md_algorithm, validation_context, bytes_reserved=None,
                       validation_paths=None, in_place=False,
-                      timestamper: Optional[TimeStamper]=None):
+                      timestamper: Optional[TimeStamper] = None):
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
@@ -926,7 +962,7 @@ class PdfTimeStamper:
             The output stream containing the signed output.
         """
         timestamper = timestamper or self.default_timestamper
-        field_name = self.generate_timestmp_field_name()
+        field_name = self.generate_timestamp_field_name()
         if bytes_reserved is None:
             test_signature_cms = timestamper.dummy_response(md_algorithm)
             test_len = len(test_signature_cms.dump()) * 2
@@ -1043,14 +1079,40 @@ class PdfTimeStamper:
 DEFAULT_SIGNING_STAMP_STYLE = TextStampStyle(
     stamp_text=SIG_DETAILS_DEFAULT_TEMPLATE, background=STAMP_ART_CONTENT
 )
+"""
+Default stamp style used for visible signatures.
+"""
 
 
 class PdfSigner(PdfTimeStamper):
+    """
+    Class to handle PDF signatures in general.
+    """
     _ignore_sv = False
 
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
-                 *, timestamper: TimeStamper = None, stamp_style=None,
+                 *, timestamper: TimeStamper = None,
+                 stamp_style: Optional[TextStampStyle] = None,
                  qr_url=None):
+        """
+        Initialise a :class:`PdfSigner`.
+
+        :param signature_meta:
+            The specification of the signature to add.
+        :param signer:
+            :class:`.Signer` object to use to produce the signature object.
+        :param timestamper:
+            :class:`.TimeStamper` object to use to produce any time stamp tokens
+            that might be required.
+        :param stamp_style:
+            Stamp style specification to determine the visible style of the
+            signature, typically an object of type :class:`.TextStampStyle` or
+            :class:`.QRStampStyle`. Defaults to
+            :const:`.DEFAULT_SIGNING_STAMP_STYLE`.
+        :param qr_url:
+            Only allowed if ``stamp_style`` is a :class:`.QRStampStyle`,
+            in which case it determines the URL used for the QR code.
+        """
         self.signature_meta = signature_meta
         self.signer = signer
         stamp_style = stamp_style or DEFAULT_SIGNING_STAMP_STYLE
@@ -1063,9 +1125,17 @@ class PdfSigner(PdfTimeStamper):
         self.qr_url = qr_url
         super().__init__(timestamper)
 
-    def generate_timestmp_field_name(self):
+    def generate_timestamp_field_name(self) -> str:
+        """
+        Look up the timestamp field name in the :class:`.PdfSignatureMetadata`
+        object associated with this :class:`.PdfSigner`.
+        If not specified, generate a unique field name using :mod:`uuid`.
+
+        :return:
+            The field name, as a (Python) string.
+        """
         return self.signature_meta.timestamp_field_name or (
-            super().generate_timestmp_field_name()
+            super().generate_timestamp_field_name()
         )
 
     def _apply_locking_rules(self, sig_field, sig_obj_ref, md_algorithm,
@@ -1273,6 +1343,25 @@ class PdfSigner(PdfTimeStamper):
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None,
                  in_place=False):
+        """
+        Sign a PDF file using the provided output writer.
+
+        :param pdf_out:
+            An :class:`.IncrementalPdfFileWriter` containing the data to sign.
+        :param existing_fields_only:
+            If ``True``, never create a new empty signature field to contain
+            the signature.
+            If ``False``, a new field may be created if no field matching
+            :attr:`~.PdfSignatureMetadata.field_name` exists.
+        :param bytes_reserved:
+            Bytes to reserve for the CMS object in the PDF file.
+            If not specified, make an estimate based on a dummy signature.
+        :param in_place:
+            Sign the input in-place. If ``False``, write output to a
+            :class:`.BytesIO` object.
+        :return:
+            The output stream containing the signed data.
+        """
 
         timestamper = self.default_timestamper
 
