@@ -1,3 +1,12 @@
+"""
+Module to handle the timestamping functionality in pyHanko.
+
+Many PDF signature profiles require trusted timestamp tokens.
+The tools in this module allow pyHanko to obtain such tokens from
+`RFC 3161 <https://tools.ietf.org/html/rfc3161>`_-compliant time stamping
+authorities.
+"""
+
 import hashlib
 import struct
 import os
@@ -23,6 +32,9 @@ __all__ = [
 
 
 class TimestampRequestError(IOError):
+    """
+    Raised when an error occurs while requesting a timestamp.
+    """
     pass
 
 
@@ -34,9 +46,24 @@ def get_nonce():
 
 @dataclass(frozen=True)
 class TimestampSignatureStatus(SignatureStatus):
+    """
+    Signature status class used when validating timestamp tokens.
+    """
     key_usage = set()
+    """
+    There are no (non-extended) key usage requirements for TSA certificates.
+    """
+
     extd_key_usage = {'time_stamping'}
+    """
+    TSA certificates must have the ``time_stamping`` extended key usage 
+    extension (OID 1.3.6.1.5.5.7.3.8).
+    """
+
     timestamp: datetime
+    """
+    Value of the timestamp token as a datetime object.
+    """
 
 
 def extract_ts_certs(ts_token, store: CertificateStore):
@@ -62,7 +89,7 @@ def extract_ts_certs(ts_token, store: CertificateStore):
 
 class TimeStamper:
     """
-    Class to make RFC3161 timestamp requests
+    Class to make RFC 3161 timestamp requests.
     """
 
     def __init__(self):
@@ -70,7 +97,22 @@ class TimeStamper:
         self._certs = {}
         self.cert_registry = SimpleCertificateStore()
 
-    def dummy_response(self, md_algorithm):
+    def dummy_response(self, md_algorithm) -> cms.ContentInfo:
+        """
+        Return a dummy response for use in CMS object size estimation.
+
+        For every new ``md_algorithm`` passed in, this method will call
+        the :meth:`timestamp` method exactly once, with a dummy digest.
+        The resulting object will be cached and reused for future invocations
+        of :meth:`dummy_response` with the same ``md_algorithm`` value.
+
+        :param md_algorithm:
+            Message digest algorithm to use.
+        :return:
+            A timestamp token, encoded as an
+            :class:`.asn1crypto.cms.ContentInfo` object.
+        """
+
         # different hashes have different sizes, so the dummy responses
         # might differ in size
         try:
@@ -85,6 +127,17 @@ class TimeStamper:
         return dummy
 
     def validation_paths(self, validation_context):
+        """
+        Produce validation paths for the certificates gathered by this
+        :class:`.TimeStamper`.
+
+        This is internal API.
+
+        :param validation_context:
+            The validation context to apply.
+        :return:
+            A generator producing validation paths.
+        """
         for cert in self._certs.values():
             validator = CertificateValidator(
                 cert,
@@ -93,10 +146,24 @@ class TimeStamper:
             )
             yield validator.validate_usage(set(), {"time_stamping"})
 
+    # noinspection PyMethodMayBeStatic
     def request_cms(self, message_digest, md_algorithm):
-        # see also
-        # https://github.com/m32/endesive/blob/5e38809387b8bdb218d02cdcaa8f17b89a8a16fc/endesive/signer.py#L161
+        """
+        Format the body of an RFC 3161 request as a CMS object.
+        Subclasses with more specific needs may want to override this.
 
+        :param message_digest:
+            Message digest to which the timestamp will apply.
+        :param md_algorithm:
+            Message digest algorithm to use.
+
+            .. note::
+                As per `RFC 8933 <https://tools.ietf.org/html/rfc8933>`_,
+                ``md_algorithm`` should also be the algorithm used to compute
+                ``message_digest``.
+        :return:
+            An :class:`.asn1crypto.tsp.TimeStampReq` object.
+        """
         nonce = get_nonce()
         req = tsp.TimeStampReq({
             'version': 1,
@@ -113,9 +180,42 @@ class TimeStamper:
         return nonce, req
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        """
+        Submit the specified timestamp request to the server.
+
+        :param req:
+            Request body to submit.
+        :return:
+            A timestamp response from the server.
+        :raises IOError:
+            Raised in case of an I/O issue in the communication with the
+            timestamping server.
+        """
         raise NotImplementedError
 
-    def timestamp(self, message_digest, md_algorithm):
+    def timestamp(self, message_digest, md_algorithm) -> cms.ContentInfo:
+        """
+        Request a timestamp for the given message digest.
+
+        :param message_digest:
+            Message digest to which the timestamp will apply.
+        :param md_algorithm:
+            Message digest algorithm to use.
+
+            .. note::
+                As per `RFC 8933 <https://tools.ietf.org/html/rfc8933>`_,
+                ``md_algorithm`` should also be the algorithm used to compute
+                ``message_digest``.
+        :return:
+            A timestamp token, encoded as an
+            :class:`.asn1crypto.cms.ContentInfo` object.
+        :raises IOError:
+            Raised in case of an I/O issue in the communication with the
+            timestamping server.
+        :raises TimestampRequestError:
+            Raised if the timestamp server did not return a success response,
+            or if the server's response is invalid.
+        """
         nonce, req = self.request_cms(message_digest, md_algorithm)
         res = self.request_tsa_response(req)
         pki_status_info = res['status']
@@ -245,8 +345,25 @@ class DummyTimeStamper(TimeStamper):
 
 
 class HTTPTimeStamper(TimeStamper):
+    """
+    Standard HTTP-based timestamp client.
+    """
 
     def __init__(self, url, https=False, timeout=5, auth=None, headers=None):
+        """
+        Initialise the timestamp client.
+
+        :param url:
+            URL where the server listens for timestamp requests.
+        :param https:
+            Enforce HTTPS.
+        :param timeout:
+            Timeout (in seconds)
+        :param auth:
+            Value of HTTP ``Authorization`` header
+        :param headers:
+            Other headers to include.
+        """
         self.url = url
         self.https = https
         self.timeout = timeout
@@ -254,12 +371,18 @@ class HTTPTimeStamper(TimeStamper):
         self.headers = headers
         super().__init__()
 
-    def request_headers(self):
+    def request_headers(self) -> dict:
+        """
+        Format the HTTP request headers.
+
+        :return:
+            Header dictionary.
+        """
         headers = self.headers or {}
         headers['Content-Type'] = 'application/timestamp-query'
         return headers
 
-    def timestamp(self, message_digest, md_algorithm):
+    def timestamp(self, message_digest, md_algorithm) -> cms.ContentInfo:
         if self.https and not self.url.startswith('https:'):  # pragma: nocover
             raise ValueError('Timestamp URL is not HTTPS.')
         return super().timestamp(message_digest, md_algorithm)
