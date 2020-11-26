@@ -33,23 +33,31 @@ from .general import (
 from .timestamps import TimestampSignatureStatus
 
 __all__ = [
-    'PdfSignatureStatus', 'validate_pdf_signature', 'validate_cms_signature',
+    'SignatureCoverageLevel', 'ModificationLevel', 'PdfSignatureStatus',
+    'EmbeddedPdfSignature',
+    'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
+    'apply_adobe_revocation_info',
     'read_certification_data', 'validate_pdf_ltv_signature',
-    'EmbeddedPdfSignature'
+    'validate_pdf_signature', 'validate_cms_signature',
+    'ValidationInfoReadingError', 'SignatureValidationError',
+    'SigSeedValueValidationError',
 ]
 
 logger = logging.getLogger(__name__)
 
 
 class ValidationInfoReadingError(ValueError):
+    """Error reading validation info."""
     pass
 
 
 class SignatureValidationError(ValueError):
+    """Error validating a signature."""
     pass
 
 
 class SigSeedValueValidationError(SignatureValidationError):
+    """Error validating a signature's seed value constraints."""
     pass
 
 
@@ -182,6 +190,29 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            validation_context: ValidationContext = None,
                            status_kwargs: dict = None,
                            externally_invalid=False):
+    """
+    Validate a detached CMS signature (i.e. a ``SignedData`` object).
+
+    :param signed_data:
+        The :class:`.asn1crypto.cms.SignedData` object to validate.
+    :param status_cls:
+        Status class to use for the validation result.
+    :param raw_digest:
+        Raw digest, computed from context.
+    :param validation_context:
+        Validation context to validate the signer's certificate.
+    :param status_kwargs:
+        Other keyword arguments to pass to the ``status_class`` when reporting
+        validation results.
+    :param externally_invalid:
+        If ``True``, there is an external reason why the signature cannot
+        be valid, but the remaining validation logic still has to be run.
+
+        This option is considered internal API, the semantics of which may
+        change without notice in the future.
+    :return:
+        A :class:`SignatureStatus` object (or an instance of a proper subclass)
+    """
     status_kwargs = _validate_cms_signature(
         signed_data, status_cls, raw_digest, validation_context,
         status_kwargs, externally_invalid
@@ -195,7 +226,7 @@ class SignatureCoverageLevel(OrderedEnum):
     Indicate the extent to which a PDF signature (cryptographically) covers
     a document. Note that this does _not_ pass judgment on whether uncovered
     updates are legitimate or not, but as a general rule, a legitimate signature
-    will satisfy at least ENTIRE_REVISION.
+    will satisfy at least :attr:`ENTIRE_REVISION`.
     """
 
     UNCLEAR = 0
@@ -207,7 +238,7 @@ class SignatureCoverageLevel(OrderedEnum):
     CONTIGUOUS_BLOCK_FROM_START = 1
     """
     The signature covers a contiguous block in the PDF file stretching from
-    the first byte of the file to the last byte in the indicated /ByteRange.
+    the first byte of the file to the last byte in the indicated ``/ByteRange``.
     In other words, the only interruption in the byte range is fully occupied
     by the signature data itself.
     """
@@ -230,11 +261,15 @@ class SignatureCoverageLevel(OrderedEnum):
 class ModificationLevel(OrderedEnum):
     """
     Records the (semantic) modification level of a document.
+
+    Compare :class:`~.pyhanko.sign.fields.MDPPerm`, which records the document
+    modification policy associated with a particular signature, as opposed
+    to the empirical judgment indicated by this enum.
     """
 
     NONE = 0
     """
-    The document was not modified at all.
+    The document was not modified at all (i.e. it is byte-for-byte unchanged).
     """
 
     LTA_UPDATES = 1
@@ -1965,7 +2000,9 @@ class DocumentSecurityStore:
     def read_dss(cls, handler: PdfHandler) -> 'DocumentSecurityStore':
         """
         Read a DSS record from a file and add the data to a validation context.
+
         :param handler:
+            PDF handler from which to read the DSS.
         :return:
             A DocumentSecurityStore object describing the current state of the
             DSS.

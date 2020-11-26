@@ -22,7 +22,7 @@ from pyhanko.stamp import AnnotAppearances
 __all__ = [
     'SigSeedValFlags', 'SigCertConstraints', 'SigSeedValueSpec',
     'SigCertConstraintFlags', 'SigFieldSpec', 'SigSeedSubFilter',
-    'FieldMDPAction', 'FieldMDPSpec',
+    'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
     'SignatureFormField', 'enumerate_sig_fields',
 ]
 
