@@ -40,7 +40,7 @@ __all__ = [
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
     'ValidationInfoReadingError', 'SignatureValidationError',
-    'SigSeedValueValidationError',
+    'SigSeedValueValidationError', 'SuspiciousModification'
 ]
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,11 @@ class SignatureValidationError(ValueError):
 
 class SigSeedValueValidationError(SignatureValidationError):
     """Error validating a signature's seed value constraints."""
+    pass
+
+
+class SuspiciousModification(ValueError):
+    """Error indicating a suspicious modification"""
     pass
 
 
@@ -294,29 +299,79 @@ class ModificationLevel(OrderedEnum):
     In addition to the previous levels, manipulating annotations is also allowed 
     at this level.
     
-    (NOTE: this level is currently unused, and modifications to annotations
-    other than those permitted to fill in forms are treated as suspicious)
+    .. note::
+        This level is currently unused, and modifications to annotations
+        other than those permitted to fill in forms are treated as suspicious.
     """
 
     OTHER = 4
     """
     The document has been modified in ways that aren't on the validator's
     whitelist. This always invalidates the corresponding signature, irrespective
-    of cryptographical integrity or /DocMDP settings.
+    of cryptographical integrity or ``/DocMDP`` settings.
     """
 
 
 @dataclass(frozen=True)
 class PdfSignatureStatus(SignatureStatus):
+    """Class to indicate the validation status of a PDF signature."""
+
     coverage: SignatureCoverageLevel
+    """
+    Indicates how much of the document is covered by the signature.
+    """
+
     modification_level: ModificationLevel
+    """
+    Indicates the degree to which the document was modified after the signature
+    was applied.
+    """
+
     seed_value_ok: bool
+    """
+    Indicates whether the signature satisfies all mandatory constraints in the
+    seed value dictionary of the associated form field.
+    
+    .. warning::
+        Currently, not all seed value entries are recognised by the signer
+        and/or the validator, so this judgment may not be entirely accurate in
+        some cases.
+        
+        See :class:`~.pyhanko.sign.fields.SigSeedValueSpec`.
+    """
+
     docmdp_ok: bool
+    """
+    Indicates whether the signature's :attr:`modification_level` is in line with
+    the document signature policy in force.
+    """
+
     signed_dt: Optional[datetime] = None
+    """
+    Signer-reported signing time, if present in the signature.
+    
+    Generally speaking, this timestamp should not be taken as fact.
+    """
+
     timestamp_validity: Optional[TimestampSignatureStatus] = None
+    """
+    Validation status of the timestamp token embedded in this signature, 
+    if present.
+    """
 
     @property
     def bottom_line(self) -> bool:
+        """
+        Formulates a general judgment on the validity of this signature.
+        This takes into account the cryptographic validity of the signature,
+        the signature's chain of trust, compliance with the document
+        modification policy, seed value constraint compliance and the validity
+        of the timestamp token (if present).
+
+        :return:
+            ``True`` if all constraints are satisfied, ``False`` otherwise.
+        """
+
         ts = self.timestamp_validity
         if ts is None:
             timestamp_ok = True
@@ -378,11 +433,25 @@ def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
         )
 
 
-class SuspiciousModification(ValueError):
-    pass
-
-
 class EmbeddedPdfSignature:
+    """
+    Class modelling a signature embedded in a PDF document.
+    """
+
+    sig_field: generic.DictionaryObject
+    """
+    The field dictionary of the form field containing the signature.
+    """
+
+    sig_object: generic.DictionaryObject
+    """
+    The signature dictionary.
+    """
+
+    signed_data: cms.SignedData
+    """
+    CMS signed data in the signature.
+    """
 
     def __init__(self, reader: PdfFileReader,
                  sig_field: generic.DictionaryObject):
@@ -439,10 +508,19 @@ class EmbeddedPdfSignature:
 
     @property
     def field_name(self):
+        """
+        :return:
+            Name of the signature field.
+        """
         return self.sig_field['/T']
 
     @property
-    def self_reported_signed_timestamp(self) -> datetime:
+    def self_reported_signed_timestamp(self) -> Optional[datetime]:
+        """
+        :return:
+            The signing time as reported by the signer, if embedded in the
+            signature's signed attributes.
+        """
         try:
             sa = self.signer_info['signed_attrs']
             st = find_cms_attribute(sa, 'signed_time')[0]
@@ -451,7 +529,12 @@ class EmbeddedPdfSignature:
             pass
 
     @property
-    def external_timestamp_data(self) -> cms.SignedData:
+    def external_timestamp_data(self) -> Optional[cms.SignedData]:
+        """
+        :return:
+            The signed data component of the timestamp token embedded in this
+            signature, if present.
+        """
         try:
             ua = self.signer_info['unsigned_attrs']
             tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
@@ -461,6 +544,13 @@ class EmbeddedPdfSignature:
             pass
 
     def compute_integrity_info(self, skip_diff=False):
+        """
+        Compute the various integrity indicators of this signature.
+
+        :param skip_diff:
+            If ``True``, skip the (rather expensive) modification level
+            evaluation.
+        """
         self.compute_digest()
 
         # TODO in scenarios where we have to verify multiple signatures, we're
@@ -469,7 +559,14 @@ class EmbeddedPdfSignature:
         if not skip_diff:
             self.modification_level = self.evaluate_modifications()
 
-    def summarise_integrity_info(self):
+    def summarise_integrity_info(self) -> dict:
+        """
+        Compile the integrity information for this signature into a dictionary
+        that can later be passed to :class:`PdfSignatureStatus` as kwargs.
+
+        :return:
+            A kwargs dictionary.
+        """
 
         self.compute_integrity_info()
 
