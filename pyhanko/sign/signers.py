@@ -1038,6 +1038,7 @@ class PdfTimeStamper:
         last_signature: EmbeddedPdfSignature = \
             all_signatures[len(all_signatures) - 1]
         last_signature.compute_digest()
+        last_signature.compute_tst_digest()
 
         # two cases: either the signature is a normal signature,
         # or it is a document timestamp

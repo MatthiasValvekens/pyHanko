@@ -433,6 +433,9 @@ def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
         )
 
 
+# TODO clarify in docs that "external timestamp" is always None when dealing
+#  with a /DocTimeStamp, since there the timestamp token is simply the entire
+#  signature object
 class EmbeddedPdfSignature:
     """
     Class modelling a signature embedded in a PDF document.
@@ -552,6 +555,7 @@ class EmbeddedPdfSignature:
             evaluation.
         """
         self.compute_digest()
+        self.compute_tst_digest()
 
         # TODO in scenarios where we have to verify multiple signatures, we're
         #  doing a lot of double work here. This could be improved.
@@ -585,6 +589,21 @@ class EmbeddedPdfSignature:
 
     @property
     def docmdp_level(self) -> Optional[MDPPerm]:
+        """
+        :return:
+            The document modification policy required by this signature.
+
+            .. warning::
+                This does not take into account the DocMDP requirements of
+                earlier signatures (if present).
+
+                The specification forbids signing with a more lenient DocMDP
+                than the one currently in force, so this should not happen
+                in a compliant document.
+                That being said, any potential violations will still invalidate
+                the earlier signature with the stricter DocMDP policy.
+
+        """
         # TODO fall back to reading /Lock in case the signing software
         #  ignored the /Lock dictionary when building up the signature object
         if self._docmdp_queried:
@@ -596,6 +615,11 @@ class EmbeddedPdfSignature:
 
     @property
     def fieldmdp(self) -> Optional[FieldMDPSpec]:
+        """
+        :return:
+            Read the field locking policy of this signature, if applicable.
+            See also :class:`~.pyhanko.sign.fields.FieldMDPSpec`.
+        """
         # TODO as above, fall back to /Lock
         if self._fieldmdp_queried:
             return self._fieldmdp
@@ -612,9 +636,16 @@ class EmbeddedPdfSignature:
         self._fieldmdp = sp
         return sp
 
-    def compute_digest(self):
+    def compute_digest(self) -> bytes:
+        """
+        Compute the ``/ByteRange`` digest of this signature.
+        The result will be cached.
+
+        :return:
+            The digest value.
+        """
         if self.raw_digest is not None:
-            return
+            return self.raw_digest
 
         md = getattr(hashlib, self.md_algorithm)()
         stream = self.reader.stream
@@ -631,17 +662,37 @@ class EmbeddedPdfSignature:
             total_len += chunk_len
 
         self.total_len = total_len
-        self.raw_digest = md.digest()
+        self.raw_digest = digest = md.digest()
+        return digest
 
+    def compute_tst_digest(self) -> Optional[bytes]:
+        """
+        Compute the digest of the signature needed to validate its timestamp
+        token (if present).
+
+        .. warning::
+            This computation is only relevant for timestamp tokens embedded
+            inside a regular signature.
+            If the signature in question is a document timestamp (where the
+            entire signature object is a timestamp token), this method
+            does not apply.
+
+        :return:
+            The digest value, or ``None`` if there is no timestamp token.
+        """
+
+        if self.tst_signature_digest is not None:
+            return self.tst_signature_digest
         # for timestamp validation: compute the digest of the signature
         #  (as embedded in the CMS object)
         tst_data = self.external_timestamp_data
         if tst_data is None:
-            return
+            return None
 
         signature_bytes = self.signer_info['signature'].native
         md = getattr(hashlib, self.md_algorithm)(signature_bytes)
-        self.tst_signature_digest = md.digest()
+        self.tst_signature_digest = digest = md.digest()
+        return digest
 
     def evaluate_signature_coverage(self):
 
@@ -1787,6 +1838,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                 current_vc.certificate_registry.add_other_cert(cert)
 
     embedded_sig.compute_digest()
+    embedded_sig.compute_tst_digest()
 
     # first, we need to validate the timestamp (or timestamp chain) *now*
     # in particular, this implies that we can't just use revocation info
