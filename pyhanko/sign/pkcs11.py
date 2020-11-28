@@ -4,7 +4,7 @@ for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
 seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
 
-import pkcs11 as python_pkcs11
+from pkcs11 import Session, ObjectClass, Attribute
 
 from typing import Set
 
@@ -25,7 +25,7 @@ class PKCS11Signer(Signer):
     # TODO is this actually the correct one to use?
     pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
 
-    def __init__(self, pkcs11_session: python_pkcs11.Session,
+    def __init__(self, pkcs11_session: Session,
                  cert_label: str, ca_chain=None, key_label=None):
         """
         Initialise a PKCS11 signer.
@@ -92,8 +92,6 @@ class PKCS11Signer(Signer):
     def _load_objects(self):
         if self._loaded:
             return
-
-        from pkcs11 import Attribute, ObjectClass
 
         q = self.pkcs11_session.get_objects({
             Attribute.LABEL: self.cert_label,
