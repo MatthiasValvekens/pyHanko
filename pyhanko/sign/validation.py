@@ -694,7 +694,13 @@ class EmbeddedPdfSignature:
         self.tst_signature_digest = digest = md.digest()
         return digest
 
-    def evaluate_signature_coverage(self):
+    def evaluate_signature_coverage(self) -> SignatureCoverageLevel:
+        """
+        Internal method used to evaluate the coverage level of a signature.
+
+        :return:
+            The coverage level of the signature.
+        """
 
         xref_cache: XRefCache = self.reader.xrefs
         # for the coverage check, we're more strict with regards to the byte
@@ -761,6 +767,13 @@ class EmbeddedPdfSignature:
         return SignatureCoverageLevel.ENTIRE_REVISION
 
     def evaluate_modifications(self) -> ModificationLevel:
+        """
+        Internal method used to evaluate the modification level of a signature.
+
+        :return:
+            The modification level of the signature.
+        """
+
         if self.coverage < SignatureCoverageLevel.ENTIRE_REVISION:
             return ModificationLevel.OTHER
         elif self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
@@ -1641,6 +1654,19 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None) \
                            -> PdfSignatureStatus:
+    """
+    Validate a PDF signature.
+
+    :param embedded_sig:
+        Embedded signature to evaluate.
+    :param signer_validation_context:
+        Validation context to use to validate the signature's chain of trust.
+    :param ts_validation_context:
+        Validation context to use to validate the timestamp's chain of trust
+        (defaults to ``signer_validation_context``).
+    :return:
+        The status of the PDF signature in question.
+    """
 
     sig_object = embedded_sig.sig_object
     # check whether the subfilter type is one we support
@@ -1700,9 +1726,28 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
 
 
 class RevocationInfoValidationType(Enum):
+    """
+    Indicates a validation profile to use when validating revocation info.
+    """
+
     ADOBE_STYLE = 'adobe'
+    """
+    Retrieve validation information from the CMS object, using Adobe's
+    revocation info archival attribute.
+    """
+
     PADES_LT = 'pades'
+    """
+    Retrieve validation information from the DSS, and require the signature's 
+    embedded timestamp to still be valid.
+    """
+
     PADES_LTA = 'pades-lta'
+    """
+    Retrieve validation information from the DSS, but read & validate the chain
+    of document timestamps leading up to the signature to establish the 
+    integrity of the validation information at the time of signing.
+    """
 
     @classmethod
     def as_tuple(cls):
@@ -1803,7 +1848,25 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                validation_type: RevocationInfoValidationType,
                                validation_context_kwargs=None,
                                bootstrap_validation_context=None,
-                               force_revinfo=False):
+                               force_revinfo=False) -> PdfSignatureStatus:
+    """
+    Validate a PDF LTV signature according to a particular profile.
+
+    :param embedded_sig:
+        Embedded signature to evaluate.
+    :param validation_type:
+        Validation profile to use.
+    :param validation_context_kwargs:
+        Keyword args to instantiate :class:`.certvalidator.ValidationContext`
+        objects needed over the course of the validation.
+    :param bootstrap_validation_context:
+        Validation context used to validate the current timestamp.
+    :param force_revinfo:
+        Require all certificates encountered to have some form of live
+        revocation checking provisions.
+    :return:
+        The status of the signature.
+    """
     # create a fresh copy of the validation_kwargs
     validation_context_kwargs: dict = dict(validation_context_kwargs or {})
 
