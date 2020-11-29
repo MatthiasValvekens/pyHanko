@@ -895,7 +895,7 @@ def test_certify():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission_bits == pyhanko.sign.fields.MDPPerm.NO_CHANGES
+    assert info.permission == pyhanko.sign.fields.MDPPerm.NO_CHANGES
 
     # with NO_CHANGES, we shouldn't be able to append an approval signature
     out.seek(0)
@@ -920,7 +920,7 @@ def test_no_double_certify():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission_bits == pyhanko.sign.fields.MDPPerm.FILL_FORMS
+    assert info.permission == pyhanko.sign.fields.MDPPerm.FILL_FORMS
 
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
@@ -956,7 +956,7 @@ def test_approval_sig():
 
     info = read_certification_data(r)
     assert info.author_sig == s.sig_object.get_object()
-    assert info.permission_bits == pyhanko.sign.fields.MDPPerm.FILL_FORMS
+    assert info.permission == pyhanko.sign.fields.MDPPerm.FILL_FORMS
 
     s = r.embedded_signatures[1]
     assert s.field_name == 'Sig2'

@@ -1237,7 +1237,7 @@ class PdfSigner(PdfTimeStamper):
             raise SigningError(
                 "Document already contains a certification signature"
             )
-        if cd.permission_bits == MDPPerm.NO_CHANGES:
+        if cd.permission == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
         author_sig_md = cd.author_sig.get('/DigestAlgorithm', None)
         if author_sig_md is not None:

@@ -34,7 +34,7 @@ from .timestamps import TimestampSignatureStatus
 
 __all__ = [
     'SignatureCoverageLevel', 'ModificationLevel', 'PdfSignatureStatus',
-    'EmbeddedPdfSignature',
+    'EmbeddedPdfSignature', 'DocMDPInfo',
     'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
     'apply_adobe_revocation_info',
     'read_certification_data', 'validate_pdf_ltv_signature',
@@ -1266,7 +1266,7 @@ def _diff_field_tree(signed_fields, current_fields,
             # new sigfield added, signal to caller
             yield sigfield_ref
 
-            # new field, so all it's dependencies are good to go
+            # new field, so all its dependencies are good to go
             # that said, only the field itself is cleared at LTA update level,
             # the other deps bump the modification level up to FORM_FILL
             # TODO am I being too strict here?
@@ -1897,7 +1897,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         else:
             current_vc = bootstrap_validation_context
             # add the certs from the DSS
-            for cert in dss.load_certs():
+            for cert in dss._load_certs():
                 current_vc.certificate_registry.add_other_cert(cert)
 
     embedded_sig.compute_digest()
@@ -1991,6 +1991,17 @@ def retrieve_adobe_revocation_info(signer_info: cms.SignerInfo):
 def apply_adobe_revocation_info(signer_info: cms.SignerInfo,
                                 validation_context_kwargs=None) \
                                -> ValidationContext:
+    """
+    Read Adobe-style revocation information from a CMS object, and load it
+    into a validation context.
+
+    :param signer_info:
+        Signer info CMS object.
+    :param validation_context_kwargs:
+        Extra kwargs to pass to the ``__init__`` function.
+    :return:
+        A validation context preloaded with the relevant revocation information.
+    """
     validation_context_kwargs = validation_context_kwargs or {}
     ocsps, crls = retrieve_adobe_revocation_info(signer_info)
     return ValidationContext(
@@ -1998,10 +2009,22 @@ def apply_adobe_revocation_info(signer_info: cms.SignerInfo,
     )
 
 
-DocMDPInfo = namedtuple('DocMDPInfo', ['permission_bits', 'author_sig'])
+DocMDPInfo = namedtuple('DocMDPInfo', ['permission', 'author_sig'])
+"""
+Encodes certification information for a signed document, consisting of a 
+reference to the author signature, together with the associated DocMDP policy.
+"""
 
 
-def read_certification_data(reader: PdfFileReader):
+def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
+    """
+    Read the certification information for a PDF document, if present.
+
+    :param reader:
+        Reader representing the input document.
+    :return:
+        A :class:`.DocMDPInfo` object containing the relevant data, or ``None``.
+    """
     try:
         certification_sig = reader.root['/Perms']['/DocMDP']
     except KeyError:
@@ -2012,17 +2035,32 @@ def read_certification_data(reader: PdfFileReader):
     return DocMDPInfo(perm, certification_sig)
 
 
-# TODO validate DocMDP compliance and PAdES compliance
-#  There are some compatibility subtleties here: e.g. valid (!) cryptographic
-#  data covered by DSS and/or DocumentTimeStamps should never trigger the DocMDP
-#  policy.
-
-
 @dataclass
 class VRI:
+    """
+    VRI dictionary as defined in PAdES / ISO 32000-2.
+    These dictionaries collect data that may be relevant for the validation of
+    a specific signature.
+
+    .. note::
+        The data are stored as PDF indirect objects, not asn1crypto values.
+        In particular, values are tied to a specific PDF handler.
+    """
+
     certs: set = data_field(default_factory=set)
+    """
+    Relevant certificates.
+    """
+
     ocsps: set = data_field(default_factory=set)
+    """
+    Relevant OCSP responses.
+    """
+
     crls: set = data_field(default_factory=set)
+    """
+    Relevant CRLs.
+    """
 
     def __iadd__(self, other):
         self.certs.update(other.certs)
@@ -2030,7 +2068,11 @@ class VRI:
         self.ocsps.update(other.ocsps)
         return self
 
-    def as_pdf_object(self):
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        :return:
+            A PDF dictionary representing this VRI entry.
+        """
         vri = generic.DictionaryObject({pdf_name('/Type'): pdf_name('/VRI')})
         if self.ocsps:
             vri[pdf_name('/OCSP')] = generic.ArrayObject(self.ocsps)
@@ -2054,6 +2096,9 @@ def enumerate_ocsp_certs(ocsp_response):
 
 
 class DocumentSecurityStore:
+    """
+    Representation of a DSS in Python.
+    """
 
     def __init__(self, writer, certs=None, ocsps=None, crls=None,
                  vri_entries=None, backing_pdf_object=None):
@@ -2116,7 +2161,18 @@ class DocumentSecurityStore:
         return ref
 
     @staticmethod
-    def sig_content_identifier(contents):
+    def sig_content_identifier(contents) -> generic.NameObject:
+        """
+        Hash the contents of a signature object to get the corresponding VRI
+        identifier.
+
+        This is internal API.
+
+        :param contents:
+            Signature contents.
+        :return:
+            A name object to put into the DSS.
+        """
         ident = hashlib.sha1(contents).digest().hex().upper()
         return pdf_name('/' + ident)
 
@@ -2124,9 +2180,6 @@ class DocumentSecurityStore:
         """
         Register validation information for a set of signing certificates
         associated with a particular signature.
-        Typically, signer_certs has only one entry (i.e. the main signer),
-        but if timestamps are embedded into the signature, more entries may be
-        included to account for timestamping authorities etc.
 
         :param identifier:
             Identifier of the signature object (see `sig_content_identifier`)
@@ -2164,6 +2217,13 @@ class DocumentSecurityStore:
         )
 
     def as_pdf_object(self):
+        """
+        Convert the :class:`.DocumentSecurityStore` object to a python
+        dictionary. This method also handles DSS updates.
+
+        :return:
+            A PDF object representing this DSS.
+        """
         pdf_dict = self.backing_pdf_object
         pdf_dict.update({
             pdf_name('/VRI'): generic.DictionaryObject(self.vri_entries),
@@ -2178,18 +2238,28 @@ class DocumentSecurityStore:
 
         return pdf_dict
 
-    def load_certs(self):
+    def _load_certs(self):
         for cert_ref in self.certs.values():
             cert_stream: generic.StreamObject = cert_ref.get_object()
             cert = Certificate.load(cert_stream.data)
             yield cert
 
     def as_validation_context(self, validation_context_kwargs,
-                              include_revinfo=True):
+                              include_revinfo=True) -> ValidationContext:
+        """
+        Construct a validation context from the data in this DSS.
+
+        :param validation_context_kwargs:
+            Extra kwargs to pass to the ``__init__`` function.
+        :param include_revinfo:
+            If ``False``, revocation info is skipped.
+        :return:
+            A validation context preloaded with information from this DSS.
+        """
 
         validation_context_kwargs = dict(validation_context_kwargs)
         extra_certs = validation_context_kwargs.pop('other_certs', [])
-        certs = list(self.load_certs()) + extra_certs
+        certs = list(self._load_certs()) + extra_certs
 
         if include_revinfo:
             ocsps = validation_context_kwargs['ocsps'] = []
@@ -2271,6 +2341,20 @@ class DocumentSecurityStore:
     @classmethod
     def add_dss(cls, output_stream, sig_contents, paths,
                 validation_context):
+        """
+        Add or update a DSS, and add the new information to a specific VRI.
+        This will be done as an incremental update.
+
+        :param output_stream:
+            Output stream to write to.
+        :param sig_contents:
+            Contents of the new signature (used to compute the VRI hash)
+        :param paths:
+            Validation paths that have been established, and need to be added
+            to the DSS.
+        :param validation_context:
+            Validation context from which to draw OCSP responses and CRLs.
+        """
         writer = IncrementalPdfFileWriter(output_stream)
 
         try:
