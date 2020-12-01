@@ -3,11 +3,10 @@
 import logging
 from dataclasses import dataclass, field
 from fractions import Fraction
-
-from fontTools import ttLib
+from typing import Union, Callable
 
 from pyhanko.pdf_utils.font import (
-    FontEngine, SimpleFontEngine, GlyphAccumulator
+    FontEngine, SimpleFontEngine, GlyphAccumulator, GlyphAccumulatorFactory
 )
 from pyhanko.pdf_utils.generic import (
     pdf_name,
@@ -23,14 +22,17 @@ logger = logging.getLogger(__name__)
 class TextStyle(ConfigurableMixin):
     """Container for basic test styling settings."""
 
-    font: FontEngine = field(default_factory=SimpleFontEngine.default_engine)
+    font: Union[FontEngine, Callable[[], FontEngine]] \
+        = field(default_factory=SimpleFontEngine.default_engine)
     """
     The :class:`.FontEngine` to be used for this text style.
     Defaults to Courier (as a non-embedded standard font).
     
     .. caution::
         Not all :class:`.FontEngine` implementations are reusable and/or 
-        stateless!        
+        stateless! When reusability is a requirement, passing a no-argument 
+        callable that produces :class:`.FontEngine` objects of the appropriate 
+        type might help (see :class:`.GlyphAccumulatorFactory`).
     """
 
     font_size: int = 10
@@ -54,8 +56,7 @@ class TextStyle(ConfigurableMixin):
                     "'font' must be a path to an OpenType font file."
                 )
 
-            ffile = ttLib.TTFont(fc)
-            config_dict['font'] = GlyphAccumulator(ffile)
+            config_dict['font'] = GlyphAccumulatorFactory(fc)
         except KeyError:
             pass
 
@@ -99,9 +100,13 @@ class TextBox(PdfContent):
         self._scaling_factor = None
         self._content_lines = self._wrapped_lines = None
         self.font_name = font_name
+        font_engine = style.font
+        if callable(font_engine):
+            font_engine = font_engine()
+        self.font_engine = font_engine
 
     def wrap_string(self, txt):
-        font_engine = self.style.font
+        font_engine = self.font_engine
         wrapped = font_engine.render(txt)
         width_em = font_engine.measure(txt)
         return wrapped, width_em * self.style.font_size
@@ -198,13 +203,13 @@ class TextBox(PdfContent):
 
         style = self.style
 
-        if isinstance(self.style.font, GlyphAccumulator):
+        if isinstance(self.font_engine, GlyphAccumulator):
             assert self.writer is not None
-            self.style.font.embed_subset(self.writer)
+            self.font_engine.embed_subset(self.writer)
 
         self.set_resource(
             category=ResourceType.FONT, name=pdf_name('/' + self.font_name),
-            value=style.font.as_resource()
+            value=self.font_engine.as_resource()
         )
         leading = self.leading
         if not self.box.height_defined:

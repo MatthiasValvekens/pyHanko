@@ -29,7 +29,7 @@ def test_read_vc_kwargs(trust_replace):
 
 def test_read_qr_config():
     from pyhanko_tests.test_utils import NOTO_SERIF_JP
-    from pyhanko.pdf_utils.font import GlyphAccumulator, SimpleFontEngine
+    from pyhanko.pdf_utils.font import GlyphAccumulatorFactory, SimpleFontEngine
 
     config_string = f"""
     stamp-styles:
@@ -52,12 +52,14 @@ def test_read_qr_config():
     default_qr_style = cli_config.get_stamp_style()
     assert isinstance(default_qr_style, QRStampStyle)
     assert default_qr_style.background is stamp.STAMP_ART_CONTENT
-    assert isinstance(default_qr_style.text_box_style.font, GlyphAccumulator)
+    assert isinstance(default_qr_style.text_box_style.font,
+                      GlyphAccumulatorFactory)
 
     alternative1 = cli_config.get_stamp_style('alternative1')
     assert isinstance(alternative1, QRStampStyle)
     assert isinstance(alternative1.background, PdfImage)
-    assert isinstance(alternative1.text_box_style.font, GlyphAccumulator)
+    assert isinstance(alternative1.text_box_style.font,
+                      GlyphAccumulatorFactory)
 
     alternative2 = cli_config.get_stamp_style('alternative2')
     assert isinstance(alternative2, QRStampStyle)

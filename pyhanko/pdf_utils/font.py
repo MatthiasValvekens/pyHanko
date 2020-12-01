@@ -10,6 +10,7 @@ OTF parsing and subsetting.
 """
 
 import logging
+from dataclasses import dataclass
 from io import BytesIO
 
 from pyhanko.pdf_utils import generic
@@ -19,7 +20,8 @@ from pyhanko.pdf_utils.misc import peek
 
 
 __all__ = [
-    'FontEngine', 'SimpleFontEngine', 'GlyphAccumulator'
+    'FontEngine', 'SimpleFontEngine', 'GlyphAccumulator',
+    'GlyphAccumulatorFactory'
 ]
 
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
@@ -430,3 +432,19 @@ class FontDescriptor(generic.DictionaryObject):
             ),
             pdf_name('/CapHeight'): generic.NumberObject(os2.sCapHeight)
         })
+
+
+@dataclass(frozen=True)
+class GlyphAccumulatorFactory:
+    """
+    Stateless callable helper class to instantiate :class:`.GlyphAccumulator`
+    objects.
+    """
+
+    font_file: str
+    """
+    Path to the OTF/TTF font to load.
+    """
+
+    def __call__(self) -> GlyphAccumulator:
+        return GlyphAccumulator(ttLib.TTFont(self.font_file))
