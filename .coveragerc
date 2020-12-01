@@ -2,6 +2,7 @@
     omit = *docs*
            *test*
            *venv*
+           setup.py
 
 [report]
 exclude_lines =
