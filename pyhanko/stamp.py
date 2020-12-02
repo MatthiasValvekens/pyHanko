@@ -36,7 +36,7 @@ from pyhanko.pdf_utils.config_utils import ConfigurableMixin
 
 __all__ = [
     "AnnotAppearances", "TextStampStyle", "QRStampStyle", "STAMP_ART_CONTENT",
-    "TextStamp", "QRStamp", "qr_stamp_file",
+    "TextStamp", "QRStamp", "text_stamp_file", "qr_stamp_file",
 ]
 
 
@@ -578,9 +578,43 @@ class QRStamp(TextStamp):
         return page_ref, (w, h)
 
 
-# TODO double-check positionining issues
-# TODO add this to the CLI.
-# TODO add an equivalent for text stamps
+def _stamp_file(input_name: str, output_name: str, style: TextStampStyle,
+                stamp_class, dest_page: int, x: int, y: int, **stamp_kwargs):
+
+    with open(input_name, 'rb') as fin:
+        pdf_out = IncrementalPdfFileWriter(fin)
+        stamp = stamp_class(writer=pdf_out, style=style, **stamp_kwargs)
+        stamp.apply(dest_page, x, y)
+
+        with open(output_name, 'wb') as out:
+            pdf_out.write(out)
+
+
+def text_stamp_file(input_name: str, output_name: str, style: TextStampStyle,
+                    dest_page: int, x: int, y: int, text_params=None):
+    """
+    Add a text stamp to a file.
+
+    :param input_name:
+        Path to the input file.
+    :param output_name:
+        Path to the output file.
+    :param style:
+        Text stamp style to use.
+    :param dest_page:
+        Index of the page to which the stamp is to be applied (starting at `0`).
+    :param x:
+        Horizontal position of the stamp's lower left corner on the page.
+    :param y:
+        Vertical position of the stamp's lower left corner on the page.
+    :param text_params:
+        Additional parameters for text template interpolation.
+    """
+    _stamp_file(
+        input_name, output_name, style, TextStamp, dest_page, x, y,
+        text_params=text_params
+    )
+
 
 def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
                   dest_page: int, x: int, y: int, url: str,
@@ -606,13 +640,10 @@ def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
         Additional parameters for text template interpolation.
     """
 
-    with open(input_name, 'rb') as fin:
-        pdf_out = IncrementalPdfFileWriter(fin)
-        stamp = QRStamp(pdf_out, url, style, text_params=text_params)
-        stamp.apply(dest_page, x, y)
-
-        with open(output_name, 'wb') as out:
-            pdf_out.write(out)
+    _stamp_file(
+        input_name, output_name, style, QRStamp, dest_page, x, y,
+        url=url, text_params=text_params
+    )
 
 
 STAMP_ART_CONTENT = RawContent(
