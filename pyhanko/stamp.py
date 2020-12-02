@@ -8,7 +8,7 @@ The code in this module is also used by the :mod:`.sign` module to render
 signature appearances.
 """
 
-import os
+import uuid
 from binascii import hexlify
 from fractions import Fraction
 from typing import Optional
@@ -432,16 +432,14 @@ class TextStamp(PdfContent):
             a ``(width, height)`` tuple describing the dimensions of the stamp.
         """
         stamp_ref = self.register()
-        # randomise resource name to avoid conflicts
-        # TODO handle this properly
-        resource_name = b'/Stamp' + hexlify(os.urandom(16))
+        resource_name = b'/Stamp' + hexlify(uuid.uuid4().bytes)
         stamp_paint = b'q 1 0 0 1 %g %g cm %s Do Q' % (
             rd(x), rd(y), resource_name
         )
         stamp_wrapper_stream = generic.StreamObject(stream_data=stamp_paint)
         resources = generic.DictionaryObject({
             pdf_name('/XObject'): generic.DictionaryObject({
-                pdf_name(resource_name): stamp_ref
+                pdf_name(resource_name.decode('ascii')): stamp_ref
             })
         })
         wr = self.writer
