@@ -453,6 +453,19 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     outfile.close()
 
 
+def _index_page(page):
+    try:
+        page_ix = int(page) - 1
+        if page_ix < 0:
+            raise ValueError
+        return page_ix
+    except ValueError:
+        raise click.ClickException(
+            "Sig field parameter PAGE should be a positive integer, "
+            "not %s." % page
+        )
+
+
 @signing.command(name='addfields')
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
@@ -466,15 +479,7 @@ def add_sig_field(infile, outfile, specs):
                 raise click.ClickException(
                     "Sig field should be of the form PAGE/X1,Y1,X2,Y2/NAME."
                 )
-            try:
-                page_ix = int(page) - 1
-                if page_ix < 0:
-                    raise ValueError
-            except ValueError:
-                raise click.ClickException(
-                    "Sig field parameter PAGE should be a nonnegative integer, "
-                    "not %s." % page
-                )
+            page_ix = _index_page(page)
             try:
                 x1, y1, x2, y2 = map(int, box.split(','))
             except ValueError:
@@ -490,3 +495,41 @@ def add_sig_field(infile, outfile, specs):
     writer.write(outfile)
     infile.close()
     outfile.close()
+
+
+# TODO: text_params support
+
+@cli.command(help='stamp PDF files', name='stamp')
+@click.argument('infile', type=readable_file)
+@click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
+@click.argument('x', type=int)
+@click.argument('y', type=int)
+@click.option(
+    '--style-name', help='stamp style name for stamp appearance',
+    required=False, type=str
+)
+@click.option(
+    '--page', help='page on which the stamp should be applied',
+    required=False, type=int, default=1, show_default=True
+)
+@click.option(
+    '--qr-url', help='QR code URL to use in QR stamp style',
+    required=False, type=str
+)
+@click.pass_context
+def stamp(ctx, infile, outfile, x, y, style_name, page, qr_url):
+
+    from pyhanko.stamp import text_stamp_file, qr_stamp_file
+
+    stamp_style = _select_style(ctx, style_name, qr_url)
+
+    page_ix = _index_page(page)
+    if qr_url:
+        qr_stamp_file(
+            infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y,
+            url=qr_url
+        )
+    else:
+        text_stamp_file(
+            infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y
+        )
