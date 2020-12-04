@@ -139,6 +139,25 @@ then
         2>> "$LOGFILE" >/dev/null
 fi
 
+if [[ "$FORCE_NEW_CERTS" = yes || ! -f "$LEAF_CERTS/tsa2.cert.pem" ]]
+then
+    echo "Signing TSA2 certificate..."
+    ensure_key keys/tsa2.key.pem 
+    "$OPENSSL" req -config openssl.cnf -key keys/tsa2.key.pem \
+        -passin "pass:$DUMMY_PASSWORD" \
+        -subj "$subj_prefix/CN=Time Stamping Authority 2" \
+        -out root/csr/tsa2.csr.pem -new -sha256 \
+        2>> "$LOGFILE" >/dev/null
+
+    "$OPENSSL" ca -batch -config openssl.cnf -name CA_root \
+        -extensions tsa_cert -md sha256 -notext \
+        -startdate $TSA2_START -enddate $TSA2_END \
+        -passin "pass:$DUMMY_PASSWORD" \
+        -in root/csr/tsa2.csr.pem \
+        -out root/newcerts/tsa2.cert.pem \
+        2>> "$LOGFILE" >/dev/null
+fi
+
 
 if [[ "$FORCE_NEW_CERTS" = yes || ! -f "$LEAF_CERTS/$SIGNER_IDENT.cert.pem" ]]
 then
@@ -235,4 +254,7 @@ then
         2>> "$LOGFILE" >/dev/null
 fi
 
+
+echo "Cleaning up..."
+rm **/*.old
 echo "Setup complete"
