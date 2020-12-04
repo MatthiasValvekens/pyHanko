@@ -398,7 +398,12 @@ class IndirectObject(PdfObject, Dereferenceable):
         """
         :return: The PDF object this reference points to.
         """
-        return self.reference.get_object()
+        obj = self.reference.get_object()
+        # there are few legitimate use cases for indirect references
+        #  pointing to indirect references, but the standard doesn't forbid
+        #  them, so we have to support them.
+        # TODO protect against reference loops?
+        return obj.get_object() if isinstance(obj, IndirectObject) else obj
 
     def get_pdf_handler(self):
         return self.reference.get_pdf_handler()
