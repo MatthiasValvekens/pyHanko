@@ -34,6 +34,8 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from .samples import *
 
+from freezegun import freeze_time
+
 
 SELF_SIGN = signers.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',
@@ -248,6 +250,7 @@ def test_sign_with_trust():
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
 def test_sign_with_revoked(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -772,6 +775,7 @@ def test_cert_constraint_subject():
     scc.satisfied_by(DUMMY_TS.tsa_cert, None)
 
 
+@freeze_time('2020-11-01')
 def test_cert_constraint_issuer(requests_mock):
     vc = live_testing_vc(requests_mock)
     signer_validation_path = CertificateValidator(
@@ -811,6 +815,7 @@ def test_cert_constraint_issuer(requests_mock):
     scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
 
 
+@freeze_time('2020-11-01')
 def test_cert_constraint_composite(requests_mock):
     vc = live_testing_vc(requests_mock)
     signer_validation_path = CertificateValidator(
@@ -1016,6 +1021,7 @@ def test_approval_sig_md_match_author_sig():
     assert EmbeddedPdfSignature(r, sig_field).md_algorithm == 'sha256'
 
 
+@freeze_time('2020-11-01')
 def test_ocsp_embed():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -1052,6 +1058,7 @@ def test_pades_flag():
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_dummydata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -1071,6 +1078,7 @@ def test_pades_revinfo_dummydata():
     assert len(dss.ocsps) == 1
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_nodata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     with pytest.raises(SigningError):
@@ -1083,6 +1091,7 @@ def test_pades_revinfo_nodata():
         )
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_ts_dummydata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -1102,6 +1111,7 @@ def test_pades_revinfo_ts_dummydata():
     assert len(dss.ocsps) == 1
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_http_ts_dummydata(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     requests_mock.post(
@@ -1127,6 +1137,7 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
 
 # TODO freeze time for these tests, test revocation
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_live_no_timestamp(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -1144,6 +1155,7 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
         )
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_live(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -1171,6 +1183,7 @@ def test_pades_revinfo_live(requests_mock):
         validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_live_update(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -1202,6 +1215,7 @@ def test_update_no_sigs():
         )
 
 
+@freeze_time('2020-11-01')
 def test_adobe_revinfo_live(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -1218,6 +1232,7 @@ def test_adobe_revinfo_live(requests_mock):
     assert status.valid and status.trusted
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_live_nofullchain():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -1252,6 +1267,7 @@ def test_pades_revinfo_live_nofullchain():
         assert status.valid and not status.trusted, status.summary()
 
 
+@freeze_time('2020-11-01')
 def test_meta_tsa_verify():
     # check if my testing setup works
     vc = ValidationContext(
@@ -1264,6 +1280,7 @@ def test_meta_tsa_verify():
         )
 
 
+@freeze_time('2020-11-01')
 def test_adobe_revinfo_live_nofullchain():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -1295,12 +1312,14 @@ def test_adobe_revinfo_live_nofullchain():
         assert status.valid and not status.trusted, status.summary()
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_live_lta(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     _test_pades_revinfo_live_lta(w, vc, in_place=False)
 
 
+@freeze_time('2020-11-01')
 def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
     from pathlib import Path
     inout_file: Path = tmp_path / "test.pdf"
@@ -1472,6 +1491,7 @@ def test_sv_sign_subfilter_hint():
     assert emb_sig.sig_object['/SubFilter'] == PADES.value
 
 
+@freeze_time('2020-11-01')
 def test_sv_sign_addrevinfo_req(requests_mock):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
@@ -1510,6 +1530,7 @@ def test_sv_sign_addrevinfo_req(requests_mock):
     sign_with_sv(sv, meta, test_violation=True)
 
 
+@freeze_time('2020-11-01')
 def test_sv_sign_addrevinfo_subfilter_conflict():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
@@ -1953,6 +1974,8 @@ def test_form_field_in_group_locked_postsign_modify_success(field_filled, fieldm
     assert s.field_name == 'SigNew'
     val_trusted(s, extd=True)
 
+
+@freeze_time('2020-11-01')
 def test_form_field_postsign_fill_pades_lt(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
     vc = live_testing_vc(requests_mock)
@@ -1974,6 +1997,7 @@ def test_form_field_postsign_fill_pades_lt(requests_mock):
     val_trusted(s, extd=True)
 
 
+@freeze_time('2020-11-01')
 def test_form_field_postsign_modify_pades_lt(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
     vc = live_testing_vc(requests_mock)
@@ -1996,6 +2020,7 @@ def test_form_field_postsign_modify_pades_lt(requests_mock):
     val_trusted(s, extd=True)
 
 
+@freeze_time('2020-11-01')
 def test_pades_double_sign(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
@@ -2021,6 +2046,7 @@ def test_pades_double_sign(requests_mock):
     val_trusted(s, extd=True)
 
 
+@freeze_time('2020-11-01')
 def test_pades_double_sign_delete_dss(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
@@ -2054,6 +2080,7 @@ def test_pades_double_sign_delete_dss(requests_mock):
     val_trusted_but_modified(s)
 
 
+@freeze_time('2020-11-01')
 def test_pades_dss_object_clobber(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
