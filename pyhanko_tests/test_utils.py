@@ -245,14 +245,14 @@ def test_historical_read():
     acroform_ref = generic.IndirectObject(6, 0, reader)
 
     # current value
-    current_root = reader.get_object(root_ref, revision=1)
+    current_root = reader.get_object(root_ref.reference, revision=1)
     assert current_root == reader.root
-    reader.get_object(acroform_ref, revision=1)
+    reader.get_object(acroform_ref.reference, revision=1)
 
-    previous_root = reader.get_object(root_ref, revision=0)
+    previous_root = reader.get_object(root_ref.reference, revision=0)
     assert '/AcroForm' not in previous_root
     with pytest.raises(misc.PdfReadError):
-        reader.get_object(acroform_ref, revision=0)
+        reader.get_object(acroform_ref.reference, revision=0)
 
     assert Reference(6, 0) in reader.xrefs.explicit_refs_in_revision(1)
     assert Reference(2, 0) in reader.xrefs.explicit_refs_in_revision(0)
@@ -275,6 +275,43 @@ def test_page_import(file_no, inherit_filters):
     # just a piece of data I know occurs in the decoded content stream
     # of the (only) page in VECTOR_IMAGE_PDF
     assert b'0 1 0 rg /a0 gs' in xobj.data
+
+
+def test_preallocate():
+    w = writer.PdfFileWriter()
+    with pytest.raises(misc.PdfWriteError):
+        w.add_object(generic.NullObject(), idnum=20)
+
+    alloc = w.allocate_placeholder()
+    assert isinstance(alloc.get_object(), generic.NullObject)
+    w.add_object(generic.TextStringObject("Test Test"), idnum=alloc.idnum)
+    assert alloc.get_object() == "Test Test"
+
+
+@pytest.mark.parametrize('stream_xrefs,with_objstreams',
+                         [(False, False), (True, False), (True, True)])
+def test_page_tree_import(stream_xrefs, with_objstreams):
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter(stream_xrefs=stream_xrefs)
+    if with_objstreams:
+        objstream = w.prepare_object_stream()
+    else:
+        objstream = None
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'), obj_stream=objstream
+    )
+    if objstream is not None:
+        w.add_object(objstream.as_pdf_object())
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    # just a piece of data I know occurs in the decoded content stream
+    # of the (only) page in VECTOR_IMAGE_PDF
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
 
 
 @pytest.mark.parametrize('inherit_filters', [True, False])

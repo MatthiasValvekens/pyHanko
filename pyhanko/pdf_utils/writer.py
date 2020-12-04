@@ -9,7 +9,7 @@ import os
 import struct
 from hashlib import md5
 from io import BytesIO
-from typing import Tuple, List, Union, Optional
+from typing import List, Union, Optional
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
@@ -29,7 +29,8 @@ __all__ = [
 VENDOR = 'pyhanko'
 
 
-# TODO consider giving object streams and writers a common add_object interface
+OBJSTREAM_FORBIDDEN = (generic.IndirectObject, generic.StreamObject)
+
 
 class ObjectStream:
     """
@@ -54,7 +55,7 @@ class ObjectStream:
     """
 
     def __init__(self, compress=True):
-        self._obj_refs: List[Tuple[int, generic.PdfObject]] = []
+        self._obj_refs = {}
         self.compress = compress
 
     def add_object(self, idnum: int, obj: generic.PdfObject):
@@ -72,12 +73,12 @@ class ObjectStream:
             or :class:`~.generic.IndirectObject`.
         """
 
-        if isinstance(obj, (generic.StreamObject, generic.IndirectObject)):
+        if isinstance(obj, OBJSTREAM_FORBIDDEN):
             raise TypeError(
                 'Stream objects and bare references cannot be embedded into '
                 'object streams.'
             )  # pragma: nocover
-        self._obj_refs.append((idnum, obj))
+        self._obj_refs[idnum] = obj
 
     def as_pdf_object(self) -> generic.StreamObject:
         """
@@ -87,13 +88,12 @@ class ObjectStream:
         """
         stream_header = BytesIO()
         main_body = BytesIO()
-        for idnum, obj in self._obj_refs:
+        for idnum, obj in self._obj_refs.items():
             offset = main_body.tell()
             obj.write_to_stream(main_body, None)
             stream_header.write(b'%d %d ' % (idnum, offset))
 
-        # strip the last bit of whitespace
-        first_obj_offset = stream_header.tell() - 1
+        first_obj_offset = stream_header.tell()
         stream_header.seek(0)
         sh_bytes = stream_header.read(first_obj_offset)
         stream_data = sh_bytes + main_body.getvalue()
@@ -292,6 +292,7 @@ class BasePdfFileWriter(PdfHandler):
         self.objs_in_streams = {}
         self._lastobj_id = obj_id_start
         self._resolves_objs_from = (self,)
+        self._allocated_placeholders = set()
 
         if isinstance(root, generic.IndirectObject):
             self._root = root
@@ -341,18 +342,43 @@ class BasePdfFileWriter(PdfHandler):
             raise ValueError(
                 f'Reference {ido} has no relation to this PDF writer.'
             )
+        idnum = ido.idnum
+        generation = ido.generation
         try:
-            return self.objects[(ido.generation, ido.idnum)]
+            return self.objects[(generation, idnum)]
         except KeyError:
-            if ido.generation == 0:
+            if generation == 0:
+                if idnum in self._allocated_placeholders:
+                    return generic.NullObject()
                 try:
-                    return self.objs_in_streams[ido.idnum]
+                    return self.objs_in_streams[idnum]
                 except KeyError:
                     pass
             raise KeyError(ido)
 
-    def add_object(self, obj, obj_stream: ObjectStream = None) \
-            -> generic.IndirectObject:
+    def allocate_placeholder(self) -> generic.IndirectObject:
+        """
+        Allocate an object reference to populate later.
+        Calls to :meth:`get_object` for this reference will
+        return :class:`~.generic.NullObject` until it is populated using
+        :meth:`add_object`.
+
+        This method is only relevant in certain advanced contexts where
+        an object ID needs to be known before the object it refers
+        to can be built; chances are you'll never need it.
+
+        :return:
+            A :class:`~.generic.IndirectObject` instance referring to
+            the object just allocated.
+        """
+
+        idnum = self._lastobj_id + 1
+        self._allocated_placeholders.add(idnum)
+        self._lastobj_id += 1
+        return generic.IndirectObject(idnum, 0, self)
+
+    def add_object(self, obj, obj_stream: Optional[ObjectStream] = None,
+                   idnum=None) -> generic.IndirectObject:
         """
         Add a new object to this writer.
 
@@ -360,12 +386,27 @@ class BasePdfFileWriter(PdfHandler):
             The object to add.
         :param obj_stream:
             An object stream to add the object to.
+        :param idnum:
+            Manually specify the object ID of the object to be added.
+            This is only allowed for object IDs that have previously been
+            allocated using :meth:`allocate_placeholder`.
         :return:
             A :class:`~.generic.IndirectObject` instance referring to
             the object just added.
         """
 
-        idnum = self._lastobj_id + 1
+        if idnum is not None:
+            if idnum not in self._allocated_placeholders:
+                raise PdfWriteError(
+                    "Manually specifying idnum is only allowed for "
+                    "references previously allocated using "
+                    "allocate_placeholder()."
+                )
+            preallocated = True
+        else:
+            preallocated = False
+            idnum = self._lastobj_id + 1
+
         if obj_stream is None:
             self.objects[(0, idnum)] = obj
         elif obj_stream in self.object_streams:
@@ -375,7 +416,11 @@ class BasePdfFileWriter(PdfHandler):
             raise PdfWriteError(
                 f'Stream {repr(obj_stream)} is unknown to this PDF writer.'
             )
-        self._lastobj_id += 1
+
+        if preallocated:
+            self._allocated_placeholders.remove(idnum)
+        else:
+            self._lastobj_id += 1
         return generic.IndirectObject(idnum, 0, self)
 
     def prepare_object_stream(self, compress=True):
@@ -386,7 +431,7 @@ class BasePdfFileWriter(PdfHandler):
         :return:
             An :class:`.ObjectStream` object.
         """
-        if not self.stream_xrefs:
+        if not self.stream_xrefs:  # pragma: no cover
             raise PdfWriteError(
                 'Object streams require Xref streams to be enabled.'
             )
@@ -405,7 +450,7 @@ class BasePdfFileWriter(PdfHandler):
             stream_ref = self.add_object(obj_stream.as_pdf_object())
             # loop over all objects in the stream, and prepare
             # the data to put in the XRef table
-            for ix, (idnum, obj) in enumerate(obj_stream._obj_refs):
+            for ix, (idnum, obj) in enumerate(obj_stream._obj_refs.items()):
                 object_position_dict[(0, idnum)] = (stream_ref.idnum, ix)
 
         for ix in sorted(self.objects.keys()):
@@ -555,13 +600,21 @@ class BasePdfFileWriter(PdfHandler):
 
         return new_page_ref
 
-    def import_object(self, obj: generic.PdfObject) -> generic.PdfObject:
+    def import_object(self, obj: generic.PdfObject,
+                      obj_stream: Optional[ObjectStream] = None) \
+            -> generic.PdfObject:
         """
         Deep-copy an object into this writer, dealing with resolving indirect
         references in the process.
 
         :param obj:
             The object to import.
+        :param obj_stream:
+            The object stream to import objects into.
+
+            .. note::
+                Stream objects and bare references will not be put into
+                the object stream; the standard forbids this.
         :return:
             The object as associated with this writer.
             If the input object was an indirect reference, a dictionary
@@ -569,9 +622,10 @@ class BasePdfFileWriter(PdfHandler):
             a new instance.
         """
 
-        # TODO support collecting all relevant references into a single object
-        #  stream. This makes sense in various scenarios (e.g. encapsulating
-        #  content from an existing PDF file)
+        return self._import_object(obj, {}, obj_stream)
+
+    def _import_object(self, obj: generic.PdfObject, reference_map: dict,
+                       obj_stream) -> generic.PdfObject:
 
         # TODO check the spec for guidance on fonts. Do font identifiers have
         #  to be globally unique?
@@ -579,10 +633,32 @@ class BasePdfFileWriter(PdfHandler):
         # TODO deal with container_ref
 
         if isinstance(obj, generic.IndirectObject):
-            refd = obj.get_object()
-            return self.add_object(self.import_object(refd))
+            try:
+                return reference_map[obj.reference]
+            except KeyError:
+                refd = obj.get_object()
+                # Add a placeholder to reserve the reference value.
+                # This ensures correct behaviour in recursive calls
+                # with self-references.
+                new_ido = self.allocate_placeholder()
+                reference_map[obj.reference] = new_ido
+                imported = self._import_object(refd, reference_map, obj_stream)
+
+                # if the imported object is a bare reference and/or a stream
+                # object, we can't put it into an object stream.
+                if isinstance(imported, OBJSTREAM_FORBIDDEN):
+                    obj_stream = None
+
+                # fill in the placeholder
+                self.add_object(
+                    imported, obj_stream=obj_stream, idnum=new_ido.idnum
+                )
+                return new_ido
         elif isinstance(obj, generic.DictionaryObject):
-            raw_dict = {k: self.import_object(v) for k, v in obj.items()}
+            raw_dict = {
+                k: self._import_object(v, reference_map, obj_stream)
+                for k, v in obj.items()
+            }
             if isinstance(obj, generic.StreamObject):
                 # In the vast majority of use cases, I'd expect the content
                 # to be available in encoded form by default.
@@ -594,7 +670,9 @@ class BasePdfFileWriter(PdfHandler):
             else:
                 return generic.DictionaryObject(raw_dict)
         elif isinstance(obj, generic.ArrayObject):
-            return generic.ArrayObject(self.import_object(v) for v in obj)
+            return generic.ArrayObject(
+                self._import_object(v, reference_map, obj_stream) for v in obj
+            )
         else:
             return obj
 
@@ -704,7 +782,7 @@ class PageObject(generic.DictionaryObject):
 class PdfFileWriter(BasePdfFileWriter):
     """Class to write new PDF files."""
 
-    def __init__(self):
+    def __init__(self, stream_xrefs=True):
         # root object
         root = generic.DictionaryObject({
             pdf_name("/Type"): pdf_name("/Catalog"),
@@ -719,7 +797,7 @@ class PdfFileWriter(BasePdfFileWriter):
             pdf_name('/Producer'): pdf_string(VENDOR)
         })
 
-        super().__init__(root, info, id_obj)
+        super().__init__(root, info, id_obj, stream_xrefs=stream_xrefs)
 
         pages = generic.DictionaryObject({
             pdf_name("/Type"): pdf_name("/Pages"),
