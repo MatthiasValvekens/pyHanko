@@ -1177,7 +1177,6 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
     assert len(dss.ocsps) == 1
 
 
-# TODO freeze time for these tests, test revocation
 
 @freeze_time('2020-11-01')
 def test_pades_revinfo_live_no_timestamp(requests_mock):
@@ -1197,32 +1196,47 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
         )
 
 
-@freeze_time('2020-11-01')
 def test_pades_revinfo_live(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
-    out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=vc,
-            subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA, timestamper=DUMMY_TS
-    )
-    r = PdfFileReader(out)
-    dss = DocumentSecurityStore.read_dss(handler=r)
-    vc = dss.as_validation_context({})
-    assert dss is not None
-    assert len(dss.vri_entries) == 1
-    assert len(dss.certs) == 5
-    assert len(dss.ocsps) == len(vc.ocsps) == 1
-    assert len(dss.crls) == len(vc.crls) == 1
-    rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
-    assert status.valid and status.trusted
-    assert status.modification_level == ModificationLevel.LTA_UPDATES
 
-    rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-    with pytest.raises(ValueError):
-        validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
+    with freeze_time('2020-11-01'):
+        vc = live_testing_vc(requests_mock)
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=vc,
+                subfilter=PADES, embed_validation_info=True
+            ), signer=FROM_CA, timestamper=DUMMY_TS
+        )
+        r = PdfFileReader(out)
+        dss = DocumentSecurityStore.read_dss(handler=r)
+        vc = dss.as_validation_context({})
+        assert dss is not None
+        assert len(dss.vri_entries) == 1
+        assert len(dss.certs) == 5
+        assert len(dss.ocsps) == len(vc.ocsps) == 1
+        assert len(dss.crls) == len(vc.crls) == 1
+        rivt_pades = RevocationInfoValidationType.PADES_LT
+        status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+        rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
+        with pytest.raises(ValueError):
+            validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
+
+    # test post-expiration, but before timestamp expires
+    with freeze_time('2025-11-01'):
+        r = PdfFileReader(out)
+        status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
+        assert status.valid and status.trusted
+
+    # test after timestamp expires: this is beyond the scope of the "basic" LTV
+    #  mechanism, but failing to validate seems to be the conservative thing
+    #  to do.
+    with freeze_time('2040-11-01'):
+        r = PdfFileReader(out)
+        with pytest.raises(SignatureValidationError):
+            validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
 
 
 @freeze_time('2020-11-01')
@@ -1354,68 +1368,93 @@ def test_adobe_revinfo_live_nofullchain():
         assert status.valid and not status.trusted, status.summary()
 
 
-@freeze_time('2020-11-01')
 def test_pades_revinfo_live_lta(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    vc = live_testing_vc(requests_mock)
-    _test_pades_revinfo_live_lta(w, vc, in_place=False)
+    _test_pades_revinfo_live_lta(w, requests_mock, in_place=False)
 
 
-@freeze_time('2020-11-01')
 def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
     from pathlib import Path
     inout_file: Path = tmp_path / "test.pdf"
     inout_file.write_bytes(MINIMAL_ONE_FIELD)
-    vc = live_testing_vc(requests_mock)
     with inout_file.open('r+b') as f:
         w = IncrementalPdfFileWriter(f)
-        _test_pades_revinfo_live_lta(w, vc, in_place=True)
+        _test_pades_revinfo_live_lta(w, requests_mock, in_place=True)
 
 
-def _test_pades_revinfo_live_lta(w, vc, in_place):
-    out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=vc,
-            subfilter=PADES, embed_validation_info=True,
-            use_pades_lta=True
-        ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=in_place
-    )
-    r = PdfFileReader(out)
-    dss = DocumentSecurityStore.read_dss(handler=r)
-    vc = dss.as_validation_context({'trust_roots': TRUST_ROOTS})
-    assert dss is not None
-    assert len(dss.vri_entries) == 2
-    assert len(dss.certs) == 5
-    assert len(dss.ocsps) == len(vc.ocsps) == 1
-    assert len(dss.crls) == len(vc.crls) == 1
-    rivt_pades = RevocationInfoValidationType.PADES_LT
-    status = validate_pdf_ltv_signature(
-        r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
-    )
-    assert status.valid and status.trusted
-    assert status.modification_level == ModificationLevel.LTA_UPDATES
+def _test_pades_revinfo_live_lta(w, requests_mock, in_place):
+    with freeze_time('2020-11-01'):
+        vc = live_testing_vc(requests_mock)
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=vc,
+                subfilter=PADES, embed_validation_info=True,
+                use_pades_lta=True
+            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=in_place
+        )
+        r = PdfFileReader(out)
+        dss = DocumentSecurityStore.read_dss(handler=r)
+        vc = dss.as_validation_context({'trust_roots': TRUST_ROOTS})
+        assert dss is not None
+        assert len(dss.vri_entries) == 2
+        assert len(dss.certs) == 5
+        assert len(dss.ocsps) == len(vc.ocsps) == 1
+        assert len(dss.crls) == len(vc.crls) == 1
+        rivt_pades = RevocationInfoValidationType.PADES_LT
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
+        )
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
 
-    sig_obj = r.embedded_signatures[1].sig_object
-    assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
+        sig_obj = r.embedded_signatures[1].sig_object
+        assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
 
-    rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
-    status = validate_pdf_ltv_signature(
-        r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
-    )
-    assert status.valid and status.trusted
-    assert status.modification_level == ModificationLevel.LTA_UPDATES
+        rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+        for bootstrap_vc in (None, vc):
+            status = validate_pdf_ltv_signature(
+                r.embedded_signatures[0], rivt_pades_lta,
+                {'trust_roots': TRUST_ROOTS},
+                bootstrap_validation_context=bootstrap_vc
+            )
+            assert status.valid and status.trusted
+            assert status.modification_level == ModificationLevel.LTA_UPDATES
 
     # check if updates work
-    out = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
-    r = PdfFileReader(out)
-    status = validate_pdf_ltv_signature(
-        r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
-    )
-    assert status.valid and status.trusted
-    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    # TODO test with a second TSA to test timestamp rollover
+    with freeze_time('2020-12-01'):
+        r = PdfFileReader(out)
 
+        vc = live_testing_vc(requests_mock)
+        out = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
+        r = PdfFileReader(out)
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades_lta,
+            {'trust_roots': TRUST_ROOTS},
+            bootstrap_validation_context=vc
+        )
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
 
-# TODO test multiple PAdES signatures
+    # test post-expiration, but before timestamp expires
+    with freeze_time('2025-11-01'):
+        r = PdfFileReader(out)
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades_lta,
+            {'trust_roots': TRUST_ROOTS},
+            bootstrap_validation_context=live_testing_vc(requests_mock)
+        )
+        assert status.valid and status.trusted
+
+    # test after last timestamp expires: this should fail when doing LTA testing
+    with freeze_time('2040-11-01'):
+        r = PdfFileReader(out)
+        with pytest.raises(SignatureValidationError):
+            validate_pdf_ltv_signature(
+                r.embedded_signatures[0], rivt_pades_lta,
+                {'trust_roots': TRUST_ROOTS},
+                bootstrap_validation_context=live_testing_vc(requests_mock)
+            )
 
 
 def prepare_sv_field(sv_spec):
