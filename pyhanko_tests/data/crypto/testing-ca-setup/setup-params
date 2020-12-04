@@ -7,7 +7,10 @@ BASE_DIR=../testing-ca
 # Set to 'yes' if you want all keys to be
 #  regenerated even if they already exist.
 FORCE_NEW_KEYS=no
-# Regenerate config from defaultson every run
+# Set to 'yes' if you want all certs, CSRs and CRLs to be
+#  regenerated even if they already exist.
+FORCE_NEW_CERTS=yes
+# Regenerate config from defaults on every run
 FORCE_CONFIG_REWRITE=no
 # Value used to initialise the certificate counter
 INITIAL_SERIAL=1000
@@ -53,7 +56,7 @@ SIGNER2_NAME="Bob Revoked"
 SIGNER2_EMAIL="bob@example.com"
 SIGNER2_START=20200101000000Z
 SIGNER2_END=20210101000000Z
-SIGNER2_IDENT=signer
+SIGNER2_IDENT=signer2
 # note: GeneralizedTime doesn't seem to work for dts in the index
 SIGNER2_REVO=200201000000Z
 
