@@ -17,6 +17,7 @@ INITIAL_SERIAL=1000
 # dummy password
 DUMMY_PASSWORD=secret
 DUMMY_PFX_PASSWORD=exportsecret
+OPENSSL=openssl
 
 CRLDAYS=3650
 
@@ -42,7 +43,8 @@ TSA_START=20020101000000Z
 TSA_END=23000101000000Z
 
 
-CRL_DATE=20200101000000Z
+# in faketime-compatible format
+CRL_DATE="2020-03-01 UTC"
 
 
 # Signer profiles
