@@ -49,6 +49,13 @@ FROM_CA = signers.SimpleSigner.load(
     key_passphrase=b'secret'
 )
 
+REVOKED_SIGNER = signers.SimpleSigner.load(
+    TESTING_CA_DIR + '/keys/signer2.key.pem',
+    TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem',
+    ca_chain_files=(TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+    key_passphrase=b'secret'
+)
+
 ROOT_PATH = TESTING_CA_DIR + '/root/certs/ca.cert.pem'
 INTERM_PATH = TESTING_CA_DIR + '/intermediate/certs/ca.cert.pem'
 OCSP_PATH = TESTING_CA_DIR + '/intermediate/newcerts/ocsp.cert.pem'
@@ -239,6 +246,29 @@ def test_sign_with_trust():
     assert not status.trusted
 
     val_trusted(s)
+
+
+def test_sign_with_revoked(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=REVOKED_SIGNER
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+
+    vc = live_testing_vc(requests_mock)
+    val_status = validate_pdf_signature(s, vc)
+    assert val_status.intact
+    assert val_status.valid
+    assert val_status.revoked
+    assert not val_status.trusted
+    summ = val_status.summary()
+    assert 'INTACT' in summ
+    assert 'REVOKED' in summ
+    assert val_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
+    assert val_status.modification_level == ModificationLevel.NONE
+    assert not val_status.bottom_line
 
 
 def test_sign_with_trust_pkcs12():
