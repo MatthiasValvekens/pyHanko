@@ -158,12 +158,15 @@ then
         -out $LEAF_CERTS/$SIGNER_IDENT.cert.pem \
         2>> "$LOGFILE" >/dev/null
 
-    "$OPENSSL" pkcs12 -export -out $LEAF_CERTS/$SIGNER_IDENT.pfx \
-        -inkey keys/$SIGNER_IDENT.key.pem \
-        -in $LEAF_CERTS/$SIGNER_IDENT.cert.pem \
-        -certfile intermediate/certs/ca-chain.cert.pem \
-        -passin "pass:$DUMMY_PASSWORD" -passout "pass:$DUMMY_PFX_PASSWORD" \
-        2>> "$LOGFILE" >/dev/null
+    if [[ "$FORCE_NEW_PFX" = yes || ! -f "$LEAF_CERTS/$SIGNER_IDENT.pfx" ]]
+    then
+        "$OPENSSL" pkcs12 -export -out $LEAF_CERTS/$SIGNER_IDENT.pfx \
+            -inkey keys/$SIGNER_IDENT.key.pem \
+            -in $LEAF_CERTS/$SIGNER_IDENT.cert.pem \
+            -certfile intermediate/certs/ca-chain.cert.pem \
+            -passin "pass:$DUMMY_PASSWORD" -passout "pass:$DUMMY_PFX_PASSWORD" \
+            2>> "$LOGFILE" >/dev/null
+    fi
 fi
 
 
@@ -185,12 +188,15 @@ then
         -out $LEAF_CERTS/$SIGNER2_IDENT.cert.pem \
         2>> "$LOGFILE" >/dev/null
 
-    "$OPENSSL" pkcs12 -export -out $LEAF_CERTS/$SIGNER2_IDENT.pfx \
-        -inkey keys/$SIGNER2_IDENT.key.pem \
-        -in $LEAF_CERTS/$SIGNER2_IDENT.cert.pem \
-        -certfile intermediate/certs/ca-chain.cert.pem \
-        -passin "pass:$DUMMY_PASSWORD" -passout "pass:$DUMMY_PFX_PASSWORD" \
-        2>> "$LOGFILE" >/dev/null
+    if [[ "$FORCE_NEW_PFX" = yes || ! -f "$LEAF_CERTS/$SIGNER2_IDENT.pfx" ]]
+    then
+        "$OPENSSL" pkcs12 -export -out $LEAF_CERTS/$SIGNER2_IDENT.pfx \
+            -inkey keys/$SIGNER2_IDENT.key.pem \
+            -in $LEAF_CERTS/$SIGNER2_IDENT.cert.pem \
+            -certfile intermediate/certs/ca-chain.cert.pem \
+            -passin "pass:$DUMMY_PASSWORD" -passout "pass:$DUMMY_PFX_PASSWORD" \
+            2>> "$LOGFILE" >/dev/null
+    fi
 
     echo "Revoking certificate for $SIGNER2_NAME..."
     # don't do this using -revoke, because that doesn't allow timestamps

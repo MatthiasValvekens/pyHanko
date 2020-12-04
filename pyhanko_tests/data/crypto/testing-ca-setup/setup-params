@@ -10,6 +10,9 @@ FORCE_NEW_KEYS=no
 # Set to 'yes' if you want all certs, CSRs and CRLs to be
 #  regenerated even if they already exist.
 FORCE_NEW_CERTS=yes
+# Set to 'yes' if you want all PKCS#12 containers to be
+#  regenerated even if they already exist.
+FORCE_NEW_PFX=no
 # Regenerate config from defaults on every run
 FORCE_CONFIG_REWRITE=no
 # Value used to initialise the certificate counter
