@@ -9,6 +9,8 @@ from typing import Optional
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
+from certvalidator.errors import PathValidationError
+
 from certvalidator import ValidationContext, CertificateValidator
 from oscrypto import asymmetric, keys as oskeys
 
@@ -1388,9 +1390,12 @@ class PdfSigner(PdfTimeStamper):
                 validation_context=validation_context
             )
             # TODO allow customisation of key usage parameters
-            signer_cert_validation_path = validator.validate_usage(
-                {"non_repudiation"}
-            )
+            try:
+                signer_cert_validation_path = validator.validate_usage(
+                    {"non_repudiation"}
+                )
+            except PathValidationError as e:
+                raise SigningError("The signer's certificate was not valid", e)
             validation_paths.append(signer_cert_validation_path)
 
         field_created, sig_field_ref = _get_or_create_sigfield(
