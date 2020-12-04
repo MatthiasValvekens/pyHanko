@@ -19,7 +19,7 @@ DUMMY_PASSWORD=secret
 DUMMY_PFX_PASSWORD=exportsecret
 OPENSSL=openssl
 
-CRLDAYS=3650
+CRLDAYS=10000
 
 # "flavour values" for the certificate
 COUNTRY=BE
