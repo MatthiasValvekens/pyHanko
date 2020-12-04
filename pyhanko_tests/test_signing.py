@@ -90,6 +90,17 @@ DUMMY_TS = timestamps.DummyTimeStamper(
     certs_to_embed=FROM_CA.cert_registry,
 )
 
+TSA2_CERT = oskeys.parse_certificate(
+    read_all(TESTING_CA_DIR + '/root/newcerts/tsa2.cert.pem')
+)
+DUMMY_TS2 = timestamps.DummyTimeStamper(
+    tsa_cert=TSA2_CERT,
+    tsa_key=oskeys.parse_private(
+        read_all(TESTING_CA_DIR + '/keys/tsa2.key.pem'), password=b'secret'
+    ),
+    certs_to_embed=FROM_CA.cert_registry,
+)
+
 DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
     'http://example.com/tsa', https=False
 )
@@ -1420,22 +1431,6 @@ def _test_pades_revinfo_live_lta(w, requests_mock, in_place):
             assert status.valid and status.trusted
             assert status.modification_level == ModificationLevel.LTA_UPDATES
 
-    # check if updates work
-    # TODO test with a second TSA to test timestamp rollover
-    with freeze_time('2020-12-01'):
-        r = PdfFileReader(out)
-
-        vc = live_testing_vc(requests_mock)
-        out = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
-        r = PdfFileReader(out)
-        status = validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades_lta,
-            {'trust_roots': TRUST_ROOTS},
-            bootstrap_validation_context=vc
-        )
-        assert status.valid and status.trusted
-        assert status.modification_level == ModificationLevel.LTA_UPDATES
-
     # test post-expiration, but before timestamp expires
     with freeze_time('2025-11-01'):
         r = PdfFileReader(out)
@@ -1446,7 +1441,42 @@ def _test_pades_revinfo_live_lta(w, requests_mock, in_place):
         )
         assert status.valid and status.trusted
 
-    # test after last timestamp expires: this should fail when doing LTA testing
+    # test after timestamp expires: this should fail when doing LTA testing
+    with freeze_time('2035-11-01'):
+        r = PdfFileReader(out)
+        with pytest.raises(SignatureValidationError):
+            validate_pdf_ltv_signature(
+                r.embedded_signatures[0], rivt_pades_lta,
+                {'trust_roots': TRUST_ROOTS},
+                bootstrap_validation_context=live_testing_vc(requests_mock)
+            )
+
+    # check if updates work: use a second TSA for timestamp rollover
+    with freeze_time('2028-12-01'):
+        r = PdfFileReader(out)
+
+        vc = live_testing_vc(requests_mock)
+        out = PdfTimeStamper(DUMMY_TS2).update_archival_timestamp_chain(r, vc)
+        r = PdfFileReader(out)
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades_lta,
+            {'trust_roots': TRUST_ROOTS},
+            bootstrap_validation_context=vc
+        )
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+    # the test that previously failed should now work
+    with freeze_time('2035-11-01'):
+        r = PdfFileReader(out)
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades_lta,
+            {'trust_roots': TRUST_ROOTS},
+            bootstrap_validation_context=live_testing_vc(requests_mock)
+        )
+        assert status.valid and status.trusted
+
+    # test after timestamp expires: this should fail when doing LTA testing
     with freeze_time('2040-11-01'):
         r = PdfFileReader(out)
         with pytest.raises(SignatureValidationError):
