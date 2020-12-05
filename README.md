@@ -8,42 +8,68 @@
 
 The lack of open-source CLI tooling to handle digitally signing and stamping PDF files was bothering me, so I went ahead and rolled my own.
 
-*Note:* The working title of this project was `pdf-stamp`, which is still the name of the repository.
-I'll probably rename it in due time.
+*Note:* The working title of this project (and former name of the repository on GitHub) was `pdf-stamp`, which might still linger in some references.
 
 *Note:* This project is not yet production-ready, and is currently in a pre-alpha stage.
 
 ### Overview
 The code in this repository functions both as a library and as a command-line tool.
-It's nowhere near complete, but here is a short overview of the features:
+It's nowhere near complete, but here is a short overview of the features.
+Note that not all of these are necessarily exposed through the CLI.
 
- - Invisible signatures (both certifying and non-certifying) should work.
- - Adding empty signature fields to existing PDFs is also possible.
- - Visible signatures are still a bit primitive, and include only basic information about the signature in a simple monospace font.
- - Through fontTools, we have (experimental) support for auto-subsetting and embedding CFF fonts (more testing needed). These features are not available in the CLI as of yet.
- - The tool can (optionally) generate LTV-enabled signatures. The revocation information for the chain of trust can be embedded PAdES-style or Adobe-style.
- - The tool offers support for PDF signature seed values when creating, filling and validating signature fields---although not all configurations have been implemented as of yet.
- - There is support for field locking.
- - All operations on PDF files are executed in append-only mode, to minimise the risk of unintentional mangling. This is also necessary to provide support for adding multiple signatures to a given document.
- - The signer supports PKCS11 devices too. For Belgian eID cards, this has been integrated into the CLI.
- - Through the CLI, it is possible to syntactically and cryptographically verify the validity of a signature. This means that it is possible to verify whether or not a signature is intact, cryptographically sound and whether it covers the entire document. However, the semantics are not yet fully checked (see below).
- - There is limited support for encrypted files, based on what is available in PyPDF2 (i.e. rudimentary RC4-based encryption)
- - The signer can request and embed timestamps from RFC 3161-compliant Time Stamping Authorities. The degree to which this feature is exposed in the CLI is limited: only TSAs that don't require authentication can be used.
- - The tool is also capable of validating PDF signatures, including the following criteria:
-    - Cryptographic validity
-    - Coverage (i.e. whether the signature covers the entire file)
-    - Chain of trust (for the signer and any timestamps, if present)
-    - Modification vetting: if the file was updated through incremental updates, the validator will attempt to (conservatively) judge whether or not the modifications made are permissible, taking into account the document/field modification policy of any signatures present.
-    - LTV validation (note: the PAdES B-LT baseline profile is supported, but PAdES B-LTA isn't available yet)
- 
- The CLI was implemented using `click`, so it comes with a built-in help function.
- Launch `python -m pyhanko` to get started.
+ - Stamping
+    - Simple text-based stamps
+    - QR stamps
+    - Font can be monospaced, or embedded from an OTF font (experimental)
+ - Document preparation 
+    - Add empty signature fields to existing PDFs
+    - Add seed values to signature fields, with or without constraints
+ - Signing
+    - Signatures can be invisible, or with an appearance based on the stamping tools
+    - LTV-enabled signatures are supported
+        - PAdES baseline profiles B-B, B-T, B-LT and B-LTA are all supported.
+        - Adobe-style revocation info embedding is also supported.
+    - RFC 3161 timestamp server support
+    - Support for multiple signatures (all modifications are executed using incremental updates to preserve
+      cryptographic integrity)
+    - PKCS11 support
+        - Extra convenience wrapper for Belgian eID cards
+ - Signature validation
+    - Cryptographic integrity check
+    - Authentication through X.509 chain of trust validation
+    - LTV validation
+    - Difference analysis on files with multiple signatures and/or incremental 
+      updates made after signing (experimental)
+    - Signature seed value constraint validation
+ - Encryption
+    - Only legacy RC4-based encryption is currently supported (based on what PyPDF2 offers).
+      This should not be used for new files, since it has been broken for quite some time.
+    - Modern AES-based PDF encryption is on the roadmap.
+ - CLI & configuration
+    - YAML-based configuration (optional for most features)
+    - CLI based on `click` 
+        - Available as `pyhanko` (when installed) or `python -m pyhanko` when running from
+          the source directory
+        - Built-in help: run `pyhanko --help` to get started
 
 
 ### Some TODOs and known limitations
 
- - Expand, polish and rigorously test the validation functionality. The test suite covers a variety of scenarios already, but obviously one can't cover everything.
+ - Expand, polish and rigorously test the validation functionality. The test suite covers a variety
+   of scenarios already, but the difference checker in particular is still far from perfect.
  - The most lenient document modification policy (i.e. addition of comments and annotations) is not supported. Comments added to a signed PDF will therefore be considered "unsafe" changes, regardless of the policy set by the signer.
+ - For now, only signatures using the "RSA with PKCS#1 v1.5" mechanism are effectively supported.
+   Expanding this to include the full gamut of what `oscrypto` supports is on the roadmap.
+ 
+### Documentation
+
+Documentation is built using Sphinx, and hosted [here](https://pyhanko.readthedocs.io/en/latest/)
+on ReadTheDocs.
+
+Given the fact that this project is still in pre-alpha, the documentation is still under construction.
+Coverage for the API docs is fairly complete, but code examples, CLI documentation and configuration
+examples are still lacking.
+
 
 ### Acknowledgement
 

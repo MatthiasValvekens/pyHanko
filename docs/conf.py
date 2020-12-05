@@ -24,7 +24,7 @@ copyright = '2020, Matthias Valvekens'
 author = 'Matthias Valvekens'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1-dev'
+release = '0.1.0.dev1'
 
 
 # -- General configuration ---------------------------------------------------

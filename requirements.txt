@@ -13,5 +13,5 @@ requests-mock>=1.8.0
 python-barcode>=0.13.1
 freezegun
 ocspbuilder>=0.10.2
-Pillow~=8.0.1
+Pillow>=8.0.1
 pyyaml>=5.3.1
