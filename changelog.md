@@ -1,5 +1,13 @@
 # changelog
 
+## 0.12.0
+ - Forked from [certvalidator](https://github.com/wbond/certvalidator)
+   to add patches for [pyHanko](https://github.com/MatthiasValvekens/pyHanko).
+ - Replaced urllib calls with `requests` library for universal mocking.
+ - Added a `time_tolerance` parameter to the validation context to allow for
+   some time drift on CRLs and OCSP responses.
+ - Deal with no-matches on OCSP and CRLs strictly in hard-fail mode.
+
 ## 0.11.1
 
  - Updated [asn1crypto](https://github.com/wbond/asn1crypto) dependency to

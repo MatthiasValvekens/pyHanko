@@ -9,8 +9,8 @@ from setuptools import find_packages, setup, Command
 from setuptools.command.egg_info import egg_info
 
 
-PACKAGE_NAME = 'certvalidator'
-PACKAGE_VERSION = '0.12.0.dev1'
+PACKAGE_NAME = 'pyhanko-certvalidator'
+PACKAGE_VERSION = '0.12.0'
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -92,14 +92,14 @@ setup(
     name=PACKAGE_NAME,
     version=PACKAGE_VERSION,
 
-    description='Validates X.509 certificates and paths',
+    description='Validates X.509 certificates and paths; forked from wbond/certvalidator',
     long_description=readme,
     long_description_content_type='text/markdown',
 
-    url='https://github.com/wbond/certvalidator',
+    url='https://github.com/MatthiasValvekens/certvalidator',
 
-    author='wbond',
-    author_email='will@wbond.net',
+    author='Matthias Valvekens',
+    author_email='dev@mvalvekens.be',
 
     license='MIT',
 

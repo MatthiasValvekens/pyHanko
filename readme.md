@@ -1,5 +1,5 @@
 # certvalidator
-Forked from [wbond/certvalidator](https://github.com/wbond/certvalidator).
+Forked from [wbond/certvalidator](https://github.com/wbond/certvalidator), with patches for [pyHanko](https://github.com/MatthiasValvekens/pyHanko).
 
 A Python library for validating X.509 certificates or paths. Supports various
 options, including: validation at a specific moment in time, whitelisting and
@@ -68,13 +68,13 @@ Unsupported features:
 
 ## Current Release
 
-0.11.1 - [changelog](changelog.md)
+0.12.0 - [changelog](changelog.md)
 
 ## Dependencies
 
  - *asn1crypto*
  - *oscrypto*
- - Python 2.6, 2.7, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8 or pypy
+ - Python 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8 or pypy
 
 ## Installation
 
@@ -95,10 +95,7 @@ pip install certvalidator
 
 Various combinations of platforms and versions of Python are tested via:
 
- - [AppVeyor](https://ci.appveyor.com/project/wbond/certvalidator/history)
- - [CircleCI](https://circleci.com/gh/wbond/certvalidator)
- - [GitHub Actions](https://github.com/wbond/certvalidator/actions)
- - [Travis CI](https://travis-ci.org/wbond/certvalidator/builds)
+ - [GitHub Actions](https://github.com/MatthiasValvekens/certvalidator/actions)
 
 ## Testing
 
@@ -208,4 +205,4 @@ Releases are created by:
    python run.py release
    ```
 
-Existing releases can be found at https://pypi.org/project/certvalidator.
+Existing releases can be found at https://pypi.org/project/pyhanko-certvalidator.
