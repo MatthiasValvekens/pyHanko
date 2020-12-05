@@ -1,6 +1,6 @@
 ![pyHanko](docs/images/pyhanko-logo.svg)
 
-![status](https://github.com/MatthiasValvekens/pdf-stamp/workflows/pytest/badge.svg)
+![status](https://github.com/MatthiasValvekens/pyHanko/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pyHanko.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pyHanko/context:python)
 

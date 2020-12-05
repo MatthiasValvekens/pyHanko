@@ -14,17 +14,17 @@ pyHanko
 PyHanko is a tool for signing and stamping PDF files.
 
 
-.. image:: https://github.com/MatthiasValvekens/pdf-stamp/workflows/pytest/badge.svg
+.. image:: https://github.com/MatthiasValvekens/pyHanko/workflows/pytest/badge.svg
    :alt: status
    :target: https://github.com/MatthiasValvekens/pyHanko
 
-.. image:: https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp
+.. image:: https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko
    :alt: Codecov
-   :target: https://img.shields.io/codecov/c/github/MatthiasValvekens/pdf-stamp
+   :target: https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko
 
-.. image:: https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pdf-stamp.svg?logo=lgtm&logoWidth=18
+.. image:: https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pyHanko.svg?logo=lgtm&logoWidth=18
    :alt: Language grade: Python
-   :target: https://lgtm.com/projects/g/MatthiasValvekens/pdf-stamp/context:python
+   :target: https://lgtm.com/projects/g/MatthiasValvekens/pyHanko/context:python
 
 .. toctree::
    :maxdepth: 3
