@@ -4,7 +4,8 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 import os
 
 
-package_name = "certvalidator"
+package_name = "pyhanko-certvalidator"
+python_package_name = "certvalidator"
 
 other_packages = []
 

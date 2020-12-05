@@ -10,6 +10,8 @@ from setuptools.command.egg_info import egg_info
 
 
 PACKAGE_NAME = 'pyhanko-certvalidator'
+EGG_NAME = PACKAGE_NAME.replace('-', '_')
+PYTHON_PACKAGE_NAME = 'certvalidator'
 PACKAGE_VERSION = '0.12.0'
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -44,7 +46,7 @@ class EggInfoCommand(egg_info):
     def run(self):
         egg_info_path = os.path.join(
             PACKAGE_ROOT,
-            '%s.egg-info' % PACKAGE_NAME
+            '%s.egg-info' % EGG_NAME 
         )
         if not os.path.exists(egg_info_path):
             os.mkdir(egg_info_path)
@@ -67,14 +69,14 @@ class CleanCommand(Command):
         pass
 
     def run(self):
-        sub_folders = ['build', 'temp', '%s.egg-info' % PACKAGE_NAME]
+        sub_folders = ['build', 'temp', '%s.egg-info' % EGG_NAME]
         if self.all:
             sub_folders.append('dist')
         for sub_folder in sub_folders:
             full_path = os.path.join(PACKAGE_ROOT, sub_folder)
             if os.path.exists(full_path):
                 shutil.rmtree(full_path)
-        for root, dirs, files in os.walk(os.path.join(PACKAGE_ROOT, PACKAGE_NAME)):
+        for root, dirs, files in os.walk(os.path.join(PACKAGE_ROOT, PYTHON_PACKAGE_NAME)):
             for filename in files:
                 if filename[-4:] == '.pyc':
                     os.unlink(os.path.join(root, filename))
@@ -110,15 +112,9 @@ setup(
 
         'License :: OSI Approved :: MIT License',
 
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.2',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: Implementation :: PyPy',
 
         'Topic :: Security :: Cryptography',
@@ -127,11 +123,11 @@ setup(
     keywords='crypto pki x509 certificate crl ocsp',
 
     install_requires=[
-        'requests~=2.24.0',
+        'requests>=2.24.0',
         'asn1crypto>=1.2.0',
         'oscrypto>=1.1.0'
     ],
-    packages=[PACKAGE_NAME],
+    packages=['certvalidator'],
     package_data=package_data,
 
     test_suite='tests.make_suite',

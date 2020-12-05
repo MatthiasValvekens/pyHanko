@@ -7,6 +7,9 @@
  - Added a `time_tolerance` parameter to the validation context to allow for
    some time drift on CRLs and OCSP responses.
  - Deal with no-matches on OCSP and CRLs strictly in hard-fail mode.
+ - Drop support for Python 2, and all Python 3 versions prior to 3.7.
+   It is likely that the code still runs on older Python 3 versions, but I have
+   no interest in maintaining support for those.
 
 ## 0.11.1
 

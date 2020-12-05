@@ -5,7 +5,7 @@ import codecs
 import os
 import re
 
-from . import package_root, package_name, has_tests_package
+from . import package_root, python_package_name, has_tests_package
 
 
 run_args = [
@@ -43,7 +43,7 @@ def run(new_version):
     if version_match.group(4):
         new_version_info += (version_match.group(4),)
 
-    version_path = os.path.join(package_root, package_name, 'version.py')
+    version_path = os.path.join(package_root, python_package_name, 'version.py')
     setup_path = os.path.join(package_root, 'setup.py')
     setup_tests_path = os.path.join(package_root, 'tests', 'setup.py')
     tests_path = os.path.join(package_root, 'tests', '__init__.py')

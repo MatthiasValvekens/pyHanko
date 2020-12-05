@@ -16,7 +16,7 @@ import platform as _plat
 import subprocess
 from fnmatch import fnmatch
 
-from . import package_name, package_root, other_packages
+from . import python_package_name, package_root, other_packages
 
 if sys.version_info < (3,):
     str_cls = unicode  # noqa
@@ -50,7 +50,7 @@ def run(ci=False):
     if os.path.exists(xml_report_path):
         os.unlink(xml_report_path)
 
-    cov = coverage.Coverage(include='%s/*.py' % package_name)
+    cov = coverage.Coverage(include='%s/*.py' % python_package_name)
     cov.start()
 
     from .tests import run as run_tests

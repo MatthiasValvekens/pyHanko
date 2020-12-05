@@ -8,7 +8,12 @@ import zipfile
 
 import setuptools.sandbox
 
-from . import package_root, package_name, has_tests_package
+from . import package_root, package_name, python_package_name, has_tests_package
+
+
+def wheelify(pkg_name_info):
+    name, ver = pkg_name_info
+    return name.replace('-', '_'), ver
 
 
 def _list_zip(filename):
@@ -45,14 +50,14 @@ def run():
 
     # Trying to call setuptools.sandbox.run_setup(setup, ['--version'])
     # resulted in a segfault, so we do this instead
-    module_info = imp.find_module('version', [os.path.join(package_root, package_name)])
-    version_mod = imp.load_module('%s.version' % package_name, *module_info)
+    module_info = imp.find_module('version', [os.path.join(package_root, python_package_name)])
+    version_mod = imp.load_module('%s.version' % python_package_name, *module_info)
 
     pkg_name_info = (package_name, version_mod.__version__)
     print('Building %s-%s' % pkg_name_info)
 
     sdist = '%s-%s.tar.gz' % pkg_name_info
-    whl = '%s-%s-py2.py3-none-any.whl' % pkg_name_info
+    whl = '%s-%s-py2.py3-none-any.whl' % wheelify(pkg_name_info)
     setuptools.sandbox.run_setup(setup, ['-q', 'sdist'])
     print(' - created %s' % sdist)
     _list_tgz(os.path.join(package_root, 'dist', sdist))
@@ -65,7 +70,7 @@ def run():
         print('Building %s_tests-%s' % (package_name, version_mod.__version__))
 
         tests_sdist = '%s_tests-%s.tar.gz' % pkg_name_info
-        tests_whl = '%s_tests-%s-py2.py3-none-any.whl' % pkg_name_info
+        tests_whl = '%s_tests-%s-py2.py3-none-any.whl' % wheelify(pkg_name_info)
         setuptools.sandbox.run_setup(tests_setup, ['-q', 'sdist'])
         print(' - created %s' % tests_sdist)
         _list_tgz(os.path.join(tests_root, 'dist', tests_sdist))

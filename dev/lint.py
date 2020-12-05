@@ -3,7 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import os
 
-from . import package_name, package_root
+from . import python_package_name, package_root
 
 import flake8
 if not hasattr(flake8, '__version_info__') or flake8.__version_info__ < (3,):
@@ -25,7 +25,7 @@ def run():
     flake8_style = get_style_guide(config_file=os.path.join(package_root, 'tox.ini'))
 
     paths = []
-    for _dir in [package_name, 'dev', 'tests']:
+    for _dir in [python_package_name, 'dev', 'tests']:
         for root, _, filenames in os.walk(_dir):
             for filename in filenames:
                 if not filename.endswith('.py'):

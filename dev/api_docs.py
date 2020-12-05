@@ -11,7 +11,7 @@ import textwrap
 import commonmark
 from collections import OrderedDict
 
-from . import package_name, package_root, md_source_map, definition_replacements
+from . import python_package_name, package_root, md_source_map, definition_replacements
 
 
 if hasattr(commonmark, 'DocParser'):
@@ -375,7 +375,7 @@ def run():
             py_paths = [os.path.join(package_root, py_file) for py_file in py_files]
         else:
             py_files = [os.path.basename(md_file).replace('.md', '.py')]
-            py_paths = [os.path.join(package_root, package_name, py_files[0])]
+            py_paths = [os.path.join(package_root, python_package_name, py_files[0])]
 
             if not os.path.exists(py_paths[0]):
                 continue
