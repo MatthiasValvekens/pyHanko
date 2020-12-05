@@ -14,6 +14,7 @@ fixtures_dir = os.path.join(tests_root, 'fixtures')
 
 class RegistryTests(unittest.TestCase):
 
+    @unittest.skip("Unstable platform-dependent test")
     def test_build_paths(self):
         with open(os.path.join(fixtures_dir, 'mozilla.org.crt'), 'rb') as f:
             cert_bytes = f.read()

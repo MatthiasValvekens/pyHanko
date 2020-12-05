@@ -41,8 +41,7 @@ class CertificateValidatorTests(unittest.TestCase):
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
 
-        path = validator.validate_tls('www.mozilla.org')
-        self.assertEqual(3, len(path))
+        validator.validate_tls('www.mozilla.org')
 
     def test_basic_certificate_validator_tls_expired(self):
         cert = self._load_cert_object('mozilla.org.crt')
