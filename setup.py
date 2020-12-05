@@ -12,7 +12,7 @@ from setuptools.command.egg_info import egg_info
 PACKAGE_NAME = 'pyhanko-certvalidator'
 EGG_NAME = PACKAGE_NAME.replace('-', '_')
 PYTHON_PACKAGE_NAME = 'certvalidator'
-PACKAGE_VERSION = '0.12.0'
+PACKAGE_VERSION = '0.12.1'
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -33,7 +33,7 @@ if svi >= (38, 6):
 # to be included, the command must be "python setup.py sdist".
 package_data = {}
 if sys.argv[1:] == ['sdist'] or sorted(sys.argv[1:]) == ['-q', 'sdist']:
-    package_data[PACKAGE_NAME] = [
+    package_data[PYTHON_PACKAGE_NAME] = [
         '../LICENSE',
         '../*.md',
         '../docs/*.md',

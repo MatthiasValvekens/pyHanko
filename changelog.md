@@ -1,5 +1,8 @@
 # changelog
 
+## 0.12.1
+ - Fixed a packaging error.
+
 ## 0.12.0
  - Forked from [certvalidator](https://github.com/wbond/certvalidator)
    to add patches for [pyHanko](https://github.com/MatthiasValvekens/pyHanko).
