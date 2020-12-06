@@ -59,3 +59,7 @@ html_static_path = ['_static']
 # Order module/class members by source order.
 
 autodoc_member_order = 'bysource'
+
+
+# number figures
+numfig = True

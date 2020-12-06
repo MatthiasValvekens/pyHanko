@@ -95,17 +95,146 @@ See :doc:`validation` for an overview of pyHanko's signature validation
 features.
 
 
-Creating simple signatures
---------------------------
+.. note::
+    By default, pyHanko uses incremental updates for all operations,
+    regardless of the presence of earlier signatures in the file.
 
 
 Creating signature fields
 -------------------------
 
+TODO
+
+Creating simple signatures
+--------------------------
+
+All operations relating to digital signatures are performed using the
+``pyhanko sign`` subcommand.
+The relevant command group for adding signatures is ``pyhanko sign addsig``.
+
+
+.. warning::
+    The commands explained in this subsection do not attempt to validate
+    the signer's certificate by default.
+    You'll have to take care of that yourself, either through your PDF reader
+    of choice, or the :doc:`validation functionality in pyHanko <validation>`.
+
+
+Signing a PDF file using key material on disk
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are two ways to sign a PDF file using a key and a certificate stored
+on disk. The signing is performed in the exact same way in either case, but
+the format in which the key material is stored differs somewhat.
+
+To sign a file with key material sourced from loose PEM or DER-encoded files,
+the ``pemder`` subcommand is used.
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field Sig1 pemder \
+        --key key.pem --cert cert.pem input.pdf output.pdf
+
+This would create a signature in ``input.pdf`` in the signature field ``Sig1``
+(which will be created if it doesn't exist), with a private key loaded from
+``key.pem``, and a corresponding certificate loaded from ``cert.pem``.
+The result is then saved to ``output.pdf``.
+Note that the ``--field`` parameter is optional if the input file contains a
+single unfilled signature field.
+
+You will be prompted for a passphrase to unlock the private key, which can be
+read from another file using ``--passfile``.
+
+
+The same result can be obtained using data from a PKCS#12 file (these usually
+have a ``.pfx`` or ``.p12`` extension) as follows:
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field Sig1 pkcs12 \
+        input.pdf output.pdf secrets.pfx
+
+
+By default, these calls create invisible signature fields, but if the field
+specified using the ``--field`` parameter exists and has a widget associated
+with it, a simple default appearance will be generated
+(see :numref:`default-appearance`).
+
+In many cases, you may want to embed extra certificates (e.g. for intermediate
+certificate authorities) into your signature, to facilitate validation.
+This can be accomplished using the ``--chain`` flag to either subcommand.
+When using the ``pkcs12`` subcommand, pyHanko will automatically embed any extra
+certificates found in the PKCS#12 archive passed in.
+
+
+.. _default-appearance:
+.. figure:: images/default-signature-appearance.png
+    :alt: The default signature appearance.
+    :align: center
+
+    The default appearance of a (visible) signature in pyHanko.
+
+
+Signing a PDF file using a Belgian eID card
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+PyHanko also supports PKCS#11 devices to create signatures, although the CLI
+only exposes a wrapper for Belgian eID cards\ [#pkcs11]_.
+This should work on all platforms supported by the eID middleware (tested on
+Linux, macOS and Windows).
+
+To sign a PDF file using your eID card, use the ``beid`` subcommand to
+``addsig``, with the ``--lib`` parameter to tell pyHanko where to look for the
+eID PKCS#11 library.
+On Linux, it is named ``libbeidpkcs11.so`` and can usually be found under
+``/usr/lib`` or ``/usr/local/lib``.
+On macOS, it is named ``libbeidpkcs11.dylib``, and can similarly be found under
+``/usr/local/lib``.
+The Windows version is typically installed to ``C:\Windows\System32`` and is
+called ``beidpkcs11.dll``.
+
+
+On Linux, this boils down to the following:
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field Sig1 beid \
+        --lib /path/to/libbeidpkcs11.so input.pdf output.pdf
+
+On all platforms, the eID middleware will prompt you to enter your PIN to create
+the signature.
+
+
+.. warning::
+    This command will produce a non-repudiable signature using the 'Signature'
+    certificate on your eID card (as opposed to the 'Authentication'
+    certificate). These signatures are legally equivalent to
+    a normal "wet" signature wherever they are allowed, so use them with care.
+
+    In particular, you should only allow software you trust\ [#disclaimer]_
+    to use the 'Signature' certificate!
+
+
+.. warning::
+    You should also be aware that your national registry number
+    (rijksregisternummer, no. de registre national) is embedded into the
+    metadata of the signature certificate on your eID card\ [#nnserial]_.
+    As such, it can also be **read off from any digital signature you create**.
+    While national registry numbers aren't secret per se, they are nevertheless
+    often considered sensitive personal information, so you may want to be
+    careful where you send documents containing your eID signature or that
+    of someone else.
+
 
 Creating signatures with long lifetimes
 ---------------------------------------
 
+TODO
+
+Customising signature appearances
+---------------------------------
+
+TODO
 
 .. rubric:: Footnotes
 .. [#pkcs11]
@@ -123,4 +252,11 @@ Creating signatures with long lifetimes
 .. [#validationscope]
     The author has it on good authority that a rigorous validation specification
     is beyond the scope of the PDF standard itself.
+.. [#disclaimer]
+    This obviously also applies to pyHanko itself; be aware that pyHanko's
+    :doc:`license </license>` doesn't make any fitness-for-purpose guarantees,
+    so making sure you know what you're running is 100% your own responsibility.
+.. [#nnserial]
+    The certificate's serial number is in fact equal to the holder's
+    national registry number.
 
