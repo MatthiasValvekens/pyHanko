@@ -28,6 +28,12 @@ This guide will adopt the former calling convention.
     ``pyhanko --help``.
 
 
+Right now, the pyHanko CLI offers two subcommands, :doc:`sign <signing>`
+and :doc:`stamp <stamping>`.
+Additional configuration options are available in an optional YAML
+:doc:`config file <config>`.
+
+
 .. toctree::
     :maxdepth: 3
     :caption: CLI topics
