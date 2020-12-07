@@ -1,3 +1,5 @@
+from enum import Enum, auto
+
 import click
 import logging
 import getpass
@@ -37,12 +39,15 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_FILE = 'pyhanko.yml'
 
-SIG_META = 'SIG_META'
-EXISTING_ONLY = 'EXISTING_ONLY'
-TIMESTAMP_URL = 'TIMESTAMP_URL'
-CLI_CONFIG = 'CLI_CONFIG'
-STAMP_STYLE = 'STAMP_STYLE'
-QR_URL = 'QR_URL'
+
+class Ctx(Enum):
+    SIG_META = auto()
+    EXISTING_ONLY = auto()
+    TIMESTAMP_URL = auto()
+    CLI_CONFIG = auto()
+    STAMP_STYLE = auto()
+    QR_URL = auto()
+    NEW_FIELD_SPEC = auto()
 
 
 @click.group()
@@ -79,7 +84,7 @@ def cli(ctx, config):
 
     ctx.ensure_object(dict)
     if config_text is not None:
-        ctx.obj[CLI_CONFIG] = parse_cli_config(config_text)
+        ctx.obj[Ctx.CLI_CONFIG] = parse_cli_config(config_text)
 
 
 @cli.group(help='sign PDF files', name='sign')
@@ -93,7 +98,7 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 # TODO user-friendly error handling for KeyErrors etc.
 def _build_vc_kwargs(ctx, validation_context, trust,
                      trust_replace, other_certs, allow_fetching=None):
-    cli_config: CLIConfig = ctx.obj.get(CLI_CONFIG, None)
+    cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
     if validation_context is not None:
         # load the desired context from config
         if cli_config is None:
@@ -142,7 +147,7 @@ def trust_options(f):
 
 def _select_style(ctx, style_name, qr_url):
     try:
-        cli_config: CLIConfig = ctx.obj[CLI_CONFIG]
+        cli_config: CLIConfig = ctx.obj[Ctx.CLI_CONFIG]
     except KeyError:
         if not style_name:
             return None
@@ -280,8 +285,8 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
            style_name, qr_url):
-    ctx.obj[EXISTING_ONLY] = existing_only or field is None
-    ctx.obj[TIMESTAMP_URL] = timestamp_url
+    ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
+    ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
 
     if use_pades:
         subfilter = fields.SigSeedSubFilter.PADES
@@ -296,19 +301,23 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         vc = ValidationContext(**vc_kwargs)
     else:
         vc = None
-    ctx.obj[SIG_META] = signers.PdfSignatureMetadata(
-        field_name=field, location=location, reason=reason, name=name,
+    field_name, new_field_spec = parse_field_location_spec(
+        field, require_full_spec=False
+    )
+    ctx.obj[Ctx.SIG_META] = signers.PdfSignatureMetadata(
+        field_name=field_name, location=location, reason=reason, name=name,
         certify=certify, subfilter=subfilter,
         embed_validation_info=with_validation_info,
         validation_context=vc
     )
-    ctx.obj[STAMP_STYLE] = _select_style(ctx, style_name, qr_url)
-    ctx.obj[QR_URL] = qr_url
+    ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
+    ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, qr_url)
+    ctx.obj[Ctx.QR_URL] = qr_url
 
 
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
-                         style, qr_url):
+                         style, qr_url, new_field_spec):
     if timestamp_url is not None:
         timestamper = HTTPTimeStamper(timestamp_url)
     else:
@@ -325,7 +334,7 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
 
     result = signers.PdfSigner(
         signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=style, qr_url=qr_url
+        stamp_style=style, qr_url=qr_url, new_field_spec=new_field_spec
     ).sign_pdf(writer, existing_fields_only=existing_fields_only)
 
     buf = result.getbuffer()
@@ -354,9 +363,9 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
               show_default='stdin')
 @click.pass_context
 def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
-    signature_meta = ctx.obj[SIG_META]
-    existing_fields_only = ctx.obj[EXISTING_ONLY]
-    timestamp_url = ctx.obj[TIMESTAMP_URL]
+    signature_meta = ctx.obj[Ctx.SIG_META]
+    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
+    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
     if passfile is None:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
@@ -371,8 +380,9 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
-        existing_fields_only=existing_fields_only, style=ctx.obj[STAMP_STYLE],
-        qr_url=ctx.obj[QR_URL]
+        existing_fields_only=existing_fields_only,
+        style=ctx.obj[Ctx.STAMP_STYLE],
+        qr_url=ctx.obj[Ctx.QR_URL], new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     )
 
 
@@ -393,9 +403,9 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     # TODO add sanity check in case the user gets the arg order wrong
     #  (now it fails with a gnarly DER decoding error, which is not very
     #  user-friendly)
-    signature_meta = ctx.obj[SIG_META]
-    existing_fields_only = ctx.obj[EXISTING_ONLY]
-    timestamp_url = ctx.obj[TIMESTAMP_URL]
+    signature_meta = ctx.obj[Ctx.SIG_META]
+    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
+    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
     if passfile is None:
         passphrase = getpass.getpass(prompt='Export passphrase: ')\
@@ -410,8 +420,9 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
-        existing_fields_only=existing_fields_only, style=ctx.obj[STAMP_STYLE],
-        qr_url=ctx.obj[QR_URL]
+        existing_fields_only=existing_fields_only,
+        style=ctx.obj[Ctx.STAMP_STYLE],
+        qr_url=ctx.obj[Ctx.QR_URL], new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     )
 
 
@@ -427,9 +438,9 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
               required=False, type=int, default=None)
 @click.pass_context
 def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
-    signature_meta = ctx.obj[SIG_META]
-    existing_fields_only = ctx.obj[EXISTING_ONLY]
-    timestamp_url = ctx.obj[TIMESTAMP_URL]
+    signature_meta = ctx.obj[Ctx.SIG_META]
+    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
+    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
     session = beid.open_beid_session(lib, slot_no=slot_no)
     label = 'Authentication' if use_auth_cert else 'Signature'
     if timestamp_url is not None:
@@ -443,7 +454,8 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     writer = IncrementalPdfFileWriter(infile)
     result = signers.PdfSigner(
         signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=ctx.obj[STAMP_STYLE], qr_url=ctx.obj[QR_URL]
+        stamp_style=ctx.obj[Ctx.STAMP_STYLE], qr_url=ctx.obj[Ctx.QR_URL],
+        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     ).sign_pdf(writer, existing_fields_only=existing_fields_only)
     buf = result.getbuffer()
     outfile.write(buf)
@@ -466,32 +478,44 @@ def _index_page(page):
         )
 
 
-@signing.command(name='addfields')
+def parse_field_location_spec(spec, require_full_spec=True):
+    try:
+        page, box, name = spec.split('/')
+    except ValueError:
+        if require_full_spec:
+            raise click.ClickException(
+                "Sig field should be of the form PAGE/X1,Y1,X2,Y2/NAME."
+            )
+        else:
+            # interpret the entire string as a field name
+            return spec, None
+
+    page_ix = _index_page(page)
+
+    try:
+        x1, y1, x2, y2 = map(int, box.split(','))
+    except ValueError:
+        raise click.ClickException(
+            "Sig field parameters X1,Y1,X2,Y2 should be four integers."
+        )
+
+    return name, fields.SigFieldSpec(
+        sig_field_name=name, on_page=page_ix, box=(x1, y1, x2, y2)
+    )
+
+
+@signing.command(
+    name='addfields', help='add empty signature fields to a PDF field'
+)
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
-@click.argument('specs', metavar='PAGE/X1,Y1,X2,Y2/NAME [...]', nargs=-1)
-def add_sig_field(infile, outfile, specs):
-    def _parse_specs():
-        for spec in specs:
-            try:
-                page, box, name = spec.split('/')
-            except ValueError:
-                raise click.ClickException(
-                    "Sig field should be of the form PAGE/X1,Y1,X2,Y2/NAME."
-                )
-            page_ix = _index_page(page)
-            try:
-                x1, y1, x2, y2 = map(int, box.split(','))
-            except ValueError:
-                raise click.ClickException(
-                    "Sig field parameters X1,Y1,X2,Y2 should be four integers."
-                )
-            yield fields.SigFieldSpec(
-                sig_field_name=name, on_page=page_ix, box=(x1, y1, x2, y2)
-            )
-
+@click.option('--field', metavar='PAGE/X1,Y1,X2,Y2/NAME', multiple=True,
+              required=True)
+def add_sig_field(infile, outfile, field):
     writer = IncrementalPdfFileWriter(infile)
-    fields.append_signature_fields(writer, list(_parse_specs()))
+    fields.append_signature_fields(
+        writer, [parse_field_location_spec(s)[1] for s in field]
+    )
     writer.write(outfile)
     infile.close()
     outfile.close()

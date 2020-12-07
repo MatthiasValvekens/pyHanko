@@ -100,6 +100,8 @@ features.
     regardless of the presence of earlier signatures in the file.
 
 
+.. _addfields-docs:
+
 Creating signature fields
 -------------------------
 
@@ -110,7 +112,7 @@ more advanced properties and metadata can be manipulated through the API.
 
 The syntax of the ``addfields`` subcommand is as follows::
 
-    pyhanko sign addfields input.pdf output.pdf PAGE/X1,Y1,X2,Y2/NAME
+    pyhanko sign addfields --field  PAGE/X1,Y1,X2,Y2/NAME input.pdf output.pdf
 
 The page numbering starts at 1, and the numbers specify the coordinates of two
 opposing corners of the bounding box of the signature field.
@@ -163,6 +165,10 @@ This would create a signature in ``input.pdf`` in the signature field ``Sig1``
 The result is then saved to ``output.pdf``.
 Note that the ``--field`` parameter is optional if the input file contains a
 single unfilled signature field.
+
+.. note::
+    The ``--field`` parameter also accepts parameters of the form passed to
+    ``addfields``, see :ref:`addfields-docs`.
 
 You will be prompted for a passphrase to unlock the private key, which can be
 read from another file using ``--passfile``.

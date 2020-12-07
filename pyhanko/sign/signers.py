@@ -1152,7 +1152,7 @@ class PdfSigner(PdfTimeStamper):
         """
         self.signature_meta = signature_meta
         if new_field_spec is not None and \
-            new_field_spec.sig_field_name != signature_meta.field_name:
+                new_field_spec.sig_field_name != signature_meta.field_name:
             raise SigningError(
                 "Field names specified in SigFieldSpec and "
                 "PdfSignatureMetadata do not agree."
