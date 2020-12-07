@@ -20,6 +20,7 @@ from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.layout import BoxConstraints
+from pyhanko.pdf_utils.misc import PdfWriteError
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import UnacceptableSignerError, SigningError
@@ -256,10 +257,40 @@ def test_sign_with_trust():
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
+    assert '/AP' not in s.sig_field
     status = val_untrusted(s)
     assert not status.trusted
 
     val_trusted(s)
+
+
+def test_sign_with_new_field_spec():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    spec = fields.SigFieldSpec(sig_field_name='Sig1', box=(20, 20, 80, 40))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+        new_field_spec=spec
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    assert '/AP' in s.sig_field
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    spec = fields.SigFieldSpec(sig_field_name='Sig1', box=(20, 20, 80, 40))
+
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
+            new_field_spec=spec
+        )
+
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
+            new_field_spec=spec, existing_fields_only=True
+        )
 
 
 @freeze_time('2020-11-01')
@@ -665,7 +696,7 @@ def test_append_simple_sig_field():
     w.write(out)
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
-    with pytest.raises(ValueError):
+    with pytest.raises(PdfWriteError):
         fields.append_signature_fields(w, [sp])
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
@@ -685,7 +716,7 @@ def test_append_visible_sig_field():
     w.write(out)
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
-    with pytest.raises(ValueError):
+    with pytest.raises(PdfWriteError):
         fields.append_signature_fields(w, [sp])
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))

@@ -14,7 +14,7 @@ from oscrypto import keys as oskeys
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import OrderedEnum
+from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import UnacceptableSignerError, SigningError
 from pyhanko.stamp import AnnotAppearances
@@ -787,9 +787,9 @@ def _prepare_sig_field(sig_field_name, root,
         )
 
     # no signature field exists, so create one
-    sig_form_kwargs = {
-        'include_on_page': root['/Pages']['/Kids'][0],
-    }
+    # default: grab a reference to the first page
+    page_ref = update_writer.find_page_for_modification(0)[0]
+    sig_form_kwargs = {'include_on_page': page_ref}
     sig_form_kwargs.update(**kwargs)
     sig_field = SignatureFormField(
         sig_field_name, writer=update_writer, **sig_form_kwargs
@@ -890,16 +890,17 @@ def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
                             sig_field_specs: List[SigFieldSpec]):
     root = pdf_out.root
 
-    page_list = root['/Pages']['/Kids']
     for sp in sig_field_specs:
+        page_ref = pdf_out.find_page_for_modification(sp.on_page)[0]
         # use default appearance
         field_created, sig_field_ref = _prepare_sig_field(
             sp.sig_field_name, root, update_writer=pdf_out,
-            existing_fields_only=False, box=sp.box,
-            include_on_page=page_list[sp.on_page], lock_sig_flags=False
+            existing_fields_only=False,
+            box=sp.box, include_on_page=page_ref,
+            lock_sig_flags=False
         )
         if not field_created:
-            raise ValueError(
+            raise PdfWriteError(
                 'Signature field with name %s already exists.'
                 % sp.sig_field_name
             )

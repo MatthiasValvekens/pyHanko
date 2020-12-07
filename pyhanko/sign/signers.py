@@ -23,6 +23,7 @@ from pyhanko.sign import general
 from pyhanko.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
     SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm, FieldMDPSpec,
+    SigFieldSpec,
 )
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.sign.general import (
@@ -821,6 +822,7 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              timestamper: TimeStamper = None,
+             new_field_spec: Optional[SigFieldSpec] = None,
              existing_fields_only=False, bytes_reserved=None, in_place=False):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.sign_pdf`.
@@ -845,10 +847,26 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         the signature.
         If ``False``, a new field may be created if no field matching
         :attr:`~.PdfSignatureMetadata.field_name` exists.
+    :param new_field_spec:
+        If a new field is to be created, this parameter allows the caller
+        to specify the field's properties in the form of a
+        :class:`.SigFieldSpec`. This parameter is only meaningful if
+        ``existing_fields_only`` is ``False``.
     :return:
         The output stream containing the signed output.
     """
-    return PdfSigner(signature_meta, signer, timestamper=timestamper).sign_pdf(
+
+    if new_field_spec is not None and existing_fields_only:
+        raise SigningError(
+            "Specifying a signature field spec is not meaningful when "
+            "existing_fields_only=True."
+        )
+
+    signer = PdfSigner(
+        signature_meta, signer, timestamper=timestamper,
+        new_field_spec=new_field_spec
+    )
+    return signer.sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
         bytes_reserved=bytes_reserved, in_place=in_place
     )
@@ -857,7 +875,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 # Wrapper around _prepare_sig_fields with some error reporting
 
 def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
-                            is_timestamp):
+                            is_timestamp,
+                            new_field_spec: Optional[SigFieldSpec] = None):
     root = pdf_out.root
     # for feedback reasons
     if is_timestamp:
@@ -896,10 +915,20 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
             )
     else:
         # grab or create a sig field
+        if new_field_spec is not None:
+            sig_field_kwargs = {
+                'box': new_field_spec.box,
+                'include_on_page': pdf_out.find_page_for_modification(
+                    new_field_spec.on_page
+                )[0]
+            }
+        else:
+            sig_field_kwargs = {}
+
         field_created, sig_field_ref = _prepare_sig_field(
             field_name, root, update_writer=pdf_out,
             existing_fields_only=existing_fields_only,
-            lock_sig_flags=True
+            lock_sig_flags=True, **sig_field_kwargs
         )
 
     return field_created, sig_field_ref
@@ -1096,7 +1125,7 @@ class PdfSigner(PdfTimeStamper):
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
                  *, timestamper: TimeStamper = None,
                  stamp_style: Optional[TextStampStyle] = None,
-                 qr_url=None):
+                 new_field_spec: Optional[SigFieldSpec] = None, qr_url=None):
         """
         Initialise a :class:`PdfSigner`.
 
@@ -1112,11 +1141,23 @@ class PdfSigner(PdfTimeStamper):
             signature, typically an object of type :class:`.TextStampStyle` or
             :class:`.QRStampStyle`. Defaults to
             :const:`.DEFAULT_SIGNING_STAMP_STYLE`.
+        :param new_field_spec:
+            If a new field is to be created, this parameter allows the caller
+            to specify the field's properties in the form of a
+            :class:`.SigFieldSpec`. This parameter is only meaningful if
+            ``existing_fields_only`` is ``False``.
         :param qr_url:
             Only allowed if ``stamp_style`` is a :class:`.QRStampStyle`,
             in which case it determines the URL used for the QR code.
         """
         self.signature_meta = signature_meta
+        if new_field_spec is not None and \
+            new_field_spec.sig_field_name != signature_meta.field_name:
+            raise SigningError(
+                "Field names specified in SigFieldSpec and "
+                "PdfSignatureMetadata do not agree."
+            )
+
         self.signer = signer
         stamp_style = stamp_style or DEFAULT_SIGNING_STAMP_STYLE
         self.stamp_style: TextStampStyle = stamp_style
@@ -1126,6 +1167,7 @@ class PdfSigner(PdfTimeStamper):
                 "The qr_url parameter requires a QRStampStyle."
             )
         self.qr_url = qr_url
+        self.new_field_spec = new_field_spec
         super().__init__(timestamper)
 
     def generate_timestamp_field_name(self) -> str:
@@ -1398,9 +1440,12 @@ class PdfSigner(PdfTimeStamper):
                 raise SigningError("The signer's certificate was not valid", e)
             validation_paths.append(signer_cert_validation_path)
 
+        new_field_spec = self.new_field_spec \
+            if not existing_fields_only else None
         field_created, sig_field_ref = _get_or_create_sigfield(
             signature_meta.field_name, pdf_out,
-            existing_fields_only, is_timestamp=False
+            existing_fields_only, is_timestamp=False,
+            new_field_spec=new_field_spec
         )
 
         sig_field = sig_field_ref.get_object()
