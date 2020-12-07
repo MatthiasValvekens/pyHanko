@@ -103,7 +103,29 @@ features.
 Creating signature fields
 -------------------------
 
-TODO
+Adding new (empty) signature fields is done through the ``addfields`` subcommand
+of ``pyhanko sign``.
+The CLI only allows you to specify the page and coordinates of the field, but
+more advanced properties and metadata can be manipulated through the API.
+
+The syntax of the ``addfields`` subcommand is as follows::
+
+    pyhanko sign addfields input.pdf output.pdf PAGE/X1,Y1,X2,Y2/NAME
+
+The page numbering starts at 1, and the numbers specify the coordinates of two
+opposing corners of the bounding box of the signature field.
+The coordinates are Cartesian, i.e. the y-coordinate increases from bottom to
+top.
+Multiple signature fields may be created in one command, by passing the last
+argument multiple times.
+
+.. note::
+    Creating empty signature fields ahead of time isn't always necessary.
+    PyHanko's signing functionality can also create them together with a
+    signature, and Adobe Reader offers similar conveniences.
+    As such, this feature is mainly useful to create fields for other
+    people to sign.
+
 
 Creating simple signatures
 --------------------------
