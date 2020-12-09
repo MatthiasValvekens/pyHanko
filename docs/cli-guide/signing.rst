@@ -257,6 +257,89 @@ the signature.
 Creating signatures with long lifetimes
 ---------------------------------------
 
+Background
+^^^^^^^^^^
+
+A simple PDF signature---or any CMS signature for that matter---is only
+cryptographically valid insofar as the certificate of the signer is valid.
+In most common trust models, this means that the signature ceases to be
+meaningful together with the expiration of the signer certificate, or the
+latter's revocation.
+
+The principal reason for this is the fact that it is no longer practical to
+verify whether a certificate was valid at the time of signing, if validation
+happens after the certificate already expired or was revoked.
+This, in turn, has to do with the fact that it is not always reasonable for
+certificate authorities to publicly supply historical validity proofs for all
+certificates they ever signed at all possible points in time.
+
+Hence, in order for a signature to remain valid long after signing, the signer
+needs to supply two additional pieces of data:
+
+1. a trusted timestamp signed by a time stamping authority (TSA), to prove the
+   time of signing to the validator;
+2. revocation information (relevant CRLs or OCSP responses) for all certificates
+   in the chain of trust of the signer's certificate, and of the TSA.
+
+For both of these, it is crucial that the relevant data is collected at the time
+of signing and embedded into the signed document.
+The revocation information in particular can be delicate, since the validator
+needs to be able to verify the validity of not only the signer's certificate,
+but also that of all issuers in the chain of trust, the OCSP responder's
+certificates used to sign the embedded OCSP responses, etc.
+
+Time stamp tokens are commonly obtained from TSA's via the HTTP-based protocol
+specified in `RFC 3616 <https://tools.ietf.org/html/rfc3161>`_.
+
+Within the PDF standard, there are two broad categories of such long-lived
+signatures.
+
+* Signers can opt to embed revocation information into the CMS data structure
+  of the signature, as a signed attribute.
+
+  * In this case, the revocation info is a signed attribute,
+    protected from tampering by the signer's own signature.
+  * This scheme uses Adobe-specific extensions to the CMS standard, which
+    are explicitly defined in the PDF specification, but may not be supported
+    by generic CMS tools that are unaware of PDF.
+
+* Signers can opt to embed revocation information into the Document Security
+  Store (DSS).
+
+  * In this case the revocation info is (a priori) not protected by a
+    signature, although this is often remedied by appending a document time
+    stamp after updating the DSS (see also :ref:`lta-sigs`).
+  * The above approach has the convenient side effect that it can be used to
+    'fix' non-LTV-enabled signatures by embedding the required revocation
+    information after the fact, together with a document timestamp.
+    Obviously, this is predicated on the certificate's still being valid
+    when the revocation information is compiled.
+    This workflow is not (yet) supported in pyHanko, and is also not
+    guaranteed to be acceptable in all X.509 validation models.
+  * This approach is used in the PAdES baseline profiles B-LT and B-LTA
+    defined by ETSI, and the (mildly modified) versions subsumed into
+    ISO 32000-2 (PDF 2.0). As such, it is not part of ISO 32000-1 'proper'.
+
+.. note::
+    The author generally prefers the DSS-based signature profiles over the
+    legacy approach based on CMS attributes, but both are supported in pyHanko.
+
+
+Timestamps in pyHanko
+^^^^^^^^^^^^^^^^^^^^^
+
+TODO
+
+Embedding revocation info with pyHanko
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+TODO
+
+.. _lta-sigs:
+
+Long-term archival (LTA) needs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 TODO
 
 Customising signature appearances
