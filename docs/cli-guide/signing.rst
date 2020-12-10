@@ -328,12 +328,39 @@ signatures.
 Timestamps in pyHanko
 ^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+Embedding a timestamp token into a signature using pyHanko is as simple as
+passing the ``--timestamp-url`` parameter to ``addsig``. The URL should
+resolve to an endpoint that responds to the HTTP-based protocol described in
+`RFC 3161 <https://tools.ietf.org/html/rfc3161>`_.
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field Sig1 --timestamp-url http://tsa.example.com \
+        pemder --key key.pem --cert cert.pem input.pdf output.pdf
+
+.. warning::
+    In the CLI, only public time stamping servers are supported right now
+    (i.e. those that do not require authentication). The API is more flexible.
+
 
 Embedding revocation info with pyHanko
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+In order to embed validation info, use the ``--with-validation-info`` flag
+to the ``addsig`` command.
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field Sig1 --timestamp-url http://tsa.example.com \
+        --with-validation-info --use-pades pemder \
+        --key key.pem --cert cert.pem input.pdf output.pdf
+
+This will validate the signer's signature, and embed the necessary revocation
+information into the signature.
+The resulting signature complies with the PAdES B-LT baseline profile.
+If you want to embed the revocation data into the CMS object instead of
+the document security store (see above), leave off the ``--use-pades`` flag.
+
 
 .. _lta-sigs:
 
