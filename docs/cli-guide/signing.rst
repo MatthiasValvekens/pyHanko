@@ -361,13 +361,63 @@ The resulting signature complies with the PAdES B-LT baseline profile.
 If you want to embed the revocation data into the CMS object instead of
 the document security store (see above), leave off the ``--use-pades`` flag.
 
+Using the ``--trust``, ``--trust-replace`` and ``--other-certs`` parameters, it
+is possible to fine tune the validation context that will be used to embed
+the validation data.
 
 .. _lta-sigs:
 
 Long-term archival (LTA) needs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+The observant reader may have noticed that embedding revocation information
+together with a timestamp merely _shifts_ the validation problem: what if the
+TSA certificate used to sign the timestamp token is already expired by the time
+we try to validate the signature?
+
+The PAdES B-LTA scheme provides a solution for this issue: by appending a new
+document timestamp whenever the most recent one comes close to expiring, we can
+produce a chain of timestamps that allows us to ensure the validity of both
+the signatures and their corresponding revocation data essentially indefinitely.
+
+This does, however, require 'active' maintenance of the document.
+PyHanko provides for this through the ``ltaupdate`` subcommand of
+``pyhanko sign``.
+
+.. code-block:: bash
+
+    pyhanko sign ltaupdate --timestamp-url http://tsa.example.com input.pdf
+
+Note that ``ltaupdate`` modifies files in-place. It is also unnecessary to
+provide a field name for the new timestamp; the software will automatically
+generate one using Python's ``uuid`` module.
+
+.. warning::
+    It is important to note that pyHanko only validates the outermost timestamp
+    when performing an LTA update. This means that the "garbage in, garbage out"
+    principle is in effect: if the timestamp chain was already broken elsewhere
+    in the input document, running ``ltaupdate`` will not detect that, let alone
+    fix it.
+
+.. note::
+    The reader may also wonder what happens if the trust anchor that guaranteed
+    the signer's certificate at the time of signing happens to expire.
+    Answering this question is technically beyond the specifications of the PKI
+    system, since root certificates are trusted by fiat, and (by definition) do
+    not have some higher authority backing them to enforce their validity
+    constraints.
+
+    Some hold the view that expiration dates on trust anchors should be taken
+    as mere suggestions rather than hard cutoffs.
+    Regardless of the merits of this view in general, for the purposes of
+    point-in-time validation, the only sensible answer seems to be to leave
+    this judgment call up to the discretion of the validator.
+
+    It is also useful to note that some certificate authorities will reissue
+    their roots with the same key pair and a later expiration date\
+    [#reissuingroot]_.
+    Due to the way PKIX validation works, these certificates will typically
+    work as drop-in replacements for the older ones.
 
 Customising signature appearances
 ---------------------------------
@@ -397,4 +447,6 @@ TODO
 .. [#nnserial]
     The certificate's serial number is in fact equal to the holder's
     national registry number.
-
+.. [#reissuingroot]
+    Author's note: it's not clear to me whether this is good PKI practice, and
+    how common it is.
