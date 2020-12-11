@@ -534,9 +534,14 @@ def parse_field_location_spec(spec, require_full_spec=True):
               required=True)
 def add_sig_field(infile, outfile, field):
     writer = IncrementalPdfFileWriter(infile)
-    fields.append_signature_fields(
-        writer, [parse_field_location_spec(s)[1] for s in field]
-    )
+
+    def _specs():
+        for s in field:
+            name, spec = parse_field_location_spec(s)
+            assert spec is not None
+            yield spec
+
+    fields.append_signature_fields(writer, list(_specs()))
     writer.write(outfile)
     infile.close()
     outfile.close()
