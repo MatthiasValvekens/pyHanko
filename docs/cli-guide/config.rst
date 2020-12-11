@@ -41,10 +41,10 @@ The example below defines two validation configs named ``default`` and
 The parameters are the same as those used to define validation contexts
 in the CLI. This is how they are interpreted:
 
-* ``trust``: one or more paths to trust anchor(s) to be used;
-* ``trust-replace``: flag indicating whether the ``trust`` setting should
-  override the system trust (default ``false``);
-* ``other-certs``: one or more paths to other certificate(s) that may be needed
+* ``trust``: One or more paths to trust anchor(s) to be used.
+* ``trust-replace``: Flag indicating whether the ``trust`` setting should
+  override the system trust (default ``false``).
+* ``other-certs``: One or more paths to other certificate(s) that may be needed
   to validate an end entity certificate.
 
 The certificates should be specified in DER or PEM-encoded form.
@@ -81,7 +81,73 @@ the ``default-validation-context`` top-level key, like so:
             trust-replace: false
 
 
+.. _style-definitions:
+
 Styles for stamping and signature appearances
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+In order to use a style other than the default for a PDF stamp or (visible)
+signature, you'll have to write some configuration.
+New styles can be defined under the ``stamp-styles`` top-level key.
+Here are some examples:
+
+.. code-block:: yaml
+
+    stamp-styles:
+        default:
+            type: text
+            background: __stamp__
+            stamp-text: "Signed by %(signer)s\nTimestamp: %(ts)s"
+            text-box-style:
+                font: NotoSerif-Regular.otf
+        noto-qr:
+            type: qr
+            background: background.png
+            stamp-text: "Signed by %(signer)s\nTimestamp: %(ts)s\n%(url)s"
+            text-box-style:
+                font: NotoSerif-Regular.otf
+                leading: 13
+
+To select a named style at runtime, pass the ``--style-name`` parameter to
+``addsig`` (when signing) or ``stamp`` (when stamping).
+As was the case for validation contexts, the style named ``default`` will be
+chosen if the ``--style-name`` parameter is absent.
+Similarly, the default style's name can be overridden using the
+``default-stamp-style`` top-level key.
+
+Let us now briefly go over the configuration parameters in the above example.
+All parameters have sane defaults.
+
+* ``type``: This can be either ``text`` or ``qr``, for a simple text box
+  or a stamp with a QR code, respectively. The default is ``text``.
+  Note that QR stamps require the ``--stamp-url`` parameter on the command line.
+* ``background``: Here, you can either specify a path to a bitmap image, or the
+  special value ``__stamp__``, which will render a simplified version of the
+  pyHanko logo in the background of the stamp (using PDF graphics operators
+  directly). Any bitmap file format natively supported by
+  `Pillow <https://pillow.readthedocs.io>`_ should be OK.
+  If not specified, the stamp will not have a background.
+* ``stamp-text``: A template string that will be used to render the text inside
+  the stamp's text box. Currently, the following variables can be used:
+
+    * ``signer``: the signer's name;
+    * ``ts``: the time of signing;
+    * ``url``: the URL associated with the stamp (only for QR stamps).
+
+* ``text-box-style``: With this parameter, you can fine-tune the text box's
+  style parameters. The most important one is ``font``, which allows you to
+  specify an OTF font that will be used to render the text\ [#fontdisclaimer]_.
+  If not specified, pyHanko will use a standard monospaced Courier font.
+  See :class:`~pyhanko.pdf_utils.text.TextBoxStyle` in the API reference for
+  other customisable parameters.
+
+.. rubric:: Footnotes
+.. [#fontdisclaimer]
+    Custom font use is somewhat experimental, so please file an issue if you
+    encounter problems. An appropriate subset of the font will always be
+    embedded into the output file by pyHanko.
+    The text rendering is currently fairly basic: pyHanko only takes character
+    width into account, but ignores things like kerning pairs and ligatures.
+    In particular, rendering of complex scripts (Myanmar, Indic scripts, ...)
+    is not supported (but may be in the future).
+    CJK fonts should work fine, though.

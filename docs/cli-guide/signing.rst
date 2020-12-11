@@ -438,7 +438,7 @@ parameter to ``addsig``:
 
 This assumes that a style named ``mystyle`` is available in the configuration
 file. Defining styles works the same way as pyHanko's stamping functionality;
-see :doc:`stamping` and :doc:`config` for details.
+see :doc:`stamping` and :ref:`style-definitions` for details.
 
 .. rubric:: Footnotes
 .. [#pkcs11]
