@@ -130,8 +130,8 @@ All parameters have sane defaults.
 * ``stamp-text``: A template string that will be used to render the text inside
   the stamp's text box. Currently, the following variables can be used:
 
-    * ``signer``: the signer's name;
-    * ``ts``: the time of signing;
+    * ``signer``: the signer's name (only for signatures);
+    * ``ts``: the time of signing/stamping;
     * ``url``: the URL associated with the stamp (only for QR stamps).
 
 * ``text-box-style``: With this parameter, you can fine-tune the text box's
