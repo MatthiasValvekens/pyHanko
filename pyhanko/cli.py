@@ -479,12 +479,18 @@ def _index_page(page):
 
 
 def parse_field_location_spec(spec, require_full_spec=True):
+    if spec is None:
+        if require_full_spec:
+            raise click.ClickException(
+                "A signature field spec was not provided."
+            )
+        return None, None
     try:
         page, box, name = spec.split('/')
     except ValueError:
         if require_full_spec:
             raise click.ClickException(
-                "Sig field should be of the form PAGE/X1,Y1,X2,Y2/NAME."
+                "Sig field spec should be of the form PAGE/X1,Y1,X2,Y2/NAME."
             )
         else:
             # interpret the entire string as a field name
