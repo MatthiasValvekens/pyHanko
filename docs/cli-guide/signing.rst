@@ -343,6 +343,8 @@ resolve to an endpoint that responds to the HTTP-based protocol described in
     (i.e. those that do not require authentication). The API is more flexible.
 
 
+.. _cli-embedding-revinfo:
+
 Embedding revocation info with pyHanko
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -366,7 +368,7 @@ is possible to fine tune the validation context that will be used to embed
 the validation data.
 You can also predefine validation contexts in the configuration file, and select
 them using the ``--validation-context`` parameter.
-See :doc:`config` for further information.
+See :ref:`config-validation-context` for further information.
 
 .. _lta-sigs:
 
