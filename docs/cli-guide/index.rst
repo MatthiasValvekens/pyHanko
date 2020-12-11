@@ -27,9 +27,16 @@ This guide will adopt the former calling convention.
     it comes with a built-in help function, which can be accessed through
     ``pyhanko --help``.
 
+.. caution::
+    The pyHanko CLI makes heavy use of Click's subcommand functionality.
+    Due to the way this works, the precise position of a command-line parameter
+    sometimes matters. In general, double-dash options (e.g. ``--option``)
+    should appear after the subcommand to which they apply, but before the next
+    one.
 
-Right now, the pyHanko CLI offers two subcommands, :doc:`sign <signing>`
-and :doc:`stamp <stamping>`.
+
+Right now, the pyHanko CLI offers two subcommand groups, for
+:doc:`sign <signing>` and :doc:`stamp <stamping>`, respectively.
 Additional configuration options are available in an optional YAML
 :doc:`config file <config>`.
 
