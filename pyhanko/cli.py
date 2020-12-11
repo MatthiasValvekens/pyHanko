@@ -46,7 +46,7 @@ class Ctx(Enum):
     TIMESTAMP_URL = auto()
     CLI_CONFIG = auto()
     STAMP_STYLE = auto()
-    QR_URL = auto()
+    STAMP_URL = auto()
     NEW_FIELD_SPEC = auto()
 
 
@@ -145,7 +145,7 @@ def trust_options(f):
     return f
 
 
-def _select_style(ctx, style_name, qr_url):
+def _select_style(ctx, style_name, url):
     try:
         cli_config: CLIConfig = ctx.obj[Ctx.CLI_CONFIG]
     except KeyError:
@@ -156,13 +156,13 @@ def _select_style(ctx, style_name, qr_url):
             f"({DEFAULT_CONFIG_FILE} by default)."
         )
     style = cli_config.get_stamp_style(style_name)
-    if qr_url and not isinstance(style, QRStampStyle):
+    if url and not isinstance(style, QRStampStyle):
         raise click.ClickException(
-            "The --qr-url is only meaningful for QR stamp styles."
+            "The --stamp-url parameter is only meaningful for QR stamp styles."
         )
-    elif not qr_url and isinstance(style, QRStampStyle):
+    elif not url and isinstance(style, QRStampStyle):
         raise click.ClickException(
-            "QR stamp styles require the --qr-url option."
+            "QR stamp styles require the --stamp-url option."
         )
 
     return style
@@ -276,7 +276,7 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
     required=False, type=str
 )
 @click.option(
-    '--qr-url', help='QR code URL to use in QR stamp style',
+    '--stamp-url', help='QR code URL to use in QR stamp style',
     required=False, type=str
 )
 @trust_options
@@ -284,7 +284,7 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
-           style_name, qr_url):
+           style_name, stamp_url):
     ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
     ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
 
@@ -311,13 +311,13 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         validation_context=vc
     )
     ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
-    ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, qr_url)
-    ctx.obj[Ctx.QR_URL] = qr_url
+    ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)
+    ctx.obj[Ctx.STAMP_URL] = stamp_url
 
 
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
-                         style, qr_url, new_field_spec):
+                         style, stamp_url, new_field_spec):
     if timestamp_url is not None:
         timestamper = HTTPTimeStamper(timestamp_url)
     else:
@@ -332,10 +332,17 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
         ).encode('utf-8')
         writer.encrypt(pdf_pass)
 
+    text_params = None
+    if stamp_url is not None:
+        text_params = {'url': stamp_url}
+
     result = signers.PdfSigner(
         signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=style, qr_url=qr_url, new_field_spec=new_field_spec
-    ).sign_pdf(writer, existing_fields_only=existing_fields_only)
+        stamp_style=style, new_field_spec=new_field_spec
+    ).sign_pdf(
+        writer, existing_fields_only=existing_fields_only,
+        appearance_text_params=text_params
+    )
 
     buf = result.getbuffer()
     outfile.write(buf)
@@ -381,8 +388,8 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE],
-        qr_url=ctx.obj[Ctx.QR_URL], new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
+        style=ctx.obj[Ctx.STAMP_STYLE], stamp_url=ctx.obj[Ctx.STAMP_URL],
+        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     )
 
 
@@ -421,8 +428,8 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE],
-        qr_url=ctx.obj[Ctx.QR_URL], new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
+        style=ctx.obj[Ctx.STAMP_STYLE], stamp_url=ctx.obj[Ctx.STAMP_URL],
+        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     )
 
 
@@ -452,11 +459,19 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     )
 
     writer = IncrementalPdfFileWriter(infile)
+    stamp_url = ctx.obj[Ctx.STAMP_URL]
+    text_params = None
+    if stamp_url is not None:
+        text_params = {'url': stamp_url}
+
     result = signers.PdfSigner(
         signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=ctx.obj[Ctx.STAMP_STYLE], qr_url=ctx.obj[Ctx.QR_URL],
+        stamp_style=ctx.obj[Ctx.STAMP_STYLE],
         new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
-    ).sign_pdf(writer, existing_fields_only=existing_fields_only)
+    ).sign_pdf(
+        writer, existing_fields_only=existing_fields_only,
+        appearance_text_params=text_params
+    )
     buf = result.getbuffer()
     outfile.write(buf)
     buf.release()
@@ -543,21 +558,21 @@ def add_sig_field(infile, outfile, field):
     required=False, type=int, default=1, show_default=True
 )
 @click.option(
-    '--qr-url', help='QR code URL to use in QR stamp style',
+    '--stamp-url', help='QR code URL to use in QR stamp style',
     required=False, type=str
 )
 @click.pass_context
-def stamp(ctx, infile, outfile, x, y, style_name, page, qr_url):
+def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
 
     from pyhanko.stamp import text_stamp_file, qr_stamp_file
 
-    stamp_style = _select_style(ctx, style_name, qr_url)
+    stamp_style = _select_style(ctx, style_name, stamp_url)
 
     page_ix = _index_page(page)
-    if qr_url:
+    if stamp_url:
         qr_stamp_file(
             infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y,
-            url=qr_url
+            url=stamp_url
         )
     else:
         text_stamp_file(

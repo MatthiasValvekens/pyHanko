@@ -33,6 +33,7 @@ from pyhanko.sign.validation import (
 )
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.stamp import QRStampStyle
 from .samples import *
 
 from freezegun import freeze_time
@@ -2356,3 +2357,35 @@ def test_rogue_backreferences():
     emb = r.embedded_signatures[0]
     emb.compute_integrity_info()
     assert emb.modification_level == ModificationLevel.OTHER
+
+
+def test_simple_qr_sign():
+    style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")
+    signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='Sig1'), FROM_CA,
+        stamp_style=style
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signer.sign_pdf(
+        w, existing_fields_only=True,
+        appearance_text_params={'url': 'https://example.com'}
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    assert '/QR' in s.sig_field['/AP']['/N']['/Resources']['/XObject']
+
+    val_trusted(s)
+
+@pytest.mark.parametrize('params_value', [None, {}, {'some': 'value'}])
+def test_qr_sign_enforce_url_param(params_value):
+    style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")
+    signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='Sig1'), FROM_CA,
+        stamp_style=style
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    with pytest.raises(SigningError):
+        signer.sign_pdf(
+            w, existing_fields_only=True, appearance_text_params=params_value
+        )

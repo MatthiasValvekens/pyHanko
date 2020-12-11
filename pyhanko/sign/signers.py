@@ -1125,7 +1125,7 @@ class PdfSigner(PdfTimeStamper):
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
                  *, timestamper: TimeStamper = None,
                  stamp_style: Optional[TextStampStyle] = None,
-                 new_field_spec: Optional[SigFieldSpec] = None, qr_url=None):
+                 new_field_spec: Optional[SigFieldSpec] = None):
         """
         Initialise a :class:`PdfSigner`.
 
@@ -1146,9 +1146,6 @@ class PdfSigner(PdfTimeStamper):
             to specify the field's properties in the form of a
             :class:`.SigFieldSpec`. This parameter is only meaningful if
             ``existing_fields_only`` is ``False``.
-        :param qr_url:
-            Only allowed if ``stamp_style`` is a :class:`.QRStampStyle`,
-            in which case it determines the URL used for the QR code.
         """
         self.signature_meta = signature_meta
         if new_field_spec is not None and \
@@ -1162,11 +1159,6 @@ class PdfSigner(PdfTimeStamper):
         stamp_style = stamp_style or DEFAULT_SIGNING_STAMP_STYLE
         self.stamp_style: TextStampStyle = stamp_style
 
-        if qr_url is not None and not isinstance(stamp_style, QRStampStyle):
-            raise ValueError(
-                "The qr_url parameter requires a QRStampStyle."
-            )
-        self.qr_url = qr_url
         self.new_field_spec = new_field_spec
         super().__init__(timestamper)
 
@@ -1233,7 +1225,8 @@ class PdfSigner(PdfTimeStamper):
 
         sig_obj_ref.get_object()['/Reference'] = reference_array
 
-    def _sig_field_appearance(self, sig_field, pdf_out, timestamp):
+    def _sig_field_appearance(self, sig_field, pdf_out, timestamp,
+                              extra_text_params):
 
         name = self.signature_meta.name
         if name is None:
@@ -1247,19 +1240,27 @@ class PdfSigner(PdfTimeStamper):
             text_params = {
                 'signer': name, 'ts': timestamp.strftime(
                     self.stamp_style.timestamp_format
-                )
+                ),
+                **(extra_text_params or {})
             }
             box = BoxConstraints(width=w, height=h)
-            if self.qr_url is None:
+            if isinstance(self.stamp_style, QRStampStyle):
+                # extract the URL parameter
+                try:
+                    url = extra_text_params.pop('url')
+                except (KeyError, AttributeError):
+                    raise SigningError(
+                        "Signatures using a QR stamp style must pass "
+                        "a 'url' text parameter."
+                    )
+                stamp = QRStamp(
+                    pdf_out, style=self.stamp_style, url=url,
+                    text_params=text_params, box=box
+                )
+            else:
                 stamp = TextStamp(
                     pdf_out, style=self.stamp_style, text_params=text_params,
                     box=box
-                )
-            else:
-                assert isinstance(self.stamp_style, QRStampStyle)
-                stamp = QRStamp(
-                    pdf_out, style=self.stamp_style, url=self.qr_url,
-                    text_params=text_params, box=box
                 )
             sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
             try:
@@ -1387,7 +1388,7 @@ class PdfSigner(PdfTimeStamper):
 
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None,
-                 in_place=False):
+                 in_place=False, appearance_text_params=None):
         """
         Sign a PDF file using the provided output writer.
 
@@ -1404,6 +1405,9 @@ class PdfSigner(PdfTimeStamper):
         :param in_place:
             Sign the input in-place. If ``False``, write output to a
             :class:`.BytesIO` object.
+        :param appearance_text_params:
+            Dictionary with text parameters that will be passed to the
+            signature appearance constructor (if applicable).
         :return:
             The output stream containing the signed data.
         """
@@ -1550,7 +1554,9 @@ class PdfSigner(PdfTimeStamper):
             pdf_out.mark_update(sig_field_ref)
 
         # take care of the field's visual appearance (if applicable)
-        self._sig_field_appearance(sig_field, pdf_out, timestamp)
+        self._sig_field_appearance(
+            sig_field, pdf_out, timestamp, appearance_text_params
+        )
 
         self._apply_locking_rules(sig_field, sig_obj_ref, md_algorithm, pdf_out)
 
