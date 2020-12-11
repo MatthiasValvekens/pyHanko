@@ -364,6 +364,9 @@ the document security store (see above), leave off the ``--use-pades`` flag.
 Using the ``--trust``, ``--trust-replace`` and ``--other-certs`` parameters, it
 is possible to fine tune the validation context that will be used to embed
 the validation data.
+You can also predefine validation contexts in the configuration file, and select
+them using the ``--validation-context`` parameter.
+See :doc:`config` for further information.
 
 .. _lta-sigs:
 
@@ -422,7 +425,18 @@ generate one using Python's ``uuid`` module.
 Customising signature appearances
 ---------------------------------
 
-TODO
+To a limited degree, the appearance of a visible signature made with pyHanko
+can be customised. You can specify a named style using the ``--style-name``
+parameter to ``addsig``:
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field Sig1 --style-name mystyle pemder \
+        --key key.pem --cert cert.pem input.pdf output.pdf
+
+This assumes that a style named ``mystyle`` is available in the configuration
+file. Defining styles works the same way as pyHanko's stamping functionality;
+see :doc:`stamping` and :doc:`config` for details.
 
 .. rubric:: Footnotes
 .. [#pkcs11]
