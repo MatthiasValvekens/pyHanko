@@ -203,19 +203,23 @@ def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
             print(name)
             continue
         status_str = 'EMPTY'
+        fingerprint = ''
         if value is not None:
+            embedded_sig = validation.EmbeddedPdfSignature(r, field_ref)
+            fingerprint: str = embedded_sig.signer_cert.sha256.hex()
+
             if validate:
                 try:
                     if ltv_profile is None:
                         vc = ValidationContext(**vc_kwargs)
                         status = validation.validate_pdf_signature(
-                            validation.EmbeddedPdfSignature(r, field_ref),
+                            embedded_sig,
                             signer_validation_context=vc
                         )
                     else:
                         status = validation.validate_pdf_ltv_signature(
-                            validation.EmbeddedPdfSignature(r, field_ref),
-                            ltv_profile, force_revinfo=ltv_obsessive,
+                            embedded_sig, ltv_profile,
+                            force_revinfo=ltv_obsessive,
                             validation_context_kwargs=vc_kwargs
                         )
                     if executive_summary:
@@ -232,7 +236,7 @@ def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
                     status_str = 'MALFORMED'
             else:
                 status_str = 'FILLED'
-        print('%s:%s' % (name, status_str))
+        print('%s:%s:%s' % (name, fingerprint, status_str))
 
 
 @signing.command(name='ltaupdate', help='update LTA timestamp')

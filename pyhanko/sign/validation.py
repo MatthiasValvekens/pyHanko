@@ -9,7 +9,7 @@ from enum import Enum, unique
 from typing import TypeVar, Type, Optional, Set
 
 from asn1crypto import (
-    cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl
+    cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
 )
 from asn1crypto.x509 import Certificate
 from certvalidator import ValidationContext, CertificateValidator
@@ -96,6 +96,21 @@ def partition_certs(certs, signer_info):
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 
+def _extract_signer_info_and_certs(signed_data: cms.SignedData):
+    certs = [c.parse() for c in signed_data['certificates']]
+
+    try:
+        signer_info, = signed_data['signer_infos']
+    except ValueError:  # pragma: nocover
+        raise ValueError(
+            'signer_infos should contain exactly one entry'
+        )
+
+    cert, other_certs = partition_certs(certs, signer_info)
+
+    return signer_info, cert, other_certs
+
+
 def _validate_cms_signature(signed_data: cms.SignedData,
                             status_cls: Type[StatusType] = SignatureStatus,
                             raw_digest: bytes = None,
@@ -105,17 +120,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     """
     Validate CMS and PKCS#7 signatures.
     """
-
-    certs = [c.parse() for c in signed_data['certificates']]
-
-    try:
-        signer_info, = signed_data['signer_infos']
-    except ValueError:
-        raise SignatureValidationError(
-            'signer_infos should contain exactly one entry'
-        )
-
-    cert, other_certs = partition_certs(certs, signer_info)
+    signer_info, cert, other_certs = _extract_signer_info_and_certs(signed_data)
 
     signature_algorithm: cms.SignedDigestAlgorithm = \
         signer_info['signature_algorithm']
@@ -456,6 +461,11 @@ class EmbeddedPdfSignature:
     CMS signed data in the signature.
     """
 
+    signer_cert: x509.Certificate
+    """
+    Certificate of the signer.
+    """
+
     def __init__(self, reader: PdfFileReader,
                  sig_field: generic.DictionaryObject):
         self.reader = reader
@@ -492,10 +502,8 @@ class EmbeddedPdfSignature:
         #  been computed using a different algorithm!
         self.md_algorithm = sd_digest['algorithm'].native.lower()
 
-        try:
-            self.signer_info, = self.signed_data['signer_infos']
-        except ValueError:
-            raise ValueError('signer_infos should contain exactly one entry')
+        self.signer_info, self.signer_cert, _ = \
+            _extract_signer_info_and_certs(signed_data)
 
         # grab the revision to which the signature applies
         self.signed_revision = self.reader.xrefs.get_introducing_revision(
