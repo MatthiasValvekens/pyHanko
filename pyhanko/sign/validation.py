@@ -415,13 +415,18 @@ class PdfSignatureStatus(SignatureStatus):
             else:
                 return "No path to trust anchor found."
 
+        if self.trusted:
+            trust_status = "trusted"
+        elif self.revoked:
+            trust_status = "revoked"
+        else:
+            trust_status = "untrusted"
         about_signer = (
-            f"Certificate subject: {cert.subject.human_friendly}\n"
+            f"Certificate subject: \"{cert.subject.human_friendly}\"\n"
             f"Certificate SHA1 fingerprint: {cert.sha1.hex()}\n"
             f"Certificate SHA256 fingerprint: {cert.sha256.hex()}\n"
-            f"Trust anchor: {_trust_anchor(self)}\n"
-            "The signer's certificate is "
-            f"{'' if self.trusted else 'un'}trusted."
+            f"Trust anchor: \"{_trust_anchor(self)}\"\n"
+            f"The signer's certificate is {trust_status}."
         )
 
         if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
@@ -459,10 +464,10 @@ class PdfSignatureStatus(SignatureStatus):
 
             about_tsa = (
                 "The signing time is guaranteed by a time stamping authority.\n"
-                f"TSA certificate subject: {tsa.subject.human_friendly}\n"
+                f"TSA certificate subject: \"{tsa.subject.human_friendly}\"\n"
                 f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
                 f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
-                f"TSA cert trust anchor: {_trust_anchor(tst_status)}\n"
+                f"TSA cert trust anchor: \"{_trust_anchor(tst_status)}\"\n"
                 "The TSA certificate is "
                 f"{'' if tst_status.trusted else 'un'}trusted."
             )

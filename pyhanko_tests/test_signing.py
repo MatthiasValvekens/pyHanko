@@ -312,6 +312,7 @@ def test_sign_with_revoked(requests_mock):
     assert val_status.valid
     assert val_status.revoked
     assert not val_status.trusted
+    assert 'revoked' in val_status.pretty_print_details()
     summ = val_status.summary()
     assert 'INTACT' in summ
     assert 'REVOKED' in summ
