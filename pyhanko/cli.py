@@ -168,15 +168,9 @@ def _select_style(ctx, style_name, url):
     return style
 
 
-def _signature_status(validate, ltv_profile, ltv_obsessive,
+def _signature_status(ltv_profile, ltv_obsessive,
                       pretty_print, vc_kwargs,
                       executive_summary, embedded_sig):
-    if not validate:
-        if pretty_print:
-            return 'The signature field is filled.'
-        else:
-            return 'FILLED'
-
     try:
         if ltv_profile is None:
             vc = ValidationContext(**vc_kwargs)
@@ -216,12 +210,8 @@ def _signature_status(validate, ltv_profile, ltv_obsessive,
 
 
 # TODO add an option to do LTV, but guess the profile
-@signing.command(name='list', help='list signature fields')
+@signing.command(name='validate', help='validate signatures')
 @click.argument('infile', type=click.File('rb'))
-@click.option('--skip-status', help='do not print status', required=False,
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--validate', help='validate signatures', required=False,
-              type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--executive-summary',
               help='only print final judgment on signature validity',
               type=bool, is_flag=True, default=False, show_default=True)
@@ -238,41 +228,30 @@ def _signature_status(validate, ltv_profile, ltv_obsessive,
                    'or OCSP endpoints.',
               type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
-def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
-                   pretty_print, validation_context, trust, trust_replace,
-                   other_certs, ltv_profile, ltv_obsessive):
+def validate_signatures(ctx, infile, executive_summary,
+                        pretty_print, validation_context, trust, trust_replace,
+                        other_certs, ltv_profile, ltv_obsessive):
 
-    if pretty_print and (executive_summary or skip_status):
+    if pretty_print and executive_summary:
         raise click.ClickException(
-            "--pretty-print is incompatible with --skip-status "
-            "and --executive-summary."
+            "--pretty-print is incompatible with --executive-summary."
         )
 
     r = PdfFileReader(infile)
-    if validate and ltv_profile is not None:
+    if ltv_profile is not None:
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     vc_kwargs = _build_vc_kwargs(
         ctx, validation_context, trust, trust_replace, other_certs
     )
-    for ix, (name, value, field_ref) in \
-            enumerate(fields.enumerate_sig_fields(r)):
-        if skip_status:
-            print(name)
-            continue
-        if pretty_print:
-            status_str = 'The signature field is empty.'
-        else:
-            status_str = 'EMPTY'
-        fingerprint = ''
-        if value is not None:
-            embedded_sig = validation.EmbeddedPdfSignature(r, field_ref)
-            fingerprint: str = embedded_sig.signer_cert.sha256.hex()
-            status_str = _signature_status(
-                validate, ltv_profile, ltv_obsessive,
-                pretty_print, vc_kwargs,
-                executive_summary, embedded_sig
-            )
+    for ix, embedded_sig in enumerate(r.embedded_signatures):
+        fingerprint: str = embedded_sig.signer_cert.sha256.hex()
+        status_str = _signature_status(
+            ltv_profile, ltv_obsessive, pretty_print, vc_kwargs,
+            executive_summary, embedded_sig
+        )
+        name = embedded_sig.field_name
+
         if pretty_print:
             header = f'Field {ix + 1}: {name}'
             line = '=' * len(header)
@@ -282,6 +261,21 @@ def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
             print('\n\n' + status_str)
         else:
             print('%s:%s:%s' % (name, fingerprint, status_str))
+
+
+@signing.command(name='list', help='list signature fields')
+@click.argument('infile', type=click.File('rb'))
+@click.option('--skip-status', help='do not print status', required=False,
+              type=bool, is_flag=True, default=False, show_default=True)
+def list_sigfields(infile, skip_status):
+
+    r = PdfFileReader(infile)
+    field_info = fields.enumerate_sig_fields(r)
+    for ix, (name, value, field_ref) in enumerate(field_info):
+        if skip_status:
+            print(name)
+            continue
+        print(f"{name}:{'EMPTY' if value is None else 'FILLED'}")
 
 
 @signing.command(name='ltaupdate', help='update LTA timestamp')
