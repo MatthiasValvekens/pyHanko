@@ -351,7 +351,7 @@ class PdfSignatureStatus(SignatureStatus):
     the document signature policy in force.
     """
 
-    signed_dt: Optional[datetime] = None
+    signer_reported_dt: Optional[datetime] = None
     """
     Signer-reported signing time, if present in the signature.
     
@@ -404,6 +404,103 @@ class PdfSignatureStatus(SignatureStatus):
             yield 'TIMESTAMP_TOKEN<%s>' % (
                 '|'.join(self.timestamp_validity.summary_fields())
             )
+
+    def pretty_print_details(self):
+        cert: x509.Certificate = self.signing_cert
+
+        def _trust_anchor(status: SignatureStatus):
+            if status.validation_path is not None:
+                trust_anchor: x509.Certificate = status.validation_path[0]
+                return trust_anchor.subject.human_friendly
+            else:
+                return "No path to trust anchor found."
+
+        about_signer = (
+            f"Certificate subject: {cert.subject.human_friendly}\n"
+            f"Certificate SHA1 fingerprint: {cert.sha1.hex()}\n"
+            f"Certificate SHA256 fingerprint: {cert.sha256.hex()}\n"
+            f"Trust anchor: {_trust_anchor(self)}\n"
+            "The signer's certificate is "
+            f"{'' if self.trusted else 'un'}trusted."
+        )
+
+        if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
+            modification_str = "The signature covers the entire file."
+        else:
+            modlvl_string = "Some modifications may be illegitimate"
+            if self.modification_level is not None:
+                if self.modification_level == ModificationLevel.LTA_UPDATES:
+                    modlvl_string = \
+                        "All modifications relate to signature maintenance"
+                elif self.modification_level == ModificationLevel.FORM_FILLING:
+                    modlvl_string = (
+                        "All modifications relate to signing and form filling "
+                        "operations"
+                    )
+            modification_str = (
+                "The signature does not cover the entire file.\n"
+                f"{modlvl_string}, and they appear to be "
+                f"{'' if self.docmdp_ok else 'in'}compatible with the "
+                "current document modification policy."
+            )
+
+        validity_info = (
+            "The signature is cryptographically "
+            f"{'' if self.intact and self.valid else 'un'}sound.\n"
+            f"{modification_str}"
+        )
+
+        ts = self.signer_reported_dt
+        tst_status = self.timestamp_validity
+        about_tsa = ''
+        if tst_status is not None:
+            ts = tst_status.timestamp
+            tsa = tst_status.signing_cert
+
+            about_tsa = (
+                "The signing time is guaranteed by a time stamping authority.\n"
+                f"TSA certificate subject: {tsa.subject.human_friendly}\n"
+                f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
+                f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
+                f"TSA cert trust anchor: {_trust_anchor(tst_status)}\n"
+                "The TSA certificate is "
+                f"{'' if tst_status.trusted else 'un'}trusted."
+            )
+        elif ts is not None:
+            about_tsa = "The signing time is self-reported by the signer."
+
+        if ts is not None:
+            signing_time_str = ts.isoformat()
+        else:
+            signing_time_str = "unknown"
+
+        timing_info = (
+            f"Signing time: {signing_time_str}\n{about_tsa}"
+        )
+
+        def fmt_section(hdr, body):
+            return '\n'.join(
+                (hdr, '-' * len(hdr), body, '\n')
+            )
+
+        bottom_line = (
+            f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
+        )
+
+        sections = [
+            ("Signer info", about_signer), ("Integrity", validity_info),
+            ("Signing time", timing_info),
+            (
+                "Seed value constraints", (
+                    f"There were {'no' if self.seed_value_ok else 'some'} "
+                    f"SV issues detected for this signature."
+                )
+            ),
+            ("Bottom line", bottom_line)
+        ]
+        return '\n'.join(
+            fmt_section(hdr, body) for hdr, body in sections
+        )
 
 
 MECHANISMS = (
@@ -525,8 +622,9 @@ class EmbeddedPdfSignature:
         """
         return self.sig_field['/T']
 
+    # TODO also parse the signature object's /M entry
     @property
-    def self_reported_signed_timestamp(self) -> Optional[datetime]:
+    def self_reported_timestamp(self) -> Optional[datetime]:
         """
         :return:
             The signing time as reported by the signer, if embedded in the
@@ -1693,9 +1791,9 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     status_kwargs = embedded_sig.summarise_integrity_info()
 
     # try to find an embedded timestamp
-    signed_dt = embedded_sig.self_reported_signed_timestamp
-    if signed_dt is not None:
-        status_kwargs['signed_dt'] = signed_dt
+    signer_reported_dt = embedded_sig.self_reported_timestamp
+    if signer_reported_dt is not None:
+        status_kwargs['signer_reported_dt'] = signer_reported_dt
 
     # if we managed to find an (externally) signed timestamp,
     # we now proceed to validate it
@@ -1962,7 +2060,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
 
     status_kwargs = embedded_sig.summarise_integrity_info()
     status_kwargs.update({
-        'signed_dt': timestamp,
+        'signer_reported_dt': timestamp,
         'timestamp_validity': timestamp_status
     })
     status_kwargs = _validate_cms_signature(

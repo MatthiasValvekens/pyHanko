@@ -180,6 +180,7 @@ def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
+    val_status.pretty_print_details()
     summ = val_status.summary()
     assert 'INTACT' in summ
     assert 'TRUSTED' in summ
@@ -205,6 +206,7 @@ def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
         assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
         assert val_status.modification_level <= ModificationLevel.FORM_FILLING
     summ = val_status.summary()
+    val_status.pretty_print_details()
     assert 'INTACT' in summ
     return val_status
 

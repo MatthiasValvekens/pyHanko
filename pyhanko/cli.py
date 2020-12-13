@@ -168,6 +168,53 @@ def _select_style(ctx, style_name, url):
     return style
 
 
+def _signature_status(validate, ltv_profile, ltv_obsessive,
+                      pretty_print, vc_kwargs,
+                      executive_summary, embedded_sig):
+    if not validate:
+        if pretty_print:
+            return 'The signature field is filled.'
+        else:
+            return 'FILLED'
+
+    try:
+        if ltv_profile is None:
+            vc = ValidationContext(**vc_kwargs)
+            status = validation.validate_pdf_signature(
+                embedded_sig,
+                signer_validation_context=vc
+            )
+        else:
+            status = validation.validate_pdf_ltv_signature(
+                embedded_sig, ltv_profile,
+                force_revinfo=ltv_obsessive,
+                validation_context_kwargs=vc_kwargs
+            )
+        if executive_summary and not pretty_print:
+            return 'VALID' if status.bottom_line else 'INVALID'
+        elif pretty_print:
+            return status.pretty_print_details()
+        else:
+            return status.summary()
+    except validation.ValidationInfoReadingError as e:
+        if pretty_print:
+            return (
+                'An error occurred while parsing the revocation information '
+                'for this signature: ' + str(e)
+            )
+        else:
+            return 'REVINFO_FAILURE'
+    except SignatureValidationError as e:
+        if pretty_print:
+            return (
+                'An error occurred while validating this signature: ' + str(e)
+            )
+        else:
+            return 'INVALID'
+    except ValueError:
+        return 'MALFORMED'
+
+
 # TODO add an option to do LTV, but guess the profile
 @signing.command(name='list', help='list signature fields')
 @click.argument('infile', type=click.File('rb'))
@@ -177,6 +224,9 @@ def _select_style(ctx, style_name, url):
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--executive-summary',
               help='only print final judgment on signature validity',
+              type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--pretty-print',
+              help='render a prettier summary for the signatures in the file',
               type=bool, is_flag=True, default=False, show_default=True)
 @trust_options
 @click.option('--ltv-profile',
@@ -189,8 +239,15 @@ def _select_style(ctx, style_name, url):
               type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
 def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
-                   validation_context, trust, trust_replace, other_certs,
-                   ltv_profile, ltv_obsessive):
+                   pretty_print, validation_context, trust, trust_replace,
+                   other_certs, ltv_profile, ltv_obsessive):
+
+    if pretty_print and (executive_summary or skip_status):
+        raise click.ClickException(
+            "--pretty-print is incompatible with --skip-status "
+            "and --executive-summary."
+        )
+
     r = PdfFileReader(infile)
     if validate and ltv_profile is not None:
         ltv_profile = RevocationInfoValidationType(ltv_profile)
@@ -198,45 +255,33 @@ def list_sigfields(ctx, infile, skip_status, validate, executive_summary,
     vc_kwargs = _build_vc_kwargs(
         ctx, validation_context, trust, trust_replace, other_certs
     )
-    for name, value, field_ref in fields.enumerate_sig_fields(r):
+    for ix, (name, value, field_ref) in \
+            enumerate(fields.enumerate_sig_fields(r)):
         if skip_status:
             print(name)
             continue
-        status_str = 'EMPTY'
+        if pretty_print:
+            status_str = 'The signature field is empty.'
+        else:
+            status_str = 'EMPTY'
         fingerprint = ''
         if value is not None:
             embedded_sig = validation.EmbeddedPdfSignature(r, field_ref)
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
-
-            if validate:
-                try:
-                    if ltv_profile is None:
-                        vc = ValidationContext(**vc_kwargs)
-                        status = validation.validate_pdf_signature(
-                            embedded_sig,
-                            signer_validation_context=vc
-                        )
-                    else:
-                        status = validation.validate_pdf_ltv_signature(
-                            embedded_sig, ltv_profile,
-                            force_revinfo=ltv_obsessive,
-                            validation_context_kwargs=vc_kwargs
-                        )
-                    if executive_summary:
-                        status_str = (
-                            'VALID' if status.bottom_line else 'INVALID'
-                        )
-                    else:
-                        status_str = status.summary()
-                except validation.ValidationInfoReadingError:
-                    status_str = 'REVINFO_FAILURE'
-                except SignatureValidationError:
-                    status_str = 'INVALID'
-                except ValueError:
-                    status_str = 'MALFORMED'
-            else:
-                status_str = 'FILLED'
-        print('%s:%s:%s' % (name, fingerprint, status_str))
+            status_str = _signature_status(
+                validate, ltv_profile, ltv_obsessive,
+                pretty_print, vc_kwargs,
+                executive_summary, embedded_sig
+            )
+        if pretty_print:
+            header = f'Field {ix + 1}: {name}'
+            line = '=' * len(header)
+            print(line)
+            print(header)
+            print(line)
+            print('\n\n' + status_str)
+        else:
+            print('%s:%s:%s' % (name, fingerprint, status_str))
 
 
 @signing.command(name='ltaupdate', help='update LTA timestamp')
