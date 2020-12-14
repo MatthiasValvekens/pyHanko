@@ -642,6 +642,12 @@ class EmbeddedPdfSignature:
         except KeyError:
             pass
 
+        try:
+            st_as_pdf_date = self.sig_object['/M']
+            return generic.parse_pdf_date(st_as_pdf_date)
+        except KeyError:  # pragma: nocover
+            pass
+
     @property
     def external_timestamp_data(self) -> Optional[cms.SignedData]:
         """
