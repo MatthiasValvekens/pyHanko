@@ -7,6 +7,8 @@ BASE_DIR=../testing-ca
 # Set to 'yes' if you want all keys to be
 #  regenerated even if they already exist.
 FORCE_NEW_KEYS=no
+# Set to 'yes' to generate keys using ECC (ECDSA based on secp384r1)
+USE_ECC_KEYS=no
 # Set to 'yes' if you want all certs, CSRs and CRLs to be
 #  regenerated even if they already exist.
 FORCE_NEW_CERTS=yes
@@ -21,6 +23,8 @@ INITIAL_SERIAL=1000
 DUMMY_PASSWORD=secret
 DUMMY_PFX_PASSWORD=exportsecret
 OPENSSL=openssl
+
+MESSAGE_DIGEST=sha256
 
 CRLDAYS=10000
 

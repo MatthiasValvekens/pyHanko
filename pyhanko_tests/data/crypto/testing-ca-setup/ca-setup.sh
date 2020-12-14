@@ -13,9 +13,20 @@ subj_prefix="/C=$COUNTRY/O=$ORG/OU=$ORG_UNIT"
 
 ensure_key () {
     if [[ "$FORCE_NEW_KEYS" = yes || ! -f "$1" ]] ; then
-        echo -n "Generating RSA key for $1... "
-        "$OPENSSL" genrsa -aes256 -out "$1" -passout "pass:$DUMMY_PASSWORD" \
-            2>> "$LOGFILE" >/dev/null
+        if [[ "$USE_ECC_KEYS" = yes ]] ; then
+            echo -n "Generating ECDSA key for $1... "
+            # ecparam doesn't have an option for encrypting the output
+            # directly, so we need to pipe through openssl ec
+            "$OPENSSL" ecparam -name secp384r1 -genkey | \
+                "$OPENSSL" ec -aes256 -out "$1" \
+                -passout "pass:$DUMMY_PASSWORD" \
+                2>> "$LOGFILE" > /dev/null
+        else
+            echo -n "Generating RSA key for $1... "
+            "$OPENSSL" genrsa -aes256 -out "$1" \
+                -passout "pass:$DUMMY_PASSWORD" \
+                2>> "$LOGFILE" >/dev/null
+        fi
         echo "OK"
     fi
 }
@@ -62,13 +73,13 @@ if [[ "$FORCE_NEW_CERTS" = yes || ! -f "root/certs/ca.cert.pem" ]] ; then
     "$OPENSSL" req -config openssl.cnf -key root/ca.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=Root CA" \
-        -out "root/csr/root.csr.pem" -new -sha256 \
+        -out "root/csr/root.csr.pem" -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_root \
         -passin "pass:$DUMMY_PASSWORD" -selfsign \
         -in root/csr/root.csr.pem \
-        -out root/certs/ca.cert.pem -md sha256 -notext \
+        -out root/certs/ca.cert.pem -md $MESSAGE_DIGEST -notext \
         -extensions v3_ca -startdate $ROOT_START -enddate $ROOT_END \
         2>> "$LOGFILE" >/dev/null
 fi
@@ -82,11 +93,11 @@ then
     "$OPENSSL" req -config openssl.cnf -key intermediate/ca.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=Intermediate CA" \
-        -out "root/csr/intermediate.csr.pem" -new -sha256 \
+        -out "root/csr/intermediate.csr.pem" -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_root \
-        -extensions v3_intermediate_ca -md sha256 -notext \
+        -extensions v3_intermediate_ca -md $MESSAGE_DIGEST -notext \
         -startdate $INTERM_START -enddate $INTERM_END \
         -passin "pass:$DUMMY_PASSWORD" \
         -in root/csr/intermediate.csr.pem \
@@ -106,11 +117,11 @@ then
     "$OPENSSL" req -config openssl.cnf -key keys/ocsp.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=OCSP Responder" \
-        -out intermediate/csr/ocsp.csr.pem -new -sha256 \
+        -out intermediate/csr/ocsp.csr.pem -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_intermediate \
-        -extensions ocsp -md sha256 -notext \
+        -extensions ocsp -md $MESSAGE_DIGEST -notext \
         -startdate $OCSP_START -enddate $OCSP_END \
         -passin "pass:$DUMMY_PASSWORD" \
         -in intermediate/csr/ocsp.csr.pem \
@@ -127,11 +138,11 @@ then
     "$OPENSSL" req -config openssl.cnf -key keys/tsa.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=Time Stamping Authority" \
-        -out root/csr/tsa.csr.pem -new -sha256 \
+        -out root/csr/tsa.csr.pem -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_root \
-        -extensions tsa_cert -md sha256 -notext \
+        -extensions tsa_cert -md $MESSAGE_DIGEST -notext \
         -startdate $TSA_START -enddate $TSA_END \
         -passin "pass:$DUMMY_PASSWORD" \
         -in root/csr/tsa.csr.pem \
@@ -146,11 +157,11 @@ then
     "$OPENSSL" req -config openssl.cnf -key keys/tsa2.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=Time Stamping Authority 2" \
-        -out root/csr/tsa2.csr.pem -new -sha256 \
+        -out root/csr/tsa2.csr.pem -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_root \
-        -extensions tsa_cert -md sha256 -notext \
+        -extensions tsa_cert -md $MESSAGE_DIGEST -notext \
         -startdate $TSA2_START -enddate $TSA2_END \
         -passin "pass:$DUMMY_PASSWORD" \
         -in root/csr/tsa2.csr.pem \
@@ -166,11 +177,11 @@ then
     "$OPENSSL" req -config openssl.cnf -key keys/$SIGNER_IDENT.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=$SIGNER_NAME/emailAddress=$SIGNER_EMAIL" \
-        -out intermediate/csr/$SIGNER_IDENT.csr.pem -new -sha256 \
+        -out intermediate/csr/$SIGNER_IDENT.csr.pem -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_intermediate \
-        -extensions usr_cert -md sha256 -notext \
+        -extensions usr_cert -md $MESSAGE_DIGEST -notext \
         -startdate $SIGNER_START -enddate $SIGNER_END \
         -passin "pass:$DUMMY_PASSWORD" \
         -in intermediate/csr/$SIGNER_IDENT.csr.pem \
@@ -196,11 +207,11 @@ then
     "$OPENSSL" req -config openssl.cnf -key keys/$SIGNER2_IDENT.key.pem \
         -passin "pass:$DUMMY_PASSWORD" \
         -subj "$subj_prefix/CN=$SIGNER2_NAME/emailAddress=$SIGNER2_EMAIL" \
-        -out intermediate/csr/$SIGNER2_IDENT.csr.pem -new -sha256 \
+        -out intermediate/csr/$SIGNER2_IDENT.csr.pem -new -$MESSAGE_DIGEST \
         2>> "$LOGFILE" >/dev/null
 
     "$OPENSSL" ca -batch -config openssl.cnf -name CA_intermediate \
-        -extensions usr_cert -md sha256 -notext \
+        -extensions usr_cert -md $MESSAGE_DIGEST -notext \
         -startdate $SIGNER2_START -enddate $SIGNER2_END \
         -passin "pass:$DUMMY_PASSWORD" \
         -in intermediate/csr/$SIGNER2_IDENT.csr.pem \
