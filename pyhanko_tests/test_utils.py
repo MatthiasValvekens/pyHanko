@@ -614,3 +614,49 @@ def test_duplicate_resource():
 
     with pytest.raises(pyhanko.pdf_utils.content.ResourceManagementError):
         res1 += res2
+
+
+TESTDATE_CET = datetime.datetime(
+    year=2008, month=2, day=3, hour=1, minute=5, second=59,
+    tzinfo=pytz.timezone('CET')
+)
+
+TESTDATE_EST = datetime.datetime(
+    year=2008, month=2, day=3, hour=1, minute=5, second=59,
+    tzinfo=pytz.timezone('EST')
+)
+
+
+@pytest.mark.parametrize('date_str, expected_dt', [
+    ('D:2008', datetime.datetime(year=2008, month=1, day=1)),
+    ('D:200802', datetime.datetime(year=2008, month=2, day=1)),
+    ('D:20080203', datetime.datetime(year=2008, month=2, day=3)),
+    ('D:20080201', datetime.datetime(year=2008, month=2, day=1)),
+    ('D:2008020301', datetime.datetime(year=2008, month=2, day=3, hour=1)),
+    ('D:200802030105',
+     datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5)),
+    ('D:20080203010559',
+     datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5, second=59)),
+    ('D:20080203010559Z',
+     datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5, second=59,
+                       tzinfo=pytz.utc)),
+    ('D:20080203010559+01\'00', TESTDATE_CET),
+    ('D:20080203010559+01', TESTDATE_CET),
+    ('D:20080203010559+01\'', TESTDATE_CET),
+    ('D:20080203010559+01\'00\'', TESTDATE_CET),
+    ('D:20080203010559-05\'00', TESTDATE_EST),
+    ('D:20080203010559-05', TESTDATE_EST),
+    ('D:20080203010559-05\'', TESTDATE_EST),
+    ('D:20080203010559-05\'00\'', TESTDATE_EST),
+])
+def test_date_parsing(date_str, expected_dt):
+    assert generic.parse_pdf_date(date_str) == expected_dt
+
+
+@pytest.mark.parametrize('date_str', [
+    '2008', 'D:20', 'D:20080', 'D:20081301',
+    'D:20030230', 'D:20080203010559Z00', 'D:20080203010559-05\'00\'11'
+])
+def test_date_parsing_errors(date_str):
+    with pytest.raises(misc.PdfReadError):
+        generic.parse_pdf_date(date_str)

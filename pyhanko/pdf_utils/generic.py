@@ -8,7 +8,7 @@ of the PyPDF2 project.
 import os
 import re
 import binascii
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Iterator, Tuple, Optional, Union
 from dataclasses import dataclass, field
 
@@ -1336,3 +1336,62 @@ def pdf_date(dt: datetime) -> TextStringObject:
             utc_offset_string = sign + ("%02d'%02d'" % (hrs, mins))
 
     return TextStringObject(base_dt + utc_offset_string)
+
+
+# The year field is the only mandatory one
+MIN_DATE_REGEX = re.compile(r'^D:(\d{4})')
+TWO_DIGIT_START = re.compile(r'^(\d\d)')
+UTC_OFFSET = re.compile(r"(\d\d)(?:'(\d\d))?'?")
+
+
+def parse_pdf_date(date_str: str) -> datetime:
+    m = MIN_DATE_REGEX.match(date_str)
+    if not m:
+        raise PdfReadError(f"{date_str} does not appear to be a date string.")
+    year = int(m.group(1))
+
+    # now, there are a number of 2-digit groups (anywhere from 0 to 5)
+    date_remaining = date_str[6:]
+    lower_order = [1, 1, 0, 0, 0]
+
+    for ix in range(5):
+        m = TWO_DIGIT_START.match(date_remaining)
+        if not m:
+            break
+        lower_order[ix] = int(m.group(1))
+        date_remaining = date_remaining[2:]
+
+    # TODO range checks
+    month, day, hour, minute, second = lower_order
+
+    # finally, parse the timezone
+    tz_info = None
+    if date_remaining:
+        sgn = date_remaining[0]
+        if sgn == 'Z' and len(date_remaining) == 1:
+            tz_offset = timedelta(0)
+        elif sgn in ('+', '-'):
+            tz_spec = date_remaining[1:]
+            tz_match = UTC_OFFSET.fullmatch(tz_spec)
+            if not tz_match:
+                raise PdfReadError(
+                    f"Improper timezone specification in {date_str}: {tz_spec}"
+                )
+            tz_hours = int(tz_match.group(1))
+            tz_minutes = int(tz_match.group(2) or 0)
+            tz_offset = timedelta(hours=tz_hours, minutes=tz_minutes)
+            if sgn == '-':
+                tz_offset = -tz_offset
+        else:
+            raise PdfReadError(
+                f"Improper trailing characters in {date_str}."
+            )
+        tz_info = timezone(tz_offset)
+
+    try:
+        return datetime(
+            year=year, month=month, day=day, hour=hour, minute=minute,
+            second=second, microsecond=0, tzinfo=tz_info
+        )
+    except ValueError as e:
+        raise PdfReadError("Improper date value", e)
