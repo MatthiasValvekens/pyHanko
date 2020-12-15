@@ -482,15 +482,16 @@ class Signer:
         digest_algorithm = digest_algorithm.lower()
         try:
             implied_hash_algo = self.signature_mechanism.hash_algo
-            if implied_hash_algo != digest_algorithm:
-                raise SigningError(
-                    f"Selected signature mechanism specifies message digest "
-                    f"{implied_hash_algo}, but {digest_algorithm} "
-                    f"was requested."
-                )
         except ValueError:
             # this is OK, just use the specified message digest
-            pass
+            implied_hash_algo = None
+        if implied_hash_algo is not None \
+                and implied_hash_algo != digest_algorithm:
+            raise SigningError(
+                f"Selected signature mechanism specifies message digest "
+                f"{implied_hash_algo}, but {digest_algorithm} "
+                f"was requested."
+            )
 
         signature = self.sign_raw(
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
@@ -747,7 +748,8 @@ class SimpleSigner(Signer):
             return None
 
     @classmethod
-    def load_pkcs12(cls, pfx_file, ca_chain_files=None, passphrase=None):
+    def load_pkcs12(cls, pfx_file, ca_chain_files=None, passphrase=None,
+                    signature_mechanism=None):
         """
         Load certificates and key material from a PCKS#12 archive
         (usually ``.pfx`` or ``.p12`` files).
@@ -759,6 +761,8 @@ class SimpleSigner(Signer):
             not included in the PKCS#12 file.
         :param passphrase:
             Passphrase to decrypt the PKCS#12 archive, if required.
+        :param signature_mechanism:
+            Override the signature mechanism to use.
         :return:
             A :class:`.SimpleSigner` object initialised with key material loaded
             from the PKCS#12 file provided.
@@ -782,12 +786,13 @@ class SimpleSigner(Signer):
         cs.register_multiple(ca_chain | set(other_certs))
         return SimpleSigner(
             signing_key=kinfo, signing_cert=cert,
-            cert_registry=cs
+            cert_registry=cs, signature_mechanism=signature_mechanism
         )
 
     @classmethod
     def load(cls, key_file, cert_file, ca_chain_files=None,
-             key_passphrase=None, other_certs=None):
+             key_passphrase=None, other_certs=None,
+             signature_mechanism=None):
         """
         Load certificates and key material from PEM/DER files.
 
@@ -802,6 +807,8 @@ class SimpleSigner(Signer):
         :param other_certs:
             Other relevant certificates, specified as a list of
             :class:`.asn1crypto.x509.Certificate` objects.
+        :param signature_mechanism:
+            Override the signature mechanism to use.
         :return:
             A :class:`.SimpleSigner` object initialised with key material loaded
             from the files provided.
@@ -831,7 +838,7 @@ class SimpleSigner(Signer):
         cert_reg.register_multiple(other_certs)
         return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
-            cert_registry=cert_reg
+            cert_registry=cert_reg, signature_mechanism=signature_mechanism
         )
 
 

@@ -6,6 +6,7 @@ from io import BytesIO
 
 import pytz
 from asn1crypto import ocsp, tsp
+from asn1crypto.algos import SignedDigestAlgorithm
 
 import pyhanko.pdf_utils.content
 from certvalidator.errors import PathValidationError
@@ -2412,4 +2413,40 @@ def test_qr_sign_enforce_url_param(params_value):
     with pytest.raises(SigningError):
         signer.sign_pdf(
             w, existing_fields_only=True, appearance_text_params=params_value
+        )
+
+
+def test_overspecify_cms_digest_algo():
+    # TODO this behaviour is not ideal, but at least this test documents it
+
+    signer = signers.SimpleSigner.load(
+        TESTING_CA_DIR + '/keys/signer.key.pem',
+        TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
+        ca_chain_files=(
+            TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+        key_passphrase=b'secret',
+        # specify an algorithm object that also mandates a specific
+        # message digest
+        signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'sha256_rsa'}
+        )
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    # digest methods agree, so that should be OK
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='sha256'),
+        signer=signer
+
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', md_algorithm='sha512'
+            ), signer=signer
         )
