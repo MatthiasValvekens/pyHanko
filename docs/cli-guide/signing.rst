@@ -444,10 +444,14 @@ see :doc:`stamping` and :ref:`style-definitions` for details.
 .. [#pkcs11]
     The PKCS#11 functionality is currently only exposed in the CLI for
     Belgian eID cards, but it should be reasonably easy to write an
-    implementation that works for any PKCS#11 device. That being said,
-    my experience with general PKCS#11 is limited, and I'm not 100% sure about
-    current best practices for generic PKCS#11 clients (key selection,
-    key-certificate pairing, ...).
+    implementation that works for any (RSA-based) PKCS#11 device.
+    That being said, my experience with general PKCS#11 is limited, and I'm not
+    100% sure about current best practices for generic PKCS#11 clients
+    (key selection, key-certificate pairing, ...).
+    Additionally, the PKCS#11 module doesn't support ECC-based certificates yet,
+    because I currently don't have the means to test those.
+    The newest generation of BeID cards (Applet v1.8, launched in 2020) will
+    therefore probably take a while to be integrated into the CLI.
     Discussion and (properly motivated) pull requests are certainly welcome!
 .. [#modpolexceptions]
     There are some legitimate modifications that cannot be prohibited by
