@@ -149,13 +149,6 @@ def _validate_cms_signature(signed_data: cms.SignedData,
         raise SignatureValidationError('Message digest not found in signature')
     intact = raw_digest == embedded_digest[0].native
 
-    # finally validate the signature
-    if mechanism not in MECHANISMS:
-        raise NotImplementedError(
-            'Signature mechanism %s is not currently supported'
-            % mechanism
-        )
-
     valid = False
     if intact:
         try:
@@ -163,7 +156,17 @@ def _validate_cms_signature(signed_data: cms.SignedData,
                 verify_md = signature_algorithm.hash_algo
             except ValueError:
                 verify_md = md_algorithm
-            asymmetric.rsa_pkcs1v15_verify(
+            sig_algo = signature_algorithm.signature_algo
+            if sig_algo == 'rsassa_pkcs1v15':
+                verify_func = asymmetric.rsa_pkcs1v15_verify
+            elif sig_algo == 'ecdsa':
+                verify_func = asymmetric.ecdsa_verify
+            else:  # pragma: nocover
+                raise SignatureValidationError(
+                    f"Signature mechanism {sig_algo} is not supported."
+                )
+
+            verify_func(
                 asymmetric.load_public_key(cert.public_key), signature,
                 signed_blob, hash_algorithm=verify_md
             )
@@ -506,11 +509,6 @@ class PdfSignatureStatus(SignatureStatus):
         return '\n'.join(
             fmt_section(hdr, body) for hdr, body in sections
         )
-
-
-MECHANISMS = (
-    'rsassa_pkcs1v15', 'sha1_rsa', 'sha256_rsa', 'sha384_rsa', 'sha512_rsa'
-)
 
 
 def _extract_reference_dict(signature_obj, method) \

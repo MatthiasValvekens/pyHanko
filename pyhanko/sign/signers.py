@@ -9,6 +9,7 @@ from typing import Optional
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
+from asn1crypto.algos import SignedDigestAlgorithm
 from certvalidator.errors import PathValidationError
 
 from certvalidator import ValidationContext, CertificateValidator
@@ -247,10 +248,32 @@ class Signer:
     about trust.
     """
 
-    pkcs7_signature_mechanism: str
+    signature_mechanism: SignedDigestAlgorithm
     """
     The (cryptographic) signature mechanism to use.
     """
+
+    def __init__(self):
+        if self.signature_mechanism is None and self.signing_cert is not None:
+            # Grab the certificate's algorithm (but forget about the digest)
+            #  and use that to set up the default.
+            # We'll specify the digest somewhere else.
+            cert_pubkey: asymmetric.PublicKey = asymmetric.load_public_key(
+                self.signing_cert.public_key
+            )
+            algo = cert_pubkey.algorithm
+            if algo == 'ec':
+                mech = 'ecdsa'
+            elif algo == 'rsa':
+                mech = 'rsassa_pkcs1v15'
+            else:  # pragma: nocover
+                raise SigningError(
+                    f"Signature mechanism {algo} is unsupported."
+                )
+
+            self.signature_mechanism = SignedDigestAlgorithm(
+                {'algorithm': mech}
+            )
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
             -> bytes:
@@ -262,6 +285,10 @@ class Signer:
             Data to sign.
         :param digest_algorithm:
             Digest algorithm to use.
+
+            .. warning::
+                If :attr:`signature_mechanism` also specifies a digest, they
+                should match.
         :param dry_run:
             Do not actually create a signature, but merely output placeholder
             bytes that would suffice to contain an actual signature.
@@ -391,9 +418,7 @@ class Signer:
             }),
             'digest_algorithm': digest_algorithm_obj,
             # TODO implement PSS support
-            'signature_algorithm': algos.SignedDigestAlgorithm(
-                {'algorithm': self.pkcs7_signature_mechanism}
-            ),
+            'signature_algorithm': self.signature_mechanism,
             'signed_attrs': signed_attrs,
             'signature': signature
         })
@@ -449,6 +474,24 @@ class Signer:
             data_digest, timestamp, revocation_info=revocation_info,
             use_pades=use_pades
         )
+
+        # TODO decouple the document hashing MD from the CMS-internal MD
+        #  it's probably a good idea to allow digest_algorithm to be None
+        #  here if it's implied by the signature mechanism, but care is needed
+        #  to integrate it correctly with the signer and validator
+        digest_algorithm = digest_algorithm.lower()
+        try:
+            implied_hash_algo = self.signature_mechanism.hash_algo
+            if implied_hash_algo != digest_algorithm:
+                raise SigningError(
+                    f"Selected signature mechanism specifies message digest "
+                    f"{implied_hash_algo}, but {digest_algorithm} "
+                    f"was requested."
+                )
+        except ValueError:
+            # this is OK, just use the specified message digest
+            pass
+
         signature = self.sign_raw(
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
         )
@@ -655,16 +698,10 @@ def load_certs_from_pemder(cert_files):
             yield x509.Certificate.load(ca_chain_bytes)
 
 
-@dataclass
 class SimpleSigner(Signer):
     """
     Simple signer implementation where the key material is available in local
     memory.
-    """
-
-    signing_cert: x509.Certificate
-    """
-    The certificate that will be used to create the signature.
     """
 
     signing_key: keys.PrivateKeyInfo
@@ -672,19 +709,31 @@ class SimpleSigner(Signer):
     Private key associated with the certificate in :attr:`signing_cert`.
     """
 
-    cert_registry: CertificateStore
-    pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
-    """
-    Signature mechanism to use.
-    
-    .. warning::
-        Only the default value ``rsassa_pkcs1v15`` is supported right now.
-        See :ref:`here <rsassa-pkcs1v15-warning>` for further comments.
-    """
+    def __init__(self, signing_cert: x509.Certificate,
+                 signing_key: keys.PrivateKeyInfo,
+                 cert_registry: CertificateStore,
+                 signature_mechanism: SignedDigestAlgorithm = None):
+        self.signing_cert = signing_cert
+        self.signing_key = signing_key
+        self.cert_registry = cert_registry
+        self.signature_mechanism = signature_mechanism
+        super().__init__()
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
             -> bytes:
-        return asymmetric.rsa_pkcs1v15_sign(
+
+        mechanism = self.signature_mechanism.signature_algo
+        if mechanism == 'rsassa_pkcs1v15':
+            sign_func = asymmetric.rsa_pkcs1v15_sign
+        elif mechanism == 'ecdsa':
+            sign_func = asymmetric.ecdsa_sign
+        else:  # pragma: nocover
+            raise SigningError(
+                f"The signature mechanism {mechanism} "
+                "is unsupported by this signer."
+            )
+
+        return sign_func(
             asymmetric.load_private_key(self.signing_key),
             data, digest_algorithm.lower()
         )

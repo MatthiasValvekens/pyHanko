@@ -3,7 +3,7 @@ This module provides PKCS#11 integration for pyHanko, by providing a wrapper
 for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
 seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
-
+from asn1crypto.algos import SignedDigestAlgorithm
 from pkcs11 import Session, ObjectClass, Attribute
 
 from typing import Set
@@ -20,10 +20,10 @@ __all__ = ['PKCS11Signer']
 class PKCS11Signer(Signer):
     """
     Signer implementation for PKCS11 devices.
-    """
 
-    # TODO is this actually the correct one to use?
-    pkcs7_signature_mechanism: str = 'rsassa_pkcs1v15'
+    Note: this class only supports the "RSA with PKCS#1 v1.5" scheme.
+    In particular, there's no ECDSA support (yet).
+    """
 
     def __init__(self, pkcs11_session: Session,
                  cert_label: str, ca_chain=None, key_label=None):
@@ -52,6 +52,10 @@ class PKCS11Signer(Signer):
             self._cert_registry = None
         self._signing_cert = self._key_handle = None
         self._loaded = False
+        self.signature_mechanism = SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        )
+        super().__init__()
 
     @property
     def cert_registry(self):

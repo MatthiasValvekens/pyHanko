@@ -5,6 +5,7 @@ def read_all(fname):
 
 CRYPTO_DATA_DIR = 'pyhanko_tests/data/crypto'
 TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'
+ECC_TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca-ecdsa'
 PDF_DATA_DIR = 'pyhanko_tests/data/pdf'
 MINIMAL_PATH = PDF_DATA_DIR + '/minimal.pdf'
 MINIMAL = read_all(MINIMAL_PATH)

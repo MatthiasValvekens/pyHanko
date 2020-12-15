@@ -53,6 +53,13 @@ FROM_CA = signers.SimpleSigner.load(
     key_passphrase=b'secret'
 )
 
+FROM_ECC_CA = signers.SimpleSigner.load(
+    ECC_TESTING_CA_DIR + '/keys/signer.key.pem',
+    ECC_TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
+    ca_chain_files=(ECC_TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+    key_passphrase=b'secret'
+)
+
 REVOKED_SIGNER = signers.SimpleSigner.load(
     TESTING_CA_DIR + '/keys/signer2.key.pem',
     TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem',
@@ -61,6 +68,7 @@ REVOKED_SIGNER = signers.SimpleSigner.load(
 )
 
 ROOT_PATH = TESTING_CA_DIR + '/root/certs/ca.cert.pem'
+ECC_ROOT_PATH = ECC_TESTING_CA_DIR + '/root/certs/ca.cert.pem'
 INTERM_PATH = TESTING_CA_DIR + '/intermediate/certs/ca.cert.pem'
 OCSP_PATH = TESTING_CA_DIR + '/intermediate/newcerts/ocsp.cert.pem'
 REVOKED_CERT_PATH = TESTING_CA_DIR + '/intermediate/newcerts/1002.pem'
@@ -72,11 +80,13 @@ FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
 )
 
 ROOT_CERT = oskeys.parse_certificate(read_all(ROOT_PATH))
+ECC_ROOT_CERT = oskeys.parse_certificate(read_all(ECC_ROOT_PATH))
 INTERM_CERT = oskeys.parse_certificate(read_all(INTERM_PATH))
 OCSP_CERT = oskeys.parse_certificate(read_all(OCSP_PATH))
 REVOKED_CERT = oskeys.parse_certificate(read_all(REVOKED_CERT_PATH))
 NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
+SIMPLE_ECC_V_CONTEXT = ValidationContext(trust_roots=[ECC_ROOT_CERT])
 OCSP_KEY = oskeys.parse_private(
     read_all(TESTING_CA_DIR + '/keys/ocsp.key.pem'), b"secret"
 )
@@ -265,6 +275,17 @@ def test_sign_with_trust():
     assert not status.trusted
 
     val_trusted(s)
+
+
+def test_sign_with_ecdsa_trust():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_ECC_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT)
 
 
 def test_sign_with_new_field_spec():
