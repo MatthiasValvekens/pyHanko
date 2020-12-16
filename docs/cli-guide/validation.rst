@@ -61,16 +61,60 @@ This is where the :ref:`trust <cli-embedding-revinfo>`
 Incremental updates: difference analysis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+PDF files can be modified, even when signed, by appending data to the end of the
+previous revision. These are *incremental updates*. In particular, this is how
+forms with multiple signatures are implemented in PDF.
+These incremental updates can essentially modify the original document in
+arbitrary ways, which is a problem, since they are (by definition) not covered
+by any earlier signatures.
+
+In short, validators have two options: either reject all incremental updates
+(and decline to support multiple-signer scenarios of any kind), or police
+incremental updates by itself. The exact way in which this is supposed to be
+done is not specified precisely in the PDF standard.
+
+.. warning::
+    PyHanko attempts to run a difference analysis on incremental updates,
+    and processes modifications on a reject-by-default basis (i.e. all updates
+    that can't be vetted as OK are considered suspect). However, this feature
+    is (very) experimental, and shouldn't be relied on too much.
 
 
 Establishing the time of signing
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+There are a number of ways to indicate when a signature was made.
+These broadly fall into two categories:
+
+* Self-reported timestamps: those are based on the signer's word, and shouldn't
+  necessarily be trusted as accurate.
+* Trusted timestamps: these derive from timestamp tokens issued by a trusted
+  timestamping authority at the time of signing.
+
+Especially in the context of long-term verifiability of signatures and
+preventing things like backdating of documents, having an accurate measure
+of when the timestamp was made can be of crucial importance.
+PyHanko will tell you when a signature includes a timestamp token, and validate
+it along with the signature.
 
 
 Evaluating seed value constraints
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TODO
+Finally, the document author can put certain restrictions on future signatures
+when setting up the form fields. These are known as *seed values* in the PDF
+standard. Not all seed values represent constraints (some are intended as
+suggestions), but one especially useful use of them is to earmark signature
+fields for use by specific signers.
+When validating signatures, pyHanko will also report on whether (mandatory)
+seed value constraints were respected.
+
+.. warning::
+    Not all digital signing software is capable of processing seed values, so
+    some false positives are to be expected.
+
+.. warning::
+    Obviously, seed value constraints are only *truly* reliable if the document
+    author secures the document with a certification signature before sending
+    it for signing. Otherwise, later signers can modify the seed values *before*
+    putting their signatures in place.
