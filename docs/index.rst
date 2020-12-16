@@ -33,6 +33,7 @@ PyHanko is a tool for signing and stamping PDF files.
    cli-guide/index
    lib-guide/index
    api-docs/modules
+   known-issues
    license
 
 
