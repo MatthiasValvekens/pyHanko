@@ -20,10 +20,11 @@ from pyhanko.sign.general import UnacceptableSignerError, SigningError
 from pyhanko.stamp import AnnotAppearances
 
 __all__ = [
-    'SigSeedValFlags', 'SigCertConstraints', 'SigSeedValueSpec',
-    'SigCertConstraintFlags', 'SigFieldSpec', 'SigSeedSubFilter',
+    'SigFieldSpec', 'SigSeedValFlags', 'SigCertConstraints',
+    'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigSeedSubFilter',
     'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
-    'SignatureFormField', 'enumerate_sig_fields',
+    'SignatureFormField',
+    'enumerate_sig_fields', 'append_signature_field'
 ]
 
 logger = logging.getLogger(__name__)
@@ -886,34 +887,44 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
                 continue
 
 
-def append_signature_fields(pdf_out: IncrementalPdfFileWriter,
-                            sig_field_specs: List[SigFieldSpec]):
+def append_signature_field(pdf_out: IncrementalPdfFileWriter,
+                           sig_field_spec: SigFieldSpec):
+    """
+    Append signature fields to a PDF file.
+
+    :param pdf_out:
+        Incremental writer to house the objects.
+    :param sig_field_spec:
+        A :class:`.SigFieldSpec` object describing the signature field
+        to add.
+    """
     root = pdf_out.root
 
-    for sp in sig_field_specs:
-        page_ref = pdf_out.find_page_for_modification(sp.on_page)[0]
-        # use default appearance
-        field_created, sig_field_ref = _prepare_sig_field(
-            sp.sig_field_name, root, update_writer=pdf_out,
-            existing_fields_only=False,
-            box=sp.box, include_on_page=page_ref,
-            lock_sig_flags=False
+    page_ref = pdf_out.find_page_for_modification(sig_field_spec.on_page)[0]
+    # use default appearance
+    field_created, sig_field_ref = _prepare_sig_field(
+        sig_field_spec.sig_field_name, root, update_writer=pdf_out,
+        existing_fields_only=False,
+        box=sig_field_spec.box, include_on_page=page_ref,
+        lock_sig_flags=False
+    )
+    if not field_created:
+        raise PdfWriteError(
+            'Signature field with name %s already exists.'
+            % sig_field_spec.sig_field_name
         )
-        if not field_created:
-            raise PdfWriteError(
-                'Signature field with name %s already exists.'
-                % sp.sig_field_name
-            )
 
-        sig_field = sig_field_ref.get_object()
-        if sp.seed_value_dict is not None:
-            # /SV must be an indirect reference as per the spec
-            sv_ref = pdf_out.add_object(sp.seed_value_dict.as_pdf_object())
-            sig_field[pdf_name('/SV')] = sv_ref
+    sig_field = sig_field_ref.get_object()
+    if sig_field_spec.seed_value_dict is not None:
+        # /SV must be an indirect reference as per the spec
+        sv_ref = pdf_out.add_object(
+            sig_field_spec.seed_value_dict.as_pdf_object()
+        )
+        sig_field[pdf_name('/SV')] = sv_ref
 
-        lock = sp.format_lock_dictionary()
-        if lock is not None:
-            sig_field[pdf_name('/Lock')] = pdf_out.add_object(lock)
+    lock = sig_field_spec.format_lock_dictionary()
+    if lock is not None:
+        sig_field[pdf_name('/Lock')] = pdf_out.add_object(lock)
 
 
 class SignatureFormField(generic.DictionaryObject):

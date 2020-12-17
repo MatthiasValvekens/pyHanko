@@ -559,7 +559,7 @@ def test_double_sig_add_visible_field():
     sp = fields.SigFieldSpec(
         'SigNew', box=(10, 74, 140, 134)
     )
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
@@ -587,7 +587,7 @@ def test_add_sigfield_with_lock(include_docmdp):
             fields.MDPPerm.NO_CHANGES if include_docmdp else None
         )
     )
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
@@ -716,17 +716,17 @@ def test_append_simple_sig_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     sp = fields.SigFieldSpec('InvisibleSig')
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 1
     out = BytesIO()
     w.write(out)
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
     with pytest.raises(PdfWriteError):
-        fields.append_signature_fields(w, [sp])
+        fields.append_signature_field(w, sp)
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 3
 
 
@@ -736,17 +736,17 @@ def test_append_visible_sig_field():
     sp = fields.SigFieldSpec(
         'VisibleSig', box=(10, 0, 50, 8)
     )
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 1
     out = BytesIO()
     w.write(out)
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
     with pytest.raises(PdfWriteError):
-        fields.append_signature_fields(w, [sp])
+        fields.append_signature_field(w, sp)
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 3
 
 
@@ -799,7 +799,7 @@ def test_append_sig_field_with_simple_sv():
         timestamp_server_url='https://tsa.example.com',
     )
     sp = fields.SigFieldSpec('InvisibleSig', seed_value_dict=sv)
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     out = BytesIO()
     w.write(out)
     out.seek(0)
@@ -972,7 +972,7 @@ def test_append_sig_field_acro_update():
 
     sp = fields.SigFieldSpec('InvisibleSig')
     w = IncrementalPdfFileWriter(out)
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 1
 
     w = PdfFileWriter()
@@ -987,7 +987,7 @@ def test_append_sig_field_acro_update():
     sp = fields.SigFieldSpec('InvisibleSig')
     w = IncrementalPdfFileWriter(out)
     with pytest.raises(ValueError):
-        fields.append_signature_fields(w, [sp])
+        fields.append_signature_field(w, sp)
 
 
 def test_cert_constraint_deserialisation():
@@ -1548,7 +1548,7 @@ def prepare_sv_field(sv_spec):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
     sp = fields.SigFieldSpec('Sig', seed_value_dict=sv_spec)
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     out = BytesIO()
     w.write(out)
     out.seek(0)
@@ -2083,7 +2083,7 @@ def test_form_field_in_group_locked_postsign_modify_failure(field_filled, fieldm
         field_mdp_spec=fieldmdp_spec,
         doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
     )
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     set_text_field_in_group(w, field_filled, "Some text")
     meta = signers.PdfSignatureMetadata(field_name='SigNew')
     out = signers.sign_pdf(w, meta, signer=FROM_CA)
@@ -2128,7 +2128,7 @@ def test_form_field_in_group_locked_postsign_modify_success(field_filled, fieldm
         field_mdp_spec=fieldmdp_spec,
         doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
     )
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     set_text_field_in_group(w, field_filled, "Some text")
     meta = signers.PdfSignatureMetadata(field_name='SigNew')
     out = signers.sign_pdf(w, meta, signer=FROM_CA)
@@ -2367,7 +2367,7 @@ def test_rogue_backreferences():
         doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
     )
     w = IncrementalPdfFileWriter(out)
-    fields.append_signature_fields(w, [sp])
+    fields.append_signature_field(w, sp)
     w.write_in_place()
 
     w = IncrementalPdfFileWriter(out)
