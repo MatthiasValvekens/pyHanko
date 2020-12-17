@@ -29,6 +29,8 @@ The pyHanko library roughly consists of the following components.
     :maxdepth: 3
     :caption: pyHanko library topics
 
+    reading-writing
+    sig-fields
     signing
     validation
     pdf-utils
