@@ -4,6 +4,8 @@ Signature fields
 .. |---| unicode:: U+02014 .. em dash
    :trim:
 .. |SigFieldSpec| replace:: :class:`~.pyhanko.sign.fields.SigFieldSpec`
+.. |SigSeedValueSpec| replace:: :class:`~.pyhanko.sign.fields.SigSeedValueSpec`
+.. |SigCertConstraints| replace:: :class:`~.pyhanko.sign.fields.SigCertConstraints`
 
 The creation of signature fields |---| that is to say, *containers* for
 (future) signatures |---| is handled by the :mod:`.pyhanko.sign.fields` module.
@@ -140,6 +142,74 @@ In this case, they also introduce a validation burden.
        sure that the entity validating the signatures is aware of the
        restrictions the author intended through out-of-band means.
 
+
+Seed values for a new signature field are configured through the
+:attr:`~.pyhanko.sign.fields.SigFieldSpec.seed_value_dict` attribute
+of |SigFieldSpec|. This attribute takes a |SigSeedValueSpec| object, containing
+the desired seed value configuration.
+For a detailed overview of the seed values that can be specified, follow the
+links to the API reference; we only discuss the most important points below.
+
+The mandatory seed values are indicated by the
+:attr:`~.pyhanko.sign.fields.SigSeedValueSpec.flags` attribute, which takes a
+:class:`~.pyhanko.sign.fields.SigSeedValFlags` object as its value.
+This is a subclass of :class:`.Flag`, so you can combine different flags using
+bitwise operations.
+
+Restrictions and suggestions pertaining to the signer's certificate deserve
+special mention, since they're a bit special.
+These are encoded the :attr:`~.pyhanko.sign.fields.SigSeedValueSpec.cert`
+attribute of |SigSeedValueSpec|, in the form of a |SigCertConstraints| object.
+This class has a :attr:`~.pyhanko.sign.fields.SigCertConstraints.flags`
+attribute of its own, indicating which of the |SigCertConstraints| are to be
+enforced.
+Its value is a :class:`~.pyhanko.sign.fields.SigCertConstraintFlags` object.
+In other words, the enforceability of certificate constraints is *not*
+controlled by the :attr:`~.pyhanko.sign.fields.SigSeedValueSpec.flags`
+attribute of |SigSeedValueSpec|, but by the
+:attr:`~.pyhanko.sign.fields.SigCertConstraints.flags` attribute of the
+|SigCertConstraints| object inside the
+:attr:`~.pyhanko.sign.fields.SigSeedValueSpec.cert` attribute.
+This mirrors the way in which these restrictions are defined in the PDF
+specification.
+
+Since this is all rather abstract, let's discuss a concrete example.
+The code below shows how you might instantiate a signature field specification
+for a ballot form of sorts, subject to the following requirements.
+
+ * Only people with voting rights should be able to sign the ballot.
+   This is enforced by requiring that the certificates be issued by
+   a specific certificate authority.
+ * The signer can either vote for or against the proposed measure, or abstain.
+   For the sake of the example, let's encode that by one of three possible
+   reasons for signing.
+ * Since we want to avoid cast ballots being modified after the fact, we require
+   a strong digest method to be used.
+
+.. code-block:: python
+
+    from pyhanko.sign import fields
+    from oscrypto import keys
+
+    franchising_ca = keys.parse_certificate(b'<certificate data goes here>')
+    sv = fields.SigSeedValueSpec(
+        reasons=[
+            'I vote in favour of the proposed measure',
+            'I vote against the proposed measure',
+            'I formally abstain from voting on the proposed measure'
+        ],
+        cert=fields.SigCertConstraints(
+            issuers=[franchising_ca],
+            flags=fields.SigCertConstraintFlags.ISSUER
+        ),
+        digest_methods=['ssh256', 'sha384', 'sha512'],
+        flags=fields.SigSeedValFlags.REASONS | fields.SigSeedValFlags.DIGEST_METHOD
+    )
+
+    sp = fields.SigFieldSpec('BallotSignature', seed_value_dict=sv)
+
+
+Note the use of the bitwise-or operator ``|`` to combine multiple flags.
 
 .. _sig-field-docmdp:
 
