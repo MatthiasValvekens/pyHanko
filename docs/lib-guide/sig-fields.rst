@@ -16,6 +16,8 @@ functionality (such as seed value support or field locking) that the
 PDF standard offers, you might want to read on.
 
 
+.. _sigfield-api-design:
+
 General API design
 ------------------
 
@@ -81,7 +83,57 @@ end up:
 Seed value settings
 -------------------
 
-TODO
+The PDF standard provides a way for document authors to provide so-called "seed
+values" for signature fields.
+These instruct the signer about the possible values for certain signature
+properties and metadata. They can be purely informative, but can also be used to
+restrict the signer in various ways.
+
+Below is a non-exhaustive list of things that seed values can do.
+
+* Put restrictions on the signer's certificate, including
+
+  * the issuer,
+  * the subject's distinguished name,
+  * key usage extensions.
+
+* Force the signer to embed a timestamp (together with a suggested time stamping
+  server URL).
+* Offer the signer a list of choices to choose from when selecting a reason for
+  signing.
+* Instruct the signer to use a particular signature (sub-)handler (e.g. tell
+  the signer to produce PAdES-style signatures).
+
+
+Most of these recommendations can be marked as mandatory using flags.
+In this case, they also introduce a validation burden.
+
+.. _sig-field-seed-value-usage-warning:
+
+.. caution::
+    Before deciding whether seed values are right for your use case, please
+    consider the following factors.
+
+    1. Seed values are a (relatively) obscure feature of the PDF specification,
+       and not all PDF software offers support for it.
+       Using mandatory seed values is therefore probably only viable in a
+       closed, controlled environment with well-defined document workflows.
+       When using seed values in an advisory manner, you may want to provide
+       alternative hints, perhaps in the form of written instructions in the
+       document, or in the form of other metadata.
+    2. At this time, pyHanko only supports a subset of the seed value
+       specification in the standard, but this should be resolved in due time.
+       The extent of what is supported is recorded in the API reference for
+       :class:`~.pyhanko.sign.fields.SigSeedValFlags`.
+    3. Since incremental updates can modify documents in arbitrary ways,
+       mandatory seed values can only be (reliably) enforced if the author
+       includes a certification signature, to prevent later signers from
+       surreptitiously changing the rules.
+
+       If this is not an option for whatever reason, then you'll have to make
+       sure that the entity validating the signatures is aware of the
+       restrictions the author intended through out-of-band means.
+
 
 .. _sig-field-docmdp:
 

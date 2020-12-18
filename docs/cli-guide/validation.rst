@@ -113,8 +113,9 @@ seed value constraints were respected.
     Not all digital signing software is capable of processing seed values, so
     some false positives are to be expected.
 
-.. warning::
     Obviously, seed value constraints are only *truly* reliable if the document
     author secures the document with a certification signature before sending
     it for signing. Otherwise, later signers can modify the seed values *before*
     putting their signatures in place.
+    See :ref:`here <sig-field-seed-value-usage-warning>` for other concerns to
+    keep in mind when relying on seed values.
