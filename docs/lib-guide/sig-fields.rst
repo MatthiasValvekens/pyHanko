@@ -3,6 +3,7 @@ Signature fields
 
 .. |---| unicode:: U+02014 .. em dash
    :trim:
+.. |SigFieldSpec| replace:: :class:`~.pyhanko.sign.fields.SigFieldSpec`
 
 The creation of signature fields |---| that is to say, *containers* for
 (future) signatures |---| is handled by the :mod:`.pyhanko.sign.fields` module.
@@ -18,15 +19,14 @@ PDF standard offers, you might want to read on.
 General API design
 ------------------
 
-In general terms, a signature field is described by a
-:class:`~.pyhanko.sign.fields.SigFieldSpec` object, which is passed to the
-:func:`~.pyhanko.sign.fields.append_signature_field` function for inclusion
-in a PDF file.
+In general terms, a signature field is described by a |SigFieldSpec| object,
+which is passed to the :func:`~.pyhanko.sign.fields.append_signature_field`
+function for inclusion in a PDF file.
 
-As the name suggests, a :class:`~.pyhanko.sign.fields.SigFieldSpec` is a
+As the name suggests, a |SigFieldSpec| is a
 specification for a new signature field.
 These objects are designed to be immutable and stateless.
-A :class:`~.pyhanko.sign.fields.SigFieldSpec` object is instantiated by
+A |SigFieldSpec| object is instantiated by
 calling ``SigFieldSpec()`` with the following keyword
 parameters.
 
@@ -60,7 +60,20 @@ as follows.
 Positioning
 -----------
 
-TODO
+The position of a signature field is essentially only relevant for visible
+signatures.
+The following |SigFieldSpec| parameters determine where a signature widget will
+end up:
+
+* ``on_page``: index of the page on which the signature field should appear
+  (default: ``0``);
+* ``box``: bounding box of the signature field, represented as a 4-tuple
+  ``(x1, y1, x2, y2)`` in Cartesian coordinates (i.e. the vertical axis runs
+  bottom to top).
+
+.. caution::
+    In contrast with the CLI, pages are zero-indexed in the API.
+
 
 
 .. _sig-field-seed-value-settings:
