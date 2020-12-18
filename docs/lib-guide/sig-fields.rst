@@ -184,7 +184,7 @@ for a ballot form of sorts, subject to the following requirements.
    For the sake of the example, let's encode that by one of three possible
    reasons for signing.
  * Since we want to avoid cast ballots being modified after the fact, we require
-   a strong digest method to be used.
+   a strong hash function to be used (at least ``sha256``).
 
 .. code-block:: python
 
@@ -202,7 +202,7 @@ for a ballot form of sorts, subject to the following requirements.
             issuers=[franchising_ca],
             flags=fields.SigCertConstraintFlags.ISSUER
         ),
-        digest_methods=['ssh256', 'sha384', 'sha512'],
+        digest_methods=['sha256', 'sha384', 'sha512'],
         flags=fields.SigSeedValFlags.REASONS | fields.SigSeedValFlags.DIGEST_METHOD
     )
 
