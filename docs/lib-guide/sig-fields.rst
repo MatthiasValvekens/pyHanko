@@ -32,15 +32,20 @@ A |SigFieldSpec| object is instantiated by
 calling ``SigFieldSpec()`` with the following keyword
 parameters.
 
-* ``sig_field_name``: the field's name. This is the only mandatory parameter;
+* :attr:`~.pyhanko.sign.fields.SigFieldSpec.sig_field_name`:
+  the field's name. This is the only mandatory parameter;
   it must not contain any period (``.``) characters.
-* ``on_page`` and ``box``: determine the position and page at which the
+* :attr:`~.pyhanko.sign.fields.SigFieldSpec.on_page` and
+  :attr:`~.pyhanko.sign.fields.SigFieldSpec.box`:
+  determine the position and page at which the
   signature field's widget should be put (see :ref:`sig-field-positioning`).
-* ``seed_value_dict``: specify the seed value settings for the signature field
+* :attr:`~.pyhanko.sign.fields.SigFieldSpec.seed_value_dict`:
+  specify the seed value settings for the signature field
   (see :ref:`sig-field-seed-value-settings`).
-* ``field_mdp_spec`` and ``doc_mdp_update_value``: specify a template for
-  the modification and field locking policy that the signer should apply
-  (see :ref:`sig-field-docmdp`).
+* :attr:`~.pyhanko.sign.fields.SigFieldSpec.field_mdp_spec` and
+  :attr:`~.pyhanko.sign.fields.SigFieldSpec.doc_mdp_update_value`:
+  specify a template for the modification and field locking policy that the
+  signer should apply (see :ref:`sig-field-docmdp`).
 
 
 Hence, to create a signature field specification for an invisible signature
@@ -67,9 +72,10 @@ signatures.
 The following |SigFieldSpec| parameters determine where a signature widget will
 end up:
 
-* ``on_page``: index of the page on which the signature field should appear
-  (default: ``0``);
-* ``box``: bounding box of the signature field, represented as a 4-tuple
+* :attr:`~.pyhanko.sign.fields.SigFieldSpec.on_page`:
+  index of the page on which the signature field should appear (default: ``0``);
+* :attr:`~.pyhanko.sign.fields.SigFieldSpec.box`:
+  box``: bounding box of the signature field, represented as a 4-tuple
   ``(x1, y1, x2, y2)`` in Cartesian coordinates (i.e. the vertical axis runs
   bottom to top).
 
