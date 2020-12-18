@@ -2,8 +2,7 @@
 General tools related to Cryptographic Message Syntax (CMS) signatures,
 not necessarily to the extent implemented in the PDF specification.
 
-CMS is defined in `RFC 5652 <https://tools.ietf.org/html/rfc5652>`_.
-To parse CMS messages, pyHanko relies heavily on
+CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 `asn1crypto <https://github.com/wbond/asn1crypto>`_.
 """
 

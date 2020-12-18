@@ -3,7 +3,7 @@ Module to handle the timestamping functionality in pyHanko.
 
 Many PDF signature profiles require trusted timestamp tokens.
 The tools in this module allow pyHanko to obtain such tokens from
-`RFC 3161 <https://tools.ietf.org/html/rfc3161>`_-compliant time stamping
+:rfc:`3161`-compliant time stamping
 authorities.
 """
 
@@ -89,7 +89,7 @@ def extract_ts_certs(ts_token, store: CertificateStore):
 
 class TimeStamper:
     """
-    Class to make RFC 3161 timestamp requests.
+    Class to make :rfc:`3161` timestamp requests.
     """
 
     def __init__(self):
@@ -149,7 +149,7 @@ class TimeStamper:
     # noinspection PyMethodMayBeStatic
     def request_cms(self, message_digest, md_algorithm):
         """
-        Format the body of an RFC 3161 request as a CMS object.
+        Format the body of an :rfc:`3161` request as a CMS object.
         Subclasses with more specific needs may want to override this.
 
         :param message_digest:
@@ -158,9 +158,8 @@ class TimeStamper:
             Message digest algorithm to use.
 
             .. note::
-                As per `RFC 8933 <https://tools.ietf.org/html/rfc8933>`_,
-                ``md_algorithm`` should also be the algorithm used to compute
-                ``message_digest``.
+                As per :rfc:`8933`, ``md_algorithm`` should also be the
+                algorithm used to compute ``message_digest``.
         :return:
             An :class:`.asn1crypto.tsp.TimeStampReq` object.
         """
@@ -203,9 +202,8 @@ class TimeStamper:
             Message digest algorithm to use.
 
             .. note::
-                As per `RFC 8933 <https://tools.ietf.org/html/rfc8933>`_,
-                ``md_algorithm`` should also be the algorithm used to compute
-                ``message_digest``.
+                As per :rfc:`8933`, ``md_algorithm`` should also be the
+                algorithm used to compute ``message_digest``.
         :return:
             A timestamp token, encoded as an
             :class:`.asn1crypto.cms.ContentInfo` object.

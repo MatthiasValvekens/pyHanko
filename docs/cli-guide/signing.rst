@@ -42,8 +42,7 @@ The signature object itself contains some PDF-specific metadata, such as
    be modified.
 
 The actual cryptographic signature is embedded as a CMS object.
-General CMS objects are defined in
-`RFC 5652 <https://tools.ietf.org/html/rfc5652>`_, but only a limited subset
+General CMS objects are defined in :rfc:`5652`, but only a limited subset
 is meaningful in PDF.
 When creating a signature, the signer is authenticated using the private key
 associated with an X.509 certificate, as issued by most common PKI authorities
@@ -289,7 +288,7 @@ but also that of all issuers in the chain of trust, the OCSP responder's
 certificates used to sign the embedded OCSP responses, etc.
 
 Time stamp tokens are commonly obtained from TSA's via the HTTP-based protocol
-specified in `RFC 3616 <https://tools.ietf.org/html/rfc3161>`_.
+specified in :rfc:`3161`.
 
 Within the PDF standard, there are two broad categories of such long-lived
 signatures.
@@ -331,7 +330,7 @@ Timestamps in pyHanko
 Embedding a timestamp token into a signature using pyHanko is as simple as
 passing the ``--timestamp-url`` parameter to ``addsig``. The URL should
 resolve to an endpoint that responds to the HTTP-based protocol described in
-`RFC 3161 <https://tools.ietf.org/html/rfc3161>`_.
+:rfc:`3161`.
 
 .. code-block:: bash
 
