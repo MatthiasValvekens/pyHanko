@@ -216,4 +216,39 @@ Note the use of the bitwise-or operator ``|`` to combine multiple flags.
 Document modification policy settings
 -------------------------------------
 
-TODO
+Broadly speaking, the PDF specification outlines two ways to specify the degree
+to which a document may be modified after a signature is applied, *without*
+these modifications affecting the validity of the signature.
+
+* The **document modification detection policy** (DocMDP) is an integer between
+  one and three, indicating on a document-wide level which classes of
+  modification are permissible. The three levels are defined as follows:
+
+    * level 1: no modifications are allowed;
+    * level 2: form filling and signing are allowed;
+    * level 3: form filling, signing and commenting are allowed.
+
+  The default value is 2.
+
+* The **field modification detection policy** (FieldMDP), as the name suggests,
+  specifies the form fields that can be modified after signing.
+  FieldMDPs can be inclusive or exclusive, and as such allow fairly granular
+  control.
+
+When creating a signature field, the document author can suggest policies that
+the signer should apply in the signature object. While the signer *should*
+follow these restrictions, this doesn't always happen\ [#mdpreject]_, so
+they shouldn't be relied upon if the signing of the document is out of your
+control.
+
+TODO: explain how to configure pyHanko to do this.
+
+.. warning::
+    There are a number of caveats that apply to MDP settings in general; see
+    :ref:`pdf-signing-background`.
+
+.. rubric:: Footnotes
+.. [#mdpreject]
+    Right now, pyHanko doesn't yet reject such signatures, but it may in the
+    future.
+

@@ -8,6 +8,8 @@ baseline PAdES profiles, seed values, and creating signatures using PKCS#11
 devices\ [#pkcs11]_.
 
 
+.. _pdf-signing-background:
+
 Some background on PDF signatures
 ---------------------------------
 
