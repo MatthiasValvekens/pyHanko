@@ -77,7 +77,7 @@ end up:
 * :attr:`~.pyhanko.sign.fields.SigFieldSpec.on_page`:
   index of the page on which the signature field should appear (default: ``0``);
 * :attr:`~.pyhanko.sign.fields.SigFieldSpec.box`:
-  box``: bounding box of the signature field, represented as a 4-tuple
+  bounding box of the signature field, represented as a 4-tuple
   ``(x1, y1, x2, y2)`` in Cartesian coordinates (i.e. the vertical axis runs
   bottom to top).
 
@@ -241,11 +241,60 @@ follow these restrictions, this doesn't always happen\ [#mdpreject]_, so
 they shouldn't be relied upon if the signing of the document is out of your
 control.
 
-TODO: explain how to configure pyHanko to do this.
-
 .. warning::
     There are a number of caveats that apply to MDP settings in general; see
     :ref:`pdf-signing-background`.
+
+Traditionally, the DocMDP settings are exclusive to certification signatures
+(i.e. the first, specially marked signature included by the document author),
+but in PDF 2.0 it is possible for approval (counter)signatures to set the DocMDP
+level to a stricter value than the one already in force.
+
+In pyHanko, these settings are controlled by the
+:attr:`~.pyhanko.sign.fields.SigFieldSpec.field_mdp_spec` and
+:attr:`~.pyhanko.sign.fields.SigFieldSpec.doc_mdp_update_value` parameters
+of |SigFieldSpec|.
+The example below specifies a field with instructions for the signer to
+lock a field called ``SomeTextField``, and set the DocMDP value for that
+signature to :attr:`~.pyhanko.sign.fields.MDPPerm.FORM_FILLING` (i.e. level 2).
+PyHanko will respect these settings when signing, but other software might not.
+
+.. code-block:: python
+
+    from pyhanko.sign import fields
+
+    fields.SigFieldSpec(
+        'Sig1', box=(10, 74, 140, 134),
+        field_mdp_spec=fields.FieldMDPSpec(
+            fields.FieldMDPAction.INCLUDE, fields=['SomeTextField']
+        ),
+        doc_mdp_update_value=fields.MDPPerm.FORM_FILLING
+    )
+
+The :attr:`~.pyhanko.sign.fields.SigFieldSpec.doc_mdp_update_value` value is
+more or less self-explanatory, since it's little more than a numerical constant.
+The value passed to :attr:`~.pyhanko.sign.fields.SigFieldSpec.field_mdp_spec`
+is an instance of :class:`~.pyhanko.sign.fields.FieldMDPSpec`.
+:class:`~.pyhanko.sign.fields.FieldMDPSpec` objects take two parameters:
+
+* :attr:`~.pyhanko.sign.fields.FieldMDPSpec.fields`:
+  The fields that are subject to the policy, which can be specified exclusively
+  or inclusively, depending on the value of
+  :attr:`~.pyhanko.sign.fields.FieldMDPSpec.action` (see below).
+* :attr:`~.pyhanko.sign.fields.FieldMDPSpec.action`:
+  This is an instance of the enum :class:`~.pyhanko.sign.fields.FieldMDPAction`.
+  The possible values are as follows.
+
+  * :attr:`~.pyhanko.sign.fields.FieldMDPAction.ALL`: all fields should be
+    locked after signing. In this case, the value of the
+    :attr:`~.pyhanko.sign.fields.FieldMDPSpec.fields` parameter is irrelevant.
+  * :attr:`~.pyhanko.sign.fields.FieldMDPAction.INCLUDE`: all fields specified
+    in :attr:`~.pyhanko.sign.fields.FieldMDPSpec.fields` should be locked, while
+    the others remain unlocked (in the absence of other more restrictive policies).
+  * :attr:`~.pyhanko.sign.fields.FieldMDPAction.EXCLUDE`: all fields *except*
+    the ones specified in :attr:`~.pyhanko.sign.fields.FieldMDPSpec.fields`
+    should be locked.
+
 
 .. rubric:: Footnotes
 .. [#mdpreject]
