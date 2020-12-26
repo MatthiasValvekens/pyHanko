@@ -64,7 +64,46 @@ minutiae makes it relatively easy to support other signing technology
 A simple example
 ----------------
 
-TODO
+Virtually all parameters of |PdfSignatureMetadata| have sane defaults.
+The only exception is the one specifying the signature field to contain the
+signature |---| this parameter is always mandatory if the number of empty
+signature fields in the document isn't exactly one.
+
+In simple cases, signing a document can therefore be as easy as this:
+
+.. code-block:: python
+
+    from pyhanko.sign import signers
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+
+    cms_signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
+
+    with open('document.pdf', 'rb') as doc:
+        w = IncrementalPdfFileWriter(doc)
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Signature1'),
+            signer=cms_signer,
+        )
+
+        # do stuff with 'out'
+        # ...
+
+The :func:`~.pyhanko.sign.signers.sign_pdf` is a thin convenience wrapper around
+|PdfSigner|'s :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf` method, with
+essentially the same API.
+In the above example, ``out`` ends up containing a byte buffer
+(:class:`.io.BytesIO` object) with the signed output.
+
+
+.. danger::
+    Any :class:`~.pyhanko.pdf_utils.incremental_writer.IncrementalPdfFileWriter`
+    used in the creation of a signature should be discarded afterwards.
+    Further modifications would simply invalidate the signature anyway.
 
 
 |PdfSignatureMetadata| options
