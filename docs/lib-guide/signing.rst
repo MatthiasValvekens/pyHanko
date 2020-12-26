@@ -31,7 +31,8 @@ over all bytes in the file, except those under the ``/Contents`` key.
 In particular, the ``/ByteRange`` key of the signature object is actually
 part of the signed data, which implies that the size of the signature
 CMS object needs to be estimated ahead of time. As we'll see soon, this has
-some minor implications for the API design.
+some minor implications for the API design (see
+:ref:`this subsection <extending-signer>` in particular).
 
 
 .. |PdfSignatureMetadata| replace:: :class:`~.pyhanko.sign.signers.PdfSignatureMetadata`
@@ -72,7 +73,51 @@ TODO
 TODO
 
 
-Extending |Signer|
+Timestamp handling
 ------------------
 
 TODO
+
+
+.. _extending-signer:
+
+Extending |Signer|
+------------------
+
+Providing detailed guidance on how to implement your own |Signer| subclass
+is beyond the scope of this guide |---| the implementations
+of :class:`~.pyhanko.sign.signers.SimpleSigner` and
+:class:`~.pyhanko.sign.signers.PKCS11Signer` should help.
+This subsection merely highlights some of the issues you should keep in mind.
+
+First, if all you want to do is implement a signing device or technique that's
+not supported by pyHanko\ [#cryptoparams]_, it should be sufficient to implement
+:meth:`~.pyhanko.sign.signers.Signer.sign_raw`.
+This method computes the raw cryptographic signature of some data (typically
+a document hash) with the appropriate key material.
+It also takes a ``dry_run`` flag, signifying that the returned object should
+merely have the correct size, but the content doesn't matter\ [#signerdryrun]_.
+
+If your requirements necessitate further modifications to the structure of the
+CMS object, you'll most likely have to override
+:meth:`~.pyhanko.sign.signers.Signer.sign`, which is responsible for the
+construction of the CMS object itself.
+
+
+
+
+.. rubric:: Footnotes
+
+.. [#cryptoparams]
+   ... and doesn't require any cryptographic parameters. Signature mechanisms
+   with parameters (such as RSA-PSS) are a bit more tricky.
+   RSA-PSS is on the roadmap for pyHanko; once that has been implemented, using
+   custom signature mechanisms with parameters should also become a bit more
+   straightforward.
+
+.. [#signerdryrun]
+   The ``dry_run`` flag is used in the estimation of the CMS object's size.
+   With key material held in memory it doesn't really matter all that much,
+   but if the signature is provided by a HSM, or requires additional input
+   on the user's end (such as a PIN), you typically don't want to use the "real"
+   signing method in dry-run mode.
