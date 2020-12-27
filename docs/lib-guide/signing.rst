@@ -38,6 +38,7 @@ some minor implications for the API design (see
 .. |PdfSignatureMetadata| replace:: :class:`~.pyhanko.sign.signers.PdfSignatureMetadata`
 .. |Signer| replace:: :class:`~.pyhanko.sign.signers.Signer`
 .. |PdfSigner| replace:: :class:`~.pyhanko.sign.signers.PdfSigner`
+.. |TimeStamper| replace:: :class:`~.pyhanko.sign.timestamps.TimeStamper`
 
 
 The pyHanko signing API is spread across sevaral modules in the
@@ -150,7 +151,72 @@ documentation for |PdfSignatureMetadata| and |PdfSigner|.
 Timestamp handling
 ------------------
 
-TODO
+Cryptographic timestamps (specified by :rfc:`3161`) play a role in PDF
+signatures in two different ways.
+
+* They can be used as part of a PDF signature (embedded into the signature
+  CMS object) to establish a (verifiable) record of the time of signing.
+* They can also be used in a stand-alone way to provide document timestamps
+  (PDF 2.0).
+
+From a PDF syntax point of view, standalone document timestamps are formally
+very similar to PDF signatures.
+PyHanko implements these using the
+:meth:`~.pyhanko.sign.signers.PdfTimeStamper.timestamp_pdf` method of
+:class:`~.pyhanko.sign.signers.PdfTimeStamper`
+(which is actually a superclass of |PdfSigner|).
+
+Timestamp tokens (TST) embedded into PDF signatures are arguably the more common
+occurrence. These function as countersignatures to the signer's signature,
+proving that a signature existed at a certain point in time.
+This is a necessary condition for (most) long-term verifiability schemes.
+
+Typically, such timestamp tokens are provided over HTTP, from a trusted time
+stamping authority (TSA), using the protocol specified in :rfc:`3161`.
+PyHanko provides a client for this protocol; see
+:class:`~.pyhanko.sign.timestamps.HTTPTimeStamper`.
+
+A |PdfSigner| can specify a default |TimeStamper| to procure timestamp tokens
+from some TSA, but sometimes pyHanko can infer a TSA endpoint from the signature
+field's seed values.
+
+The example from the previous section doesn't need to be modified by a lot
+to include a trusted timestamp in the signature.
+
+.. code-block:: python
+
+    from pyhanko.sign import signers
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+
+    cms_signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
+
+    tst_client = timestamps.HTTPTimeStamper('http://example.com/tsa')
+
+    with open('document.pdf', 'rb') as doc:
+        w = IncrementalPdfFileWriter(doc)
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Signature1'),
+            signer=cms_signer, timestamper=tst_client
+        )
+
+        # do stuff with 'out'
+        # ...
+
+
+As a general rule, pyHanko will attempt to obtain a timestamp token whenever
+a |TimeStamper| is available, but you may sometimes see more TST requests
+go over the wire than the number of signatures you're creating.
+This is normal: since the timestamps are to be embedded into the signature CMS
+object of the signature, pyHanko needs a sample token to estimate the CMS
+object's size\ [#tstsize]_.
+These "dummy tokens" are cached on the |TimeStamper|, so you
+can cut down on the number of such unnecessary requests by reusing the same
+|TimeStamper| for many signatures.
 
 
 .. _extending-signer:
@@ -195,3 +261,8 @@ construction of the CMS object itself.
    but if the signature is provided by a HSM, or requires additional input
    on the user's end (such as a PIN), you typically don't want to use the "real"
    signing method in dry-run mode.
+
+.. [#tstsize]
+   The size of a timestamp token is difficult to predict ahead of time, since it
+   depends on many unknown factors, including the number & form of the various
+   certificates that might come embedded within them.
