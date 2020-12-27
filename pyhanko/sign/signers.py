@@ -1175,6 +1175,24 @@ Default stamp style used for visible signatures.
 class PdfSigner(PdfTimeStamper):
     """
     Class to handle PDF signatures in general.
+
+    :param signature_meta:
+        The specification of the signature to add.
+    :param signer:
+        :class:`.Signer` object to use to produce the signature object.
+    :param timestamper:
+        :class:`.TimeStamper` object to use to produce any time stamp tokens
+        that might be required.
+    :param stamp_style:
+        Stamp style specification to determine the visible style of the
+        signature, typically an object of type :class:`.TextStampStyle` or
+        :class:`.QRStampStyle`. Defaults to
+        :const:`.DEFAULT_SIGNING_STAMP_STYLE`.
+    :param new_field_spec:
+        If a new field is to be created, this parameter allows the caller
+        to specify the field's properties in the form of a
+        :class:`.SigFieldSpec`. This parameter is only meaningful if
+        ``existing_fields_only`` is ``False``.
     """
     _ignore_sv = False
 
@@ -1183,25 +1201,6 @@ class PdfSigner(PdfTimeStamper):
                  stamp_style: Optional[TextStampStyle] = None,
                  new_field_spec: Optional[SigFieldSpec] = None):
         """
-        Initialise a :class:`PdfSigner`.
-
-        :param signature_meta:
-            The specification of the signature to add.
-        :param signer:
-            :class:`.Signer` object to use to produce the signature object.
-        :param timestamper:
-            :class:`.TimeStamper` object to use to produce any time stamp tokens
-            that might be required.
-        :param stamp_style:
-            Stamp style specification to determine the visible style of the
-            signature, typically an object of type :class:`.TextStampStyle` or
-            :class:`.QRStampStyle`. Defaults to
-            :const:`.DEFAULT_SIGNING_STAMP_STYLE`.
-        :param new_field_spec:
-            If a new field is to be created, this parameter allows the caller
-            to specify the field's properties in the form of a
-            :class:`.SigFieldSpec`. This parameter is only meaningful if
-            ``existing_fields_only`` is ``False``.
         """
         self.signature_meta = signature_meta
         if new_field_spec is not None and \

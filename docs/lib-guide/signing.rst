@@ -44,7 +44,7 @@ The pyHanko signing API is spread across sevaral modules in the
 :mod:`.pyhanko.sign` package. Broadly speaking, it has three aspects:
 
 * |PdfSignatureMetadata| specifies high-level metadata & structural requirements
-  for the signature object and the signature CMS object.
+  for the signature object and (to a lesser degree) the signature CMS object.
 * |Signer| and its subclasses are responsible for the construction of the
   signature CMS object, but are in principle "PDF-agnostic".
 * |PdfSigner| is the "steering" class that invokes the |Signer| on an
@@ -96,20 +96,55 @@ In simple cases, signing a document can therefore be as easy as this:
 The :func:`~.pyhanko.sign.signers.sign_pdf` is a thin convenience wrapper around
 |PdfSigner|'s :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf` method, with
 essentially the same API.
-In the above example, ``out`` ends up containing a byte buffer
-(:class:`.io.BytesIO` object) with the signed output.
+The following code is more or less equivalent.
 
+.. code-block:: python
+
+    from pyhanko.sign import signers
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+
+    cms_signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
+
+    with open('document.pdf', 'rb') as doc:
+        w = IncrementalPdfFileWriter(doc)
+        out = signers.PdfSigner(
+            signers.PdfSignatureMetadata(field_name='Signature1'),
+            signer=cms_signer,
+        ).sign_pdf(w)
+
+        # do stuff with 'out'
+        # ...
+
+The advantages of instantiating the |PdfSigner| object yourself include
+reusability and more granular control over the signature's appearance.
+
+In the above examples, ``out`` ends up containing a byte buffer
+(:class:`.io.BytesIO` object) with the signed output.
 
 .. danger::
     Any :class:`~.pyhanko.pdf_utils.incremental_writer.IncrementalPdfFileWriter`
     used in the creation of a signature should be discarded afterwards.
     Further modifications would simply invalidate the signature anyway.
 
+For a full description of the optional parameters, see the API reference
+documentation for |PdfSignatureMetadata| and |PdfSigner|.
 
-|PdfSignatureMetadata| options
-------------------------------
+.. warning::
+    If there is no signature field with the name specified in the
+    :attr:`~.pyhanko.sign.signers.PdfSignatureMetadata.field_name` parameter
+    of |PdfSignatureMetadata|, pyHanko will (by default) create an invisible
+    signature field to contain the signature.
+    This behaviour can be turned off using the ``existing_fields_only`` parameter
+    to :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`, or you can supply
+    a custom field spec when initialising the |PdfSigner|.
 
-TODO
+    For more details on signature fields and how to create them, take a look at
+    :doc:`sig-fields`.
 
 
 Timestamp handling
