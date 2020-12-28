@@ -255,6 +255,8 @@ the signature.
     of someone else.
 
 
+.. _ltv-signing:
+
 Creating signatures with long lifetimes
 ---------------------------------------
 
