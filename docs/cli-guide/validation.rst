@@ -22,6 +22,8 @@ and :ref:`configuration options <config-validation-context>`
 as for creating LTV signatures.
 
 
+.. _validation-factors:
+
 Factors in play when validating a signature
 -------------------------------------------
 
@@ -119,3 +121,11 @@ seed value constraints were respected.
     putting their signatures in place.
     See :ref:`here <sig-field-seed-value-usage-warning>` for other concerns to
     keep in mind when relying on seed values.
+
+
+.. warning::
+    PyHanko currently does *not* offer validation of structural PAdES profile
+    requirements, in the sense that it can't tell you if a signature
+    complies with all the provisions required by a particular PAdES profile.
+    Note that these are requirements on the signature itself, and have no
+    bearing on possible later modifications to the document.
