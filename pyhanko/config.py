@@ -1,5 +1,7 @@
+import enum
+import logging
 from datetime import timedelta
-from typing import Dict
+from typing import Dict, Optional, Union
 from dataclasses import dataclass
 
 import yaml
@@ -7,12 +9,45 @@ from certvalidator import ValidationContext
 from pyhanko.pdf_utils.config_utils import (
     check_config_keys, ConfigurationError
 )
+from pyhanko.pdf_utils.misc import get_and_apply
 from pyhanko.sign import signers
 
 
 # TODO add stamp styles etc.
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.stamp import QRStampStyle, TextStampStyle
+
+
+class StdLogOutput(enum.Enum):
+    STDERR = enum.auto()
+    STDOUT = enum.auto()
+
+
+@dataclass(frozen=True)
+class LogConfig:
+    level: Union[int, str]
+    """
+    Logging level, should be one of the levels defined in the logging module.
+    """
+
+    output: Union[StdLogOutput, str]
+    """
+    Name of the output file, or a standard one.
+    """
+
+    @staticmethod
+    def parse_output_spec(spec) -> Union[StdLogOutput, str]:
+        if not isinstance(spec, str):
+            raise ConfigurationError(
+                "Log output must be specified as a string."
+            )
+        spec_l = spec.lower()
+        if spec_l == 'stderr':
+            return StdLogOutput.STDERR
+        elif spec_l == 'stdout':
+            return StdLogOutput.STDOUT
+        else:
+            return spec
 
 
 @dataclass
@@ -22,6 +57,7 @@ class CLIConfig:
     default_validation_context: str
     default_stamp_style: str
     time_tolerance: timedelta
+    log_config: Dict[Optional[str], LogConfig]
 
     # TODO graceful error handling
 
@@ -92,6 +128,59 @@ def parse_trust_config(trust_config, time_tolerance) -> dict:
     )
 
 
+DEFAULT_ROOT_LOGGER_LEVEL = logging.INFO
+
+
+def _retrieve_log_level(settings_dict, key, default=None) -> Union[int, str]:
+    try:
+        level_spec = settings_dict[key]
+    except KeyError:
+        if default is not None:
+            return default
+        raise ConfigurationError(
+            f"Logging config for '{key}' does not define a log level."
+        )
+    if not isinstance(level_spec, (int, str)):
+        raise ConfigurationError(
+            f"Log levels must be int or str, not {type(level_spec)}"
+        )
+    return level_spec
+
+
+def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
+    if not isinstance(log_config_spec, dict):
+        raise ConfigurationError('logging config should be a dictionary')
+
+    root_logger_level = _retrieve_log_level(
+        log_config_spec, 'root-level', default=DEFAULT_ROOT_LOGGER_LEVEL
+    )
+
+    root_logger_output = get_and_apply(
+        log_config_spec, 'root-output', LogConfig.parse_output_spec,
+        default=StdLogOutput.STDERR
+    )
+
+    log_config = {None: LogConfig(root_logger_level, root_logger_output)}
+
+    logging_by_module = log_config_spec.get('by-module', {})
+    if not isinstance(logging_by_module, dict):
+        raise ConfigurationError('logging.by-module should be a dict')
+
+    for module, module_logging_settings in logging_by_module.items():
+        if not isinstance(module, str):
+            raise ConfigurationError(
+                "Keys in logging.by-module should be strings"
+            )
+        level_spec = _retrieve_log_level(module_logging_settings, 'level')
+        output_spec = get_and_apply(
+            module_logging_settings, 'output', LogConfig.parse_output_spec,
+            default=StdLogOutput.STDERR
+        )
+        log_config[module] = LogConfig(level=level_spec, output=output_spec)
+
+    return log_config
+
+
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
 DEFAULT_TIME_TOLERANCE = 10
 STAMP_STYLE_TYPES = {
@@ -103,6 +192,7 @@ STAMP_STYLE_TYPES = {
 def parse_cli_config(yaml_str):
     config_dict = yaml.safe_load(yaml_str) or {}
 
+    # validation context config
     vcs = {DEFAULT_VALIDATION_CONTEXT: {}}
     try:
         vc_specs = config_dict['validation-contexts']
@@ -110,6 +200,7 @@ def parse_cli_config(yaml_str):
     except KeyError:
         pass
 
+    # stamp style config
     # TODO this style is obviously not suited for non-signing scenarios
     #  (but it'll do for now)
     stamp_configs = {DEFAULT_STAMP_STYLE: DEFAULT_SIGNING_STAMP_STYLE}
@@ -119,6 +210,11 @@ def parse_cli_config(yaml_str):
     except KeyError:
         pass
 
+    # logging config
+    log_config_spec = config_dict.get('logging', {})
+    log_config = parse_logging_config(log_config_spec)
+
+    # some misc settings
     default_vc = config_dict.get(
         'default-validation-context', DEFAULT_VALIDATION_CONTEXT
     )
@@ -131,5 +227,6 @@ def parse_cli_config(yaml_str):
     return CLIConfig(
         validation_contexts=vcs, default_validation_context=default_vc,
         time_tolerance=time_tolerance, stamp_styles=stamp_configs,
-        default_stamp_style=default_stamp_style
+        default_stamp_style=default_stamp_style,
+        log_config=log_config
     )

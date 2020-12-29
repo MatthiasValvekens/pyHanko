@@ -1,3 +1,4 @@
+import sys
 from enum import Enum, auto
 
 import click
@@ -7,7 +8,7 @@ import getpass
 from certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
-    CLIConfig,
+    CLIConfig, LogConfig, StdLogOutput, parse_logging_config
 )
 
 from pyhanko.sign import signers
@@ -23,18 +24,27 @@ from pyhanko.stamp import QRStampStyle
 
 __all__ = ['cli']
 
-# TODO make log level configurable
 
-# noinspection PyTypeChecker
-root_logger = logging.getLogger(None)
-root_logger.setLevel(logging.DEBUG)
-sh = logging.StreamHandler()
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-sh.setFormatter(formatter)
-root_logger.addHandler(sh)
 logger = logging.getLogger(__name__)
+
+
+def logging_setup(log_configs):
+    log_config: LogConfig
+    for module, log_config in log_configs.items():
+        cur_logger = logging.getLogger(module)
+        cur_logger.setLevel(log_config.level)
+        if isinstance(log_config.output, StdLogOutput):
+            if StdLogOutput == StdLogOutput.STDOUT:
+                handler = logging.StreamHandler(sys.stdout)
+            else:
+                handler = logging.StreamHandler()
+        else:
+            handler = logging.FileHandler(log_config.output)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        cur_logger.addHandler(handler)
 
 
 DEFAULT_CONFIG_FILE = 'pyhanko.yml'
@@ -51,20 +61,21 @@ class Ctx(Enum):
 
 
 @click.group()
-@click.option('--config', help='YAML file to load configuration from',
-              required=False, type=click.File('r'),
-              show_default=DEFAULT_CONFIG_FILE)
+@click.option('--config',
+              help=(
+                  'YAML file to load configuration from'
+                  f'[default: {DEFAULT_CONFIG_FILE}]'
+              ), required=False, type=click.File('r'))
+@click.option('--verbose', help='Run in verbose mode', required=False,
+              default=False, type=bool, is_flag=True)
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx, config, verbose):
     config_text = None
     if config is None:
         try:
             with open(DEFAULT_CONFIG_FILE, 'r') as f:
                 config_text = f.read()
-            logging.debug(
-                f"Reading config from default config file "
-                f"{DEFAULT_CONFIG_FILE}..."
-            )
+            config = DEFAULT_CONFIG_FILE
         except FileNotFoundError:
             pass
         except IOError as e:
@@ -74,9 +85,6 @@ def cli(ctx, config):
     else:
         try:
             config_text = config.read()
-            logging.debug(
-                f"Reading config from config file {config}..."
-            )
         except IOError as e:
             raise click.ClickException(
                 f"Failed to read configuration: {str(e)}",
@@ -84,7 +92,27 @@ def cli(ctx, config):
 
     ctx.ensure_object(dict)
     if config_text is not None:
-        ctx.obj[Ctx.CLI_CONFIG] = parse_cli_config(config_text)
+        ctx.obj[Ctx.CLI_CONFIG] = cfg = parse_cli_config(config_text)
+        log_config = cfg.log_config
+    else:
+        # grab the default
+        log_config = parse_logging_config({})
+
+    if verbose:
+        # override the root logger's logging level, but preserve the output
+        root_logger_config = log_config[None]
+        log_config[None] = LogConfig(
+            level=logging.DEBUG, output=root_logger_config.output
+        )
+
+    logging_setup(log_config)
+
+    if verbose:
+        logging.debug("Running with --verbose")
+    if config_text is not None:
+        logging.debug(f'Finished reading configuration from {config}.')
+    else:
+        logging.debug('There was no configuration to parse.')
 
 
 @cli.group(help='sign PDF files', name='sign')

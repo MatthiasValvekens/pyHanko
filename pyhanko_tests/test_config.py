@@ -1,6 +1,7 @@
 import pytest
 
 from pyhanko import config, stamp
+from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL
 from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
@@ -107,3 +108,101 @@ def test_empty_config():
     assert 'extra_trust_roots' not in vc_kwargs
     assert 'trust_roots' not in vc_kwargs
     assert 'other_certs' not in vc_kwargs
+
+
+def test_read_logging_config():
+    config_string = """
+    logging:
+        root-level: DEBUG
+        root-output: stdout
+        by-module:
+            example.test1:
+                level: 50
+                output: test.log
+            example.test2:
+                level: DEBUG
+            example.test3:
+                level: 10
+                output: stderr
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+
+    assert cli_config.log_config[None].output == StdLogOutput.STDOUT
+    assert cli_config.log_config[None].level == 'DEBUG'
+
+    assert cli_config.log_config['example.test1'].level == 50
+    assert cli_config.log_config['example.test1'].output == 'test.log'
+    assert cli_config.log_config['example.test2'].level == 'DEBUG'
+    assert cli_config.log_config['example.test2'].output == StdLogOutput.STDERR
+    assert cli_config.log_config['example.test3'].level == 10
+    assert cli_config.log_config['example.test3'].output == StdLogOutput.STDERR
+
+
+def test_read_logging_config_defaults():
+    cli_config: config.CLIConfig = config.parse_cli_config("""
+        logging:
+            root-level: DEBUG
+    """)
+
+    assert cli_config.log_config[None].output == StdLogOutput.STDERR
+    assert cli_config.log_config[None].level == 'DEBUG'
+    assert list(cli_config.log_config.keys()) == [None]
+
+    cli_config: config.CLIConfig = config.parse_cli_config("""
+        logging:
+            root-output: 'test.log'
+    """)
+
+    assert cli_config.log_config[None].output == 'test.log'
+    assert cli_config.log_config[None].level == DEFAULT_ROOT_LOGGER_LEVEL
+    assert list(cli_config.log_config.keys()) == [None]
+
+    cli_config: config.CLIConfig = config.parse_cli_config("")
+    assert cli_config.log_config[None].output == StdLogOutput.STDERR
+    assert cli_config.log_config[None].level == DEFAULT_ROOT_LOGGER_LEVEL
+    assert list(cli_config.log_config.keys()) == [None]
+
+
+WRONG_CONFIGS = [
+    # a bunch of type errors
+    "logging: 5",
+    """
+    logging:
+        by-module: 1
+    """,
+    """
+    logging:
+        root-output: [1, 2]
+    """,
+    """
+    logging:
+        root-level: [2, 3]
+    """,
+    """
+    logging:
+        by-module:
+            test.example:
+                level: 10
+                output: 5
+    """,
+    """
+    logging:
+        by-module:
+            0:
+                level: 10
+                
+    """,
+    # level is required for non-root logging specs
+    """
+    logging:
+        by-module:
+            test.example:
+                output: 'abc.log'
+    """
+]
+
+
+@pytest.mark.parametrize('config_str', WRONG_CONFIGS)
+def test_read_logging_config_errors(config_str):
+    with pytest.raises(ConfigurationError):
+        config.parse_cli_config(config_str)
