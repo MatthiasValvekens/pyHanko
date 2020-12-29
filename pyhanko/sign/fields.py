@@ -14,7 +14,7 @@ from oscrypto import keys as oskeys
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError
+from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError, get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import UnacceptableSignerError, SigningError
 from pyhanko.stamp import AnnotAppearances
@@ -476,7 +476,7 @@ class SigSeedValueSpec:
         except KeyError:
             digest_methods = None
 
-        reasons = pdf_dict.get('/Reasons', None)
+        reasons = get_and_apply(pdf_dict, '/Reasons', list)
         timestamp_dict = pdf_dict.get('/TimeStamp', {})
         timestamp_server_url = timestamp_dict.get('/URL', None)
         timestamp_required = bool(timestamp_dict.get('/Ff', 0))

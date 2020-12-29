@@ -12,6 +12,8 @@ __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError'
 ]
 
+from typing import Callable
+
 rd = lambda x: round(x, 4)
 
 
@@ -189,3 +191,11 @@ class LazyJoin:
 
     def __str__(self):
         return self.sep.join(self.iterator)
+
+
+def get_and_apply(dictionary: dict, key, function: Callable, *, default=None):
+    try:
+        value = dictionary[key]
+    except KeyError:
+        return default
+    return function(value)

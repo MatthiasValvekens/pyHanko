@@ -20,7 +20,7 @@ from oscrypto.errors import SignatureError
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import OrderedEnum, LazyJoin
+from pyhanko.pdf_utils.misc import OrderedEnum, LazyJoin, get_and_apply
 from pyhanko.pdf_utils.reader import (
     PdfFileReader, XRefCache, process_data_at_eof,
 )
@@ -2417,14 +2417,14 @@ class DocumentSecurityStore:
             cert: Certificate = Certificate.load(cert_stream.data)
             cert_refs[cert.issuer_serial] = cert_ref
 
-        ocsp_refs = list(dss_dict.get('/OCSPs', ()))
+        ocsp_refs = get_and_apply(dss_dict, '/OCSPs', list, default=())
         ocsps = []
         for ocsp_ref in ocsp_refs:
             ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
             resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
             ocsps.append(resp)
 
-        crl_refs = list(dss_dict.get('/CRLs', ()))
+        crl_refs = get_and_apply(dss_dict, '/CRLs', list, default=())
         crls = []
         for crl_ref in crl_refs:
             crl_stream: generic.StreamObject = crl_ref.get_object()
