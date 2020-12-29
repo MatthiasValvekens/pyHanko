@@ -632,6 +632,8 @@ class BasePdfFileWriter(PdfHandler):
 
         # TODO deal with container_ref
 
+        if isinstance(obj, generic.DecryptedObjectProxy):
+            obj = obj.decrypted
         if isinstance(obj, generic.IndirectObject):
             try:
                 return reference_map[obj.reference]
