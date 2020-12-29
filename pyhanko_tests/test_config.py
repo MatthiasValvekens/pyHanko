@@ -26,6 +26,9 @@ def test_read_vc_kwargs(trust_replace):
         assert 'trust_roots' not in vc_kwargs
         assert len(vc_kwargs['extra_trust_roots']) == 1
 
+    with pytest.raises(ConfigurationError):
+        cli_config.get_validation_context('theresnosuchvc')
+
 
 def test_read_qr_config():
     from pyhanko_tests.test_utils import NOTO_SERIF_JP
@@ -70,6 +73,9 @@ def test_read_qr_config():
     assert isinstance(alternative3, TextStampStyle)
     assert alternative3.background is None
     assert isinstance(alternative3.text_box_style.font, SimpleFontEngine)
+
+    with pytest.raises(ConfigurationError):
+        cli_config.get_stamp_style('theresnosuchstyle')
 
 
 def test_read_bad_config():

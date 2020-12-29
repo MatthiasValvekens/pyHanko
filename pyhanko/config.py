@@ -4,7 +4,9 @@ from dataclasses import dataclass
 
 import yaml
 from certvalidator import ValidationContext
-from pyhanko.pdf_utils.config_utils import check_config_keys, ConfigurationError
+from pyhanko.pdf_utils.config_utils import (
+    check_config_keys, ConfigurationError
+)
 from pyhanko.sign import signers
 
 
@@ -25,15 +27,23 @@ class CLIConfig:
 
     def get_validation_context(self, name=None, as_dict=False):
         name = name or self.default_validation_context
-        vc_kwargs = parse_trust_config(
-            self.validation_contexts[name], self.time_tolerance
-        )
+        try:
+            vc_config = self.validation_contexts[name]
+        except KeyError:
+            raise ConfigurationError(
+                f"There is no validation context named '{name}'."
+            )
+        vc_kwargs = parse_trust_config(vc_config, self.time_tolerance)
         return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
 
     def get_stamp_style(self, name=None) -> TextStampStyle:
         name = name or self.default_stamp_style
         try:
             style_config = dict(self.stamp_styles[name])
+        except KeyError:
+            raise ConfigurationError(
+                f"There is no stamp style named '{name}'."
+            )
         except TypeError as e:
             raise ConfigurationError(e)
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
@@ -59,7 +69,9 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
     if other_certs:
         if isinstance(other_certs, str):
             other_certs = (other_certs,)
-        vc_kwargs['other_certs'] = list(signers.load_certs_from_pemder(other_certs))
+        vc_kwargs['other_certs'] = list(
+            signers.load_certs_from_pemder(other_certs)
+        )
     return vc_kwargs
 
 
