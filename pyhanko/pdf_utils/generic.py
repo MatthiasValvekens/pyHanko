@@ -37,6 +37,13 @@ INDIRECT_PATTERN = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
 logger = logging.getLogger(__name__)
 
 
+def _deproxy_decrypt(obj):
+    if isinstance(obj, DecryptedObjectProxy):
+        return obj.decrypted
+    else:
+        return obj
+
+
 class Dereferenceable:
     """Represents an opaque reference to a PDF object associated with
     a PDF Handler (see :class:`PdfHandler <.rw_common.PdfHandler>`).
@@ -334,20 +341,37 @@ class ArrayObject(list, PdfObject):
     .. warning::
         Contrary to the case of dictionary objects, PyPDF2 does not
         transparently dereference array entries when accessed using
-        :meth:`__getitem__`. I originally decided to preserve this inconsistency
-        for backwards compatibility reasons, but since the API has already
-        started to diverge from PyPDF2 in other places, this might change
-        between now and the first major release.
+        :meth:`__getitem__`.
+        For usability & consistency reasons, I decided to depart from that
+        and dereference automatically.
+        This makes the behaviour of :class:`.ArrayObject` consistent with
+        :class:`.DictionaryObject`.
 
+        That said, some vestiges of the old PyPDF2 behaviour may linger in
+        the codebase. I'll fix those as I get to them.
     """
 
-    # transparently decrypt, but otherwise don't dereference
-    #  (keeps PyPDF2 behaviour)
-    def __getitem__(self, item):
-        value = list.__getitem__(self, item)
-        if isinstance(value, DecryptedObjectProxy):
-            return value.decrypted
-        return value
+    def __getitem__(self, index):
+        return self.raw_get(index).get_object()
+
+    def raw_get(self, index, decrypt=True):
+        """
+        Get a value from an array without dereferencing.
+        In other words, if the value corresponding to the given key is of type
+        :class:`.IndirectObject`, the indirect reference will not be resolved.
+
+        :param index:
+            Key to look up in the dictionary.
+        :param decrypt:
+            If ``False``, instances of :class:`.DecryptedObjectProxy` will
+            be returned as-is. If ``True``, they will be decrypted.
+            Default ``True``.
+        :return:
+            A :class:`.PdfObject`.
+        """
+
+        val = list.__getitem__(self, index)
+        return _deproxy_decrypt(val) if decrypt else val
 
     def write_to_stream(self, stream, encryption_key):
         stream.write(b"[")
@@ -833,10 +857,7 @@ class DictionaryObject(dict, PdfObject):
             A :class:`.PdfObject`.
         """
         val = dict.__getitem__(self, key)
-        if decrypt and isinstance(val, DecryptedObjectProxy):
-            return val.decrypted
-        else:
-            return val
+        return _deproxy_decrypt(val) if decrypt else val
 
     def __setitem__(self, key, value):
         key = _normalise_key(key)

@@ -72,7 +72,7 @@ def test_add_stream():
     out.seek(0)
     r = PdfFileReader(out)
     # check if the content stream was added
-    page_obj_ref = r.root['/Pages']['/Kids'][0]
+    page_obj_ref = r.root['/Pages']['/Kids'].raw_get(0)
     assert isinstance(page_obj_ref, generic.IndirectObject)
     page_obj = page_obj_ref.get_object()
     conts = page_obj['/Contents']
@@ -94,7 +94,7 @@ def test_add_stream():
     out.seek(0)
     r = PdfFileReader(out)
     # check if the content stream was added
-    page_obj_ref = r.root['/Pages']['/Kids'][0]
+    page_obj_ref = r.root['/Pages']['/Kids'].raw_get(0)
     assert isinstance(page_obj_ref, generic.IndirectObject)
     page_obj = page_obj_ref.get_object()
     conts = page_obj['/Contents']
@@ -121,7 +121,7 @@ def test_add_stream_to_direct_arr():
     out.seek(0)
     r = PdfFileReader(out)
     # check if the content stream was added
-    page_obj_ref = r.root['/Pages']['/Kids'][0]
+    page_obj_ref = r.root['/Pages']['/Kids'].raw_get(0)
     assert isinstance(page_obj_ref, generic.IndirectObject)
     page_obj = page_obj_ref.get_object()
     conts = page_obj['/Contents']

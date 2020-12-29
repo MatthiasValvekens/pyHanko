@@ -598,7 +598,7 @@ def test_add_sigfield_with_lock(include_docmdp):
     assert len(refs) == (2 if include_docmdp else 1)
     ref = refs[0]
     assert ref['/TransformMethod'] == '/FieldMDP'
-    assert ref['/TransformParams']['/Fields'] == ['blah']
+    assert ref['/TransformParams']['/Fields'] == generic.ArrayObject(['blah'])
     assert ref.raw_get('/Data').reference == r.root_ref
     assert '/Perms' not in r.root
     if include_docmdp:

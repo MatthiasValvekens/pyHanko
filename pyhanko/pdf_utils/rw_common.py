@@ -56,10 +56,7 @@ class PdfHandler:
 
         def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict):
             pages_obj = pages_obj_ref.get_object()
-            kids = pages_obj.raw_get('/Kids')
-            if isinstance(kids, generic.IndirectObject):
-                kids = kids.get_object()
-
+            kids = pages_obj['/Kids']
             try:
                 last_rsrc_dict = pages_obj.raw_get('/Resources')
             except KeyError:
