@@ -1,4 +1,5 @@
 import sys
+from contextlib import contextmanager
 from enum import Enum, auto
 
 import click
@@ -10,8 +11,11 @@ from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
     CLIConfig, LogConfig, StdLogOutput, parse_logging_config
 )
+from pyhanko.pdf_utils import misc
+from pyhanko.pdf_utils.config_utils import ConfigurationError
 
 from pyhanko.sign import signers
+from pyhanko.sign.general import SigningError
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign import validation, beid, fields
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -19,8 +23,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign.validation import (
     SignatureValidationError, RevocationInfoValidationType
 )
-from pyhanko.stamp import QRStampStyle
-
+from pyhanko.stamp import QRStampStyle, text_stamp_file, qr_stamp_file
 
 __all__ = ['cli']
 
@@ -45,6 +48,31 @@ def logging_setup(log_configs):
         )
         handler.setFormatter(formatter)
         cur_logger.addHandler(handler)
+
+
+@contextmanager
+def pyhanko_exception_manager():
+    msg = exception = None
+    try:
+        yield
+    except click.ClickException:
+        raise
+    except misc.PdfReadError as e:
+        exception = e
+        msg = "Failed to read PDF file."
+    except misc.PdfWriteError as e:
+        exception = e
+        msg = "Failed to write PDF file."
+    except SigningError as e:
+        exception = e
+        msg = "Error raised while producing signed file."
+    except Exception as e:
+        exception = e
+        msg = "Generic processing error."
+
+    if exception is not None:
+        logger.error(msg, exc_info=exception)
+        raise click.ClickException(msg)
 
 
 DEFAULT_CONFIG_FILE = 'pyhanko.yml'
@@ -123,32 +151,58 @@ def signing():
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
-# TODO user-friendly error handling for KeyErrors etc.
 def _build_vc_kwargs(ctx, validation_context, trust,
                      trust_replace, other_certs, allow_fetching=None):
     cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
-    if validation_context is not None:
-        # load the desired context from config
-        if cli_config is None:
-            raise click.ClickException("No config file specified.")
-        result = cli_config.get_validation_context(
-            validation_context, as_dict=True
-        )
-    elif trust or other_certs:
-        # load a validation profile using command line kwargs
-        result = init_validation_context_kwargs(
-            trust, trust_replace, other_certs
-        )
-    elif cli_config is not None:
-        # load the default settings from the CLI config
-        result = cli_config.get_validation_context(as_dict=True)
-    else:
-        result = {}
+    try:
+        if validation_context is not None:
+            # load the desired context from config
+            if cli_config is None:
+                raise click.ClickException("No config file specified.")
+            try:
+                result = cli_config.get_validation_context(
+                    validation_context, as_dict=True
+                )
+            except ConfigurationError as e:
+                msg = (
+                    "Configuration problem. Are you sure that the validation "
+                    f"context '{validation_context}' is properly defined in the"
+                    " configuration file?"
+                )
+                logger.error(msg, exc_info=e)
+                raise click.ClickException(msg)
+        elif trust or other_certs:
+            # load a validation profile using command line kwargs
+            result = init_validation_context_kwargs(
+                trust, trust_replace, other_certs
+            )
+        elif cli_config is not None:
+            # load the default settings from the CLI config
+            try:
+                result = cli_config.get_validation_context(as_dict=True)
+            except ConfigurationError as e:
+                msg = (
+                    "Failed to load default validation context."
+                )
+                logger.error(msg, exc_info=e)
+                raise click.ClickException(msg)
+        else:
+            result = {}
 
-    if allow_fetching is not None:
-        result['allow_fetching'] = allow_fetching
+        if allow_fetching is not None:
+            result['allow_fetching'] = allow_fetching
 
-    return result
+        return result
+    except click.ClickException:
+        raise
+    except IOError as e:
+        msg = "I/O problem while reading validation config"
+        logger.error(msg, exc_info=e)
+        raise click.ClickException(msg)
+    except Exception as e:
+        msg = "Generic processing problem while reading validation config"
+        logger.error(msg, exc_info=e)
+        raise click.ClickException(msg)
 
 
 def trust_options(f):
@@ -183,7 +237,15 @@ def _select_style(ctx, style_name, url):
             "Using stamp styles requires a configuration file "
             f"({DEFAULT_CONFIG_FILE} by default)."
         )
-    style = cli_config.get_stamp_style(style_name)
+    try:
+        style = cli_config.get_stamp_style(style_name)
+    except ConfigurationError as e:
+        msg = (
+            "Configuration problem. Are you sure that the style "
+            f"'{style_name}' is properly defined in the configuration file?"
+        )
+        logger.error(msg, exc_info=e)
+        raise click.ClickException(msg)
     if url and not isinstance(style, QRStampStyle):
         raise click.ClickException(
             "The --stamp-url parameter is only meaningful for QR stamp styles."
@@ -219,22 +281,29 @@ def _signature_status(ltv_profile, ltv_obsessive,
         else:
             return status.summary()
     except validation.ValidationInfoReadingError as e:
+        msg = (
+            'An error occurred while parsing the revocation information '
+            'for this signature: ' + str(e)
+        )
+        logger.error(msg, exc_info=e)
         if pretty_print:
-            return (
-                'An error occurred while parsing the revocation information '
-                'for this signature: ' + str(e)
-            )
+            return msg
         else:
             return 'REVINFO_FAILURE'
     except SignatureValidationError as e:
+        msg = 'An error occurred while validating this signature: ' + str(e)
+        logger.error(msg, exc_info=e)
         if pretty_print:
-            return (
-                'An error occurred while validating this signature: ' + str(e)
-            )
+            return msg
         else:
             return 'INVALID'
-    except ValueError:
-        return 'MALFORMED'
+    except Exception as e:
+        msg = 'Generic processing error: ' + str(e)
+        logger.error(msg, exc_info=e)
+        if pretty_print:
+            return msg
+        else:
+            return 'MALFORMED'
 
 
 # TODO add an option to do LTV, but guess the profile
@@ -265,30 +334,31 @@ def validate_signatures(ctx, infile, executive_summary,
             "--pretty-print is incompatible with --executive-summary."
         )
 
-    r = PdfFileReader(infile)
     if ltv_profile is not None:
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     vc_kwargs = _build_vc_kwargs(
         ctx, validation_context, trust, trust_replace, other_certs
     )
-    for ix, embedded_sig in enumerate(r.embedded_signatures):
-        fingerprint: str = embedded_sig.signer_cert.sha256.hex()
-        status_str = _signature_status(
-            ltv_profile, ltv_obsessive, pretty_print, vc_kwargs,
-            executive_summary, embedded_sig
-        )
-        name = embedded_sig.field_name
+    with pyhanko_exception_manager():
+        r = PdfFileReader(infile)
+        for ix, embedded_sig in enumerate(r.embedded_signatures):
+            fingerprint: str = embedded_sig.signer_cert.sha256.hex()
+            status_str = _signature_status(
+                ltv_profile, ltv_obsessive, pretty_print, vc_kwargs,
+                executive_summary, embedded_sig
+            )
+            name = embedded_sig.field_name
 
-        if pretty_print:
-            header = f'Field {ix + 1}: {name}'
-            line = '=' * len(header)
-            print(line)
-            print(header)
-            print(line)
-            print('\n\n' + status_str)
-        else:
-            print('%s:%s:%s' % (name, fingerprint, status_str))
+            if pretty_print:
+                header = f'Field {ix + 1}: {name}'
+                line = '=' * len(header)
+                print(line)
+                print(header)
+                print(line)
+                print('\n\n' + status_str)
+            else:
+                print('%s:%s:%s' % (name, fingerprint, status_str))
 
 
 @signing.command(name='list', help='list signature fields')
@@ -297,13 +367,14 @@ def validate_signatures(ctx, infile, executive_summary,
               type=bool, is_flag=True, default=False, show_default=True)
 def list_sigfields(infile, skip_status):
 
-    r = PdfFileReader(infile)
-    field_info = fields.enumerate_sig_fields(r)
-    for ix, (name, value, field_ref) in enumerate(field_info):
-        if skip_status:
-            print(name)
-            continue
-        print(f"{name}:{'EMPTY' if value is None else 'FILLED'}")
+    with pyhanko_exception_manager():
+        r = PdfFileReader(infile)
+        field_info = fields.enumerate_sig_fields(r)
+        for ix, (name, value, field_ref) in enumerate(field_info):
+            if skip_status:
+                print(name)
+                continue
+            print(f"{name}:{'EMPTY' if value is None else 'FILLED'}")
 
 
 @signing.command(name='ltaupdate', help='update LTA timestamp')
@@ -314,14 +385,15 @@ def list_sigfields(infile, skip_status):
 @click.pass_context
 def lta_update(ctx, infile, validation_context, trust, trust_replace,
                other_certs, timestamp_url):
-    vc_kwargs = _build_vc_kwargs(
-        ctx, validation_context, trust, trust_replace, other_certs
-    )
-    timestamper = HTTPTimeStamper(timestamp_url)
-    r = PdfFileReader(infile)
-    signers.PdfTimeStamper(timestamper).update_archival_timestamp_chain(
-        r, ValidationContext(**vc_kwargs)
-    )
+    with pyhanko_exception_manager():
+        vc_kwargs = _build_vc_kwargs(
+            ctx, validation_context, trust, trust_replace, other_certs
+        )
+        timestamper = HTTPTimeStamper(timestamp_url)
+        r = PdfFileReader(infile)
+        signers.PdfTimeStamper(timestamper).update_archival_timestamp_chain(
+            r, ValidationContext(**vc_kwargs)
+        )
 
 
 @signing.group(name='addsig', help='add a signature')
@@ -389,38 +461,39 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
 def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
                          style, stamp_url, new_field_spec):
-    if timestamp_url is not None:
-        timestamper = HTTPTimeStamper(timestamp_url)
-    else:
-        timestamper = None
-    writer = IncrementalPdfFileWriter(infile)
+    with pyhanko_exception_manager():
+        if timestamp_url is not None:
+            timestamper = HTTPTimeStamper(timestamp_url)
+        else:
+            timestamper = None
+        writer = IncrementalPdfFileWriter(infile)
 
-    # TODO make this an option higher up the tree
-    # TODO mention filename in prompt
-    if writer.prev.encrypted:
-        pdf_pass = getpass.getpass(
-            prompt='Password for encrypted file: '
-        ).encode('utf-8')
-        writer.encrypt(pdf_pass)
+        # TODO make this an option higher up the tree
+        # TODO mention filename in prompt
+        if writer.prev.encrypted:
+            pdf_pass = getpass.getpass(
+                prompt='Password for encrypted file: '
+            ).encode('utf-8')
+            writer.encrypt(pdf_pass)
 
-    text_params = None
-    if stamp_url is not None:
-        text_params = {'url': stamp_url}
+        text_params = None
+        if stamp_url is not None:
+            text_params = {'url': stamp_url}
 
-    result = signers.PdfSigner(
-        signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=style, new_field_spec=new_field_spec
-    ).sign_pdf(
-        writer, existing_fields_only=existing_fields_only,
-        appearance_text_params=text_params
-    )
+        result = signers.PdfSigner(
+            signature_meta, signer=signer, timestamper=timestamper,
+            stamp_style=style, new_field_spec=new_field_spec
+        ).sign_pdf(
+            writer, existing_fields_only=existing_fields_only,
+            appearance_text_params=text_params
+        )
 
-    buf = result.getbuffer()
-    outfile.write(buf)
-    buf.release()
+        buf = result.getbuffer()
+        outfile.write(buf)
+        buf.release()
 
-    infile.close()
-    outfile.close()
+        infile.close()
+        outfile.close()
 
 
 @addsig.command(name='pemder', help='read key material from PEM/DER files')
@@ -529,26 +602,27 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
         session, label
     )
 
-    writer = IncrementalPdfFileWriter(infile)
     stamp_url = ctx.obj[Ctx.STAMP_URL]
     text_params = None
     if stamp_url is not None:
         text_params = {'url': stamp_url}
 
-    result = signers.PdfSigner(
-        signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=ctx.obj[Ctx.STAMP_STYLE],
-        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
-    ).sign_pdf(
-        writer, existing_fields_only=existing_fields_only,
-        appearance_text_params=text_params
-    )
-    buf = result.getbuffer()
-    outfile.write(buf)
-    buf.release()
+    with pyhanko_exception_manager():
+        writer = IncrementalPdfFileWriter(infile)
+        result = signers.PdfSigner(
+            signature_meta, signer=signer, timestamper=timestamper,
+            stamp_style=ctx.obj[Ctx.STAMP_STYLE],
+            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
+        ).sign_pdf(
+            writer, existing_fields_only=existing_fields_only,
+            appearance_text_params=text_params
+        )
+        buf = result.getbuffer()
+        outfile.write(buf)
+        buf.release()
 
-    infile.close()
-    outfile.close()
+        infile.close()
+        outfile.close()
 
 
 def _index_page(page):
@@ -604,16 +678,17 @@ def parse_field_location_spec(spec, require_full_spec=True):
 @click.option('--field', metavar='PAGE/X1,Y1,X2,Y2/NAME', multiple=True,
               required=True)
 def add_sig_field(infile, outfile, field):
-    writer = IncrementalPdfFileWriter(infile)
+    with pyhanko_exception_manager():
+        writer = IncrementalPdfFileWriter(infile)
 
-    for s in field:
-        name, spec = parse_field_location_spec(s)
-        assert spec is not None
-        fields.append_signature_field(writer, spec)
+        for s in field:
+            name, spec = parse_field_location_spec(s)
+            assert spec is not None
+            fields.append_signature_field(writer, spec)
 
-    writer.write(outfile)
-    infile.close()
-    outfile.close()
+        writer.write(outfile)
+        infile.close()
+        outfile.close()
 
 
 # TODO: text_params support
@@ -637,18 +712,15 @@ def add_sig_field(infile, outfile, field):
 )
 @click.pass_context
 def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
-
-    from pyhanko.stamp import text_stamp_file, qr_stamp_file
-
-    stamp_style = _select_style(ctx, style_name, stamp_url)
-
-    page_ix = _index_page(page)
-    if stamp_url:
-        qr_stamp_file(
-            infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y,
-            url=stamp_url
-        )
-    else:
-        text_stamp_file(
-            infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y
-        )
+    with pyhanko_exception_manager():
+        stamp_style = _select_style(ctx, style_name, stamp_url)
+        page_ix = _index_page(page)
+        if stamp_url:
+            qr_stamp_file(
+                infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y,
+                url=stamp_url
+            )
+        else:
+            text_stamp_file(
+                infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y
+            )
