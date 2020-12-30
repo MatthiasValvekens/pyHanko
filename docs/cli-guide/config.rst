@@ -18,6 +18,39 @@ In these cases, the configuration must be sourced from a config file.
 Configuration options
 ---------------------
 
+
+Logging options
+^^^^^^^^^^^^^^^
+
+Under the ``logging`` key in the configuration file, you can set up the
+configuration for Python's logging module.
+Here's an example.
+
+.. code-block:: yaml
+
+    logging:
+        root-level: ERROR
+        root-output: stderr
+        by-module:
+            certvalidator:
+                level: DEBUG
+                output: certvalidator.log
+            pyhanko.sign:
+                level: DEBUG
+
+
+The keys ``root-level`` and ``root-ouput`` allow you to set the log level
+and the output stream (respectively) for the root logger.
+The default log level is ``INFO``, and the default output stream is ``stderr``.
+The keys under ``by-module`` allow you to specify more granular
+per-module logging configuration. The ``level`` key is mandatory in this case.
+
+.. note::
+    If ``pyhanko`` is invoked with ``--verbose``, the root logger will have its
+    log level set to ``DEBUG``, irrespective of the value specified
+    in the configuration.
+
+
 .. _config-validation-context:
 
 Named validation contexts

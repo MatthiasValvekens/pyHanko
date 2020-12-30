@@ -21,6 +21,11 @@ CLI through ::
 
 This guide will adopt the former calling convention.
 
+You can run ``pyhanko`` in verbose mode by passing the ``--verbose`` flag
+before specifying the subcommand to invoke. ::
+
+    pyhanko --verbose <subcommand>
+
 .. note::
     The CLI portion of pyHanko was implemented using
     `Click <https://click.palletsprojects.com>`_. In particular, this means that
