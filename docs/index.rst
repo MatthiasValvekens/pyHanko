@@ -26,6 +26,10 @@ PyHanko is a tool for signing and stamping PDF files.
    :alt: Language grade: Python
    :target: https://lgtm.com/projects/g/MatthiasValvekens/pyHanko/context:python
 
+.. image:: https://img.shields.io/pypi/v/pyHanko.svg
+   :alt: PyPI
+   :target: https://pypi.org/project/pyHanko/
+
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
