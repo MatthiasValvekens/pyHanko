@@ -3,6 +3,7 @@
 ![status](https://github.com/MatthiasValvekens/pyHanko/workflows/pytest/badge.svg)
 ![Codecov](https://img.shields.io/codecov/c/github/MatthiasValvekens/pyHanko)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/MatthiasValvekens/pyHanko.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/MatthiasValvekens/pyHanko/context:python)
+![pypi](https://img.shields.io/pypi/v/pyHanko.svg)
 
 
 
@@ -11,6 +12,15 @@ The lack of open-source CLI tooling to handle digitally signing and stamping PDF
 *Note:* The working title of this project (and former name of the repository on GitHub) was `pdf-stamp`, which might still linger in some references.
 
 *Note:* This project is currently in alpha, and not yet production-ready.
+
+### Installing
+
+PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
+and can be installed using `pip`:
+
+```bash
+   pip install pyHanko
+```
 
 ### Overview
 The code in this repository functions both as a library and as a command-line tool.
