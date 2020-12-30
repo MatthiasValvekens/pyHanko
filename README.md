@@ -10,7 +10,7 @@ The lack of open-source CLI tooling to handle digitally signing and stamping PDF
 
 *Note:* The working title of this project (and former name of the repository on GitHub) was `pdf-stamp`, which might still linger in some references.
 
-*Note:* This project is not yet production-ready, and is currently in a pre-alpha stage.
+*Note:* This project is currently in alpha, and not yet production-ready.
 
 ### Overview
 The code in this repository functions both as a library and as a command-line tool.
@@ -63,10 +63,6 @@ page in the documentation.
 
 Documentation is built using Sphinx, and hosted [here](https://pyhanko.readthedocs.io/en/latest/)
 on ReadTheDocs.
-
-Given the fact that this project is still in pre-alpha, the documentation is still under construction.
-Coverage for the API docs is fairly complete, but code examples, CLI documentation and configuration
-examples are still lacking.
 
 
 ### Acknowledgement

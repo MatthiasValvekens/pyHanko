@@ -7,7 +7,7 @@ with open(path.join(BASE_DIR, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pyHanko',
-    version='0.1.0.dev2',
+    version='0.1.0',
     packages=['pyhanko', 'pyhanko.pdf_utils', 'pyhanko.sign'],
     url='https://github.com/MatthiasValvekens/pyHanko',
     license='MIT',
@@ -17,7 +17,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     classifiers=[
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 3 - Alpha',
 
         'Intended Audience :: Developers',
 
