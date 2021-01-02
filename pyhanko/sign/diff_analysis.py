@@ -488,6 +488,7 @@ class SigFieldCreationRule(FieldMDPRule):
         # (including the /Fields ref), so our only responsibility is to match
         # up the names of new fields
         approved_new_fields = set(all_new_refs.keys())
+        approved_new_refs = set(all_new_refs.values())
         actual_new_fields = set(
             fq_name for fq_name, spec in context.field_specs.items()
             if spec.old_field_ref is None
@@ -503,7 +504,7 @@ class SigFieldCreationRule(FieldMDPRule):
         # finally, deal with the signature fields themselves
         # The distinction between timestamps and signatures isn't relevant
         # yet, that's a problem for /V, which we don't bother with here.
-        for sigfield_ref in all_new_refs.values():
+        for sigfield_ref in approved_new_refs:
 
             # new field, so all its dependencies are good to go
             # that said, only the field itself is cleared at LTA update level,
@@ -552,7 +553,8 @@ class SigFieldCreationRule(FieldMDPRule):
         yield from qualify(
             ModificationLevel.LTA_UPDATES,
             _walk_page_tree_annots(
-                old_page_root, new_page_root, lambda x: x in all_new_refs,
+                old_page_root, new_page_root,
+                lambda ref: ref in approved_new_refs,
                 context.old
             )
         )
@@ -1068,7 +1070,7 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                     f"Annotations {deleted_annots} were deleted."
                 )
             all_annots_allowed = all(map(annot_allowed_predicate, added_annots))
-            if not added_annots or all_annots_allowed:
+            if not added_annots or not all_annots_allowed:
                 # in this case, we don't whitelist anything, so any changes
                 # will be caught by the reference checker.
                 continue
