@@ -1034,6 +1034,8 @@ class HistoricalResolver(PdfHandler):
         try:
             return cache[ref]
         except KeyError:
+            # TODO deal with container_ref
+
             # if the object wasn't modified after this revision
             # we can grab it from the "normal" shared cache.
             reader = self.reader
@@ -1046,9 +1048,7 @@ class HistoricalResolver(PdfHandler):
             # replace all PDF handler references in the object with references
             # to this one, so that indirect references will resolve within
             # this historical revision
-            # TODO now that this little trick is in place, I should probably
-            #  take another look at simplifying some of the /DocMDP diffing code
-            cache[ref] = self._subsume_object(obj)
+            cache[ref] = obj = self._subsume_object(obj)
             return obj
 
     def _subsume_object(self, obj):
