@@ -858,7 +858,10 @@ def docmdp_reference_dictionary(md_algorithm, permission_level: MDPPerm):
 
 def fieldmdp_reference_dictionary(field_mdp_spec: FieldMDPSpec,
                                   md_algorithm: str,
-                                  data_ref: generic.IndirectObject):
+                                  data_ref: generic.Reference):
+    data_ref = generic.IndirectObject(
+        data_ref.idnum, data_ref.generation, data_ref.pdf
+    )
     # this is part of the /Reference entry of the signature object.
     return generic.DictionaryObject({
         pdf_name('/Type'): pdf_name('/SigRef'),

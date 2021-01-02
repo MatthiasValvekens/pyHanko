@@ -22,7 +22,23 @@ class PdfHandler:
         raise NotImplementedError
 
     @property
-    def root_ref(self) -> generic.IndirectObject:
+    def trailer_view(self) -> generic.DictionaryObject:
+        """
+        Returns a view of the document trailer of the document represented
+        by this :class:`.PdfHandler` instance.
+
+        The view is effectively read-only, in the sense that any writes
+        will not be reflected in the actual trailer (if the handler supports
+        writing, that is).
+
+        :return:
+            A :class:`.generic.DictionaryObject` representing the current state
+            of the document trailer.
+        """
+        raise NotImplementedError
+
+    @property
+    def root_ref(self) -> generic.Reference:
         """
         :return: A reference to the document catalog of this PDF handler.
         """

@@ -334,8 +334,8 @@ class BasePdfFileWriter(PdfHandler):
         pass
 
     @property
-    def root_ref(self):
-        return self._root
+    def root_ref(self) -> generic.Reference:
+        return self._root.reference
 
     def get_object(self, ido):
         if ido.pdf not in self._resolves_objs_from:
@@ -473,6 +473,12 @@ class BasePdfFileWriter(PdfHandler):
         # before doing anything else, we attempt to load the crypto-relevant
         # data, so that we can bail early if something's not right
         trailer[pdf_name('/ID')] = self._document_id
+
+    @property
+    def trailer_view(self) -> generic.DictionaryObject:
+        trailer = generic.DictionaryObject()
+        self._populate_trailer(trailer)
+        return trailer
 
     def write(self, stream):
         """

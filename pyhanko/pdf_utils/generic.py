@@ -9,13 +9,13 @@ import os
 import re
 import binascii
 from datetime import datetime, timedelta, timezone
-from typing import Iterator, Tuple, Optional, Union
+from typing import Iterator, Tuple, Optional, Union, Callable, Any
 from dataclasses import dataclass, field
 
 from .misc import (
     read_non_whitespace, skip_over_comment, read_until_regex,
 )
-from .misc import PdfStreamError, PdfReadError
+from .misc import PdfStreamError, PdfReadError, IndirectObjectExpected
 import logging
 from . import filters
 from .crypt import rc4_encrypt
@@ -878,6 +878,25 @@ class DictionaryObject(dict, PdfObject):
     def __getitem__(self, key):
         return dict.__getitem__(self, key).get_object()
 
+    def get_and_apply(self, key, function: Callable[[PdfObject], Any], *,
+                      raw=False, default=None):
+        try:
+            value = self.raw_get(key) if raw else self[key]
+        except KeyError:
+            return default
+        return function(value)
+
+    def get_value_as_reference(self, key, optional=False) -> Reference:
+        def as_ref(obj):
+            if isinstance(obj, IndirectObject):
+                return obj.reference
+            raise IndirectObjectExpected
+
+        value = self.get_and_apply(key, as_ref, raw=True)
+        if value is None and not optional:
+            raise KeyError
+        return value
+
     def write_to_stream(self, stream, encryption_key):
         stream.write(b"<<\n")
         for key, value in list(self.items()):
@@ -1315,7 +1334,7 @@ class DecryptedObjectProxy(PdfObject):
         self.decrypted.write_to_stream(stream, encryption_key)
 
     def get_object(self):
-        return self.decrypted
+        return self.decrypted.get_object()
 
     @property
     def container_ref(self):

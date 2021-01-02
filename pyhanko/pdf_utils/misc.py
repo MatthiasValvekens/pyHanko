@@ -12,7 +12,7 @@ __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError'
 ]
 
-from typing import Callable
+from typing import Callable, TypeVar, Generator, Iterable
 
 rd = lambda x: round(x, 4)
 
@@ -129,6 +129,10 @@ class PdfReadError(PdfError):
     pass
 
 
+class IndirectObjectExpected(PdfReadError):
+    pass
+
+
 class PdfWriteError(PdfError):
     pass
 
@@ -199,3 +203,22 @@ def get_and_apply(dictionary: dict, key, function: Callable, *, default=None):
     except KeyError:
         return default
     return function(value)
+
+
+X = TypeVar('X')
+Y = TypeVar('Y')
+R = TypeVar('R')
+
+
+def map_with_return(gen: Generator[X, None, R], func: Callable[[X], Y])\
+        -> Generator[Y, None, R]:
+    while True:
+        try:
+            yield func(next(gen))
+        except StopIteration as e:
+            return e.value
+
+
+# type checker trick
+def _as_gen(x: Iterable[X]) -> Generator[X, None, None]:
+    yield from x

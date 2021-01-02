@@ -472,9 +472,12 @@ class TrailerDictionary(generic.PdfObject):
     def __setitem__(self, item, value):
         self._new_changes[item] = value
 
-    def flatten(self) -> generic.DictionaryObject:
+    def flatten(self, revision=None) -> generic.DictionaryObject:
+        relevant_revisions = self._trailer_revisions
+        if revision is not None:
+            relevant_revisions = relevant_revisions[:revision]
         trailer = generic.DictionaryObject({
-            k: v for revision in reversed(self._trailer_revisions)
+            k: v for revision in reversed(relevant_revisions)
             for k, v in revision.items()
         })
         trailer.update(self._new_changes)
@@ -598,6 +601,10 @@ class PdfFileReader(PdfHandler):
             return self.get_object(encrypt_ref.reference, never_decrypt=True)
         else:
             return encrypt_ref
+
+    @property
+    def trailer_view(self) -> generic.DictionaryObject:
+        return self.trailer.flatten()
 
     @property
     def root_ref(self) -> generic.Reference:
@@ -1016,6 +1023,11 @@ class HistoricalResolver(PdfHandler):
         self.cache = {}
         self.reader = reader
         self.revision = revision
+        self._trailer = self.reader.trailer.flatten(self.revision)
+
+    @property
+    def trailer_view(self) -> generic.DictionaryObject:
+        return self._trailer
 
     def get_object(self, ref: generic.Reference):
         cache = self.cache
@@ -1060,11 +1072,11 @@ class HistoricalResolver(PdfHandler):
             return obj
 
     @property
-    def root_ref(self) -> generic.IndirectObject:
+    def root_ref(self) -> generic.Reference:
         ref: generic.IndirectObject = self.reader.trailer.raw_get(
             '/Root', revision=self.revision
         )
-        return generic.IndirectObject(
+        return generic.Reference(
             idnum=ref.idnum, generation=ref.generation, pdf=self
         )
 
