@@ -1,0 +1,1128 @@
+import re
+import logging
+from dataclasses import dataclass
+from enum import unique
+from typing import (
+    Iterable, Optional, Set, Tuple, Generator, TypeVar, Dict,
+    List,
+)
+
+from pyhanko.pdf_utils.generic import Reference, PdfObject
+from pyhanko.pdf_utils.misc import OrderedEnum
+from pyhanko.pdf_utils.reader import HistoricalResolver
+from pyhanko.pdf_utils import generic, misc
+from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
+
+__all__ = [
+    'ModificationLevel', 'SuspiciousModification',
+    'QualifiedWhitelistRule', 'WhitelistRule', 'qualify',
+    'DocInfoRule', 'DSSCompareRule', 'FormUpdatingRule',
+    'CatalogModificationRule', 'ObjectStreamRule',
+    'FieldMDPRule', 'FieldComparisonSpec', 'FieldMDPSpec',
+    'FieldMDPContext',
+    'run_diff', 'DiffPolicy', 'DefaultDiffPolicy'
+]
+
+logger = logging.getLogger(__name__)
+
+FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
+VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V'}
+VRI_KEY_PATTERN = re.compile('/[A-Z0-9]{40}')
+
+
+@unique
+class ModificationLevel(OrderedEnum):
+    """
+    Records the (semantic) modification level of a document.
+
+    Compare :class:`~.pyhanko.sign.fields.MDPPerm`, which records the document
+    modification policy associated with a particular signature, as opposed
+    to the empirical judgment indicated by this enum.
+    """
+
+    NONE = 0
+    """
+    The document was not modified at all (i.e. it is byte-for-byte unchanged).
+    """
+
+    LTA_UPDATES = 1
+    """
+    The only updates are signature long term archival (LTA) updates.
+    That is to say, updates to the document security store or new document
+    time stamps. For the purposes of evaluating whether a document has been
+    modified in the sense defined in the PAdES and ISO 32000-2 standards,
+    these updates do not count.
+    Adding form fields is permissible at this level, but only if they are 
+    signature fields. This is necessary for proper document timestamp support.
+    """
+
+    FORM_FILLING = 2
+    """
+    The only updates are extra signatures and updates to form field values or
+    their appearance streams, in addition to the previous levels.
+    """
+
+    ANNOTATIONS = 3
+    """
+    In addition to the previous levels, manipulating annotations is also allowed 
+    at this level.
+
+    .. note::
+        This level is currently unused, and modifications to annotations
+        other than those permitted to fill in forms are treated as suspicious.
+    """
+
+    OTHER = 4
+    """
+    The document has been modified in ways that aren't on the validator's
+    whitelist. This always invalidates the corresponding signature, irrespective
+    of cryptographical integrity or ``/DocMDP`` settings.
+    """
+
+
+class SuspiciousModification(ValueError):
+    """Error indicating a suspicious modification"""
+    pass
+
+
+class QualifiedWhitelistRule:
+
+    def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+        raise NotImplementedError
+
+
+class WhitelistRule:
+    # general rule: errors in the old revision should be tolerated as much as
+    # possible, but refusing to validate resulting edits in the new revisions
+    # is OK.
+
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
+            -> Iterable[Reference]:
+        raise NotImplementedError
+
+    def as_qualified(self, level: ModificationLevel):
+        return _WrappingQualifiedWhitelistRule(self, level)
+
+
+class _WrappingQualifiedWhitelistRule(QualifiedWhitelistRule):
+
+    def __init__(self, rule: WhitelistRule, level: ModificationLevel):
+        self.rule = rule
+        self.level = level
+
+    def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+        for ref in self.rule.apply(old, new):
+            yield self.level, ref
+
+
+R = TypeVar('R')
+
+
+def qualify(level: ModificationLevel,
+            rule_result: Generator[Reference, None, R])\
+        -> Generator[Tuple[ModificationLevel, Reference], None, R]:
+
+    return misc.map_with_return(rule_result, lambda ref: (level, ref))
+
+
+def _safe_whitelist(old: HistoricalResolver, old_ref, new_ref):
+    if old_ref:
+        _assert_not_stream(old_ref.get_object())
+
+    if old_ref == new_ref:
+        _assert_not_stream(new_ref.get_object())
+        yield new_ref
+    elif old.is_ref_available(new_ref):
+        yield new_ref
+    else:
+        raise SuspiciousModification(
+            f"Update clobbers or reuses {new_ref} in an unexpected way."
+        )
+
+
+class DocInfoRule(WhitelistRule):
+
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
+            -> Iterable[Reference]:
+        # updates to /Info are always OK (and must be through indirect objects)
+        # Removing the /Info dictionary is no big deal, since most readers
+        # will fall back to older revisions regardless
+        new_info = new.trailer_view.get_value_as_reference(
+            '/Info', optional=True
+        )
+        if new_info is None:
+            return
+        old_info = old.trailer_view.get_value_as_reference(
+            '/Info', optional=True
+        )
+        yield from _safe_whitelist(old, old_info, new_info)
+
+
+class DSSCompareRule(WhitelistRule):
+
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
+            -> Iterable[Reference]:
+        # TODO refactor these into less ad-hoc rules
+
+        old_dss, new_dss = yield from _compare_key_refs(
+            '/DSS', old, old.root, new.root
+        )
+        if new_dss is None:
+            return
+
+        if old_dss is None:
+            old_dss = generic.DictionaryObject()
+        if not isinstance(old_dss, generic.DictionaryObject):
+            raise misc.PdfReadError("/DSS is not a dictionary")
+        if not isinstance(new_dss, generic.DictionaryObject):
+            raise SuspiciousModification("/DSS is not a dictionary")
+
+        dss_der_stream_keys = {'/Certs', '/CRLs', '/OCSPs'}
+        dss_expected_keys = {'/Type', '/VRI'} | dss_der_stream_keys
+        dss_keys = set(new_dss.keys())
+
+        if not (dss_keys <= dss_expected_keys):
+            raise SuspiciousModification(
+                f"Unexpected keys in DSS: {dss_keys - dss_expected_keys}."
+            )
+
+        for der_obj_type in dss_der_stream_keys:
+            try:
+                value = new_dss.raw_get(der_obj_type)
+            except KeyError:
+                continue
+            if not isinstance(value.get_object(), generic.ArrayObject):
+                raise SuspiciousModification(
+                    f"Expected array at DSS key {der_obj_type}"
+                )
+
+            yield from new.collect_dependencies(
+                value, since_revision=old.revision + 1
+            )
+
+        # check that the /VRI dictionary still contains all old keys, unchanged.
+        old_vri, new_vri = yield from _compare_key_refs(
+            '/VRI', old, old_dss, new_dss,
+        )
+        if old_vri is None:
+            old_vri = generic.DictionaryObject()
+
+        if not isinstance(old_vri, generic.DictionaryObject):
+            raise misc.PdfReadError("/VRI is not a dictionary")
+        if not isinstance(new_vri, generic.DictionaryObject):
+            raise SuspiciousModification("/VRI is not a dictionary")
+
+        new_vri_hashes = set(new_vri.keys())
+        for key, old_vri_value in old_vri.items():
+            if not VRI_KEY_PATTERN.match(key):
+                raise SuspiciousModification(
+                    f"VRI key {key} is not formatted correctly."
+                )
+
+            try:
+                new_vri_dict = new_vri.raw_get(key)
+            except KeyError:
+                new_vri_dict = None
+
+            if new_vri_dict != old_vri_value:
+                # indirect or direct doesn't matter, they have to be the same
+                raise SuspiciousModification(
+                    f"VRI key {key} was modified or deleted."
+                )
+
+        # check the newly added entries
+        vri_der_stream_keys = {'/Cert', '/CRL', '/OCSP'}
+        vri_expected_keys = {'/Type', '/TU', '/TS'} | vri_der_stream_keys
+        for key in new_vri_hashes - old_vri.keys():
+            if not VRI_KEY_PATTERN.match(key):
+                raise SuspiciousModification(
+                    f"VRI key {key} is not formatted correctly."
+                )
+
+            new_vri_dict = new_vri.raw_get(key)
+            if isinstance(new_vri_dict, generic.IndirectObject) \
+                    and old.is_ref_available(new_vri_dict.reference):
+                yield new_vri_dict.reference
+                new_vri_dict = new_vri_dict.get_object()
+            _assert_not_stream(new_vri_dict)
+            if not isinstance(new_vri_dict, generic.DictionaryObject):
+                raise SuspiciousModification(
+                    "VRI entries should be dictionaries"
+                )
+
+            new_vri_value_keys = new_vri_dict.keys()
+            if not (new_vri_value_keys <= vri_expected_keys):
+                raise SuspiciousModification(
+                    "Unexpected keys in VRI dictionary: "
+                    f"{new_vri_value_keys - vri_expected_keys}."
+                )
+            for der_obj_type in vri_der_stream_keys:
+                try:
+                    value = new_vri_dict.raw_get(der_obj_type)
+                except KeyError:
+                    continue
+                if not isinstance(value.get_object(), generic.ArrayObject):
+                    raise SuspiciousModification(
+                        f"Expected array at VRI key {der_obj_type}"
+                    )
+                yield from new.collect_dependencies(
+                    value, since_revision=old.revision + 1
+                )
+
+            # /TS is also a DER stream
+            try:
+                ts_ref = new_vri_dict.get_value_as_reference(
+                    '/TS', optional=True
+                )
+                if ts_ref is not None and old.is_ref_available(ts_ref):
+                    yield ts_ref
+            except misc.IndirectObjectExpected:
+                pass
+
+
+@dataclass(frozen=True)
+class FieldComparisonSpec:
+    field_type: str
+    old_field_ref: Optional[generic.Reference]
+    new_field_ref: Optional[generic.Reference]
+
+    @property
+    def old_field(self) -> Optional[generic.DictionaryObject]:
+        ref = self.old_field_ref
+        if ref is None:
+            return None
+        field = ref.get_object()
+        assert isinstance(field, generic.DictionaryObject)
+        return field
+
+    @property
+    def new_field(self) -> Optional[generic.DictionaryObject]:
+        ref = self.new_field_ref
+        if ref is None:
+            return None
+        field = ref.get_object()
+        assert isinstance(field, generic.DictionaryObject)
+        return field
+
+
+@dataclass(frozen=True)
+class FieldMDPContext:
+    field_specs: Dict[str, FieldComparisonSpec]
+    old: HistoricalResolver
+    new: HistoricalResolver
+    field_mdp_spec: Optional[FieldMDPSpec] = None
+
+    # TODO use this to work more efficiently
+    doc_mdp: Optional[MDPPerm] = None
+
+
+class FieldMDPRule:
+
+    def apply_qualified(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+        raise NotImplementedError
+
+
+class SigFieldCreationRule(FieldMDPRule):
+    """
+    This rule allows signature fields to be created at the root of the form
+    hierarchy, but denies the creation of other types of fields.
+    It also disallows field deletion.
+    """
+
+    def __init__(self, approve_widget_bindings=True):
+        self.approve_widget_bindings = approve_widget_bindings
+
+    def apply_qualified(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+
+        deleted = set(
+            fq_name for fq_name, spec in context.field_specs.items()
+            if spec.old_field_ref and not spec.new_field_ref
+        )
+        if deleted:
+            raise SuspiciousModification(
+                f"Fields {deleted} were deleted after signing."
+            )
+
+        def _collect():
+            for fq_name, spec in context.field_specs.items():
+                if spec.field_type != '/Sig' or spec.old_field_ref:
+                    continue
+                if '.' in fq_name:
+                    raise NotImplementedError(
+                        "Can't deal with signature fields that aren't top level"
+                    )
+                yield fq_name, spec.new_field_ref
+
+        all_new_refs = dict(_collect())
+
+        # The form MDP logic already vetted the /AcroForm dictionary itself
+        # (including the /Fields ref), so our only responsibility is to match
+        # up the names of new fields
+        approved_new_fields = set(all_new_refs.keys())
+        actual_new_fields = set(
+            fq_name for fq_name, spec in context.field_specs.items()
+            if spec.old_field_ref is None
+        )
+
+        if actual_new_fields != approved_new_fields:
+            raise SuspiciousModification(
+                "More form fields added than expected: expected "
+                f"only {approved_new_fields}, but found new fields named "
+                f"{actual_new_fields - approved_new_fields}."
+            )
+
+        # finally, deal with the signature fields themselves
+        # The distinction between timestamps and signatures isn't relevant
+        # yet, that's a problem for /V, which we don't bother with here.
+        for sigfield_ref in all_new_refs.values():
+
+            # new field, so all its dependencies are good to go
+            # that said, only the field itself is cleared at LTA update level,
+            # the other deps bump the modification level up to FORM_FILL
+            yield ModificationLevel.LTA_UPDATES, sigfield_ref
+            sigfield = sigfield_ref.get_object()
+            # checked by field listing routine already
+            assert isinstance(sigfield, generic.DictionaryObject)
+
+            for _key in ('/AP', '/Lock', '/SV'):
+                try:
+                    raw_value = sigfield.raw_get(_key)
+
+                    deps = context.new.collect_dependencies(
+                        raw_value,
+                        since_revision=context.old.revision + 1
+                    )
+                    yield from qualify(
+                        ModificationLevel.FORM_FILLING, misc._as_gen(deps)
+                    )
+                except KeyError:
+                    pass
+
+        # Next, check (widget) annotations: newly added signature fields may
+        #  be added to the /Annots entry of any page. These are processed as LTA
+        #  updates, because even invisible signature fields / timestamps might
+        #  be added to /Annots (this isn't strictly necessary, but more
+        #  importantly it's not forbidden).
+        # Note: we don't descend into the annotation dictionaries themselves.
+        #  For modifications to form field values, this is the purview
+        #  of the appearance checkers.
+        # TODO allow other annotation modifications, but at level ANNOTATIONS
+        # if no new sigfields were added, we skip this step.
+        #  Any modifications to /Annots will be flagged by the xref
+        #  crawler later.
+
+        if not self.approve_widget_bindings or not all_new_refs:
+            return
+
+        # note: this is guaranteed to be equal to its signed counterpart,
+        # since we already checked the document catalog for unauthorised
+        # modifications
+        old_page_root = context.old.root['/Pages']
+        new_page_root = context.new.root['/Pages']
+
+        yield from qualify(
+            ModificationLevel.LTA_UPDATES,
+            _walk_page_tree_annots(
+                old_page_root, new_page_root, lambda x: x in all_new_refs,
+                context.old
+            )
+        )
+
+
+class SigFieldModificationRule(FieldMDPRule):
+
+    def __init__(self, always_modifiable=None, value_update_keys=None):
+        self.always_modifiable = (
+            always_modifiable if always_modifiable is not None
+            else FORMFIELD_ALWAYS_MODIFIABLE
+        )
+        self.value_update_keys = (
+            value_update_keys if always_modifiable is not None
+            else VALUE_UPDATE_KEYS
+        )
+
+    def apply_qualified(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+
+        # deal with "freshly signed" signature fields,
+        # i.e. those that are filled now, but weren't previously
+        #  + newly created ones
+        for fq_name, spec in context.field_specs.items():
+            if spec.field_type != '/Sig' or not spec.new_field_ref:
+                continue
+
+            old_field = spec.old_field
+            new_field = spec.new_field
+
+            previously_signed = old_field is not None and '/V' in old_field
+            now_signed = '/V' in new_field
+
+            if old_field:
+                # operating on an existing field ---> check changes
+                # (if the field we're dealing with is new, we don't need
+                #  to bother, the sig field creation rule takes care of that)
+                if not previously_signed and now_signed:
+                    # here, we check that the form field didn't change
+                    # beyond the keys that we expect to change when updating
+                    # a signature field.
+                    _compare_dicts(old_field, new_field, self.value_update_keys)
+                    yield ModificationLevel.LTA_UPDATES, spec.new_field_ref
+
+                    # whitelist appearance updates at FORM_FILL level
+                    yield from qualify(
+                        ModificationLevel.FORM_FILLING,
+                        _allow_appearance_update(
+                            old_field, new_field, context.old, context.new
+                        )
+                    )
+                else:
+                    # case where the field was already signed, or is still
+                    # not signed in the current revision.
+                    # in this case, the state of the field better didn't change
+                    # at all!
+                    # ... but Acrobat apparently sometimes sets /Ff rather
+                    #  liberally, so let's allow that one to change
+                    _compare_dicts(
+                        old_field, new_field, self.always_modifiable
+                    )
+                    yield ModificationLevel.LTA_UPDATES, spec.new_field_ref
+                    # Skip the comparison logic on /V. In particular, if
+                    # the signature object in question was overridden,
+                    # it should trigger a suspicious modification later.
+                    continue
+
+            if not now_signed:
+                continue
+
+            # We're now in the case where the form field did not exist or did
+            # not have a value in the original revision, but does have one in
+            # the revision we're auditing. If the signature is /DocTimeStamp,
+            # this is a modification at level LTA_UPDATES. If it's a normal
+            # signature, it requires FORM_FILLING.
+            try:
+                current_value_ref = new_field.get_value_as_reference('/V')
+            except (misc.IndirectObjectExpected, KeyError):
+                raise SuspiciousModification(
+                    f"Value of signature field {fq_name} should be an indirect "
+                    f"reference"
+                )
+
+            sig_obj = current_value_ref.get_object()
+            if not isinstance(sig_obj, generic.DictionaryObject):
+                raise SuspiciousModification(
+                    f"Value of signature field {fq_name} is not a dictionary"
+                )
+
+            try:
+                x1, y1, x2, y2 = new_field['/Rect']
+                area = abs(x1 - x2) * abs(y1 - y2)
+            except (TypeError, ValueError, KeyError):
+                area = 0
+
+            # /DocTimeStamps added for LTA validation purposes shouldn't have
+            # an appearance (as per the recommendation in ISO 32000-2, which we
+            # enforce as a rigid rule here)
+            if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
+                sig_whitelist = ModificationLevel.LTA_UPDATES
+            else:
+                sig_whitelist = ModificationLevel.FORM_FILLING
+
+            # first, whitelist the actual signature object
+            yield sig_whitelist, current_value_ref
+
+            # since apparently Acrobat didn't get the memo about not having
+            # indirect references in signature objects, we have to do some
+            # tweaking to whitelist /TransformParams if necessary
+            try:
+                # the issue is with signature reference dictionaries
+                for sigref_dict in sig_obj.raw_get('/Reference'):
+                    try:
+                        yield (
+                            sig_whitelist,
+                            sigref_dict.raw_get('/TransformParams').reference
+                        )
+                    except (KeyError, AttributeError):
+                        continue
+            except KeyError:
+                pass
+
+
+class GenericFieldModificationRule(FieldMDPRule):
+
+    def __init__(self, always_modifiable=None, value_update_keys=None):
+        self.always_modifiable = (
+            always_modifiable if always_modifiable is not None
+            else FORMFIELD_ALWAYS_MODIFIABLE
+        )
+        self.value_update_keys = (
+            value_update_keys if always_modifiable is not None
+            else VALUE_UPDATE_KEYS
+        )
+
+    def apply_qualified(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+        for fq_name, spec in context.field_specs.items():
+            if spec.field_type == '/Sig' or not spec.new_field_ref:
+                continue
+
+            field_mdp_spec = context.field_mdp_spec
+            locked = (
+                field_mdp_spec is not None and field_mdp_spec.is_locked(fq_name)
+            )
+            old_field = spec.old_field
+            new_field = spec.new_field
+            if not locked:
+                _compare_dicts(old_field, new_field, self.value_update_keys)
+                yield ModificationLevel.FORM_FILLING, spec.new_field_ref
+                yield from qualify(
+                    ModificationLevel.FORM_FILLING,
+                    _allow_appearance_update(
+                        old_field, new_field, context.old, context.new
+                    )
+                )
+                try:
+                    new_value = new_field.raw_get('/V')
+                except KeyError:
+                    # no current value => no thing else to check
+                    continue
+                try:
+                    old_value = old_field.raw_get('/V')
+                except KeyError:
+                    old_value = None
+
+                # if the value was changed, pull in newly defined objects.
+                # TODO is this sufficient?
+                if new_value != old_value:
+                    deps = context.new.collect_dependencies(
+                        new_value,
+                        since_revision=context.old.revision + 1
+                    )
+                    yield from qualify(
+                        ModificationLevel.FORM_FILLING, misc._as_gen(deps)
+                    )
+            else:
+                _compare_dicts(
+                    old_field, new_field, self.always_modifiable
+                )
+                yield ModificationLevel.FORM_FILLING, spec.new_field_ref
+
+
+class FormUpdatingRule(QualifiedWhitelistRule):
+
+    def __init__(self, field_rules: List[FieldMDPRule],
+                 field_mdp_spec: Optional[FieldMDPSpec] = None,
+                 doc_mdp: Optional[MDPPerm] = None,
+                 ignored_acroform_keys=None):
+        self.field_rules = field_rules
+        self.doc_mdp = doc_mdp
+        self.field_mdp_spec = field_mdp_spec
+        self.ignored_acroform_keys = (
+            ignored_acroform_keys if ignored_acroform_keys is not None
+            else {'/Fields'}
+        )
+
+    def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+
+        old_acroform, new_acroform = yield from qualify(
+            ModificationLevel.LTA_UPDATES, _compare_key_refs(
+                '/AcroForm', old, old.root, new.root
+            )
+        )
+
+        # first, compare the entries that aren't /Fields
+        _compare_dicts(old_acroform, new_acroform, self.ignored_acroform_keys)
+        assert isinstance(old_acroform, generic.DictionaryObject)
+        assert isinstance(new_acroform, generic.DictionaryObject)
+
+        # mark /Fields ref as OK if it's an indirect reference
+        # This is fine: the _list_fields logic checks that it really contains
+        # stuff that looks like form fields, and other rules are responsible
+        # for vetting the creation of other form fields anyway.
+        yield from qualify(
+            ModificationLevel.LTA_UPDATES,
+            _compare_key_refs('/Fields', old, old_acroform, new_acroform)
+        )
+        try:
+            old_fields = old_acroform['/Fields']
+            new_fields = new_acroform['/Fields']
+        except KeyError:
+            raise misc.PdfReadError(
+                "Could not read /Fields in form"
+            )  # pragma: nocover
+
+        context = FieldMDPContext(
+            field_specs=dict(_list_fields(old_fields, new_fields)),
+            old=old, new=new, field_mdp_spec=self.field_mdp_spec
+        )
+
+        for rule in self.field_rules:
+            yield from rule.apply_qualified(context)
+
+
+ROOT_EXEMPT_STRICT_COMPARISON = {
+    '/AcroForm', '/DSS', '/Extensions', '/Metadata', '/MarkInfo'
+}
+
+
+class CatalogModificationRule(QualifiedWhitelistRule):
+
+    def __init__(self, ignored_keys=None):
+        self.ignored_keys = (
+            ignored_keys if ignored_keys is not None
+            else ROOT_EXEMPT_STRICT_COMPARISON
+        )
+
+    def apply_qualified(self, old: HistoricalResolver,
+                        new: HistoricalResolver) \
+            -> Iterable[Tuple[ModificationLevel, Reference]]:
+
+        old_root = old.root
+        new_root = new.root
+        # first, check if the keys in the document catalog are unchanged
+        _compare_dicts(old_root, new_root, self.ignored_keys)
+
+        # As for the keys in the root dictionary that are allowed to change:
+        #  - /Extensions requires no further processing since it must consist
+        #    of direct objects anyway.
+        #  - /MarkInfo: if it's an indirect reference (probably not) we can
+        #    whitelist it if the key set makes sense. TODO do this
+        #  - /Metadata: is a stream ---> don't allow overrides, only new refs
+        #  - /DSS and /AcroForm are dealt with by other rules.
+        try:
+            new_metadata_ref = new_root.get_value_as_reference('/Metadata')
+            if old.is_ref_available(new_metadata_ref):
+                yield ModificationLevel.LTA_UPDATES, new_metadata_ref
+        except misc.IndirectObjectExpected:
+            raise SuspiciousModification(
+                "/Metadata should be an indirect reference"
+            )
+        except KeyError:
+            pass
+
+        yield ModificationLevel.LTA_UPDATES, new.root_ref
+
+
+class ObjectStreamRule(WhitelistRule):
+
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
+            -> Iterable[Reference]:
+        # object streams are OK, but overriding object streams is not.
+        for objstream_ref in new.object_streams_used():
+            if old.is_ref_available(objstream_ref):
+                yield objstream_ref
+
+
+def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
+                 parent_name="",
+                 inherited_ft=None) -> Dict[str, FieldComparisonSpec]:
+    """
+    Recursively construct a list of field names, together with their
+    "incarnations" in either revision.
+    """
+
+    def _make_list(lst: generic.PdfObject, exc):
+        if not isinstance(lst, generic.ArrayObject):
+            raise exc("Field list is not an array.")
+        names_seen = set()
+
+        for field_ref in lst:
+            if not isinstance(field_ref, generic.IndirectObject):
+                raise exc("Fields must be indirect objects")
+
+            field = field_ref.get_object()
+            if not isinstance(field, generic.DictionaryObject):
+                raise exc("Fields must be dictionary objects")
+
+            name = field.raw_get('/T')
+            if name in names_seen:
+                raise exc("Duplicate field name")
+            elif '.' in name:
+                raise exc("Partial names must not contain periods")
+            names_seen.add(name)
+
+            fq_name = parent_name + "." + name if parent_name else name
+            try:
+                field_type = field.raw_get('/FT')
+            except KeyError:
+                if inherited_ft is not None:
+                    field_type = inherited_ft
+                else:
+                    raise exc(
+                        f"Field type of {fq_name} could not be determined"
+                    )
+
+            try:
+                kids = field["/Kids"]
+            except KeyError:
+                kids = generic.ArrayObject()
+            yield fq_name, (field_type, field_ref.reference, kids)
+
+    old_fields_by_name = dict(_make_list(old_fields, misc.PdfReadError))
+    new_fields_by_name = dict(_make_list(new_fields, SuspiciousModification))
+
+    names = set()
+    names.update(old_fields_by_name.keys())
+    names.update(new_fields_by_name.keys())
+
+    for field_name in names:
+        try:
+            old_field_type, old_field_ref, old_kids = \
+                old_fields_by_name[field_name]
+        except KeyError:
+            old_field_type = old_field_ref = None
+            old_kids = generic.ArrayObject()
+
+        try:
+            new_field_type, new_field_ref, new_kids = \
+                new_fields_by_name[field_name]
+        except KeyError:
+            new_field_type = new_field_ref = None
+            new_kids = generic.ArrayObject()
+
+        if old_field_ref and new_field_ref:
+            if new_field_type != old_field_type:
+                raise SuspiciousModification(
+                    f"Update changed field type of {field_name}"
+                )
+        common_ft = old_field_type or new_field_type
+        yield field_name, FieldComparisonSpec(
+            field_type=common_ft,
+            old_field_ref=old_field_ref, new_field_ref=new_field_ref
+        )
+
+        # recursively descend into /Kids if necessary
+        if old_kids or new_kids:
+            yield from _list_fields(
+                old_kids, new_kids, field_name, inherited_ft=common_ft
+            )
+
+
+def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
+                             new: HistoricalResolver) \
+        -> Generator[generic.Reference, None, None]:
+
+    old_ap_val, new_ap_val = yield from _compare_key_refs(
+        '/AP', old, old_field, new_field
+    )
+
+    if new_ap_val is None:
+        return
+
+    if not isinstance(new_ap_val, generic.DictionaryObject):
+        raise SuspiciousModification('/AP should point to a dictionary')
+
+    # we *never* want to whitelist an update for an existing
+    # stream object (too much potential for abuse), so we insist on
+    # modifying the /N, /R, /D keys to point to new streams
+    # TODO this could be worked around with a reference counter for
+    #  streams, in which case we could allow the stream to be overridden
+    #  on the condition that it isn't used anywhere else.
+
+    for key in ('/N', '/R', '/D'):
+        try:
+            appearance_spec = new_ap_val.raw_get(key)
+        except KeyError:
+            continue
+        yield from new.collect_dependencies(
+            appearance_spec, since_revision=old.revision + 1
+        )
+
+
+def _arr_to_refset(arr_obj, exc):
+    arr_obj = arr_obj.get_object()
+    if not isinstance(arr_obj, generic.ArrayObject):
+        raise exc("Not an array object")
+
+    def _convert():
+        for indir in arr_obj:
+            if not isinstance(indir, generic.IndirectObject):
+                raise exc("Array contains direct objects")
+            yield indir.reference
+
+    return set(_convert())
+
+
+def _extract_annots_from_page(page, exc):
+    if not isinstance(page, generic.DictionaryObject):
+        raise exc("Page objects should be dictionaries")
+    try:
+        annots_value = page.raw_get('/Annots')
+        annots_ref = (
+            annots_value.reference
+            if isinstance(annots_value, generic.IndirectObject)
+            else None
+        )
+        annots = _arr_to_refset(
+            annots_value, SuspiciousModification
+        )
+        return annots, annots_ref
+    except KeyError:
+        raise
+
+
+def _walk_page_tree_annots(old_page_root, new_page_root,
+                           annot_allowed_predicate, old: HistoricalResolver):
+    def get_kids(page_root, exc):
+        try:
+            kids = page_root['/Kids']
+            indir = map(lambda x: isinstance(x, generic.IndirectObject), kids)
+            if not isinstance(kids, generic.ArrayObject) or not all(indir):
+                raise exc("Badly formatted /Kids entry")
+        except KeyError:
+            raise exc("No /Kids in /Pages entry")
+        return list(map(lambda x: x.reference, kids))
+
+    old_kids = get_kids(old_page_root, misc.PdfReadError)
+    new_kids = get_kids(new_page_root, SuspiciousModification)
+
+    # /Kids should only contain indirect refs, so direct comparison is
+    # appropriate (__eq__ ignores the attached PDF handler)
+    if old_kids != new_kids:
+        raise SuspiciousModification(
+            "Unexpected change to page tree structure."
+        )
+    for new_kid_ref, old_kid_ref in zip(new_kids, old_kids):
+        new_kid = new_kid_ref.get_object()
+        old_kid = old_kid_ref.get_object()
+        try:
+            node_type = old_kid['/Type']
+        except (KeyError, TypeError) as e:  # pragma: nocover
+            raise misc.PdfReadError from e
+        if node_type == '/Pages':
+            yield from _walk_page_tree_annots(
+                old_kid, new_kid, annot_allowed_predicate, old
+            )
+        elif node_type == '/Page':
+            try:
+                new_annots, new_annots_ref = _extract_annots_from_page(
+                    new_kid, SuspiciousModification
+                )
+            except KeyError:
+                # no annotations, continue
+                continue
+            try:
+                old_annots, old_annots_ref = _extract_annots_from_page(
+                    old_kid, misc.PdfReadError
+                )
+            except KeyError:
+                old_annots_ref = None
+                old_annots = set()
+
+            # check if annotations were added
+            if old_annots == new_annots:
+                continue
+            deleted_annots = old_annots - new_annots
+            added_annots = new_annots - old_annots
+            if deleted_annots:
+                raise SuspiciousModification(
+                    f"Annotations {deleted_annots} were deleted."
+                )
+            all_annots_allowed = all(map(annot_allowed_predicate, added_annots))
+            if not added_annots or all_annots_allowed:
+                # in this case, we don't whitelist anything, so any changes
+                # will be caught by the reference checker.
+                continue
+
+            # there are new annotations, and they're all changes we expect
+            # => cleared to edit
+            # Make sure the page dictionaries are the same, so that we
+            #  can safely clear them for modification
+            #  (not necessary if both /Annots entries are indirect references,
+            #   but adding even more cases is pushing things)
+            _compare_dicts(old_kid, new_kid, {'/Annots'})
+            yield new_kid_ref
+            if new_annots_ref:
+                # current /Annots entry is an indirect reference
+                if old_annots_ref == new_annots_ref:
+                    yield new_annots_ref
+                else:
+                    # either the /Annots array got reassigned to another
+                    # object ID, or it was moved from a direct object to an
+                    # indirect one, or the /Annots entry was newly created.
+                    # This is all fine, provided that the new  object
+                    # ID doesn't clobber an existing one.
+                    if old.is_ref_available(new_annots_ref):
+                        yield new_annots_ref
+
+
+def _assert_not_stream(dict_obj):
+    if isinstance(dict_obj, generic.StreamObject):
+        raise SuspiciousModification(
+            f"Unexpected stream encountered at {dict_obj.container_ref}!"
+        )
+
+
+def _compare_dicts(old_dict: PdfObject, new_dict: PdfObject,
+                   ignored: Set[str] = frozenset()):
+    if not isinstance(old_dict, generic.DictionaryObject):
+        raise misc.PdfReadError(
+            "Encountered unexpected non-dictionary object in prior revision."
+        )  # pragma: nocover
+    if not isinstance(new_dict, generic.DictionaryObject):
+        raise SuspiciousModification(
+            "Dict is overridden by non-dict in new revision"
+        )
+
+    _assert_not_stream(old_dict)
+    _assert_not_stream(new_dict)
+    new_dict_keys = set(new_dict.keys()) - ignored
+    old_dict_keys = set(old_dict.keys()) - ignored
+    if new_dict_keys != old_dict_keys:
+        raise SuspiciousModification(
+            f"Dict keys differ: {new_dict_keys} vs. "
+            f"{old_dict_keys}."
+        )
+
+    for k in new_dict_keys:
+        if new_dict.raw_get(k) != old_dict.raw_get(k):
+            raise SuspiciousModification(f"Values for dict key {k} differ.")
+
+
+TwoVersions = Tuple[Optional[generic.PdfObject], Optional[generic.PdfObject]]
+
+
+def _compare_key_refs(key, old: HistoricalResolver,
+                      old_dict: generic.DictionaryObject,
+                      new_dict: generic.DictionaryObject) \
+        -> Generator[Reference, None, TwoVersions]:
+    """
+    Ensure that updating a key in a dictionary has no undesirable side effects.
+    The following scenarios are allowed:
+
+    1. adding a key in new_dict
+    2. replacing a direct value in old_dict with a reference in new_dict
+    3. the reverse (allowed by default)
+    4. replacing a reference with another reference (that doesn't override
+       anything else)
+
+    The restrictions of _safe_whitelist apply to this function as well.
+
+    Note: this routine is only safe to use if the structure of the resulting
+    values is also checked. Otherwise, it can lead to reference leaks if
+    one is not careful.
+    """
+
+    try:
+        old_value = old_dict.raw_get(key)
+        if isinstance(old_value, generic.IndirectObject):
+            old_value_ref = old_value.reference
+            old_value = old_value.get_object()
+        else:
+            old_value_ref = None
+    except KeyError:
+        old_value_ref = old_value = None
+
+    try:
+        new_value = new_dict.raw_get(key)
+        if isinstance(new_value, generic.IndirectObject):
+            new_value_ref = new_value.reference
+            new_value = new_value.get_object()
+        else:
+            new_value_ref = None
+    except KeyError:
+        if old_value is not None:
+            raise SuspiciousModification(
+                f"Key {key} was deleted from dictionary"
+            )
+        return old_value, None  # nothing to do
+
+    if new_value_ref is not None:
+        yield from _safe_whitelist(old, old_value_ref, new_value_ref)
+
+    return old_value, new_value
+
+
+def _whitelist_callback(explained_refs, signed_revision, xref_cache):
+    def _wl(ref):
+        assert isinstance(ref, generic.Reference), ref
+        # Whitelist a reference *if* the new object reference doesn't
+        # override an object that existed in the signed revision
+        try:
+            xref_cache.get_historical_ref(ref, signed_revision)
+            # no error -> suspicious -> do not whitelist
+            return
+        except misc.PdfReadError:
+            explained_refs.add(ref)
+    return _wl
+
+
+# TODO have a "fail fast" mode
+
+def run_diff(rules: List[QualifiedWhitelistRule], old: HistoricalResolver,
+             new: HistoricalResolver) -> ModificationLevel:
+
+    # we need to verify that there are no xrefs in the revision's xref table
+    # other than the ones we can justify.
+    new_xrefs = new.explicit_refs_in_revision()
+
+    explained_lta = set()
+    explained_formfill = set()
+    explained_annot = set()
+
+    for rule in rules:
+        for level, ref in rule.apply_qualified(old, new):
+            if level == ModificationLevel.LTA_UPDATES:
+                explained_lta.add(ref)
+            elif level == ModificationLevel.FORM_FILLING:
+                explained_formfill.add(ref)
+            else:
+                explained_annot.add(ref)
+
+    unexplained_lta = new_xrefs - explained_lta
+    unexplained_formfill = unexplained_lta - explained_formfill
+    unexplained_annot = unexplained_formfill - explained_annot
+    if unexplained_annot:
+        msg = misc.LazyJoin(
+            '\n', (
+                '%s:%s...' % (
+                    repr(x), repr(x.get_object())[:300]
+                ) for x in unexplained_annot
+            )
+        )
+        logger.debug(
+            "Unexplained xrefs in revision %d:\n%s",
+            new.revision, msg
+        )
+        raise SuspiciousModification(
+            f"There are unexplained xrefs in revision {new.revision}: "
+            f"{', '.join(repr(x) for x in unexplained_annot)}."
+        )
+    elif unexplained_formfill:
+        return ModificationLevel.ANNOTATIONS
+    elif unexplained_lta:
+        return ModificationLevel.FORM_FILLING
+    else:
+        return ModificationLevel.LTA_UPDATES
+
+
+class DiffPolicy:
+
+    def get_rules(self, field_mdp_spec: Optional[FieldMDPSpec],
+                  doc_mdp: Optional[MDPPerm]) -> List[QualifiedWhitelistRule]:
+        raise NotImplementedError
+
+
+class DefaultDiffPolicy(DiffPolicy):
+
+    def get_rules(self, field_mdp_spec: Optional[FieldMDPSpec] = None,
+                  doc_mdp: Optional[MDPPerm] = None) \
+            -> List[QualifiedWhitelistRule]:
+        return [
+            CatalogModificationRule(),
+            DocInfoRule().as_qualified(ModificationLevel.LTA_UPDATES),
+            ObjectStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
+            DSSCompareRule().as_qualified(ModificationLevel.LTA_UPDATES),
+            FormUpdatingRule(
+                field_rules=[
+                    SigFieldCreationRule(), SigFieldModificationRule(),
+                    GenericFieldModificationRule()
+                ],
+                field_mdp_spec=field_mdp_spec,
+                doc_mdp=doc_mdp
+            )
+        ]

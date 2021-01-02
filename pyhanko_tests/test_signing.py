@@ -30,8 +30,9 @@ from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, ModificationLevel, SignatureValidationError,
+    SignatureCoverageLevel, SignatureValidationError,
 )
+from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.stamp import QRStampStyle
@@ -480,7 +481,6 @@ def test_sign_field_filled():
 
     def val2(out_buf):
         r = PdfFileReader(out_buf)
-        sig_fields = fields.enumerate_sig_fields(r)
         s = r.embedded_signatures[0]
         assert s.field_name == 'Sig1'
         val_trusted(s, extd=True)

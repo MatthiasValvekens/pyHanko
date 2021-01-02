@@ -1083,6 +1083,33 @@ class HistoricalResolver(PdfHandler):
     def __call__(self, ref: generic.Reference):
         return self.get_object(ref)
 
+    def explicit_refs_in_revision(self):
+        return self.reader.xrefs.explicit_refs_in_revision(self.revision)
+
+    def object_streams_used(self):
+        return self.reader.xrefs.object_streams_used_in(self.revision)
+
+    def is_ref_available(self, ref: generic.Reference) -> bool:
+        """
+        Check if the reference in question would already point to an object
+        in this revision.
+
+        :param ref:
+            A reference object (usually one written to by a by a newer revision)
+        :return:
+            ``True`` if the reference is undefined, ``False`` otherwise.
+        """
+
+        # TODO double-check behaviour of freed objects
+
+        xref_cache = self.reader.xrefs
+        try:
+            xref_cache.get_historical_ref(ref, self.revision)
+            # if we get here, the ref was taken
+            return False
+        except misc.PdfReadError:
+            return True
+
     def collect_dependencies(self, obj: generic.PdfObject, since_revision=None):
         """
         Collect all indirect references used by an object and its descendants.
