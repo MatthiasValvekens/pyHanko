@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import unique
 from typing import (
     Iterable, Optional, Set, Tuple, Generator, TypeVar, Dict,
-    List,
+    List, Callable,
 )
 
 from pyhanko.pdf_utils.generic import Reference, PdfObject
@@ -174,10 +174,11 @@ class DSSCompareRule(WhitelistRule):
 
         if old_dss is None:
             old_dss = generic.DictionaryObject()
+        nodict_err = "/DSS is not a dictionary"
         if not isinstance(old_dss, generic.DictionaryObject):
-            raise misc.PdfReadError("/DSS is not a dictionary")
+            raise misc.PdfReadError(nodict_err)  # pragma: nocover
         if not isinstance(new_dss, generic.DictionaryObject):
-            raise SuspiciousModification("/DSS is not a dictionary")
+            raise SuspiciousModification(nodict_err)
 
         dss_der_stream_keys = {'/Certs', '/CRLs', '/OCSPs'}
         dss_expected_keys = {'/Type', '/VRI'} | dss_der_stream_keys
@@ -209,18 +210,14 @@ class DSSCompareRule(WhitelistRule):
         if old_vri is None:
             old_vri = generic.DictionaryObject()
 
+        nodict_err = "/VRI is not a dictionary"
         if not isinstance(old_vri, generic.DictionaryObject):
-            raise misc.PdfReadError("/VRI is not a dictionary")
+            raise misc.PdfReadError(nodict_err)  # pragma: nocover
         if not isinstance(new_vri, generic.DictionaryObject):
-            raise SuspiciousModification("/VRI is not a dictionary")
+            raise SuspiciousModification(nodict_err)
 
         new_vri_hashes = set(new_vri.keys())
         for key, old_vri_value in old_vri.items():
-            if not VRI_KEY_PATTERN.match(key):
-                raise SuspiciousModification(
-                    f"VRI key {key} is not formatted correctly."
-                )
-
             try:
                 new_vri_dict = new_vri.raw_get(key)
             except KeyError:
@@ -650,10 +647,8 @@ class FormUpdatingRule(QualifiedWhitelistRule):
         try:
             old_fields = old_acroform['/Fields']
             new_fields = new_acroform['/Fields']
-        except KeyError:
-            raise misc.PdfReadError(
-                "Could not read /Fields in form"
-            )  # pragma: nocover
+        except KeyError:  # pragma: nocover
+            raise misc.PdfReadError("Could not read /Fields in form")
 
         context = FieldMDPContext(
             field_specs=dict(_list_fields(old_fields, new_fields)),
@@ -833,7 +828,7 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
         )
 
 
-def _arr_to_refset(arr_obj, exc):
+def _arr_to_refs(arr_obj, exc, collector: Callable = list):
     arr_obj = arr_obj.get_object()
     if not isinstance(arr_obj, generic.ArrayObject):
         raise exc("Not an array object")
@@ -844,7 +839,7 @@ def _arr_to_refset(arr_obj, exc):
                 raise exc("Array contains direct objects")
             yield indir.reference
 
-    return set(_convert())
+    return collector(_convert())
 
 
 def _extract_annots_from_page(page, exc):
@@ -857,8 +852,8 @@ def _extract_annots_from_page(page, exc):
             if isinstance(annots_value, generic.IndirectObject)
             else None
         )
-        annots = _arr_to_refset(
-            annots_value, SuspiciousModification
+        annots = _arr_to_refs(
+            annots_value, SuspiciousModification, collector=set
         )
         return annots, annots_ref
     except KeyError:
@@ -869,13 +864,9 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                            annot_allowed_predicate, old: HistoricalResolver):
     def get_kids(page_root, exc):
         try:
-            kids = page_root['/Kids']
-            indir = map(lambda x: isinstance(x, generic.IndirectObject), kids)
-            if not isinstance(kids, generic.ArrayObject) or not all(indir):
-                raise exc("Badly formatted /Kids entry")
+            return _arr_to_refs(page_root['/Kids'], exc)
         except KeyError:
             raise exc("No /Kids in /Pages entry")
-        return list(map(lambda x: x.reference, kids))
 
     old_kids = get_kids(old_page_root, misc.PdfReadError)
     new_kids = get_kids(new_page_root, SuspiciousModification)
@@ -1035,20 +1026,6 @@ def _compare_key_refs(key, old: HistoricalResolver,
         yield from _safe_whitelist(old, old_value_ref, new_value_ref)
 
     return old_value, new_value
-
-
-def _whitelist_callback(explained_refs, signed_revision, xref_cache):
-    def _wl(ref):
-        assert isinstance(ref, generic.Reference), ref
-        # Whitelist a reference *if* the new object reference doesn't
-        # override an object that existed in the signed revision
-        try:
-            xref_cache.get_historical_ref(ref, signed_revision)
-            # no error -> suspicious -> do not whitelist
-            return
-        except misc.PdfReadError:
-            explained_refs.add(ref)
-    return _wl
 
 
 # TODO have a "fail fast" mode

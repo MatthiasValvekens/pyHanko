@@ -1281,7 +1281,8 @@ class PdfSigner(PdfTimeStamper):
                 docmdp_reference_dictionary(md_algorithm, docmdp_perms)
             )
 
-        sig_obj_ref.get_object()['/Reference'] = reference_array
+        if reference_array:
+            sig_obj_ref.get_object()['/Reference'] = reference_array
 
     def _sig_field_appearance(self, sig_field, pdf_out, timestamp,
                               extra_text_params):

@@ -831,13 +831,28 @@ def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
 
 def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
                             parent_name="", parents=None):
+    if not isinstance(field_list, generic.ArrayObject):
+        logger.warning(
+            f"Values of type {type(field_list)} are not valid as field "
+            f"lists, must be array objects -- skipping."
+        )
+        return
+
     parents = parents or ()
     for field_ref in field_list:
-        # TODO the spec mandates this, but perhaps we should be a bit more
-        #  tolerant
-        assert isinstance(field_ref, generic.IndirectObject)
+        if not isinstance(field_ref, generic.IndirectObject):
+            logger.warning(
+                "Entries in field list must be indirect references -- skipping."
+            )
+            continue
+
         field = field_ref.get_object()
-        assert isinstance(field, generic.DictionaryObject)
+        if not isinstance(field, generic.DictionaryObject):
+            logger.warning(
+                "Entries in field list must be dictionary objects, not "
+                f"{type(field)} -- skipping."
+            )
+            continue
         # /T is the field name. If not specified, we're dealing with a bare
         # widget, so skip it. (these should never occur in /Fields, but hey)
         try:

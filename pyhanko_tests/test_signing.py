@@ -556,6 +556,45 @@ def test_double_sig_add_field():
 
 
 @freeze_time('2020-11-01')
+def test_double_sig_add_field_annots_indirect():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA,
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+    # ... but first make the /Annots entry of the first page an indirect one
+    first_page = w.root['/Pages']['/Kids'][0]
+    annots_copy = generic.ArrayObject(first_page['/Annots'])
+    first_page['/Annots'] = annots_ref = w.add_object(annots_copy)
+    annots_copy.container_ref = annots_ref
+    w.update_container(first_page)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='SigNew'
+        ), signer=FROM_CA, new_field_spec=fields.SigFieldSpec(
+            sig_field_name='SigNew', box=(10, 10, 10, 10)
+        )
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
+
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'SigNew'
+    val_trusted(s)
+
+
+@freeze_time('2020-11-01')
 def test_double_sig_add_visible_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -587,11 +626,8 @@ def test_double_sig_add_visible_field():
     val_trusted(s)
 
 
-@pytest.mark.parametrize('include_docmdp', [True, False])
-@freeze_time('2020-11-01')
-def test_add_sigfield_with_lock(include_docmdp):
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    sp = fields.SigFieldSpec(
+def field_with_lock_sp(include_docmdp):
+    return fields.SigFieldSpec(
         'SigNew', box=(10, 74, 140, 134),
         field_mdp_spec=fields.FieldMDPSpec(
             fields.FieldMDPAction.INCLUDE, fields=['blah']
@@ -600,7 +636,13 @@ def test_add_sigfield_with_lock(include_docmdp):
             fields.MDPPerm.NO_CHANGES if include_docmdp else None
         )
     )
-    fields.append_signature_field(w, sp)
+
+
+@pytest.mark.parametrize('include_docmdp', [True, False])
+@freeze_time('2020-11-01')
+def test_add_sigfield_with_lock(include_docmdp):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    fields.append_signature_field(w, field_with_lock_sp(include_docmdp))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
@@ -618,6 +660,32 @@ def test_add_sigfield_with_lock(include_docmdp):
         ref = refs[1]
         assert ref['/TransformMethod'] == '/DocMDP'
         assert ref['/TransformParams']['/P'] == 1
+    val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_double_sign_lock_second():
+    # test if the difference analysis correctly processes /Reference
+    # on a newly added signature object
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    fields.append_signature_field(w, field_with_lock_sp(True))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigFirst'), signer=FROM_CA,
+    )
+    w = IncrementalPdfFileWriter(out)
+
+    # now sign the locked field
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s, extd=True)
+
+    s = r.embedded_signatures[1]
+    assert len(s.sig_object.get_object()['/Reference']) == 2
+
     val_trusted(s)
 
 
@@ -1053,6 +1121,8 @@ def test_certify():
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
+    refs = s.sig_object.get_object()['/Reference']
+    assert len(refs) == 1
     assert s.field_name == 'Sig1'
     val_trusted(s)
 
@@ -1263,7 +1333,6 @@ def test_pades_revinfo_http_ts_dummydata(requests_mock):
     assert dss is not None
     assert len(dss.certs) == 5
     assert len(dss.ocsps) == 1
-
 
 
 @freeze_time('2020-11-01')
@@ -1938,6 +2007,90 @@ def set_text_field(writer, val):
 
 
 @freeze_time('2020-11-01')
+def test_form_field_ft_tamper():
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+
+    # sign, then fill
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    tf = w.root['/AcroForm']['/Fields'][1].get_object()
+    tf['/FT'] = pdf_name('/Sig')
+    w.update_container(tf)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
+
+
+BOGUS_KIDS_VALUES = [
+    (generic.NullObject(), False),
+    (generic.ArrayObject(), False),
+    (generic.ArrayObject([generic.NullObject()]), False),
+    (generic.ArrayObject([generic.NullObject()]), True),
+]
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('bogus_kids, indirectify', BOGUS_KIDS_VALUES)
+def test_form_field_kids_tamper(bogus_kids, indirectify):
+    w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
+
+    # sign, then fill
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    tf = w.root['/AcroForm']['/Fields'][1].get_object()
+    if indirectify:
+        bogus_kids = generic.ArrayObject(map(w.add_object, bogus_kids))
+    tf['/Kids'] = bogus_kids
+    w.update_container(tf)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('bogus_kids, indirectify',
+                         BOGUS_KIDS_VALUES + [(None, False)])
+def test_pages_kids_tamper(bogus_kids, indirectify):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    # sign, then fill
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+
+    # add an empty sig field to trigger the annotation parsing logic
+    # in the difference analysis tool
+    fields.append_signature_field(
+        w, sig_field_spec=fields.SigFieldSpec(sig_field_name="Extra")
+    )
+    page_root = w.root['/Pages']
+    if indirectify:
+        bogus_kids = generic.ArrayObject(map(w.add_object, bogus_kids))
+    if bogus_kids is not None:
+        page_root['/Kids'] = bogus_kids
+    else:
+        del page_root['/Kids']
+    w.update_container(page_root)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
+
+
+@freeze_time('2020-11-01')
 def test_form_field_postsign_fill():
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
 
@@ -2216,11 +2369,12 @@ def test_form_field_postsign_modify_pades_lt(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_pades_double_sign(requests_mock):
+@pytest.mark.parametrize('certify_first', [True, False])
+def test_pades_double_sign(requests_mock, certify_first):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
         field_name='Sig1', validation_context=live_testing_vc(requests_mock),
-        subfilter=PADES, embed_validation_info=True,
+        subfilter=PADES, embed_validation_info=True, certify=certify_first
     )
     meta2 = signers.PdfSignatureMetadata(
         field_name='Sig2', validation_context=live_testing_vc(requests_mock),
@@ -2234,6 +2388,8 @@ def test_pades_double_sign(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
+    if certify_first:
+        assert len(s.sig_object['/Reference']) == 1
     val_trusted(s, extd=True)
 
     s = r.embedded_signatures[1]
@@ -2304,6 +2460,66 @@ def test_pades_dss_object_clobber(requests_mock):
     val_trusted_but_modified(s)
 
 
+BOGUS_DSS_VALUES = [
+    generic.pdf_string("Hi there"),
+    generic.DictionaryObject({pdf_name('/Blah'): generic.NullObject()}),
+    generic.DictionaryObject({pdf_name('/Certs'): generic.NullObject()}),
+    generic.DictionaryObject({pdf_name('/VRI'): generic.NullObject()}),
+    generic.DictionaryObject({
+        pdf_name('/VRI'): generic.DictionaryObject({
+            pdf_name('/Bleh'): generic.NullObject()
+        })
+    }),
+    generic.DictionaryObject({
+        pdf_name('/VRI'): generic.DictionaryObject({
+            pdf_name('/' + 'A' * 40): generic.NullObject()
+        })
+    }),
+    generic.DictionaryObject({
+        pdf_name('/VRI'): generic.DictionaryObject({
+            pdf_name('/' + 'A' * 40): generic.DictionaryObject({
+                pdf_name('/Bleh'): generic.NullObject()
+            })
+        })
+    }),
+    generic.DictionaryObject({
+        pdf_name('/VRI'): generic.DictionaryObject({
+            pdf_name('/' + 'A' * 40): generic.DictionaryObject({
+                pdf_name('/OCSP'): generic.NullObject()
+            })
+        })
+    }),
+]
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('bogus_dss', BOGUS_DSS_VALUES)
+def test_pades_dss_object_typing_tamper(requests_mock, bogus_dss):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    out = signers.sign_pdf(
+        w, meta1, signer=FROM_CA, timestamper=DUMMY_TS
+    )
+    out.seek(0)
+    original_out = out.read()
+
+    # write some bogus reference into the DSS
+    w = IncrementalPdfFileWriter(BytesIO(original_out))
+
+    w.root['/DSS'] = w.add_object(bogus_dss)
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
+
+
 @freeze_time('2020-11-01')
 def test_form_field_structure_modification():
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
@@ -2314,6 +2530,7 @@ def test_form_field_structure_modification():
     field_arr = w.root['/AcroForm']['/Fields']
     # shallow copy the text field
     tf = generic.DictionaryObject(field_arr[1].get_object())
+    tf['/T'] = generic.pdf_string('OtherField')
     field_arr.append(w.add_object(tf))
     w.update_container(field_arr)
     out = BytesIO()
