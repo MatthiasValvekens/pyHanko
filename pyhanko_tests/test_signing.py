@@ -85,9 +85,9 @@ ECC_ROOT_CERT = oskeys.parse_certificate(read_all(ECC_ROOT_PATH))
 INTERM_CERT = oskeys.parse_certificate(read_all(INTERM_PATH))
 OCSP_CERT = oskeys.parse_certificate(read_all(OCSP_PATH))
 REVOKED_CERT = oskeys.parse_certificate(read_all(REVOKED_CERT_PATH))
-NOTRUST_V_CONTEXT = ValidationContext(trust_roots=[])
-SIMPLE_V_CONTEXT = ValidationContext(trust_roots=[ROOT_CERT])
-SIMPLE_ECC_V_CONTEXT = ValidationContext(trust_roots=[ECC_ROOT_CERT])
+NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
+SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
+SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
 OCSP_KEY = oskeys.parse_private(
     read_all(TESTING_CA_DIR + '/keys/ocsp.key.pem'), b"secret"
 )
@@ -186,7 +186,9 @@ def live_testing_vc(requests_mock):
 
 
 def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,
-                vc=SIMPLE_V_CONTEXT):
+                vc=None):
+    if vc is None:
+        vc = SIMPLE_V_CONTEXT()
     val_status = validate_pdf_signature(embedded_sig, vc)
     assert val_status.intact
     assert val_status.valid
@@ -207,7 +209,7 @@ def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,
 
 # validate a signature, don't care about trust
 def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
-    val_status = validate_pdf_signature(embedded_sig, NOTRUST_V_CONTEXT)
+    val_status = validate_pdf_signature(embedded_sig, NOTRUST_V_CONTEXT())
     assert val_status.intact
     assert val_status.valid
     if not extd:
@@ -223,7 +225,7 @@ def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
 
 
 def val_trusted_but_modified(embedded_sig: EmbeddedPdfSignature):
-    val_status = validate_pdf_signature(embedded_sig, SIMPLE_V_CONTEXT)
+    val_status = validate_pdf_signature(embedded_sig, SIMPLE_V_CONTEXT())
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
@@ -257,12 +259,13 @@ def test_simple_sign():
     out.seek(0)
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    tampered = validate_pdf_signature(emb, SIMPLE_V_CONTEXT)
+    tampered = validate_pdf_signature(emb, SIMPLE_V_CONTEXT())
     assert not tampered.intact
     assert not tampered.valid
     assert tampered.summary() == 'INVALID'
 
 
+@freeze_time('2020-11-01')
 def test_sign_with_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -278,6 +281,7 @@ def test_sign_with_trust():
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
 def test_sign_with_ecdsa_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -286,7 +290,7 @@ def test_sign_with_ecdsa_trust():
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
-    val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT)
+    val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
 
 
 def test_sign_with_new_field_spec():
@@ -384,6 +388,7 @@ def test_sign_with_later_revoked_nots(requests_mock):
         assert not val_status.bottom_line
 
 
+@freeze_time('2020-11-01')
 def test_sign_with_trust_pkcs12():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -420,6 +425,7 @@ def test_sign_field_unclear():
         )
 
 
+@freeze_time('2020-11-01')
 def test_sign_field_infer():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
@@ -437,6 +443,7 @@ def test_sign_field_infer():
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
 def test_sign_with_bitmap_bg():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
@@ -452,6 +459,8 @@ def test_sign_with_bitmap_bg():
     assert s.field_name == 'Sig1'
     val_trusted(s)
 
+
+@freeze_time('2020-11-01')
 def test_sign_field_filled():
     w1 = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
 
@@ -501,6 +510,7 @@ sign_test_files = (MINIMAL, MINIMAL_ONE_FIELD)
 
 
 @pytest.mark.parametrize('file', [0, 1])
+@freeze_time('2020-11-01')
 def test_sign_new(file):
     w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
     out = signers.sign_pdf(
@@ -512,6 +522,7 @@ def test_sign_new(file):
     val_trusted(e)
 
 
+@freeze_time('2020-11-01')
 def test_double_sig_add_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -544,6 +555,7 @@ def test_double_sig_add_field():
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
 def test_double_sig_add_visible_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
@@ -576,6 +588,7 @@ def test_double_sig_add_visible_field():
 
 
 @pytest.mark.parametrize('include_docmdp', [True, False])
+@freeze_time('2020-11-01')
 def test_add_sigfield_with_lock(include_docmdp):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     sp = fields.SigFieldSpec(
@@ -624,6 +637,7 @@ def test_sign_new_existingonly(file):
         )
 
 
+@freeze_time('2020-11-01')
 def test_dummy_timestamp():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
@@ -645,6 +659,7 @@ def ts_response_callback(request, _context):
     return DUMMY_TS.request_tsa_response(req=req).dump()
 
 
+@freeze_time('2020-11-01')
 def test_http_timestamp(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
@@ -676,6 +691,7 @@ def test_http_timestamp(requests_mock):
 
 # try both the user password and the owner password
 @pytest.mark.parametrize('password', [b'usersecret', b'ownersecret'])
+@freeze_time('2020-11-01')
 def test_sign_crypt_rc4(password):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD_RC4))
     w.encrypt(password)
@@ -698,6 +714,7 @@ sign_crypt_rc4_new_params = [
 
 
 @pytest.mark.parametrize('password, file', sign_crypt_rc4_new_params)
+@freeze_time('2020-11-01')
 def test_sign_crypt_rc4_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_rc4_files[file]))
     w.encrypt(password)
@@ -1025,6 +1042,7 @@ def test_certify_blank():
     assert read_certification_data(r) is None
 
 
+@freeze_time('2020-11-01')
 def test_certify():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -1051,6 +1069,7 @@ def test_certify():
         )
 
 
+@freeze_time('2020-11-01')
 def test_no_double_certify():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -1078,6 +1097,7 @@ def test_no_double_certify():
         )
 
 
+@freeze_time('2020-11-01')
 def test_approval_sig():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -1917,6 +1937,7 @@ def set_text_field(writer, val):
     writer.update_container(tf)
 
 
+@freeze_time('2020-11-01')
 def test_form_field_postsign_fill():
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
 
@@ -1934,6 +1955,7 @@ def test_form_field_postsign_fill():
     val_trusted(s, extd=True)
 
 
+@freeze_time('2020-11-01')
 def test_form_field_postsign_modify():
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
 
@@ -1996,6 +2018,7 @@ def test_deep_non_sig_field_nocreate(variant):
 
 
 @pytest.mark.parametrize('variant', [0, 1])
+@freeze_time('2020-11-01')
 def test_form_field_in_group_postsign_fill(variant):
     w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
 
@@ -2014,6 +2037,7 @@ def test_form_field_in_group_postsign_fill(variant):
 
 
 @pytest.mark.parametrize('variant', [0, 1])
+@freeze_time('2020-11-01')
 def test_form_field_in_group_postsign_fill_other_field(variant):
     w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
 
@@ -2033,6 +2057,7 @@ def test_form_field_in_group_postsign_fill_other_field(variant):
 
 
 @pytest.mark.parametrize('variant', [0, 1])
+@freeze_time('2020-11-01')
 def test_form_field_in_group_postsign_modify(variant):
     w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
 
@@ -2072,6 +2097,7 @@ test_form_field_in_group_postsign_modify_failure_matrix = [
 ]
 
 @pytest.mark.parametrize('field_filled, fieldmdp_spec', test_form_field_in_group_postsign_modify_failure_matrix)
+@freeze_time('2020-11-01')
 def test_form_field_in_group_locked_postsign_modify_failure(field_filled, fieldmdp_spec):
     # the field that is filled in after signing is always the same,
     # but the initial one varies
@@ -2117,6 +2143,7 @@ test_form_field_in_group_postsign_modify_success_matrix = [
 
 
 @pytest.mark.parametrize('field_filled, fieldmdp_spec', test_form_field_in_group_postsign_modify_success_matrix)
+@freeze_time('2020-11-01')
 def test_form_field_in_group_locked_postsign_modify_success(field_filled, fieldmdp_spec):
     # the field that is filled in after signing is always the same,
     # but the initial one varies
@@ -2277,6 +2304,7 @@ def test_pades_dss_object_clobber(requests_mock):
     val_trusted_but_modified(s)
 
 
+@freeze_time('2020-11-01')
 def test_form_field_structure_modification():
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
     meta =signers.PdfSignatureMetadata(field_name='Sig1')
@@ -2297,6 +2325,7 @@ def test_form_field_structure_modification():
     val_trusted_but_modified(s)
 
 
+@freeze_time('2020-11-01')
 def test_delete_signature():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
 
@@ -2384,6 +2413,7 @@ def test_rogue_backreferences():
     assert emb.modification_level == ModificationLevel.OTHER
 
 
+@freeze_time('2020-11-01')
 def test_simple_qr_sign():
     style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")
     signer = signers.PdfSigner(
@@ -2416,6 +2446,7 @@ def test_qr_sign_enforce_url_param(params_value):
         )
 
 
+@freeze_time('2020-11-01')
 def test_overspecify_cms_digest_algo():
     # TODO this behaviour is not ideal, but at least this test documents it
 
