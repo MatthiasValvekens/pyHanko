@@ -1,9 +1,6 @@
 pyhanko.pdf\_utils package
 ==========================
 
-Submodules
-----------
-
 .. toctree::
    :maxdepth: 4
 
@@ -21,11 +18,3 @@ Submodules
    pyhanko.pdf_utils.rw_common
    pyhanko.pdf_utils.text
    pyhanko.pdf_utils.writer
-
-Module contents
----------------
-
-.. automodule:: pyhanko.pdf_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:

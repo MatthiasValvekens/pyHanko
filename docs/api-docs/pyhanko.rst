@@ -16,14 +16,5 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   pyhanko.cli
    pyhanko.config
    pyhanko.stamp
-
-Module contents
----------------
-
-.. automodule:: pyhanko
-   :members:
-   :undoc-members:
-   :show-inheritance:
