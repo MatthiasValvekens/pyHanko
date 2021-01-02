@@ -1,3 +1,43 @@
+"""
+.. versionadded:: 0.2.0
+    :mod:`pyhanko.sign.diff_analysis` extracted from
+    :mod:`pyhanko.sign.validation` and restructured into a more rule-based
+    format.
+
+This module defines utilities for difference analysis between revisions
+of the same PDF file.
+PyHanko uses this functionality to validate signatures on files
+that have been modified after signing (using PDF's incremental update feature).
+
+In pyHanko's validation model, every incremental update is disallowed by
+default. For a change to be accepted, it must be cleared by at least one
+whitelisting rule.
+These rules can moreover *qualify* the modification level at which they accept
+the change (see :class:`.ModificationLevel`).
+Additionally, any rule can veto an entire revision as suspect by raising
+a :class:`.SuspiciousModification` exception.
+Whitelisting rules are encouraged to apply their vetoes liberally.
+
+
+Whitelisting rules are bundled in :class:`.DiffPolicy` objects for use by the
+validator.
+"""
+
+# TODO flesh out & comment on the contract of a whitelisting rule.
+#
+#  - All rules are either executed completely (i.e. their generators exhausted)
+#    or aborted.
+#  - If the diff runner aborts a rule, this always means that the revision
+#    is rejected.
+#  - Whitelisting rules are allowed to informally delegate some checking to
+#    other rules, provided that this is documented clearly.
+#    (example: Catalog validator ignores /AcroForm, which is validated by
+#     another rule entirely)
+#  - "Clearing" a reference by yielding it does not imply that the revision
+#    cannot be vetoed by that same rule further down the road (this is why
+#    the first point is important)
+
+
 import re
 import logging
 from dataclasses import dataclass
@@ -18,8 +58,7 @@ __all__ = [
     'QualifiedWhitelistRule', 'WhitelistRule', 'qualify',
     'DocInfoRule', 'DSSCompareRule', 'FormUpdatingRule',
     'CatalogModificationRule', 'ObjectStreamRule',
-    'FieldMDPRule', 'FieldComparisonSpec', 'FieldMDPSpec',
-    'FieldMDPContext',
+    'FieldMDPRule', 'FieldComparisonSpec', 'FieldMDPContext',
     'run_diff', 'DiffPolicy', 'DefaultDiffPolicy'
 ]
 
@@ -68,8 +107,9 @@ class ModificationLevel(OrderedEnum):
     at this level.
 
     .. note::
-        This level is currently unused, and modifications to annotations
-        other than those permitted to fill in forms are treated as suspicious.
+        This level is currently unused by the default diff policy, and 
+        modifications to annotations other than those permitted to fill in forms
+        are treated as suspicious.
     """
 
     OTHER = 4
@@ -86,22 +126,60 @@ class SuspiciousModification(ValueError):
 
 
 class QualifiedWhitelistRule:
+    """
+    Abstract base class for a whitelisting rule that outputs references together
+    with the modification level at which they're cleared.
+
+    This is intended for use by complicated whitelisting rules that need to
+    differentiate between multiple levels.
+    """
 
     def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
             -> Iterable[Tuple[ModificationLevel, Reference]]:
+        """
+        Apply the rule to the changes between two revisions.
+
+        :param old:
+            The older, base revision.
+        :param new:
+            The newer revision to be vetted.
+        """
         raise NotImplementedError
 
 
 class WhitelistRule:
-    # general rule: errors in the old revision should be tolerated as much as
-    # possible, but refusing to validate resulting edits in the new revisions
-    # is OK.
+    """
+    Abstract base class for a whitelisting rule that simply outputs
+    cleared references without specifying a modification level.
+
+    These rules are more flexible than rules of type
+    :class:`.QualifiedWhitelistRule`, since the modification level can be
+    specified separately (see :meth:`.WhitelistRule.as_qualified`).
+    """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
             -> Iterable[Reference]:
+        """
+        Apply the rule to the changes between two revisions.
+
+        :param old:
+            The older, base revision.
+        :param new:
+            The newer revision to be vetted.
+        """
         raise NotImplementedError
 
-    def as_qualified(self, level: ModificationLevel):
+    def as_qualified(self, level: ModificationLevel) -> QualifiedWhitelistRule:
+        """
+        Construct a new :class:`QualifiedWhitelistRule` that whitelists the
+        object references from this rule at the level specified.
+
+        :param level:
+            The modification level at which the output of this rule should be
+            cleared.
+        :return:
+            A :class:`.QualifiedWhitelistRule` backed by this rule.
+        """
         return _WrappingQualifiedWhitelistRule(self, level)
 
 
@@ -123,6 +201,44 @@ R = TypeVar('R')
 def qualify(level: ModificationLevel,
             rule_result: Generator[Reference, None, R])\
         -> Generator[Tuple[ModificationLevel, Reference], None, R]:
+    """
+    This is a helper function for rule implementors.
+    It attaches a fixed modification level to an existing reference generator,
+    respecting the original generator's return value (if relevant).
+
+    A prototypical use would be of the following form:
+
+    .. code-block:: python
+
+        def some_generator_function():
+            # do stuff
+            for ref in some_list:
+                # do stuff
+                yield ref
+
+            # do more stuff
+            return summary_value
+
+        # ...
+
+        def some_qualified_generator_function():
+            summary_value = yield from qualify(
+                ModificationLevel.FORM_FILLING,
+                some_generator_function()
+            )
+
+    Provided that ``some_generator_function`` yields
+    :class:`~.generic.Reference` objects, the yield type of the resulting
+    generator will be tuples of the form ``(level, ref)``.
+
+    :param level:
+        The modification level to set.
+    :param rule_result:
+        A generator that outputs references to be whitelisted.
+    :return:
+        A converted generator that outputs references qualified at the
+        modification level specified.
+    """
 
     return misc.map_with_return(rule_result, lambda ref: (level, ref))
 
@@ -143,6 +259,9 @@ def _safe_whitelist(old: HistoricalResolver, old_ref, new_ref):
 
 
 class DocInfoRule(WhitelistRule):
+    """
+    Rule that allows the ``/Info`` dictionary in the trailer to be updated.
+    """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
             -> Iterable[Reference]:
@@ -161,6 +280,15 @@ class DocInfoRule(WhitelistRule):
 
 
 class DSSCompareRule(WhitelistRule):
+    """
+    Rule that allows changes to the document security store (DSS).
+
+    This rule will validate the structure of the DSS quite rigidly, and
+    will raise :class:`.SuspiciousModification` whenever it encounters
+    structural problems with the DSS.
+    Similarly, modifications that remove items from the DSS also count as
+    suspicious.
+    """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
             -> Iterable[Reference]:
@@ -609,6 +737,19 @@ class GenericFieldModificationRule(FieldMDPRule):
 
 
 class FormUpdatingRule(QualifiedWhitelistRule):
+    """
+    Whitelisting rule that validates changes to the form attached to the input
+    document.
+
+    :param field_rules:
+        A list of :class:`.FieldMDPRule` objects to validate the individual
+        form fields.
+    :param field_mdp_spec:
+        The :class:`.FieldMDPSpec` that determines which fields are locked.
+    :param ignored_acroform_keys:
+        Keys in the ``/AcroForm`` dictionary that may be changed.
+        Changes are potentially subject to validation by other rules.
+    """
 
     def __init__(self, field_rules: List[FieldMDPRule],
                  field_mdp_spec: Optional[FieldMDPSpec] = None,
@@ -665,6 +806,19 @@ ROOT_EXEMPT_STRICT_COMPARISON = {
 
 
 class CatalogModificationRule(QualifiedWhitelistRule):
+    """
+    Rule that adjudicates modifications to the document catalog.
+
+    :param ignored_keys:
+        Values in the document catalog that may change between revisions.
+        The default ones are ``/AcroForm``, ``/DSS``, ``/Extensions``,
+        ``/Metadata`` and ``/MarkInfo``.
+
+        This rule also includes a basic sanity check to prevent ``/Metadata``
+        from clobbering existing streams, but allows it to be redefined.
+        Checking for ``/AcroForm`` and ``/DSS`` is delegated to
+        :class:`.FormUpdatingRule` and :class:`.DSSCompareRule`, respectively.
+    """
 
     def __init__(self, ignored_keys=None):
         self.ignored_keys = (
@@ -1032,6 +1186,21 @@ def _compare_key_refs(key, old: HistoricalResolver,
 
 def run_diff(rules: List[QualifiedWhitelistRule], old: HistoricalResolver,
              new: HistoricalResolver) -> ModificationLevel:
+    """
+    Run a list of rules to analyse the differences between two revisions.
+    :class:`.SuspiciousModification` exceptions will be propagated.
+
+    :param rules:
+        The :class:`.QualifiedWhitelistRule` objects encoding the rules to
+        apply.
+    :param old:
+        The older, base revision.
+    :param new:
+        The newer revision.
+    :return:
+        The strictest :class:`.ModificationLevel` at which all changes
+        in ``new`` pass muster.
+    """
 
     # we need to verify that there are no xrefs in the revision's xref table
     # other than the ones we can justify.
