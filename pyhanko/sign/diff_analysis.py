@@ -33,6 +33,7 @@ validator.
 #    other rules, provided that this is documented clearly.
 #    (example: Catalog validator ignores /AcroForm, which is validated by
 #     another rule entirely)
+#  - Rules should be entirely stateless.
 #  - "Clearing" a reference by yielding it does not imply that the revision
 #    cannot be vetoed by that same rule further down the road (this is why
 #    the first point is important)

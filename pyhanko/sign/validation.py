@@ -852,6 +852,22 @@ class EmbeddedPdfSignature:
         rev_count = self.reader.xrefs.xref_sections
         current_max = ModificationLevel.LTA_UPDATES
         signed_rev_resolver = self.reader.get_historical_resolver(signed_rev)
+
+        # Note: there's a pragmatic reason why we iterate over all revisions
+        # instead of just asking for all updated objects between the signed
+        # revision and the most recent one:
+        #
+        # The effect of intermediate updates may not be detectable anymore in
+        # the most recent version, so if we'd consolidate all checks into one,
+        # we would have no way to tell whether or not the objects created
+        # (and later forgotten) by these intermediate revisions actually
+        # constituted legitimate changes.
+        # (see the test_pades_revinfo tests for examples where this applies)
+        #
+        # Until we have a reference counter (which comes with its own
+        # performance problems that may or may not be worse), I don't really
+        # see a good way around this issue other than diffing every intermediate
+        # version separately.
         for revision in range(signed_rev + 1, rev_count):
             try:
                 ml = run_diff(
