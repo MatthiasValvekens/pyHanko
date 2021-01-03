@@ -123,6 +123,12 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         stream.write(self.input_stream.read())
         self.input_stream.seek(input_pos)
 
+    def set_info(self,
+                 info: Union[generic.IndirectObject, generic.DictionaryObject]):
+        info = super().set_info(info)
+        # also update our trailer
+        self.trailer['/Info'] = info
+
     def _populate_trailer(self, trailer):
         trailer.update(self.trailer.flatten())
         super()._populate_trailer(trailer)

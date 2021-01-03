@@ -894,6 +894,13 @@ class CatalogModificationRule(QualifiedWhitelistRule):
 
 
 class ObjectStreamRule(WhitelistRule):
+    """
+    Rule that allows object streams to be added.
+
+    Note that this rule only whitelists the object streams themselves (provided
+    they do not override any existing objects, obviously), not the objects
+    in them.
+    """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
             -> Iterable[Reference]:
@@ -901,6 +908,18 @@ class ObjectStreamRule(WhitelistRule):
         for objstream_ref in new.object_streams_used():
             if old.is_ref_available(objstream_ref):
                 yield objstream_ref
+
+
+class XrefStreamRule(WhitelistRule):
+    """
+    Rule that allows new XRef streams to be defined.
+    """
+
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
+            -> Iterable[Reference]:
+        xref_start, _ = new.reader.xrefs.get_xref_container_info(new.revision)
+        if isinstance(xref_start, generic.Reference):
+            yield xref_start
 
 
 def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
@@ -1358,6 +1377,7 @@ class DefaultDiffPolicy(DiffPolicy):
             global_rules=[
                 CatalogModificationRule(),
                 DocInfoRule().as_qualified(ModificationLevel.LTA_UPDATES),
+                XrefStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
                 ObjectStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
                 DSSCompareRule().as_qualified(ModificationLevel.LTA_UPDATES),
             ],

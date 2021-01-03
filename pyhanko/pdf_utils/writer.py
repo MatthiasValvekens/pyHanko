@@ -299,13 +299,20 @@ class BasePdfFileWriter(PdfHandler):
         else:
             self._root = self.add_object(root)
 
-        if info is None or isinstance(info, generic.IndirectObject):
-            self._info = info
-        else:
-            self._info = self.add_object(info)
         self._encrypt = self._encrypt_key = None
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs
+        self._info = None
+        if info is not None:
+            self.set_info(info)
+
+    def set_info(self,
+                 info: Union[generic.IndirectObject, generic.DictionaryObject]):
+        if isinstance(info, generic.IndirectObject):
+            self._info = info
+        else:
+            self._info = info = self.add_object(info)
+        return info
 
     def mark_update(self, obj_ref: Union[generic.Reference,
                                          generic.IndirectObject]):

@@ -561,8 +561,7 @@ def test_no_changes_policy():
     # do an /Info update
     dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
-
-    w.trailer['/Info'] = w.add_object(info)
+    w.set_info(info)
     w.write_in_place()
 
     # check with normal diff policy
@@ -581,9 +580,15 @@ def test_no_changes_policy():
     assert not status.docmdp_ok
 
 
+DOUBLE_SIG_TESTDATA_FILES = [
+    MINIMAL, MINIMAL_XREF, MINIMAL_ONE_FIELD
+]
+
+
 @freeze_time('2020-11-01')
-def test_double_sig_add_field():
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+@pytest.mark.parametrize('file_ix', [0, 1, 2])
+def test_double_sig_add_field(file_ix):
+    w = IncrementalPdfFileWriter(BytesIO(DOUBLE_SIG_TESTDATA_FILES[file_ix]))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
@@ -597,7 +602,8 @@ def test_double_sig_add_field():
     # throw in an /Info update for good measure
     dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
-    w.trailer['/Info'] = w.add_object(info)
+    w.set_info(info)
+
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
     )
