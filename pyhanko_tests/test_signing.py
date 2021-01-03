@@ -193,7 +193,7 @@ def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,
                 vc=None):
     if vc is None:
         vc = SIMPLE_V_CONTEXT()
-    val_status = validate_pdf_signature(embedded_sig, vc)
+    val_status = validate_pdf_signature(embedded_sig, vc, skip_diff=not extd)
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted
