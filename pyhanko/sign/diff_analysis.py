@@ -41,6 +41,7 @@ validator.
 
 import re
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import unique
 from typing import (
@@ -60,7 +61,7 @@ __all__ = [
     'DocInfoRule', 'DSSCompareRule', 'FormUpdatingRule',
     'CatalogModificationRule', 'ObjectStreamRule',
     'FieldMDPRule', 'FieldComparisonSpec', 'FieldMDPContext',
-    'run_diff', 'DiffPolicy', 'DefaultDiffPolicy'
+    'DiffPolicy', 'DefaultDiffPolicy'
 ]
 
 logger = logging.getLogger(__name__)
@@ -444,10 +445,17 @@ class FieldMDPContext:
     doc_mdp: Optional[MDPPerm] = None
 
 
+@dataclass(frozen=True)
+class FormUpdate:
+
+    updated_ref: generic.Reference
+    field_name: Optional[str]
+
+
 class FieldMDPRule:
 
-    def apply_qualified(self, context: FieldMDPContext) \
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+    def apply(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
         raise NotImplementedError
 
 
@@ -461,8 +469,8 @@ class SigFieldCreationRule(FieldMDPRule):
     def __init__(self, approve_widget_bindings=True):
         self.approve_widget_bindings = approve_widget_bindings
 
-    def apply_qualified(self, context: FieldMDPContext) \
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+    def apply(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         deleted = set(
             fq_name for fq_name, spec in context.field_specs.items()
@@ -489,7 +497,6 @@ class SigFieldCreationRule(FieldMDPRule):
         # (including the /Fields ref), so our only responsibility is to match
         # up the names of new fields
         approved_new_fields = set(all_new_refs.keys())
-        approved_new_refs = set(all_new_refs.values())
         actual_new_fields = set(
             fq_name for fq_name, spec in context.field_specs.items()
             if spec.old_field_ref is None
@@ -505,12 +512,14 @@ class SigFieldCreationRule(FieldMDPRule):
         # finally, deal with the signature fields themselves
         # The distinction between timestamps and signatures isn't relevant
         # yet, that's a problem for /V, which we don't bother with here.
-        for sigfield_ref in approved_new_refs:
+        for fq_name, sigfield_ref in all_new_refs.items():
 
             # new field, so all its dependencies are good to go
             # that said, only the field itself is cleared at LTA update level,
             # the other deps bump the modification level up to FORM_FILL
-            yield ModificationLevel.LTA_UPDATES, sigfield_ref
+            yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                updated_ref=sigfield_ref, field_name=fq_name
+            )
             sigfield = sigfield_ref.get_object()
             # checked by field listing routine already
             assert isinstance(sigfield, generic.DictionaryObject)
@@ -523,9 +532,10 @@ class SigFieldCreationRule(FieldMDPRule):
                         raw_value,
                         since_revision=context.old.revision + 1
                     )
-                    yield from qualify(
-                        ModificationLevel.FORM_FILLING, misc._as_gen(deps)
-                    )
+                    for _ref in deps:
+                        yield ModificationLevel.FORM_FILLING, FormUpdate(
+                            updated_ref=_ref, field_name=fq_name
+                        )
                 except KeyError:
                     pass
 
@@ -551,12 +561,13 @@ class SigFieldCreationRule(FieldMDPRule):
         old_page_root = context.old.root['/Pages']
         new_page_root = context.new.root['/Pages']
 
+        field_ref_reverse = {v: k for k, v in all_new_refs.items()}
+
         yield from qualify(
             ModificationLevel.LTA_UPDATES,
             _walk_page_tree_annots(
                 old_page_root, new_page_root,
-                lambda ref: ref in approved_new_refs,
-                context.old
+                field_ref_reverse, context.old
             )
         )
 
@@ -573,8 +584,8 @@ class SigFieldModificationRule(FieldMDPRule):
             else VALUE_UPDATE_KEYS
         )
 
-    def apply_qualified(self, context: FieldMDPContext) \
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+    def apply(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         # deal with "freshly signed" signature fields,
         # i.e. those that are filled now, but weren't previously
@@ -598,12 +609,19 @@ class SigFieldModificationRule(FieldMDPRule):
                     # beyond the keys that we expect to change when updating
                     # a signature field.
                     _compare_dicts(old_field, new_field, self.value_update_keys)
-                    yield ModificationLevel.LTA_UPDATES, spec.new_field_ref
+                    yield (
+                        ModificationLevel.LTA_UPDATES,
+                        FormUpdate(
+                            updated_ref=spec.new_field_ref, field_name=fq_name
+                        )
+                    )
 
                     # whitelist appearance updates at FORM_FILL level
-                    yield from qualify(
-                        ModificationLevel.FORM_FILLING,
-                        _allow_appearance_update(
+                    yield from map(
+                        lambda ref: (
+                            ModificationLevel.FORM_FILLING,
+                            FormUpdate(updated_ref=ref, field_name=fq_name)
+                        ), _allow_appearance_update(
                             old_field, new_field, context.old, context.new
                         )
                     )
@@ -617,7 +635,9 @@ class SigFieldModificationRule(FieldMDPRule):
                     _compare_dicts(
                         old_field, new_field, self.always_modifiable
                     )
-                    yield ModificationLevel.LTA_UPDATES, spec.new_field_ref
+                    yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                        updated_ref=spec.new_field_ref, field_name=fq_name
+                    )
                     # Skip the comparison logic on /V. In particular, if
                     # the signature object in question was overridden,
                     # it should trigger a suspicious modification later.
@@ -660,7 +680,9 @@ class SigFieldModificationRule(FieldMDPRule):
                 sig_whitelist = ModificationLevel.FORM_FILLING
 
             # first, whitelist the actual signature object
-            yield sig_whitelist, current_value_ref
+            yield sig_whitelist, FormUpdate(
+                updated_ref=current_value_ref, field_name=fq_name
+            )
 
             # since apparently Acrobat didn't get the memo about not having
             # indirect references in signature objects, we have to do some
@@ -669,9 +691,12 @@ class SigFieldModificationRule(FieldMDPRule):
                 # the issue is with signature reference dictionaries
                 for sigref_dict in sig_obj.raw_get('/Reference'):
                     try:
+                        tp = sigref_dict.raw_get('/TransformParams')
                         yield (
                             sig_whitelist,
-                            sigref_dict.raw_get('/TransformParams').reference
+                            FormUpdate(
+                                updated_ref=tp.reference, field_name=fq_name
+                            )
                         )
                     except (KeyError, AttributeError):
                         continue
@@ -691,11 +716,18 @@ class GenericFieldModificationRule(FieldMDPRule):
             else VALUE_UPDATE_KEYS
         )
 
-    def apply_qualified(self, context: FieldMDPContext) \
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+    def apply(self, context: FieldMDPContext) \
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
         for fq_name, spec in context.field_specs.items():
+
             if spec.field_type == '/Sig' or not spec.new_field_ref:
                 continue
+
+            def _emit_ref(ref):
+                return (
+                    ModificationLevel.FORM_FILLING,
+                    FormUpdate(updated_ref=ref, field_name=fq_name)
+                )
 
             field_mdp_spec = context.field_mdp_spec
             locked = (
@@ -705,9 +737,9 @@ class GenericFieldModificationRule(FieldMDPRule):
             new_field = spec.new_field
             if not locked:
                 _compare_dicts(old_field, new_field, self.value_update_keys)
-                yield ModificationLevel.FORM_FILLING, spec.new_field_ref
-                yield from qualify(
-                    ModificationLevel.FORM_FILLING,
+                yield _emit_ref(spec.new_field_ref)
+                yield from map(
+                    _emit_ref,
                     _allow_appearance_update(
                         old_field, new_field, context.old, context.new
                     )
@@ -729,50 +761,51 @@ class GenericFieldModificationRule(FieldMDPRule):
                         new_value,
                         since_revision=context.old.revision + 1
                     )
-                    yield from qualify(
-                        ModificationLevel.FORM_FILLING, misc._as_gen(deps)
-                    )
+                    yield from map(_emit_ref, deps)
             else:
                 _compare_dicts(
                     old_field, new_field, self.always_modifiable
                 )
-                yield ModificationLevel.FORM_FILLING, spec.new_field_ref
+                yield _emit_ref(spec.new_field_ref)
 
 
-class FormUpdatingRule(QualifiedWhitelistRule):
+class FormUpdatingRule:
     """
-    Whitelisting rule that validates changes to the form attached to the input
-    document.
+    Special whitelisting rule that validates changes to the form attached to
+    the input document.
 
     :param field_rules:
         A list of :class:`.FieldMDPRule` objects to validate the individual
         form fields.
-    :param field_mdp_spec:
-        The :class:`.FieldMDPSpec` that determines which fields are locked.
     :param ignored_acroform_keys:
         Keys in the ``/AcroForm`` dictionary that may be changed.
         Changes are potentially subject to validation by other rules.
     """
 
     def __init__(self, field_rules: List[FieldMDPRule],
-                 field_mdp_spec: Optional[FieldMDPSpec] = None,
-                 doc_mdp: Optional[MDPPerm] = None,
                  ignored_acroform_keys=None):
         self.field_rules = field_rules
-        self.doc_mdp = doc_mdp
-        self.field_mdp_spec = field_mdp_spec
         self.ignored_acroform_keys = (
             ignored_acroform_keys if ignored_acroform_keys is not None
             else {'/Fields'}
         )
 
-    def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver,
+              field_mdp_spec: Optional[FieldMDPSpec] = None,
+              doc_mdp: Optional[MDPPerm] = None)\
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
-        old_acroform, new_acroform = yield from qualify(
-            ModificationLevel.LTA_UPDATES, _compare_key_refs(
-                '/AcroForm', old, old.root, new.root
+        def _emit_ref(_ref):
+            return (
+                ModificationLevel.LTA_UPDATES,
+                FormUpdate(updated_ref=_ref, field_name=None)
             )
+
+        old_acroform, new_acroform = yield from misc.map_with_return(
+            _compare_key_refs(
+                '/AcroForm', old, old.root, new.root
+            ),
+            _emit_ref
         )
 
         # first, compare the entries that aren't /Fields
@@ -784,9 +817,9 @@ class FormUpdatingRule(QualifiedWhitelistRule):
         # This is fine: the _list_fields logic checks that it really contains
         # stuff that looks like form fields, and other rules are responsible
         # for vetting the creation of other form fields anyway.
-        yield from qualify(
-            ModificationLevel.LTA_UPDATES,
-            _compare_key_refs('/Fields', old, old_acroform, new_acroform)
+        yield from misc.map_with_return(
+            _compare_key_refs('/Fields', old, old_acroform, new_acroform),
+            _emit_ref
         )
         try:
             old_fields = old_acroform['/Fields']
@@ -796,11 +829,12 @@ class FormUpdatingRule(QualifiedWhitelistRule):
 
         context = FieldMDPContext(
             field_specs=dict(_list_fields(old_fields, new_fields)),
-            old=old, new=new, field_mdp_spec=self.field_mdp_spec
+            old=old, new=new, field_mdp_spec=field_mdp_spec,
+            doc_mdp=doc_mdp
         )
 
         for rule in self.field_rules:
-            yield from rule.apply_qualified(context)
+            yield from rule.apply(context)
 
 
 ROOT_EXEMPT_STRICT_COMPARISON = {
@@ -1018,7 +1052,7 @@ def _extract_annots_from_page(page, exc):
 
 
 def _walk_page_tree_annots(old_page_root, new_page_root,
-                           annot_allowed_predicate, old: HistoricalResolver):
+                           field_name_dict, old: HistoricalResolver):
     def get_kids(page_root, exc):
         try:
             return _arr_to_refs(page_root['/Kids'], exc)
@@ -1043,7 +1077,7 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             raise misc.PdfReadError from e
         if node_type == '/Pages':
             yield from _walk_page_tree_annots(
-                old_kid, new_kid, annot_allowed_predicate, old
+                old_kid, new_kid, field_name_dict, old
             )
         elif node_type == '/Page':
             try:
@@ -1070,32 +1104,50 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                 raise SuspiciousModification(
                     f"Annotations {deleted_annots} were deleted."
                 )
-            all_annots_allowed = all(map(annot_allowed_predicate, added_annots))
-            if not added_annots or not all_annots_allowed:
-                # in this case, we don't whitelist anything, so any changes
-                # will be caught by the reference checker.
+
+            if not added_annots:
+                # nothing to do
                 continue
+
+            # look up the names of the associated form field(s)
+            # if any of the refs are not in the list
+            # -> unrelated annotation -> bail
+            unknown_annots = added_annots - field_name_dict.keys()
+            if unknown_annots:
+                raise SuspiciousModification(
+                    f"The newly added annotations {unknown_annots} were not "
+                    "recognised."
+                )
 
             # there are new annotations, and they're all changes we expect
             # => cleared to edit
+
+            # if there's only one new annotation, we can set the field name
+            # on the resulting FormUpdate object, but otherwise there's
+            # not much we can do.
+            field_name = None
+            if len(added_annots) == 1:
+                field_name = field_name_dict[next(iter(added_annots))]
+
             # Make sure the page dictionaries are the same, so that we
             #  can safely clear them for modification
             #  (not necessary if both /Annots entries are indirect references,
             #   but adding even more cases is pushing things)
             _compare_dicts(old_kid, new_kid, {'/Annots'})
-            yield new_kid_ref
+            yield FormUpdate(updated_ref=new_kid_ref, field_name=field_name)
             if new_annots_ref:
                 # current /Annots entry is an indirect reference
-                if old_annots_ref == new_annots_ref:
-                    yield new_annots_ref
-                else:
-                    # either the /Annots array got reassigned to another
-                    # object ID, or it was moved from a direct object to an
-                    # indirect one, or the /Annots entry was newly created.
-                    # This is all fine, provided that the new  object
-                    # ID doesn't clobber an existing one.
-                    if old.is_ref_available(new_annots_ref):
-                        yield new_annots_ref
+
+                # If the equality check fails,
+                # either the /Annots array got reassigned to another
+                # object ID, or it was moved from a direct object to an
+                # indirect one, or the /Annots entry was newly created.
+                # This is all fine, provided that the new  object
+                # ID doesn't clobber an existing one.
+                if old_annots_ref == new_annots_ref or \
+                        old.is_ref_available(new_annots_ref):
+                    yield FormUpdate(updated_ref=new_annots_ref,
+                                     field_name=field_name)
 
 
 def _assert_not_stream(dict_obj):
@@ -1185,93 +1237,129 @@ def _compare_key_refs(key, old: HistoricalResolver,
     return old_value, new_value
 
 
-# TODO have a "fail fast" mode
+@dataclass(frozen=True)
+class DiffResult:
 
-def run_diff(rules: List[QualifiedWhitelistRule], old: HistoricalResolver,
-             new: HistoricalResolver) -> ModificationLevel:
+    modification_level: ModificationLevel
     """
-    Run a list of rules to analyse the differences between two revisions.
-    :class:`.SuspiciousModification` exceptions will be propagated.
-
-    :param rules:
-        The :class:`.QualifiedWhitelistRule` objects encoding the rules to
-        apply.
-    :param old:
-        The older, base revision.
-    :param new:
-        The newer revision.
-    :return:
-        The strictest :class:`.ModificationLevel` at which all changes
-        in ``new`` pass muster.
+    The strictest modification level at which all changes pass muster.
     """
 
-    # we need to verify that there are no xrefs in the revision's xref table
-    # other than the ones we can justify.
-    new_xrefs = new.explicit_refs_in_revision()
-
-    explained_lta = set()
-    explained_formfill = set()
-    explained_annot = set()
-
-    for rule in rules:
-        for level, ref in rule.apply_qualified(old, new):
-            if level == ModificationLevel.LTA_UPDATES:
-                explained_lta.add(ref)
-            elif level == ModificationLevel.FORM_FILLING:
-                explained_formfill.add(ref)
-            else:
-                explained_annot.add(ref)
-
-    unexplained_lta = new_xrefs - explained_lta
-    unexplained_formfill = unexplained_lta - explained_formfill
-    unexplained_annot = unexplained_formfill - explained_annot
-    if unexplained_annot:
-        msg = misc.LazyJoin(
-            '\n', (
-                '%s:%s...' % (
-                    repr(x), repr(x.get_object())[:300]
-                ) for x in unexplained_annot
-            )
-        )
-        logger.debug(
-            "Unexplained xrefs in revision %d:\n%s",
-            new.revision, msg
-        )
-        raise SuspiciousModification(
-            f"There are unexplained xrefs in revision {new.revision}: "
-            f"{', '.join(repr(x) for x in unexplained_annot)}."
-        )
-    elif unexplained_formfill:
-        return ModificationLevel.ANNOTATIONS
-    elif unexplained_lta:
-        return ModificationLevel.FORM_FILLING
-    else:
-        return ModificationLevel.LTA_UPDATES
+    changed_form_fields: Set[str]
+    """
+    Set containing the names of all changed form fields.
+    
+    .. note::
+        For the purposes of this parameter, a change is defined as any update
+        that is judged significant at modification level
+        :attr:`.ModificationLevel.FORM_FILLING` or higher.
+        
+        In other words, changes at :attr:`.ModificationLevel.LTA_UPDATES`
+        are ignored by design.
+    """
 
 
 class DiffPolicy:
+    """
+    Run a list of rules to analyse the differences between two revisions.
 
-    def get_rules(self, field_mdp_spec: Optional[FieldMDPSpec],
-                  doc_mdp: Optional[MDPPerm]) -> List[QualifiedWhitelistRule]:
-        raise NotImplementedError
+    :param global_rules:
+        The :class:`.QualifiedWhitelistRule` objects encoding the rules to
+        apply.
+    :param form_rule:
+        The :class:`.FormUpdatingRule` that adjudicates changes to form fields
+        and their values.
+    """
+
+    def __init__(self, global_rules: List[QualifiedWhitelistRule],
+                 form_rule: FormUpdatingRule):
+        self.global_rules = global_rules
+        self.form_rule = form_rule
+
+    def apply(self, old: HistoricalResolver, new: HistoricalResolver,
+              field_mdp_spec: Optional[FieldMDPSpec] = None,
+              doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
+        """
+        Execute the policy on a pair of revisions, with the MDP values provided.
+        :class:`.SuspiciousModification` exceptions will be propagated.
+
+        :param old:
+            The older, base revision.
+        :param new:
+            The newer revision.
+        :param field_mdp_spec:
+            The field MDP spec that's currently active.
+        :param doc_mdp:
+        :return:
+        """
+        # we need to verify that there are no xrefs in the revision's xref table
+        # other than the ones we can justify.
+        new_xrefs = new.explicit_refs_in_revision()
+
+        explained = defaultdict(set)
+
+        for rule in self.global_rules:
+            for level, ref in rule.apply_qualified(old, new):
+                explained[level].add(ref)
+
+        form_changes = self.form_rule.apply(
+            old, new, field_mdp_spec, doc_mdp
+        )
+
+        changed_form_fields = set()
+        for level, fu in form_changes:
+            if fu.field_name is not None and \
+                    level >= ModificationLevel.FORM_FILLING:
+                changed_form_fields.add(fu.field_name)
+            explained[level].add(fu.updated_ref)
+
+        unexplained_lta = new_xrefs - explained[ModificationLevel.LTA_UPDATES]
+        unexplained_formfill = \
+            unexplained_lta - explained[ModificationLevel.FORM_FILLING]
+        unexplained_annot = \
+            unexplained_formfill - explained[ModificationLevel.ANNOTATIONS]
+        if unexplained_annot:
+            msg = misc.LazyJoin(
+                '\n', (
+                    '%s:%s...' % (
+                        repr(x), repr(x.get_object())[:300]
+                    ) for x in unexplained_annot
+                )
+            )
+            logger.debug(
+                "Unexplained xrefs in revision %d:\n%s",
+                new.revision, msg
+            )
+            raise SuspiciousModification(
+                f"There are unexplained xrefs in revision {new.revision}: "
+                f"{', '.join(repr(x) for x in unexplained_annot)}."
+            )
+        elif unexplained_formfill:
+            level = ModificationLevel.ANNOTATIONS
+        elif unexplained_lta:
+            level = ModificationLevel.FORM_FILLING
+        else:
+            level = ModificationLevel.LTA_UPDATES
+
+        return DiffResult(
+            modification_level=level, changed_form_fields=changed_form_fields
+        )
 
 
 class DefaultDiffPolicy(DiffPolicy):
 
-    def get_rules(self, field_mdp_spec: Optional[FieldMDPSpec] = None,
-                  doc_mdp: Optional[MDPPerm] = None) \
-            -> List[QualifiedWhitelistRule]:
-        return [
-            CatalogModificationRule(),
-            DocInfoRule().as_qualified(ModificationLevel.LTA_UPDATES),
-            ObjectStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
-            DSSCompareRule().as_qualified(ModificationLevel.LTA_UPDATES),
-            FormUpdatingRule(
+    def __init__(self):
+        super().__init__(
+            global_rules=[
+                CatalogModificationRule(),
+                DocInfoRule().as_qualified(ModificationLevel.LTA_UPDATES),
+                ObjectStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
+                DSSCompareRule().as_qualified(ModificationLevel.LTA_UPDATES),
+            ],
+            form_rule=FormUpdatingRule(
                 field_rules=[
                     SigFieldCreationRule(), SigFieldModificationRule(),
                     GenericFieldModificationRule()
                 ],
-                field_mdp_spec=field_mdp_spec,
-                doc_mdp=doc_mdp
             )
-        ]
+        )

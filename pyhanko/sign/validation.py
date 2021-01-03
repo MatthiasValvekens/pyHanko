@@ -26,7 +26,7 @@ from pyhanko.pdf_utils.reader import (
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from .diff_analysis import (
     SuspiciousModification, ModificationLevel, DefaultDiffPolicy, DiffPolicy,
-    run_diff
+    DiffResult,
 )
 from .fields import MDPPerm, FieldMDPSpec
 from .general import (
@@ -627,7 +627,14 @@ class EmbeddedPdfSignature:
         #  doing a lot of double work here. This could be improved.
         self.coverage = self.evaluate_signature_coverage()
         if not skip_diff:
-            self.modification_level = self.evaluate_modifications()
+            # TODO integrate this into the signature status
+            #  as a full DiffResult object instead of just the modification
+            #  level.
+            diff_result = self.evaluate_modifications()
+            self.modification_level = (
+                diff_result.modification_level if diff_result is not None
+                else ModificationLevel.OTHER
+            )
 
     def summarise_integrity_info(self) -> dict:
         """
@@ -832,22 +839,17 @@ class EmbeddedPdfSignature:
 
         return SignatureCoverageLevel.ENTIRE_REVISION
 
-    def evaluate_modifications(self) -> ModificationLevel:
+    def evaluate_modifications(self) -> Optional[DiffResult]:
         """
         Internal method used to evaluate the modification level of a signature.
-
-        :return:
-            The modification level of the signature.
         """
 
         if self.coverage < SignatureCoverageLevel.ENTIRE_REVISION:
-            return ModificationLevel.OTHER
+            return None
         elif self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
-            return ModificationLevel.NONE
+            return DiffResult(ModificationLevel.NONE, set())
 
-        diff_rules = self.diff_policy.get_rules(
-            field_mdp_spec=self.fieldmdp, doc_mdp=self.docmdp_level
-        )
+        changed_form_fields = set()
         signed_rev = self.signed_revision
         rev_count = self.reader.xrefs.xref_sections
         current_max = ModificationLevel.LTA_UPDATES
@@ -870,15 +872,17 @@ class EmbeddedPdfSignature:
         # version separately.
         for revision in range(signed_rev + 1, rev_count):
             try:
-                ml = run_diff(
-                    diff_rules, signed_rev_resolver,
-                    self.reader.get_historical_resolver(revision)
+                diff_result = self.diff_policy.apply(
+                    old=signed_rev_resolver,
+                    new=self.reader.get_historical_resolver(revision),
+                    field_mdp_spec=self.fieldmdp, doc_mdp=self.docmdp_level
                 )
             except SuspiciousModification as e:
                 logger.warning(e)
-                return ModificationLevel.OTHER
-            current_max = max(current_max, ml)
-        return current_max
+                return None
+            current_max = max(current_max, diff_result.modification_level)
+            changed_form_fields |= diff_result.changed_form_fields
+        return DiffResult(current_max, changed_form_fields)
 
 
 # TODO confirm the rules on name uniqueness
