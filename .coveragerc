@@ -10,3 +10,4 @@ exclude_lines =
     pragma: nocover
     raise AssertionError
     raise NotImplementedError
+precision = 2
