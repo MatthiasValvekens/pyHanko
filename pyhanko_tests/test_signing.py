@@ -32,7 +32,10 @@ from pyhanko.sign.validation import (
     validate_pdf_ltv_signature, RevocationInfoValidationType,
     SignatureCoverageLevel, SignatureValidationError,
 )
-from pyhanko.sign.diff_analysis import ModificationLevel
+from pyhanko.sign.diff_analysis import (
+    ModificationLevel, NoChangesDiffPolicy,
+    SuspiciousModification, DiffResult,
+)
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.stamp import QRStampStyle
@@ -244,11 +247,6 @@ def test_simple_sign():
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    emb.compute_integrity_info(skip_diff=True)
-    assert emb.modification_level is None
-
-    r = PdfFileReader(out)
-    emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_untrusted(emb)
 
@@ -264,6 +262,32 @@ def test_simple_sign():
     assert not tampered.intact
     assert not tampered.valid
     assert tampered.summary() == 'INVALID'
+
+
+@pytest.mark.parametrize('policy, skip_diff',
+                         [(None, False),
+                          (NoChangesDiffPolicy(), False),
+                          (None, True)])
+def test_diff_fallback_ok(policy, skip_diff):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    status = validate_pdf_signature(
+        emb, diff_policy=policy, skip_diff=skip_diff
+    )
+    if skip_diff:
+        assert emb.diff_result is None
+        # docmdp should still be OK without the diff check
+        # because the signature covers the entire file
+        assert status.docmdp_ok
+        assert status.modification_level == ModificationLevel.NONE
+    else:
+        assert isinstance(emb.diff_result, DiffResult)
+        assert status.modification_level == ModificationLevel.NONE
+        assert status.docmdp_ok
 
 
 @freeze_time('2020-11-01')
@@ -520,6 +544,41 @@ def test_sign_new(file):
     e = r.embedded_signatures[0]
     assert e.field_name == 'SigNew'
     val_trusted(e)
+
+
+@freeze_time('2020-11-01')
+def test_no_changes_policy():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    # do an /Info update
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
+    info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
+
+    w.trailer['/Info'] = w.add_object(info)
+    w.write_in_place()
+
+    # check with normal diff policy
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert status.docmdp_ok
+
+    # now check with the ultra-strict no-op policy
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = validate_pdf_signature(s, diff_policy=NoChangesDiffPolicy())
+    assert isinstance(s.diff_result, SuspiciousModification)
+    assert not status.docmdp_ok
 
 
 @freeze_time('2020-11-01')
@@ -2576,7 +2635,11 @@ def test_delete_signature():
     val_trusted_but_modified(s)
 
 
-def test_tamper_sig_obj():
+@pytest.mark.parametrize('policy, skip_diff',
+                         [(None, False),
+                          (NoChangesDiffPolicy(), False),
+                          (None, True)])
+def test_tamper_sig_obj(policy, skip_diff):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1'
@@ -2592,8 +2655,15 @@ def test_tamper_sig_obj():
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
-    emb.compute_integrity_info()
-    assert emb.modification_level == ModificationLevel.OTHER
+    status = validate_pdf_signature(
+        emb, diff_policy=policy, skip_diff=skip_diff
+    )
+    if skip_diff:
+        assert emb.diff_result is None
+        assert status.modification_level is None
+    else:
+        assert isinstance(emb.diff_result, SuspiciousModification)
+        assert status.modification_level == ModificationLevel.OTHER
 
 
 def test_rogue_backreferences():
@@ -2627,7 +2697,7 @@ def test_rogue_backreferences():
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     emb.compute_integrity_info()
-    assert emb.modification_level == ModificationLevel.OTHER
+    assert isinstance(emb.diff_result, SuspiciousModification)
 
 
 @freeze_time('2020-11-01')

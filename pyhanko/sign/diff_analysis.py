@@ -1272,7 +1272,7 @@ class DiffPolicy:
     """
 
     def __init__(self, global_rules: List[QualifiedWhitelistRule],
-                 form_rule: FormUpdatingRule):
+                 form_rule: Optional[FormUpdatingRule]):
         self.global_rules = global_rules
         self.form_rule = form_rule
 
@@ -1281,7 +1281,7 @@ class DiffPolicy:
               doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
         """
         Execute the policy on a pair of revisions, with the MDP values provided.
-        :class:`.SuspiciousModification` exceptions will be propagated.
+        :class:`.SuspiciousModification` exceptions should be propagated.
 
         :param old:
             The older, base revision.
@@ -1290,6 +1290,7 @@ class DiffPolicy:
         :param field_mdp_spec:
             The field MDP spec that's currently active.
         :param doc_mdp:
+            The DocMDP spec that's currently active.
         :return:
         """
         # we need to verify that there are no xrefs in the revision's xref table
@@ -1302,16 +1303,17 @@ class DiffPolicy:
             for level, ref in rule.apply_qualified(old, new):
                 explained[level].add(ref)
 
-        form_changes = self.form_rule.apply(
-            old, new, field_mdp_spec, doc_mdp
-        )
-
         changed_form_fields = set()
-        for level, fu in form_changes:
-            if fu.field_name is not None and \
-                    level >= ModificationLevel.FORM_FILLING:
-                changed_form_fields.add(fu.field_name)
-            explained[level].add(fu.updated_ref)
+        if self.form_rule:
+            form_changes = self.form_rule.apply(
+                old, new, field_mdp_spec, doc_mdp
+            )
+
+            for level, fu in form_changes:
+                if fu.field_name is not None and \
+                        level >= ModificationLevel.FORM_FILLING:
+                    changed_form_fields.add(fu.field_name)
+                explained[level].add(fu.updated_ref)
 
         unexplained_lta = new_xrefs - explained[ModificationLevel.LTA_UPDATES]
         unexplained_formfill = \
@@ -1347,6 +1349,9 @@ class DiffPolicy:
 
 
 class DefaultDiffPolicy(DiffPolicy):
+    """
+    Default :class:`.DiffPolicy` implementation.
+    """
 
     def __init__(self):
         super().__init__(
@@ -1363,3 +1368,13 @@ class DefaultDiffPolicy(DiffPolicy):
                 ],
             )
         )
+
+
+class NoChangesDiffPolicy(DiffPolicy):
+    """
+    :class:`.DiffPolicy` implementation that does not provide any rules,
+    and will therefore simply reject all changes.
+    """
+
+    def __init__(self):
+        super().__init__(global_rules=[], form_rule=None)

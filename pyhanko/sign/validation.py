@@ -5,7 +5,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import TypeVar, Type, Optional
+from typing import TypeVar, Type, Optional, Union
 
 from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
@@ -277,10 +277,16 @@ class PdfSignatureStatus(SignatureStatus):
     Indicates how much of the document is covered by the signature.
     """
 
-    modification_level: ModificationLevel
+    diff_result: Optional[Union[DiffResult, SuspiciousModification]]
     """
-    Indicates the degree to which the document was modified after the signature
-    was applied.
+    Result of the difference analysis run on the file:
+    
+    * If ``None``, no difference analysis was run.
+    * If the difference analysis was successful, this attribute will contain
+      a :class:`DiffResult` object.
+    * If the difference analysis failed due to unforeseen or suspicious
+      modifications, the :class:`SuspiciousModification` exception thrown
+      by the difference policy will be stored in this attribute.
     """
 
     seed_value_ok: bool
@@ -296,10 +302,12 @@ class PdfSignatureStatus(SignatureStatus):
         See :class:`~.pyhanko.sign.fields.SigSeedValueSpec`.
     """
 
-    docmdp_ok: bool
+    docmdp_ok: Optional[bool]
     """
     Indicates whether the signature's :attr:`modification_level` is in line with
     the document signature policy in force.
+    
+    If ``None``, compliance could not be determined.
     """
 
     signer_reported_dt: Optional[datetime] = None
@@ -314,6 +322,26 @@ class PdfSignatureStatus(SignatureStatus):
     Validation status of the timestamp token embedded in this signature, 
     if present.
     """
+
+    @property
+    def modification_level(self) -> Optional[ModificationLevel]:
+        """
+        Indicates the degree to which the document was modified after the
+        signature was applied.
+        """
+
+        if self.diff_result is None:
+            if self.coverage == SignatureCoverageLevel.ENTIRE_REVISION:
+                # in this case, we can't know without the diff analysis result
+                return None
+            return (
+                ModificationLevel.NONE if SignatureCoverageLevel.ENTIRE_FILE
+                else ModificationLevel.OTHER
+            )
+        elif isinstance(self.diff_result, DiffResult):
+            return self.diff_result.modification_level
+        else:
+            return ModificationLevel.OTHER
 
     @property
     def bottom_line(self) -> bool:
@@ -515,8 +543,7 @@ class EmbeddedPdfSignature:
     """
 
     def __init__(self, reader: PdfFileReader,
-                 sig_field: generic.DictionaryObject,
-                 diff_policy: DiffPolicy = DefaultDiffPolicy()):
+                 sig_field: generic.DictionaryObject):
         self.reader = reader
         if isinstance(sig_field, generic.IndirectObject):
             sig_field = sig_field.get_object()
@@ -559,14 +586,14 @@ class EmbeddedPdfSignature:
             sig_object_ref.reference
         )
         self.coverage = None
-        self.modification_level = None
         self.raw_digest = None
         self.total_len = None
         self._docmdp = self._fieldmdp = None
         self._docmdp_queried = self._fieldmdp_queried = False
         self.tst_signature_digest = None
 
-        self.diff_policy = diff_policy
+        self.diff_result = None
+        self._integrity_checked = False
 
     @property
     def field_name(self):
@@ -612,13 +639,16 @@ class EmbeddedPdfSignature:
         except KeyError:
             pass
 
-    def compute_integrity_info(self, skip_diff=False):
+    def compute_integrity_info(self, diff_policy=None, skip_diff=False):
         """
         Compute the various integrity indicators of this signature.
 
+        :param diff_policy:
+            Policy to evaluate potential incremental updates that were appended
+            to the signed revision of the document.
+            Defaults to (an instance of) :class:`.DefaultDiffPolicy`.
         :param skip_diff:
-            If ``True``, skip the (rather expensive) modification level
-            evaluation.
+            If ``True``, skip the difference analysis step entirely.
         """
         self.compute_digest()
         self.compute_tst_digest()
@@ -626,37 +656,53 @@ class EmbeddedPdfSignature:
         # TODO in scenarios where we have to verify multiple signatures, we're
         #  doing a lot of double work here. This could be improved.
         self.coverage = self.evaluate_signature_coverage()
+        diff_policy = diff_policy or DefaultDiffPolicy()
         if not skip_diff:
-            # TODO integrate this into the signature status
-            #  as a full DiffResult object instead of just the modification
-            #  level.
-            diff_result = self.evaluate_modifications()
-            self.modification_level = (
-                diff_result.modification_level if diff_result is not None
-                else ModificationLevel.OTHER
-            )
+            self.diff_result = self.evaluate_modifications(diff_policy)
+
+        self._integrity_checked = True
 
     def summarise_integrity_info(self) -> dict:
         """
         Compile the integrity information for this signature into a dictionary
         that can later be passed to :class:`PdfSignatureStatus` as kwargs.
 
-        :return:
-            A kwargs dictionary.
+        This method is only available after calling
+        :meth:`.EmbeddedSig.compute_integrity_info`.
         """
 
-        self.compute_integrity_info()
+        if not self._integrity_checked:
+            raise SignatureValidationError(
+                "Call compute_integrity_info() before invoking"
+                "summarise_integrity_info()"
+            )  # pragma: nocover
 
-        mod_level = self.modification_level
         docmdp = self.docmdp_level
-        docmdp_ok = not (
+        diff_result = self.diff_result
+        coverage = self.coverage
+        docmdp_ok = None
+
+        # attempt to set docmdp_ok based on the diff analysis results
+        if diff_result is not None:
+            mod_level = (
+                diff_result.modification_level
+                if isinstance(diff_result, DiffResult)
+                else ModificationLevel.OTHER
+            )
+            docmdp_ok = not (
                 mod_level == ModificationLevel.OTHER
                 or (docmdp is not None and mod_level.value > docmdp.value)
-        )
+            )
+        elif coverage != SignatureCoverageLevel.ENTIRE_REVISION:
+            # if the diff analysis didn't run, we can still do something
+            # meaningful if coverage is not ENTIRE_REVISION:
+            #  - if the signature covers the entire file, we're good.
+            #  - if the coverage level is anything else, not so much
+            docmdp_ok = coverage == SignatureCoverageLevel.ENTIRE_FILE
+
         status_kwargs = {
-            'coverage': self.coverage,
-            'modification_level': mod_level,
-            'docmdp_ok': docmdp_ok
+            'coverage': coverage, 'docmdp_ok': docmdp_ok,
+            'diff_result': diff_result
         }
         return status_kwargs
 
@@ -839,13 +885,16 @@ class EmbeddedPdfSignature:
 
         return SignatureCoverageLevel.ENTIRE_REVISION
 
-    def evaluate_modifications(self) -> Optional[DiffResult]:
+    def evaluate_modifications(self, diff_policy: DiffPolicy) \
+            -> Union[DiffResult, SuspiciousModification]:
         """
         Internal method used to evaluate the modification level of a signature.
         """
 
         if self.coverage < SignatureCoverageLevel.ENTIRE_REVISION:
-            return None
+            return SuspiciousModification(
+                'Nonstandard signature coverage level'
+            )
         elif self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
             return DiffResult(ModificationLevel.NONE, set())
 
@@ -872,14 +921,14 @@ class EmbeddedPdfSignature:
         # version separately.
         for revision in range(signed_rev + 1, rev_count):
             try:
-                diff_result = self.diff_policy.apply(
+                diff_result = diff_policy.apply(
                     old=signed_rev_resolver,
                     new=self.reader.get_historical_resolver(revision),
                     field_mdp_spec=self.fieldmdp, doc_mdp=self.docmdp_level
                 )
             except SuspiciousModification as e:
                 logger.warning(e)
-                return None
+                return e
             current_max = max(current_max, diff_result.modification_level)
             changed_form_fields |= diff_result.changed_form_fields
         return DiffResult(current_max, changed_form_fields)
@@ -1004,8 +1053,9 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
 
 def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
-                           ts_validation_context: ValidationContext = None) \
-                           -> PdfSignatureStatus:
+                           ts_validation_context: ValidationContext = None,
+                           diff_policy: DiffPolicy = None,
+                           skip_diff: bool = False) -> PdfSignatureStatus:
     """
     Validate a PDF signature.
 
@@ -1016,6 +1066,12 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     :param ts_validation_context:
         Validation context to use to validate the timestamp's chain of trust
         (defaults to ``signer_validation_context``).
+    :param diff_policy:
+        Policy to evaluate potential incremental updates that were appended
+        to the signed revision of the document.
+        Defaults to (an instance of) :class:`.DefaultDiffPolicy`.
+    :param skip_diff:
+        If ``True``, skip the difference analysis step entirely.
     :return:
         The status of the PDF signature in question.
     """
@@ -1034,6 +1090,9 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
 
+    embedded_sig.compute_integrity_info(
+        diff_policy=diff_policy, skip_diff=skip_diff
+    )
     status_kwargs = embedded_sig.summarise_integrity_info()
 
     # try to find an embedded timestamp
@@ -1200,7 +1259,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                validation_type: RevocationInfoValidationType,
                                validation_context_kwargs=None,
                                bootstrap_validation_context=None,
-                               force_revinfo=False) -> PdfSignatureStatus:
+                               force_revinfo=False,
+                               diff_policy: DiffPolicy = None,
+                               skip_diff: bool = False) -> PdfSignatureStatus:
     """
     Validate a PDF LTV signature according to a particular profile.
 
@@ -1216,6 +1277,12 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :param force_revinfo:
         Require all certificates encountered to have some form of live
         revocation checking provisions.
+    :param diff_policy:
+        Policy to evaluate potential incremental updates that were appended
+        to the signed revision of the document.
+        Defaults to (an instance of) :class:`.DefaultDiffPolicy`.
+    :param skip_diff:
+        If ``True``, skip the difference analysis step entirely.
     :return:
         The status of the signature.
     """
@@ -1304,6 +1371,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         validation_context=stored_vc, status_kwargs={'timestamp': timestamp}
     )
 
+    embedded_sig.compute_integrity_info(
+        diff_policy=diff_policy, skip_diff=skip_diff
+    )
     status_kwargs = embedded_sig.summarise_integrity_info()
     status_kwargs.update({
         'signer_reported_dt': timestamp,
