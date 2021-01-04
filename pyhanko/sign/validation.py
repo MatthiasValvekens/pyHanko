@@ -927,7 +927,10 @@ class EmbeddedPdfSignature:
                     field_mdp_spec=self.fieldmdp, doc_mdp=self.docmdp_level
                 )
             except SuspiciousModification as e:
-                logger.warning(e)
+                logger.warning(
+                    f'Error in diff operation between revision {signed_rev} '
+                    f'and {revision}', exc_info=e
+                )
                 return e
             current_max = max(current_max, diff_result.modification_level)
             changed_form_fields |= diff_result.changed_form_fields

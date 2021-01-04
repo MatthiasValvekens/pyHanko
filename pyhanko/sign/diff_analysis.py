@@ -1360,9 +1360,14 @@ def _compare_dicts(old_dict: PdfObject, new_dict: PdfObject,
             return False
 
     for k in new_dict_keys:
-        if new_dict.raw_get(k) != old_dict.raw_get(k):
+        new_val = new_dict.raw_get(k)
+        old_val = old_dict.raw_get(k)
+        if new_val != old_val:
             if raise_exc:
-                raise SuspiciousModification(f"Values for dict key {k} differ.")
+                raise SuspiciousModification(
+                    f"Values for dict key {k} differ:"
+                    f"{old_val} changed to {new_val}"
+                )
             else:
                 return False
 
