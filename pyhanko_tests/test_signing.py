@@ -640,6 +640,57 @@ def test_double_sig_adobe_reader():
     val_untrusted(s)
 
 
+@freeze_time('2021-01-05')
+def test_bogus_metadata_manipulation():
+    # test using a double signature created using Adobe Reader
+    # (uses object streams, XMP metadata updates and all the fun stuff)
+
+    infile = BytesIO(
+        read_all(PDF_DATA_DIR + '/minimal-two-fields-signed-twice.pdf')
+    )
+
+    bogus = b'This is bogus data, yay!'
+
+    def do_check():
+        r = PdfFileReader(out)
+        print(r.get_object(generic.Reference(2, 0, r), revision=3).data)
+        s = r.embedded_signatures[0]
+        status = validate_pdf_signature(s)
+        assert status.modification_level == ModificationLevel.OTHER
+
+    w = IncrementalPdfFileWriter(infile)
+    w.root['/Metadata'] = w.add_object(generic.StreamObject(stream_data=bogus))
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+    do_check()
+
+    w = IncrementalPdfFileWriter(infile)
+    metadata_ref = w.root.raw_get('/Metadata')
+    metadata_stream: generic.StreamObject = metadata_ref.get_object()
+    metadata_stream.strip_filters()
+    metadata_stream._data = bogus
+    metadata_stream._encoded_data = None
+    w.mark_update(metadata_ref)
+    out = BytesIO()
+    w.write(out)
+    do_check()
+
+    w = IncrementalPdfFileWriter(infile)
+    w.root['/Metadata'] = generic.NullObject()
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+    do_check()
+
+    w = IncrementalPdfFileWriter(infile)
+    w.root['/Metadata'] = w.add_object(generic.NullObject())
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+    do_check()
+
+
 @freeze_time('2020-11-01')
 def test_double_sig_add_field_annots_indirect():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))

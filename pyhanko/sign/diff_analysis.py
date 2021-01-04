@@ -1086,7 +1086,7 @@ class MetadataUpdateRule(WhitelistRule):
         try:
             parser.parse(BytesIO(metadata_stream.data))
         except Exception as e:
-            SuspiciousModification(
+            raise SuspiciousModification(
                 "/Metadata XML syntax could not be validated", e
             )
 
