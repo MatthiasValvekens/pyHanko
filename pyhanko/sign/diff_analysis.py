@@ -58,10 +58,14 @@ from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 __all__ = [
     'ModificationLevel', 'SuspiciousModification',
     'QualifiedWhitelistRule', 'WhitelistRule', 'qualify',
-    'DocInfoRule', 'DSSCompareRule', 'FormUpdatingRule',
-    'CatalogModificationRule', 'ObjectStreamRule',
+    'DocInfoRule', 'DSSCompareRule',
+    'CatalogModificationRule', 'ObjectStreamRule', 'XrefStreamRule',
+    'FormUpdatingRule', 'FormUpdate',
     'FieldMDPRule', 'FieldComparisonSpec', 'FieldMDPContext',
-    'DiffPolicy', 'DefaultDiffPolicy'
+    'GenericFieldModificationRule', 'SigFieldCreationRule',
+    'SigFieldModificationRule',
+    'DiffPolicy', 'DefaultDiffPolicy', 'NoChangesDiffPolicy',
+    'DiffResult'
 ]
 
 logger = logging.getLogger(__name__)
@@ -411,12 +415,33 @@ class DSSCompareRule(WhitelistRule):
 
 @dataclass(frozen=True)
 class FieldComparisonSpec:
+    """
+    Helper object that specifies a form field name together with references
+    to its old and new versions.
+    """
+
     field_type: str
+    """
+    The (fully qualified) form field name.
+    """
+
     old_field_ref: Optional[generic.Reference]
+    """
+    A reference to the field's dictionary in the old revision, if present.
+    """
+
     new_field_ref: Optional[generic.Reference]
+    """
+    A reference to the field's dictionary in the new revision, if present.
+    """
 
     @property
     def old_field(self) -> Optional[generic.DictionaryObject]:
+        """
+        :return:
+            The field's dictionary in the old revision, if present, otherwise
+            ``None``.
+        """
         ref = self.old_field_ref
         if ref is None:
             return None
@@ -426,6 +451,11 @@ class FieldComparisonSpec:
 
     @property
     def new_field(self) -> Optional[generic.DictionaryObject]:
+        """
+        :return:
+            The field's dictionary in the new revision, if present, otherwise
+            ``None``.
+        """
         ref = self.new_field_ref
         if ref is None:
             return None
@@ -436,34 +466,92 @@ class FieldComparisonSpec:
 
 @dataclass(frozen=True)
 class FieldMDPContext:
+    """
+    Context for a form diffing operation.
+    """
+
     field_specs: Dict[str, FieldComparisonSpec]
+    """
+    Dictionary mapping field names to :class:`.FieldComparisonSpec` objects.
+    """
+
     old: HistoricalResolver
+    """
+    The older, base revision.
+    """
+
     new: HistoricalResolver
+    """
+    The newer revision.
+    """
+
+    # TODO would it be cleaner to handle field locking at the FormUpdatingRule
+    #  level, instead of delegating that to the FieldMDPRules?
+    # We could let FormUpdate objects specify whether an update would violate
+    # a field lock or not.
     field_mdp_spec: Optional[FieldMDPSpec] = None
+    """
+    The currently relevant FieldMDP specification.
+    """
 
     # TODO use this to work more efficiently
     doc_mdp: Optional[MDPPerm] = None
+    """
+    The currently relevant DocMDP level (informative).
+    """
 
 
 @dataclass(frozen=True)
 class FormUpdate:
+    """
+    Container for a reference together with (optional) metadata about a form
+    field it relates to.
+
+    Currently, this metadata simply consists of the field's (fully qualified)
+    name.
+    """
 
     updated_ref: generic.Reference
+    """
+    Reference that was (potentially) updated.
+    """
+
     field_name: Optional[str]
+    """
+    The relevant field's fully qualified name, or ``None`` if there's either
+    no obvious associated field, or if there are multiple reasonable candidates.
+    """
 
 
 class FieldMDPRule:
+    """
+    Sub-rules attached to a :class:`.FormUpdatingRule`.
+    """
 
     def apply(self, context: FieldMDPContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+        """
+        Apply the rule to the given :class:`.FieldMDPContext`.
+
+        :param context:
+            The context of this form revision evaluation, given as an instance
+            of :class:`.FieldMDPContext`.
+        """
         raise NotImplementedError
 
 
 class SigFieldCreationRule(FieldMDPRule):
     """
     This rule allows signature fields to be created at the root of the form
-    hierarchy, but denies the creation of other types of fields.
+    hierarchy, but disallows the creation of other types of fields.
     It also disallows field deletion.
+
+    In addition, this rule will allow newly created signature fields to
+    attach themselves as widget annotations to pages.
+
+    The creation of invisible signature fields is considered a modification
+    at level :attr:`.ModificationLevel.LTA_UPDATES`, but appearance-related
+    changes will be qualified with :attr:`.ModificationLevel.FORM_FILLING`.
     """
 
     def __init__(self, approve_widget_bindings=True):
@@ -573,6 +661,19 @@ class SigFieldCreationRule(FieldMDPRule):
 
 
 class SigFieldModificationRule(FieldMDPRule):
+    """
+    This rule allows signature fields to be filled in, and set an appearance
+    if desired. Deleting values from signature fields is disallowed, as is
+    modifying signature fields that already contain a signature.
+
+    This rule will take field locks into account if the
+    :class:`.FieldMDPContext` includes a :class:`.FieldMDPSpec`.
+
+    For (invisible) document timestamps, this is allowed at
+    :class:`.ModificationLevel.LTA_UPDATES`, but in all other cases
+    the modification level will be bumped to
+    :class:`.ModificationLevel.FORM_FILLING`.
+    """
 
     def __init__(self, always_modifiable=None, value_update_keys=None):
         self.always_modifiable = (
@@ -705,6 +806,18 @@ class SigFieldModificationRule(FieldMDPRule):
 
 
 class GenericFieldModificationRule(FieldMDPRule):
+    """
+    This rule allows non-signature form fields to be modified at
+    :class:`.ModificationLevel.FORM_FILLING`.
+
+    This rule will take field locks into account if the
+    :class:`.FieldMDPContext` includes a :class:`.FieldMDPSpec`.
+
+    For (invisible) document timestamps, this is allowed at
+    :class:`.ModificationLevel.LTA_UPDATES`, but in all other cases
+    the modification level will be bumped to
+    :class:`.ModificationLevel.FORM_FILLING`.
+    """
 
     def __init__(self, always_modifiable=None, value_update_keys=None):
         self.always_modifiable = (
@@ -774,6 +887,21 @@ class FormUpdatingRule:
     Special whitelisting rule that validates changes to the form attached to
     the input document.
 
+    This rule is special in three ways:
+
+    * it outputs :class:`.FormUpdate` objects instead of references;
+    * the :meth:`apply` method takes extra arguments
+      to pass information on the document/field MDP settings, if relevant;
+    * it delegates most of the hard work to sub-rules (instances of
+      :class:`.FieldMDPRule`).
+
+    A :class:`.DiffPolicy` can have at most one :class:`.FormUpdatingRule`,
+    but there is no limit on the number of :class:`.FieldMDPRule` objects
+    attached to it.
+
+    :class:`.FormUpdate` objects contain a reference plus metadata about
+    the form field it belongs to.
+
     :param field_rules:
         A list of :class:`.FieldMDPRule` objects to validate the individual
         form fields.
@@ -794,6 +922,18 @@ class FormUpdatingRule:
               field_mdp_spec: Optional[FieldMDPSpec] = None,
               doc_mdp: Optional[MDPPerm] = None)\
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+        """
+        Evaluate changes in the document's form between two revisions.
+
+        :param old:
+            The older, base revision.
+        :param new:
+            The newer revision to be vetted.
+        :param field_mdp_spec:
+            The currently relevant FieldMDP specification.
+        :param doc_mdp:
+            The currently relevant DocMDP level (informative).
+        """
 
         def _emit_ref(_ref):
             return (
@@ -1258,6 +1398,11 @@ def _compare_key_refs(key, old: HistoricalResolver,
 
 @dataclass(frozen=True)
 class DiffResult:
+    """
+    Encodes the result of a difference analysis on two revisions.
+
+    Returned by :meth:`.DiffPolicy.apply`.
+    """
 
     modification_level: ModificationLevel
     """
@@ -1271,7 +1416,7 @@ class DiffResult:
     .. note::
         For the purposes of this parameter, a change is defined as any update
         that is judged significant at modification level
-        :attr:`.ModificationLevel.FORM_FILLING` or higher.
+        :attr:`~.ModificationLevel.FORM_FILLING` or higher.
         
         In other words, changes at :attr:`.ModificationLevel.LTA_UPDATES`
         are ignored by design.
