@@ -33,8 +33,8 @@ from pyhanko.sign.validation import (
     SignatureCoverageLevel, SignatureValidationError,
 )
 from pyhanko.sign.diff_analysis import (
-    ModificationLevel, NoChangesDiffPolicy,
-    SuspiciousModification, DiffResult,
+    ModificationLevel, SuspiciousModification, DiffResult,
+    NO_CHANGES_DIFF_POLICY,
 )
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -266,7 +266,7 @@ def test_simple_sign():
 
 @pytest.mark.parametrize('policy, skip_diff',
                          [(None, False),
-                          (NoChangesDiffPolicy(), False),
+                          (NO_CHANGES_DIFF_POLICY, False),
                           (None, True)])
 def test_diff_fallback_ok(policy, skip_diff):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -575,7 +575,7 @@ def test_no_changes_policy():
     # now check with the ultra-strict no-op policy
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    status = validate_pdf_signature(s, diff_policy=NoChangesDiffPolicy())
+    status = validate_pdf_signature(s, diff_policy=NO_CHANGES_DIFF_POLICY)
     assert isinstance(s.diff_result, SuspiciousModification)
     assert not status.docmdp_ok
 
@@ -2643,7 +2643,7 @@ def test_delete_signature():
 
 @pytest.mark.parametrize('policy, skip_diff',
                          [(None, False),
-                          (NoChangesDiffPolicy(), False),
+                          (NO_CHANGES_DIFF_POLICY, False),
                           (None, True)])
 def test_tamper_sig_obj(policy, skip_diff):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))

@@ -25,7 +25,7 @@ from pyhanko.pdf_utils.reader import (
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from .diff_analysis import (
-    SuspiciousModification, ModificationLevel, DefaultDiffPolicy, DiffPolicy,
+    SuspiciousModification, ModificationLevel, DEFAULT_DIFF_POLICY, DiffPolicy,
     DiffResult,
 )
 from .fields import MDPPerm, FieldMDPSpec
@@ -646,7 +646,7 @@ class EmbeddedPdfSignature:
         :param diff_policy:
             Policy to evaluate potential incremental updates that were appended
             to the signed revision of the document.
-            Defaults to (an instance of) :class:`.DefaultDiffPolicy`.
+            Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
         :param skip_diff:
             If ``True``, skip the difference analysis step entirely.
         """
@@ -656,7 +656,7 @@ class EmbeddedPdfSignature:
         # TODO in scenarios where we have to verify multiple signatures, we're
         #  doing a lot of double work here. This could be improved.
         self.coverage = self.evaluate_signature_coverage()
-        diff_policy = diff_policy or DefaultDiffPolicy()
+        diff_policy = diff_policy or DEFAULT_DIFF_POLICY
         if not skip_diff:
             self.diff_result = self.evaluate_modifications(diff_policy)
 
@@ -1069,7 +1069,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     :param diff_policy:
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
-        Defaults to (an instance of) :class:`.DefaultDiffPolicy`.
+        Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1280,7 +1280,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :param diff_policy:
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
-        Defaults to (an instance of) :class:`.DefaultDiffPolicy`.
+        Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
