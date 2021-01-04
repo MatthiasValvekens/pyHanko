@@ -70,8 +70,13 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+# /Ff: Form field flags can always be updated
 FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
-VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V'}
+# /AP: appearance dictionary
+# /AS: current appearance state
+# /V: field value
+# /F: (widget) annotation flags
+VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V', '/F'}
 VRI_KEY_PATTERN = re.compile('/[A-Z0-9]{40}')
 
 
