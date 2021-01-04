@@ -620,6 +620,26 @@ def test_double_sig_add_field(file_ix):
     val_trusted(s)
 
 
+@freeze_time('2021-01-05')
+def test_double_sig_adobe_reader():
+    # test using a double signature created using Adobe Reader
+    # (uses object streams, XMP metadata updates and all the fun stuff)
+
+    infile = BytesIO(
+        read_all(PDF_DATA_DIR + '/minimal-two-fields-signed-twice.pdf')
+    )
+    r = PdfFileReader(infile)
+
+
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
+
+    s = r.embedded_signatures[1]
+    val_untrusted(s)
+
+
 @freeze_time('2020-11-01')
 def test_double_sig_add_field_annots_indirect():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
