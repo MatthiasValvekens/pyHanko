@@ -481,6 +481,15 @@ class TrailerDictionary(generic.PdfObject):
             for k, v in revision.items()
         })
         trailer.update(self._new_changes)
+
+        # ensure that the trailer isn't polluted using stream
+        # compression / XRef parameters
+        trailer.pop('/Length', None)
+        trailer.pop('/Filter', None)
+        trailer.pop('/DecodeParms', None)
+        trailer.pop('/W', None)
+        trailer.pop('/Type', None)
+        trailer.pop('/Index', None)
         return trailer
 
     def __contains__(self, item):
