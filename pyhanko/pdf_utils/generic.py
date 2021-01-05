@@ -131,6 +131,8 @@ class Reference(Dereferenceable):
     """
 
     def get_object(self) -> 'PdfObject':
+        if self.pdf is None:
+            return NullObject()
         from pyhanko.pdf_utils.rw_common import PdfHandler
         assert isinstance(self.pdf, PdfHandler)
         return self.pdf.get_object(self).get_object()

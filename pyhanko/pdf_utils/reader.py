@@ -82,7 +82,9 @@ class XRefCache:
         # making this a dict doesn't make much sense
         self.history = defaultdict(list)
         self._current_section_ids = set()
+        self._current_section_freed = set()
         self._refs_by_section = []
+        self._freed_by_section = []
         self._generations = {}
         self._previous_expected_free = {}
         self.xref_container_info = []
@@ -93,6 +95,8 @@ class XRefCache:
         self.xref_sections += 1
         self._refs_by_section.append(self._current_section_ids)
         self._current_section_ids = set()
+        self._freed_by_section.append(self._current_section_freed)
+        self._current_section_freed = set()
 
     def used_later(self, idnum, generation) -> bool:
         # We move backwards through the xrefs, don't replace any.
@@ -106,10 +110,10 @@ class XRefCache:
             return
         # treat this as setting idnum, next_generation-1 to null
         prev_generation = (next_generation - 1) if next_generation else 0xffff
-        self.standard_xrefs[(prev_generation, idnum)] = None
-        self._current_section_ids.add(
-            generic.Reference(idnum, prev_generation)
-        )
+        self.standard_xrefs[(prev_generation, idnum)] = generic.NullObject()
+        null_ref = generic.Reference(idnum, prev_generation)
+        self._current_section_freed.add(null_ref)
+        self._current_section_ids.add(null_ref)
         try:
             # check for sneaky reuse: does prev_generation (or any lower one)
             # still occur later in the file?
@@ -209,6 +213,19 @@ class XRefCache:
         """
         rbs = self._refs_by_section
         return rbs[self.xref_sections - 1 - revision]
+
+    def refs_freed_in_revision(self, revision) -> Set[generic.Reference]:
+        """
+        Look up the object refs for all objects explicitly freed
+        in a given revision.
+
+        :param revision:
+            A revision number. The oldest revision is zero.
+        :return:
+            A set of Reference objects.
+        """
+        fbs = self._freed_by_section
+        return fbs[self.xref_sections - 1 - revision]
 
     def get_startxref_for_revision(self, revision):
         """
@@ -1104,6 +1121,9 @@ class HistoricalResolver(PdfHandler):
 
     def explicit_refs_in_revision(self):
         return self.reader.xrefs.explicit_refs_in_revision(self.revision)
+
+    def refs_freed_in_revision(self):
+        return self.reader.xrefs.refs_freed_in_revision(self.revision)
 
     def object_streams_used(self):
         return self.reader.xrefs.object_streams_used_in(self.revision)

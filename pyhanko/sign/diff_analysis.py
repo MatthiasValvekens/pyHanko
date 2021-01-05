@@ -1603,16 +1603,40 @@ class StandardDiffPolicy(DiffPolicy):
     :param form_rule:
         The :class:`.FormUpdatingRule` that adjudicates changes to form fields
         and their values.
+    :param reject_object_freeing:
+        Always fail revisions that free objects that existed prior to signing.
+
+        .. note::
+            PyHanko resolves freed references to the ``null`` object in PDF,
+            and a freeing instruction in a cross-reference section is
+            always registered as a change that needs to be approved, regardless
+            of the value of this setting.
+
+            It is theoretically possible for a rule to permit deleting content,
+            in which case allowing objects to be freed might be reasonable.
+            That said, pyHanko takes the conservative default position to reject
+            all object freeing instructions as suspect.
     """
 
     def __init__(self, global_rules: List[QualifiedWhitelistRule],
-                 form_rule: Optional[FormUpdatingRule]):
+                 form_rule: Optional[FormUpdatingRule],
+                 reject_object_freeing=True):
         self.global_rules = global_rules
         self.form_rule = form_rule
+        self.reject_object_freeing = reject_object_freeing
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver,
               field_mdp_spec: Optional[FieldMDPSpec] = None,
               doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
+
+        if self.reject_object_freeing:
+            freed = new.refs_freed_in_revision()
+            if freed:
+                raise SuspiciousModification(
+                    f"The refs {freed} were freed in the revision provided. "
+                    "The configured difference analysis policy does not allow "
+                    "object freeing."
+                )
         # we need to verify that there are no xrefs in the revision's xref table
         # other than the ones we can justify.
         new_xrefs = new.explicit_refs_in_revision()

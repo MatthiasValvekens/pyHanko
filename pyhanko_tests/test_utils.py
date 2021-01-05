@@ -463,7 +463,8 @@ def test_object_free():
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
     assert r.xrefs.xref_sections == 3
-    assert r.xrefs[generic.Reference(1, 0)] is None
+    assert r.xrefs[generic.Reference(1, 0)] == generic.NullObject()
+    assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
     assert r.xrefs[generic.Reference(1, 1)] == 300
 
 
@@ -486,8 +487,10 @@ def test_object_free_no_override():
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
     assert r.xrefs.xref_sections == 4
-    assert r.xrefs[generic.Reference(1, 0)] is None
-    assert r.xrefs[generic.Reference(1, 1)] is None
+    assert r.xrefs[generic.Reference(1, 0)] == generic.NullObject()
+    assert r.xrefs[generic.Reference(1, 1)] == generic.NullObject()
+    assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
+    assert generic.Reference(1, 1) in r.xrefs.refs_freed_in_revision(3)
 
 
 def test_increase_gen_without_free():
