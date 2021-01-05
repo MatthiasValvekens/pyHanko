@@ -46,12 +46,12 @@ from enum import unique
 from io import BytesIO
 from typing import (
     Iterable, Optional, Set, Tuple, Generator, TypeVar, Dict,
-    List, Callable,
+    List, Callable, Union,
 )
 
 from pyhanko.pdf_utils.generic import Reference, PdfObject
 from pyhanko.pdf_utils.misc import OrderedEnum
-from pyhanko.pdf_utils.reader import HistoricalResolver
+from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
@@ -1545,6 +1545,51 @@ class DiffPolicy:
     def apply(self, old: HistoricalResolver, new: HistoricalResolver,
               field_mdp_spec: Optional[FieldMDPSpec] = None,
               doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
+        """
+        Execute the policy on a pair of revisions, with the MDP values provided.
+        :class:`.SuspiciousModification` exceptions should be propagated.
+
+        :param old:
+            The older, base revision.
+        :param new:
+            The newer revision.
+        :param field_mdp_spec:
+            The field MDP spec that's currently active.
+        :param doc_mdp:
+            The DocMDP spec that's currently active.
+        :return:
+            A :class:`.DiffResult` object summarising the policy's judgment.
+        """
+        raise NotImplementedError
+
+    def review_file(self, reader: PdfFileReader,
+                    base_revision: Union[int, HistoricalResolver],
+                    field_mdp_spec: Optional[FieldMDPSpec] = None,
+                    doc_mdp: Optional[MDPPerm] = None) \
+            -> Union[DiffResult, SuspiciousModification]:
+        """
+        Compare the current state of a file to an earlier version,
+        with the MDP values provided.
+        :class:`.SuspiciousModification` exceptions should be propagated.
+
+        If there are multiple revisions between the base revision and the
+        current one, the precise manner in which the review is conducted
+        is left up to the implementing class. In particular,
+        subclasses may choose to review each intermediate revision individually,
+        or handle them all at once.
+
+        :param reader:
+            PDF reader representing the current state of the file.
+        :param base_revision:
+            The older, base revision. You can choose between providing it as a
+            revision index, or a :class:`.HistoricalResolver` instance.
+        :param field_mdp_spec:
+            The field MDP spec that's currently active.
+        :param doc_mdp:
+            The DocMDP spec that's currently active.
+        :return:
+            A :class:`.DiffResult` object summarising the policy's judgment.
+        """
         raise NotImplementedError
 
 
@@ -1568,21 +1613,6 @@ class StandardDiffPolicy(DiffPolicy):
     def apply(self, old: HistoricalResolver, new: HistoricalResolver,
               field_mdp_spec: Optional[FieldMDPSpec] = None,
               doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
-        """
-        Execute the policy on a pair of revisions, with the MDP values provided.
-        :class:`.SuspiciousModification` exceptions should be propagated.
-
-        :param old:
-            The older, base revision.
-        :param new:
-            The newer revision.
-        :param field_mdp_spec:
-            The field MDP spec that's currently active.
-        :param doc_mdp:
-            The DocMDP spec that's currently active.
-        :return:
-            A :class:`.DiffResult` object summarising the policy's judgment.
-        """
         # we need to verify that there are no xrefs in the revision's xref table
         # other than the ones we can justify.
         new_xrefs = new.explicit_refs_in_revision()
@@ -1644,6 +1674,61 @@ class StandardDiffPolicy(DiffPolicy):
         return DiffResult(
             modification_level=level, changed_form_fields=changed_form_fields
         )
+
+    def review_file(self, reader: PdfFileReader,
+                    base_revision: Union[int, HistoricalResolver],
+                    field_mdp_spec: Optional[FieldMDPSpec] = None,
+                    doc_mdp: Optional[MDPPerm] = None) \
+            -> Union[DiffResult, SuspiciousModification]:
+        """
+        Implementation of :meth:`.DiffPolicy.review_file` that reviews
+        each intermediate revision between the base revision and the current one
+        individually.
+        """
+
+        changed_form_fields = set()
+
+        rev_count = reader.xrefs.xref_sections
+        current_max = ModificationLevel.NONE
+        if isinstance(base_revision, int):
+            base_rev_resolver = reader.get_historical_resolver(
+                base_revision
+            )
+        else:
+            base_rev_resolver = base_revision
+            base_revision = base_rev_resolver.revision
+
+        # Note: there's a pragmatic reason why we iterate over all revisions
+        # instead of just asking for all updated objects between the signed
+        # revision and the most recent one:
+        #
+        # The effect of intermediate updates may not be detectable anymore in
+        # the most recent version, so if we'd consolidate all checks into one,
+        # we would have no way to tell whether or not the objects created
+        # (and later forgotten) by these intermediate revisions actually
+        # constituted legitimate changes.
+        # (see the test_pades_revinfo tests for examples where this applies)
+        #
+        # Until we have a reference counter (which comes with its own
+        # performance problems that may or may not be worse), I don't really
+        # see a good way around this issue other than diffing every intermediate
+        # version separately.
+        for revision in range(base_revision + 1, rev_count):
+            try:
+                diff_result = self.apply(
+                    old=base_rev_resolver,
+                    new=reader.get_historical_resolver(revision),
+                    field_mdp_spec=field_mdp_spec, doc_mdp=doc_mdp
+                )
+            except SuspiciousModification as e:
+                logger.warning(
+                    'Error in diff operation between revision '
+                    f'{base_revision} and {revision}', exc_info=e
+                )
+                return e
+            current_max = max(current_max, diff_result.modification_level)
+            changed_form_fields |= diff_result.changed_form_fields
+        return DiffResult(current_max, changed_form_fields)
 
 
 """
