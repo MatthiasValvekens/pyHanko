@@ -472,6 +472,16 @@ class TrailerDictionary(generic.PdfObject):
     def __setitem__(self, item, value):
         self._new_changes[item] = value
 
+    def __delitem__(self, item):
+        try:
+            # deleting stuff from _new_changes should be OK.
+            del self._new_changes[item]
+        except KeyError:
+            raise misc.PdfError(
+                "Cannot remove existing entries from trailer dictionary, only "
+                "update them."
+            )
+
     def flatten(self, revision=None) -> generic.DictionaryObject:
         relevant_revisions = self._trailer_revisions
         if revision is not None:

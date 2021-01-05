@@ -302,16 +302,19 @@ class BasePdfFileWriter(PdfHandler):
         self._encrypt = self._encrypt_key = None
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs
-        self._info = None
-        if info is not None:
-            self.set_info(info)
-
-    def set_info(self,
-                 info: Union[generic.IndirectObject, generic.DictionaryObject]):
-        if isinstance(info, generic.IndirectObject):
-            self._info = info
+        if info is not None and \
+                not isinstance(info, generic.IndirectObject):
+            self._info = self.add_object(info)
         else:
+            self._info = info
+
+    def set_info(self, info: Optional[Union[generic.IndirectObject,
+                                      generic.DictionaryObject]]):
+        if info is not None and \
+                not isinstance(info, generic.IndirectObject):
             self._info = info = self.add_object(info)
+        else:
+            self._info = info
         return info
 
     def mark_update(self, obj_ref: Union[generic.Reference,

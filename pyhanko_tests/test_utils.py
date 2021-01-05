@@ -660,3 +660,9 @@ def test_date_parsing(date_str, expected_dt):
 def test_date_parsing_errors(date_str):
     with pytest.raises(misc.PdfReadError):
         generic.parse_pdf_date(date_str)
+
+
+def test_info_delete():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    with pytest.raises(misc.PdfError):
+        w.set_info(None)

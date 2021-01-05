@@ -3,7 +3,7 @@ Utility for writing incremental updates to existing PDF files.
 """
 
 import os
-from typing import Union
+from typing import Union, Optional
 
 from . import generic
 from .misc import PdfReadError
@@ -46,6 +46,8 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             root_ref, info_ref, document_id, obj_id_start=trailer['/Size'],
             stream_xrefs=prev.has_xref_stream
         )
+        if self._info is not None:
+            self.trailer['/Info'] = self._info
         self._resolves_objs_from = (self, prev)
         if self.prev.input_version < self.output_version:
             root = root_ref.get_object()
@@ -123,11 +125,15 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         stream.write(self.input_stream.read())
         self.input_stream.seek(input_pos)
 
-    def set_info(self,
-                 info: Union[generic.IndirectObject, generic.DictionaryObject]):
+    def set_info(self, info: Optional[Union[generic.IndirectObject,
+                                      generic.DictionaryObject]]):
         info = super().set_info(info)
-        # also update our trailer
-        self.trailer['/Info'] = info
+        if info is not None:
+            # also update our trailer
+            self.trailer['/Info'] = info
+        else:
+            del self.trailer['/Info']
+        return info
 
     def _populate_trailer(self, trailer):
         trailer.update(self.trailer.flatten())
