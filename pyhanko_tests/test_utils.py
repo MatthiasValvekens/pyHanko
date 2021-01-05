@@ -6,7 +6,6 @@ from io import BytesIO
 
 import pytz
 
-import pyhanko.pdf_utils.content
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
@@ -14,6 +13,9 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils import writer, generic, misc
 from fontTools import ttLib
 from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
+from pyhanko.pdf_utils.content import (
+    ResourceType, PdfResources, ResourceManagementError
+)
 
 from .samples import *
 
@@ -587,12 +589,12 @@ def test_free_unexpected_jump():
 
 
 def test_resource_add_test():
-    res1 = pyhanko.pdf_utils.content.PdfResources()
-    res2 = pyhanko.pdf_utils.content.PdfResources()
-    res1[pyhanko.pdf_utils.content.ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
-    res1[pyhanko.pdf_utils.content.ResourceType.PATTERN][pdf_name('/Blih')] = generic.NullObject()
-    res2[pyhanko.pdf_utils.content.ResourceType.XOBJECT][pdf_name('/Blah')] = generic.NullObject()
-    res2[pyhanko.pdf_utils.content.ResourceType.FONT][pdf_name('/Bluh')] = generic.NullObject()
+    res1 = PdfResources()
+    res2 = PdfResources()
+    res1[ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
+    res1[ResourceType.PATTERN][pdf_name('/Blih')] = generic.NullObject()
+    res2[ResourceType.XOBJECT][pdf_name('/Blah')] = generic.NullObject()
+    res2[ResourceType.FONT][pdf_name('/Bluh')] = generic.NullObject()
 
     res1 += res2
     res1_dict = res1.as_pdf_object()
@@ -605,14 +607,14 @@ def test_resource_add_test():
 
 
 def test_duplicate_resource():
-    res1 = pyhanko.pdf_utils.content.PdfResources()
-    res2 = pyhanko.pdf_utils.content.PdfResources()
-    res1[pyhanko.pdf_utils.content.ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
-    res1[pyhanko.pdf_utils.content.ResourceType.PATTERN][pdf_name('/Blih')] = generic.NullObject()
-    res2[pyhanko.pdf_utils.content.ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
-    res2[pyhanko.pdf_utils.content.ResourceType.FONT][pdf_name('/Bluh')] = generic.NullObject()
+    res1 = PdfResources()
+    res2 = PdfResources()
+    res1[ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
+    res1[ResourceType.PATTERN][pdf_name('/Blih')] = generic.NullObject()
+    res2[ResourceType.XOBJECT][pdf_name('/Bleh')] = generic.NullObject()
+    res2[ResourceType.FONT][pdf_name('/Bluh')] = generic.NullObject()
 
-    with pytest.raises(pyhanko.pdf_utils.content.ResourceManagementError):
+    with pytest.raises(ResourceManagementError):
         res1 += res2
 
 
