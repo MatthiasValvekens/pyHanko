@@ -1153,7 +1153,8 @@ class XrefStreamRule(WhitelistRule):
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
             -> Iterable[Reference]:
         xref_start, _ = new.reader.xrefs.get_xref_container_info(new.revision)
-        if isinstance(xref_start, generic.Reference):
+        if isinstance(xref_start, generic.Reference) \
+                and old.is_ref_available(xref_start):
             yield xref_start
 
 
