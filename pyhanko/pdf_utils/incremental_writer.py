@@ -160,6 +160,18 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             return
         super().write(stream)
 
+    def write_updated_section(self, stream):
+        """
+        Only write the updated and new objects to the designated output stream.
+
+        The new PDF file can then be put together by concatenating the original
+        input with the generated output.
+
+        :param stream:
+            Output stream to write to.
+        """
+        self._write(stream, skip_header=True)
+
     def write_in_place(self):
         """
         Write the updated file contents in-place to the same stream as
@@ -167,9 +179,10 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         This obviously requires a stream supporting both reading and writing
         operations.
         """
+
         stream = self.prev.stream
         stream.seek(0, os.SEEK_END)
-        self._write(stream, skip_header=True)
+        self.write_updated_section(stream)
 
     def encrypt(self, user_pwd):
         """Method to handle updates to RC4-encrypted files.

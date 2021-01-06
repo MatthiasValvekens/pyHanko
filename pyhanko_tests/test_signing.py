@@ -20,7 +20,6 @@ from oscrypto import keys as oskeys
 from pyhanko import stamp
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font import pdf_name
-from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.misc import PdfWriteError
@@ -1666,7 +1665,7 @@ def test_adobe_revinfo_live_nofullchain():
 
 def test_pades_revinfo_live_lta(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    _test_pades_revinfo_live_lta(w, requests_mock, in_place=False)
+    _test_pades_revinfo_live_lta(w, requests_mock)
 
 
 def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
@@ -1678,7 +1677,19 @@ def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
         _test_pades_revinfo_live_lta(w, requests_mock, in_place=True)
 
 
-def _test_pades_revinfo_live_lta(w, requests_mock, in_place):
+def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
+    from pathlib import Path
+    in_file: Path = tmp_path / "test.pdf"
+    in_file.write_bytes(MINIMAL_ONE_FIELD)
+    out_file: Path = tmp_path / "test-out.pdf"
+    with in_file.open('rb') as inf:
+        out_file.touch()
+        with out_file.open('r+b') as out:
+            w = IncrementalPdfFileWriter(inf)
+            _test_pades_revinfo_live_lta(w, requests_mock, output=out)
+
+
+def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
     with freeze_time('2020-11-01'):
         vc = live_testing_vc(requests_mock)
         out = signers.sign_pdf(
@@ -1686,7 +1697,7 @@ def _test_pades_revinfo_live_lta(w, requests_mock, in_place):
                 field_name='Sig1', validation_context=vc,
                 subfilter=PADES, embed_validation_info=True,
                 use_pades_lta=True
-            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=in_place
+            ), signer=FROM_CA, timestamper=DUMMY_TS, **kwargs
         )
         r = PdfFileReader(out)
         dss = DocumentSecurityStore.read_dss(handler=r)

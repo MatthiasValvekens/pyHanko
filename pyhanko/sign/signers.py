@@ -15,7 +15,7 @@ from certvalidator.errors import PathValidationError
 from certvalidator import ValidationContext, CertificateValidator
 from oscrypto import asymmetric, keys as oskeys
 
-from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
@@ -75,6 +75,7 @@ class SigByteRangeObject(generic.PdfObject):
         self.write_to_stream(stream, None)
 
         stream.seek(old_seek)
+        self._filled = True
 
     def write_to_stream(self, stream, encryption_key):
         if self._range_object_offset is None:
@@ -138,14 +139,14 @@ class PdfSignedData(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
     def write_signature(self, writer: IncrementalPdfFileWriter, md_algorithm,
-                        in_place=False):
+                        in_place=False, output=None, chunk_size=4096):
         if in_place:
             output = writer.prev.stream
             writer.write_in_place()
         else:
             # Render the PDF to a byte buffer with placeholder values
             # for the signature data
-            output = BytesIO()
+            output = BytesIO() if output is None else output
             writer.write(output)
 
         # retcon time: write the proper values of the /ByteRange entry
@@ -156,18 +157,28 @@ class PdfSignedData(generic.DictionaryObject):
 
         # compute the digests
         md = getattr(hashlib, md_algorithm)()
+
+        # attempt to get a memoryview for automatic buffering
+        output_buffer = None
         if isinstance(output, BytesIO):
             output_buffer = output.getbuffer()
+        else:
+            try:
+                output_buffer = memoryview(output)
+            except (TypeError, IOError):
+                pass
+
+        if output_buffer is not None:
             # these are memoryviews, so slices should not copy stuff around
             md.update(output_buffer[:sig_start])
             md.update(output_buffer[sig_end:eof])
             output_buffer.release()
         else:
-            # TODO chunk these reads
+            temp_buffer = bytearray(chunk_size)
             output.seek(0)
-            md.update(output.read(sig_start))
+            misc.chunked_digest(temp_buffer, output, md, max_read=sig_start)
             output.seek(sig_end)
-            md.update(output.read())
+            misc.chunked_digest(temp_buffer, output, md, max_read=eof-sig_end)
 
         digest_value = md.digest()
         signature_cms = yield digest_value
@@ -178,7 +189,12 @@ class PdfSignedData(generic.DictionaryObject):
         # might as well compute this
         bytes_reserved = sig_end - sig_start - 2
         length = len(signature)
-        assert length <= bytes_reserved, (length, bytes_reserved)
+        if length > bytes_reserved:
+            raise SigningError(
+                f"Final signature buffer larger than expected: "
+                f"allocated {bytes_reserved} bytes, but signature required"
+                f"{length} bytes long."
+            )  # pragma: nocover
 
         # +1 to skip the '<'
         output.seek(sig_start + 1)
@@ -882,7 +898,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              timestamper: TimeStamper = None,
              new_field_spec: Optional[SigFieldSpec] = None,
-             existing_fields_only=False, bytes_reserved=None, in_place=False):
+             existing_fields_only=False, bytes_reserved=None, in_place=False,
+             output=None):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.sign_pdf`.
 
@@ -911,6 +928,13 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
         to specify the field's properties in the form of a
         :class:`.SigFieldSpec`. This parameter is only meaningful if
         ``existing_fields_only`` is ``False``.
+    :param output:
+        Write the output to the specified output stream.
+        If ``None``, write to a new :class:`.BytesIO` object.
+        Default is ``None``.
+
+        .. warning::
+            The output stream must also support reading and seeking.
     :return:
         The output stream containing the signed output.
     """
@@ -927,7 +951,7 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
     )
     return signer.sign_pdf(
         pdf_out, existing_fields_only=existing_fields_only,
-        bytes_reserved=bytes_reserved, in_place=in_place
+        bytes_reserved=bytes_reserved, in_place=in_place, output=output
     )
 
 
@@ -1022,8 +1046,10 @@ class PdfTimeStamper:
 
     def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
                       md_algorithm, validation_context, bytes_reserved=None,
-                      validation_paths=None, in_place=False,
-                      timestamper: Optional[TimeStamper] = None):
+                      validation_paths=None,
+                      timestamper: Optional[TimeStamper] = None, *,
+                      in_place=False, output=None, chunk_size=4096):
+
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
@@ -1042,12 +1068,23 @@ class PdfTimeStamper:
             If the validation path(s) for the TSA's certificate are already
             known, you can pass them using this parameter to avoid having to
             run the validation logic again.
-        :param in_place:
-            Sign the input in-place. If ``False``, write output to a
-            :class:`.BytesIO` object.
         :param timestamper:
             Override the default :class:`.TimeStamper` associated with this
             :class:`.PdfTimeStamper`.
+        :param output:
+            Write the output to the specified output stream.
+            If ``None``, write to a new :class:`.BytesIO` object.
+            Default is ``None``.
+
+            .. warning::
+                The output stream must also support reading and seeking.
+        :param in_place:
+            Sign the original input stream in-place.
+            This parameter overrides ``output``.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``. Default is 4096.
         :return:
             The output stream containing the signed output.
         """
@@ -1081,7 +1118,8 @@ class PdfTimeStamper:
             pdf_out.mark_update(timestamp_obj_ref)
 
         wr = timestamp_obj.write_signature(
-            pdf_out, md_algorithm, in_place=in_place
+            pdf_out, md_algorithm, in_place=in_place,
+            output=output, chunk_size=chunk_size
         )
         true_digest = next(wr)
         timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
@@ -1446,8 +1484,9 @@ class PdfSigner(PdfTimeStamper):
         return sv_spec
 
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                 existing_fields_only=False, bytes_reserved=None,
-                 in_place=False, appearance_text_params=None):
+                 existing_fields_only=False, bytes_reserved=None, *,
+                 appearance_text_params=None, in_place=False,
+                 output=None, chunk_size=4096):
         """
         Sign a PDF file using the provided output writer.
 
@@ -1461,12 +1500,23 @@ class PdfSigner(PdfTimeStamper):
         :param bytes_reserved:
             Bytes to reserve for the CMS object in the PDF file.
             If not specified, make an estimate based on a dummy signature.
-        :param in_place:
-            Sign the input in-place. If ``False``, write output to a
-            :class:`.BytesIO` object.
         :param appearance_text_params:
             Dictionary with text parameters that will be passed to the
             signature appearance constructor (if applicable).
+        :param output:
+            Write the output to the specified output stream.
+            If ``None``, write to a new :class:`.BytesIO` object.
+            Default is ``None``.
+
+            .. warning::
+                The output stream must also support reading and seeking.
+        :param in_place:
+            Sign the original input stream in-place.
+            This parameter overrides ``output``.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``. Default is 4096.
         :return:
             The output stream containing the signed data.
         """
@@ -1619,7 +1669,10 @@ class PdfSigner(PdfTimeStamper):
 
         self._apply_locking_rules(sig_field, sig_obj_ref, md_algorithm, pdf_out)
 
-        wr = sig_obj.write_signature(pdf_out, md_algorithm, in_place=in_place)
+        wr = sig_obj.write_signature(
+            pdf_out, md_algorithm, in_place=in_place,
+            output=output, chunk_size=chunk_size
+        )
         true_digest = next(wr)
 
         signature_cms = signer.sign(
@@ -1642,7 +1695,7 @@ class PdfSigner(PdfTimeStamper):
                 self.timestamp_pdf(
                     w, md_algorithm, validation_context,
                     validation_paths=ts_validation_paths, in_place=True,
-                    timestamper=timestamper
+                    timestamper=timestamper, chunk_size=chunk_size
                 )
 
         return output

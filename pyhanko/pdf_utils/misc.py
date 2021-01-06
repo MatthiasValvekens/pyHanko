@@ -222,3 +222,25 @@ def map_with_return(gen: Generator[X, None, R], func: Callable[[X], Y])\
 # type checker trick
 def _as_gen(x: Iterable[X]) -> Generator[X, None, None]:
     yield from x
+
+
+def chunked_digest(temp_buffer: bytearray, stream, md, max_read=None):
+    total_read = 0
+    while max_read is None or total_read < max_read:
+        # clamp the input buffer if necessary
+        read_buffer = temp_buffer
+        if max_read is not None:
+            to_read = max_read - total_read
+            if to_read < len(temp_buffer):
+                read_buffer = memoryview(temp_buffer)[:to_read]
+        bytes_read = stream.readinto(read_buffer)
+        total_read += bytes_read
+        if not bytes_read:
+            return
+
+        # clamp the output as well, if necessary
+        if bytes_read < len(read_buffer):
+            to_feed = memoryview(read_buffer)[:bytes_read]
+        else:
+            to_feed = read_buffer
+        md.update(to_feed)
