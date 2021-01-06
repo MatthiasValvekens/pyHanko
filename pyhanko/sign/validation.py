@@ -61,7 +61,13 @@ class SignatureValidationError(ValueError):
 
 class SigSeedValueValidationError(SignatureValidationError):
     """Error validating a signature's seed value constraints."""
-    pass
+
+    # TODO perhaps we can encode some more metadata here, such as the
+    #  seed value that tripped the failure.
+
+    def __init__(self, failure_message):
+        self.failure_message = failure_message
+        super().__init__(failure_message)
 
 
 def partition_certs(certs, signer_info):
@@ -289,19 +295,6 @@ class PdfSignatureStatus(SignatureStatus):
       by the difference policy will be stored in this attribute.
     """
 
-    seed_value_ok: bool
-    """
-    Indicates whether the signature satisfies all mandatory constraints in the
-    seed value dictionary of the associated form field.
-    
-    .. warning::
-        Currently, not all seed value entries are recognised by the signer
-        and/or the validator, so this judgment may not be entirely accurate in
-        some cases.
-        
-        See :class:`~.pyhanko.sign.fields.SigSeedValueSpec`.
-    """
-
     docmdp_ok: Optional[bool]
     """
     Indicates whether the signature's :attr:`modification_level` is in line with
@@ -321,6 +314,12 @@ class PdfSignatureStatus(SignatureStatus):
     """
     Validation status of the timestamp token embedded in this signature, 
     if present.
+    """
+
+    seed_value_constraint_error: Optional[SigSeedValueValidationError] = None
+    """
+    Records the reason for failure if the signature field's seed value
+    constraints didn't validate.
     """
 
     @property
@@ -365,6 +364,22 @@ class PdfSignatureStatus(SignatureStatus):
             self.valid and self.trusted and self.seed_value_ok
             and self.docmdp_ok and timestamp_ok
         )
+
+    @property
+    def seed_value_ok(self) -> bool:
+        """
+        Indicates whether the signature satisfies all mandatory constraints in
+        the seed value dictionary of the associated form field.
+
+        .. warning::
+            Currently, not all seed value entries are recognised by the signer
+            and/or the validator, so this judgment may not be entirely accurate
+            in some cases.
+
+            See :class:`~.pyhanko.sign.fields.SigSeedValueSpec`.
+        """
+
+        return self.seed_value_constraint_error is None
 
     def summary_fields(self):
         yield from super().summary_fields()
@@ -471,15 +486,19 @@ class PdfSignatureStatus(SignatureStatus):
             f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
         )
 
+        if self.seed_value_ok:
+            sv_info = "There were no SV issues detected for this signature."
+        else:
+            sv_info = (
+                "The signature did not satisfy the SV constraints on "
+                "the signature field.\nError message: "
+                + self.seed_value_constraint_error.failure_message
+            )
+
         sections = [
             ("Signer info", about_signer), ("Integrity", validity_info),
             ("Signing time", timing_info),
-            (
-                "Seed value constraints", (
-                    f"There were {'no' if self.seed_value_ok else 'some'} "
-                    f"SV issues detected for this signature."
-                )
-            ),
+            ("Seed value constraints", sv_info),
             ("Bottom line", bottom_line)
         ]
         return '\n'.join(
@@ -1021,6 +1040,20 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
             )
 
 
+def _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found):
+    try:
+        _validate_sv_constraints(
+            embedded_sig, status_kwargs['signing_cert'],
+            status_kwargs['validation_path'], timestamp_found=timestamp_found
+        )
+        status_kwargs['seed_value_constraint_error'] = None
+    except SigSeedValueValidationError as e:
+        logger.warning(
+            "Error in seed value validation.", exc_info=e
+        )
+        status_kwargs['seed_value_constraint_error'] = e
+
+
 def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None,
@@ -1094,16 +1127,8 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         tst_validity is not None
         and tst_validity.valid and tst_validity.trusted
     )
-    try:
-        _validate_sv_constraints(
-            embedded_sig, status_kwargs['signing_cert'],
-            status_kwargs['validation_path'], timestamp_found
-        )
-        seed_value_ok = True
-    except SigSeedValueValidationError as e:
-        logger.warning(e)
-        seed_value_ok = False
-    return PdfSignatureStatus(seed_value_ok=seed_value_ok, **status_kwargs)
+    _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found)
+    return PdfSignatureStatus(**status_kwargs)
 
 
 class RevocationInfoValidationType(Enum):
@@ -1355,16 +1380,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         validation_context=stored_vc, status_kwargs=status_kwargs
     )
 
-    try:
-        _validate_sv_constraints(
-            embedded_sig, status_kwargs['signing_cert'],
-            status_kwargs['validation_path'], timestamp_found=True
-        )
-        seed_value_ok = True
-    except SigSeedValueValidationError as e:
-        logger.warning(e)
-        seed_value_ok = False
-    return PdfSignatureStatus(seed_value_ok=seed_value_ok, **status_kwargs)
+    _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found=True)
+
+    return PdfSignatureStatus(**status_kwargs)
 
 
 def retrieve_adobe_revocation_info(signer_info: cms.SignerInfo):
