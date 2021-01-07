@@ -974,14 +974,34 @@ def test_append_visible_sig_field():
 
 
 def test_sv_deserialisation():
-    sv = fields.SigSeedValueSpec.from_pdf_object(
-        generic.DictionaryObject(
-            {'/SubFilter': ['/foo', '/adbe.pkcs7.detached', '/bleh']}
-        )
-    )
+    sv_input = generic.DictionaryObject({
+        pdf_name('/SubFilter'): generic.ArrayObject(
+            map(pdf_name, ['/foo', '/adbe.pkcs7.detached', '/bleh'])
+        ),
+        pdf_name('/LegalAttestation'): generic.ArrayObject(
+            ['xyz', 'abc', 'def']
+        ),
+        pdf_name('/AppearanceFilter'): generic.pdf_string('blah'),
+        pdf_name('/LockDocument'): generic.pdf_name('/true')
+    })
+    sv = fields.SigSeedValueSpec.from_pdf_object(sv_input)
     assert len(sv.subfilters) == 1
+    assert len(sv.legal_attestations) == 3
+    assert sv.lock_document == fields.SeedLockDocument.LOCK
+    sv_output = sv.as_pdf_object()
+    assert sv_output['/AppearanceFilter'] == sv_input['/AppearanceFilter']
+    assert sv_output['/LockDocument'] == sv_input['/LockDocument']
+    assert sv_output['/LegalAttestation'] == sv_input['/LegalAttestation']
+
+    with pytest.raises(SigningError):
+        fields.SigSeedValueSpec.from_pdf_object(generic.DictionaryObject({
+            pdf_name('/LockDocument'): generic.pdf_name('/nonsense')
+        }))
+        fields.SigSeedValueSpec.from_pdf_object(generic.DictionaryObject({
+            pdf_name('/LockDocument'): generic.BooleanObject(True)
+        }))
     bad_filter = generic.DictionaryObject(
-        {'/Filter': pdf_name('/unsupported')}
+        {pdf_name('/Filter'): pdf_name('/unsupported')}
     )
     # this should run
     fields.SigSeedValueSpec.from_pdf_object(bad_filter)
@@ -990,19 +1010,90 @@ def test_sv_deserialisation():
             generic.NumberObject(fields.SigSeedValFlags.FILTER.value)
         fields.SigSeedValueSpec.from_pdf_object(bad_filter)
 
-    fields.SigSeedValueSpec.from_pdf_object(
-        generic.DictionaryObject(
-            {'/Ff': fields.SigSeedValFlags.V, '/V': generic.NumberObject(1)}
-        )
-    )
+
+def test_sv_version():
     fields.SigSeedValueSpec.from_pdf_object(
         generic.DictionaryObject({'/Ff': fields.SigSeedValFlags.V})
     )
+    fields.SigSeedValueSpec.from_pdf_object(
+        fields.SigSeedValueSpec(
+            flags=fields.SigSeedValFlags.V,
+            sv_dict_version=fields.SeedValueDictVersion.PDF_2_0
+        ).as_pdf_object()
+    )
     with pytest.raises(SigningError):
         fields.SigSeedValueSpec.from_pdf_object(
-            generic.DictionaryObject(
-                {'/Ff': fields.SigSeedValFlags.V, '/V': generic.NumberObject(2)}
-            )
+            fields.SigSeedValueSpec(
+                flags=fields.SigSeedValFlags.V,
+                sv_dict_version=4
+            ).as_pdf_object()
+        )
+
+
+def test_sv_mdp_type():
+    sv_dict = fields.SigSeedValueSpec().as_pdf_object()
+    assert '/MDP' not in sv_dict
+    sv_dict = fields.SigSeedValueSpec(
+        seed_signature_type=fields.SeedSignatureType(None)
+    ).as_pdf_object()
+    assert sv_dict['/MDP'] == generic.DictionaryObject(
+        {pdf_name('/P'): generic.NumberObject(0)}
+    )
+    sv_dict = fields.SigSeedValueSpec(
+        seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.NO_CHANGES)
+    ).as_pdf_object()
+    assert sv_dict['/MDP'] == generic.DictionaryObject(
+        {pdf_name('/P'): generic.NumberObject(1)}
+    )
+
+    sv_spec = fields.SigSeedValueSpec.from_pdf_object(
+        generic.DictionaryObject({
+            pdf_name('/MDP'): generic.DictionaryObject({
+                pdf_name('/P'): generic.NumberObject(0)
+            })
+        })
+    )
+    assert sv_spec.seed_signature_type == fields.SeedSignatureType(None)
+
+    sv_spec = fields.SigSeedValueSpec.from_pdf_object(
+        generic.DictionaryObject({
+            pdf_name('/MDP'): generic.DictionaryObject({
+                pdf_name('/P'): generic.NumberObject(2)
+            })
+        })
+    )
+    assert sv_spec.seed_signature_type == fields.SeedSignatureType(
+        fields.MDPPerm.FILL_FORMS
+    )
+
+
+    with pytest.raises(SigningError):
+        fields.SigSeedValueSpec.from_pdf_object(
+            generic.DictionaryObject({
+                pdf_name('/MDP'): generic.DictionaryObject({
+                    pdf_name('/P'): generic.NumberObject(5)
+                })
+            })
+        )
+    with pytest.raises(SigningError):
+        fields.SigSeedValueSpec.from_pdf_object(
+            generic.DictionaryObject({
+                pdf_name('/MDP'): generic.DictionaryObject({
+                    pdf_name('/P'): generic.NullObject()
+                })
+            })
+        )
+    with pytest.raises(SigningError):
+        fields.SigSeedValueSpec.from_pdf_object(
+            generic.DictionaryObject({
+                pdf_name('/MDP'): generic.DictionaryObject()
+            })
+        )
+    with pytest.raises(SigningError):
+        fields.SigSeedValueSpec.from_pdf_object(
+            generic.DictionaryObject({
+                pdf_name('/MDP'): generic.NullObject()
+            })
         )
 
 
@@ -1029,6 +1120,8 @@ def test_append_sig_field_with_simple_sv():
     r = PdfFileReader(out)
     _, _, sig_field_ref = next(fields.enumerate_sig_fields(r))
     sv_dict = sig_field_ref.get_object()['/SV']
+    assert sv_dict['/V'] == generic.NumberObject(2)
+    del sv_dict['/V']
     recovered_sv = fields.SigSeedValueSpec.from_pdf_object(sv_dict)
     # x509.Certificate doesn't have an __eq__ implementation apparently,
     # so for the purposes of the test, we replace them by byte dumps

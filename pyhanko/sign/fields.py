@@ -5,7 +5,7 @@ Utilities to deal with signature form fields and their properties in PDF files.
 import logging
 from dataclasses import dataclass
 from enum import Flag, Enum, unique
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from asn1crypto import x509
 from certvalidator.path import ValidationPath
@@ -31,6 +31,61 @@ logger = logging.getLogger(__name__)
 
 # TODO support other seed value dict entries
 # TODO add more customisability appearance-wise
+
+
+class MDPPerm(OrderedEnum):
+    """
+    Indicates a ``/DocMDP`` level.
+
+    Cf. Table 254  in ISO 32000-1.
+    """
+
+    NO_CHANGES = 1
+    """
+    No changes to the document are allowed.
+
+    .. warning::
+        This does not apply to DSS updates and the addition of document time
+        stamps.
+    """
+    FILL_FORMS = 2
+    """
+    Form filling & signing is allowed.
+    """
+
+    ANNOTATE = 3
+    """
+    Form filling, signing and commenting are allowed.
+
+    .. warning::
+        Validating this ``/DocMDP`` level is not currently supported,
+        but included in the list for completeness.
+    """
+
+
+class SeedSignatureType:
+    """
+    Signature type indicator to be embedded into the seed value dictionary
+    attached to a signature field.
+
+    :param mdp_perm:
+        If not ``None``, indicates that the signature field is intended for
+        a certification signature. The :class:`MDPPerm` value passed as the
+        ``mdp_perm`` parameter indicates the modification policy that the
+        certification signature should use.
+
+        A value of ``None`` indicates that the signature field is intended for
+        an approval signature (i.e. a non-certification signature).
+    """
+
+    def __init__(self, mdp_perm: Optional[MDPPerm] = None):
+        self.mdp_perm = mdp_perm
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, SeedSignatureType)
+            and other.mdp_perm == self.mdp_perm
+        )
 
 
 class SigSeedValFlags(Flag):
@@ -322,7 +377,54 @@ class SigSeedSubFilter(Enum):
     ETSI_RFC3161 = pdf_name("/ETSI.RFC3161")
 
 
-# TODO support /V version indicator, other fields
+@unique
+class SeedValueDictVersion(OrderedEnum):
+    """
+    Specify the minimal compliance level for a seed value dictionary processor.
+    """
+
+    PDF_1_5 = 1
+    """
+    Require the reader to understand all keys defined in PDF 1.5.
+    """
+
+    PDF_1_7 = 2
+    """
+    Require the reader to understand all keys defined in PDF 1.7.
+    """
+
+    PDF_2_0 = 3
+    """
+    Require the reader to understand all keys defined in PDF 2.0.
+    """
+
+@unique
+class SeedLockDocument(Enum):
+    """
+    Provides a recommendation to the signer as to whether the document should
+    be locked after signing.
+    The corresponding flag in :attr:`.SigSeedValueSpec.flags` determines whether
+    this constraint is a required constraint.
+    """
+
+    LOCK = pdf_name('/true')
+    """
+    Lock the document after signing.
+    """
+
+    DO_NOT_LOCK = pdf_name('/false')
+    """
+    Lock the document after signing.
+    """
+
+    SIGNER_DISCRETION = pdf_name('/auto')
+    """
+    Leave the decision up to the signer.
+    
+    .. note::
+        This is functionally equivalent to not specifying any value.
+    """
+
 
 @dataclass(frozen=True)
 class SigSeedValueSpec:
@@ -379,6 +481,71 @@ class SigSeedValueSpec:
         ``/adbe.pkcs7.detached`` if this flag is ``True``.
     """
 
+    seed_signature_type: SeedSignatureType = None
+    """
+    Specifies the type of signature that should occupy a signature field;
+    this represents the ``/MDP`` entry in the seed value dictionary.
+    See :class:`.SeedSignatureType` for details.
+    
+    .. caution::
+        Since a certification-type signature is by definition the first
+        signature applied to a document, compliance with this requirement
+        cannot be cryptographically enforced.
+    """
+
+    sv_dict_version: Union[SeedValueDictVersion, int] = None
+    """
+    Specifies the compliance level required of a seed value dictionary
+    processor. If ``None``, pyHanko will compute an appropriate value.
+    
+    .. note::
+        You may also specify this value directly as an integer.
+        This covers potential future versions of the standard that pyHanko
+        does not support out of the box.
+    """
+
+    legal_attestations: List[str] = None
+    """
+    Specifies the possible legal attestations that a certification signature
+    occupying this signature field can supply.
+    The corresponding flag in :attr:`flags` indicates whether this is a
+    mandatory constraint.
+    
+    .. caution::
+        Since :attr:`legal_attestations` is only relevant for certification
+        signatures, compliance with this requirement cannot be reliably 
+        enforced.
+        
+        Additionally, since pyHanko does not support legal attestation
+        specifications at all, it vacuously satisfies the requirements of this
+        entry no matter what, and will therefore ignore it when signing.
+    """
+
+    lock_document: SeedLockDocument = None
+    """
+    Tell the signer whether or not the document should be locked after signing
+    this field; see :class:`.SeedLockDocument` for details.
+    
+    The corresponding flag in :attr:`flags` indicates whether this constraint
+    is mandatory.
+    """
+
+    # TODO handle this value by reading named appearances from the user's
+    #  settings
+
+    appearance: str = None
+    """
+    Specify a named appearance to use when generating the signature.
+    The corresponding flag in :attr:`flags` indicates whether this constraint
+    is mandatory.
+    
+    .. caution::
+        There is no standard registry of named appearances, so these constraints
+        are not portable, and cannot be validated.
+        
+        PyHanko currently does not define any named appearances.        
+    """
+
     def as_pdf_object(self):
         """
         Render this :class:`.SigSeedValueSpec` object to a PDF dictionary.
@@ -386,6 +553,7 @@ class SigSeedValueSpec:
         :return:
             A :class:`~.generic.DictionaryObject`.
         """
+        min_version = SeedValueDictVersion.PDF_1_5
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/SV'),
             pdf_name('/Ff'): generic.NumberObject(self.flags.value),
@@ -396,10 +564,12 @@ class SigSeedValueSpec:
                 sf.value for sf in self.subfilters
             )
         if self.add_rev_info is not None:
+            min_version = SeedValueDictVersion.PDF_1_7
             result[pdf_name('/AddRevInfo')] = generic.BooleanObject(
                 self.add_rev_info
             )
         if self.digest_methods is not None:
+            min_version = SeedValueDictVersion.PDF_1_7
             result[pdf_name('/DigestMethod')] = generic.ArrayObject(
                 map(pdf_string, self.digest_methods)
             )
@@ -408,6 +578,7 @@ class SigSeedValueSpec:
                 pdf_string(reason) for reason in self.reasons
             )
         if self.timestamp_server_url is not None:
+            min_version = SeedValueDictVersion.PDF_1_7
             result[pdf_name('/TimeStamp')] = generic.DictionaryObject({
                 pdf_name('/URL'): pdf_string(self.timestamp_server_url),
                 pdf_name('/Ff'): generic.NumberObject(
@@ -416,6 +587,32 @@ class SigSeedValueSpec:
             })
         if self.cert is not None:
             result[pdf_name('/Cert')] = self.cert.as_pdf_object()
+        if self.seed_signature_type is not None:
+            mdp_perm = self.seed_signature_type.mdp_perm
+            result[pdf_name('/MDP')] = generic.DictionaryObject({
+                pdf_name('/P'): generic.NumberObject(
+                    mdp_perm.value if mdp_perm is not None else 0
+                )
+            })
+        if self.legal_attestations is not None:
+            result[pdf_name('/LegalAttestation')] = generic.ArrayObject(
+                pdf_string(att) for att in self.legal_attestations
+            )
+        if self.lock_document is not None:
+            min_version = SeedValueDictVersion.PDF_2_0
+            result[pdf_name('/LockDocument')] = self.lock_document.value
+        if self.appearance is not None:
+            result[pdf_name('/AppearanceFilter')] = pdf_string(self.appearance)
+
+        specified_version = self.sv_dict_version
+        if specified_version is not None:
+            result[pdf_name('/V')] = generic.NumberObject(
+                specified_version.value
+                if isinstance(specified_version, SeedValueDictVersion)
+                else specified_version
+            )
+        else:
+            result[pdf_name('/V')] = generic.NumberObject(min_version.value)
         return result
 
     @classmethod
@@ -448,12 +645,17 @@ class SigSeedValueSpec:
         except KeyError:
             pass
 
-        # TODO support all PDF 2.0 values
-        min_version = pdf_dict.get('/V', 1)
-        if flags & SigSeedValFlags.V and min_version > 1:
-            raise SigningError(
-                "Seed value dictionary version %s not supported." % min_version
-            )
+        try:
+            min_version = pdf_dict['/V']
+            supported = SeedValueDictVersion.PDF_2_0.value
+            if flags & SigSeedValFlags.V and min_version > supported:
+                raise SigningError(
+                    "Seed value dictionary version %s not supported."
+                    % min_version
+                )
+            min_version = SeedValueDictVersion(min_version)
+        except KeyError:
+            min_version = None
 
         try:
             add_rev_info = bool(pdf_dict['/AddRevInfo'])
@@ -477,6 +679,29 @@ class SigSeedValueSpec:
             digest_methods = None
 
         reasons = get_and_apply(pdf_dict, '/Reasons', list)
+        legal_attestations = get_and_apply(pdf_dict, '/LegalAttestation', list)
+
+        def read_mdp_dict(mdp):
+            try:
+                val = mdp['/P']
+                return SeedSignatureType(None if val == 0 else MDPPerm(val))
+            except (KeyError, TypeError, ValueError):
+                raise SigningError(
+                    f"/MDP entry {mdp} in seed value dictionary is not "
+                    "correctly formatted."
+                )
+        signature_type = get_and_apply(pdf_dict, '/MDP', read_mdp_dict)
+
+        def read_lock_document(val):
+            try:
+                return SeedLockDocument(val)
+            except ValueError:
+                raise SigningError(f"/LockDocument entry '{val}' is invalid.")
+
+        lock_document = get_and_apply(
+            pdf_dict, '/LockDocument', read_lock_document
+        )
+        appearance_filter = pdf_dict.get('/AppearanceFilter', None)
         timestamp_dict = pdf_dict.get('/TimeStamp', {})
         timestamp_server_url = timestamp_dict.get('/URL', None)
         timestamp_required = bool(timestamp_dict.get('/Ff', 0))
@@ -490,7 +715,10 @@ class SigSeedValueSpec:
             timestamp_server_url=timestamp_server_url,
             cert=cert_constraints, subfilters=subfilters,
             digest_methods=digest_methods, add_rev_info=add_rev_info,
-            timestamp_required=timestamp_required
+            timestamp_required=timestamp_required,
+            legal_attestations=legal_attestations,
+            seed_signature_type=signature_type, sv_dict_version=min_version,
+            lock_document=lock_document, appearance=appearance_filter
         )
 
     def build_timestamper(self):
@@ -504,36 +732,6 @@ class SigSeedValueSpec:
         from pyhanko.sign.timestamps import HTTPTimeStamper
         if self.timestamp_server_url:
             return HTTPTimeStamper(self.timestamp_server_url)
-
-
-class MDPPerm(OrderedEnum):
-    """
-    Indicates a ``/DocMDP`` level.
-
-    Cf. Table 254  in ISO 32000-1.
-    """
-
-    NO_CHANGES = 1
-    """
-    No changes to the document are allowed.
-    
-    .. warning::
-        This does not apply to DSS updates and the addition of document time
-        stamps.
-    """
-    FILL_FORMS = 2
-    """
-    Form filling & signing is allowed.
-    """
-
-    ANNOTATE = 3
-    """
-    Form filling, signing and commenting are allowed.
-    
-    .. warning::
-        Validating this ``/DocMDP`` level is not currently supported,
-        but included in the list for completeness.
-    """
 
 
 class FieldMDPAction(Enum):
