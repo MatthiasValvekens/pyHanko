@@ -310,6 +310,13 @@ class BasePdfFileWriter(PdfHandler):
 
     def set_info(self, info: Optional[Union[generic.IndirectObject,
                                       generic.DictionaryObject]]):
+        """
+        Set the ``/Info`` entry of the document trailer.
+
+        :param info:
+            The new ``/Info`` dictionary, either as an indirect reference
+            or as a :class:`~.generic.DictionaryObject`
+        """
         if info is not None and \
                 not isinstance(info, generic.IndirectObject):
             self._info = info = self.add_object(info)
