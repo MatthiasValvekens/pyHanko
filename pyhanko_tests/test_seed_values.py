@@ -325,10 +325,19 @@ def test_cert_constraint_composite(requests_mock):
         scc.satisfied_by(FROM_CA.signing_cert, signer_validation_path)
 
 
-def prepare_sv_field(sv_spec):
+def prepare_sv_field(sv_spec, add_field_lock=False):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
-    sp = fields.SigFieldSpec('Sig', seed_value_dict=sv_spec)
+    if add_field_lock:
+        sp = fields.SigFieldSpec(
+            'Sig', seed_value_dict=sv_spec,
+            field_mdp_spec=fields.FieldMDPSpec(
+                fields.FieldMDPAction.INCLUDE, fields=['blah']
+            ),
+            doc_mdp_update_value=fields.MDPPerm.NO_CHANGES
+        )
+    else:
+        sp = fields.SigFieldSpec('Sig', seed_value_dict=sv_spec)
     fields.append_signature_field(w, sp)
     out = BytesIO()
     w.write(out)
@@ -336,8 +345,11 @@ def prepare_sv_field(sv_spec):
     return out
 
 
-def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, test_violation=False):
-    w = IncrementalPdfFileWriter(prepare_sv_field(sv_spec))
+def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, *,
+                 test_violation=False, add_field_lock=False):
+    w = IncrementalPdfFileWriter(
+        prepare_sv_field(sv_spec, add_field_lock=add_field_lock)
+    )
 
     pdf_signer = signers.PdfSigner(sig_meta, signer, timestamper=timestamper)
     pdf_signer._ignore_sv = test_violation
@@ -538,11 +550,64 @@ def test_sv_sign_cert_constraint():
 
 def test_sv_flag_unsupported():
     sv = fields.SigSeedValueSpec(
-        flags=fields.SigSeedValFlags.APPEARANCE_FILTER,
+        flags=(
+            fields.SigSeedValFlags.LEGAL_ATTESTATION
+            | fields.SigSeedValFlags.APPEARANCE_FILTER
+        ),
+        legal_attestations=['abc'],
+        appearance='test'
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(NotImplementedError):
+        sign_with_sv(sv, meta, test_violation=True)
+
+
+def test_sv_flag_appearance_required():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.APPEARANCE_FILTER,
+        appearance='test'
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    with pytest.raises(SigningError):
         sign_with_sv(sv, meta)
+
+
+def test_sv_mdp_no_certify():
+
+    sv = fields.SigSeedValueSpec(
+        seed_signature_type=fields.SeedSignatureType(),
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
+    with pytest.raises(SigningError):
+        sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
+    sign_with_sv(sv, meta, test_violation=True)
+
+
+def test_sv_mdp_must_certify():
+
+    sv = fields.SigSeedValueSpec(
+        seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.FILL_FORMS),
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    with pytest.raises(SigningError):
+        sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    sign_with_sv(sv, meta, test_violation=True)
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.NO_CHANGES
+    )
+    sign_with_sv(sv, meta, test_violation=True)
 
 
 def test_sv_subfilter_unsupported():
@@ -674,3 +739,78 @@ def test_sv_sign_reason_prohibited(reasons_param):
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert pdf_name('/Reason') not in emb_sig.sig_object
+
+
+def test_sv_lock_certify():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
+        lock_document=fields.SeedLockDocument.LOCK
+    )
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.NO_CHANGES
+    )
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
+    sign_with_sv(sv, meta)
+    sign_with_sv(sv, meta, test_violation=True)
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.ANNOTATE
+    )
+    sign_with_sv(sv, meta)
+    sign_with_sv(sv, meta, test_violation=True)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    sign_with_sv(sv, meta)
+
+
+def test_sv_no_lock_certify():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
+        lock_document=fields.SeedLockDocument.DO_NOT_LOCK
+    )
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.FILL_FORMS
+    )
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.ANNOTATE
+    )
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+    )
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    sign_with_sv(sv, meta)
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.NO_CHANGES
+    )
+    sign_with_sv(sv, meta, test_violation=True)
+
+
+def test_field_lock_compat():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
+        lock_document=fields.SeedLockDocument.LOCK
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    sign_with_sv(sv, meta, add_field_lock=True)
+
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
+        lock_document=fields.SeedLockDocument.DO_NOT_LOCK
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    with pytest.raises(SigningError):
+        sign_with_sv(sv, meta, add_field_lock=True)

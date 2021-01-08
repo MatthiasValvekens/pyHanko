@@ -24,7 +24,7 @@ from pyhanko.sign import general
 from pyhanko.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
     SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm, FieldMDPSpec,
-    SigFieldSpec,
+    SigFieldSpec, SeedLockDocument
 )
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.sign.general import (
@@ -1272,30 +1272,71 @@ class PdfSigner(PdfTimeStamper):
         )
 
     def _apply_locking_rules(self, sig_field, sig_obj_ref, md_algorithm,
-                             pdf_out):
+                             pdf_out, sv_spec: SigSeedValueSpec = None):
         # this helper method handles /Lock dictionary and certification
         #  semantics.
 
+        # read recommendations and/or requirements from the SV dictionary
+        if sv_spec is not None and not self._ignore_sv:
+            sv_lock_values = {
+                SeedLockDocument.LOCK:
+                    (MDPPerm.NO_CHANGES,),
+                SeedLockDocument.DO_NOT_LOCK:
+                    (MDPPerm.FILL_FORMS, MDPPerm.ANNOTATE),
+            }.get(sv_spec.lock_document, None)
+            sv_lock_value_req = sv_lock_values is not None and (
+                sv_spec.flags & SigSeedValFlags.LOCK_DOCUMENT
+            )
+        else:
+            sv_lock_values = None
+            sv_lock_value_req = False
+
         lock = None
-        docmdp_perms = None
+        # init the DocMDP value with what the /LockDocument setting in the SV
+        # dict recommends. If the constraint is mandatory, it might conflict
+        # with the /Lock dictionary, but we'll deal with that later.
+        docmdp_perms = sv_lock_values[0] if sv_lock_values is not None else None
         try:
             lock_dict = sig_field['/Lock']
             lock = FieldMDPSpec.from_pdf_object(lock_dict)
             docmdp_value = lock_dict['/P']
             docmdp_perms = MDPPerm(docmdp_value)
+            if sv_lock_value_req and docmdp_perms not in sv_lock_values:
+                raise SigningError(
+                    "Inconsistency in form field data. "
+                    "The field lock dictionary imposes the DocMDP policy "
+                    f"'{docmdp_perms}', but the seed value "
+                    "dictionary's /LockDocument does not allow that."
+                )
         except KeyError:
             pass
         except ValueError as e:
             raise SigningError("Failed to read /Lock dictionary", e)
 
-        if self.signature_meta.certify:
-            meta_perms = self.signature_meta.docmdp_permissions
-            assert meta_perms is not None
-            # choose the stricter option if both are available
-            docmdp_perms = meta_perms if docmdp_perms is None else (
-                min(docmdp_perms, meta_perms)
-            )
+        meta_perms = self.signature_meta.docmdp_permissions
+        meta_certify = self.signature_meta.certify
 
+        # only use meta_perms if we're trying to make a cert sig, or
+        # there already is some other docmdp_perms value in play.
+        # (in other words, if there's no SV dict or /Lock, and we're not
+        # certifying, this will be skipped)
+        if meta_perms is not None and (meta_certify or docmdp_perms is not None):
+            if sv_lock_value_req and meta_perms not in sv_lock_values:
+                # in this case, we have to override
+                docmdp_perms = sv_lock_values[0]
+            else:
+                # choose the stricter option if both are available
+                docmdp_perms = meta_perms if docmdp_perms is None else (
+                    min(docmdp_perms, meta_perms)
+                )
+            if docmdp_perms != meta_perms:
+                logger.warning(
+                    f"DocMDP policy '{meta_perms}', was requested, "
+                    f"but the signature field settings do "
+                    f"not allow that. Setting '{docmdp_perms}' instead."
+                )
+
+        if meta_certify:
             # To make a certification signature, we need to leave a record
             #  in the document catalog.
             root = pdf_out.root
@@ -1401,15 +1442,31 @@ class PdfSigner(PdfTimeStamper):
         if sv_spec.cert is not None:
             sv_spec.cert.satisfied_by(self.signer.signing_cert, validation_path)
 
+        if sv_spec.seed_signature_type is not None:
+            sv_certify = sv_spec.seed_signature_type.certification_signature()
+            if sv_certify != self.signature_meta.certify:
+                def _type(certify):
+                    return 'a certification' if certify else 'an approval'
+                raise SigningError(
+                    "The seed value dictionary's /MDP entry specifies that "
+                    f"this field should contain {_type(sv_certify)} "
+                    f"signature, but {_type(self.signature_meta.certify)} "
+                    "was requested."
+                )
+            sv_mdp_perm = sv_spec.seed_signature_type.mdp_perm
+            if sv_certify \
+                    and sv_mdp_perm != self.signature_meta.docmdp_permissions:
+                raise SigningError(
+                    "The seed value dictionary specified that this "
+                    "certification signature should use the MDP policy "
+                    f"'{sv_mdp_perm}', "
+                    f"but '{self.signature_meta.docmdp_permissions}' was "
+                    "requested."
+                )
+
         if not flags:
             return sv_spec
 
-        if flags & SigSeedValFlags.UNSUPPORTED:
-            raise NotImplementedError(
-                "Unsupported mandatory seed value items: " + repr(
-                    flags & SigSeedValFlags.UNSUPPORTED
-                )
-            )
         selected_sf = self.signature_meta.subfilter
         if (flags & SigSeedValFlags.SUBFILTER) \
                 and sv_spec.subfilters is not None:
@@ -1432,6 +1489,14 @@ class PdfSigner(PdfTimeStamper):
         # SV dict serves as a source of defaults as well
         if selected_sf is None and sv_spec.subfilters is not None:
             selected_sf = sv_spec.subfilters[0]
+
+        if (flags & SigSeedValFlags.APPEARANCE_FILTER) \
+                and sv_spec.appearance is not None:
+            raise SigningError(
+                "pyHanko does not define any named appearances, but "
+                "the seed value dictionary requires that the named appearance "
+                f"'{sv_spec.appearance}' be used."
+            )
 
         if (flags & SigSeedValFlags.ADD_REV_INFO) \
                 and sv_spec.add_rev_info is not None:
@@ -1481,6 +1546,7 @@ class PdfSigner(PdfTimeStamper):
                     )
                 )
 
+        # LOCK_DOCUMENT is only enforced later
         return sv_spec
 
     def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
@@ -1667,7 +1733,9 @@ class PdfSigner(PdfTimeStamper):
             sig_field, pdf_out, timestamp, appearance_text_params
         )
 
-        self._apply_locking_rules(sig_field, sig_obj_ref, md_algorithm, pdf_out)
+        self._apply_locking_rules(
+            sig_field, sig_obj_ref, md_algorithm, pdf_out, sv_spec=sv_spec
+        )
 
         wr = sig_obj.write_signature(
             pdf_out, md_algorithm, in_place=in_place,

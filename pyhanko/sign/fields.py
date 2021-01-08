@@ -87,6 +87,9 @@ class SeedSignatureType:
             and other.mdp_perm == self.mdp_perm
         )
 
+    def certification_signature(self) -> bool:
+        return self.mdp_perm is not None
+
 
 class SigSeedValFlags(Flag):
     """
@@ -95,22 +98,74 @@ class SigSeedValFlags(Flag):
     as opposed to optional ones.
 
     .. warning::
-        While this enum records values for all flags, not all corresponding
-        constraint types have been implemented yet.
+        The flags :attr:`LEGAL_ATTESTATION` and :attr:`APPEARANCE_FILTER` are
+        processed in accordance with the specification when creating a
+        signature, but support is nevertheless limited.
+
+        * PyHanko does not support legal attestations at all, so given that
+          the :attr:`LEGAL_ATTESTATION` requirement flag only restricts the
+          legal attestations that can be used by the signer, pyHanko can safely
+          ignore it when signing.
+
+          On the other hand, since the validator is not aware of
+          legal attestations either, it cannot validate signatures that
+          make :attr:`~.SigSeedValueSpec.legal_attestations` a mandatory
+          constraint.
+        * Since pyHanko does not define any named appearances, setting
+          the :attr:`APPEARANCE_FILTER` flag and the
+          :attr:`~.SigSeedValueSpec.appearance` entry in the seed value
+          dictionary will make pyHanko refuse to sign the document.
+
+          When validating, the situation is different: since pyHanko has no
+          way of knowing whether the signer used the named appearance imposed
+          by the seed value dictionary, it will simply emit a warning and
+          continue validating the signature.
     """
 
     FILTER = 1
-    SUBFILTER = 2
-    V = 4
-    REASONS = 8
-    LEGAL_ATTESTATION = 16
-    ADD_REV_INFO = 32
-    DIGEST_METHOD = 64
-    LOCK_DOCUMENT = 128
-    APPEARANCE_FILTER = 256
-    UNSUPPORTED = LEGAL_ATTESTATION | LOCK_DOCUMENT | APPEARANCE_FILTER
     """
-    Flags for which the corresponding constraint is unsupported.
+    Makes the signature handler setting mandatory. PyHanko only supports
+    ``/Adobe.PPKLite``.
+    """
+
+    SUBFILTER = 2
+    """
+    See :attr:`~.SigSeedValueSpec.subfilters`.
+    """
+
+    V = 4
+    """
+    See :attr:`~.SigSeedValueSpec.sv_dict_version`.
+    """
+
+    REASONS = 8
+    """
+    See :attr:`~.SigSeedValueSpec.reasons`.
+    """
+
+    LEGAL_ATTESTATION = 16
+    """
+    See :attr:`~.SigSeedValueSpec.legal_attestations`.
+    """
+
+    ADD_REV_INFO = 32
+    """
+    See :attr:`~.SigSeedValueSpec.add_rev_info`.
+    """
+
+    DIGEST_METHOD = 64
+    """
+    See :attr:`~.SigSeedValueSpec.digest_method`.
+    """
+
+    LOCK_DOCUMENT = 128
+    """
+    See :attr:`~.SigSeedValueSpec.lock_document`.
+    """
+
+    APPEARANCE_FILTER = 256
+    """
+    See :attr:`~.SigSeedValueSpec.appearance`.
     """
 
 
@@ -132,6 +187,10 @@ class SigCertConstraintFlags(Flag):
     RESERVED = 16
     KEY_USAGE = 32
     URL = 64
+    UNSUPPORTED = KEY_USAGE | RESERVED | OID
+    """
+    Flags for which the corresponding constraint is unsupported.
+    """
 
 
 name_type_abbrevs = {
@@ -515,6 +574,9 @@ class SigSeedValueSpec:
         Since :attr:`legal_attestations` is only relevant for certification
         signatures, compliance with this requirement cannot be reliably 
         enforced.
+        Regardless, since pyHanko's validator is also unaware of legal
+        attestation settings, it will refuse to validate signatures
+        where this seed value constitutes a mandatory constraint.
         
         Additionally, since pyHanko does not support legal attestation
         specifications at all, it vacuously satisfies the requirements of this

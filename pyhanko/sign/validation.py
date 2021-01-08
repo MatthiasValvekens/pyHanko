@@ -28,7 +28,7 @@ from .diff_analysis import (
     SuspiciousModification, ModificationLevel, DEFAULT_DIFF_POLICY, DiffPolicy,
     DiffResult,
 )
-from .fields import MDPPerm, FieldMDPSpec
+from .fields import MDPPerm, FieldMDPSpec, SeedLockDocument
 from .general import (
     SignatureStatus, find_cms_attribute,
     UnacceptableSignerError,
@@ -508,15 +508,12 @@ class PdfSignatureStatus(SignatureStatus):
 
 def _extract_reference_dict(signature_obj, method) \
         -> Optional[generic.DictionaryObject]:
-    # all queries are raw because we don't want to trigger object resolution
-    #  (this has to work for historic queries as well, and signature_obj
-    #   shouldn't contain any indirect refs anyway)
     try:
-        sig_refs = signature_obj.raw_get('/Reference')
+        sig_refs = signature_obj['/Reference']
     except KeyError:
         return
     for ref in sig_refs:
-        if ref.raw_get('/TransformMethod') == method:
+        if ref['/TransformMethod'] == method:
             return ref
 
 
@@ -952,18 +949,40 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
             "none was found, or the timestamp did not validate."
         )
 
+    sig_obj = emb_sig.sig_object
+
+    if sv_spec.seed_signature_type is not None:
+        sv_certify = sv_spec.seed_signature_type.certification_signature()
+        try:
+            perms: generic.DictionaryObject = emb_sig.reader.root['/Perms']
+            cert_sig_ref = perms.get_value_as_reference('/DocMDP')
+            was_certified = cert_sig_ref == sig_obj.container_ref
+        except (KeyError, generic.IndirectObjectExpected, AttributeError):
+            was_certified = False
+        if sv_certify != was_certified:
+            def _type(certify):
+                return 'a certification' if certify else 'an approval'
+
+            raise SigSeedValueValidationError(
+                "The seed value dictionary's /MDP entry specifies that "
+                f"this field should contain {_type(sv_certify)} "
+                f"signature, but {_type(was_certified)} "
+                "appears to have been used."
+            )
+        if sv_certify:
+            sv_mdp_perm = sv_spec.seed_signature_type.mdp_perm
+            doc_mdp = emb_sig.docmdp_level
+            if sv_mdp_perm != doc_mdp:
+                raise SigSeedValueValidationError(
+                    "The seed value dictionary specified that this "
+                    "certification signature should use the MDP policy "
+                    f"'{sv_mdp_perm}', but '{doc_mdp}' was "
+                    "used in the signature."
+                )
+
     flags = sv_spec.flags
     if not flags:
         return
-
-    sig_obj = sig_field['/V']
-
-    if flags & SigSeedValFlags.UNSUPPORTED:
-        raise NotImplementedError(
-            "Unsupported mandatory seed value items: " + repr(
-                flags & SigSeedValFlags.UNSUPPORTED
-            )
-        )
 
     selected_sf_str = sig_obj['/SubFilter']
     selected_sf = SigSeedSubFilter(selected_sf_str)
@@ -984,6 +1003,37 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
                     mandated_sf.value, selected_sf.value
                 )
             )
+
+    if (flags & SigSeedValFlags.APPEARANCE_FILTER) \
+            and sv_spec.appearance is not None:
+        logger.warning(
+            "The signature's seed value dictionary specifies the "
+            "/AppearanceFilter entry as mandatory, but this constraint "
+            "is impossible to validate."
+        )
+
+    if (flags & SigSeedValFlags.LEGAL_ATTESTATION) \
+            and sv_spec.legal_attestations is not None:
+        raise NotImplementedError(
+            "pyHanko does not support legal attestations, but the seed value "
+            "dictionary mandates that they be restricted to a specific subset."
+        )
+
+    if (flags & SigSeedValFlags.LOCK_DOCUMENT) \
+            and sv_spec.lock_document is not None:
+        doc_mdp = emb_sig.docmdp_level
+        if sv_spec.lock_document == SeedLockDocument.LOCK \
+                and doc_mdp != MDPPerm.NO_CHANGES:
+            raise SigSeedValueValidationError(
+                "Document must be locked, but some changes are still allowed."
+            )
+        if sv_spec.lock_document == SeedLockDocument.DO_NOT_LOCK \
+                and doc_mdp == MDPPerm.NO_CHANGES:
+            raise SigSeedValueValidationError(
+                "Document must not be locked, but the DocMDP level is set to "
+                "NO_CHANGES."
+            )
+        # value 'auto' is OK.
 
     signer_info = emb_sig.signer_info
     if (flags & SigSeedValFlags.ADD_REV_INFO) \
