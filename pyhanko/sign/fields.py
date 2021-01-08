@@ -5,9 +5,10 @@ Utilities to deal with signature form fields and their properties in PDF files.
 import logging
 from dataclasses import dataclass
 from enum import Flag, Enum, unique
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Set
 
 from asn1crypto import x509
+from asn1crypto.x509 import KeyUsage
 from certvalidator.path import ValidationPath
 from oscrypto import keys as oskeys
 
@@ -193,6 +194,67 @@ class SigCertConstraintFlags(Flag):
     """
 
 
+class SigCertKeyUsage:
+    """
+    Encodes the key usage bits that must (resp. must not) be active on the
+    signer's
+    """
+
+    def __init__(self, must_have: KeyUsage = None, forbidden: KeyUsage = None):
+        self.must_have = must_have if must_have is not None else KeyUsage(set())
+        self.forbidden = forbidden if forbidden is not None else KeyUsage(set())
+
+    def encode_to_sv_string(self):
+        """
+        Encode the KeyUsage requirements in the format specified in the PDF
+        specification.
+
+        :return:
+            A string.
+        """
+
+        def fmt_bit(bit: int):
+            if self.must_have[bit]:
+                return '1'
+            elif self.forbidden[bit]:
+                return '0'
+            else:
+                return 'X'
+        return ''.join(fmt_bit(bit) for bit in range(9))
+
+    @classmethod
+    def read_from_sv_string(cls, ku_str):
+        ku_str = ku_str[:9]
+
+        def _as_tuple(with_val):
+            return tuple(1 if val == with_val else 0 for val in ku_str)
+
+        return SigCertKeyUsage(
+            must_have=KeyUsage(_as_tuple('1')),
+            forbidden=KeyUsage(_as_tuple('0'))
+        )
+
+    @classmethod
+    def from_sets(cls, must_have: Set[str]=None, forbidden: Set[str]=None):
+        return SigCertKeyUsage(
+            must_have=KeyUsage(set() if must_have is None else must_have),
+            forbidden=KeyUsage(set() if forbidden is None else forbidden)
+        )
+
+    def must_have_set(self) -> Set[str]:
+        return self.must_have.native
+
+    def forbidden_set(self) -> Set[str]:
+        return self.forbidden.native
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, SigCertKeyUsage)
+            and self.must_have_set() == other.must_have_set()
+            and self.forbidden_set() == other.forbidden_set()
+        )
+
+
 name_type_abbrevs = {
     '2.5.4.3': 'CN',
     '2.5.4.5': 'SerialNumber',
@@ -233,6 +295,7 @@ class SigCertConstraints:
 
     See Table 235 in ISO 32000-1.
     """
+
     flags: SigCertConstraintFlags = SigCertConstraintFlags(0)
     """
     Enforcement flags. By default, all entries are optional.
@@ -268,7 +331,14 @@ class SigCertConstraints:
     ``/Browser`` is the only implementation-independent value.
     """
 
-    # TODO support key usage and OID constraints
+    key_usage: SigCertKeyUsage = SigCertKeyUsage()
+    """
+    Specify the key usage extensions that should (or should not) be present
+    on the signer's certificate.
+    """
+
+    # TODO support OID constraints (certificate policies) and signature policy
+    #  constraints.
 
     @classmethod
     def from_pdf_object(cls, pdf_dict):
@@ -311,12 +381,17 @@ class SigCertConstraints:
             for attr, value in dn_dir.items()
         })
 
+        key_usage = SigCertKeyUsage.read_from_sv_string(
+            pdf_dict.get('/KeyUsage', '')
+        )
+
         url = pdf_dict.get('/URL')
         url_type = pdf_dict.get('/URLType')
         kwargs = {
             'flags': flags, 'subjects': subjects or None,
             'subject_dn': subject_dns or None,
-            'issuers': issuers or None, 'info_url': url
+            'issuers': issuers or None, 'info_url': url,
+            'key_usage': key_usage
         }
         if url is not None and url_type is not None:
             kwargs['url_type'] = url_type
@@ -358,6 +433,10 @@ class SigCertConstraints:
         if self.info_url is not None:
             result[pdf_name('/URL')] = pdf_string(self.info_url)
             result[pdf_name('/URLType')] = self.url_type
+
+        ku = self.key_usage
+        if ku.must_have_set() or ku.forbidden_set():
+            result[pdf_name('/KeyUsage')] = pdf_string(ku.encode_to_sv_string())
 
         return result
 
@@ -456,6 +535,7 @@ class SeedValueDictVersion(OrderedEnum):
     """
     Require the reader to understand all keys defined in PDF 2.0.
     """
+
 
 @unique
 class SeedLockDocument(Enum):

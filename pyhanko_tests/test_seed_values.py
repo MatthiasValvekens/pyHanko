@@ -155,7 +155,10 @@ def test_append_sig_field_with_simple_sv():
         cert=fields.SigCertConstraints(
             subject_dn=FROM_CA.signing_cert.subject,
             issuers=[INTERM_CERT],
-            subjects=[FROM_CA.signing_cert]
+            subjects=[FROM_CA.signing_cert],
+            key_usage=fields.SigCertKeyUsage.from_sets(
+                {'digital_signature'}, {'key_agreement'}
+            )
         ),
         digest_methods=['ssh256'],
         add_rev_info=True,
@@ -814,3 +817,27 @@ def test_field_lock_compat():
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(SigningError):
         sign_with_sv(sv, meta, add_field_lock=True)
+
+
+@pytest.mark.parametrize('must_have_set, forbidden_set, as_string', [
+    ({'digital_signature', 'crl_sign'}, set(), '1XXXXX1XX'),
+    (set(), {'digital_signature', 'crl_sign'}, '0XXXXX0XX'),
+    ({'digital_signature', 'non_repudiation'}, {'data_encipherment'}, '11X0XXXXX'),
+])
+def test_key_usage_decode(must_have_set, forbidden_set, as_string):
+    ku_from_str = fields.SigCertKeyUsage.read_from_sv_string(as_string)
+    assert ku_from_str.must_have_set() == must_have_set
+    assert ku_from_str.forbidden_set() == forbidden_set
+    assert ku_from_str.encode_to_sv_string() == as_string
+
+
+def test_key_usage_decode_tolerance():
+    empty_ku = fields.SigCertKeyUsage.read_from_sv_string('')
+    assert not empty_ku.must_have_set()
+    assert not empty_ku.forbidden_set()
+
+    too_long_ku = fields.SigCertKeyUsage.read_from_sv_string('100XX1XX0XX11X')
+    assert too_long_ku.must_have_set() == {'digital_signature', 'key_cert_sign'}
+    assert too_long_ku.forbidden_set() == {
+        'non_repudiation', 'key_encipherment', 'decipher_only'
+    }
