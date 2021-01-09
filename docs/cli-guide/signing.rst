@@ -123,6 +123,11 @@ Multiple signature fields may be created in one command, by passing the last
 argument multiple times.
 
 .. note::
+    You can specify page numbers "in reverse" by providing a negative number
+    for the ``PAGE`` entry. With this convention, page ``-1`` refers to the last
+    page of the document, page ``-2`` the second-to-last, etc.
+
+.. note::
     Creating empty signature fields ahead of time isn't always necessary.
     PyHanko's signing functionality can also create them together with a
     signature, and Adobe Reader offers similar conveniences.
