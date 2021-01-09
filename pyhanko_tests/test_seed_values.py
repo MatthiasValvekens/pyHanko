@@ -592,6 +592,17 @@ def test_sv_flag_unsupported():
         sign_with_sv(sv, meta, test_violation=True)
 
 
+def test_sv_cert_flag_unsupported():
+    sv = fields.SigSeedValueSpec(
+        cert=fields.SigCertConstraints(
+            flags=fields.SigCertConstraintFlags.RESERVED,
+        )
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig')
+    with pytest.raises(NotImplementedError):
+        sign_with_sv(sv, meta)
+
+
 def test_sv_flag_appearance_required():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.APPEARANCE_FILTER,

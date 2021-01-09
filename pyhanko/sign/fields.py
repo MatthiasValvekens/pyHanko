@@ -192,7 +192,7 @@ class SigCertConstraintFlags(Flag):
     RESERVED = 16
     KEY_USAGE = 32
     URL = 64
-    UNSUPPORTED = KEY_USAGE | RESERVED | OID
+    UNSUPPORTED = RESERVED | OID
     """
     Flags for which the corresponding constraint is unsupported.
     """
@@ -461,6 +461,11 @@ class SigCertConstraints:
         # this function assumes that key usage & trust checks have
         #  passed already.
         flags = self.flags
+        if flags & SigCertConstraintFlags.UNSUPPORTED:
+            raise NotImplementedError(
+                "Certificate constraint flags include mandatory constraints "
+                "that are not supported."
+            )
         if (flags & SigCertConstraintFlags.SUBJECT) \
                 and self.subjects is not None:
             # Explicit whitelist of approved signer certificates
