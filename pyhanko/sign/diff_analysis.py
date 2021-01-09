@@ -62,7 +62,7 @@ __all__ = [
     'FormUpdatingRule', 'FormUpdate',
     'FieldMDPRule', 'FieldComparisonSpec', 'FieldComparisonContext',
     'GenericFieldModificationRule', 'SigFieldCreationRule',
-    'SigFieldModificationRule',
+    'SigFieldModificationRule', 'BaseFieldModificationRule',
     'DiffPolicy', 'StandardDiffPolicy',
     'DEFAULT_DIFF_POLICY', 'NO_CHANGES_DIFF_POLICY',
     'DiffResult'
@@ -97,7 +97,8 @@ class ModificationLevel(OrderedEnum):
 
     LTA_UPDATES = 1
     """
-    The only updates are signature long term archival (LTA) updates.
+    The only updates are of the type that would be allowed as part of 
+    signature long term archival (LTA) processing.
     That is to say, updates to the document security store or new document
     time stamps. For the purposes of evaluating whether a document has been
     modified in the sense defined in the PAdES and ISO 32000-2 standards,
@@ -674,6 +675,10 @@ class SigFieldCreationRule(FieldMDPRule):
 
 
 class BaseFieldModificationRule(FieldMDPRule):
+    """
+    Base class that implements some boilerplate to validate modifications
+    to individual form fields.
+    """
 
     def __init__(self, always_modifiable=None, value_update_keys=None):
         self.always_modifiable = (
@@ -719,6 +724,23 @@ class BaseFieldModificationRule(FieldMDPRule):
     def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
                          context: FieldComparisonContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+        """
+        Investigate updates to a particular form field.
+        This function is called by :meth:`apply` for every form field in
+        the new revision.
+
+        :param fq_name:
+            The fully qualified name of the form field.j
+        :param spec:
+            The :class:`.FieldComparisonSpec` object describing the old state
+            of the field in relation to the new state.
+        :param context:
+            The full :class:`.FieldComparisonContext` that is currently
+            being evaluated.
+        :return:
+            An iterable yielding :class:`.FormUpdate` objects qualified
+            with an appropriate :class:`.ModificationLevel`.
+        """
         raise NotImplementedError
 
 
@@ -1081,6 +1103,17 @@ class MetadataUpdateRule(WhitelistRule):
 
     @staticmethod
     def is_well_formed_xml(metadata_ref: generic.Reference):
+        """
+        Checks whether the provided stream consists of well-formed XML data.
+        Note that this does not perform any more advanced XML or XMP validation,
+        the check is purely syntactic.
+
+        :param metadata_ref:
+            A reference to a (purported) metadata stream.
+        :raises SuspiciousModification:
+            if there are indications that the reference doesn't point to an XML
+            stream.
+        """
         metadata_stream = metadata_ref.get_object()
 
         if not isinstance(metadata_stream, generic.StreamObject):
@@ -1766,9 +1799,6 @@ class StandardDiffPolicy(DiffPolicy):
         return DiffResult(current_max, changed_form_fields)
 
 
-"""
-Default :class:`.DiffPolicy` implementation.
-"""
 DEFAULT_DIFF_POLICY = StandardDiffPolicy(
     global_rules=[
         CatalogModificationRule(),
@@ -1785,10 +1815,29 @@ DEFAULT_DIFF_POLICY = StandardDiffPolicy(
         ],
     )
 )
+"""
+Default :class:`.DiffPolicy` implementation.
+
+This policy includes the following rules, all with the default settings.
+The unqualified rules in the list all have their updates qualified at
+level :class:`~.ModificationLevel.LTA_UPDATES`.
+
+* :class:`.CatalogModificationRule`,
+* :class:`.DocInfoRule`,
+* :class:`.ObjectStreamRule`,
+* :class:`.XrefStreamRule`,
+* :class:`.DSSCompareRule`,
+* :class:`.MetadataUpdateRule`.
+* :class:`.FormUpdatingRule`, with the following field rules:
+    
+    * :class:`.SigFieldCreationRule`,
+    * :class:`.SigFieldModificationRule`,
+    * :class:`.GenericFieldModificationRule`.
+"""
 
 
+NO_CHANGES_DIFF_POLICY = StandardDiffPolicy(global_rules=[], form_rule=None)
 """
 :class:`.DiffPolicy` implementation that does not provide any rules,
 and will therefore simply reject all changes.
 """
-NO_CHANGES_DIFF_POLICY = StandardDiffPolicy(global_rules=[], form_rule=None)
