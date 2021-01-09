@@ -27,6 +27,7 @@ from pyhanko.stamp import AnnotAppearances
 __all__ = [
     'SigFieldSpec', 'SigSeedValFlags', 'SigCertConstraints',
     'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigSeedSubFilter',
+    'SeedValueDictVersion', 'SeedLockDocument', 'SigCertKeyUsage',
     'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
     'SignatureFormField',
     'enumerate_sig_fields', 'append_signature_field'
@@ -186,12 +187,44 @@ class SigCertConstraintFlags(Flag):
     """
 
     SUBJECT = 1
+    """
+    See :attr:`SigCertConstraints.subjects`.
+    """
+
     ISSUER = 2
+    """
+    See :attr:`SigCertConstraints.issuers`.
+    """
+
     OID = 4
+    """
+    Currently not supported.
+    """
+
     SUBJECT_DN = 8
+    """ 
+    See :attr:`SigCertConstraints.subject_dn`.
+    """
+
     RESERVED = 16
+    """
+    Currently not supported (reserved).
+    """
+
     KEY_USAGE = 32
+    """
+    See :attr:`SigCertConstraints.key_usage`.
+    """
+
     URL = 64
+    """
+    See :attr:`SigCertConstraints.info_url`.
+    
+    .. note::
+        As specified in the standard, this enforcement bit is supposed to be
+        ignored by default. We include it for compatibility reasons.
+    """
+
     UNSUPPORTED = RESERVED | OID
     """
     Flags for which the corresponding constraint is unsupported.
@@ -201,7 +234,32 @@ class SigCertConstraintFlags(Flag):
 class SigCertKeyUsage:
     """
     Encodes the key usage bits that must (resp. must not) be active on the
-    signer's
+    signer's certificate.
+
+    .. note::
+        See § 4.2.1.3 in :rfc:`5280` and :class:`.KeyUsage` for more
+        information on key usage extensions.
+
+    .. note::
+        The human-readable names of the key usage extensions are recorded
+        in ``camelCase`` in :rfc:`5280`, but this class uses
+        the naming convention of :class:`.KeyUsage` in ``asn1crypto``.
+        The conversion is done by replacing ``camelCase`` with ``snake_case``.
+        For example, ``nonRepudiation`` becomes ``non_repudiation``, and
+        ``digitalSignature`` turns into ``digital_signature``.
+
+    .. note::
+        This class is intended to closely replicate the definition of the
+        KeyUsage entry Table 235 in ISO 32000-1.
+        In particular, it does *not* provide a mechanism to deal
+        with extended key usage extensions (cf. § 4.2.1.12 in :rfc:`5280`).
+
+    :param must_have:
+        The :class:`.KeyUsage` object encoding the key usage extensions
+        that must be present on the signer's certificate.
+    :param forbidden:
+        The :class:`.KeyUsage` object encoding the key usage extensions
+        that must *not* be present on the signer's certificate.
     """
 
     def __init__(self, must_have: KeyUsage = None, forbidden: KeyUsage = None):
@@ -210,7 +268,7 @@ class SigCertKeyUsage:
 
     def encode_to_sv_string(self):
         """
-        Encode the KeyUsage requirements in the format specified in the PDF
+        Encode the key usage requirements in the format specified in the PDF
         specification.
 
         :return:
@@ -228,6 +286,15 @@ class SigCertKeyUsage:
 
     @classmethod
     def read_from_sv_string(cls, ku_str):
+        """
+        Parse a PDF KeyUsage string into an instance of
+        :class:`.SigCertKeyUsage`. See Table 235 in ISO 32000-1.
+
+        :param ku_str:
+            A PDF KeyUsage string.
+        :return:
+            An instance of :class:`.SigCertKeyUsage`.
+        """
         ku_str = ku_str[:9]
 
         def _as_tuple(with_val):
@@ -240,15 +307,35 @@ class SigCertKeyUsage:
 
     @classmethod
     def from_sets(cls, must_have: Set[str] = None, forbidden: Set[str] = None):
+        """
+        Initialise a :class:`.SigCertKeyUsage` object from two sets.
+
+        :param must_have:
+            The key usage extensions that must be present on the signer's
+            certificate.
+        :param forbidden:
+            The key usage extensions that must *not* be present on the signer's
+            certificate.
+        :return:
+            A :class:`.SigCertKeyUsage` object encoding these.
+        """
         return SigCertKeyUsage(
             must_have=KeyUsage(set() if must_have is None else must_have),
             forbidden=KeyUsage(set() if forbidden is None else forbidden)
         )
 
     def must_have_set(self) -> Set[str]:
+        """
+        Return the set of key usage extensions that must be present
+        on the signer's certificate.
+        """
         return self.must_have.native
 
     def forbidden_set(self) -> Set[str]:
+        """
+        Return the set of key usage extensions that must not be present
+        on the signer's certificate.
+        """
         return self.forbidden.native
 
     def __eq__(self, other):
@@ -325,8 +412,11 @@ class SigCertConstraints:
 
     info_url: str = None
     """
-    Informational URL that should be opened when an appropriate signature
-    cannot be found.
+    Informational URL that should be opened when an appropriate certificate
+    cannot be found (if :attr:`url_type` is ``/Browser``, that is).
+    
+    .. note::
+        PyHanko ignores this value, but we include it for compatibility.
     """
 
     url_type: generic.NameObject = pdf_name('/Browser')
