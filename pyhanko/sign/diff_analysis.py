@@ -37,7 +37,6 @@ validator.
 #  - "Clearing" a reference by yielding it does not imply that the revision
 #    cannot be vetoed by that same rule further down the road (this is why
 #    the first point is important)
-import abc
 import re
 import logging
 from collections import defaultdict
@@ -61,7 +60,7 @@ __all__ = [
     'DocInfoRule', 'DSSCompareRule', 'MetadataUpdateRule',
     'CatalogModificationRule', 'ObjectStreamRule', 'XrefStreamRule',
     'FormUpdatingRule', 'FormUpdate',
-    'FieldMDPRule', 'FieldComparisonSpec', 'FieldMDPContext',
+    'FieldMDPRule', 'FieldComparisonSpec', 'FieldComparisonContext',
     'GenericFieldModificationRule', 'SigFieldCreationRule',
     'SigFieldModificationRule',
     'DiffPolicy', 'StandardDiffPolicy',
@@ -477,7 +476,7 @@ class FieldComparisonSpec:
 
 
 @dataclass(frozen=True)
-class FieldMDPContext:
+class FieldComparisonContext:
     """
     Context for a form diffing operation.
     """
@@ -535,14 +534,14 @@ class FieldMDPRule:
     Sub-rules attached to a :class:`.FormUpdatingRule`.
     """
 
-    def apply(self, context: FieldMDPContext) \
+    def apply(self, context: FieldComparisonContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
         """
-        Apply the rule to the given :class:`.FieldMDPContext`.
+        Apply the rule to the given :class:`.FieldComparisonContext`.
 
         :param context:
             The context of this form revision evaluation, given as an instance
-            of :class:`.FieldMDPContext`.
+            of :class:`.FieldComparisonContext`.
         """
         raise NotImplementedError
 
@@ -564,7 +563,7 @@ class SigFieldCreationRule(FieldMDPRule):
     def __init__(self, approve_widget_bindings=True):
         self.approve_widget_bindings = approve_widget_bindings
 
-    def apply(self, context: FieldMDPContext) \
+    def apply(self, context: FieldComparisonContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         deleted = set(
@@ -674,7 +673,7 @@ class SigFieldCreationRule(FieldMDPRule):
         )
 
 
-class BaseFieldModificationRule(FieldMDPRule, abc.ABC):
+class BaseFieldModificationRule(FieldMDPRule):
 
     def __init__(self, always_modifiable=None, value_update_keys=None):
         self.always_modifiable = (
@@ -711,6 +710,17 @@ class BaseFieldModificationRule(FieldMDPRule, abc.ABC):
             old_field, new_field, self.always_modifiable, raise_exc=False
         )
 
+    def apply(self, context: FieldComparisonContext) \
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+
+        for fq_name, spec in context.field_specs.items():
+            yield from self.check_form_field(fq_name, spec, context)
+
+    def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
+                         context: FieldComparisonContext) \
+            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+        raise NotImplementedError
+
 
 class SigFieldModificationRule(BaseFieldModificationRule):
     """
@@ -719,7 +729,7 @@ class SigFieldModificationRule(BaseFieldModificationRule):
     modifying signature fields that already contain a signature.
 
     This rule will take field locks into account if the
-    :class:`.FieldMDPContext` includes a :class:`.FieldMDPSpec`.
+    :class:`.FieldComparisonContext` includes a :class:`.FieldMDPSpec`.
 
     For (invisible) document timestamps, this is allowed at
     :class:`.ModificationLevel.LTA_UPDATES`, but in all other cases
@@ -727,121 +737,121 @@ class SigFieldModificationRule(BaseFieldModificationRule):
     :class:`.ModificationLevel.FORM_FILLING`.
     """
 
-    def apply(self, context: FieldMDPContext) \
+    def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
+                         context: FieldComparisonContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         # deal with "freshly signed" signature fields,
         # i.e. those that are filled now, but weren't previously
         #  + newly created ones
-        for fq_name, spec in context.field_specs.items():
-            if spec.field_type != '/Sig' or not spec.new_field_ref:
-                continue
+        if spec.field_type != '/Sig' or not spec.new_field_ref:
+            return
 
-            old_field = spec.old_field
-            new_field = spec.new_field
+        old_field = spec.old_field
+        new_field = spec.new_field
 
-            previously_signed = old_field is not None and '/V' in old_field
-            now_signed = '/V' in new_field
+        previously_signed = old_field is not None and '/V' in old_field
+        now_signed = '/V' in new_field
 
-            if old_field:
-                # operating on an existing field ---> check changes
-                # (if the field we're dealing with is new, we don't need
-                #  to bother, the sig field creation rule takes care of that)
+        if old_field:
+            # operating on an existing field ---> check changes
+            # (if the field we're dealing with is new, we don't need
+            #  to bother, the sig field creation rule takes care of that)
 
-                # here, we check that the form field didn't change
-                # beyond the keys that we expect to change when updating,
-                # and also register whether the changes made would be
-                # permissible even when the field is locked.
-                valid_when_locked = self.compare_fields(spec)
-                field_ref_update = FormUpdate(
-                    updated_ref=spec.new_field_ref, field_name=fq_name,
-                    valid_when_locked=valid_when_locked
-                )
-
-                if not previously_signed and now_signed:
-                    yield ModificationLevel.LTA_UPDATES, field_ref_update
-
-                    # whitelist appearance updates at FORM_FILL level
-                    yield from qualify(
-                        ModificationLevel.FORM_FILLING,
-                        _allow_appearance_update(
-                            old_field, new_field, context.old, context.new
-                        ),
-                        transform=FormUpdate.curry_ref(field_name=fq_name)
-                    )
-                else:
-                    # case where the field was already signed, or is still
-                    # not signed in the current revision.
-                    # in this case, the state of the field better didn't change
-                    # at all!
-                    # ... but Acrobat apparently sometimes sets /Ff rather
-                    #  liberally, so we have to make some allowances
-                    if valid_when_locked:
-                        yield ModificationLevel.LTA_UPDATES, field_ref_update
-                    # Skip the comparison logic on /V. In particular, if
-                    # the signature object in question was overridden,
-                    # it should trigger a suspicious modification later.
-                    continue
-
-            if not now_signed:
-                continue
-
-            # We're now in the case where the form field did not exist or did
-            # not have a value in the original revision, but does have one in
-            # the revision we're auditing. If the signature is /DocTimeStamp,
-            # this is a modification at level LTA_UPDATES. If it's a normal
-            # signature, it requires FORM_FILLING.
-            try:
-                current_value_ref = new_field.get_value_as_reference('/V')
-            except (misc.IndirectObjectExpected, KeyError):
-                raise SuspiciousModification(
-                    f"Value of signature field {fq_name} should be an indirect "
-                    f"reference"
-                )
-
-            sig_obj = current_value_ref.get_object()
-            if not isinstance(sig_obj, generic.DictionaryObject):
-                raise SuspiciousModification(
-                    f"Value of signature field {fq_name} is not a dictionary"
-                )
-
-            try:
-                x1, y1, x2, y2 = new_field['/Rect']
-                area = abs(x1 - x2) * abs(y1 - y2)
-            except (TypeError, ValueError, KeyError):
-                area = 0
-
-            # /DocTimeStamps added for LTA validation purposes shouldn't have
-            # an appearance (as per the recommendation in ISO 32000-2, which we
-            # enforce as a rigid rule here)
-            if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
-                sig_whitelist = ModificationLevel.LTA_UPDATES
-            else:
-                sig_whitelist = ModificationLevel.FORM_FILLING
-
-            # first, whitelist the actual signature object
-            yield sig_whitelist, FormUpdate(
-                updated_ref=current_value_ref, field_name=fq_name
+            # here, we check that the form field didn't change
+            # beyond the keys that we expect to change when updating,
+            # and also register whether the changes made would be
+            # permissible even when the field is locked.
+            valid_when_locked = self.compare_fields(spec)
+            field_ref_update = FormUpdate(
+                updated_ref=spec.new_field_ref, field_name=fq_name,
+                valid_when_locked=valid_when_locked
             )
 
-            # since apparently Acrobat didn't get the memo about not having
-            # indirect references in signature objects, we have to do some
-            # tweaking to whitelist /TransformParams if necessary
-            try:
-                # the issue is with signature reference dictionaries
-                for sigref_dict in sig_obj.raw_get('/Reference'):
-                    try:
-                        tp = sigref_dict.raw_get('/TransformParams')
-                        yield (
-                            sig_whitelist,
-                            FormUpdate(
-                                updated_ref=tp.reference, field_name=fq_name
-                            )
+            if not previously_signed and now_signed:
+                yield ModificationLevel.LTA_UPDATES, field_ref_update
+
+                # whitelist appearance updates at FORM_FILL level
+                yield from qualify(
+                    ModificationLevel.FORM_FILLING,
+                    _allow_appearance_update(
+                        old_field, new_field, context.old, context.new
+                    ),
+                    transform=FormUpdate.curry_ref(field_name=fq_name)
+                )
+            else:
+                # case where the field was already signed, or is still
+                # not signed in the current revision.
+                # in this case, the state of the field better didn't change
+                # at all!
+                # ... but Acrobat apparently sometimes sets /Ff rather
+                #  liberally, so we have to make some allowances
+                if valid_when_locked:
+                    yield ModificationLevel.LTA_UPDATES, field_ref_update
+                # Skip the comparison logic on /V. In particular, if
+                # the signature object in question was overridden,
+                # it should trigger a suspicious modification later.
+                return
+
+        if not now_signed:
+            return
+
+        # We're now in the case where the form field did not exist or did
+        # not have a value in the original revision, but does have one in
+        # the revision we're auditing. If the signature is /DocTimeStamp,
+        # this is a modification at level LTA_UPDATES. If it's a normal
+        # signature, it requires FORM_FILLING.
+        try:
+            current_value_ref = new_field.get_value_as_reference('/V')
+        except (misc.IndirectObjectExpected, KeyError):
+            raise SuspiciousModification(
+                f"Value of signature field {fq_name} should be an indirect "
+                f"reference"
+            )
+
+        sig_obj = current_value_ref.get_object()
+        if not isinstance(sig_obj, generic.DictionaryObject):
+            raise SuspiciousModification(
+                f"Value of signature field {fq_name} is not a dictionary"
+            )
+
+        try:
+            x1, y1, x2, y2 = new_field['/Rect']
+            area = abs(x1 - x2) * abs(y1 - y2)
+        except (TypeError, ValueError, KeyError):
+            area = 0
+
+        # /DocTimeStamps added for LTA validation purposes shouldn't have
+        # an appearance (as per the recommendation in ISO 32000-2, which we
+        # enforce as a rigid rule here)
+        if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
+            sig_whitelist = ModificationLevel.LTA_UPDATES
+        else:
+            sig_whitelist = ModificationLevel.FORM_FILLING
+
+        # first, whitelist the actual signature object
+        yield sig_whitelist, FormUpdate(
+            updated_ref=current_value_ref, field_name=fq_name
+        )
+
+        # since apparently Acrobat didn't get the memo about not having
+        # indirect references in signature objects, we have to do some
+        # tweaking to whitelist /TransformParams if necessary
+        try:
+            # the issue is with signature reference dictionaries
+            for sigref_dict in sig_obj.raw_get('/Reference'):
+                try:
+                    tp = sigref_dict.raw_get('/TransformParams')
+                    yield (
+                        sig_whitelist,
+                        FormUpdate(
+                            updated_ref=tp.reference, field_name=fq_name
                         )
-                    except (KeyError, AttributeError):
-                        continue
-            except KeyError:
-                pass
+                    )
+                except (KeyError, AttributeError):
+                    continue
+        except KeyError:
+            pass
 
 
 class GenericFieldModificationRule(BaseFieldModificationRule):
@@ -850,7 +860,7 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
     :class:`.ModificationLevel.FORM_FILLING`.
 
     This rule will take field locks into account if the
-    :class:`.FieldMDPContext` includes a :class:`.FieldMDPSpec`.
+    :class:`.FieldComparisonContext` includes a :class:`.FieldMDPSpec`.
 
     For (invisible) document timestamps, this is allowed at
     :class:`.ModificationLevel.LTA_UPDATES`, but in all other cases
@@ -858,53 +868,53 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
     :class:`.ModificationLevel.FORM_FILLING`.
     """
 
-    def apply(self, context: FieldMDPContext) \
+    def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
+                         context: FieldComparisonContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
-        for fq_name, spec in context.field_specs.items():
 
-            if spec.field_type == '/Sig' or \
-                    not spec.new_field_ref or not spec.old_field_ref:
-                continue
+        if spec.field_type == '/Sig' or \
+                not spec.new_field_ref or not spec.old_field_ref:
+            return
 
-            valid_when_locked = self.compare_fields(spec)
-            yield (
-                ModificationLevel.FORM_FILLING,
-                FormUpdate(
-                    updated_ref=spec.new_field_ref, field_name=fq_name,
-                    valid_when_locked=valid_when_locked
-                )
+        valid_when_locked = self.compare_fields(spec)
+        yield (
+            ModificationLevel.FORM_FILLING,
+            FormUpdate(
+                updated_ref=spec.new_field_ref, field_name=fq_name,
+                valid_when_locked=valid_when_locked
             )
-            old_field = spec.old_field
-            new_field = spec.new_field
+        )
+        old_field = spec.old_field
+        new_field = spec.new_field
+        yield from qualify(
+            ModificationLevel.FORM_FILLING,
+            _allow_appearance_update(
+                old_field, new_field, context.old, context.new
+            ),
+            transform=FormUpdate.curry_ref(field_name=fq_name)
+        )
+        try:
+            new_value = new_field.raw_get('/V')
+        except KeyError:
+            # no current value => nothing else to check
+            return
+        try:
+            old_value = old_field.raw_get('/V')
+        except KeyError:
+            old_value = None
+
+        # if the value was changed, pull in newly defined objects.
+        # TODO is this sufficient?
+        if new_value != old_value:
+            deps = context.new.collect_dependencies(
+                new_value,
+                since_revision=context.old.revision + 1
+            )
             yield from qualify(
                 ModificationLevel.FORM_FILLING,
-                _allow_appearance_update(
-                    old_field, new_field, context.old, context.new
-                ),
+                misc._as_gen(deps),
                 transform=FormUpdate.curry_ref(field_name=fq_name)
             )
-            try:
-                new_value = new_field.raw_get('/V')
-            except KeyError:
-                # no current value => nothing else to check
-                continue
-            try:
-                old_value = old_field.raw_get('/V')
-            except KeyError:
-                old_value = None
-
-            # if the value was changed, pull in newly defined objects.
-            # TODO is this sufficient?
-            if new_value != old_value:
-                deps = context.new.collect_dependencies(
-                    new_value,
-                    since_revision=context.old.revision + 1
-                )
-                yield from qualify(
-                    ModificationLevel.FORM_FILLING,
-                    misc._as_gen(deps),
-                    transform=FormUpdate.curry_ref(field_name=fq_name)
-                )
 
 
 class FormUpdatingRule:
@@ -984,7 +994,7 @@ class FormUpdatingRule:
         except KeyError:  # pragma: nocover
             raise misc.PdfReadError("Could not read /Fields in form")
 
-        context = FieldMDPContext(
+        context = FieldComparisonContext(
             field_specs=dict(_list_fields(old_fields, new_fields)),
             old=old, new=new
         )
