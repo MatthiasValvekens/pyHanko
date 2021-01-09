@@ -94,9 +94,9 @@ In simple cases, signing a document can therefore be as easy as this:
         # do stuff with 'out'
         # ...
 
-The :func:`~.pyhanko.sign.signers.sign_pdf` is a thin convenience wrapper around
-|PdfSigner|'s :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf` method, with
-essentially the same API.
+The :func:`~.pyhanko.sign.signers.sign_pdf` function is a thin convenience
+wrapper around |PdfSigner|'s :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`
+method, with essentially the same API.
 The following code is more or less equivalent.
 
 .. code-block:: python
@@ -126,6 +126,9 @@ reusability and more granular control over the signature's appearance.
 
 In the above examples, ``out`` ends up containing a byte buffer
 (:class:`.io.BytesIO` object) with the signed output.
+You can control the output stream using the ``output`` or ``in_place``
+parameters; see the documentation for
+:meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`.
 
 .. danger::
     Any :class:`~.pyhanko.pdf_utils.incremental_writer.IncrementalPdfFileWriter`
