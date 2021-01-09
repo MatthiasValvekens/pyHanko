@@ -116,7 +116,6 @@ def test_sv_mdp_type():
         fields.MDPPerm.FILL_FORMS
     )
 
-
     with pytest.raises(SigningError):
         fields.SigSeedValueSpec.from_pdf_object(
             generic.DictionaryObject({
@@ -156,9 +155,9 @@ def test_append_sig_field_with_simple_sv():
             subject_dn=FROM_CA.signing_cert.subject,
             issuers=[INTERM_CERT],
             subjects=[FROM_CA.signing_cert],
-            key_usage=fields.SigCertKeyUsage.from_sets(
-                {'digital_signature'}, {'key_agreement'}
-            )
+            key_usage=[fields.SigCertKeyUsage.from_sets(
+                {'digital_signature', 'non_repudiation'}, {'key_agreement'}
+            )]
         ),
         digest_methods=['ssh256'],
         add_rev_info=True,
@@ -188,6 +187,34 @@ def test_append_sig_field_with_simple_sv():
     subjects1[0] = subjects1[0].dump()
     subjects2[0] = subjects2[0].dump()
     assert recovered_sv == sv
+
+
+SV_KU_SATISFIED = "11XXXXXX0"
+SV_KU_NOT_SATISFIED = "10XXXXXX0"
+
+
+@pytest.mark.parametrize('ku_strs', [[SV_KU_SATISFIED],
+                                     [SV_KU_SATISFIED, SV_KU_NOT_SATISFIED]])
+def test_cert_constraint_key_usage_ok(ku_strs):
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.KEY_USAGE,
+        key_usage=[
+            fields.SigCertKeyUsage.read_from_sv_string(ku) for ku in ku_strs
+        ]
+    )
+    scc.satisfied_by(FROM_CA.signing_cert, None)
+
+
+@pytest.mark.parametrize('ku_strs', [[SV_KU_NOT_SATISFIED], []])
+def test_cert_constraint_key_usage_not_ok(ku_strs):
+    scc = fields.SigCertConstraints(
+        flags=fields.SigCertConstraintFlags.KEY_USAGE,
+        key_usage=[
+            fields.SigCertKeyUsage.read_from_sv_string(ku) for ku in ku_strs
+        ]
+    )
+    with pytest.raises(UnacceptableSignerError):
+        scc.satisfied_by(FROM_CA.signing_cert, None)
 
 
 def test_cert_constraint_subject_dn():

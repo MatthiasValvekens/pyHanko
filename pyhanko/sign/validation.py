@@ -28,10 +28,13 @@ from .diff_analysis import (
     SuspiciousModification, ModificationLevel, DEFAULT_DIFF_POLICY, DiffPolicy,
     DiffResult,
 )
-from .fields import MDPPerm, FieldMDPSpec, SeedLockDocument
+from .fields import (
+    MDPPerm, FieldMDPSpec, SeedLockDocument, SigSeedValueSpec,
+    SigSeedValFlags, SigSeedSubFilter
+)
 from .general import (
     SignatureStatus, find_cms_attribute,
-    UnacceptableSignerError,
+    UnacceptableSignerError, KeyUsageConstraints,
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -120,6 +123,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
                             raw_digest: bytes = None,
                             validation_context: ValidationContext = None,
                             status_kwargs: dict = None,
+                            key_usage_settings: KeyUsageConstraints = None,
                             externally_invalid=False):
     """
     Validate CMS and PKCS#7 signatures.
@@ -188,8 +192,9 @@ def _validate_cms_signature(signed_data: cms.SignedData,
             cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
-        trusted, revoked, path = \
-            status_cls.validate_cert_usage(validator)
+        trusted, revoked, path = status_cls.validate_cert_usage(
+            validator, key_usage_settings=key_usage_settings
+        )
 
     status_kwargs = status_kwargs or {}
     status_kwargs.update(
@@ -206,6 +211,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            raw_digest: bytes = None,
                            validation_context: ValidationContext = None,
                            status_kwargs: dict = None,
+                           key_usage_settings: KeyUsageConstraints = None,
                            externally_invalid=False):
     """
     Validate a detached CMS signature (i.e. a ``SignedData`` object).
@@ -221,6 +227,9 @@ def validate_cms_signature(signed_data: cms.SignedData,
     :param status_kwargs:
         Other keyword arguments to pass to the ``status_class`` when reporting
         validation results.
+    :param key_usage_settings:
+        A :class:`.KeyUsageConstraints` object specifying which key usage
+        extensions must or must not be present in the signer's certificate.
     :param externally_invalid:
         If ``True``, there is an external reason why the signature cannot
         be valid, but the remaining validation logic still has to be run.
@@ -232,7 +241,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
     """
     status_kwargs = _validate_cms_signature(
         signed_data, status_cls, raw_digest, validation_context,
-        status_kwargs, externally_invalid
+        status_kwargs, key_usage_settings, externally_invalid
     )
     return status_cls(**status_kwargs)
 
@@ -723,6 +732,14 @@ class EmbeddedPdfSignature:
         return status_kwargs
 
     @property
+    def seed_value_spec(self) -> Optional[SigSeedValueSpec]:
+        try:
+            sig_sv_dict = self.sig_field['/SV']
+        except KeyError:
+            return
+        return SigSeedValueSpec.from_pdf_object(sig_sv_dict)
+
+    @property
     def docmdp_level(self) -> Optional[MDPPerm]:
         """
         :return:
@@ -920,22 +937,12 @@ class EmbeddedPdfSignature:
         )
 
 
-# TODO confirm the rules on name uniqueness
-#  (in particular for things like choice fields, where there are potentially
-#   multiple widgets)
-
-
 def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
                              signing_cert, validation_path, timestamp_found):
-    from pyhanko.sign.fields import (
-        SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter
-    )
-    sig_field = emb_sig.sig_field
-    try:
-        sig_sv_dict = sig_field['/SV']
-    except KeyError:
+
+    sv_spec = emb_sig.seed_value_spec
+    if sv_spec is None:
         return
-    sv_spec = SigSeedValueSpec.from_pdf_object(sig_sv_dict)
 
     if sv_spec.cert is not None:
         try:
@@ -1108,6 +1115,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None,
                            diff_policy: DiffPolicy = None,
+                           key_usage_settings: KeyUsageConstraints = None,
                            skip_diff: bool = False) -> PdfSignatureStatus:
     """
     Validate a PDF signature.
@@ -1123,6 +1131,9 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
         Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+    :param key_usage_settings:
+        A :class:`.KeyUsageConstraints` object specifying which key usage
+        extensions must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1171,7 +1182,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.raw_digest,
         validation_context=signer_validation_context,
-        status_kwargs=status_kwargs
+        status_kwargs=status_kwargs, key_usage_settings=key_usage_settings
     )
     timestamp_found = (
         tst_validity is not None
@@ -1306,6 +1317,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                bootstrap_validation_context=None,
                                force_revinfo=False,
                                diff_policy: DiffPolicy = None,
+                               key_usage_settings: KeyUsageConstraints = None,
                                skip_diff: bool = False) -> PdfSignatureStatus:
     """
     Validate a PDF LTV signature according to a particular profile.
@@ -1326,6 +1338,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
         Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+    :param key_usage_settings:
+        A :class:`.KeyUsageConstraints` object specifying which key usage
+        extensions must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1427,7 +1442,8 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     status_kwargs = _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.raw_digest,
-        validation_context=stored_vc, status_kwargs=status_kwargs
+        validation_context=stored_vc, status_kwargs=status_kwargs,
+        key_usage_settings=key_usage_settings
     )
 
     _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found=True)

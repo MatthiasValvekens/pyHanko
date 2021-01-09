@@ -9,6 +9,7 @@ from typing import List, Optional, Union, Set
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
+from certvalidator import InvalidCertificateError
 from certvalidator.path import ValidationPath
 from oscrypto import keys as oskeys
 
@@ -17,7 +18,10 @@ from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError, get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
-from pyhanko.sign.general import UnacceptableSignerError, SigningError
+from pyhanko.sign.general import (
+    UnacceptableSignerError, SigningError,
+    KeyUsageConstraints,
+)
 from pyhanko.stamp import AnnotAppearances
 
 __all__ = [
@@ -235,7 +239,7 @@ class SigCertKeyUsage:
         )
 
     @classmethod
-    def from_sets(cls, must_have: Set[str]=None, forbidden: Set[str]=None):
+    def from_sets(cls, must_have: Set[str] = None, forbidden: Set[str] = None):
         return SigCertKeyUsage(
             must_have=KeyUsage(set() if must_have is None else must_have),
             forbidden=KeyUsage(set() if forbidden is None else forbidden)
@@ -331,7 +335,7 @@ class SigCertConstraints:
     ``/Browser`` is the only implementation-independent value.
     """
 
-    key_usage: SigCertKeyUsage = SigCertKeyUsage()
+    key_usage: List[SigCertKeyUsage] = None
     """
     Specify the key usage extensions that should (or should not) be present
     on the signer's certificate.
@@ -381,9 +385,9 @@ class SigCertConstraints:
             for attr, value in dn_dir.items()
         })
 
-        key_usage = SigCertKeyUsage.read_from_sv_string(
-            pdf_dict.get('/KeyUsage', '')
-        )
+        def parse_key_usage(val):
+            return [SigCertKeyUsage.read_from_sv_string(ku) for ku in val]
+        key_usage = get_and_apply(pdf_dict, '/KeyUsage', parse_key_usage)
 
         url = pdf_dict.get('/URL')
         url_type = pdf_dict.get('/URLType')
@@ -434,9 +438,10 @@ class SigCertConstraints:
             result[pdf_name('/URL')] = pdf_string(self.info_url)
             result[pdf_name('/URLType')] = self.url_type
 
-        ku = self.key_usage
-        if ku.must_have_set() or ku.forbidden_set():
-            result[pdf_name('/KeyUsage')] = pdf_string(ku.encode_to_sv_string())
+        if self.key_usage is not None:
+            result[pdf_name('/KeyUsage')] = generic.ArrayObject(
+                pdf_string(ku.encode_to_sv_string()) for ku in self.key_usage
+            )
 
         return result
 
@@ -501,6 +506,22 @@ class SigCertConstraints:
                 raise UnacceptableSignerError(
                     "Subject does not have some of the following required "
                     "attributes: " + self.subject_dn.human_friendly
+                )
+        if (flags & SigCertConstraintFlags.KEY_USAGE) \
+                and self.key_usage is not None:
+            for ku in self.key_usage:
+                try:
+                    KeyUsageConstraints(
+                        key_usage=ku.must_have_set(),
+                        key_usage_forbidden=ku.forbidden_set()
+                    ).validate(signer)
+                    break
+                except InvalidCertificateError:
+                    continue
+            else:
+                raise UnacceptableSignerError(
+                    "The signer satisfies none of the key usage "
+                    "extension profiles specified in the seed value dictionary."
                 )
 
 

@@ -34,6 +34,74 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class KeyUsageConstraints:
+    """
+    Convenience class to pass around key usage requirements and validate them.
+    """
+
+    key_usage: Set[str] = None
+    """
+    These key usage extensions must be present in the signer's certificate.
+    """
+
+    extd_key_usage: Set[str] = None
+    """
+    These extended key usage extensions must be present in the signer's
+    certificate.
+    """
+
+    key_usage_forbidden: Set[str] = None
+    """
+    These key usage extensions must not be present in the signer's certificate.
+    """
+
+    extd_key_usage_forbidden: Set[str] = None
+    """
+    These extended key usage extensions must not be present in the signer's
+    certificate.
+    """
+
+    def validate(self, cert: x509.Certificate):
+
+        # the PDF specification permits this type of "negative" constraint
+        # in seed value dictionaries.
+        # We have to validate these manually.
+        key_usage = self.key_usage or set()
+        extd_key_usage = self.extd_key_usage or set()
+        key_usage_forbidden = self.key_usage_forbidden or set()
+        extd_key_usage_forbidden = self.extd_key_usage_forbidden or set()
+        cert_ku = (
+            set(cert.key_usage_value.native) if cert.key_usage_value is not None
+            else set()
+        )
+        cert_extd_ku = (
+            set(cert.extended_key_usage_value.native)
+            if cert.extended_key_usage_value is not None
+            else set()
+        )
+
+        must_have = key_usage - cert_ku
+        must_have |= extd_key_usage - cert_extd_ku
+
+        forbidden = cert_ku & key_usage_forbidden
+        forbidden |= cert_extd_ku & extd_key_usage_forbidden
+
+        if must_have:
+            rephrased = map(lambda s: s.replace('_', ' '), must_have)
+            raise InvalidCertificateError(
+                "The active key usage policy requires the key extensions "
+                f"{', '.join(rephrased)} to be present."
+            )
+
+        if forbidden:
+            rephrased = map(lambda s: s.replace('_', ' '), forbidden)
+            raise InvalidCertificateError(
+                "The active key usage policy explicitly bans certificates "
+                f"used for {', '.join(rephrased)}."
+            )
+
+
+@dataclass(frozen=True)
 class SignatureStatus:
     """
     Class describing the validity of a (general) CMS signature.
@@ -122,14 +190,28 @@ class SignatureStatus:
             return 'INVALID'
 
     @classmethod
-    def validate_cert_usage(cls, validator: CertificateValidator):
+    def validate_cert_usage(cls, validator: CertificateValidator,
+                            key_usage_settings: KeyUsageConstraints = None):
+        key_usage_settings = key_usage_settings or KeyUsageConstraints()
+        key_usage_settings = KeyUsageConstraints(
+            key_usage=(
+                cls.key_usage if key_usage_settings.key_usage is None
+                else key_usage_settings.key_usage
+            ),
+            extd_key_usage=(
+                cls.extd_key_usage if key_usage_settings.extd_key_usage is None
+                else key_usage_settings.extd_key_usage
+            )
+        )
+        cert: x509.Certificate = validator._certificate
 
         revoked = trusted = False
         path = None
+
         try:
-            path = validator.validate_usage(
-                key_usage=cls.key_usage, extended_key_usage=cls.extd_key_usage
-            )
+            # validate usage without going through certvalidator
+            key_usage_settings.validate(cert)
+            path = validator.validate_usage(key_usage=set())
             trusted = True
         except InvalidCertificateError as e:
             # TODO accumulate these somewhere
@@ -139,7 +221,7 @@ class SignatureStatus:
         except (PathValidationError, PathBuildingError) as e:
             logger.warning(e)
         if not trusted:
-            subj = validator._certificate.subject.human_friendly
+            subj = cert.subject.human_friendly
             logger.warning(
                 f"Chain of trust validation for {subj} failed."
             )
