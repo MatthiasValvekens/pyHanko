@@ -250,7 +250,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
 class SignatureCoverageLevel(OrderedEnum):
     """
     Indicate the extent to which a PDF signature (cryptographically) covers
-    a document. Note that this does _not_ pass judgment on whether uncovered
+    a document. Note that this does *not* pass judgment on whether uncovered
     updates are legitimate or not, but as a general rule, a legitimate signature
     will satisfy at least :attr:`ENTIRE_REVISION`.
     """
@@ -336,6 +336,9 @@ class PdfSignatureStatus(SignatureStatus):
         """
         Indicates the degree to which the document was modified after the
         signature was applied.
+
+        Will be ``None`` if difference analysis results are not available;
+        an instance of :class:`.ModificationLevel` otherwise.
         """
 
         if self.diff_result is None:

@@ -1,5 +1,6 @@
 """
 .. versionadded:: 0.2.0
+
     :mod:`pyhanko.sign.diff_analysis` extracted from
     :mod:`pyhanko.sign.validation` and restructured into a more rule-based
     format.
@@ -21,22 +22,37 @@ Whitelisting rules are encouraged to apply their vetoes liberally.
 
 Whitelisting rules are bundled in :class:`.DiffPolicy` objects for use by the
 validator.
+
+
+Guidelines for developing rules for use with :class:`.StandardDiffPolicy`
+-------------------------------------------------------------------------
+
+.. caution::
+    These APIs aren't fully stable yet, so some changes might still occur
+    between now and the first major release.
+
+In general, you should keep the following informal guidelines in mind when
+putting together custom diff rules.
+
+* All rules are either executed completely (i.e. their generators exhausted)
+  or aborted.
+* If the diff runner aborts a rule, this always means that the entire
+  revision is rejected. In other words, for accepted revisions, all rules
+  will always have run to completion.
+* Whitelisting rules are allowed to informally delegate some checking to
+  other rules, provided that this is documented clearly.
+
+  .. note::
+      Example: :class:`.CatalogModificationRule` ignores ``/AcroForm``,
+      which is validated by another rule entirely.
+
+* Rules should be entirely stateless.
+  "Clearing" a reference by yielding it does not imply that the revision
+  cannot be vetoed by that same rule further down the road (this is why
+  the first point is important).
+
 """
 
-# TODO flesh out & comment on the contract of a whitelisting rule.
-#
-#  - All rules are either executed completely (i.e. their generators exhausted)
-#    or aborted.
-#  - If the diff runner aborts a rule, this always means that the revision
-#    is rejected.
-#  - Whitelisting rules are allowed to informally delegate some checking to
-#    other rules, provided that this is documented clearly.
-#    (example: Catalog validator ignores /AcroForm, which is validated by
-#     another rule entirely)
-#  - Rules should be entirely stateless.
-#  - "Clearing" a reference by yielding it does not imply that the revision
-#    cannot be vetoed by that same rule further down the road (this is why
-#    the first point is important)
 import re
 import logging
 from collections import defaultdict
@@ -1039,10 +1055,9 @@ class CatalogModificationRule(QualifiedWhitelistRule):
         The default ones are ``/AcroForm``, ``/DSS``, ``/Extensions``,
         ``/Metadata`` and ``/MarkInfo``.
 
-        This rule also includes a basic sanity check to prevent ``/Metadata``
-        from clobbering existing streams, but allows it to be redefined.
-        Checking for ``/AcroForm`` and ``/DSS`` is delegated to
-        :class:`.FormUpdatingRule` and :class:`.DSSCompareRule`, respectively.
+        Checking for ``/AcroForm``, ``/DSS`` and ``/Metadata`` is delegated to
+        :class:`.FormUpdatingRule`, :class:`.DSSCompareRule` and
+        :class:`.MetadataUpdateRule`, respectively.
     """
 
     def __init__(self, ignored_keys=None):

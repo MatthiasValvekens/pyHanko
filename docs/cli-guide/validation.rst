@@ -60,6 +60,8 @@ This is where the :ref:`trust <cli-embedding-revinfo>`
 :ref:`settings <config-validation-context>` mentioned above come into play.
 
 
+.. _validation-general-incremental-updates:
+
 Incremental updates: difference analysis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
