@@ -635,13 +635,19 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
 
 def _index_page(page):
     try:
-        page_ix = int(page) - 1
-        if page_ix < 0:
+        page_ix = int(page)
+        if not page_ix:
             raise ValueError
-        return page_ix
+        if page_ix > 0:
+            # subtract 1 from the total, since that's what people expect
+            # when referring to a page index
+            return page_ix - 1
+        else:
+            # keep negative indexes as-is.
+            return page_ix
     except ValueError:
         raise click.ClickException(
-            "Sig field parameter PAGE should be a positive integer, "
+            "Sig field parameter PAGE should be a nonzero integer, "
             "not %s." % page
         )
 

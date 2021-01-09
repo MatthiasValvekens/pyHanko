@@ -1138,6 +1138,8 @@ class SigFieldSpec:
     """
     Index of the page on which the signature field should be included (starting
     at `0`).
+    A negative number counts pages from the back of the document,
+    with index ``-1`` referring to the last page.
     
     .. note::
         This is essentially only relevant for visible signature fields, i.e.

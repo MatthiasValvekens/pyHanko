@@ -67,6 +67,8 @@ class PdfHandler:
             root_resources = generic.DictionaryObject()
 
         page_count = page_tree_root['/Count']
+        if page_ix < 0:
+            page_ix = page_count + page_ix
         if not (0 <= page_ix < page_count):
             raise ValueError('Page index out of range')
 
@@ -125,6 +127,8 @@ class PdfHandler:
         :param page_ix:
             The (zero-indexed) number of the page for which we want to
             retrieve the parent.
+            A negative number counts pages from the back of the document,
+            with index ``-1`` referring to the last page.
         :return:
             A triple with the ``/Pages`` object (or a reference to it),
             the index of the target page in said ``/Pages`` object, and a
@@ -139,6 +143,8 @@ class PdfHandler:
 
         :param page_ix:
             The (zero-indexed) number of the page to retrieve.
+            A negative number counts pages from the back of the document,
+            with index ``-1`` referring to the last page.
         :return:
             A tuple with a reference to the page object and a
             (possibly inherited) resource dictionary.

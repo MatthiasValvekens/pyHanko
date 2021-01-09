@@ -26,8 +26,8 @@ def test_create_fresh(zip1, zip2):
     pdf_out = writer.PdfFileWriter()
     p1 = simple_page(pdf_out, 'Hello world', compress=zip1)
     p2 = simple_page(pdf_out, 'Hello Page 2', compress=zip2)
-    pdf_out.insert_page(p1)
-    pdf_out.insert_page(p2)
+    p1_ref = pdf_out.insert_page(p1)
+    p2_ref = pdf_out.insert_page(p2)
 
     out = BytesIO()
     pdf_out.write(out)
@@ -39,6 +39,16 @@ def test_create_fresh(zip1, zip2):
     kids = pages['/Kids']
     assert b'world' in kids[0].get_object()['/Contents'].data
     assert b'Page 2' in kids[1].get_object()['/Contents'].data
+
+    assert r.find_page_for_modification(0)[0].idnum == p1_ref.idnum
+    assert r.find_page_for_modification(1)[0].idnum == p2_ref.idnum
+    assert r.find_page_for_modification(-1)[0].idnum == p2_ref.idnum
+    assert r.find_page_for_modification(-2)[0].idnum == p1_ref.idnum
+
+    with pytest.raises(ValueError):
+        r.find_page_for_modification(2)
+    with pytest.raises(ValueError):
+        r.find_page_for_modification(-3)
 
 
 NOTO_SERIF_JP = 'pyhanko_tests/data/fonts/NotoSerifJP-Regular.otf'
