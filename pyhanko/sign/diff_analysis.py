@@ -632,10 +632,11 @@ class SigFieldCreationRule(FieldMDPRule):
             # Since LTA updates should arguably not trigger field locks either
             # (relevant for FieldMDP settings that use /All or /Exclude),
             # we pass valid_when_locked=True on these updates
-            yield ModificationLevel.LTA_UPDATES, FormUpdate(
-                updated_ref=sigfield_ref, field_name=fq_name,
-                valid_when_locked=True
-            )
+            if context.old.is_ref_available(sigfield_ref):
+                yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                    updated_ref=sigfield_ref, field_name=fq_name,
+                    valid_when_locked=True
+                )
             sigfield = sigfield_ref.get_object()
             # checked by field listing routine already
             assert isinstance(sigfield, generic.DictionaryObject)
