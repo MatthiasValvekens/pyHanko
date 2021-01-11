@@ -956,6 +956,9 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             )
 
 
+ACROFORM_EXEMPT_STRICT_COMPARISON = {'/Fields', '/DR'}
+
+
 class FormUpdatingRule:
     """
     Special whitelisting rule that validates changes to the form attached to
@@ -987,7 +990,7 @@ class FormUpdatingRule:
         self.field_rules = field_rules
         self.ignored_acroform_keys = (
             ignored_acroform_keys if ignored_acroform_keys is not None
-            else {'/Fields'}
+            else ACROFORM_EXEMPT_STRICT_COMPARISON
         )
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
@@ -1001,17 +1004,12 @@ class FormUpdatingRule:
             The newer revision to be vetted.
         """
 
-        def _emit_ref(_ref):
-            return (
-                ModificationLevel.LTA_UPDATES,
-                FormUpdate(updated_ref=_ref, field_name=None)
-            )
-
-        old_acroform, new_acroform = yield from misc.map_with_return(
+        old_acroform, new_acroform = yield from qualify(
+            ModificationLevel.LTA_UPDATES,
             _compare_key_refs(
                 '/AcroForm', old, old.root, new.root
             ),
-            _emit_ref
+            transform=FormUpdate.curry_ref(field_name=None)
         )
 
         # first, compare the entries that aren't /Fields
@@ -1023,15 +1021,27 @@ class FormUpdatingRule:
         # This is fine: the _list_fields logic checks that it really contains
         # stuff that looks like form fields, and other rules are responsible
         # for vetting the creation of other form fields anyway.
-        yield from misc.map_with_return(
+        old_fields, new_fields = yield from qualify(
+            ModificationLevel.LTA_UPDATES,
             _compare_key_refs('/Fields', old, old_acroform, new_acroform),
-            _emit_ref
+            transform=FormUpdate.curry_ref(field_name=None)
         )
-        try:
-            old_fields = old_acroform['/Fields']
-            new_fields = new_acroform['/Fields']
-        except KeyError:  # pragma: nocover
-            raise misc.PdfReadError("Could not read /Fields in form")
+
+        # we also need to deal with the default resource dict, since
+        # Acrobat / Adobe Reader sometimes mess with it
+        old_dr, new_dr = yield from qualify(
+            ModificationLevel.FORM_FILLING,
+            _compare_key_refs('/DR', old, old_acroform, new_acroform),
+            transform=FormUpdate.curry_ref(field_name=None)
+        )
+        if new_dr is not None:
+            dr_deps = new.collect_dependencies(
+                new_dr, since_revision=old.revision + 1
+            )
+            yield from qualify(
+                ModificationLevel.FORM_FILLING, misc._as_gen(dr_deps),
+                transform=FormUpdate.curry_ref(field_name=None)
+            )
 
         context = FieldComparisonContext(
             field_specs=dict(_list_fields(old_fields, new_fields)),
@@ -1565,7 +1575,7 @@ def _compare_key_refs(key, old: HistoricalResolver,
             raise SuspiciousModification(
                 f"Key {key} was deleted from dictionary"
             )
-        return old_value, None  # nothing to do
+        return None, None  # nothing to do
 
     if new_value_ref is not None:
         yield from _safe_whitelist(old, old_value_ref, new_value_ref)

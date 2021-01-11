@@ -103,16 +103,25 @@ def test_double_sig_add_field(file_ix):
     val_trusted(s)
 
 
+@pytest.mark.parametrize('infile_name', [
+    'minimal-two-fields-signed-twice.pdf',
+    'minimal-signed-twice-second-created.pdf',
+    'minimal-signed-twice-both-created.pdf'
+])
 @freeze_time('2021-01-05')
-def test_double_sig_adobe_reader():
+def test_double_sig_adobe_reader(infile_name):
     # test using a double signature created using Adobe Reader
     # (uses object streams, XMP metadata updates and all the fun stuff)
 
-    infile = BytesIO(
-        read_all(PDF_DATA_DIR + '/minimal-two-fields-signed-twice.pdf')
-    )
-    r = PdfFileReader(infile)
+    # One file has two prepared form fields, signed one by one by Adobe Reader.
+    # The other file has one prepared form field, signed by Adobe Reader,
+    # and the second signature occupies a form field that was created on the fly
+    # by Adobe Reader.
+    # The last one involves a double signature where both fields were created
+    # by Adobe Reader.
 
+    infile = BytesIO(read_all('%s/%s' % (PDF_DATA_DIR, infile_name)))
+    r = PdfFileReader(infile)
 
     s = r.embedded_signatures[0]
     status = val_untrusted(s, extd=True)
@@ -122,6 +131,21 @@ def test_double_sig_adobe_reader():
     s = r.embedded_signatures[1]
     val_untrusted(s)
 
+
+@freeze_time('2021-01-12')
+def test_double_sig_adobe_reader_second_created():
+    infile = BytesIO(
+        read_all(PDF_DATA_DIR + '/minimal-signed-twice-second-created.pdf')
+    )
+    r = PdfFileReader(infile)
+
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
+
+    s = r.embedded_signatures[1]
+    val_untrusted(s)
 
 @freeze_time('2021-01-05')
 def test_bogus_metadata_manipulation():
