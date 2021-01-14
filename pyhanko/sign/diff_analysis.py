@@ -1053,7 +1053,7 @@ class FormUpdatingRule:
 
 
 ROOT_EXEMPT_STRICT_COMPARISON = {
-    '/AcroForm', '/DSS', '/Extensions', '/Metadata', '/MarkInfo'
+    '/AcroForm', '/DSS', '/Extensions', '/Metadata', '/MarkInfo', '/Version'
 }
 
 
