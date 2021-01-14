@@ -244,3 +244,14 @@ def chunked_digest(temp_buffer: bytearray, stream, md, max_read=None):
         else:
             to_feed = read_buffer
         md.update(to_feed)
+
+
+class Singleton(type):
+
+    def __new__(mcs, name, bases, dct):
+        cls = type.__new__(mcs, name, bases, dct)
+        cls.__instance = type.__call__(cls)
+        return cls
+
+    def __call__(cls):
+        return cls.__instance

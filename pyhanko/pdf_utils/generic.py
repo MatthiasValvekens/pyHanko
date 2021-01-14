@@ -13,12 +13,11 @@ from typing import Iterator, Tuple, Optional, Union, Callable, Any
 from dataclasses import dataclass, field
 
 from .misc import (
-    read_non_whitespace, skip_over_comment, read_until_regex,
+    read_non_whitespace, skip_over_comment, read_until_regex
 )
 from .misc import PdfStreamError, PdfReadError, IndirectObjectExpected
 import logging
 from . import filters
-from .crypt import rc4_encrypt
 import decimal
 import codecs
 
@@ -268,18 +267,17 @@ class PdfObject:
         """
         return self
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key: bytes = None):
         """
         Abstract method to render this object to an output stream.
 
         :param stream:
             An output stream.
-        :param encryption_key:
-            Key to encrypt the object with.
+        :param local_key:
+            Local encryption key.
+        :param handler:
+            Security handler
         """
-        # TODO put a reference to the encryption docs here (as soon as I have
-        #  those), since it's worth stressing that we only support the crappy
-        #  RC4 encryption scheme of yore.
         raise NotImplementedError
 
 
@@ -289,7 +287,7 @@ class NullObject(PdfObject):
     All instances are treated as equal and falsy.
     """
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         stream.write(b"null")
 
     @staticmethod
@@ -315,7 +313,7 @@ class BooleanObject(PdfObject):
     def __init__(self, value):
         self.value = value
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         if self.value:
             stream.write(b"true")
         else:
@@ -375,11 +373,11 @@ class ArrayObject(list, PdfObject):
         val = list.__getitem__(self, index)
         return _deproxy_decrypt(val) if decrypt else val
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         stream.write(b"[")
         for data in self:
             stream.write(b" ")
-            data.write_to_stream(stream, encryption_key)
+            data.write_to_stream(stream, handler=handler, local_key=local_key)
         stream.write(b" ]")
 
     @staticmethod
@@ -467,7 +465,7 @@ class IndirectObject(PdfObject, Dereferenceable):
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         stream.write(b"%d %d R" % (self.idnum, self.generation))
 
     @staticmethod
@@ -529,7 +527,7 @@ class FloatObject(decimal.Decimal, PdfObject):
         """
         return float(self)
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         stream.write(repr(self).encode('ascii'))
 
 
@@ -554,7 +552,7 @@ class NumberObject(int, PdfObject):
         """
         return int(self)
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         stream.write(repr(self).encode('ascii'))
 
     @staticmethod
@@ -714,10 +712,10 @@ class ByteStringObject(bytes, PdfObject):
     For compatibility with :attr:`.TextStringObject.original_bytes`
     """
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         bytearr = self
-        if encryption_key:
-            bytearr = rc4_encrypt(encryption_key, bytearr)
+        if handler is not None and local_key is not None:
+            bytearr = handler.get_string_filter().encrypt(local_key, bytearr)
         stream.write(b"<")
         stream.write(binascii.hexlify(bytearr))
         stream.write(b">")
@@ -759,7 +757,7 @@ class TextStringObject(str, PdfObject):
         else:
             raise Exception("no information about original bytes")
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         # Try to write the string out as a PDFDocEncoding encoded string.  It's
         # nicer to look at in the PDF file.  Sadly, we take a performance hit
         # here for trying...
@@ -768,10 +766,10 @@ class TextStringObject(str, PdfObject):
             bytearr = encode_pdfdocencoding(self)
         except UnicodeEncodeError:
             bytearr = codecs.BOM_UTF16_BE + self.encode("utf-16be")
-        if encryption_key:
-            bytearr = rc4_encrypt(encryption_key, bytearr)
+        if handler is not None and local_key is not None:
+            bytearr = handler.get_string_filter().encrypt(local_key, bytearr)
             obj = ByteStringObject(bytearr)
-            obj.write_to_stream(stream, None)
+            obj.write_to_stream(stream)
         else:
             stream.write(b"(")
             for c in bytearr:
@@ -792,10 +790,8 @@ class NameObject(str, PdfObject):
 
     DELIMITER_PATTERN = re.compile(r"\s+|[\(\)<>\[\]{}/%]".encode('ascii'))
 
-    def write_to_stream(self, stream, encryption_key):
-        # TODO look up the correct encoding to use in the spec
-        #  (although these will be alphanumeric in 99% percent of cases)
-        stream.write(self.encode('utf-8'))
+    def write_to_stream(self, stream, handler=None, local_key=None):
+        stream.write(encode_pdfdocencoding(self))
 
     @staticmethod
     def read_from_stream(stream, strict=True):
@@ -899,12 +895,12 @@ class DictionaryObject(dict, PdfObject):
             raise KeyError
         return value
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         stream.write(b"<<\n")
         for key, value in list(self.items()):
-            key.write_to_stream(stream, encryption_key)
+            key.write_to_stream(stream, handler, local_key)
             stream.write(b" ")
-            value.write_to_stream(stream, encryption_key)
+            value.write_to_stream(stream, handler, local_key)
             stream.write(b"\n")
         stream.write(b">>")
 
@@ -1037,6 +1033,10 @@ class StreamObject(DictionaryObject):
         self._data = stream_data
         self._encoded_data = encoded_data
 
+    @property
+    def _has_crypt_filter(self) -> bool:
+        return '/Crypt' in (name for name, _ in self._filters())
+
     def _filters(self) -> Iterator[Tuple[str, Optional[dict]]]:
         try:
             filter_arr = self[pdf_name('/Filter')]
@@ -1066,12 +1066,23 @@ class StreamObject(DictionaryObject):
 
         yield from zip(filter_arr, decode_params)
 
-    def _stream_decoders(self) -> Iterator[Tuple[filters.Decoder, dict]]:
+    def _stream_decoders(self):
         for filter_type, params in self._filters():
             try:
                 if params is None or isinstance(params, NullObject):
                     params = {}
-                yield filters.DECODERS[filter_type], params
+                if filter_type == '/Crypt':
+                    # crypt filters get special treatment
+                    filter_name = params.get('/Name', '/Identity')
+                    # if we're dealing with the identity filter, just move on
+                    if filter_name == '/Identity':
+                        continue
+                    raise NotImplementedError(
+                        "non-/Identity explicit /Crypt filters are "
+                        "not supported."
+                    )
+                else:
+                    yield filters.DECODERS[filter_type], params
             except KeyError:
                 raise NotImplementedError(
                     "Filters of type %s are not supported." % filter_type
@@ -1198,15 +1209,16 @@ class StreamObject(DictionaryObject):
         """
         self.apply_filter(pdf_name('/FlateDecode'), allow_duplicates=None)
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         data = self.encoded_data
+        if handler is not None and local_key is not None and \
+                not self._has_crypt_filter:
+            data = handler.get_stream_filter().encrypt(local_key, data)
         self[NameObject("/Length")] = NumberObject(len(data))
         # write the dictionary
-        super().write_to_stream(stream, encryption_key)
+        super().write_to_stream(stream, handler, local_key)
         del self["/Length"]
         stream.write(b"\nstream\n")
-        if encryption_key:
-            data = rc4_encrypt(encryption_key, data)
         stream.write(data)
         stream.write(b"\nendstream")
 
@@ -1280,9 +1292,9 @@ pdf_name = NameObject
 PROXYABLE = (TextStringObject, ByteStringObject, DictionaryObject, ArrayObject)
 
 
-def proxy_encrypted_obj(encrypted_obj, key):
+def proxy_encrypted_obj(encrypted_obj, handler, local_key):
     if isinstance(encrypted_obj, PROXYABLE):
-        return DecryptedObjectProxy(encrypted_obj, key)
+        return DecryptedObjectProxy(encrypted_obj, handler, local_key)
     else:
         return encrypted_obj
 
@@ -1290,10 +1302,11 @@ def proxy_encrypted_obj(encrypted_obj, key):
 # TODO support 2.0-style encryption
 class DecryptedObjectProxy(PdfObject):
 
-    def __init__(self, raw_object: PdfObject, key):
+    def __init__(self, raw_object: PdfObject, handler, local_key):
         self.raw_object = raw_object
-        self.key = key
         self._decrypted = None
+        self.handler = handler
+        self.local_key = local_key
 
     @property
     def decrypted(self):
@@ -1301,39 +1314,55 @@ class DecryptedObjectProxy(PdfObject):
         if decrypted is not None:
             return decrypted
 
+        from .crypt import SecurityHandler
+
         obj = self.raw_object
-        key = self.key
+        handler: SecurityHandler = self.handler
+        key = self.local_key
         if isinstance(obj, ByteStringObject) or \
                 isinstance(obj, TextStringObject):
-            decrypted = pdf_string(rc4_encrypt(key, obj.original_bytes))
+            decrypted = pdf_string(
+                handler.get_string_filter().decrypt(key, obj.original_bytes)
+            )
         elif isinstance(obj, DictionaryObject):
             decrypted_entries = {
-                dictkey: proxy_encrypted_obj(value, key)
+                dictkey: proxy_encrypted_obj(value, handler, key)
                 for dictkey, value in obj.items()
             }
             if isinstance(obj, StreamObject):
-                # TODO add tests for this specific use case!
+                # can't deal with crypt filters here
+                if obj._has_crypt_filter:
+                    # in this case, dealing with encryption is delegated
+                    # to the stream decoding process, so just pretend the data
+                    # is decrypted.
+                    decrypted_data = obj.encoded_data
+                else:
+                    decrypted_data = handler.get_stream_filter().decrypt(
+                        key, obj.encoded_data
+                    )
+
                 decrypted = StreamObject(
-                    decrypted_entries,
-                    encoded_data=rc4_encrypt(key, obj.encoded_data)
+                    decrypted_entries, encoded_data=decrypted_data
                 )
             else:
                 decrypted = DictionaryObject(decrypted_entries)
         elif isinstance(obj, ArrayObject):
-            decrypted_map = map(lambda v: proxy_encrypted_obj(v, key), obj)
+            decrypted_map = map(
+                lambda v: proxy_encrypted_obj(v, handler, key), obj
+            )
             decrypted = ArrayObject(decrypted_map)
-        else:
+        else:  # pragma: nocover
             raise TypeError(f'Object of type {type(obj)} is not proxyable.')
         decrypted.container_ref = obj.container_ref
         self._decrypted = decrypted
         return decrypted
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         # maybe the encryption key for this object changed (due to it being
         # included as part of a larger object or somesuch, without proper
         # dereferencing), so to avoid unexpected shenanigans, let's start from
         # scratch.
-        self.decrypted.write_to_stream(stream, encryption_key)
+        self.decrypted.write_to_stream(stream, handler, local_key)
 
     def get_object(self):
         return self.decrypted.get_object()

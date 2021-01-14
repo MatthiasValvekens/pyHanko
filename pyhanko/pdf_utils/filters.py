@@ -247,28 +247,10 @@ class ASCII85Decode(Decoder):
         return out.getvalue()
 
 
-class CryptDecoder(Decoder):  # pragma: nocover
-    """
-    Dummy class
-    """
-    @classmethod
-    def encode(cls, data: bytes, decode_params) -> bytes:
-        pass
-
-    @classmethod
-    def decode(cls, data: bytes, decode_params) -> bytes:
-        if "/Name" not in decode_params and "/Type" not in decode_params:
-            return data
-        else:
-            raise NotImplementedError(
-                "/Crypt filter with /Name or /Type not supported yet")
-
-
 DECODERS = {
     '/FlateDecode': FlateDecode, '/Fl': FlateDecode,
     '/ASCIIHexDecode': ASCIIHexDecode, '/AHx': ASCIIHexDecode,
     '/ASCII85Decode': ASCII85Decode, '/A85': ASCII85Decode,
-    '/Crypt': CryptDecoder
 }
 """
 Dictionary mapping decoder names to implementations.

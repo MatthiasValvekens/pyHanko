@@ -7,11 +7,11 @@ for the original license.
 
 import os
 import struct
-from hashlib import md5
 from io import BytesIO
 from typing import List, Union, Optional
 
 from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.crypt import SecurityHandler, StandardSecurityHandler
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.misc import (
     peek, PdfReadError, instance_test,
@@ -107,16 +107,6 @@ class ObjectStream:
         return stream_object
 
 
-def _derive_key(base_key, idnum, generation):
-    # Ripped out of PyPDF2
-    # See § 7.6.2 in ISO 32000
-    pack1 = struct.pack("<i", idnum)[:3]
-    pack2 = struct.pack("<i", generation)[:2]
-    key = base_key + pack1 + pack2
-    md5_hash = md5(key).digest()
-    return md5_hash[:min(16, len(base_key) + 5)]
-
-
 def _contiguous_xref_chunks(position_dict):
     """
     Helper method to divide the XRef table (or stream) into contiguous chunks.
@@ -205,11 +195,9 @@ class XRefStream(generic.StreamObject):
             pdf_name('/Type'): pdf_name('/XRef'),
         })
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         # the caller is responsible for making sure that the stream
         # is registered in the position dictionary
-        if encryption_key is not None:
-            raise ValueError('XRef streams cannot be encrypted')
 
         index = [0, 1]
         subsections = _contiguous_xref_chunks(self.position_dict)
@@ -299,6 +287,7 @@ class BasePdfFileWriter(PdfHandler):
         else:
             self._root = self.add_object(root)
 
+        self.security_handler: Optional[SecurityHandler] = None
         self._encrypt = self._encrypt_key = None
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs
@@ -459,6 +448,10 @@ class BasePdfFileWriter(PdfHandler):
     def _write_header(self, stream):
         pass
 
+    def _assign_security_handler(self, sh: SecurityHandler):
+        self.security_handler = sh
+        self._encrypt = self.add_object(sh.as_pdf_object())
+
     def _write_objects(self, stream, object_position_dict):
         # deal with objects in object streams first
         for obj_stream in self.object_streams:
@@ -475,11 +468,14 @@ class BasePdfFileWriter(PdfHandler):
             obj = self.objects[ix]
             object_position_dict[ix] = stream.tell()
             stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
-            if self._encrypt is not None and idnum != self._encrypt.idnum:
-                key = _derive_key(self._encrypt_key, idnum, generation)
+            if self.security_handler is not None \
+                    and idnum != self._encrypt.idnum:
+                local_key = self.security_handler.derive_object_key(
+                    idnum, generation
+                )
             else:
-                key = None
-            obj.write_to_stream(stream, key)
+                local_key = None
+            obj.write_to_stream(stream, self.security_handler, local_key)
             stream.write(b'\nendobj\n')
 
     def _populate_trailer(self, trailer):
@@ -487,6 +483,8 @@ class BasePdfFileWriter(PdfHandler):
         trailer[pdf_name('/Root')] = self._root
         if self._info is not None:
             trailer[pdf_name('/Info')] = self._info
+        if self._encrypt is not None:
+            trailer[pdf_name('/Encrypt')] = self._encrypt
         # before doing anything else, we attempt to load the crypto-relevant
         # data, so that we can bail early if something's not right
         trailer[pdf_name('/ID')] = self._document_id
@@ -839,7 +837,26 @@ class PdfFileWriter(BasePdfFileWriter):
         # as binary (see § 7.5.2 in ISO 32000-1)
         stream.write(b'%\xc2\xa5\xc2\xb1\xc3\xab\n')
 
-    # I can't be arsed to actually implement encrypt() for newly written PDFs,
-    # since all security handlers specified in the 1.7 standard are insecure as
-    # hell. I'm going to keep the RC4 functionality in the incremental writer,
-    # since we still want to be able to sign old PDF files.
+    def encrypt(self, owner_pass, user_pass=None):
+        """
+        Mark this document to be encrypted with PDF 2.0 encryption (AES-256).
+
+        .. caution::
+            While pyHanko supports legacy PDF encryption as well, the API
+            to create those is left undocumented on purpose to discourage
+            its use.
+
+            Incremental updates to a file encrypted with one of these
+            outdated methods will still work, however.
+
+
+        :param owner_pass:
+            The desired owner password.
+        :param user_pass:
+            The desired user password (defaults to the owner password
+            if not specified)
+        """
+        self.output_version = (2, 0)
+        sh = StandardSecurityHandler.build_from_pw(owner_pass, user_pass)
+        self.security_handler = sh
+        self._encrypt = self.add_object(sh.as_pdf_object())

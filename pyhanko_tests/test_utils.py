@@ -16,6 +16,7 @@ from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
 from pyhanko.pdf_utils.content import (
     ResourceType, PdfResources, ResourceManagementError
 )
+from pyhanko.pdf_utils.crypt import StandardSecurityHandler, StandardSecuritySettingsRevision
 
 from .samples import *
 
@@ -300,11 +301,15 @@ def test_preallocate():
     assert alloc.get_object() == "Test Test"
 
 
-@pytest.mark.parametrize('stream_xrefs,with_objstreams',
-                         [(False, False), (True, False), (True, True)])
-def test_page_tree_import(stream_xrefs, with_objstreams):
+@pytest.mark.parametrize('stream_xrefs,with_objstreams,encrypt',
+                         [(False, False, True), (False, False, False),
+                          (True, False, False), (True, True, False),
+                          (True, True, True)])
+def test_page_tree_import(stream_xrefs, with_objstreams, encrypt):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter(stream_xrefs=stream_xrefs)
+    if encrypt:
+        w.encrypt("secret")
     if with_objstreams:
         objstream = w.prepare_object_stream()
     else:
@@ -317,8 +322,9 @@ def test_page_tree_import(stream_xrefs, with_objstreams):
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
     w.write(out)
-
     r = PdfFileReader(out)
+    if encrypt:
+        r.decrypt("secret")
     page = r.root['/Pages']['/Kids'][0].get_object()
     assert '/ExtGState' in page['/Resources']
     # just a piece of data I know occurs in the decoded content stream
@@ -681,3 +687,41 @@ def test_info_delete():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     with pytest.raises(misc.PdfError):
         w.set_info(None)
+
+
+@pytest.mark.parametrize("use_owner_pass,rev,keylen_bytes,use_aes", [
+    (True, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
+    (False, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
+    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
+    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
+    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
+    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
+    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
+    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
+    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
+    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
+    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
+    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
+])
+def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+    sh = StandardSecurityHandler.build_from_pw_legacy(
+        rev, w._document_id[0].original_bytes, "ownersecret", "usersecret",
+        keylen_bytes=keylen_bytes, use_aes128=use_aes
+    )
+    w.security_handler = sh
+    w._encrypt = w.add_object(sh.as_pdf_object())
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'),
+    )
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    r.decrypt("ownersecret" if use_owner_pass else "usersecret")
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    # just a piece of data I know occurs in the decoded content stream
+    # of the (only) page in VECTOR_IMAGE_PDF
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data

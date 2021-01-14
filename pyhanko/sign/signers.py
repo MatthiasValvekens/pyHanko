@@ -77,7 +77,7 @@ class SigByteRangeObject(generic.PdfObject):
         stream.seek(old_seek)
         self._filled = True
 
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         if self._range_object_offset is None:
             self._range_object_offset = stream.tell()
         string_repr = "[ %08d %08d %08d %08d ]" % (
@@ -105,7 +105,7 @@ class DERPlaceholder(generic.PdfObject):
         return self.value
 
     # always ignore encryption key, since this is a placeholder
-    def write_to_stream(self, stream, encryption_key):
+    def write_to_stream(self, stream, handler=None, local_key=None):
         start = stream.tell()
         stream.write(b'<')
         stream.write(self.value)

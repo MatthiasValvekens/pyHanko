@@ -16,11 +16,11 @@ import re
 from collections import defaultdict
 from io import BytesIO
 from itertools import chain
-from typing import Set, List
+from typing import Set, List, Optional, Union
 
 from . import generic, misc
 from .misc import PdfReadError
-from .crypt import _alg33_1, _alg34, _alg35, derive_key, rc4_encrypt
+from .crypt import SecurityHandler
 
 import logging
 
@@ -533,8 +533,8 @@ class TrailerDictionary(generic.PdfObject):
     def items(self):
         return self.flatten().items()
 
-    def write_to_stream(self, stream, encryption_key):
-        return self.flatten().write_to_stream(stream, encryption_key)
+    def write_to_stream(self, stream, handler=None, local_key=None):
+        return self.flatten().write_to_stream(stream, handler, local_key)
 
 
 class PdfFileReader(PdfHandler):
@@ -577,6 +577,13 @@ class PdfFileReader(PdfHandler):
                 major = int(m.group(1))
                 minor = int(m.group(2))
                 self.input_version = (major, minor)
+        except KeyError:
+            pass
+
+        self.security_handler: Optional[SecurityHandler] = None
+        try:
+            encrypt_dict = self._get_encryption_params()
+            self.security_handler = SecurityHandler.build(encrypt_dict)
         except KeyError:
             pass
 
@@ -755,14 +762,11 @@ class PdfFileReader(PdfHandler):
 
             # override encryption is used for the /Encrypt dictionary
             if not never_decrypt and self.encrypted:
-                try:
-                    shared_key = self._decryption_key
-                except AttributeError:
-                    raise PdfReadError("file has not been decrypted")
-                key = derive_key(shared_key, ref.idnum, ref.generation)
+                sh: SecurityHandler = self.security_handler
+                key = sh.derive_object_key(ref.idnum, ref.generation)
                 # make sure the object that lands in the cache is always
                 # a proxy object
-                retval = generic.proxy_encrypted_obj(retval, key)
+                retval = generic.proxy_encrypted_obj(retval, sh, key)
             return retval
 
     def cache_get_indirect_object(self, generation, idnum):
@@ -893,99 +897,47 @@ class PdfFileReader(PdfHandler):
         self.last_startxref = process_data_at_eof(stream)
         self._read_xrefs()
 
-    # TODO: use sane return values (leftover from PyPDF2)
-    # TODO: support AES
-    def decrypt(self, password: bytes) -> int:
+    def decrypt(self, password: Union[str, bytes]):
         """
-        When using an encrypted PDF file with the PDF legacy RC4-based
-        encryption handler, this function will allow the file to be decrypted.
+        When using an encrypted PDF file with the standard PDF encryption
+        handler, this function will allow the file to be decrypted.
         It checks the given password against the document's user password and
         owner password, and then stores the resulting decryption key if either
         password is correct.
 
-        Supplying either user or owner password will work.
+        Both legacy encryption schemes and PDF 2.0 encryption (based on AES-256)
+        are supported.
 
         .. danger::
-            One should also be aware that the encryption scheme implemented here
-            is (very) weak, and we only support it for compatibility reasons.
-            Under no circumstances should it still be used to encrypt new files.
+            Supplying either user or owner password will work.
+            Cryptographically, both allow the decryption key to be computed,
+            but processors are expected to adhere to the ``/P`` flags in the
+            encryption dictionary when accessing a file with the user password.
+            Currently, pyHanko does not enforce these restrictions, but it
+            may in the future.
+
+        .. danger::
+            One should also be aware that the legacy encryption schemes used
+            prior to PDF 2.0 are (very) weak, and we only support them for
+            compatibility reasons.
+            Under no circumstances should these still be used to encrypt new
+            files.
 
         :param password: The password to match.
-        :return: ``0`` if the password failed, ``1`` if the password matched the
-            user password, and ``2`` if the password matched the owner password.
         :raises NotImplementedError:
             Raised if the document uses an unsupported encryption method.
         """
 
-        return self._decrypt(password)
-
-    def _decrypt(self, password):
-        encrypt = self._get_encryption_params()
-        if encrypt['/Filter'] != '/Standard':
-            raise NotImplementedError(
-                "only Standard PDF encryption handler is available"
-            )
-        if not (encrypt['/V'] in (1, 2)):
-            raise NotImplementedError(
-                "only algorithm code 1 and 2 are supported"
-            )
-        user_password, key = self._auth_user_password(password)
-        if user_password:
-            self._decryption_key = key
-            return 1
-        else:
-            rev = encrypt['/R'].get_object()
-            if rev == 2:
-                keylen = 5
-            else:
-                keylen = encrypt['/Length'].get_object() // 8
-            key = _alg33_1(password, rev, keylen)
-            owner_token = encrypt["/O"].get_object()
-            if rev == 2:
-                userpass = rc4_encrypt(key, owner_token)
-            else:
-                val = owner_token
-                for i in range(19, -1, -1):
-                    new_key = bytes(b ^ i for b in key)
-                    val = rc4_encrypt(new_key, val)
-                userpass = val
-            owner_password, key = self._auth_user_password(userpass)
-            if owner_password:
-                self._decryption_key = key
-                return 2
-        return 0
-
-    def _auth_user_password(self, password):
-        encrypt = self._get_encryption_params()
-        rev = encrypt['/R'].get_object()
-        owner_entry = encrypt['/O'].get_object()
-        p_entry = encrypt['/P'].get_object()
-        id_entry = self.trailer['/ID'].get_object()
-        id1_entry = id_entry[0].get_object()
-        user_token = encrypt['/U'].get_object().original_bytes
-        if rev == 2:
-            user_tok_supplied, key = _alg34(
-                password, owner_entry, p_entry, id1_entry
-            )
-        elif rev >= 3:
-            encrypt_meta = encrypt.get(
-                "/EncryptMetadata", generic.BooleanObject(False)
-            ).get_object()
-            user_tok_supplied, key = _alg35(
-                password, rev, encrypt["/Length"].get_object() // 8,
-                owner_entry, p_entry, id1_entry, encrypt_meta)
-            user_tok_supplied = user_tok_supplied[:16]
-            user_token = user_token[:16]
-        else:
-            raise NotImplementedError
-        return user_tok_supplied == user_token, key
+        return self.security_handler.authenticate(
+            self.trailer['/ID'][0].original_bytes, password
+        )
 
     @property
     def encrypted(self):
         """
         :return: ``True`` if a document is encrypted, ``False`` otherwise.
         """
-        return "/Encrypt" in self.trailer
+        return self.security_handler is not None
 
     def get_historical_resolver(self, revision: int) -> 'HistoricalResolver':
         """

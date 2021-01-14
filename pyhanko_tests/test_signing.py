@@ -692,7 +692,23 @@ def test_sign_crypt_rc4(password):
     r = PdfFileReader(out)
     r.decrypt(password)
     s = r.embedded_signatures[0]
-    validity = val_trusted(s)
+    val_trusted(s)
+
+
+@pytest.mark.parametrize('password', ['usersecret', 'ownersecret'])
+@freeze_time('2020-11-01')
+def test_sign_crypt_aes256(password):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD_AES256))
+    w.encrypt(password)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    r = PdfFileReader(out)
+    r.decrypt(password)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
 
 
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
@@ -706,6 +722,24 @@ sign_crypt_rc4_new_params = [
 @freeze_time('2020-11-01')
 def test_sign_crypt_rc4_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_rc4_files[file]))
+    w.encrypt(password)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    out.seek(0)
+    r = PdfFileReader(out)
+    r.decrypt(password)
+
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+
+
+sign_crypt_aes256_files = (MINIMAL_AES256, MINIMAL_ONE_FIELD_AES256)
+
+@pytest.mark.parametrize('password, file', sign_crypt_rc4_new_params)
+@freeze_time('2020-11-01')
+def test_sign_crypt_aes256_new(password, file):
+    w = IncrementalPdfFileWriter(BytesIO(sign_crypt_aes256_files[file]))
     w.encrypt(password)
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,

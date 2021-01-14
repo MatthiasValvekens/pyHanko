@@ -481,7 +481,7 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
         if writer.prev.encrypted:
             pdf_pass = getpass.getpass(
                 prompt='Password for encrypted file: '
-            ).encode('utf-8')
+            )
             writer.encrypt(pdf_pass)
 
         text_params = None

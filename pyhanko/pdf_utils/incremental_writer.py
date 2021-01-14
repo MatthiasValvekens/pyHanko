@@ -55,6 +55,8 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             root[pdf_name('/Version')] = version_str
             self.update_root()
 
+        self.security_handler = prev.security_handler
+
     @classmethod
     def _handle_id(cls, prev):
         # There are a number of issues at play here
@@ -141,16 +143,13 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         trailer[pdf_name('/Prev')] = generic.NumberObject(
             self.prev.last_startxref
         )
-        if self.prev.encrypted:
-            if self._encrypt is not None:
-                trailer[pdf_name("/Encrypt")] = self._encrypt
-            else:
-                # removing encryption in an incremental update is impossible
-                raise ValueError(
-                    'Cannot save this document unencrypted. Please call '
-                    'encrypt() with the user password of the original file '
-                    'before calling write().'
-                )
+        if self.prev.encrypted and self._encrypt is None:
+            # removing encryption in an incremental update is impossible
+            raise ValueError(
+                'Cannot save this document unencrypted. Please call '
+                'encrypt() with the password of the original file '
+                'before calling write().'
+            )
 
     def write(self, stream):
 
@@ -185,18 +184,13 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.write_updated_section(stream)
 
     def encrypt(self, user_pwd):
-        """Method to handle updates to RC4-encrypted files.
+        """Method to handle updates to encrypted files.
 
         This method handles decrypting of the original file, and makes sure
         the resulting updated file is encrypted in a compatible way.
         The standard mandates that updates to encrypted files be effected using
         the same encryption settings. In particular, incremental updates
         cannot remove file encryption.
-
-        .. danger::
-            One should also be aware that the encryption scheme implemented here
-            is (very) weak, and we only support it for compatibility reasons.
-            Under no circumstances should it still be used to encrypt new files.
 
         :param user_pwd:
             The original file's user password.
@@ -222,7 +216,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 'Original document does not have an encryption dictionary'
             )
 
-        self._encrypt_key = self.prev._decryption_key
         self._encrypt = encrypt_ref
 
     # TODO these can be simplified considerably using the new update_container

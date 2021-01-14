@@ -19,6 +19,8 @@ TEXTFIELD_GROUP_VAR = read_all(PDF_DATA_DIR + '/minimal-with-textfield-group-var
 # user/owner passwords are 'usersecret' and 'ownersecret' respectively
 MINIMAL_RC4 = read_all(PDF_DATA_DIR + '/minimal-rc4.pdf')
 MINIMAL_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-rc4.pdf')
+MINIMAL_AES256 = read_all(PDF_DATA_DIR + '/minimal-aes256.pdf')
+MINIMAL_ONE_FIELD_AES256 = read_all(PDF_DATA_DIR + '/minimal-with-field-aes256.pdf')
 
 VECTOR_IMAGE_PDF = read_all(PDF_DATA_DIR + '/scribble.pdf')
 VECTOR_IMAGE_PDF_DECOMP = read_all(PDF_DATA_DIR + '/scribble-decomp.pdf')
