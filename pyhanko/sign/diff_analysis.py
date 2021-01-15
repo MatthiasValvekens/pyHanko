@@ -61,7 +61,7 @@ from enum import unique
 from io import BytesIO
 from typing import (
     Iterable, Optional, Set, Tuple, Generator, TypeVar, Dict,
-    List, Callable, Union,
+    List, Callable, Union
 )
 
 from pyhanko.pdf_utils.generic import Reference, PdfObject
@@ -153,6 +153,15 @@ class SuspiciousModification(ValueError):
     pass
 
 
+@dataclass(frozen=True)
+class ReferenceUpdate:
+
+    updated_ref: Reference
+    """
+    Reference that was (potentially) updated.
+    """
+
+
 class QualifiedWhitelistRule:
     """
     Abstract base class for a whitelisting rule that outputs references together
@@ -163,7 +172,7 @@ class QualifiedWhitelistRule:
     """
 
     def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+            -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
         """
         Apply the rule to the changes between two revisions.
 
@@ -186,7 +195,7 @@ class WhitelistRule:
     """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[Reference]:
+            -> Iterable[ReferenceUpdate]:
         """
         Apply the rule to the changes between two revisions.
 
@@ -218,22 +227,23 @@ class _WrappingQualifiedWhitelistRule(QualifiedWhitelistRule):
         self.level = level
 
     def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
+            -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
         for ref in self.rule.apply(old, new):
             yield self.level, ref
 
 
 R = TypeVar('R')
+X = TypeVar('X')
 
 
 def qualify(level: ModificationLevel,
-            rule_result: Generator[Reference, None, R],
-            transform=lambda x: x)\
-        -> Generator[Tuple[ModificationLevel, Reference], None, R]:
+            rule_result: Generator[X, None, R],
+            transform: Callable[[X], ReferenceUpdate] = lambda x: x)\
+        -> Generator[Tuple[ModificationLevel, ReferenceUpdate], None, R]:
     """
     This is a helper function for rule implementors.
-    It attaches a fixed modification level to an existing reference generator,
-    respecting the original generator's return value (if relevant).
+    It attaches a fixed modification level to an existing reference update
+    generator, respecting the original generator's return value (if relevant).
 
     A prototypical use would be of the following form:
 
@@ -257,7 +267,7 @@ def qualify(level: ModificationLevel,
             )
 
     Provided that ``some_generator_function`` yields
-    :class:`~.generic.Reference` objects, the yield type of the resulting
+    :class:`~.generic.ReferenceUpdate` objects, the yield type of the resulting
     generator will be tuples of the form ``(level, ref)``.
 
     :param level:
@@ -277,7 +287,8 @@ def qualify(level: ModificationLevel,
     )
 
 
-def _safe_whitelist(old: HistoricalResolver, old_ref, new_ref):
+def _safe_whitelist(old: HistoricalResolver, old_ref, new_ref) \
+        -> Generator[Reference, None, None]:
     if old_ref:
         _assert_not_stream(old_ref.get_object())
 
@@ -298,7 +309,7 @@ class DocInfoRule(WhitelistRule):
     """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[Reference]:
+            -> Iterable[ReferenceUpdate]:
         # updates to /Info are always OK (and must be through indirect objects)
         # Removing the /Info dictionary is no big deal, since most readers
         # will fall back to older revisions regardless
@@ -310,7 +321,26 @@ class DocInfoRule(WhitelistRule):
         old_info = old.trailer_view.get_value_as_reference(
             '/Info', optional=True
         )
-        yield from _safe_whitelist(old, old_info, new_info)
+        yield from map(ReferenceUpdate,
+                       _safe_whitelist(old, old_info, new_info))
+
+
+def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
+                               new_dict, der_stream_keys, is_vri):
+    for der_obj_type in der_stream_keys:
+        try:
+            value = new_dict.raw_get(der_obj_type)
+        except KeyError:
+            continue
+        if not isinstance(value.get_object(), generic.ArrayObject):
+            raise SuspiciousModification(
+                f"Expected array at {'VRI' if is_vri else 'DSS'} "
+                f"key {der_obj_type}."
+            )
+
+        yield from map(ReferenceUpdate, new.collect_dependencies(
+            value, since_revision=old.revision + 1
+        ))
 
 
 class DSSCompareRule(WhitelistRule):
@@ -325,11 +355,12 @@ class DSSCompareRule(WhitelistRule):
     """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Reference]:
+            -> Iterable[ReferenceUpdate]:
         # TODO refactor these into less ad-hoc rules
 
-        old_dss, new_dss = yield from _compare_key_refs(
-            '/DSS', old, old.root, new.root
+        old_dss, new_dss = yield from misc.map_with_return(
+            _compare_key_refs('/DSS', old, old.root, new.root),
+            ReferenceUpdate
         )
         if new_dss is None:
             return
@@ -351,24 +382,17 @@ class DSSCompareRule(WhitelistRule):
                 f"Unexpected keys in DSS: {dss_keys - dss_expected_keys}."
             )
 
-        for der_obj_type in dss_der_stream_keys:
-            try:
-                value = new_dss.raw_get(der_obj_type)
-            except KeyError:
-                continue
-            if not isinstance(value.get_object(), generic.ArrayObject):
-                raise SuspiciousModification(
-                    f"Expected array at DSS key {der_obj_type}"
-                )
-
-            yield from new.collect_dependencies(
-                value, since_revision=old.revision + 1
-            )
+        yield from _validate_dss_substructure(
+            old, new, new_dss, dss_der_stream_keys, is_vri=False
+        )
 
         # check that the /VRI dictionary still contains all old keys, unchanged.
-        old_vri, new_vri = yield from _compare_key_refs(
-            '/VRI', old, old_dss, new_dss,
+        old_vri, new_vri = yield from misc.map_with_return(
+            _compare_key_refs(
+                '/VRI', old, old_dss, new_dss,
+            ), ReferenceUpdate
         )
+
         if old_vri is None:
             old_vri = generic.DictionaryObject()
 
@@ -403,7 +427,7 @@ class DSSCompareRule(WhitelistRule):
             new_vri_dict = new_vri.raw_get(key)
             if isinstance(new_vri_dict, generic.IndirectObject) \
                     and old.is_ref_available(new_vri_dict.reference):
-                yield new_vri_dict.reference
+                yield ReferenceUpdate(new_vri_dict.reference)
                 new_vri_dict = new_vri_dict.get_object()
             _assert_not_stream(new_vri_dict)
             if not isinstance(new_vri_dict, generic.DictionaryObject):
@@ -417,18 +441,9 @@ class DSSCompareRule(WhitelistRule):
                     "Unexpected keys in VRI dictionary: "
                     f"{new_vri_value_keys - vri_expected_keys}."
                 )
-            for der_obj_type in vri_der_stream_keys:
-                try:
-                    value = new_vri_dict.raw_get(der_obj_type)
-                except KeyError:
-                    continue
-                if not isinstance(value.get_object(), generic.ArrayObject):
-                    raise SuspiciousModification(
-                        f"Expected array at VRI key {der_obj_type}"
-                    )
-                yield from new.collect_dependencies(
-                    value, since_revision=old.revision + 1
-                )
+            yield from _validate_dss_substructure(
+                old, new, new_vri_dict, vri_der_stream_keys, is_vri=True
+            )
 
             # /TS is also a DER stream
             try:
@@ -436,7 +451,7 @@ class DSSCompareRule(WhitelistRule):
                     '/TS', optional=True
                 )
                 if ts_ref is not None and old.is_ref_available(ts_ref):
-                    yield ts_ref
+                    yield ReferenceUpdate(ts_ref)
             except misc.IndirectObjectExpected:
                 pass
 
@@ -515,18 +530,13 @@ class FieldComparisonContext:
 
 
 @dataclass(frozen=True)
-class FormUpdate:
+class FormUpdate(ReferenceUpdate):
     """
     Container for a reference together with (optional) metadata.
 
     Currently, this metadata consists of the relevant field's (fully qualified)
     name, and whether the update should be approved or not if said field
     is locked by the FieldMDP policy currently in force.
-    """
-
-    updated_ref: generic.Reference
-    """
-    Reference that was (potentially) updated.
     """
 
     field_name: Optional[str]
@@ -1092,7 +1102,7 @@ class CatalogModificationRule(QualifiedWhitelistRule):
         #  - /MarkInfo: if it's an indirect reference (probably not) we can
         #    whitelist it if the key set makes sense. TODO do this
         #  - /DSS, /AcroForm and /Metadata are dealt with by other rules.
-        yield ModificationLevel.LTA_UPDATES, new.root_ref
+        yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(new.root_ref)
 
 
 class MetadataUpdateRule(WhitelistRule):
@@ -1160,7 +1170,7 @@ class MetadataUpdateRule(WhitelistRule):
             )
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[Reference]:
+            -> Iterable[ReferenceUpdate]:
 
         # /Metadata points to a stream, so we have to be careful allowing
         # object overrides!
@@ -1194,7 +1204,7 @@ class MetadataUpdateRule(WhitelistRule):
             and not self.always_refuse_stream_override
         )
         if same_ref_ok or old.is_ref_available(new_metadata_ref):
-            yield new_metadata_ref
+            yield ReferenceUpdate(new_metadata_ref)
 
 
 class ObjectStreamRule(WhitelistRule):
@@ -1211,7 +1221,7 @@ class ObjectStreamRule(WhitelistRule):
         # object streams are OK, but overriding object streams is not.
         for objstream_ref in new.object_streams_used():
             if old.is_ref_available(objstream_ref):
-                yield objstream_ref
+                yield ReferenceUpdate(objstream_ref)
 
 
 class XrefStreamRule(WhitelistRule):
@@ -1224,7 +1234,7 @@ class XrefStreamRule(WhitelistRule):
         xref_start, _ = new.reader.xrefs.get_xref_container_info(new.revision)
         if isinstance(xref_start, generic.Reference) \
                 and old.is_ref_available(xref_start):
-            yield xref_start
+            yield ReferenceUpdate(xref_start)
 
 
 def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
@@ -1314,7 +1324,7 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
 
 def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
                              new: HistoricalResolver) \
-        -> Generator[generic.Reference, None, None]:
+        -> Generator[Reference, None, None]:
 
     old_ap_val, new_ap_val = yield from _compare_key_refs(
         '/AP', old, old_field, new_field
@@ -1715,7 +1725,7 @@ class StandardDiffPolicy(DiffPolicy):
 
         for rule in self.global_rules:
             for level, ref in rule.apply_qualified(old, new):
-                explained[level].add(ref)
+                explained[level].add(ref.updated_ref)
 
         changed_form_fields = set()
 

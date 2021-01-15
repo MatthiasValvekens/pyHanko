@@ -1,4 +1,3 @@
-import os
 import re
 from datetime import datetime
 
@@ -34,10 +33,9 @@ from pyhanko.sign.validation import (
 )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
-    NO_CHANGES_DIFF_POLICY, StandardDiffPolicy, DEFAULT_DIFF_POLICY,
-    QualifiedWhitelistRule,
+    NO_CHANGES_DIFF_POLICY,
 )
-from pyhanko.pdf_utils.reader import PdfFileReader, HistoricalResolver
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.stamp import QRStampStyle
 from .samples import *
@@ -1471,65 +1469,3 @@ def test_overspecify_cms_digest_algo():
                 field_name='Sig1', md_algorithm='sha512'
             ), signer=signer
         )
-
-
-@freeze_time("2020-11-01")
-@pytest.mark.parametrize('forbid_freeing', [True, False])
-def test_sign_reject_freed(forbid_freeing):
-
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    out = signers.sign_pdf(
-        w, signature_meta=signers.PdfSignatureMetadata(field_name='Sig1'),
-        signer=FROM_CA
-    )
-
-    # free the ref containing the /Info dictionary
-    # since we don't have support for freeing objects in the writer (yet),
-    # do it manually
-    r = PdfFileReader(out)
-    last_startxref = r.last_startxref
-
-    # NOTE the linked list offsets are dummied out, but our Xref parser
-    # doesn't care
-    len_out = out.seek(0, os.SEEK_END)
-    out.write(
-        b'\n'.join([
-            b'xref',
-            b'0 1',
-            b'0000000000 65535 f ',
-            b'2 1',
-            b'0000000000 00001 f ',
-            b'trailer<</Prev %d>>' % last_startxref,
-            b'startxref',
-            b'%d' % len_out,
-            b'%%EOF'
-        ])
-    )
-    r = PdfFileReader(out)
-    last_rev = r.xrefs.xref_sections - 1
-    info_ref = generic.Reference(2, 0)
-
-    assert info_ref in r.xrefs.refs_freed_in_revision(last_rev)
-
-    sig = r.embedded_signatures[0]
-    assert sig.signed_revision == 2
-
-    # make a dummy rule that whitelists our freed object ref
-
-    class AdHocRule(QualifiedWhitelistRule):
-        def apply_qualified(self, old: HistoricalResolver,
-                            new: HistoricalResolver):
-            yield ModificationLevel.LTA_UPDATES, info_ref
-
-    val_status = validate_pdf_signature(
-        sig, SIMPLE_V_CONTEXT(),
-        diff_policy=StandardDiffPolicy(
-            DEFAULT_DIFF_POLICY.global_rules + [AdHocRule()],
-            DEFAULT_DIFF_POLICY.form_rule,
-            reject_object_freeing=forbid_freeing
-        )
-    )
-    if forbid_freeing:
-        assert val_status.modification_level == ModificationLevel.OTHER
-    else:
-        assert val_status.modification_level == ModificationLevel.LTA_UPDATES
