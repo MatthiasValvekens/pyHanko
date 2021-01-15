@@ -16,7 +16,10 @@ from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
 from pyhanko.pdf_utils.content import (
     ResourceType, PdfResources, ResourceManagementError
 )
-from pyhanko.pdf_utils.crypt import StandardSecurityHandler, StandardSecuritySettingsRevision
+from pyhanko.pdf_utils.crypt import (
+    StandardSecurityHandler,
+    StandardSecuritySettingsRevision, IdentityCryptFilter, AuthResult,
+)
 
 from .samples import *
 
@@ -725,3 +728,63 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
     # just a piece of data I know occurs in the decoded content stream
     # of the (only) page in VECTOR_IMAGE_PDF
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
+@pytest.mark.parametrize("legacy", [True, False])
+def test_wrong_password(legacy):
+    w = writer.PdfFileWriter()
+    if legacy:
+        sh = StandardSecurityHandler.build_from_pw_legacy(
+            StandardSecuritySettingsRevision.RC4_OR_AES128,
+            w._document_id[0].original_bytes, "ownersecret", "usersecret",
+            keylen_bytes=16, use_aes128=True
+        )
+    else:
+        sh = StandardSecurityHandler.build_from_pw("ownersecret", "usersecret")
+    w.security_handler = sh
+    w._encrypt = w.add_object(sh.as_pdf_object())
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.decrypt("thispasswordiswrong") == AuthResult.UNKNOWN
+    with pytest.raises(misc.PdfReadError):
+        # noinspection PyStatementEffect
+        r.root['/Pages']
+
+
+@pytest.mark.parametrize("use_alias, with_never_decrypt", [
+    (True, False), (False, True), (False, False)
+])
+def test_identity_crypt_filter(use_alias, with_never_decrypt):
+    w = writer.PdfFileWriter()
+    sh = StandardSecurityHandler.build_from_pw("secret")
+    w.security_handler = sh
+    idf = IdentityCryptFilter()
+    assert sh.crypt_filter_config[pdf_name("/Identity")] is idf
+    with pytest.raises(misc.PdfError):
+        # noinspection PyStatementEffect
+        idf.shared_key
+    if use_alias:
+        sh.crypt_filter_config._crypt_filters[pdf_name("/IdentityAlias")] = idf
+        assert sh.crypt_filter_config[pdf_name("/IdentityAlias")] is idf
+    if use_alias:
+        # identity filter can't be serialised, so this should throw an error
+        with pytest.raises(misc.PdfError):
+            w._encrypt = w.add_object(sh.as_pdf_object())
+        return
+    else:
+        w._encrypt = w.add_object(sh.as_pdf_object())
+    test_bytes = b'This is some test data that should remain unencrypted.'
+    test_stream = generic.StreamObject(stream_data=test_bytes)
+    test_stream.apply_filter(
+        "/Crypt", params={pdf_name("/Name"): pdf_name("/Identity")}
+    )
+    ref = w.add_object(test_stream).reference
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    r.decrypt("secret")
+    the_stream = r.get_object(ref, never_decrypt=with_never_decrypt)
+    assert the_stream.encoded_data == test_bytes
+    assert the_stream.data == test_bytes

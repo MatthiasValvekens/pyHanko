@@ -395,9 +395,6 @@ class CryptFilter:
             result = self._shared_key = self._handler.get_file_encryption_key()
         return result
 
-    def derive_object_key(self, idnum, generation) -> bytes:
-        raise NotImplementedError
-
     def as_pdf_object(self):
         raise NotImplementedError
 
@@ -409,13 +406,10 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
 
     @property
     def shared_key(self) -> bytes:
-        return b''
-
-    def derive_object_key(self, idnum, generation):
-        return b''
+        raise misc.PdfError("Identity filter doesn't operate with a key")
 
     def as_pdf_object(self):
-        return generic.NullObject()
+        raise misc.PdfError("Identity filter cannot be serialised")
 
     def encrypt(self, key, plaintext: bytes) -> bytes:
         return plaintext
@@ -428,9 +422,6 @@ class RC4CryptFilter(CryptFilter):
 
     def __init__(self, keylen):
         self.keylen = keylen
-
-    def derive_object_key(self, idnum, generation) -> bytes:
-        return legacy_derive_object_key(self.shared_key, idnum, generation)
 
     def encrypt(self, key, plaintext: bytes) -> bytes:
         return rc4_encrypt(key, plaintext)
@@ -463,9 +454,6 @@ class AESCryptFilter(CryptFilter, abc.ABC):
 
 class AESV2CryptFilter(AESCryptFilter):
 
-    def derive_object_key(self, idnum, generation) -> bytes:
-        return legacy_derive_object_key(self.shared_key, idnum, generation)
-
     def as_pdf_object(self):
         return generic.DictionaryObject({
             generic.NameObject('/CFM'): generic.NameObject('/AESV2'),
@@ -477,9 +465,6 @@ class AESV2CryptFilter(AESCryptFilter):
 
 
 class AESV3CryptFilter(AESCryptFilter):
-
-    def derive_object_key(self, idnum, generation) -> bytes:
-        return self.shared_key
 
     def as_pdf_object(self):
         return generic.DictionaryObject({
@@ -501,10 +486,10 @@ class CryptFilterConfiguration:
                  default_stream_filter=IDENTITY, default_string_filter=IDENTITY,
                  default_file_filter=None):
         def _select(name) -> CryptFilter:
-            if name == IDENTITY:
-                return IdentityCryptFilter()
-            else:
-                return crypt_filters[name]
+            return (
+                IdentityCryptFilter() if name == IDENTITY
+                else crypt_filters[name]
+            )
 
         self._crypt_filters = crypt_filters
         self._default_string_filter_name = default_string_filter
@@ -546,26 +531,28 @@ class CryptFilterConfiguration:
         return result
 
 
-def _rc4_config(keylen):
+def _rc4_config(default_filter_name, keylen):
     return CryptFilterConfiguration(
-        {STD_CF: RC4CryptFilter(keylen)},
-        default_stream_filter=STD_CF,
-        default_string_filter=STD_CF
+        {default_filter_name: RC4CryptFilter(keylen)},
+        default_stream_filter=default_filter_name,
+        default_string_filter=default_filter_name
     )
 
 
-AES128_CONFIG = CryptFilterConfiguration(
-    {STD_CF: AESV2CryptFilter()},
-    default_stream_filter=STD_CF,
-    default_string_filter=STD_CF
-)
+def _aes128_config(default_filter_name):
+    return CryptFilterConfiguration(
+        {default_filter_name: AESV2CryptFilter()},
+        default_stream_filter=default_filter_name,
+        default_string_filter=default_filter_name
+    )
 
 
-AES256_CONFIG = CryptFilterConfiguration(
-    {STD_CF: AESV3CryptFilter()},
-    default_stream_filter=STD_CF,
-    default_string_filter=STD_CF
-)
+def _aes256_config(default_filter_name):
+    return CryptFilterConfiguration(
+        {default_filter_name: AESV3CryptFilter()},
+        default_stream_filter=default_filter_name,
+        default_string_filter=default_filter_name
+    )
 
 
 @SecurityHandler.register
@@ -617,9 +604,9 @@ class StandardSecurityHandler(SecurityHandler):
         if rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
             version = StandardSecurityHandlerVersion.RC4_OR_AES128
             if use_aes128:
-                cfc = AES128_CONFIG
+                cfc = _aes128_config(STD_CF)
             else:
-                cfc = _rc4_config(keylen_bytes)
+                cfc = _rc4_config(STD_CF, keylen_bytes)
         elif rev == StandardSecuritySettingsRevision.RC4_BASIC:
             version = StandardSecurityHandlerVersion.RC4_40
             cfc = None
@@ -710,16 +697,16 @@ class StandardSecurityHandler(SecurityHandler):
         self.perms = perm_flags
         if version == StandardSecurityHandlerVersion.RC4_40:
             legacy_keylen = 5
-            crypt_filter_config = _rc4_config(5)
+            crypt_filter_config = _rc4_config(STD_CF, 5)
         elif not (5 <= legacy_keylen <= 16) \
                 and version <= StandardSecurityHandlerVersion.RC4_OR_AES128:
             raise misc.PdfError("Key length must be between 5 and 16")
         elif version == StandardSecurityHandlerVersion.RC4_LONGER_KEYS:
-            crypt_filter_config = _rc4_config(legacy_keylen)
+            crypt_filter_config = _rc4_config(STD_CF, legacy_keylen)
         elif version == StandardSecurityHandlerVersion.AES256 \
                 and crypt_filter_config is None:
             # there's a reasonable default config that we can fall back to here
-            crypt_filter_config = AES256_CONFIG
+            crypt_filter_config = _aes256_config(STD_CF)
             legacy_keylen = 32
 
         if crypt_filter_config is None:
@@ -727,6 +714,7 @@ class StandardSecurityHandler(SecurityHandler):
                 "Specifying a crypt filter configuration is mandatory for "
                 "/Encrypt dictionaries of version 4."
             )
+        crypt_filter_config.set_security_handler(self)
 
         self.keylen = legacy_keylen
         self.crypt_filter_config = crypt_filter_config
@@ -767,7 +755,7 @@ class StandardSecurityHandler(SecurityHandler):
     def shared_key(self):
         key = self._shared_key
         if key is None:
-            raise misc.PdfError(
+            raise misc.PdfReadError(
                 "Authentication failed." if self._auth_failed else
                 "Shared key not available. Authenticate first."
             )
