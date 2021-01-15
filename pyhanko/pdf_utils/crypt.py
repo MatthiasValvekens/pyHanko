@@ -671,9 +671,24 @@ class StandardSecurityHandler(SecurityHandler):
             perms_bytes + (b'\xff' * 4) + b'Tadb' + secrets.token_bytes(4)
         )
         perms = struct.unpack('<i', perms_bytes)[0]
-        _, encrypted_perms = symmetric.aes_cbc_no_padding_encrypt(
+
+        # need to encrypt one 16 byte block in CBC mode with an
+        # IV of 0 (equivalent to 1 block in ECB mode).
+        # FIXME
+        #  oscrypto's OpenSSL-based implementation of aes_cbc_no_padding_encrypt
+        #  requires padding to encrypt a single 16-byte block if the key size is
+        #  larger than 16 bytes. I believe that's a mistake, but since I'm not
+        #  willing to vendor oscrypto, this little hack will have to do.
+
+        # We'll indulge in oscrypto's whims and request padding
+        _, encrypted_perms = symmetric.aes_cbc_pkcs7_encrypt(
             encryption_key, extd_perms_bytes, bytes(16)
         )
+
+        # ... and then cut the result off at 16 bytes
+        # This is OK, because the block size is 16 bytes, so the first 16
+        # bytes aren't affected by the rest of the encrypted string
+        encrypted_perms = encrypted_perms[:16]
         sh = StandardSecurityHandler(
             version=StandardSecurityHandlerVersion.AES256,
             revision=StandardSecuritySettingsRevision.AES256,
