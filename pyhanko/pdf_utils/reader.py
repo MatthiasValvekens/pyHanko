@@ -502,12 +502,13 @@ class TrailerDictionary(generic.PdfObject):
     def flatten(self, revision=None) -> generic.DictionaryObject:
         relevant_revisions = self._trailer_revisions
         if revision is not None:
-            relevant_revisions = relevant_revisions[:revision]
+            relevant_revisions = relevant_revisions[-revision-1:]
         trailer = generic.DictionaryObject({
             k: v for revision in reversed(relevant_revisions)
             for k, v in revision.items()
         })
-        trailer.update(self._new_changes)
+        if revision is None:
+            trailer.update(self._new_changes)
 
         # ensure that the trailer isn't polluted using stream
         # compression / XRef parameters
