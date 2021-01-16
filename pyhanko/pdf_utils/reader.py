@@ -989,6 +989,55 @@ def convert_to_int(d, size):
         return sum(digit ** (size - ix - 1) for ix, digit in enumerate(d))
 
 
+class RawPdfPath:
+    """
+    Class to model raw paths in a file.
+    """
+
+    def __init__(self, *path: Union[str, int]):
+        self.path = path
+
+    def __len__(self):
+        return len(self.path)
+
+    def __iter__(self):
+        return iter(self.path)
+
+    def _tag(self):
+        # should give better hashing results
+        return tuple(map(lambda x: (isinstance(x, int), x), self.path))
+
+    def __hash__(self):
+        return hash(self._tag())
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, RawPdfPath)
+            and (self is other or self._tag() == other._tag())
+        )
+
+    @staticmethod
+    def _fmt_node(node):
+        if isinstance(node, int):
+            return '[%d]' % node
+        else:
+            return '.' + node[1:]
+
+    def __add__(self, other):
+        if isinstance(other, RawPdfPath):
+            return RawPdfPath(*self.path, *other.path)
+        elif isinstance(other, (int, str)):
+            return RawPdfPath(*self.path, other)
+        else:  # pragma: nocover
+            raise TypeError
+
+    def __str__(self):
+        return ''.join(map(RawPdfPath._fmt_node, self.path))
+
+    def __repr__(self):  # pragma: nocover
+        return f"PathInRevision('{str(self)}')"
+
+
 class HistoricalResolver(PdfHandler):
     """
     :class:`~.rw_common.PdfHandler` implementation that provides a view
@@ -1013,6 +1062,7 @@ class HistoricalResolver(PdfHandler):
         self.reader = reader
         self.revision = revision
         self._trailer = self.reader.trailer.flatten(self.revision)
+        self._indirect_object_access_cache = None
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
@@ -1147,3 +1197,88 @@ class HistoricalResolver(PdfHandler):
         elif isinstance(obj, generic.ArrayObject):
             for v in obj:
                 self._collect_indirect_references(v, seen, since_revision)
+
+    def _get_usages_of_ref(self, ref: generic.Reference) \
+            -> Optional[Set[RawPdfPath]]:
+        cache = self._indirect_object_access_cache or {}
+        return cache.get(ref, None)
+
+    def _load_reverse_xref_cache(self):
+        if self._indirect_object_access_cache is not None:
+            return
+
+        collected = defaultdict(set)
+
+        # internally, _compute_paths_to_refs works with singly linked lists
+        # to avoid having to create & destroy lots of list objects
+        # We flatten everything when we're done
+        def _compute_paths_to_refs(obj, cur_path: misc.ConsList,
+                                   seen_in_path: misc.ConsList, *,
+                                   is_page_tree, page_tree_objs):
+
+            # optimisation: page tree gets special treatment
+            # to prevent unnecessary paths from being generated when the
+            # tree is entered from the outside (e.g. by following /P on a form
+            # field/widget annotation)
+            # TODO what about the structure tree?
+            # Can we deal with this more systematically? The problem is that
+            # there's no a priori way to state which path from an object
+            # to the trailer is the "canonical" one. For page objects
+            #  things are a bit more clear-cut, so we deal with those
+            # separately.
+
+            if isinstance(obj, generic.IndirectObject):
+                ref = obj.reference
+                if ref in seen_in_path:
+                    return
+                collected[ref].add(cur_path)
+                seen_in_path = seen_in_path.cons(ref)
+                obj = self(ref)
+                if not is_page_tree and ref in page_tree_objs:
+                    return
+            if isinstance(obj, generic.DictionaryObject):
+                for k, v in obj.items():
+                    # another hack to eliminate some spurious extra paths
+                    # that don't convey any useful information
+                    if k == '/Parent':
+                        continue
+
+                    _compute_paths_to_refs(
+                        v, cur_path.cons(k), seen_in_path,
+                        is_page_tree=is_page_tree or (
+                            cur_path.head == '/Root' and k == '/Pages'
+                            and cur_path.tail == misc.ConsList.empty()
+                        ),
+                        page_tree_objs=page_tree_objs
+                    )
+            elif isinstance(obj, generic.ArrayObject):
+                for ix, v in enumerate(obj):
+                    _compute_paths_to_refs(
+                        v, cur_path.cons(ix), seen_in_path,
+                        is_page_tree=is_page_tree,
+                        page_tree_objs=page_tree_objs
+                    )
+
+        def _collect_page_tree_refs(pages_obj):
+            for kid in pages_obj['/Kids']:
+                # should always be true, but hey
+                if isinstance(kid, generic.IndirectObject):
+                    yield kid.reference
+                kid = kid.get_object()
+                if kid.get('/Type', None) == '/Pages':
+                    yield from _collect_page_tree_refs(kid)
+
+        pages_ref = self.root.raw_get('/Pages')
+        page_tree_nodes = set()
+        page_tree_nodes.update(
+            _collect_page_tree_refs(pages_obj=pages_ref.get_object())
+        )
+        _compute_paths_to_refs(
+            self.trailer_view, misc.ConsList.empty(), misc.ConsList.empty(),
+            is_page_tree=False, page_tree_objs=page_tree_nodes
+        )
+
+        self._indirect_object_access_cache = {
+            ref: {RawPdfPath(*reversed(list(p))) for p in paths}
+            for ref, paths in collected.items()
+        }

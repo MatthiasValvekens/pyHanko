@@ -66,7 +66,10 @@ from typing import (
 
 from pyhanko.pdf_utils.generic import Reference, PdfObject
 from pyhanko.pdf_utils.misc import OrderedEnum
-from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
+from pyhanko.pdf_utils.reader import (
+    HistoricalResolver, PdfFileReader,
+    RawPdfPath,
+)
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
@@ -160,6 +163,16 @@ class ReferenceUpdate:
     """
     Reference that was (potentially) updated.
     """
+
+    # TODO document
+    paths_checked: Optional[Union[RawPdfPath, Iterable[RawPdfPath]]] \
+        = None
+
+    blanket_approve: bool = False
+
+    @classmethod
+    def curry_ref(cls, **kwargs):
+        return lambda ref: cls(updated_ref=ref, **kwargs)
 
 
 class QualifiedWhitelistRule:
@@ -321,8 +334,11 @@ class DocInfoRule(WhitelistRule):
         old_info = old.trailer_view.get_value_as_reference(
             '/Info', optional=True
         )
-        yield from map(ReferenceUpdate,
-                       _safe_whitelist(old, old_info, new_info))
+        path = RawPdfPath('/Info')
+        yield from map(
+            ReferenceUpdate.curry_ref(paths_checked=path),
+            _safe_whitelist(old, old_info, new_info)
+        )
 
 
 def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
@@ -358,9 +374,10 @@ class DSSCompareRule(WhitelistRule):
             -> Iterable[ReferenceUpdate]:
         # TODO refactor these into less ad-hoc rules
 
+        dss_path = RawPdfPath('/Root', '/DSS')
         old_dss, new_dss = yield from misc.map_with_return(
             _compare_key_refs('/DSS', old, old.root, new.root),
-            ReferenceUpdate
+            ReferenceUpdate.curry_ref(paths_checked=dss_path)
         )
         if new_dss is None:
             return
@@ -387,10 +404,12 @@ class DSSCompareRule(WhitelistRule):
         )
 
         # check that the /VRI dictionary still contains all old keys, unchanged.
+        vri_path = RawPdfPath('/Root', '/DSS', '/VRI')
         old_vri, new_vri = yield from misc.map_with_return(
             _compare_key_refs(
                 '/VRI', old, old_dss, new_dss,
-            ), ReferenceUpdate
+            ), ReferenceUpdate.curry_ref(paths_checked=vri_path)
+
         )
 
         if old_vri is None:
@@ -478,6 +497,12 @@ class FieldComparisonSpec:
     A reference to the field's dictionary in the new revision, if present.
     """
 
+    old_canonical_path: Optional[RawPdfPath]
+    """
+    Path from the trailer through the AcroForm structure to this field (in the
+    older revision). If the field is new, set to ``None``.
+    """
+
     @property
     def old_field(self) -> Optional[generic.DictionaryObject]:
         """
@@ -505,6 +530,46 @@ class FieldComparisonSpec:
         field = ref.get_object()
         assert isinstance(field, generic.DictionaryObject)
         return field
+
+    def old_annotation_paths(self):
+        # collect path(s) through which this field is used as an annotation
+        # the clean way to accomplish this would be to follow /P
+        # and go from there, but /P is optional, so we have to get a little
+        # creative.
+        old_field_ref = self.old_field_ref
+        if old_field_ref is None:
+            return set()
+
+        old = self.old_field_ref.get_pdf_handler()
+        assert isinstance(old, HistoricalResolver)
+
+        all_paths = old._get_usages_of_ref(old_field_ref)
+
+        def _path_ok(pdf_path: RawPdfPath):
+            # check if the path looks like a path to an annotation on a page
+
+            # .Root.Pages.Kids[0].Annots[0] is the shortest you can get,
+            # so 6 nodes is the minimum
+            if len(pdf_path) < 6:
+                return False
+            fst, snd, *rest = pdf_path.path
+            if fst != '/Root' or snd != '/Pages':
+                return False
+
+            # there should be one or more elements of the form /Kids[i] now
+            descended = False
+            nxt, nxt_ix, *rest = rest
+            while nxt == '/Kids' and isinstance(nxt_ix, int):
+                descended = True
+                nxt, nxt_ix, *rest = rest
+
+            # rest should be nothing and nxt should be /Annots
+            return (
+                descended and not rest and nxt == '/Annots'
+                and isinstance(nxt_ix, int)
+            )
+
+        return {p for p in all_paths if _path_ok(p)}
 
 
 @dataclass(frozen=True)
@@ -539,7 +604,7 @@ class FormUpdate(ReferenceUpdate):
     is locked by the FieldMDP policy currently in force.
     """
 
-    field_name: Optional[str]
+    field_name: Optional[str] = None
     """
     The relevant field's fully qualified name, or ``None`` if there's either
     no obvious associated field, or if there are multiple reasonable candidates.
@@ -550,10 +615,6 @@ class FormUpdate(ReferenceUpdate):
     Flag indicating whether the update is valid even when the field is locked.
     This is only relevant if :attr:`field_name` is not ``None``.
     """
-
-    @staticmethod
-    def curry_ref(**kwargs):
-        return lambda ref: FormUpdate(updated_ref=ref, **kwargs)
 
 
 class FieldMDPRule:
@@ -812,9 +873,15 @@ class SigFieldModificationRule(BaseFieldModificationRule):
             # and also register whether the changes made would be
             # permissible even when the field is locked.
             valid_when_locked = self.compare_fields(spec)
+
+            # these are the paths where we expect to encounter this signature
+            # field
+            paths = spec.old_annotation_paths()
+            paths.add(spec.old_canonical_path)
             field_ref_update = FormUpdate(
                 updated_ref=spec.new_field_ref, field_name=fq_name,
-                valid_when_locked=valid_when_locked
+                valid_when_locked=valid_when_locked,
+                paths_checked=paths
             )
 
             if not previously_signed and now_signed:
@@ -926,11 +993,15 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             return
 
         valid_when_locked = self.compare_fields(spec)
+
+        # these are the paths where we expect the form field to be referred to
+        paths = spec.old_annotation_paths()
+        paths.add(spec.old_canonical_path)
         yield (
             ModificationLevel.FORM_FILLING,
             FormUpdate(
                 updated_ref=spec.new_field_ref, field_name=fq_name,
-                valid_when_locked=valid_when_locked
+                valid_when_locked=valid_when_locked, paths_checked=paths
             )
         )
         old_field = spec.old_field
@@ -1014,12 +1085,15 @@ class FormUpdatingRule:
             The newer revision to be vetted.
         """
 
+        acroform_path = RawPdfPath('/Root', '/AcroForm')
         old_acroform, new_acroform = yield from qualify(
             ModificationLevel.LTA_UPDATES,
             _compare_key_refs(
                 '/AcroForm', old, old.root, new.root
             ),
-            transform=FormUpdate.curry_ref(field_name=None)
+            transform=FormUpdate.curry_ref(
+                field_name=None, paths_checked=acroform_path
+            )
         )
 
         # first, compare the entries that aren't /Fields
@@ -1031,10 +1105,13 @@ class FormUpdatingRule:
         # This is fine: the _list_fields logic checks that it really contains
         # stuff that looks like form fields, and other rules are responsible
         # for vetting the creation of other form fields anyway.
+        fields_path = acroform_path + '/Fields'
         old_fields, new_fields = yield from qualify(
             ModificationLevel.LTA_UPDATES,
             _compare_key_refs('/Fields', old, old_acroform, new_acroform),
-            transform=FormUpdate.curry_ref(field_name=None)
+            transform=FormUpdate.curry_ref(
+                field_name=None, paths_checked=fields_path
+            )
         )
 
         # we also need to deal with the default resource dict, since
@@ -1042,7 +1119,9 @@ class FormUpdatingRule:
         old_dr, new_dr = yield from qualify(
             ModificationLevel.FORM_FILLING,
             _compare_key_refs('/DR', old, old_acroform, new_acroform),
-            transform=FormUpdate.curry_ref(field_name=None)
+            transform=FormUpdate.curry_ref(
+                field_name=None, paths_checked=acroform_path + '/DR'
+            )
         )
         if new_dr is not None:
             dr_deps = new.collect_dependencies(
@@ -1054,7 +1133,9 @@ class FormUpdatingRule:
             )
 
         context = FieldComparisonContext(
-            field_specs=dict(_list_fields(old_fields, new_fields)),
+            field_specs=dict(
+                _list_fields(old_fields, new_fields, old_path=fields_path)
+            ),
             old=old, new=new
         )
 
@@ -1102,7 +1183,14 @@ class CatalogModificationRule(QualifiedWhitelistRule):
         #  - /MarkInfo: if it's an indirect reference (probably not) we can
         #    whitelist it if the key set makes sense. TODO do this
         #  - /DSS, /AcroForm and /Metadata are dealt with by other rules.
-        yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(new.root_ref)
+        yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
+            new.root_ref, paths_checked=RawPdfPath('/Root'),
+            # Things like /Data in a MDP policy can point to root
+            # and since we checked with _compare_dicts, doing a blanket
+            # approval is much easier than figuring out all the ways
+            # in which /Root can be cross-referenced.
+            blanket_approve=True
+        )
 
 
 class MetadataUpdateRule(WhitelistRule):
@@ -1204,7 +1292,10 @@ class MetadataUpdateRule(WhitelistRule):
             and not self.always_refuse_stream_override
         )
         if same_ref_ok or old.is_ref_available(new_metadata_ref):
-            yield ReferenceUpdate(new_metadata_ref)
+            yield ReferenceUpdate(
+                new_metadata_ref,
+                paths_checked=RawPdfPath('/Root', '/Metadata')
+            )
 
 
 class ObjectStreamRule(WhitelistRule):
@@ -1238,8 +1329,8 @@ class XrefStreamRule(WhitelistRule):
 
 
 def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
-                 parent_name="",
-                 inherited_ft=None) -> Dict[str, FieldComparisonSpec]:
+                 old_path: RawPdfPath, parent_name="", inherited_ft=None) \
+        -> Dict[str, FieldComparisonSpec]:
     """
     Recursively construct a list of field names, together with their
     "incarnations" in either revision.
@@ -1250,7 +1341,7 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
             raise exc("Field list is not an array.")
         names_seen = set()
 
-        for field_ref in lst:
+        for ix, field_ref in enumerate(lst):
             if not isinstance(field_ref, generic.IndirectObject):
                 raise exc("Fields must be indirect objects")
 
@@ -1280,7 +1371,7 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
                 kids = field["/Kids"]
             except KeyError:
                 kids = generic.ArrayObject()
-            yield fq_name, (field_type, field_ref.reference, kids)
+            yield fq_name, (field_type, field_ref.reference, kids, ix)
 
     old_fields_by_name = dict(_make_list(old_fields, misc.PdfReadError))
     new_fields_by_name = dict(_make_list(new_fields, SuspiciousModification))
@@ -1291,14 +1382,15 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
 
     for field_name in names:
         try:
-            old_field_type, old_field_ref, old_kids = \
+            old_field_type, old_field_ref, old_kids, field_index = \
                 old_fields_by_name[field_name]
         except KeyError:
             old_field_type = old_field_ref = None
             old_kids = generic.ArrayObject()
+            field_index = None
 
         try:
-            new_field_type, new_field_ref, new_kids = \
+            new_field_type, new_field_ref, new_kids, _ = \
                 new_fields_by_name[field_name]
         except KeyError:
             new_field_type = new_field_ref = None
@@ -1310,15 +1402,23 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
                     f"Update changed field type of {field_name}"
                 )
         common_ft = old_field_type or new_field_type
+        if field_index is not None and old_path is not None:
+            field_path = old_path + field_index
+        else:
+            field_path = None
         yield field_name, FieldComparisonSpec(
             field_type=common_ft,
-            old_field_ref=old_field_ref, new_field_ref=new_field_ref
+            old_field_ref=old_field_ref, new_field_ref=new_field_ref,
+            old_canonical_path=field_path
         )
 
         # recursively descend into /Kids if necessary
         if old_kids or new_kids:
             yield from _list_fields(
-                old_kids, new_kids, field_name, inherited_ft=common_ft
+                old_kids, new_kids, parent_name=field_name, old_path=(
+                    field_path + '/Kids' if field_path is not None else None
+                ),
+                inherited_ft=common_ft,
             )
 
 
@@ -1466,16 +1566,28 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                 field_name = field_name_dict[next(iter(added_annots))]
 
             # Make sure the page dictionaries are the same, so that we
-            #  can safely clear them for modification
+            #  can safely clear them for modification across ALL paths
             #  (not necessary if both /Annots entries are indirect references,
             #   but adding even more cases is pushing things)
             _compare_dicts(old_kid, new_kid, {'/Annots'})
+            # Page objects are often referenced from all sorts of places in the
+            # file, and attempting to check all possible paths would probably
+            # create more problems than it solves.
             yield FormUpdate(
                 updated_ref=new_kid_ref, field_name=field_name,
-                valid_when_locked=valid_when_locked and field_name is not None
+                valid_when_locked=valid_when_locked and field_name is not None,
+                blanket_approve=True
             )
             if new_annots_ref:
                 # current /Annots entry is an indirect reference
+
+                # collect paths to this page and append /Annots
+                #  (recall: old_kid_ref and new_kid_ref should be the same
+                #   anyhow)
+                paths_to_annots = {
+                    path + '/Annots'
+                    for path in old._get_usages_of_ref(old_kid_ref)
+                }
 
                 # If the equality check fails,
                 # either the /Annots array got reassigned to another
@@ -1489,7 +1601,8 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                         updated_ref=new_annots_ref, field_name=field_name,
                         valid_when_locked=(
                             valid_when_locked and field_name is not None
-                        )
+                        ),
+                        paths_checked=paths_to_annots
                     )
 
 
@@ -1723,9 +1836,52 @@ class StandardDiffPolicy(DiffPolicy):
 
         explained = defaultdict(set)
 
+        # prepare LUT for refs that are used multiple times in the old revision
+        # (this is a very expensive operation, since it reads all objects in
+        #  the signed revision)
+        def _init_multi_lut():
+            old._load_reverse_xref_cache()
+            for _ref in new_xrefs:
+                usages = old._get_usages_of_ref(_ref)
+                if usages:
+                    yield _ref, (ModificationLevel.NONE, set(usages))
+
+        # This table records all the overridden refs that already existed
+        # in the old revision, together with the different ways they can be
+        # reached from the document trailer.
+        # Unlike fresh refs, these need to be cleared together with the paths
+        # through which they are accessed.
+        old_usages_to_clear = dict(_init_multi_lut())
+
+        def ingest_ref(_level: ModificationLevel, _upd: ReferenceUpdate):
+            ref = _upd.updated_ref
+            try:
+                current_max_level, usages = old_usages_to_clear[ref]
+                if _upd.blanket_approve:
+                    # approve all usages at once
+                    usages = set()
+                else:
+                    # remove the paths that have just been cleared from
+                    # the checklist
+                    paths_checked = _upd.paths_checked or ()
+                    if isinstance(paths_checked, RawPdfPath):
+                        # single path
+                        paths_checked = paths_checked,
+                    usages.difference_update(paths_checked)
+                # bump the modification level for this reference if necessary
+                _level = max(current_max_level, _level)
+                old_usages_to_clear[ref] = _level, usages
+                if usages:
+                    # not all paths/usages have been cleared, so we can't
+                    # approve the reference yet
+                    return
+            except KeyError:
+                pass
+            explained[_level].add(ref)
+
         for rule in self.global_rules:
-            for level, ref in rule.apply_qualified(old, new):
-                explained[level].add(ref.updated_ref)
+            for level, upd in rule.apply_qualified(old, new):
+                ingest_ref(level, upd)
 
         changed_form_fields = set()
 
@@ -1737,7 +1893,7 @@ class StandardDiffPolicy(DiffPolicy):
                        and field_mdp_spec.is_locked(fq_name)
 
             for level, fu in form_changes:
-                explained[level].add(fu.updated_ref)
+                ingest_ref(level, fu)
                 field_name = fu.field_name
                 if field_name is not None and not fu.valid_when_locked:
                     if is_locked(field_name):
@@ -1764,10 +1920,27 @@ class StandardDiffPolicy(DiffPolicy):
                 "Unexplained xrefs in revision %d:\n%s",
                 new.revision, msg
             )
-            raise SuspiciousModification(
+            unexplained_overrides = [
+                f" - {repr(ref)} is also used at "
+                f"{', '.join(str(p) for p in paths_remaining)} in the prior "
+                f"revision."
+                for ref, (_, paths_remaining) in old_usages_to_clear.items()
+                if paths_remaining
+            ]
+            err_msg = (
                 f"There are unexplained xrefs in revision {new.revision}: "
                 f"{', '.join(repr(x) for x in unexplained_annot)}."
             )
+            if unexplained_overrides:
+                unchecked_paths_msg = (
+                    f"Some objects from revision {old.revision} were replaced "
+                    f"in revision {new.revision} without precise "
+                    "justification:\n" + '\n'.join(unexplained_overrides)
+                )
+                err_msg = "%s\n%s" % (err_msg, unchecked_paths_msg)
+                logger.debug(unchecked_paths_msg)
+
+            raise SuspiciousModification(err_msg)
         elif unexplained_formfill:
             level = ModificationLevel.ANNOTATIONS
         elif unexplained_lta:

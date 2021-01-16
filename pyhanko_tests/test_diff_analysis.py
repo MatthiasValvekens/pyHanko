@@ -11,7 +11,10 @@ from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.font import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko.pdf_utils.reader import PdfFileReader, HistoricalResolver
+from pyhanko.pdf_utils.reader import (
+    PdfFileReader, HistoricalResolver,
+    RawPdfPath,
+)
 from pyhanko.sign import signers, fields
 from pyhanko.sign.diff_analysis import (
     ModificationLevel,
@@ -959,9 +962,9 @@ def test_sign_reject_freed(forbid_freeing):
     )
     r = PdfFileReader(out)
     last_rev = r.xrefs.xref_sections - 1
-    info_ref = generic.Reference(2, 0)
+    some_ref = generic.Reference(2, 0)
 
-    assert info_ref in r.xrefs.refs_freed_in_revision(last_rev)
+    assert some_ref in r.xrefs.refs_freed_in_revision(last_rev)
 
     sig = r.embedded_signatures[0]
     assert sig.signed_revision == 2
@@ -971,7 +974,9 @@ def test_sign_reject_freed(forbid_freeing):
     class AdHocRule(QualifiedWhitelistRule):
         def apply_qualified(self, old: HistoricalResolver,
                             new: HistoricalResolver):
-            yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(info_ref)
+            yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
+                some_ref, paths_checked=RawPdfPath('/Root', '/Pages')
+            )
 
     val_status = validate_pdf_signature(
         sig, SIMPLE_V_CONTEXT(),
@@ -985,3 +990,29 @@ def test_sign_reject_freed(forbid_freeing):
         assert val_status.modification_level == ModificationLevel.OTHER
     else:
         assert val_status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@freeze_time("2020-11-01")
+def test_not_all_paths_cleared():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    # make /Fields indirect
+    fields_arr = w.root['/AcroForm'].raw_get('/Fields')
+    # just in case we ever end up declaring /Fields as indirect in the example
+    assert isinstance(fields_arr, generic.ArrayObject)
+    w.root['/AcroForm']['/Fields'] = w.root['/Blah'] = w.add_object(fields_arr)
+    w.update_root()
+    w.update_container(w.root['/AcroForm'])
+    out = signers.sign_pdf(
+        w, signature_meta=signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+
+    r = PdfFileReader(out)
+    val_trusted_but_modified(embedded_sig=r.embedded_signatures[0])

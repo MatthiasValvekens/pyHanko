@@ -6,6 +6,7 @@ Taken from PyPDF2 with modifications and additions, see
 
 
 import os
+from dataclasses import dataclass
 from enum import Enum
 
 __all__ = [
@@ -255,3 +256,25 @@ class Singleton(type):
 
     def __call__(cls):
         return cls.__instance
+
+
+@dataclass(frozen=True)
+class ConsList:
+    head: object
+    tail: 'ConsList' = None
+
+    @staticmethod
+    def empty() -> 'ConsList':
+        return ConsList(head=None)
+
+    def __iter__(self):
+        cur = self
+        while cur.head is not None:
+            yield cur.head
+            cur = cur.tail
+
+    def cons(self, head):
+        return ConsList(head, self)
+
+    def __repr__(self):  # pragma: nocover
+        return f"ConsList({list(reversed(list(self)))})"
