@@ -3,6 +3,7 @@
            *test*
            *venv*
            setup.py
+           pyhanko/pdf_utils/_saslprep.py
 
 [report]
 exclude_lines =
