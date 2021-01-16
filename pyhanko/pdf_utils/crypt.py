@@ -305,9 +305,44 @@ class AuthResult(misc.OrderedEnum):
     OWNER = 2
 
 
+@enum.unique
+class SecurityHandlerVersion(misc.OrderedEnum):
+    RC4_40 = 1
+    RC4_LONGER_KEYS = 2
+    RC4_OR_AES128 = 4
+    AES256 = 5
+
+
 class SecurityHandler:
 
     __registered_subclasses: Dict[str, Type['SecurityHandler']] = dict()
+
+    def __init__(self, version: SecurityHandlerVersion, legacy_keylen,
+                 crypt_filter_config: 'CryptFilterConfiguration'):
+        self.version = version
+        if version == SecurityHandlerVersion.RC4_40:
+            legacy_keylen = 5
+            crypt_filter_config = _rc4_config(STD_CF, 5)
+        elif not (5 <= legacy_keylen <= 16) \
+                and version <= SecurityHandlerVersion.RC4_OR_AES128:
+            raise misc.PdfError("Key length must be between 5 and 16")
+        elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
+            crypt_filter_config = _rc4_config(STD_CF, legacy_keylen)
+        elif version == SecurityHandlerVersion.AES256 \
+                and crypt_filter_config is None:
+            # there's a reasonable default config that we can fall back to here
+            crypt_filter_config = _aes256_config(STD_CF)
+            legacy_keylen = 32
+
+        if crypt_filter_config is None:
+            raise misc.PdfError(
+                "Specifying a crypt filter configuration is mandatory for "
+                "/Encrypt dictionaries of version 4."
+            )
+        crypt_filter_config.set_security_handler(self)
+
+        self.keylen = legacy_keylen
+        self.crypt_filter_config = crypt_filter_config
 
     @staticmethod
     def register(cls: Type['SecurityHandler']):
@@ -354,14 +389,6 @@ class SecurityHandler:
 
     def get_stream_filter(self, name=None) -> 'CryptFilter':
         raise NotImplementedError
-
-
-@enum.unique
-class StandardSecurityHandlerVersion(misc.OrderedEnum):
-    RC4_40 = 1
-    RC4_LONGER_KEYS = 2
-    RC4_OR_AES128 = 4
-    AES256 = 5
 
 
 @enum.unique
@@ -602,16 +629,16 @@ class StandardSecurityHandler(SecurityHandler):
             )
 
         if rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
-            version = StandardSecurityHandlerVersion.RC4_OR_AES128
+            version = SecurityHandlerVersion.RC4_OR_AES128
             if use_aes128:
                 cfc = _aes128_config(STD_CF)
             else:
                 cfc = _rc4_config(STD_CF, keylen_bytes)
         elif rev == StandardSecuritySettingsRevision.RC4_BASIC:
-            version = StandardSecurityHandlerVersion.RC4_40
+            version = SecurityHandlerVersion.RC4_40
             cfc = None
         else:
-            version = StandardSecurityHandlerVersion.RC4_LONGER_KEYS
+            version = SecurityHandlerVersion.RC4_LONGER_KEYS
             cfc = None
 
         sh = StandardSecurityHandler(
@@ -677,7 +704,7 @@ class StandardSecurityHandler(SecurityHandler):
         # bytes aren't affected by the rest of the encrypted string
         encrypted_perms = encrypted_perms[:16]
         sh = StandardSecurityHandler(
-            version=StandardSecurityHandlerVersion.AES256,
+            version=SecurityHandlerVersion.AES256,
             revision=StandardSecuritySettingsRevision.AES256,
             legacy_keylen=32, perm_flags=perms, odata=o_entry,
             udata=u_entry, oeseed=oe_seed, ueseed=ue_seed,
@@ -686,38 +713,15 @@ class StandardSecurityHandler(SecurityHandler):
         sh._shared_key = encryption_key
         return sh
 
-    def __init__(self, version: StandardSecurityHandlerVersion,
+    def __init__(self, version: SecurityHandlerVersion,
                  revision: StandardSecuritySettingsRevision,
                  legacy_keylen,  # in bytes, not bits
                  perm_flags: int, odata, udata, oeseed=None,
                  ueseed=None, encrypted_perms=None, encrypt_metadata=True,
                  crypt_filter_config: CryptFilterConfiguration = None):
-        self.version = version
+        super().__init__(version, legacy_keylen, crypt_filter_config)
         self.revision = revision
         self.perms = perm_flags
-        if version == StandardSecurityHandlerVersion.RC4_40:
-            legacy_keylen = 5
-            crypt_filter_config = _rc4_config(STD_CF, 5)
-        elif not (5 <= legacy_keylen <= 16) \
-                and version <= StandardSecurityHandlerVersion.RC4_OR_AES128:
-            raise misc.PdfError("Key length must be between 5 and 16")
-        elif version == StandardSecurityHandlerVersion.RC4_LONGER_KEYS:
-            crypt_filter_config = _rc4_config(STD_CF, legacy_keylen)
-        elif version == StandardSecurityHandlerVersion.AES256 \
-                and crypt_filter_config is None:
-            # there's a reasonable default config that we can fall back to here
-            crypt_filter_config = _aes256_config(STD_CF)
-            legacy_keylen = 32
-
-        if crypt_filter_config is None:
-            raise misc.PdfError(
-                "Specifying a crypt filter configuration is mandatory for "
-                "/Encrypt dictionaries of version 4."
-            )
-        crypt_filter_config.set_security_handler(self)
-
-        self.keylen = legacy_keylen
-        self.crypt_filter_config = crypt_filter_config
         if revision == StandardSecuritySettingsRevision.AES256:
             if not (len(udata) == len(odata) == 48):
                 raise misc.PdfError(
@@ -784,7 +788,7 @@ class StandardSecurityHandler(SecurityHandler):
     @classmethod
     def instantiate_from_pdf_object(cls,
                                     encrypt_dict: generic.DictionaryObject):
-        v = StandardSecurityHandlerVersion(encrypt_dict['/V'])
+        v = SecurityHandlerVersion(encrypt_dict['/V'])
         r = StandardSecuritySettingsRevision(encrypt_dict['/R'])
         keylen_bits = encrypt_dict.get('/Length', 40)
         if (keylen_bits % 8) != 0:
@@ -837,7 +841,7 @@ class StandardSecurityHandler(SecurityHandler):
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
         result['/Length'] = generic.NumberObject(self.keylen * 8)
-        if self.version > StandardSecurityHandlerVersion.RC4_LONGER_KEYS:
+        if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
             result['/EncryptMetadata'] \
                 = generic.BooleanObject(self.encrypt_metadata)
             result.update(self.crypt_filter_config.as_pdf_object())
@@ -939,7 +943,7 @@ class StandardSecurityHandler(SecurityHandler):
         return result, key
 
     def derive_object_key(self, idnum, generation):
-        if self.version == StandardSecurityHandlerVersion.AES256:
+        if self.version == SecurityHandlerVersion.AES256:
             return self.shared_key
         else:
             return legacy_derive_object_key(self.shared_key, idnum, generation)
