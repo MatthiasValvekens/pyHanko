@@ -1,4 +1,5 @@
 """Utilities common to reading and writing PDF files."""
+from typing import Tuple
 
 from . import generic
 
@@ -52,6 +53,10 @@ class PdfHandler:
         root = self.root_ref.get_object()
         assert isinstance(root, generic.DictionaryObject)
         return root
+
+    @property
+    def document_id(self) -> Tuple[bytes, bytes]:
+        raise NotImplementedError
 
     # TODO write tests specifically for this helper function
     def _walk_page_tree(self, page_ix, retrieve_parent):

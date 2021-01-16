@@ -16,7 +16,7 @@ import re
 from collections import defaultdict
 from io import BytesIO
 from itertools import chain
-from typing import Set, List, Optional, Union
+from typing import Set, List, Optional, Union, Tuple
 
 from . import generic, misc
 from .misc import PdfReadError
@@ -654,6 +654,11 @@ class PdfFileReader(PdfHandler):
     def root_ref(self) -> generic.Reference:
         return self.trailer.raw_get('/Root', decrypt=False).reference
 
+    @property
+    def document_id(self) -> Tuple[bytes, bytes]:
+        id_arr = self.trailer['/ID']
+        return id_arr[0].original_bytes, id_arr[1].original_bytes
+
     def get_historical_root(self, revision: int):
         """
         Get the document catalog for a specific revision.
@@ -930,7 +935,7 @@ class PdfFileReader(PdfHandler):
         """
 
         return self.security_handler.authenticate(
-            self.trailer['/ID'][0].original_bytes, password
+            self.document_id[0], password
         )
 
     @property
@@ -1056,6 +1061,11 @@ class HistoricalResolver(PdfHandler):
         reference object will cause the reference to be resolved within the
         selected revision.
     """
+
+    @property
+    def document_id(self) -> Tuple[bytes, bytes]:
+        id_arr = self._trailer['/ID']
+        return id_arr[0].original_bytes, id_arr[1].original_bytes
 
     def __init__(self, reader: PdfFileReader, revision):
         self.cache = {}

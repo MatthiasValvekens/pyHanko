@@ -8,7 +8,7 @@ for the original license.
 import os
 import struct
 from io import BytesIO
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.crypt import SecurityHandler, StandardSecurityHandler
@@ -312,6 +312,10 @@ class BasePdfFileWriter(PdfHandler):
         else:
             self._info = info
         return info
+
+    def document_id(self) -> Tuple[bytes, bytes]:
+        id_arr = self._document_id
+        return id_arr[0].original_bytes, id_arr[1].original_bytes
 
     def mark_update(self, obj_ref: Union[generic.Reference,
                                          generic.IndirectObject]):
