@@ -805,7 +805,7 @@ class PageObject(generic.DictionaryObject):
 class PdfFileWriter(BasePdfFileWriter):
     """Class to write new PDF files."""
 
-    def __init__(self, stream_xrefs=True):
+    def __init__(self, stream_xrefs=True, init_page_tree=True):
         # root object
         root = generic.DictionaryObject({
             pdf_name("/Type"): pdf_name("/Catalog"),
@@ -822,13 +822,14 @@ class PdfFileWriter(BasePdfFileWriter):
 
         super().__init__(root, info, id_obj, stream_xrefs=stream_xrefs)
 
-        pages = generic.DictionaryObject({
-            pdf_name("/Type"): pdf_name("/Pages"),
-            pdf_name("/Count"): generic.NumberObject(0),
-            pdf_name("/Kids"): generic.ArrayObject(),
-        })
+        if init_page_tree:
+            pages = generic.DictionaryObject({
+                pdf_name("/Type"): pdf_name("/Pages"),
+                pdf_name("/Count"): generic.NumberObject(0),
+                pdf_name("/Kids"): generic.ArrayObject(),
+            })
 
-        root[pdf_name('/Pages')] = self.add_object(pages)
+            root[pdf_name('/Pages')] = self.add_object(pages)
 
     def _write_header(self, stream):
         major, minor = self.output_version
