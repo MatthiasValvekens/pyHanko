@@ -637,6 +637,12 @@ class BasePdfFileWriter(PdfHandler):
         Deep-copy an object into this writer, dealing with resolving indirect
         references in the process.
 
+        .. danger::
+            The table mapping indirect references in the input to indirect
+            references in the writer is not preserved between calls.
+            Concretely, this means that invoking :meth:`import_object` twice
+            on the same input reader may cause objects duplication.
+
         :param obj:
             The object to import.
         :param obj_stream:
@@ -895,3 +901,23 @@ class PdfFileWriter(BasePdfFileWriter):
         self.output_version = (2, 0)
         sh = PubKeySecurityHandler.build_from_certs(recipients)
         self._assign_security_handler(sh)
+
+
+def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
+    w = PdfFileWriter(init_page_tree=False)
+    input_root_ref = input_handler.root_ref
+    output_root_ref = w.root_ref
+    # call _import_object in such a way that we translate the input handler's
+    # root to the new writer's root.
+    # From a technical PoV this doesn't matter, but it makes the output file
+    # somewhat "cleaner" (i.e. it doesn't leave an orphaned document catalog
+    # cluttering up the file)
+    new_root_dict = w._import_object(
+        input_handler.root, reference_map={input_root_ref: output_root_ref},
+        obj_stream=None
+    )
+    # override the old root ref
+    ix = (output_root_ref.generation, output_root_ref.idnum)
+    w.objects[ix] = new_root_dict
+
+    return w

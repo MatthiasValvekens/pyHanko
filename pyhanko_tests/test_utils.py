@@ -1020,3 +1020,41 @@ def test_custom_crypt_filter_errors():
     with pytest.raises(misc.PdfStreamError):
         w.write(out)
 
+
+def test_copy_file():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    old_root_ref = w.root_ref
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.root_ref == old_root_ref
+    assert len(r.root['/AcroForm']['/Fields']) == 1
+    assert len(r.root['/Pages']['/Kids']) == 1
+
+
+def test_copy_encrypted_file():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
+    r.decrypt("ownersecret")
+    w = writer.copy_into_new_writer(r)
+    old_root_ref = w.root_ref
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.root_ref == old_root_ref
+    assert len(r.root['/AcroForm']['/Fields']) == 1
+    assert len(r.root['/Pages']['/Kids']) == 1
+
+
+def test_copy_to_encrypted_file():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    old_root_ref = w.root_ref
+    w.encrypt("ownersecret", "usersecret")
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    r.decrypt("ownersecret")
+    assert r.root_ref == old_root_ref
+    assert len(r.root['/AcroForm']['/Fields']) == 1
+    assert len(r.root['/Pages']['/Kids']) == 1
