@@ -251,11 +251,9 @@ class Singleton(type):
 
     def __new__(mcs, name, bases, dct):
         cls = type.__new__(mcs, name, bases, dct)
-        cls.__instance = type.__call__(cls)
+        instance = type.__call__(cls)
+        cls.__new__ = lambda _: instance
         return cls
-
-    def __call__(cls):
-        return cls.__instance
 
 
 @dataclass(frozen=True)
