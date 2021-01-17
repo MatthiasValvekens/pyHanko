@@ -10,8 +10,13 @@ import struct
 from io import BytesIO
 from typing import List, Union, Optional, Tuple
 
+from asn1crypto import x509
+
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.crypt import SecurityHandler, StandardSecurityHandler
+from pyhanko.pdf_utils.crypt import (
+    SecurityHandler, StandardSecurityHandler,
+    PubKeySecurityHandler,
+)
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.misc import (
     peek, PdfReadError, instance_test,
@@ -848,12 +853,11 @@ class PdfFileWriter(BasePdfFileWriter):
 
         .. caution::
             While pyHanko supports legacy PDF encryption as well, the API
-            to create those is left undocumented on purpose to discourage
-            its use.
+            to create new documents using outdated encryption is left
+            undocumented on purpose to discourage its use.
 
-            Incremental updates to a file encrypted with one of these
-            outdated methods will still work, however.
-
+            This caveat does _not_ apply to incremental updates added to
+            existing documents.
 
         :param owner_pass:
             The desired owner password.
@@ -863,4 +867,31 @@ class PdfFileWriter(BasePdfFileWriter):
         """
         self.output_version = (2, 0)
         sh = StandardSecurityHandler.build_from_pw(owner_pass, user_pass)
+        self._assign_security_handler(sh)
+
+    def encrypt_pubkey(self, recipients: List[x509.Certificate]):
+        """
+        Mark this document to be encrypted with PDF 2.0 public key encryption.
+        The certificates passed in should be RSA certificates.
+
+        PyHanko defaults to AES-256 to encrypt the actual file contents.
+        The seed used to derive the file encryption key is also encrypted
+        using AES-256 and bundled in a CMS EnvelopedData object.
+        The envelope key is then encrypted separately for each recipient, using
+        their respective public keys.
+
+        .. caution::
+            While pyHanko supports legacy PDF encryption as well, the API
+            to create new documents using outdated encryption is left
+            undocumented on purpose to discourage its use.
+
+            This caveat does _not_ apply to incremental updates added to
+            existing documents.
+
+        :param recipients:
+            Certificates of the recipients that should be able to decrypt
+            the document.
+        """
+        self.output_version = (2, 0)
+        sh = PubKeySecurityHandler.build_from_certs(recipients)
         self._assign_security_handler(sh)

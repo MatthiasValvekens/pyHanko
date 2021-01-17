@@ -854,8 +854,7 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
 def test_pubkey_alternative_filter():
     w = writer.PdfFileWriter()
 
-    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
-    w._assign_security_handler(sh)
+    w.encrypt_pubkey([PUBKEY_TEST_DECRYPTER.cert])
     # subfilter should be picked up
     w._encrypt.get_object()['/Filter'] = pdf_name('/FooBar')
     out = BytesIO()
@@ -868,8 +867,7 @@ def test_pubkey_alternative_filter():
 def test_pubkey_unsupported_filter(delete_subfilter):
     w = writer.PdfFileWriter()
 
-    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
-    w._assign_security_handler(sh)
+    w.encrypt_pubkey([PUBKEY_TEST_DECRYPTER.cert])
     encrypt = w._encrypt.get_object()
     encrypt['/Filter'] = pdf_name('/FooBar')
     if delete_subfilter:
@@ -885,8 +883,7 @@ def test_pubkey_unsupported_filter(delete_subfilter):
 def test_pubkey_encryption_block_cfs_s4():
     w = writer.PdfFileWriter()
 
-    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
-    w._assign_security_handler(sh)
+    w.encrypt_pubkey([PUBKEY_TEST_DECRYPTER.cert])
     encrypt = w._encrypt.get_object()
     encrypt['/SubFilter'] = pdf_name('/adbe.pkcs7.s4')
     out = BytesIO()
