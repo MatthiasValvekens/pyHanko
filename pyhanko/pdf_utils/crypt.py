@@ -264,12 +264,15 @@ def _compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
     return val + (b'\x00' * 16), key
 
 
-def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int) \
+def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
+                             use_aes=False) \
         -> bytes:
     pack1 = struct.pack("<i", idnum)[:3]
     pack2 = struct.pack("<i", generation)[:2]
     key = shared_key + pack1 + pack2
     assert len(key) == (len(shared_key) + 5)
+    if use_aes:
+        key += b'sAlT'
     md5_hash = md5(key).digest()
     return md5_hash[:min(16, len(shared_key) + 5)]
 
@@ -430,10 +433,7 @@ class CryptFilter:
         raise NotImplementedError
 
     def derive_object_key(self, idnum, generation) -> bytes:
-        if self._handler.version == SecurityHandlerVersion.AES256:
-            return self.shared_key
-        else:
-            return legacy_derive_object_key(self.shared_key, idnum, generation)
+        raise NotImplementedError
 
     @property
     def shared_key(self) -> bytes:
@@ -549,6 +549,9 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
     def derive_shared_encryption_key(self) -> bytes:
         return b''  # pragma: nocover
 
+    def derive_object_key(self, idnum, generation) -> bytes:
+        return b''
+
     @property
     def _auth_failed(self) -> bool:
         return False
@@ -580,6 +583,9 @@ class RC4CryptFilterMixin(CryptFilter, abc.ABC):
     def decrypt(self, key, ciphertext: bytes) -> bytes:
         return symmetric.rc4_encrypt(key, ciphertext)
 
+    def derive_object_key(self, idnum, generation) -> bytes:
+        return legacy_derive_object_key(self.shared_key, idnum, generation)
+
 
 class AESCryptFilterMixin(CryptFilter, abc.ABC):
     keylen = None
@@ -604,6 +610,14 @@ class AESCryptFilterMixin(CryptFilter, abc.ABC):
     def decrypt(self, key, ciphertext: bytes) -> bytes:
         iv, data = ciphertext[:16], ciphertext[16:]
         return symmetric.aes_cbc_pkcs7_decrypt(key, data, iv)
+
+    def derive_object_key(self, idnum, generation) -> bytes:
+        if self._handler.version == SecurityHandlerVersion.AES256:
+            return self.shared_key
+        else:
+            return legacy_derive_object_key(
+                self.shared_key, idnum, generation, use_aes=True
+            )
 
 
 class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
