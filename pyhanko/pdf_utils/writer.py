@@ -313,6 +313,7 @@ class BasePdfFileWriter(PdfHandler):
             self._info = info
         return info
 
+    @property
     def document_id(self) -> Tuple[bytes, bytes]:
         id_arr = self._document_id
         return id_arr[0].original_bytes, id_arr[1].original_bytes
