@@ -195,7 +195,7 @@ class XRefStream(generic.StreamObject):
             pdf_name('/Type'): pdf_name('/XRef'),
         })
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         # the caller is responsible for making sure that the stream
         # is registered in the position dictionary
 
@@ -474,12 +474,11 @@ class BasePdfFileWriter(PdfHandler):
             stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
             if self.security_handler is not None \
                     and idnum != self._encrypt.idnum:
-                local_key = self.security_handler.derive_object_key(
-                    idnum, generation
-                )
+                handler = self.security_handler
             else:
-                local_key = None
-            obj.write_to_stream(stream, self.security_handler, local_key)
+                handler = None
+            container_ref = generic.Reference(idnum, generation, self)
+            obj.write_to_stream(stream, handler, container_ref)
             stream.write(b'\nendobj\n')
 
     def _populate_trailer(self, trailer):
@@ -863,5 +862,4 @@ class PdfFileWriter(BasePdfFileWriter):
         """
         self.output_version = (2, 0)
         sh = StandardSecurityHandler.build_from_pw(owner_pass, user_pass)
-        self.security_handler = sh
-        self._encrypt = self.add_object(sh.as_pdf_object())
+        self._assign_security_handler(sh)

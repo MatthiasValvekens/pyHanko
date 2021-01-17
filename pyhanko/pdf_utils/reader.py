@@ -20,7 +20,10 @@ from typing import Set, List, Optional, Union, Tuple
 
 from . import generic, misc
 from .misc import PdfReadError
-from .crypt import SecurityHandler
+from .crypt import (
+    SecurityHandler, StandardSecurityHandler,
+    EnvelopeKeyDecrypter, PubKeySecurityHandler,
+)
 
 import logging
 
@@ -534,8 +537,8 @@ class TrailerDictionary(generic.PdfObject):
     def items(self):
         return self.flatten().items()
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
-        return self.flatten().write_to_stream(stream, handler, local_key)
+    def write_to_stream(self, stream, handler=None, container_ref=None):
+        return self.flatten().write_to_stream(stream, handler, container_ref)
 
 
 class PdfFileReader(PdfHandler):
@@ -582,11 +585,9 @@ class PdfFileReader(PdfHandler):
             pass
 
         self.security_handler: Optional[SecurityHandler] = None
-        try:
-            encrypt_dict = self._get_encryption_params()
+        encrypt_dict = self._get_encryption_params()
+        if encrypt_dict is not None:
             self.security_handler = SecurityHandler.build(encrypt_dict)
-        except KeyError:
-            pass
 
         self._embedded_signatures = None
 
@@ -639,8 +640,11 @@ class PdfFileReader(PdfHandler):
             raise PdfReadError("This is a fatal error in strict mode.")
         return generic.NullObject()
 
-    def _get_encryption_params(self):
-        encrypt_ref = self.trailer.raw_get('/Encrypt')
+    def _get_encryption_params(self) -> Optional[generic.DictionaryObject]:
+        try:
+            encrypt_ref = self.trailer.raw_get('/Encrypt')
+        except KeyError:
+            return
         if isinstance(encrypt_ref, generic.IndirectObject):
             return self.get_object(encrypt_ref.reference, never_decrypt=True)
         else:
@@ -769,10 +773,9 @@ class PdfFileReader(PdfHandler):
             # override encryption is used for the /Encrypt dictionary
             if not never_decrypt and self.encrypted:
                 sh: SecurityHandler = self.security_handler
-                key = sh.derive_object_key(ref.idnum, ref.generation)
                 # make sure the object that lands in the cache is always
                 # a proxy object
-                retval = generic.proxy_encrypted_obj(retval, sh, key)
+                retval = generic.proxy_encrypted_obj(retval, sh)
             return retval
 
     def cache_get_indirect_object(self, generation, idnum):
@@ -930,13 +933,43 @@ class PdfFileReader(PdfHandler):
             files.
 
         :param password: The password to match.
-        :raises NotImplementedError:
-            Raised if the document uses an unsupported encryption method.
         """
+        sh = self.security_handler
+        if not isinstance(sh, StandardSecurityHandler):
+            raise misc.PdfReadError(
+                f"Security handler is of type '{type(sh)}', "
+                f"not StandardSecurityHandler"
+            )  # pragma: nocover
 
-        return self.security_handler.authenticate(
-            self.document_id[0], password
-        )
+        return sh.authenticate(password, id1=self.document_id[0])
+
+    def decrypt_pubkey(self, credential: EnvelopeKeyDecrypter):
+        """
+        Decrypt a PDF file encrypted using public-key encryption by providing
+        a credential representing the private key of one of the recipients.
+
+        .. danger::
+            The same caveats as in :meth:`.decrypt` w.r.t. permission handling
+            apply to this method.
+
+        .. danger::
+            The robustness of the public key cipher being used is not the only
+            factor in the security of public-key encryption in PDF.
+            The standard still permits weak schemes to encrypt the actual file
+            data and file keys.
+            PyHanko uses sane defaults everywhere, but other software may not.
+
+        :param credential:
+            The :class:`.EnvelopeKeyDecrypter` handling the recipient's
+            private key.
+        """
+        sh = self.security_handler
+        if not isinstance(sh, PubKeySecurityHandler):
+            raise misc.PdfReadError(
+                f"Security handler is of type '{type(sh)}', "
+                f"not PubKeySecurityHandler"
+            )  # pragma: nocover
+        return sh.authenticate(credential)
 
     @property
     def encrypted(self):

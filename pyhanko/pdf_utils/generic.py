@@ -267,13 +267,14 @@ class PdfObject:
         """
         return self
 
-    def write_to_stream(self, stream, handler=None, local_key: bytes = None):
+    def write_to_stream(self, stream, handler=None,
+                        container_ref: Reference = None):
         """
         Abstract method to render this object to an output stream.
 
         :param stream:
             An output stream.
-        :param local_key:
+        :param container_ref:
             Local encryption key.
         :param handler:
             Security handler
@@ -287,7 +288,7 @@ class NullObject(PdfObject):
     All instances are treated as equal and falsy.
     """
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(b"null")
 
     @staticmethod
@@ -313,7 +314,7 @@ class BooleanObject(PdfObject):
     def __init__(self, value):
         self.value = value
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         if self.value:
             stream.write(b"true")
         else:
@@ -373,11 +374,13 @@ class ArrayObject(list, PdfObject):
         val = list.__getitem__(self, index)
         return _deproxy_decrypt(val) if decrypt else val
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(b"[")
         for data in self:
             stream.write(b" ")
-            data.write_to_stream(stream, handler=handler, local_key=local_key)
+            data.write_to_stream(
+                stream, handler=handler, container_ref=container_ref
+            )
         stream.write(b" ]")
 
     @staticmethod
@@ -465,7 +468,7 @@ class IndirectObject(PdfObject, Dereferenceable):
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(b"%d %d R" % (self.idnum, self.generation))
 
     @staticmethod
@@ -527,7 +530,7 @@ class FloatObject(decimal.Decimal, PdfObject):
         """
         return float(self)
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(repr(self).encode('ascii'))
 
 
@@ -552,7 +555,7 @@ class NumberObject(int, PdfObject):
         """
         return int(self)
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(repr(self).encode('ascii'))
 
     @staticmethod
@@ -712,10 +715,14 @@ class ByteStringObject(bytes, PdfObject):
     For compatibility with :attr:`.TextStringObject.original_bytes`
     """
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         bytearr = self
-        if handler is not None and local_key is not None:
-            bytearr = handler.get_string_filter().encrypt(local_key, bytearr)
+        if handler is not None and container_ref is not None:
+            cf = handler.get_string_filter()
+            local_key = cf.derive_object_key(
+                container_ref.idnum, container_ref.generation
+            )
+            bytearr = cf.encrypt(local_key, bytearr)
         stream.write(b"<")
         stream.write(binascii.hexlify(bytearr))
         stream.write(b">")
@@ -757,7 +764,7 @@ class TextStringObject(str, PdfObject):
         else:
             raise Exception("no information about original bytes")
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         # Try to write the string out as a PDFDocEncoding encoded string.  It's
         # nicer to look at in the PDF file.  Sadly, we take a performance hit
         # here for trying...
@@ -766,8 +773,12 @@ class TextStringObject(str, PdfObject):
             bytearr = encode_pdfdocencoding(self)
         except UnicodeEncodeError:
             bytearr = codecs.BOM_UTF16_BE + self.encode("utf-16be")
-        if handler is not None and local_key is not None:
-            bytearr = handler.get_string_filter().encrypt(local_key, bytearr)
+        if handler is not None and container_ref is not None:
+            cf = handler.get_string_filter()
+            local_key = cf.derive_object_key(
+                container_ref.idnum, container_ref.generation
+            )
+            bytearr = cf.encrypt(local_key, bytearr)
             obj = ByteStringObject(bytearr)
             obj.write_to_stream(stream)
         else:
@@ -790,7 +801,7 @@ class NameObject(str, PdfObject):
 
     DELIMITER_PATTERN = re.compile(r"\s+|[\(\)<>\[\]{}/%]".encode('ascii'))
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(encode_pdfdocencoding(self))
 
     @staticmethod
@@ -895,12 +906,12 @@ class DictionaryObject(dict, PdfObject):
             raise KeyError
         return value
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(b"<<\n")
         for key, value in list(self.items()):
-            key.write_to_stream(stream, handler, local_key)
+            key.write_to_stream(stream, handler, container_ref)
             stream.write(b" ")
-            value.write_to_stream(stream, handler, local_key)
+            value.write_to_stream(stream, handler, container_ref)
             stream.write(b"\n")
         stream.write(b">>")
 
@@ -1209,14 +1220,18 @@ class StreamObject(DictionaryObject):
         """
         self.apply_filter(pdf_name('/FlateDecode'), allow_duplicates=None)
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         data = self.encoded_data
-        if handler is not None and local_key is not None and \
+        if handler is not None and container_ref is not None and \
                 not self._has_crypt_filter:
-            data = handler.get_stream_filter().encrypt(local_key, data)
+            cf = handler.get_stream_filter()
+            local_key = cf.derive_object_key(
+                container_ref.idnum, container_ref.generation
+            )
+            data = cf.encrypt(local_key, data)
         self[NameObject("/Length")] = NumberObject(len(data))
         # write the dictionary
-        super().write_to_stream(stream, handler, local_key)
+        super().write_to_stream(stream, handler, container_ref)
         del self["/Length"]
         stream.write(b"\nstream\n")
         stream.write(data)
@@ -1292,9 +1307,9 @@ pdf_name = NameObject
 PROXYABLE = (TextStringObject, ByteStringObject, DictionaryObject, ArrayObject)
 
 
-def proxy_encrypted_obj(encrypted_obj, handler, local_key):
+def proxy_encrypted_obj(encrypted_obj, handler):
     if isinstance(encrypted_obj, PROXYABLE):
-        return DecryptedObjectProxy(encrypted_obj, handler, local_key)
+        return DecryptedObjectProxy(encrypted_obj, handler)
     else:
         return encrypted_obj
 
@@ -1302,11 +1317,10 @@ def proxy_encrypted_obj(encrypted_obj, handler, local_key):
 # TODO support 2.0-style encryption
 class DecryptedObjectProxy(PdfObject):
 
-    def __init__(self, raw_object: PdfObject, handler, local_key):
+    def __init__(self, raw_object: PdfObject, handler):
         self.raw_object = raw_object
         self._decrypted = None
         self.handler = handler
-        self.local_key = local_key
 
     @property
     def decrypted(self):
@@ -1318,15 +1332,22 @@ class DecryptedObjectProxy(PdfObject):
 
         obj = self.raw_object
         handler: SecurityHandler = self.handler
-        key = self.local_key
+        container_ref = obj.container_ref
+        if not isinstance(container_ref, Reference):
+            raise ValueError(
+                "Proxyable objects must have a container ref pointing to a "
+                f"numbered object, not '{container_ref}'."
+            )  # pragma: nocover
         if isinstance(obj, ByteStringObject) or \
                 isinstance(obj, TextStringObject):
-            decrypted = pdf_string(
-                handler.get_string_filter().decrypt(key, obj.original_bytes)
+            cf = handler.get_string_filter()
+            local_key = cf.derive_object_key(
+                container_ref.idnum, container_ref.generation
             )
+            decrypted = pdf_string(cf.decrypt(local_key, obj.original_bytes))
         elif isinstance(obj, DictionaryObject):
             decrypted_entries = {
-                dictkey: proxy_encrypted_obj(value, handler, key)
+                dictkey: proxy_encrypted_obj(value, handler)
                 for dictkey, value in obj.items()
             }
             if isinstance(obj, StreamObject):
@@ -1337,9 +1358,11 @@ class DecryptedObjectProxy(PdfObject):
                     # is decrypted.
                     decrypted_data = obj.encoded_data
                 else:
-                    decrypted_data = handler.get_stream_filter().decrypt(
-                        key, obj.encoded_data
+                    cf = handler.get_string_filter()
+                    local_key = cf.derive_object_key(
+                        container_ref.idnum, container_ref.generation
                     )
+                    decrypted_data = cf.decrypt(local_key, obj.encoded_data)
 
                 decrypted = StreamObject(
                     decrypted_entries, encoded_data=decrypted_data
@@ -1348,7 +1371,7 @@ class DecryptedObjectProxy(PdfObject):
                 decrypted = DictionaryObject(decrypted_entries)
         elif isinstance(obj, ArrayObject):
             decrypted_map = map(
-                lambda v: proxy_encrypted_obj(v, handler, key), obj
+                lambda v: proxy_encrypted_obj(v, handler), obj
             )
             decrypted = ArrayObject(decrypted_map)
         else:  # pragma: nocover
@@ -1357,12 +1380,12 @@ class DecryptedObjectProxy(PdfObject):
         self._decrypted = decrypted
         return decrypted
 
-    def write_to_stream(self, stream, handler=None, local_key=None):
+    def write_to_stream(self, stream, handler=None, container_ref=None):
         # maybe the encryption key for this object changed (due to it being
         # included as part of a larger object or somesuch, without proper
         # dereferencing), so to avoid unexpected shenanigans, let's start from
         # scratch.
-        self.decrypted.write_to_stream(stream, handler, local_key)
+        self.decrypted.write_to_stream(stream, handler, container_ref)
 
     def get_object(self):
         return self.decrypted.get_object()

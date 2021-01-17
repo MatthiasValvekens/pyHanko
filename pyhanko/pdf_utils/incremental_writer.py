@@ -6,6 +6,7 @@ import os
 from typing import Union, Optional
 
 from . import generic
+from .crypt import EnvelopeKeyDecrypter
 from .misc import PdfReadError
 
 from .reader import PdfFileReader
@@ -198,25 +199,33 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         :raises PdfReadError:
             Raised when there is a problem decrypting the file.
         """
+
         prev = self.prev
-        # first, attempt decryption
-        if prev.encrypted:
-            if not prev.decrypt(user_pwd):
-                raise PdfReadError(
-                    'Failed to decrypt original with the password supplied'
-                )
-        else:
-            raise PdfReadError('Original file was not encrypted.')
+        result = prev.decrypt(user_pwd)
 
         # take care to use the same encryption algorithm as the underlying file
-        try:
-            encrypt_ref = prev.trailer.raw_get("/Encrypt")
-        except KeyError:
-            raise PdfReadError(
-                'Original document does not have an encryption dictionary'
-            )
+        self._encrypt = prev.trailer.raw_get("/Encrypt")
+        return result
 
-        self._encrypt = encrypt_ref
+    def encrypt_pubkey(self, credential: EnvelopeKeyDecrypter):
+        """Method to handle updates to files encrypted using public-key
+        encryption.
+
+        The same caveats as :meth:`encrypt` apply here.
+
+
+        :param credential:
+            The :class:`.EnvelopeKeyDecrypter` handling the recipient's
+            private key.
+
+        :raises PdfReadError:
+            Raised when there is a problem decrypting the file.
+        """
+
+        prev = self.prev
+        result = prev.decrypt_pubkey(credential)
+        self._encrypt = prev.trailer.raw_get("/Encrypt")
+        return result
 
     # TODO these can be simplified considerably using the new update_container
     # TODO move these to the base writer class, perhaps

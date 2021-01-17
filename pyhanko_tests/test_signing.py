@@ -709,6 +709,36 @@ def test_sign_crypt_aes256(password):
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
+def test_sign_crypt_pubkey_aes256():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_PUBKEY_ONE_FIELD_AES256))
+    w.encrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_sign_crypt_pubkey_rc4():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_PUBKEY_ONE_FIELD_RC4))
+    w.encrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+        existing_fields_only=True
+    )
+
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+
+
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
 sign_crypt_rc4_new_params = [
     [b'usersecret', 0], [b'usersecret', 1],

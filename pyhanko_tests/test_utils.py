@@ -19,6 +19,7 @@ from pyhanko.pdf_utils.content import (
 from pyhanko.pdf_utils.crypt import (
     StandardSecurityHandler,
     StandardSecuritySettingsRevision, IdentityCryptFilter, AuthResult,
+    PubKeySecurityHandler, SecurityHandlerVersion,
 )
 
 from .samples import *
@@ -733,6 +734,7 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
 @pytest.mark.parametrize("legacy", [True, False])
 def test_wrong_password(legacy):
     w = writer.PdfFileWriter()
+    ref = w.add_object(generic.TextStringObject("Blah blah"))
     if legacy:
         sh = StandardSecurityHandler.build_from_pw_legacy(
             StandardSecuritySettingsRevision.RC4_OR_AES128,
@@ -747,9 +749,10 @@ def test_wrong_password(legacy):
     w.write(out)
     r = PdfFileReader(out)
     assert r.decrypt("thispasswordiswrong") == AuthResult.UNKNOWN
+    assert r.security_handler._auth_failed
+    assert r.security_handler.get_string_filter()._auth_failed
     with pytest.raises(misc.PdfReadError):
-        # noinspection PyStatementEffect
-        r.root['/Pages']
+        r.get_object(ref.reference)
 
 
 @pytest.mark.parametrize("use_alias, with_never_decrypt", [
@@ -761,9 +764,6 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     w.security_handler = sh
     idf = IdentityCryptFilter()
     assert sh.crypt_filter_config[pdf_name("/Identity")] is idf
-    with pytest.raises(misc.PdfError):
-        # noinspection PyStatementEffect
-        idf.shared_key
     if use_alias:
         sh.crypt_filter_config._crypt_filters[pdf_name("/IdentityAlias")] = idf
         assert sh.crypt_filter_config[pdf_name("/IdentityAlias")] is idf
@@ -788,3 +788,122 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     the_stream = r.get_object(ref, never_decrypt=with_never_decrypt)
     assert the_stream.encoded_data == test_bytes
     assert the_stream.data == test_bytes
+
+
+@pytest.mark.parametrize("version, keylen, use_aes, use_crypt_filters", [
+    (SecurityHandlerVersion.AES256, 32, True, True),
+    (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
+    (SecurityHandlerVersion.RC4_OR_AES128, 16, False, True),
+    (SecurityHandlerVersion.RC4_OR_AES128, 5, False, True),
+    (SecurityHandlerVersion.RC4_40, 5, False, True),
+    (SecurityHandlerVersion.RC4_40, 5, False, False),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, True),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, False),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, True),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
+])
+def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=keylen,
+        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters
+    )
+    w.security_handler = sh
+    w._encrypt = w.add_object(sh.as_pdf_object())
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'),
+    )
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    # just a piece of data I know occurs in the decoded content stream
+    # of the (only) page in VECTOR_IMAGE_PDF
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
+def test_pubkey_alternative_filter():
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
+    w._assign_security_handler(sh)
+    # subfilter should be picked up
+    w._encrypt.get_object()['/Filter'] = pdf_name('/FooBar')
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert isinstance(r.security_handler, PubKeySecurityHandler)
+
+
+@pytest.mark.parametrize('delete_subfilter', [True, False])
+def test_pubkey_unsupported_filter(delete_subfilter):
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
+    w._assign_security_handler(sh)
+    encrypt = w._encrypt.get_object()
+    encrypt['/Filter'] = pdf_name('/FooBar')
+    if delete_subfilter:
+        del encrypt['/SubFilter']
+    else:
+        encrypt['/SubFilter'] = pdf_name('/baz.quux')
+    out = BytesIO()
+    w.write(out)
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(out)
+
+
+def test_pubkey_encryption_block_cfs_s4():
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
+    w._assign_security_handler(sh)
+    encrypt = w._encrypt.get_object()
+    encrypt['/SubFilter'] = pdf_name('/adbe.pkcs7.s4')
+    out = BytesIO()
+    w.write(out)
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(out)
+
+
+def test_pubkey_encryption_s5_requires_cfs():
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
+    w._assign_security_handler(sh)
+    encrypt = w._encrypt.get_object()
+    del encrypt['/CF']
+    out = BytesIO()
+    w.write(out)
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(out)
+
+
+def test_pubkey_encryption_dict_errors():
+    sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
+    original= sh.as_pdf_object()
+
+    encrypt = generic.DictionaryObject(original)
+    encrypt['/SubFilter'] = pdf_name('/asdflakdsjf')
+    with pytest.raises(misc.PdfReadError):
+        PubKeySecurityHandler.build(encrypt)
+
+    encrypt = generic.DictionaryObject(original)
+    encrypt['/Length'] = generic.NumberObject(13)
+    with pytest.raises(misc.PdfError):
+        PubKeySecurityHandler.build(encrypt)
+
+    encrypt = generic.DictionaryObject(original)
+    del encrypt['/CF']['/DefaultCryptFilter']['/CFM']
+    with pytest.raises(misc.PdfReadError):
+        PubKeySecurityHandler.build(encrypt)
+
+    encrypt = generic.DictionaryObject(original)
+    encrypt['/CF']['/DefaultCryptFilter']['/CFM'] = pdf_name('/None')
+    with pytest.raises(misc.PdfReadError):
+        PubKeySecurityHandler.build(encrypt)

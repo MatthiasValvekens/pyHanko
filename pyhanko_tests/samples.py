@@ -1,3 +1,6 @@
+from pyhanko.pdf_utils.crypt import SimpleEnvelopeKeyDecrypter
+
+
 def read_all(fname):
     with open(fname, 'rb') as f:
         return f.read()
@@ -16,11 +19,16 @@ SIMPLE_FORM = read_all(PDF_DATA_DIR + '/minimal-with-simple-form.pdf')
 TEXTFIELD_GROUP = read_all(PDF_DATA_DIR + '/minimal-with-textfield-group.pdf')
 TEXTFIELD_GROUP_VAR = read_all(PDF_DATA_DIR + '/minimal-with-textfield-group-var.pdf')
 
+
 # user/owner passwords are 'usersecret' and 'ownersecret' respectively
 MINIMAL_RC4 = read_all(PDF_DATA_DIR + '/minimal-rc4.pdf')
 MINIMAL_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-rc4.pdf')
 MINIMAL_AES256 = read_all(PDF_DATA_DIR + '/minimal-aes256.pdf')
 MINIMAL_ONE_FIELD_AES256 = read_all(PDF_DATA_DIR + '/minimal-with-field-aes256.pdf')
+MINIMAL_PUBKEY_AES256 = read_all(PDF_DATA_DIR + '/minimal-pubkey-aes256.pdf')
+MINIMAL_PUBKEY_ONE_FIELD_AES256 = read_all(PDF_DATA_DIR + '/minimal-with-field-pubkey-aes256.pdf')
+MINIMAL_PUBKEY_RC4 = read_all(PDF_DATA_DIR + '/minimal-pubkey-rc4.pdf')
+MINIMAL_PUBKEY_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-pubkey-rc4.pdf')
 
 VECTOR_IMAGE_PDF = read_all(PDF_DATA_DIR + '/scribble.pdf')
 VECTOR_IMAGE_PDF_DECOMP = read_all(PDF_DATA_DIR + '/scribble-decomp.pdf')
@@ -65,3 +73,12 @@ def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     return writer.PageObject(
         contents=contents, media_box=media_box, resources=resources
     )
+
+
+PUBKEY_TEST_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
+    "pyhanko_tests/data/crypto/selfsigned.key.pem",
+    "pyhanko_tests/data/crypto/selfsigned.cert.pem",
+    b'secret'
+)
+
+
