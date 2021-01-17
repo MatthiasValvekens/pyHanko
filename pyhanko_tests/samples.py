@@ -80,5 +80,3 @@ PUBKEY_TEST_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
     "pyhanko_tests/data/crypto/selfsigned.cert.pem",
     b'secret'
 )
-
-

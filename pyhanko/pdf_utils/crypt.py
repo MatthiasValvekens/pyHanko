@@ -1248,6 +1248,22 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
             cert=cert, private_key=asymmetric.load_private_key(private_key)
         )
 
+    @classmethod
+    def load_pkcs12(cls, pfx_file, passphrase=None):
+
+        try:
+            with open(pfx_file, 'rb') as f:
+                pfx_bytes = f.read()
+        except IOError as e:  # pragma: nocover
+            logger.error(f'Could not open PKCS#12 file {pfx_file}.', e)
+            return None
+
+        (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
+
+        return SimpleEnvelopeKeyDecrypter(
+            cert=cert, private_key=asymmetric.load_private_key(kinfo)
+        )
+
     def decrypt(self, encrypted_key: bytes,
                 algo_params: cms.KeyEncryptionAlgorithm) -> bytes:
         algo_name = algo_params['algorithm'].native

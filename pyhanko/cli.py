@@ -13,12 +13,17 @@ from pyhanko.config import (
 )
 from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
+from pyhanko.pdf_utils.crypt import (
+    SimpleEnvelopeKeyDecrypter,
+    PubKeySecurityHandler, AuthResult,
+)
 
 from pyhanko.sign import signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign import validation, beid, fields
 from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign.validation import (
     SignatureValidationError, RevocationInfoValidationType
@@ -738,3 +743,151 @@ def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
             text_stamp_file(
                 infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y
             )
+
+
+@cli.command(help='encrypt PDF files (AES-256 only)', name='encrypt')
+@click.argument('infile', type=readable_file)
+@click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
+@click.option(
+    '--password', help='password to encrypt the file with', required=False,
+    type=str
+)
+@click.option(
+    '--recipient', required=False, multiple=True,
+    help='certificate(s) corresponding to entities that '
+         'can decrypt the output file',
+    type=click.Path(readable=True, dir_okay=False)
+)
+def encrypt_file(infile, outfile, password, recipient):
+    if bool(password) == bool(recipient):
+        raise click.ClickException(
+            "Specify either a password or a list of recipients."
+        )
+
+    recipient_certs = None
+    if recipient:
+        recipient_certs = list(
+            signers.load_certs_from_pemder(cert_files=recipient)
+        )
+
+    with pyhanko_exception_manager():
+        with open(infile, 'rb') as inf:
+            r = PdfFileReader(inf)
+            w = copy_into_new_writer(r)
+
+            if recipient_certs:
+                w.encrypt_pubkey(recipient_certs)
+            else:
+                w.encrypt(owner_pass=password)
+
+            with open(outfile, 'wb') as outf:
+                w.write(outf)
+
+
+@cli.group(help='decrypt PDF files (any standard PDF encryption scheme)',
+           name='decrypt')
+def decrypt():
+    pass
+
+
+decrypt_force_flag = click.option(
+    '--force', help='ignore access restrictions (use at your own risk)',
+    required=False, type=bool, is_flag=True, default=False
+)
+
+
+@decrypt.command(help='decrypt using password', name='password')
+@click.argument('infile', type=readable_file)
+@click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
+@click.option(
+    '--password', help='password to decrypt the file with', required=False,
+    type=str
+)
+@decrypt_force_flag
+def decrypt_with_password(infile, outfile, password, force):
+    with pyhanko_exception_manager():
+        with open(infile, 'rb') as inf:
+            r = PdfFileReader(inf)
+            if r.security_handler is None:
+                raise click.ClickException("File is not encrypted.")
+            if not password:
+                password = getpass.getpass(prompt='File password: ')
+            auth_result = r.decrypt(password)
+            if auth_result == AuthResult.USER and not force:
+                raise click.ClickException(
+                    "Password specified was the user password, not "
+                    "the owner password. Pass --force to decrypt the "
+                    "file anyway."
+                )
+            elif auth_result == AuthResult.UNKNOWN:
+                raise click.ClickException("Password didn't match.")
+            w = copy_into_new_writer(r)
+            with open(outfile, 'wb') as outf:
+                w.write(outf)
+
+
+@decrypt.command(help='decrypt using private key (PEM/DER)', name='pemder')
+@click.argument('infile', type=readable_file)
+@click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
+@click.option('--key', type=readable_file, required=True,
+              help='file containing the recipient\'s private key (PEM/DER)')
+@click.option('--cert', help='file containing the recipient\'s certificate '
+                             '(PEM/DER)', type=readable_file, required=True)
+@click.option('--passfile', required=False, type=click.File('rb'),
+              help='file containing the passphrase for the private key',
+              show_default='stdin')
+@decrypt_force_flag
+def decrypt_with_pemder(infile, outfile, key, cert, passfile, force):
+    if passfile is None:
+        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+    else:
+        passphrase = passfile.read()
+        passfile.close()
+    sedk = SimpleEnvelopeKeyDecrypter.load(key, cert, key_passphrase=passphrase)
+
+    _decrypt_pubkey(sedk, infile, outfile, force)
+
+
+def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
+    with pyhanko_exception_manager():
+        with open(infile, 'rb') as inf:
+            r = PdfFileReader(inf)
+            if r.security_handler is None:
+                raise click.ClickException("File is not encrypted.")
+            if not isinstance(r.security_handler, PubKeySecurityHandler):
+                raise click.ClickException(
+                    "File was not encrypted with a public-key security handler."
+                )
+            auth_result = r.decrypt_pubkey(sedk)
+            perms = r.security_handler.perms
+            if auth_result == AuthResult.USER:
+                # 2nd bit is the one indicating that change of encryption is OK
+                if not force and not (perms & 2):
+                    raise click.ClickException(
+                        "Permission flags don't appear to allow change of "
+                        "encryption. Pass --force to decrypt the file anyway."
+                    )
+            elif auth_result == AuthResult.UNKNOWN:
+                raise click.ClickException("Failed to decrypt the file.")
+            w = copy_into_new_writer(r)
+            with open(outfile, 'wb') as outf:
+                w.write(outf)
+
+
+@decrypt.command(help='decrypt using private key (PKCS#12)', name='pkcs12')
+@click.argument('infile', type=readable_file)
+@click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
+@click.argument('pfx', type=readable_file)
+@click.option('--passfile', required=False, type=click.File('rb'),
+              help='file containing the passphrase for the PKCS#12 file',
+              show_default='stdin')
+@decrypt_force_flag
+def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
+    if passfile is None:
+        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+    else:
+        passphrase = passfile.read()
+        passfile.close()
+    sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(pfx, passphrase=passphrase)
+
+    _decrypt_pubkey(sedk, infile, outfile, force)

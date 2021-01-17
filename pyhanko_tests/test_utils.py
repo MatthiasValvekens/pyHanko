@@ -1058,3 +1058,12 @@ def test_copy_to_encrypted_file():
     assert r.root_ref == old_root_ref
     assert len(r.root['/AcroForm']['/Fields']) == 1
     assert len(r.root['/Pages']['/Kids']) == 1
+
+
+def test_load_pkcs12():
+
+    sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(
+        "pyhanko_tests/data/crypto/selfsigned.pfx", b'exportsecret'
+    )
+    assert sedk.cert.subject == PUBKEY_TEST_DECRYPTER.cert.subject
+
