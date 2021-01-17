@@ -391,33 +391,110 @@ class StandardSecuritySettingsRevision(misc.OrderedEnum):
 ALL_PERMS = -4
 
 # TODO handle /AuthEvent
-# TODO since the standard couples CryptFilters with specific types of
-#  security handlers, trying to shoehorn everything into one class doesn't make
-#  a lot of sense
-# I've tried to write the class in a way that makes later refactoring easier,
-# I'll iterate on that later.
 
 
 class CryptFilter:
     _handler: 'SecurityHandler' = None
     _shared_key: Optional[bytes] = None
-    _recp_key_seed: Optional[bytes] = None
 
-    def __init__(self, keylen=5, recipients=None, includes_permissions=False,
-                 encrypt_metadata=True):
-        self.keylen = keylen
+    def set_security_handler(self, handler):
+        self._handler = handler
+        self._shared_key = None
+
+    @property
+    def _auth_failed(self) -> bool:
+        raise NotImplementedError
+
+    @property
+    def method(self) -> generic.NameObject:
+        raise NotImplementedError
+
+    @property
+    def keylen(self) -> generic.NameObject:
+        raise NotImplementedError
+
+    def encrypt(self, key, plaintext: bytes) -> bytes:
+        raise NotImplementedError
+
+    def decrypt(self, key, ciphertext: bytes) -> bytes:
+        raise NotImplementedError
+
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        result = generic.DictionaryObject({
+            generic.NameObject('/AuthEvent'): generic.NameObject('/DocOpen'),
+            generic.NameObject('/CFM'): self.method
+        })
+        return result
+
+    def derive_shared_encryption_key(self) -> bytes:
+        raise NotImplementedError
+
+    def derive_object_key(self, idnum, generation) -> bytes:
+        if self._handler.version == SecurityHandlerVersion.AES256:
+            return self.shared_key
+        else:
+            return legacy_derive_object_key(self.shared_key, idnum, generation)
+
+    @property
+    def shared_key(self) -> bytes:
+        key = self._shared_key
+        if key is None:
+            if self._auth_failed:
+                raise misc.PdfReadError("Authentication failed")
+            key = self._shared_key = self.derive_shared_encryption_key()
+        return key
+
+
+class StandardCryptFilter(CryptFilter, abc.ABC):
+    _handler: 'StandardSecurityHandler' = None
+
+    @property
+    def _auth_failed(self):
+        if isinstance(self._handler, StandardSecurityHandler):
+            return self._handler._auth_failed
+        raise NotImplementedError
+
+    def set_security_handler(self, handler):
+        if not isinstance(handler, StandardSecurityHandler):
+            raise TypeError  # pragma: nocover
+        super().set_security_handler(handler)
+        self._shared_key = None
+
+    def derive_shared_encryption_key(self) -> bytes:
+        return self._handler.get_file_encryption_key()
+
+    def as_pdf_object(self):
+        result = super().as_pdf_object()
+        # Specifying the length in bytes is wrong per the 2017 spec,
+        # but the 2020 revision mandates doing it this way
+        result['/Length'] = generic.NumberObject(self.keylen)
+        return result
+
+
+class PubKeyCryptFilter(CryptFilter, abc.ABC):
+    _handler: 'PubKeySecurityHandler' = None
+
+    def __init__(self, *, recipients=None, includes_permissions=False,
+                 encrypt_metadata=True, **kwargs):
         self.recipients = recipients
         self.includes_permissions = includes_permissions
         self.encrypt_metadata = encrypt_metadata
         self._pubkey_auth_failed = False
+        self._shared_key = self._recp_key_seed = None
+        super().__init__(**kwargs)
+
+    @property
+    def _auth_failed(self) -> bool:
+        return self._pubkey_auth_failed
+
+    def set_security_handler(self, handler):
+        if not isinstance(handler, PubKeySecurityHandler):
+            raise TypeError  # pragma: nocover
+        super().set_security_handler(handler)
+        self._shared_key = self._recp_key_seed = None
 
     def add_recipients(self, certs: List[x509.Certificate]):
         # this always adds one full CMS object to the Recipients array
-        if not isinstance(self._handler, PubKeySecurityHandler):
-            raise NotImplementedError(
-                "This operation is only meaningful for public key "
-                "security handlers."
-            )
 
         if self.recipients is None:
             # assume that this is a freshly created pubkey crypt filter,
@@ -438,80 +515,43 @@ class CryptFilter:
         )
         self.recipients.append(new_cms)
 
-    @property
-    def _auth_failed(self):
-        if isinstance(self._handler, StandardSecurityHandler):
-            return self._handler._auth_failed
-        elif isinstance(self._handler, PubKeySecurityHandler):
-            return self._pubkey_auth_failed
-
-        raise NotImplementedError
-
-    def set_security_handler(self, handler):
-        self._handler = handler
-        self._shared_key = self._recp_key_seed = None
-
-    def get_shared_encryption_key(self) -> bytes:
-        key = self._shared_key
-        if key is None:
-            if self._auth_failed:
-                raise misc.PdfReadError("Authentication failed")
-            if isinstance(self._handler, StandardSecurityHandler):
-                self._shared_key = key = self._handler.get_file_encryption_key()
-            elif isinstance(self._handler, PubKeySecurityHandler):
-                if self._recp_key_seed is None:
-                    raise misc.PdfError(
-                        "No seed available; authenticate first.")
-                if self._handler.version == SecurityHandlerVersion.AES256:
-                    md = sha256()
-                else:
-                    md = sha1()
-                md.update(self._recp_key_seed)
-                for recp in self.recipients:
-                    md.update(recp.dump())
-                if not self.encrypt_metadata:
-                    md.update(b'\xff\xff\xff\xff')
-                self._shared_key = key = md.digest()[:self._handler.keylen]
-            else:  # pragma: nocover
-                raise NotImplementedError(
-                    f"Handler {self._handler} not supported"
-                )
-
-        return key
-
-    def derive_object_key(self, idnum, generation) -> bytes:
+    def derive_shared_encryption_key(self) -> bytes:
+        if self._recp_key_seed is None:
+            raise misc.PdfError("No seed available; authenticate first.")
         if self._handler.version == SecurityHandlerVersion.AES256:
-            return self.get_shared_encryption_key()
+            md = sha256()
         else:
-            return legacy_derive_object_key(
-                self.get_shared_encryption_key(), idnum, generation
-            )
-
-    def encrypt(self, key, plaintext: bytes) -> bytes:
-        raise NotImplementedError
-
-    def decrypt(self, key, ciphertext: bytes) -> bytes:
-        raise NotImplementedError
+            md = sha1()
+        md.update(self._recp_key_seed)
+        for recp in self.recipients:
+            md.update(recp.dump())
+        if not self.encrypt_metadata:
+            md.update(b'\xff\xff\xff\xff')
+        return md.digest()[:self.keylen]
 
     def as_pdf_object(self):
-        result = generic.DictionaryObject({
-            # this is wrong per the 2017 spec, but the 2020 revision mandates
-            # doing it this way
-            generic.NameObject('/Length'): generic.NumberObject(
-                self.keylen * 8 if self.recipients else self.keylen
-            )
-        })
-        if isinstance(self._handler, PubKeySecurityHandler):
-            result['/Recipients'] = generic.ArrayObject(
-                generic.ByteStringObject(recp.dump())
-                for recp in self.recipients
-            )
-            result['/EncryptMetadata'] \
-                = generic.BooleanObject(self.encrypt_metadata)
+        result = super().as_pdf_object()
+        result['/Length'] = generic.NumberObject(self.keylen * 8)
+        result['/Recipients'] = generic.ArrayObject(
+            generic.ByteStringObject(recp.dump())
+            for recp in self.recipients
+        )
+        result['/EncryptMetadata'] \
+            = generic.BooleanObject(self.encrypt_metadata)
         return result
 
 
 class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
+
+    method = generic.NameObject('/None')
+    keylen = 0
+
+    def derive_shared_encryption_key(self) -> bytes:
+        return b''  # pragma: nocover
+
+    @property
+    def _auth_failed(self) -> bool:
+        return False
 
     def set_security_handler(self, handler):
         return
@@ -526,7 +566,13 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
         return ciphertext
 
 
-class RC4CryptFilter(CryptFilter):
+class RC4CryptFilterMixin(CryptFilter, abc.ABC):
+    method = generic.NameObject('/V2')
+    keylen = None
+
+    def __init__(self, *, keylen=5, **kwargs):
+        self.keylen = keylen
+        super().__init__(**kwargs)
 
     def encrypt(self, key, plaintext: bytes) -> bytes:
         return symmetric.rc4_encrypt(key, plaintext)
@@ -534,16 +580,20 @@ class RC4CryptFilter(CryptFilter):
     def decrypt(self, key, ciphertext: bytes) -> bytes:
         return symmetric.rc4_encrypt(key, ciphertext)
 
-    def as_pdf_object(self):
-        result = super().as_pdf_object()
-        result.update({
-            generic.NameObject('/CFM'): generic.NameObject('/V2'),
-            generic.NameObject('/AuthEvent'): generic.NameObject('/DocOpen'),
-        })
-        return result
 
+class AESCryptFilterMixin(CryptFilter, abc.ABC):
+    keylen = None
+    method = None
 
-class AESCryptFilter(CryptFilter, abc.ABC):
+    def __init__(self, *, keylen, **kwargs):
+        if keylen not in (16, 32):
+            raise NotImplementedError("Only AES-128 and AES-256 are supported")
+        self.keylen = keylen
+        self.method = (
+            generic.NameObject('/AESV2') if keylen == 16 else
+            generic.NameObject('/AESV3')
+        )
+        super().__init__(**kwargs)
 
     def encrypt(self, key, plaintext: bytes):
         iv, ciphertext = symmetric.aes_cbc_pkcs7_encrypt(
@@ -556,33 +606,20 @@ class AESCryptFilter(CryptFilter, abc.ABC):
         return symmetric.aes_cbc_pkcs7_decrypt(key, data, iv)
 
 
-class AESV2CryptFilter(AESCryptFilter):
-
-    def __init__(self, **kwargs):
-        super().__init__(keylen=16, **kwargs)
-
-    def as_pdf_object(self):
-        result = super().as_pdf_object()
-        result.update({
-            generic.NameObject('/CFM'): generic.NameObject('/AESV2'),
-            generic.NameObject('/AuthEvent'): generic.NameObject('/DocOpen'),
-        })
-        return result
+class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
+    pass
 
 
-class AESV3CryptFilter(AESCryptFilter):
+class PubKeyAESCryptFilter(PubKeyCryptFilter, AESCryptFilterMixin):
+    pass
 
-    def __init__(self, **kwargs):
-        super().__init__(keylen=32, **kwargs)
 
-    def as_pdf_object(self):
-        result = super().as_pdf_object()
-        result.update({
-            generic.NameObject('/CFM'): generic.NameObject('/AESV3'),
-            generic.NameObject('/AuthEvent'): generic.NameObject(
-                '/DocOpen'),
-        })
-        return result
+class StandardRC4CryptFilter(StandardCryptFilter, RC4CryptFilterMixin):
+    pass
+
+
+class PubKeyRC4CryptFilter(PubKeyCryptFilter, RC4CryptFilterMixin):
+    pass
 
 
 STD_CF = generic.NameObject('/StdCF')
@@ -644,30 +681,41 @@ class CryptFilterConfiguration:
         return result
 
 
-def _rc4_config(default_filter_name, keylen, **kwargs):
+def _std_rc4_config(keylen):
     return CryptFilterConfiguration(
-        {default_filter_name: RC4CryptFilter(
-            keylen, includes_permissions=True, **kwargs)},
-        default_stream_filter=default_filter_name,
-        default_string_filter=default_filter_name
+        {STD_CF: StandardRC4CryptFilter(keylen=keylen)},
+        default_stream_filter=STD_CF,
+        default_string_filter=STD_CF
     )
 
 
-def _aes128_config(default_filter_name, **kwargs):
+def _pubkey_rc4_config(keylen, recipients=None, encrypt_metadata=True):
     return CryptFilterConfiguration(
-        {default_filter_name: AESV2CryptFilter(
-            includes_permissions=True, **kwargs)},
-        default_stream_filter=default_filter_name,
-        default_string_filter=default_filter_name
+        {DEFAULT_CRYPT_FILTER: PubKeyRC4CryptFilter(
+            keylen=keylen, includes_permissions=True, recipients=recipients,
+            encrypt_metadata=encrypt_metadata
+        )},
+        default_stream_filter=DEFAULT_CRYPT_FILTER,
+        default_string_filter=DEFAULT_CRYPT_FILTER
     )
 
 
-def _aes256_config(default_filter_name, **kwargs):
+def _std_aes_config(keylen):
     return CryptFilterConfiguration(
-        {default_filter_name: AESV3CryptFilter(
-            includes_permissions=True, **kwargs)},
-        default_stream_filter=default_filter_name,
-        default_string_filter=default_filter_name
+        {STD_CF: StandardAESCryptFilter(keylen=keylen)},
+        default_stream_filter=STD_CF,
+        default_string_filter=STD_CF
+    )
+
+
+def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
+    return CryptFilterConfiguration(
+        {DEFAULT_CRYPT_FILTER: PubKeyAESCryptFilter(
+            keylen=keylen, includes_permissions=True, recipients=recipients,
+            encrypt_metadata=encrypt_metadata
+        )},
+        default_stream_filter=DEFAULT_CRYPT_FILTER,
+        default_string_filter=DEFAULT_CRYPT_FILTER
     )
 
 
@@ -716,11 +764,9 @@ class StandardSecurityHandler(SecurityHandler):
         if rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
             version = SecurityHandlerVersion.RC4_OR_AES128
             if use_aes128:
-                cfc = _aes128_config(STD_CF, recipients=None)
+                cfc = _std_aes_config(keylen=16)
             else:
-                cfc = _rc4_config(
-                    STD_CF, keylen_bytes, recipients=None
-                )
+                cfc = _std_rc4_config(keylen=keylen_bytes)
         elif rev == StandardSecuritySettingsRevision.RC4_BASIC:
             version = SecurityHandlerVersion.RC4_40
             cfc = None
@@ -807,20 +853,14 @@ class StandardSecurityHandler(SecurityHandler):
                  crypt_filter_config: CryptFilterConfiguration = None):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
-                crypt_filter_config = _rc4_config(
-                    STD_CF, 5, recipients=None
-                )
+                crypt_filter_config = _std_rc4_config(5)
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
-                crypt_filter_config = _rc4_config(
-                    STD_CF, legacy_keylen, recipients=None
-                )
+                crypt_filter_config = _std_rc4_config(legacy_keylen)
             elif version == SecurityHandlerVersion.AES256 \
                     and crypt_filter_config is None:
                 # there's a reasonable default config that we can fall back
                 # to here
-                crypt_filter_config = _aes256_config(
-                    STD_CF, recipients=None
-                )
+                crypt_filter_config = _std_aes_config(32)
         super().__init__(
             version, legacy_keylen, crypt_filter_config,
             encrypt_metadata=encrypt_metadata
@@ -871,11 +911,11 @@ class StandardSecurityHandler(SecurityHandler):
             return None
         elif cfm == '/V2':
             keylen_bits = cfdict.get('/Length', 40)
-            return RC4CryptFilter(keylen_bits // 8)
+            return StandardRC4CryptFilter(keylen=keylen_bits // 8)
         elif cfm == '/AESV2':
-            return AESV2CryptFilter()
+            return StandardAESCryptFilter(keylen=16)
         elif cfm == '/AESV3':
-            return AESV3CryptFilter()
+            return StandardAESCryptFilter(keylen=32)
         else:
             raise NotImplementedError("No such crypt filter method: " + cfm)
 
@@ -1285,13 +1325,13 @@ class PubKeySecurityHandler(SecurityHandler):
             # only in this case we need a CFC, otherwise the constructor
             # takes care of it
             if use_aes:
-                cfc = _aes128_config(
-                    DEFAULT_CRYPT_FILTER, encrypt_metadata=encrypt_metadata,
+                cfc = _pubkey_aes_config(
+                    16, encrypt_metadata=encrypt_metadata,
                     recipients=None
                 )
             else:
-                cfc = _rc4_config(
-                    DEFAULT_CRYPT_FILTER, keylen_bytes, recipients=None,
+                cfc = _pubkey_rc4_config(
+                    keylen_bytes, recipients=None,
                     encrypt_metadata=encrypt_metadata
                 )
         sh = PubKeySecurityHandler(
@@ -1321,21 +1361,20 @@ class PubKeySecurityHandler(SecurityHandler):
 
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
-                crypt_filter_config = _rc4_config(
-                    DEFAULT_CRYPT_FILTER, 5, encrypt_metadata=encrypt_metadata,
+                crypt_filter_config = _pubkey_rc4_config(
+                    keylen=5, encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs
                 )
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
-                crypt_filter_config = _rc4_config(
-                    DEFAULT_CRYPT_FILTER, legacy_keylen,
-                    encrypt_metadata=encrypt_metadata,
+                crypt_filter_config = _pubkey_rc4_config(
+                    keylen=legacy_keylen, encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs
                 )
             elif version == SecurityHandlerVersion.AES256:
                 # there's a reasonable default config that we can fall back to
                 # here
-                crypt_filter_config = _aes256_config(
-                    DEFAULT_CRYPT_FILTER, encrypt_metadata=encrypt_metadata,
+                crypt_filter_config = _pubkey_aes_config(
+                    keylen=32, encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs
                 )
         super().__init__(
@@ -1428,15 +1467,22 @@ class PubKeySecurityHandler(SecurityHandler):
             result.update(self.crypt_filter_config.as_pdf_object())
         else:
             # load recipients from default crypt filter into the encryption dict
+            default_cf = self.get_stream_filter()
+            if not isinstance(default_cf, PubKeyCryptFilter):
+                raise TypeError  # pragma: nocover
             result['/Recipients'] = generic.ArrayObject(
                 generic.ByteStringObject(recp.dump())
-                for recp in self.get_stream_filter().recipients
+                for recp in default_cf.recipients
             )
         return result
 
     def add_recipients(self, certs: List[x509.Certificate]):
-        # unlock all crypt filters
+        # add recipients to all crypt filters
+        # callers that want to do this more granularly are welcome to, but
+        # then they have to do the legwork themselves.
         for cf in self.crypt_filter_config.values():
+            if not isinstance(cf, PubKeyCryptFilter):
+                continue  # pragma: nocover
             cf.add_recipients(certs)
 
     def authenticate(self, credential: EnvelopeKeyDecrypter, id1=None) \
@@ -1448,9 +1494,8 @@ class PubKeySecurityHandler(SecurityHandler):
             )
         # unlock all crypt filters
         for cf in self.crypt_filter_config.values():
-            if cf.recipients is None:  # pragma: nocover
-                cf._pubkey_auth_failed = True
-                continue
+            if not isinstance(cf, PubKeyCryptFilter):
+                continue  # pragma: nocover
             recp: cms.ContentInfo
             for recp in cf.recipients:
                 seed = read_seed_from_recipient_cms(recp, credential)
@@ -1479,16 +1524,18 @@ class PubKeySecurityHandler(SecurityHandler):
             )
         elif cfm == '/V2':
             keylen_bits = cfdict.get('/Length', 40)
-            return RC4CryptFilter(
-                keylen_bits // 8,
+            return PubKeyRC4CryptFilter(
+                keylen=keylen_bits // 8,
                 encrypt_metadata=encrypt_metadata, recipients=recipient_objs
             )
         elif cfm == '/AESV2':
-            return AESV2CryptFilter(
-                encrypt_metadata=encrypt_metadata, recipients=recipient_objs
+            return PubKeyAESCryptFilter(
+                keylen=16,
+                encrypt_metadata=encrypt_metadata, recipients=recipient_objs,
             )
         elif cfm == '/AESV3':
-            return AESV3CryptFilter(
+            return PubKeyAESCryptFilter(
+                keylen=32,
                 encrypt_metadata=encrypt_metadata, recipients=recipient_objs
             )
         else:
