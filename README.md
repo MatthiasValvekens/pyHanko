@@ -52,9 +52,9 @@ Note that not all of these are necessarily exposed through the CLI.
       updates made after signing (experimental)
     - Signature seed value constraint validation
  - Encryption
-    - Only legacy RC4-based encryption is currently supported (based on what PyPDF2 offers).
+    - Only legacy RC4-based encryption is supported in the `<0.2.0` releases (based on what PyPDF2 offers).
       This should not be used for new files, since it has been broken for quite some time.
-    - Modern AES-based PDF encryption is on the roadmap.
+    - Modern AES-based PDF encryption & public-key encryption have been implemented in the development version and will be included with the `0.3.0` release.
  - CLI & configuration
     - YAML-based configuration (optional for most features)
     - CLI based on `click` 
