@@ -7,7 +7,6 @@ from typing import Union, Optional
 
 from . import generic
 from .crypt import EnvelopeKeyDecrypter
-from .misc import PdfReadError
 
 from .reader import PdfFileReader
 from .generic import pdf_name
