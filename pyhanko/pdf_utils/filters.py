@@ -10,15 +10,15 @@ In particular ``/Crypt`` and ``/LZWDecode`` are missing.
 import binascii
 import re
 
-
-from .misc import PdfReadError, PdfStreamError
+from .misc import PdfReadError, PdfStreamError, Singleton
 from io import BytesIO
 import struct
 
 import zlib
 
 __all__ = [
-    'Decoder', 'ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode', 'DECODERS'
+    'Decoder', 'ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode',
+    'get_generic_decoder'
 ]
 
 decompress = zlib.decompress
@@ -30,8 +30,7 @@ class Decoder:
     General filter/decoder interface.
     """
 
-    @classmethod
-    def decode(cls, data: bytes, decode_params: dict) -> bytes:
+    def decode(self, data: bytes, decode_params: dict) -> bytes:
         """
         Decode a stream.
 
@@ -45,8 +44,7 @@ class Decoder:
         """
         raise NotImplementedError
 
-    @classmethod
-    def encode(cls, data: bytes, decode_params: dict) -> bytes:
+    def encode(self, data: bytes, decode_params: dict) -> bytes:
         """
         Encode a stream.
 
@@ -94,7 +92,7 @@ def _png_decode(data: memoryview, columns):
     return output.getvalue()
 
 
-class FlateDecode(Decoder):
+class FlateDecode(Decoder, metaclass=Singleton):
     """
     Implementation of the ``/FlateDecode`` filter.
 
@@ -103,8 +101,7 @@ class FlateDecode(Decoder):
         problems when extracting image data from PDF files.
     """
 
-    @classmethod
-    def decode(cls, data: bytes, decode_params):
+    def decode(self, data: bytes, decode_params):
         # there's lots of slicing ahead, so let's reduce copying overhead
         data = memoryview(decompress(data))
         predictor = 1
@@ -128,8 +125,7 @@ class FlateDecode(Decoder):
                 "Unsupported flatedecode predictor %r" % predictor
             )
 
-    @classmethod
-    def encode(cls, data, decode_params=None):
+    def encode(self, data, decode_params=None):
         # TODO support the parameters in the spec
         return compress(data)
 
@@ -140,18 +136,16 @@ WS_REGEX = re.compile(b'\\s+')
 ASCII_HEX_EOD_MARKER = b'>'
 
 
-class ASCIIHexDecode(Decoder):
+class ASCIIHexDecode(Decoder, metaclass=Singleton):
     """
     Wrapper around :func:`binascii.hexlify` that implements the
     :class:`.Decoder` interface.
     """
 
-    @classmethod
-    def encode(cls, data: bytes, decode_params=None) -> bytes:
+    def encode(self, data: bytes, decode_params=None) -> bytes:
         return binascii.hexlify(data) + b'>'
 
-    @classmethod
-    def decode(cls, data, decode_params=None):
+    def decode(self, data, decode_params=None):
         if isinstance(data, str):
             data = data.encode('ascii')
         data, _ = data.split(ASCII_HEX_EOD_MARKER, 1)
@@ -165,13 +159,12 @@ ASCII_85_EOD_MARKER = b'~>'
 POWS = tuple(85 ** p for p in (4, 3, 2, 1, 0))
 
 
-class ASCII85Decode(Decoder):
+class ASCII85Decode(Decoder, metaclass=Singleton):
     """
     Implementation of the base 85 encoding scheme specified in ISO 32000-1.
     """
 
-    @classmethod
-    def encode(cls, data: bytes, decode_params=None) -> bytes:
+    def encode(self, data: bytes, decode_params=None) -> bytes:
         # BytesIO is quite clever, in that it doesn't copy things until modified
         data = BytesIO(data)
         out = BytesIO()
@@ -202,8 +195,7 @@ class ASCII85Decode(Decoder):
         out.write(ASCII_85_EOD_MARKER)
         return out.getvalue()
 
-    @classmethod
-    def decode(cls, data, decode_params=None):
+    def decode(self, data, decode_params=None):
         if isinstance(data, str):
             data = data.encode('ascii')
         data, _ = data.split(ASCII_85_EOD_MARKER, 1)
@@ -247,11 +239,61 @@ class ASCII85Decode(Decoder):
         return out.getvalue()
 
 
+class CryptFilterDecoder(Decoder):
+
+    def __init__(self, handler):
+        from .crypt import SecurityHandler
+        self.handler: SecurityHandler = handler
+
+    def decode(self, data: bytes, decode_params: dict) -> bytes:
+        from .crypt import IDENTITY
+        cf_name = decode_params.get('/Name', IDENTITY)
+        cf = self.handler.get_stream_filter(name=cf_name)
+        # the spec explicitly tells us to use the global key here, go figure
+        # (clause § 7.4.10 in both 32k-1 and 32k-2)
+        return cf.decrypt(cf.shared_key, data, params=decode_params)
+
+    def encode(self, data: bytes, decode_params: dict) -> bytes:
+        from .crypt import IDENTITY
+        cf_name = decode_params.get('/Name', IDENTITY)
+        cf = self.handler.get_stream_filter(name=cf_name)
+        return cf.encrypt(cf.shared_key, data, params=decode_params)
+
+
 DECODERS = {
     '/FlateDecode': FlateDecode, '/Fl': FlateDecode,
     '/ASCIIHexDecode': ASCIIHexDecode, '/AHx': ASCIIHexDecode,
     '/ASCII85Decode': ASCII85Decode, '/A85': ASCII85Decode,
 }
-"""
-Dictionary mapping decoder names to implementations.
-"""
+
+
+def get_generic_decoder(name: str) -> Decoder:
+    """
+    Instantiate a specific stream filter decoder type by (PDF) name.
+
+    The following names are recognised:
+
+    * ``/FlateDecode`` or ``/Fl`` for the decoder implementing Flate
+       compression.
+    * ``/ASCIIHexDecode`` or ``/AHx`` for the decoder that converts bytes to
+      their hexadecimal representations.
+    * ``/ASCII85Decode`` or ``/A85`` for the decoder that converts byte strings
+      to a base-85 textual representation.
+
+    .. warning::
+        ``/Crypt`` is a special case because it requires access to the
+        document's security handler.
+
+    .. warning::
+        LZW compression is currently unsupported, as are most compression
+        methods that are used specifically for image data.
+
+    :param name:
+        Name of the decoder to instantiate.
+    """
+
+    try:
+        cls = DECODERS[name]
+    except KeyError:
+        raise PdfStreamError(f"Stream filter '{name}' is not supported.")
+    return cls()

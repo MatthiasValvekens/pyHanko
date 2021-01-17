@@ -1027,7 +1027,8 @@ class StreamObject(DictionaryObject):
     The latter will be overwritten as necessary.
     """
 
-    def __init__(self, dict_data=None, stream_data=None, encoded_data=None):
+    def __init__(self, dict_data=None, stream_data=None, encoded_data=None,
+                 handler=None):
         """Initialise a stream with dictionary data and stream data
         (either encoded or decoded). If both `stream_data` and `encoded_data`
         are provided, the caller is responsible for making sure that both are
@@ -1039,14 +1040,35 @@ class StreamObject(DictionaryObject):
             The (unencoded) stream data.
         :param encoded_data:
             The encoded stream data.
+        :param handler:
+            A reference to the currently active
+            :class:`.pyhanko.pdf_utils.crypt.SecurityHandler`.
+            This is only necessary if the stream requires crypt filters.
         """
         super().__init__(dict_data)
         self._data = stream_data
         self._encoded_data = encoded_data
+        self._handler = handler
 
     @property
     def _has_crypt_filter(self) -> bool:
         return '/Crypt' in (name for name, _ in self._filters())
+
+    def add_crypt_filter(self, name=NameObject('/Identity'),
+                         params=None, handler=None):
+        if handler is not None:
+            self._handler = handler
+
+        if name not in self._handler.crypt_filter_config:
+            raise PdfStreamError(
+                f"The crypt filter {name} is not known to the security handler."
+            )
+        params = params or DictionaryObject()
+        params['/Type'] = pdf_name('/CryptFilterDecodeParms')
+        params['/Name'] = name
+        self.apply_filter(
+            pdf_name('/Crypt'), params=params, allow_duplicates=True
+        )
 
     def _filters(self) -> Iterator[Tuple[str, Optional[dict]]]:
         try:
@@ -1071,11 +1093,15 @@ class StreamObject(DictionaryObject):
                 lendiff = len(filter_arr) - len(decode_params)
                 # this should be zero, but let's be lenient
                 if lendiff > 0:
-                    decode_params += [None] * lendiff
+                    decode_params += [NullObject()] * lendiff
         except KeyError:
-            decode_params = [None] * len(filter_arr)
+            decode_params = [NullObject()] * len(filter_arr)
 
-        yield from zip(filter_arr, decode_params)
+        # make sure to deal with resolving decrypted object proxies by
+        # calling get_object()
+        yield from zip(
+            filter_arr, (param_set.get_object() for param_set in decode_params)
+        )
 
     def _stream_decoders(self):
         for filter_type, params in self._filters():
@@ -1084,16 +1110,21 @@ class StreamObject(DictionaryObject):
                     params = {}
                 if filter_type == '/Crypt':
                     # crypt filters get special treatment
-                    filter_name = params.get('/Name', '/Identity')
                     # if we're dealing with the identity filter, just move on
-                    if filter_name == '/Identity':
+                    if params.get('/Name', '/Identity') == '/Identity':
                         continue
-                    raise NotImplementedError(
-                        "non-/Identity explicit /Crypt filters are "
-                        "not supported."
-                    )
+                    # if it's another one, we need a reference to the security
+                    # handler
+                    sh = self._handler
+                    if sh is None:
+                        raise PdfStreamError(
+                            "PDF streams require a security handler to use "
+                            "explicit /Crypt filters."
+                        )
+                    decoder = filters.CryptFilterDecoder(sh)
                 else:
-                    yield filters.DECODERS[filter_type], params
+                    decoder = filters.get_generic_decoder(filter_type)
+                yield decoder, params
             except KeyError:
                 raise NotImplementedError(
                     "Filters of type %s are not supported." % filter_type
@@ -1202,12 +1233,16 @@ class StreamObject(DictionaryObject):
                     return
 
             # prepend the new filter (order is important!)
-            self[pdf_name('/Filter')] = ArrayObject((pdf_name,) + filter_names)
+            self[pdf_name('/Filter')] = ArrayObject(
+                (filter_name,) + filter_names
+            )
 
             if params or any(param_sets):
-                self[pdf_name('/DecodeParms')] = [params or NullObject()] + [
-                    param_set or NullObject() for param_set in param_sets
-                ]
+                def _params():
+                    yield params or NullObject()
+                    for param_set in param_sets:
+                        yield param_set or NullObject()
+                self[pdf_name('/DecodeParms')] = ArrayObject(_params())
         self._encoded_data = None
         self._data = data
 
@@ -1356,6 +1391,9 @@ class DecryptedObjectProxy(PdfObject):
                     # in this case, dealing with encryption is delegated
                     # to the stream decoding process, so just pretend the data
                     # is decrypted.
+                    # We pass a reference to the security handler below,
+                    # which is sufficient to take care of /Crypt filters
+                    # in the stream.
                     decrypted_data = obj.encoded_data
                 else:
                     cf = handler.get_string_filter()
@@ -1365,7 +1403,8 @@ class DecryptedObjectProxy(PdfObject):
                     decrypted_data = cf.decrypt(local_key, obj.encoded_data)
 
                 decrypted = StreamObject(
-                    decrypted_entries, encoded_data=decrypted_data
+                    decrypted_entries, encoded_data=decrypted_data,
+                    handler=handler
                 )
             else:
                 decrypted = DictionaryObject(decrypted_entries)

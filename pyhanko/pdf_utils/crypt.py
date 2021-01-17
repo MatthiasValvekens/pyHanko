@@ -258,7 +258,7 @@ def _compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
     # 6. Append 16 bytes of arbitrary padding to the output from the final
     # invocation of the RC4 function and store the 32-byte result as the value
     # of the U entry in the encryption dictionary.
-    # (implementator note: I don't know what "arbitrary padding" is supposed to
+    # (implementer note: I don't know what "arbitrary padding" is supposed to
     # mean, so I have used null bytes.  This seems to match a few other
     # people's implementations)
     return val + (b'\x00' * 16), key
@@ -416,10 +416,10 @@ class CryptFilter:
     def keylen(self) -> generic.NameObject:
         raise NotImplementedError
 
-    def encrypt(self, key, plaintext: bytes) -> bytes:
+    def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
         raise NotImplementedError
 
-    def decrypt(self, key, ciphertext: bytes) -> bytes:
+    def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
         raise NotImplementedError
 
     def as_pdf_object(self) -> generic.DictionaryObject:
@@ -545,6 +545,7 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
 
     method = generic.NameObject('/None')
     keylen = 0
+    _auth_failed = False
 
     def derive_shared_encryption_key(self) -> bytes:
         return b''  # pragma: nocover
@@ -552,20 +553,16 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
     def derive_object_key(self, idnum, generation) -> bytes:
         return b''
 
-    @property
-    def _auth_failed(self) -> bool:
-        return False
-
     def set_security_handler(self, handler):
         return
 
     def as_pdf_object(self):
         raise misc.PdfError("Identity filter cannot be serialised")
 
-    def encrypt(self, key, plaintext: bytes) -> bytes:
+    def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
         return plaintext
 
-    def decrypt(self, key, ciphertext: bytes) -> bytes:
+    def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
         return ciphertext
 
 
@@ -577,10 +574,10 @@ class RC4CryptFilterMixin(CryptFilter, abc.ABC):
         self.keylen = keylen
         super().__init__(**kwargs)
 
-    def encrypt(self, key, plaintext: bytes) -> bytes:
+    def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
         return symmetric.rc4_encrypt(key, plaintext)
 
-    def decrypt(self, key, ciphertext: bytes) -> bytes:
+    def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
         return symmetric.rc4_encrypt(key, ciphertext)
 
     def derive_object_key(self, idnum, generation) -> bytes:
@@ -601,13 +598,13 @@ class AESCryptFilterMixin(CryptFilter, abc.ABC):
         )
         super().__init__(**kwargs)
 
-    def encrypt(self, key, plaintext: bytes):
+    def encrypt(self, key, plaintext: bytes, params=None):
         iv, ciphertext = symmetric.aes_cbc_pkcs7_encrypt(
             key, plaintext, secrets.token_bytes(16)
         )
         return iv + ciphertext
 
-    def decrypt(self, key, ciphertext: bytes) -> bytes:
+    def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
         iv, data = ciphertext[:16], ciphertext[16:]
         return symmetric.aes_cbc_pkcs7_decrypt(key, data, iv)
 
@@ -665,6 +662,12 @@ class CryptFilterConfiguration:
         if item == generic.NameObject('/Identity'):
             return IdentityCryptFilter()
         return self._crypt_filters[item]
+
+    def __contains__(self, item):
+        return (
+            item == generic.NameObject('/Identity')
+            or item in self._crypt_filters
+        )
 
     def values(self):
         return self._crypt_filters.values()
@@ -743,7 +746,8 @@ class StandardSecurityHandler(SecurityHandler):
     @classmethod
     def build_from_pw_legacy(cls, rev: StandardSecuritySettingsRevision,
                              id1, desired_owner_pass, desired_user_pass=None,
-                             keylen_bytes=16, use_aes128=True):
+                             keylen_bytes=16, use_aes128=True,
+                             crypt_filter_config=None):
         desired_owner_pass = _legacy_normalise_pw(desired_owner_pass)
         desired_user_pass = (
             _legacy_normalise_pw(desired_user_pass)
@@ -777,21 +781,23 @@ class StandardSecurityHandler(SecurityHandler):
 
         if rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
             version = SecurityHandlerVersion.RC4_OR_AES128
-            if use_aes128:
-                cfc = _std_aes_config(keylen=16)
-            else:
-                cfc = _std_rc4_config(keylen=keylen_bytes)
         elif rev == StandardSecuritySettingsRevision.RC4_BASIC:
             version = SecurityHandlerVersion.RC4_40
-            cfc = None
         else:
             version = SecurityHandlerVersion.RC4_LONGER_KEYS
-            cfc = None
+
+        if rev == StandardSecuritySettingsRevision.RC4_OR_AES128 and \
+                crypt_filter_config is None:
+            if use_aes128:
+                crypt_filter_config = _std_aes_config(keylen=16)
+            else:
+                crypt_filter_config = _std_rc4_config(keylen=keylen_bytes)
 
         sh = StandardSecurityHandler(
             version=version, revision=rev, legacy_keylen=keylen_bytes,
             perm_flags=perms, odata=o_entry,
-            udata=u_entry, encrypt_metadata=True, crypt_filter_config=cfc,
+            udata=u_entry, encrypt_metadata=True,
+            crypt_filter_config=crypt_filter_config,
         )
         sh._shared_key = key
         return sh
@@ -1096,7 +1102,13 @@ class StandardSecurityHandler(SecurityHandler):
         return result, key
 
     def get_file_encryption_key(self) -> bytes:
-        return self._shared_key
+        key = self._shared_key
+        if key is None:
+            raise misc.PdfReadError(
+                "Authentication failed." if self._auth_failed
+                else "No key available to decrypt, please authenticate first."
+            )
+        return key
 
 
 @enum.unique

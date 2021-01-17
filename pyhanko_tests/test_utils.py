@@ -19,7 +19,8 @@ from pyhanko.pdf_utils.content import (
 from pyhanko.pdf_utils.crypt import (
     StandardSecurityHandler,
     StandardSecuritySettingsRevision, IdentityCryptFilter, AuthResult,
-    PubKeySecurityHandler, SecurityHandlerVersion,
+    PubKeySecurityHandler, SecurityHandlerVersion, CryptFilterConfiguration,
+    StandardRC4CryptFilter, StandardAESCryptFilter, STD_CF,
 )
 
 from .samples import *
@@ -238,18 +239,18 @@ def test_ascii_hex_decode():
     from pyhanko.pdf_utils import filters
     data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
 
-    encoded = filters.ASCIIHexDecode.encode(data)
-    assert filters.ASCIIHexDecode.decode(encoded) == data
+    encoded = filters.ASCIIHexDecode().encode(data)
+    assert filters.ASCIIHexDecode().decode(encoded) == data
 
 
 def test_ascii85_decode():
     from pyhanko.pdf_utils import filters
     data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
 
-    encoded = filters.ASCII85Decode.encode(data)
+    encoded = filters.ASCII85Decode().encode(data)
     # 50 normal groups of 4 * 5 -> 200,
     assert len(encoded) == 257
-    assert filters.ASCII85Decode.decode(encoded) == data
+    assert filters.ASCII85Decode().decode(encoded) == data
 
 
 def test_historical_read():
@@ -748,11 +749,32 @@ def test_wrong_password(legacy):
     out = BytesIO()
     w.write(out)
     r = PdfFileReader(out)
+    with pytest.raises(misc.PdfReadError):
+        r.get_object(ref.reference)
     assert r.decrypt("thispasswordiswrong") == AuthResult.UNKNOWN
     assert r.security_handler._auth_failed
     assert r.security_handler.get_string_filter()._auth_failed
     with pytest.raises(misc.PdfReadError):
         r.get_object(ref.reference)
+
+
+def test_identity_crypt_filter_api():
+
+    # confirm that the CryptFilter API of the identity filter doesn't do
+    # anything unexpected, even though we typically don't invoke it explicitly.
+    idf: IdentityCryptFilter = IdentityCryptFilter()
+    idf.set_security_handler(None)
+    assert not idf._auth_failed
+    assert isinstance(idf.derive_shared_encryption_key(), bytes)
+    assert isinstance(idf.derive_object_key(1, 2), bytes)
+    assert isinstance(idf.method, generic.NameObject)
+    assert isinstance(idf.keylen, int)
+    assert idf.decrypt(None, b'abc') == b'abc'
+    assert idf.encrypt(None, b'abc') == b'abc'
+
+    # can't serialise /Identity
+    with pytest.raises(misc.PdfError):
+        idf.as_pdf_object()
 
 
 @pytest.mark.parametrize("use_alias, with_never_decrypt", [
@@ -762,7 +784,7 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw("secret")
     w.security_handler = sh
-    idf = IdentityCryptFilter()
+    idf: IdentityCryptFilter = IdentityCryptFilter()
     assert sh.crypt_filter_config[pdf_name("/Identity")] is idf
     if use_alias:
         sh.crypt_filter_config._crypt_filters[pdf_name("/IdentityAlias")] = idf
@@ -770,12 +792,14 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     if use_alias:
         # identity filter can't be serialised, so this should throw an error
         with pytest.raises(misc.PdfError):
-            w._encrypt = w.add_object(sh.as_pdf_object())
+            w._assign_security_handler(sh)
         return
     else:
-        w._encrypt = w.add_object(sh.as_pdf_object())
+        w._assign_security_handler(sh)
     test_bytes = b'This is some test data that should remain unencrypted.'
-    test_stream = generic.StreamObject(stream_data=test_bytes)
+    test_stream = generic.StreamObject(
+        stream_data=test_bytes, handler=sh
+    )
     test_stream.apply_filter(
         "/Crypt", params={pdf_name("/Name"): pdf_name("/Identity")}
     )
@@ -907,3 +931,95 @@ def test_pubkey_encryption_dict_errors():
     encrypt['/CF']['/DefaultCryptFilter']['/CFM'] = pdf_name('/None')
     with pytest.raises(misc.PdfReadError):
         PubKeySecurityHandler.build(encrypt)
+
+
+@pytest.mark.parametrize('with_hex_filter, main_unencrypted', [
+    (True, False), (True, True), (True, False), (False, False)
+])
+def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
+    w = writer.PdfFileWriter()
+    custom = pdf_name('/Custom')
+    crypt_filters = {
+        custom: StandardRC4CryptFilter(keylen=16),
+    }
+    if main_unencrypted:
+        # streams/strings are unencrypted by default
+        cfc = CryptFilterConfiguration(crypt_filters=crypt_filters)
+    else:
+        crypt_filters[STD_CF] = StandardAESCryptFilter(keylen=16)
+        cfc = CryptFilterConfiguration(
+            crypt_filters=crypt_filters,
+            default_string_filter=STD_CF, default_stream_filter=STD_CF
+        )
+    sh = StandardSecurityHandler.build_from_pw_legacy(
+        rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
+        id1=w.document_id[0], desired_user_pass="usersecret",
+        desired_owner_pass="ownersecret",
+        keylen_bytes=16, crypt_filter_config=cfc
+    )
+    w._assign_security_handler(sh)
+    test_data = b'This is test data!'
+    dummy_stream = generic.StreamObject(stream_data=test_data)
+    dummy_stream.add_crypt_filter(name=custom, handler=sh)
+    ref = w.add_object(dummy_stream)
+    dummy_stream2 = generic.StreamObject(stream_data=test_data)
+    ref2 = w.add_object(dummy_stream2)
+
+    if with_hex_filter:
+        dummy_stream.apply_filter(pdf_name('/AHx'))
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    r.decrypt("ownersecret")
+    obj: generic.StreamObject = r.get_object(ref.reference)
+    assert obj.data == test_data
+    if with_hex_filter:
+        cf_dict = obj['/DecodeParms'][1]
+    else:
+        cf_dict = obj['/DecodeParms']
+
+    assert cf_dict['/Name'] == pdf_name('/Custom')
+
+    obj2: generic.DecryptedObjectProxy = r.get_object(
+        ref2.reference, transparent_decrypt=False
+    )
+    raw = obj2.raw_object
+    assert isinstance(raw, generic.StreamObject)
+    if main_unencrypted:
+        assert raw.encoded_data == test_data
+    else:
+        assert raw.encoded_data != test_data
+
+
+def test_custom_crypt_filter_errors():
+    w = writer.PdfFileWriter()
+    custom = pdf_name('/Custom')
+    crypt_filters = {
+        custom: StandardRC4CryptFilter(keylen=16),
+        STD_CF: StandardAESCryptFilter(keylen=16)
+    }
+    cfc = CryptFilterConfiguration(
+        crypt_filters=crypt_filters,
+        default_string_filter=STD_CF, default_stream_filter=STD_CF
+    )
+    sh = StandardSecurityHandler.build_from_pw_legacy(
+        rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
+        id1=w.document_id[0], desired_user_pass="usersecret",
+        desired_owner_pass="ownersecret",
+        keylen_bytes=16, crypt_filter_config=cfc
+    )
+    w._assign_security_handler(sh)
+    test_data = b'This is test data!'
+    dummy_stream = generic.StreamObject(stream_data=test_data)
+    with pytest.raises(misc.PdfStreamError):
+        dummy_stream.add_crypt_filter(name='/Idontexist', handler=sh)
+
+    # no handler
+    dummy_stream.add_crypt_filter(name=custom)
+    dummy_stream._handler = None
+    w.add_object(dummy_stream)
+
+    out = BytesIO()
+    with pytest.raises(misc.PdfStreamError):
+        w.write(out)
+
