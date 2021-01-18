@@ -559,6 +559,7 @@ class PdfFileReader(PdfHandler):
             problems and also causes some correctable problems to be fatal.
             Defaults to ``True``.
         """
+        self.security_handler: Optional[SecurityHandler] = None
         self.strict = strict
         self.resolved_objects = {}
         self.input_version = None
@@ -584,7 +585,6 @@ class PdfFileReader(PdfHandler):
         except KeyError:
             pass
 
-        self.security_handler: Optional[SecurityHandler] = None
         encrypt_dict = self._get_encryption_params()
         if encrypt_dict is not None:
             self.security_handler = SecurityHandler.build(encrypt_dict)
