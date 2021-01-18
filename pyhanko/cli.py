@@ -29,6 +29,7 @@ from pyhanko.sign.validation import (
     SignatureValidationError, RevocationInfoValidationType
 )
 from pyhanko.stamp import QRStampStyle, text_stamp_file, qr_stamp_file
+from pyhanko import __version__
 
 __all__ = ['cli']
 
@@ -94,6 +95,7 @@ class Ctx(Enum):
 
 
 @click.group()
+@click.version_option(prog_name='pyHanko', version=__version__)
 @click.option('--config',
               help=(
                   'YAML file to load configuration from'

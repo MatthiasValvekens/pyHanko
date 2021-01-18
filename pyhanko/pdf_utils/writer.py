@@ -23,6 +23,7 @@ from pyhanko.pdf_utils.misc import (
     PdfWriteError,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko import __version__
 
 
 __all__ = [
@@ -31,7 +32,7 @@ __all__ = [
 ]
 
 # TODO include version number
-VENDOR = 'pyhanko'
+VENDOR = 'pyHanko ' + __version__
 
 
 OBJSTREAM_FORBIDDEN = (generic.IndirectObject, generic.StreamObject)

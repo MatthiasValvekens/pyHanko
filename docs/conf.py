@@ -17,14 +17,28 @@ sys.path.insert(0, os.path.abspath('..'))
 import sphinx_rtd_theme
 
 
+def get_version():
+    from os import path
+    project_root = path.abspath(path.dirname(path.dirname(__file__)))
+    version_file = path.join(project_root, 'pyhanko', 'version.py')
+    with open(version_file, encoding='utf-8') as f:
+        for line in f:
+            if line.startswith('__version__'):
+                delim = '"' if '"' in line else "'"
+                return line.split(delim)[1]
+        else:
+            raise RuntimeError("Unable to find version string.")
+
+
 # -- Project information -----------------------------------------------------
 
 project = 'pyHanko'
-copyright = '2020, Matthias Valvekens'
+copyright = '2020-2021, Matthias Valvekens'
 author = 'Matthias Valvekens'
 
 # The full version, including alpha/beta/rc tags
-release = '0.3.0-dev1'
+release = get_version()
+version = release.split('-')[0]  # strip the release tag
 
 
 # -- General configuration ---------------------------------------------------

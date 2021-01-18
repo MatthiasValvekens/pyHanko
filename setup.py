@@ -5,9 +5,22 @@ BASE_DIR = path.abspath(path.dirname(__file__))
 with open(path.join(BASE_DIR, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+
+# based on https://packaging.python.org/guides/single-sourcing-package-version/
+def get_version():
+    version_file = path.join(BASE_DIR, 'pyhanko', 'version.py')
+    with open(version_file, encoding='utf-8') as f:
+        for line in f:
+            if line.startswith('__version__'):
+                delim = '"' if '"' in line else "'"
+                return line.split(delim)[1]
+        else:
+            raise RuntimeError("Unable to find version string.")
+
+
 setup(
     name='pyHanko',
-    version='0.3.0-dev1',
+    version=get_version(),
     packages=['pyhanko', 'pyhanko.pdf_utils', 'pyhanko.sign'],
     url='https://github.com/MatthiasValvekens/pyHanko',
     license='MIT',
