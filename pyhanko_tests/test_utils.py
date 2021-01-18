@@ -21,6 +21,8 @@ from pyhanko.pdf_utils.crypt import (
     StandardSecuritySettingsRevision, IdentityCryptFilter, AuthResult,
     PubKeySecurityHandler, SecurityHandlerVersion, CryptFilterConfiguration,
     StandardRC4CryptFilter, StandardAESCryptFilter, STD_CF,
+    PubKeyRC4CryptFilter, PubKeyAESCryptFilter, PubKeyAdbeSubFilter,
+    DEFAULT_CRYPT_FILTER,
 )
 
 from .samples import *
@@ -931,7 +933,7 @@ def test_pubkey_encryption_dict_errors():
 
 
 @pytest.mark.parametrize('with_hex_filter, main_unencrypted', [
-    (True, False), (True, True), (True, False), (False, False)
+    (True, False), (True, True), (False, True), (False, False)
 ])
 def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
     w = writer.PdfFileWriter()
@@ -969,6 +971,101 @@ def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
     r = PdfFileReader(out)
     r.decrypt("ownersecret")
     obj: generic.StreamObject = r.get_object(ref.reference)
+    assert obj.data == test_data
+    if with_hex_filter:
+        cf_dict = obj['/DecodeParms'][1]
+    else:
+        cf_dict = obj['/DecodeParms']
+
+    assert cf_dict['/Name'] == pdf_name('/Custom')
+
+    obj2: generic.DecryptedObjectProxy = r.get_object(
+        ref2.reference, transparent_decrypt=False
+    )
+    raw = obj2.raw_object
+    assert isinstance(raw, generic.StreamObject)
+    if main_unencrypted:
+        assert raw.encoded_data == test_data
+    else:
+        assert raw.encoded_data != test_data
+
+
+@pytest.mark.parametrize('with_hex_filter, main_unencrypted', [
+    (True, False), (True, True), (False, True), (False, False)
+])
+def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
+    w = writer.PdfFileWriter()
+    custom = pdf_name('/Custom')
+    crypt_filters = {
+        custom: PubKeyRC4CryptFilter(keylen=16),
+    }
+    if main_unencrypted:
+        # streams/strings are unencrypted by default
+        cfc = CryptFilterConfiguration(crypt_filters=crypt_filters)
+    else:
+        crypt_filters[DEFAULT_CRYPT_FILTER] = PubKeyAESCryptFilter(
+            keylen=16, acts_as_default=True
+        )
+        cfc = CryptFilterConfiguration(
+            crypt_filters=crypt_filters,
+            default_string_filter=DEFAULT_CRYPT_FILTER,
+            default_stream_filter=DEFAULT_CRYPT_FILTER
+        )
+    sh = PubKeySecurityHandler(
+        version=SecurityHandlerVersion.RC4_OR_AES128,
+        pubkey_handler_subfilter=PubKeyAdbeSubFilter.S5,
+        legacy_keylen=16, perm_flags=-4, crypt_filter_config=cfc
+    )
+
+    # if main_unencrypted, these should be no-ops
+    sh.add_recipients([PUBKEY_TEST_DECRYPTER.cert])
+    # (this is always pointless, but it should be allowed)
+    sh.add_recipients([PUBKEY_TEST_DECRYPTER.cert])
+
+    crypt_filters[custom].add_recipients([PUBKEY_TEST_DECRYPTER.cert])
+    w._assign_security_handler(sh)
+
+    encrypt_dict = w._encrypt.get_object()
+    cfs = encrypt_dict['/CF']
+    # no /Recipients in S5 mode
+    assert '/Recipients' not in encrypt_dict
+    assert isinstance(cfs[custom]['/Recipients'], generic.ByteStringObject)
+    if main_unencrypted:
+        assert DEFAULT_CRYPT_FILTER not in cfs
+    else:
+        default_rcpts = cfs[DEFAULT_CRYPT_FILTER]['/Recipients']
+        assert isinstance(default_rcpts, generic.ArrayObject)
+        assert len(default_rcpts) == 2
+
+    # custom crypt filters can only have one set of recipients
+    with pytest.raises(misc.PdfError):
+        crypt_filters[custom].add_recipients([PUBKEY_TEST_DECRYPTER.cert])
+
+    test_data = b'This is test data!'
+    dummy_stream = generic.StreamObject(stream_data=test_data)
+    dummy_stream.add_crypt_filter(name=custom, handler=sh)
+    ref = w.add_object(dummy_stream)
+    dummy_stream2 = generic.StreamObject(stream_data=test_data)
+    ref2 = w.add_object(dummy_stream2)
+
+    if with_hex_filter:
+        dummy_stream.apply_filter(pdf_name('/AHx'))
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+
+    # the custom test filter shouldn't have been decrypted yet
+    # so attempting to decode the stream should cause the crypt filter
+    # to throw an error
+    obj: generic.StreamObject = r.get_object(ref.reference)
+    with pytest.raises(misc.PdfError):
+        # noinspection PyStatementEffect
+        obj.data
+
+    r.security_handler.crypt_filter_config[custom].authenticate(
+        PUBKEY_TEST_DECRYPTER
+    )
     assert obj.data == test_data
     if with_hex_filter:
         cf_dict = obj['/DecodeParms'][1]
@@ -1067,3 +1164,24 @@ def test_load_pkcs12():
     )
     assert sedk.cert.subject == PUBKEY_TEST_DECRYPTER.cert.subject
 
+
+def test_pubkey_wrong_cert():
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+
+    from oscrypto import keys
+    recpt_cert = keys.parse_certificate(
+        read_all(TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem')
+    )
+    test_data = b'This is test data!'
+    dummy_stream = generic.StreamObject(stream_data=test_data)
+    ref = w.add_object(dummy_stream)
+    w.encrypt_pubkey([recpt_cert])
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    assert result == AuthResult.UNKNOWN
+
+    with pytest.raises(misc.PdfError):
+        r.get_object(ref.reference)

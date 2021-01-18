@@ -474,10 +474,10 @@ class StandardCryptFilter(CryptFilter, abc.ABC):
 class PubKeyCryptFilter(CryptFilter, abc.ABC):
     _handler: 'PubKeySecurityHandler' = None
 
-    def __init__(self, *, recipients=None, includes_permissions=False,
+    def __init__(self, *, recipients=None, acts_as_default=False,
                  encrypt_metadata=True, **kwargs):
         self.recipients = recipients
-        self.includes_permissions = includes_permissions
+        self.acts_as_default = acts_as_default
         self.encrypt_metadata = encrypt_metadata
         self._pubkey_auth_failed = False
         self._shared_key = self._recp_key_seed = None
@@ -496,6 +496,11 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
     def add_recipients(self, certs: List[x509.Certificate]):
         # this always adds one full CMS object to the Recipients array
 
+        if not self.acts_as_default and self.recipients:
+            raise misc.PdfError(
+                "A non-default crypt filter cannot have multiple sets of "
+                "recipients."
+            )
         if self.recipients is None:
             # assume that this is a freshly created pubkey crypt filter,
             # so set up the shared seed
@@ -511,9 +516,17 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         perms = ALL_PERMS
         new_cms = construct_recipient_cms(
             certs, self._recp_key_seed, perms,
-            include_permissions=self.includes_permissions
+            include_permissions=self.acts_as_default
         )
         self.recipients.append(new_cms)
+
+    def authenticate(self, credential) -> AuthResult:
+        for recp in self.recipients:
+            seed = read_seed_from_recipient_cms(recp, credential)
+            if seed is not None:
+                self._recp_key_seed = seed
+                return AuthResult.USER
+        return AuthResult.UNKNOWN
 
     def derive_shared_encryption_key(self) -> bytes:
         if self._recp_key_seed is None:
@@ -532,10 +545,15 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
     def as_pdf_object(self):
         result = super().as_pdf_object()
         result['/Length'] = generic.NumberObject(self.keylen * 8)
-        result['/Recipients'] = generic.ArrayObject(
+        recipients = generic.ArrayObject(
             generic.ByteStringObject(recp.dump())
             for recp in self.recipients
         )
+        if self.acts_as_default:
+            result['/Recipients'] = recipients
+        else:
+            # non-default crypt filters can only have one recipient object
+            result['/Recipients'] = recipients[0]
         result['/EncryptMetadata'] \
             = generic.BooleanObject(self.encrypt_metadata)
         return result
@@ -697,6 +715,11 @@ class CryptFilterConfiguration:
         })
         return result
 
+    def default_filters(self):
+        stmf = self._default_stream_filter
+        strf = self._default_string_filter
+        return {stmf, strf} if stmf is not strf else {stmf}
+
 
 def _std_rc4_config(keylen):
     return CryptFilterConfiguration(
@@ -709,7 +732,7 @@ def _std_rc4_config(keylen):
 def _pubkey_rc4_config(keylen, recipients=None, encrypt_metadata=True):
     return CryptFilterConfiguration(
         {DEFAULT_CRYPT_FILTER: PubKeyRC4CryptFilter(
-            keylen=keylen, includes_permissions=True, recipients=recipients,
+            keylen=keylen, acts_as_default=True, recipients=recipients,
             encrypt_metadata=encrypt_metadata
         )},
         default_stream_filter=DEFAULT_CRYPT_FILTER,
@@ -728,7 +751,7 @@ def _std_aes_config(keylen):
 def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
     return CryptFilterConfiguration(
         {DEFAULT_CRYPT_FILTER: PubKeyAESCryptFilter(
-            keylen=keylen, includes_permissions=True, recipients=recipients,
+            keylen=keylen, acts_as_default=True, recipients=recipients,
             encrypt_metadata=encrypt_metadata
         )},
         default_stream_filter=DEFAULT_CRYPT_FILTER,
@@ -1457,8 +1480,14 @@ class PubKeySecurityHandler(SecurityHandler):
             raise misc.PdfError("Key length must be a multiple of 8")
         keylen = keylen_bits // 8
         try:
+            stmf = encrypt_dict.get('/StmF', IDENTITY)
+            strf = encrypt_dict.get('/StrF', IDENTITY)
+            eff = encrypt_dict.get('/EFF', stmf)
+            default_filters = {stmf, strf}
             crypt_filters = {
-                name: PubKeySecurityHandler.read_pubkey_cf_dictionary(cfdict)
+                name: PubKeySecurityHandler.read_pubkey_cf_dictionary(
+                    cfdict, name in default_filters
+                )
                 for name, cfdict in encrypt_dict['/CF'].items()
             }
             if subfilter != PubKeyAdbeSubFilter.S5:
@@ -1466,9 +1495,6 @@ class PubKeySecurityHandler(SecurityHandler):
                     "Crypt filters require /adbe.pkcs7.s5 as the declared "
                     "handler."
                 )
-            stmf = encrypt_dict.get('/StmF', IDENTITY)
-            strf = encrypt_dict.get('/StrF', IDENTITY)
-            eff = encrypt_dict.get('/EFF', stmf)
 
             cfc = CryptFilterConfiguration(
                 crypt_filters=crypt_filters, default_stream_filter=stmf,
@@ -1519,12 +1545,13 @@ class PubKeySecurityHandler(SecurityHandler):
         return result
 
     def add_recipients(self, certs: List[x509.Certificate]):
-        # add recipients to all crypt filters
+        # add recipients to all *default* crypt filters
         # callers that want to do this more granularly are welcome to, but
         # then they have to do the legwork themselves.
-        for cf in self.crypt_filter_config.values():
+
+        for cf in self.crypt_filter_config.default_filters():
             if not isinstance(cf, PubKeyCryptFilter):
-                continue  # pragma: nocover
+                continue
             cf.add_recipients(certs)
 
     def authenticate(self, credential: EnvelopeKeyDecrypter, id1=None) \
@@ -1533,22 +1560,19 @@ class PubKeySecurityHandler(SecurityHandler):
             raise misc.PdfReadError(
                 f"Pubkey authentication credential must be an instance of "
                 f"EnvelopeKeyDecrypter, not {type(credential)}."
-            )
-        # unlock all crypt filters
-        for cf in self.crypt_filter_config.values():
-            if not isinstance(cf, PubKeyCryptFilter):
-                continue  # pragma: nocover
-            recp: cms.ContentInfo
-            for recp in cf.recipients:
-                seed = read_seed_from_recipient_cms(recp, credential)
-                if seed is not None:
-                    cf._recp_key_seed = seed
-                    return AuthResult.USER
+            )  # pragma: nocover
 
-        return AuthResult.UNKNOWN
+        for cf in self.crypt_filter_config.default_filters():
+            if not isinstance(cf, PubKeyCryptFilter):
+                continue
+            recp: cms.ContentInfo
+            result = cf.authenticate(credential)
+            if result == AuthResult.UNKNOWN:
+                return AuthResult.UNKNOWN
+        return AuthResult.USER
 
     @staticmethod
-    def read_pubkey_cf_dictionary(cfdict):
+    def read_pubkey_cf_dictionary(cfdict, acts_as_default):
         try:
             cfm = cfdict['/CFM']
             recipients = cfdict['/Recipients']
@@ -1556,6 +1580,8 @@ class PubKeySecurityHandler(SecurityHandler):
             raise misc.PdfReadError(
                 "PubKey CF dictionary must have /Recipients and /CFM keys"
             )
+        if isinstance(recipients, generic.ByteStringObject):
+            recipients = recipients,
         recipient_objs = [
             cms.ContentInfo.load(x.original_bytes) for x in recipients
         ]
@@ -1568,17 +1594,20 @@ class PubKeySecurityHandler(SecurityHandler):
             keylen_bits = cfdict.get('/Length', 40)
             return PubKeyRC4CryptFilter(
                 keylen=keylen_bits // 8,
-                encrypt_metadata=encrypt_metadata, recipients=recipient_objs
+                encrypt_metadata=encrypt_metadata, recipients=recipient_objs,
+                acts_as_default=acts_as_default
             )
         elif cfm == '/AESV2':
             return PubKeyAESCryptFilter(
                 keylen=16,
                 encrypt_metadata=encrypt_metadata, recipients=recipient_objs,
+                acts_as_default=acts_as_default
             )
         elif cfm == '/AESV3':
             return PubKeyAESCryptFilter(
                 keylen=32,
-                encrypt_metadata=encrypt_metadata, recipients=recipient_objs
+                encrypt_metadata=encrypt_metadata, recipients=recipient_objs,
+                acts_as_default = acts_as_default
             )
         else:
             raise NotImplementedError("No such crypt filter method: " + cfm)
