@@ -42,6 +42,9 @@ Note that not all of these are necessarily exposed through the CLI.
     - RFC 3161 timestamp server support
     - Support for multiple signatures (all modifications are executed using incremental updates to preserve
       cryptographic integrity)
+    - Supports both RSA & ECDSA
+    - If `cryptography` is installed, pyHanko can also produce and validate 
+      RSASSA-PSS signatures (with arbitrary parameters).
     - PKCS11 support
         - Extra convenience wrapper for Belgian eID cards
  - Signature validation
@@ -54,7 +57,7 @@ Note that not all of these are necessarily exposed through the CLI.
  - Encryption
     - Only legacy RC4-based encryption is supported in the `<0.2.0` releases (based on what PyPDF2 offers).
       This should not be used for new files, since it has been broken for quite some time.
-    - Modern AES-based PDF encryption & public-key encryption have been implemented in the development version and will be included with the `0.3.0` release.
+    - Modern AES-based PDF encryption & public-key encryption have been implemented in the development version, and will be included with the `0.3.0` release.
  - CLI & configuration
     - YAML-based configuration (optional for most features)
     - CLI based on `click` 
