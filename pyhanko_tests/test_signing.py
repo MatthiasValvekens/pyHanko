@@ -6,7 +6,10 @@ from io import BytesIO
 
 import pytz
 from asn1crypto import ocsp, tsp
-from asn1crypto.algos import SignedDigestAlgorithm
+from asn1crypto.algos import (
+    SignedDigestAlgorithm, RSASSAPSSParams,
+    MaskGenAlgorithm, DigestAlgorithm,
+)
 
 import pyhanko.pdf_utils.content
 from certvalidator.errors import PathValidationError
@@ -310,6 +313,28 @@ def test_sign_with_ecdsa_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_ECC_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_explicit_ecdsa():
+    signer = signers.SimpleSigner.load(
+        ECC_TESTING_CA_DIR + '/keys/signer.key.pem',
+        ECC_TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
+        ca_chain_files=(
+            ECC_TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+        key_passphrase=b'secret', signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'ecdsa'}
+        )
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=signer
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1499,3 +1524,55 @@ def test_overspecify_cms_digest_algo():
                 field_name='Sig1', md_algorithm='sha512'
             ), signer=signer
         )
+
+
+def test_sign_pss():
+    signer = signers.SimpleSigner.load(
+        CRYPTO_DATA_DIR + '/selfsigned.key.pem',
+        CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
+        ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
+        key_passphrase=b'secret', prefer_pss=True
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    sda: SignedDigestAlgorithm = emb.signer_info['signature_algorithm']
+    assert sda.signature_algo == 'rsassa_pss'
+    val_untrusted(emb)
+
+
+def test_sign_pss_md_discrepancy():
+    # Acrobat refuses to validate PSS signatures where the internal
+    # hash functions disagree, but mathematically speaking, that shouldn't
+    # be an issue.
+    signer = signers.SimpleSigner.load(
+        CRYPTO_DATA_DIR + '/selfsigned.key.pem',
+        CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
+        ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
+        key_passphrase=b'secret', signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pss',
+            'parameters': RSASSAPSSParams({
+                'mask_gen_algorithm': MaskGenAlgorithm({
+                    'algorithm': 'mgf1',
+                    'parameters': DigestAlgorithm({'algorithm': 'sha512'})
+                }),
+                'hash_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
+                'salt_length': 478
+            })
+        })
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    sda: SignedDigestAlgorithm = emb.signer_info['signature_algorithm']
+    assert sda.signature_algo == 'rsassa_pss'
+    val_untrusted(emb)
+

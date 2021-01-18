@@ -53,6 +53,11 @@ setup(
     setup_requires=[
         'wheel', 'pytest-runner'
     ],
+    extras_require={
+        # oscrypto also has an API function to handle PSS signing & validation,
+        # but not with arbitrary parameters. Only the defaults are supported.
+        'pss': ['cryptography>=3.3.1']
+    },
     tests_require=[
         'pytest>=6.1.1',
         'requests-mock>=1.8.0',

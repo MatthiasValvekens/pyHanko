@@ -29,7 +29,7 @@ from pyhanko.sign.fields import (
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.sign.general import (
     simple_cms_attribute, CertificateStore,
-    SimpleCertificateStore, SigningError,
+    SimpleCertificateStore, SigningError, _sign_pss_raw, optimal_pss_params,
 )
 from pyhanko.stamp import (
     TextStampStyle, TextStamp, STAMP_ART_CONTENT,
@@ -269,27 +269,43 @@ class Signer:
     The (cryptographic) signature mechanism to use.
     """
 
-    def __init__(self):
-        if self.signature_mechanism is None and self.signing_cert is not None:
-            # Grab the certificate's algorithm (but forget about the digest)
-            #  and use that to set up the default.
-            # We'll specify the digest somewhere else.
-            cert_pubkey: asymmetric.PublicKey = asymmetric.load_public_key(
-                self.signing_cert.public_key
-            )
-            algo = cert_pubkey.algorithm
-            if algo == 'ec':
-                mech = 'ecdsa'
-            elif algo == 'rsa':
-                mech = 'rsassa_pkcs1v15'
-            else:  # pragma: nocover
-                raise SigningError(
-                    f"Signature mechanism {algo} is unsupported."
-                )
+    def __init__(self, prefer_pss=False):
+        self.prefer_pss = prefer_pss
 
-            self.signature_mechanism = SignedDigestAlgorithm(
-                {'algorithm': mech}
+    def get_signature_mechanism(self, digest_algorithm):
+        if self.signature_mechanism is not None:
+            return self.signature_mechanism
+        if self.signing_cert is None:
+            raise SigningError(
+                "Could not set up a default signature mechanism."
+            )  # pragma: nocover
+        # Grab the certificate's algorithm (but forget about the digest)
+        #  and use that to set up the default.
+        # We'll specify the digest somewhere else.
+        cert_pubkey: asymmetric.PublicKey = asymmetric.load_public_key(
+            self.signing_cert.public_key
+        )
+        algo = cert_pubkey.algorithm
+        params = None
+        if algo == 'ec':
+            mech = 'ecdsa'
+        elif algo == 'rsa':
+            if self.prefer_pss:
+                mech = 'rsassa_pss'
+                params = optimal_pss_params(
+                    self.signing_cert, digest_algorithm
+                )
+            else:
+                mech = 'rsassa_pkcs1v15'
+        else:  # pragma: nocover
+            raise SigningError(
+                f"Signature mechanism {algo} is unsupported."
             )
+
+        sda_kwargs = {'algorithm': mech}
+        if params is not None:
+            sda_kwargs['parameters'] = params
+        return SignedDigestAlgorithm(sda_kwargs)
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
             -> bytes:
@@ -433,8 +449,9 @@ class Signer:
                 })
             }),
             'digest_algorithm': digest_algorithm_obj,
-            # TODO implement PSS support
-            'signature_algorithm': self.signature_mechanism,
+            'signature_algorithm': self.get_signature_mechanism(
+                digest_algorithm
+            ),
             'signed_attrs': signed_attrs,
             'signature': signature
         })
@@ -496,11 +513,13 @@ class Signer:
         #  here if it's implied by the signature mechanism, but care is needed
         #  to integrate it correctly with the signer and validator
         digest_algorithm = digest_algorithm.lower()
+        implied_hash_algo = None
         try:
-            implied_hash_algo = self.signature_mechanism.hash_algo
+            if self.signature_mechanism is not None:
+                implied_hash_algo = self.signature_mechanism.hash_algo
         except ValueError:
             # this is OK, just use the specified message digest
-            implied_hash_algo = None
+            pass
         if implied_hash_algo is not None \
                 and implied_hash_algo != digest_algorithm:
             raise SigningError(
@@ -729,19 +748,26 @@ class SimpleSigner(Signer):
     def __init__(self, signing_cert: x509.Certificate,
                  signing_key: keys.PrivateKeyInfo,
                  cert_registry: CertificateStore,
-                 signature_mechanism: SignedDigestAlgorithm = None):
+                 signature_mechanism: SignedDigestAlgorithm = None,
+                 prefer_pss=False):
         self.signing_cert = signing_cert
         self.signing_key = signing_key
         self.cert_registry = cert_registry
         self.signature_mechanism = signature_mechanism
-        super().__init__()
+        super().__init__(prefer_pss=prefer_pss)
 
     def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
             -> bytes:
 
-        mechanism = self.signature_mechanism.signature_algo
+        signature_mechanism = self.get_signature_mechanism(digest_algorithm)
+        mechanism = signature_mechanism.signature_algo
         if mechanism == 'rsassa_pkcs1v15':
             sign_func = asymmetric.rsa_pkcs1v15_sign
+        elif mechanism == 'rsassa_pss':
+            return _sign_pss_raw(
+                data, self.signing_key, signature_mechanism['parameters'],
+                digest_algorithm
+            )
         elif mechanism == 'ecdsa':
             sign_func = asymmetric.ecdsa_sign
         else:  # pragma: nocover
@@ -765,7 +791,7 @@ class SimpleSigner(Signer):
 
     @classmethod
     def load_pkcs12(cls, pfx_file, ca_chain_files=None, passphrase=None,
-                    signature_mechanism=None):
+                    signature_mechanism=None, prefer_pss=False):
         """
         Load certificates and key material from a PCKS#12 archive
         (usually ``.pfx`` or ``.p12`` files).
@@ -779,6 +805,9 @@ class SimpleSigner(Signer):
             Passphrase to decrypt the PKCS#12 archive, if required.
         :param signature_mechanism:
             Override the signature mechanism to use.
+        :param prefer_pss:
+            Prefer PSS signature mechanism over RSA PKCS#1 v1.5 if
+            there's a choice.
         :return:
             A :class:`.SimpleSigner` object initialised with key material loaded
             from the PKCS#12 file provided.
@@ -802,13 +831,14 @@ class SimpleSigner(Signer):
         cs.register_multiple(ca_chain | set(other_certs))
         return SimpleSigner(
             signing_key=kinfo, signing_cert=cert,
-            cert_registry=cs, signature_mechanism=signature_mechanism
+            cert_registry=cs, signature_mechanism=signature_mechanism,
+            prefer_pss=prefer_pss
         )
 
     @classmethod
     def load(cls, key_file, cert_file, ca_chain_files=None,
              key_passphrase=None, other_certs=None,
-             signature_mechanism=None):
+             signature_mechanism=None, prefer_pss=False):
         """
         Load certificates and key material from PEM/DER files.
 
@@ -825,6 +855,9 @@ class SimpleSigner(Signer):
             :class:`.asn1crypto.x509.Certificate` objects.
         :param signature_mechanism:
             Override the signature mechanism to use.
+        :param prefer_pss:
+            Prefer PSS signature mechanism over RSA PKCS#1 v1.5 if
+            there's a choice.
         :return:
             A :class:`.SimpleSigner` object initialised with key material loaded
             from the files provided.
@@ -854,7 +887,8 @@ class SimpleSigner(Signer):
         cert_reg.register_multiple(other_certs)
         return SimpleSigner(
             signing_cert=signing_cert, signing_key=signing_key,
-            cert_registry=cert_reg, signature_mechanism=signature_mechanism
+            cert_registry=cert_reg, signature_mechanism=signature_mechanism,
+            prefer_pss=prefer_pss
         )
 
 

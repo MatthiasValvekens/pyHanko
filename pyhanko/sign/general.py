@@ -13,7 +13,7 @@ from typing import ClassVar, Set
 
 import hashlib
 
-from asn1crypto import x509, cms, tsp
+from asn1crypto import x509, cms, tsp, algos, keys
 # noinspection PyProtectedMember
 from certvalidator.path import ValidationPath
 
@@ -29,6 +29,7 @@ __all__ = [
     'UnacceptableSignerError'
 ]
 
+from oscrypto.errors import SignatureError
 
 logger = logging.getLogger(__name__)
 
@@ -356,3 +357,108 @@ class UnacceptableSignerError(SigningError):
     Error raised when a signer was judged unacceptable.
     """
     pass
+
+
+def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm):
+    # oscrypto doesn't support PSS with arbitrary parameters,
+    # so we rely on pyca/cryptography for this bit
+
+    hash_algo: algos.DigestAlgorithm = params['hash_algorithm']
+    md_name = hash_algo['algorithm'].native
+    if md_name != digest_algorithm:
+        raise ValueError(
+            f"PSS MD '{md_name}' must agree with signature "
+            f"MD '{digest_algorithm}'."
+        )  # pragma: nocover
+    mga: algos.MaskGenAlgorithm = params['mask_gen_algorithm']
+    if not mga['algorithm'].native == 'mgf1':
+        raise NotImplementedError("Only MFG1 is supported")
+
+    mgf_md_name = mga['parameters']['algorithm'].native
+
+    if mgf_md_name != md_name:
+        logger.warning(
+            f"Message digest for MGF1 is {mgf_md_name}, and the one used for "
+            f"signing is {md_name}. If these do not agree, some software may "
+            f"refuse to validate the signature."
+        )
+    salt_len: int = params['salt_length'].native
+
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+    except ImportError:  # pragma: nocover
+        raise SigningError("pyca/cryptography is required for generic PSS")
+
+    mgf_md = getattr(hashes, mgf_md_name.upper())
+    md = getattr(hashes, md_name.upper())
+    pss_padding = padding.PSS(
+        mgf=padding.MGF1(algorithm=mgf_md()),
+        salt_length=salt_len
+    )
+    return pss_padding, md()
+
+
+def _validate_pss_raw(signature: bytes, data: bytes, cert: x509.Certificate,
+                      params: algos.RSASSAPSSParams, digest_algorithm: str):
+
+    pss_padding, hash_algo = _process_pss_params(params, digest_algorithm)
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+    from cryptography.exceptions import InvalidSignature
+    pub_key: RSAPublicKey = serialization.load_der_public_key(
+        cert.public_key.dump()
+    )
+
+    try:
+        pub_key.verify(signature, data, pss_padding, hash_algo)
+    except InvalidSignature as e:
+        # reraise using oscrypto-style exception
+        raise SignatureError() from e
+
+
+def _sign_pss_raw(data: bytes, signing_key: keys.PrivateKeyInfo,
+                  params: algos.RSASSAPSSParams, digest_algorithm: str):
+
+    pss_padding, hash_algo = _process_pss_params(params, digest_algorithm)
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+    priv_key: RSAPrivateKey = serialization.load_der_private_key(
+        signing_key.dump(), password=None
+    )
+
+    return priv_key.sign(data=data, padding=pss_padding, algorithm=hash_algo)
+
+
+def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str):
+
+    digest_algorithm = digest_algorithm.lower()
+
+    try:
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+    except ImportError:  # pragma: nocover
+        raise SigningError("pyca/cryptography is required for generic PSS")
+
+    key: RSAPublicKey = serialization.load_der_public_key(
+        cert.public_key.dump()
+    )
+    md = getattr(hashes, digest_algorithm.upper())
+    # the PSS salt calculation function is not in the .pyi file, apparently.
+    # noinspection PyUnresolvedReferences
+    optimal_salt_len = padding.calculate_max_pss_salt_length(key, md())
+    return algos.RSASSAPSSParams({
+        'hash_algorithm': algos.DigestAlgorithm({
+            'algorithm': digest_algorithm
+        }),
+        'mask_gen_algorithm': algos.MaskGenAlgorithm({
+            'algorithm': 'mgf1',
+            'parameters': algos.DigestAlgorithm({
+                'algorithm': digest_algorithm
+            }),
+        }),
+        'salt_length': optimal_salt_len
+    })

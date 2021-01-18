@@ -34,7 +34,7 @@ from .fields import (
 )
 from .general import (
     SignatureStatus, find_cms_attribute,
-    UnacceptableSignerError, KeyUsageConstraints,
+    UnacceptableSignerError, KeyUsageConstraints, _validate_pss_raw,
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -118,6 +118,35 @@ def _extract_signer_info_and_certs(signed_data: cms.SignedData):
     return signer_info, cert, other_certs
 
 
+def _validate_raw(signature: bytes, signed_blob: bytes, cert: x509.Certificate,
+                  signature_algorithm: cms.SignedDigestAlgorithm,
+                  md_algorithm: str):
+    try:
+        verify_md = signature_algorithm.hash_algo
+    except ValueError:
+        verify_md = md_algorithm
+    sig_algo = signature_algorithm.signature_algo
+    if sig_algo == 'rsassa_pkcs1v15':
+        verify_func = asymmetric.rsa_pkcs1v15_verify
+    elif sig_algo == 'rsassa_pss':
+        _validate_pss_raw(
+            signature, signed_blob, cert, signature_algorithm['parameters'],
+            digest_algorithm=verify_md
+        )
+        return
+    elif sig_algo == 'ecdsa':
+        verify_func = asymmetric.ecdsa_verify
+    else:  # pragma: nocover
+        raise SignatureValidationError(
+            f"Signature mechanism {sig_algo} is not supported."
+        )
+
+    verify_func(
+        asymmetric.load_public_key(cert.public_key), signature,
+        signed_blob, hash_algorithm=verify_md
+    )
+
+
 def _validate_cms_signature(signed_data: cms.SignedData,
                             status_cls: Type[StatusType] = SignatureStatus,
                             raw_digest: bytes = None,
@@ -160,23 +189,8 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     valid = False
     if intact:
         try:
-            try:
-                verify_md = signature_algorithm.hash_algo
-            except ValueError:
-                verify_md = md_algorithm
-            sig_algo = signature_algorithm.signature_algo
-            if sig_algo == 'rsassa_pkcs1v15':
-                verify_func = asymmetric.rsa_pkcs1v15_verify
-            elif sig_algo == 'ecdsa':
-                verify_func = asymmetric.ecdsa_verify
-            else:  # pragma: nocover
-                raise SignatureValidationError(
-                    f"Signature mechanism {sig_algo} is not supported."
-                )
-
-            verify_func(
-                asymmetric.load_public_key(cert.public_key), signature,
-                signed_blob, hash_algorithm=verify_md
+            _validate_raw(
+                signature, signed_blob, cert, signature_algorithm, md_algorithm
             )
             valid = True
         except SignatureError:
