@@ -278,7 +278,7 @@ def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
 
 
 class AuthResult(misc.OrderedEnum):
-    UNKNOWN = 0
+    FAILED = 0
     USER = 1
     OWNER = 2
 
@@ -526,7 +526,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             if seed is not None:
                 self._recp_key_seed = seed
                 return AuthResult.USER
-        return AuthResult.UNKNOWN
+        return AuthResult.FAILED
 
     def derive_shared_encryption_key(self) -> bytes:
         if self._recp_key_seed is None:
@@ -1063,7 +1063,7 @@ class StandardSecurityHandler(SecurityHandler):
             owner_password, key = self._auth_user_password_legacy(id1, userpass)
             if owner_password:
                 return AuthResult.OWNER, key
-        return AuthResult.UNKNOWN, None
+        return AuthResult.FAILED, None
 
     def authenticate(self, credential, id1: bytes = None):
         rev = self.revision
@@ -1097,7 +1097,7 @@ class StandardSecurityHandler(SecurityHandler):
             result = AuthResult.USER
             key = _r6_derive_file_key(pw_bytes, u_entry_split, self.ueseed)
         else:
-            return AuthResult.UNKNOWN, None
+            return AuthResult.FAILED, None
 
         # check the file key against the perms entry
 
@@ -1567,8 +1567,8 @@ class PubKeySecurityHandler(SecurityHandler):
                 continue
             recp: cms.ContentInfo
             result = cf.authenticate(credential)
-            if result == AuthResult.UNKNOWN:
-                return AuthResult.UNKNOWN
+            if result == AuthResult.FAILED:
+                return AuthResult.FAILED
         return AuthResult.USER
 
     @staticmethod

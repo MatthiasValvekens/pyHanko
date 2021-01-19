@@ -826,7 +826,7 @@ def decrypt_with_password(infile, outfile, password, force):
                     "the owner password. Pass --force to decrypt the "
                     "file anyway."
                 )
-            elif auth_result == AuthResult.UNKNOWN:
+            elif auth_result == AuthResult.FAILED:
                 raise click.ClickException("Password didn't match.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:
@@ -874,7 +874,7 @@ def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
                         "Permission flags don't appear to allow change of "
                         "encryption. Pass --force to decrypt the file anyway."
                     )
-            elif auth_result == AuthResult.UNKNOWN:
+            elif auth_result == AuthResult.FAILED:
                 raise click.ClickException("Failed to decrypt the file.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:

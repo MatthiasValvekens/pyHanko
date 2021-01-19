@@ -753,7 +753,7 @@ def test_wrong_password(legacy):
     r = PdfFileReader(out)
     with pytest.raises(misc.PdfReadError):
         r.get_object(ref.reference)
-    assert r.decrypt("thispasswordiswrong") == AuthResult.UNKNOWN
+    assert r.decrypt("thispasswordiswrong") == AuthResult.FAILED
     assert r.security_handler._auth_failed
     assert r.security_handler.get_string_filter()._auth_failed
     with pytest.raises(misc.PdfReadError):
@@ -1181,7 +1181,7 @@ def test_pubkey_wrong_cert():
     w.write(out)
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
-    assert result == AuthResult.UNKNOWN
+    assert result == AuthResult.FAILED
 
     with pytest.raises(misc.PdfError):
         r.get_object(ref.reference)
