@@ -92,6 +92,7 @@ class Ctx(Enum):
     STAMP_STYLE = auto()
     STAMP_URL = auto()
     NEW_FIELD_SPEC = auto()
+    PREFER_PSS = auto()
 
 
 @click.group()
@@ -426,6 +427,8 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
 @click.option('--use-pades', help='sign PAdES-style [level B/B-T/B-LT]',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
+@click.option('--prefer-pss', is_flag=True, default=False, type=bool,
+              help='prefer RSASSA-PSS to PKCS#1 v1.5 padding, if available')
 @click.option('--with-validation-info', help='embed revocation info',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
@@ -442,9 +445,10 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
-           style_name, stamp_url):
+           style_name, stamp_url, prefer_pss):
     ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
     ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
+    ctx.obj[Ctx.PREFER_PSS] = prefer_pss
 
     if use_pades:
         subfilter = fields.SigSeedSubFilter.PADES
@@ -541,7 +545,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     
     signer = signers.SimpleSigner.load(
         cert_file=cert, key_file=key, key_passphrase=passphrase,
-        ca_chain_files=chain
+        ca_chain_files=chain, prefer_pss=ctx.obj[Ctx.PREFER_PSS]
     )
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
@@ -581,7 +585,8 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
         passfile.close()
 
     signer = signers.SimpleSigner.load_pkcs12(
-        pfx_file=pfx, passphrase=passphrase, ca_chain_files=chain
+        pfx_file=pfx, passphrase=passphrase, ca_chain_files=chain,
+        prefer_pss=ctx.obj[Ctx.PREFER_PSS]
     )
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
