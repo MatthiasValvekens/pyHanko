@@ -1,17 +1,59 @@
 """
-Legacy encryption implementation based on PyPDF2 see (License.PyPDF2)
-with additions for pyHanko:
+.. versionchanged: 0.3.0
+    Added support for PDF 2.0 encryption standards and crypt filters.
 
- * The :class:`SignatureHandler` abstraction is new.
- * The AES-256 implementation for PDF 2.0 is also new.
+Utilities for PDF encryption. This module covers all methods outlined in the
+standard:
 
-The members of this module are all considered internal API, and are therefore
-subject to change without notice.
+* Legacy RC4-based encryption (based on PyPDF2 code).
+* AES-128 encryption with legacy key derivation (partly based on PyPDF2 code).
+* PDF 2.0 AES-256 encryption.
+* Public key encryption backed by any of the above.
 
-One should also be aware that the legacy encryption scheme implemented here is
-(very) weak, and we only support it for compatibility reasons. Under no
-circumstances should it still be used to encrypt new files.
+Following the language in the standard, encryption operations are backed by
+subclasses of the :class:`SecurityHandler` class, which provides a more or less
+generic API.
+
+.. danger::
+    The members of this module are all considered internal API, and are therefore
+    subject to change without notice.
+
+.. danger::
+    One should also be aware that the legacy encryption scheme implemented
+    here is (very) weak, and we only support it for compatibility reasons.
+    Under no circumstances should it still be used to encrypt new files.
+
+
+About crypt filters
+-------------------
+
+Crypt filters are objects that handle encryption and decryption of streams and
+strings, either for all of them, or for a specific subset (e.g. streams
+representing embedded files). In the context of the PDF standard, crypt filters
+are a notion that only makes sense for security handlers of version 4 and up.
+In pyHanko, however, *all* encryption and decryption operations pass through
+crypt filters, and the serialisation/deserialisation logic in
+:class:`SecurityHandler` and its subclasses transparently deals with staying
+backwards compatible with earlier revisions.
+
+Internally, pyHanko loosely distinguishes between implicit and explicit
+uses of crypt filters:
+
+* Explicit crypt filters are used by directly referring to them from the
+  ``/Filter`` entry of a stream dictionary. These are invoked in the usual
+  stream decoding process.
+* Implicit crypt filters are set by the ``/StmF`` and ``/StrF`` entries
+  in the security handler's crypt filter configuration, and are invoked by the
+  object reading/writing procedures as necessary. These filters are invisble
+  to the stream encoding/decoding process: the
+  :attr:`~.generic.StreamObject.encoded_data` attribute of
+  an "implicitly encrypted" stream will therefore contain decrypted data ready
+  to be decoded in the usual way.
+
+As long as you don't require access to encoded object data and/or raw encrypted
+object data, this distiction should be irrelevant to you as an API user.
 """
+
 import logging
 import abc
 import struct
