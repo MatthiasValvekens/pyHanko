@@ -866,13 +866,13 @@ def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
                     "File was not encrypted with a public-key security handler."
                 )
             auth_result = r.decrypt_pubkey(sedk)
-            perms = r.security_handler.perms
             if auth_result == AuthResult.USER:
-                # 2nd bit is the one indicating that change of encryption is OK
-                if not force and not (perms & 2):
+                # TODO read 2nd bit of perms in CMS enveloped data
+                #  is the one indicating that change of encryption is OK
+                if not force:
                     raise click.ClickException(
-                        "Permission flags don't appear to allow change of "
-                        "encryption. Pass --force to decrypt the file anyway."
+                        "Change of encryption is typically not allowed with "
+                        "user access. Pass --force to decrypt the file anyway."
                     )
             elif auth_result == AuthResult.FAILED:
                 raise click.ClickException("Failed to decrypt the file.")

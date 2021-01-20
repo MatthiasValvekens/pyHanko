@@ -15,8 +15,8 @@ subclasses of the :class:`SecurityHandler` class, which provides a more or less
 generic API.
 
 .. danger::
-    The members of this module are all considered internal API, and are therefore
-    subject to change without notice.
+    The members of this module are all considered internal API, and are
+    therefore subject to change without notice.
 
 .. danger::
     One should also be aware that the legacy encryption scheme implemented
@@ -1442,7 +1442,7 @@ class PubKeySecurityHandler(SecurityHandler):
                     encrypt_metadata=encrypt_metadata
                 )
         sh = PubKeySecurityHandler(
-            version, subfilter, keylen_bytes, perm_flags=-4,
+            version, subfilter, keylen_bytes,
             encrypt_metadata=encrypt_metadata, crypt_filter_config=cfc,
             recipient_objs=None
         )
@@ -1451,10 +1451,9 @@ class PubKeySecurityHandler(SecurityHandler):
 
     def __init__(self, version: SecurityHandlerVersion,
                  pubkey_handler_subfilter: PubKeyAdbeSubFilter,
-                 legacy_keylen, perm_flags: int, encrypt_metadata=True,
+                 legacy_keylen, encrypt_metadata=True,
                  crypt_filter_config: 'CryptFilterConfiguration' = None,
                  recipient_objs: list = None):
-        self.perms = perm_flags
 
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
@@ -1556,7 +1555,6 @@ class PubKeySecurityHandler(SecurityHandler):
             version=v, pubkey_handler_subfilter=subfilter,
             legacy_keylen=keylen, recipient_objs=recipients,
             crypt_filter_config=cfc,
-            perm_flags=int(encrypt_dict.get('/P', ALL_PERMS)),
             encrypt_metadata=encrypt_dict.get_and_apply(
                 '/EncryptMetadata', bool, default=True
             )
@@ -1566,7 +1564,6 @@ class PubKeySecurityHandler(SecurityHandler):
         result = generic.DictionaryObject()
         result['/Filter'] = generic.NameObject(self.get_name())
         result['/SubFilter'] = self.subfilter.value
-        result['/P'] = generic.NumberObject(self.perms)
         result['/V'] = generic.NumberObject(self.version.value)
         result['/Length'] = generic.NumberObject(self.keylen * 8)
         if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
@@ -1649,7 +1646,7 @@ class PubKeySecurityHandler(SecurityHandler):
             return PubKeyAESCryptFilter(
                 keylen=32,
                 encrypt_metadata=encrypt_metadata, recipients=recipient_objs,
-                acts_as_default = acts_as_default
+                acts_as_default=acts_as_default
             )
         else:
             raise NotImplementedError("No such crypt filter method: " + cfm)

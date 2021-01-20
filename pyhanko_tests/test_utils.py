@@ -1014,7 +1014,7 @@ def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
     sh = PubKeySecurityHandler(
         version=SecurityHandlerVersion.RC4_OR_AES128,
         pubkey_handler_subfilter=PubKeyAdbeSubFilter.S5,
-        legacy_keylen=16, perm_flags=-4, crypt_filter_config=cfc
+        legacy_keylen=16, crypt_filter_config=cfc
     )
 
     # if main_unencrypted, these should be no-ops
