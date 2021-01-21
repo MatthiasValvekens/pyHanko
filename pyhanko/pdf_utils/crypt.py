@@ -70,6 +70,17 @@ from oscrypto import symmetric, asymmetric, keys as oskeys
 
 from . import generic, misc
 
+__all__ = [
+    'SecurityHandler', 'StandardSecurityHandler', 'PubKeySecurityHandler',
+    'SecurityHandlerVersion', 'StandardSecuritySettingsRevision',
+    'PubKeyAdbeSubFilter', 'CryptFilterConfiguration', 'CryptFilter',
+    'StandardCryptFilter', 'PubKeyCryptFilter', 'IdentityCryptFilter',
+    'RC4CryptFilterMixin', 'AESCryptFilterMixin', 'StandardAESCryptFilter',
+    'StandardRC4CryptFilter', 'PubKeyAESCryptFilter', 'PubKeyRC4CryptFilter',
+    'EnvelopeKeyDecrypter', 'SimpleEnvelopeKeyDecrypter',
+    'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY'
+]
+
 logger = logging.getLogger(__name__)
 
 # ref: pdf1.8 spec section 3.5.2 algorithm 3.2
@@ -125,15 +136,15 @@ def _derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
 
 
 @dataclass
-class R6KeyEntry:
+class _R6KeyEntry:
     hash_value: bytes
     validation_salt: bytes
     key_salt: bytes
 
     @classmethod
-    def from_bytes(cls, entry: bytes) -> 'R6KeyEntry':
+    def from_bytes(cls, entry: bytes) -> '_R6KeyEntry':
         assert len(entry) == 48
-        return R6KeyEntry(entry[:32], entry[32:40], entry[40:48])
+        return _R6KeyEntry(entry[:32], entry[32:40], entry[40:48])
 
 
 def _legacy_normalise_pw(password: Union[str, bytes]) -> bytes:
@@ -150,13 +161,13 @@ def _r6_normalise_pw(password: Union[str, bytes]) -> bytes:
     return password[:127]
 
 
-def _r6_password_authenticate(pw_bytes: bytes, entry: R6KeyEntry,
+def _r6_password_authenticate(pw_bytes: bytes, entry: _R6KeyEntry,
                               u_entry: Optional[bytes] = None):
     purported_hash = _r6_hash_algo(pw_bytes, entry.validation_salt, u_entry)
     return purported_hash == entry.hash_value
 
 
-def _r6_derive_file_key(pw_bytes: bytes, entry: R6KeyEntry, e_entry: bytes,
+def _r6_derive_file_key(pw_bytes: bytes, entry: _R6KeyEntry, e_entry: bytes,
                         u_entry: Optional[bytes] = None):
     interm_key = _r6_hash_algo(pw_bytes, entry.key_salt, u_entry)
     assert len(e_entry) == 32
@@ -307,8 +318,20 @@ def _compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
 
 
 def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
-                             use_aes=False) \
-        -> bytes:
+                             use_aes=False) -> bytes:
+    """
+    Function that does the key derivation for PDF's legacy security handlers.
+
+    :param shared_key:
+        Global file encryption key.
+    :param idnum:
+        ID of the object being written.
+    :param generation:
+        Generation number of the object being written.
+    :param use_aes:
+        Boolean indicating whether the security handler uses RC4 or AES(-128).
+    :return:
+    """
     pack1 = struct.pack("<i", idnum)[:3]
     pack2 = struct.pack("<i", generation)[:2]
     key = shared_key + pack1 + pack2
@@ -320,6 +343,9 @@ def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
 
 
 class AuthResult(misc.OrderedEnum):
+    """
+    Describes the result of an authentication
+    """
     FAILED = 0
     USER = 1
     OWNER = 2
@@ -327,13 +353,55 @@ class AuthResult(misc.OrderedEnum):
 
 @enum.unique
 class SecurityHandlerVersion(misc.OrderedEnum):
+    """
+    Indicates the security handler's version.
+
+    The enum constants are named more or less in accordance with the
+    cryptographic algorithms they permit.
+    """
     RC4_40 = 1
     RC4_LONGER_KEYS = 2
     RC4_OR_AES128 = 4
     AES256 = 5
 
+    OTHER = None
+    """
+    Placeholder value for custom security handlers.
+    """
+
 
 class SecurityHandler:
+    """
+    Generic PDF security handler interface.
+
+    This class contains relatively little actual functionality, except for
+    some common initialisation logic and bookkeeping machinery to register
+    security handler implementations.
+
+    :param version:
+        Indicates the version of the security handler to use, as described
+        in the specification. See :class:`.SecurityHandlerVersion`.
+    :param legacy_keylen:
+        Key length in bytes (only relevant for legacy encryption handlers).
+    :param crypt_filter_config:
+        The crypt filter configuration for the security handler, in the
+        form of a :class:`.CryptFilterConfiguration` object.
+
+        .. note::
+            PyHanko implements legacy security handlers (which, according to
+            the standard, aren't crypt filter-aware) using crypt filters
+            as well, even though they aren't serialised to the output file.
+    :param encrypt_metadata:
+        Flag indicating whether document (XMP) metadata is to be encrypted.
+
+        .. warning::
+            Currently, PyHanko does not manage metadata streams, so until
+            that changes, it is the responsibility of the API user to mark
+            metadata streams using the `/Identity` crypt filter as required.
+
+            Nonetheless, the value of this flag is required in key derivation
+            computations, so the security handler needs to know about it.
+    """
 
     __registered_subclasses: Dict[str, Type['SecurityHandler']] = dict()
 
@@ -359,14 +427,41 @@ class SecurityHandler:
 
     @staticmethod
     def register(cls: Type['SecurityHandler']):
-        # don't put this in __init_subclass__, so that people can override
+        """
+        Register a security handler class.
+        Intended to be used as a decorator on subclasses.
+
+        See :meth:`build` for further information.
+
+        :param cls:
+            A subclass of :class:`.SecurityHandler`.
+        """
+        # don't put this in __init_subclass__, so that people can inherit from
         # security handlers if they want
         SecurityHandler.__registered_subclasses[cls.get_name()] = cls
         return cls
 
     @staticmethod
     def build(encrypt_dict: generic.DictionaryObject) -> 'SecurityHandler':
-        # TODO allow selecting by subfilter
+        """
+        Instantiate an appropriate :class:`.SecurityHandler` from a PDF
+        document's encryption dictionary.
+
+        PyHanko will search the registry for a security handler with
+        a name matching the ``/Filter`` entry. Failing that, a security
+        handler implementing the protocol designated by the
+        ``/SubFilter`` entry (see :meth:`support_generic_subfilters`) will be
+        chosen.
+
+        Once an appropriate :class:`.SecurityHandler` subclass has been
+        selected, pyHanko will invoke the subclass's
+        :meth:`instantiate_from_pdf_object` method with the original encryption
+        dictionary as its argument.
+
+        :param encrypt_dict:
+            A PDF encryption dictionary.
+        :return:
+        """
         handler_name = encrypt_dict.get('/Filter', '/Standard')
         try:
             cls = SecurityHandler.__registered_subclasses[handler_name]
@@ -382,7 +477,6 @@ class SecurityHandler:
                     f"and the encryption dictionary does not contain a generic "
                     f"/SubFilter entry."
                 )
-
             try:
                 cls = next(
                     h for h in SecurityHandler.__registered_subclasses.values()
@@ -399,27 +493,81 @@ class SecurityHandler:
 
     @classmethod
     def get_name(cls) -> str:
+        """
+        Retrieves the name of this security handler.
+
+        :return:
+            The name of this security handler.
+        """
         raise NotImplementedError
 
     @classmethod
     def support_generic_subfilters(cls) -> Set[str]:
+        """
+        Indicates the generic ``/SubFilter`` values that this security handler
+        supports.
+
+        :return:
+            A set of generic protocols (indicated in the ``/SubFilter`` entry
+            of an encryption dictionary) that this :class:`.SecurityHandler`
+            class implements. Defaults to the empty set.
+        """
         return set()
 
     @classmethod
     def instantiate_from_pdf_object(cls,
                                     encrypt_dict: generic.DictionaryObject):
+        """
+        Instantiate an object of this class using a PDF encryption dictionary
+        as input.
+
+        :param encrypt_dict:
+            A PDF encryption dictionary.
+        :return:
+        """
         raise NotImplementedError
 
-    def as_pdf_object(self):
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Serialise this security handler to a PDF encryption dictionary.
+
+        :return:
+            A PDF encryption dictionary.
+        """
         raise NotImplementedError
 
     def authenticate(self, credential, id1=None) -> AuthResult:
+        """
+        Authenticate a credential holder with this security handler.
+
+        :param credential:
+            A credential.
+            The type of the credential is left up to the subclasses.
+        :param id1:
+            The first part of the document ID of the document being accessed.
+        :return:
+            A :class:`AuthResult` object indicating the level of access
+            obtained.
+        """
         raise NotImplementedError
 
     def get_string_filter(self) -> 'CryptFilter':
+        """
+        :return:
+            The crypt filter responsible for decrypting strings
+            for this security handler.
+        """
         return self.crypt_filter_config.get_for_string()
 
     def get_stream_filter(self, name=None) -> 'CryptFilter':
+        """
+        :param name:
+            Optionally specify a crypt filter by name.
+        :return:
+            The default crypt filter responsible for decrypting streams
+            for this security handler, or the crypt filter named ``name``,
+            if not ``None``.
+        """
         if name is None:
             return self.crypt_filter_config.get_for_stream()
         return self.crypt_filter_config[name]
@@ -427,6 +575,8 @@ class SecurityHandler:
 
 @enum.unique
 class StandardSecuritySettingsRevision(misc.OrderedEnum):
+    """Indicate the standard security handler revision to emulate."""
+
     RC4_BASIC = 2
     RC4_EXTENDED = 3
     RC4_OR_AES128 = 4
@@ -434,51 +584,160 @@ class StandardSecuritySettingsRevision(misc.OrderedEnum):
 
 
 ALL_PERMS = -4
-
-# TODO handle /AuthEvent
+"""
+Dummy value that translates to "everything is allowed" in an
+encrypted PDF document.
+"""
 
 
 class CryptFilter:
+    """
+    Generic abstract crypt filter class.
+
+    The superclass only handles the binding with the security handler, and
+    offers some default implementations for serialisation routines that may
+    be overridden in subclasses.
+
+    There is generally no requirement for crypt filters to be compatible with
+    *any* security handler (the leaf classes in this module aren't), but
+    the API supports mixin usage so code can be shared.
+    """
+
     _handler: 'SecurityHandler' = None
     _shared_key: Optional[bytes] = None
 
-    def set_security_handler(self, handler):
+    def _set_security_handler(self, handler):
+        """
+        Set the security handler to which this crypt filter is tied.
+
+        Called by pyHanko during initialisation.
+        """
         self._handler = handler
         self._shared_key = None
 
     @property
     def _auth_failed(self) -> bool:
+        """
+        Indicate whether authentication previously failed for this crypt filter.
+
+        Note that re-authenticating is not forbidden, this function mostly
+        exists to make error reporting easier.
+
+        Crypt filters are allowed to manage their own authentication, but may
+        defer to the security handler as well.
+        """
         raise NotImplementedError
 
     @property
     def method(self) -> generic.NameObject:
+        """
+        :return:
+            The method name (``/CFM`` entry) associated with this crypt filter.
+        """
         raise NotImplementedError
 
     @property
-    def keylen(self) -> generic.NameObject:
+    def keylen(self) -> int:
+        """
+        :return:
+            The keylength (in bytes) of the key associated with this crypt
+            filter.
+        """
         raise NotImplementedError
 
     def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
+        """
+        Encrypt plaintext with the specified key.
+
+        :param key:
+            The current local key, which may or may not be equal to this
+            crypt filter's global key.
+        :param plaintext:
+            Plaintext to encrypt.
+        :param params:
+            Optional parameters private to the crypt filter,
+            specified as a PDF dictionary. These can only be used for
+            explicit crypt filters; the parameters are then sourced from
+            the corresponding entry in ``/DecodeParms``.
+        :return:
+            The resulting ciphertext.
+        """
         raise NotImplementedError
 
     def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
+        """
+        Decrypt ciphertext with the specified key.
+
+        :param key:
+            The current local key, which may or may not be equal to this
+            crypt filter's global key.
+        :param ciphertext:
+            Ciphertext to decrypt.
+        :param params:
+            Optional parameters private to the crypt filter,
+            specified as a PDF dictionary. These can only be used for
+            explicit crypt filters; the parameters are then sourced from
+            the corresponding entry in ``/DecodeParms``.
+        :return:
+            The resulting plaintext.
+        """
         raise NotImplementedError
 
     def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Serialise this crypt filter to a PDF crypt filter dictionary.
+
+        .. note::
+            Implementations are encouraged to use a cooperative inheritance
+            model, where subclasses first call ``super().as_pdf_object()``
+            and add the keys they need before returning the result.
+
+            This makes it easy to write crypt filter mixins that can provide
+            functionality to multiple handlers.
+
+        :return:
+            A PDF crypt filter dictionary.
+        """
         result = generic.DictionaryObject({
+            # TODO handle /AuthEvent properly
             generic.NameObject('/AuthEvent'): generic.NameObject('/DocOpen'),
             generic.NameObject('/CFM'): self.method
         })
         return result
 
     def derive_shared_encryption_key(self) -> bytes:
+        """
+        Compute the (global) file encryption key for this crypt filter.
+
+        :return:
+            The key, as a :class:`bytes` object.
+        :raise misc.PdfError:
+            Raised if the data needed to derive the key is not present (e.g.
+            because the caller hasn't authenticated yet).
+        """
         raise NotImplementedError
 
     def derive_object_key(self, idnum, generation) -> bytes:
+        """
+        Derive the encryption key for a specific object, based on the shared
+        file encryption key.
+
+        :param idnum:
+            ID of the object being encrypted.
+        :param generation:
+            Generation number of the object being encrypted.
+        :return:
+            The local key to use for this object.
+        """
         raise NotImplementedError
 
     @property
     def shared_key(self) -> bytes:
+        """
+        Return the shared file encryption key for this crypt filter, or
+        attempt to compute it using :meth:`derive_shared_encryption_key`
+        if not available.
+        """
         key = self._shared_key
         if key is None:
             if self._auth_failed:
@@ -496,10 +755,10 @@ class StandardCryptFilter(CryptFilter, abc.ABC):
             return self._handler._auth_failed
         raise NotImplementedError
 
-    def set_security_handler(self, handler):
+    def _set_security_handler(self, handler):
         if not isinstance(handler, StandardSecurityHandler):
             raise TypeError  # pragma: nocover
-        super().set_security_handler(handler)
+        super()._set_security_handler(handler)
         self._shared_key = None
 
     def derive_shared_encryption_key(self) -> bytes:
@@ -529,10 +788,10 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
     def _auth_failed(self) -> bool:
         return self._pubkey_auth_failed
 
-    def set_security_handler(self, handler):
+    def _set_security_handler(self, handler):
         if not isinstance(handler, PubKeySecurityHandler):
             raise TypeError  # pragma: nocover
-        super().set_security_handler(handler)
+        super()._set_security_handler(handler)
         self._shared_key = self._recp_key_seed = None
 
     def add_recipients(self, certs: List[x509.Certificate]):
@@ -602,6 +861,14 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
 
 
 class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
+    """
+    Class implementing the trivial crypt filter.
+
+    This is a singleton class, so all its instances are identical.
+    Additionally, some of the :class:`.CryptFilter` API is nonfunctional.
+    In particular, :meth:`as_pdf_object` always raises an error, since the
+    ``/Identity`` filter cannot be serialised.
+    """
 
     method = generic.NameObject('/None')
     keylen = 0
@@ -613,7 +880,7 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
     def derive_object_key(self, idnum, generation) -> bytes:
         return b''
 
-    def set_security_handler(self, handler):
+    def _set_security_handler(self, handler):
         return
 
     def as_pdf_object(self):
@@ -734,7 +1001,7 @@ class CryptFilterConfiguration:
 
     def set_security_handler(self, handler: 'SecurityHandler'):
         for cf in self._crypt_filters.values():
-            cf.set_security_handler(handler)
+            cf._set_security_handler(handler)
 
     def get_for_stream(self):
         return self._default_stream_filter
@@ -1127,8 +1394,8 @@ class StandardSecurityHandler(SecurityHandler):
     # Algorithm 2.A in ISO 32000-2 § 7.6.4.3.3
     def _authenticate_r6(self, password) -> Tuple[AuthResult, Optional[bytes]]:
         pw_bytes = _r6_normalise_pw(password)
-        o_entry_split = R6KeyEntry.from_bytes(self.odata)
-        u_entry_split = R6KeyEntry.from_bytes(self.udata)
+        o_entry_split = _R6KeyEntry.from_bytes(self.odata)
+        u_entry_split = _R6KeyEntry.from_bytes(self.udata)
 
         if _r6_password_authenticate(pw_bytes, o_entry_split, self.udata):
             result = AuthResult.OWNER

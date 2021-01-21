@@ -765,7 +765,7 @@ def test_identity_crypt_filter_api():
     # confirm that the CryptFilter API of the identity filter doesn't do
     # anything unexpected, even though we typically don't invoke it explicitly.
     idf: IdentityCryptFilter = IdentityCryptFilter()
-    idf.set_security_handler(None)
+    idf._set_security_handler(None)
     assert not idf._auth_failed
     assert isinstance(idf.derive_shared_encryption_key(), bytes)
     assert isinstance(idf.derive_object_key(1, 2), bytes)
