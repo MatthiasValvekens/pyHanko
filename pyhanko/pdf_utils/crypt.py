@@ -78,7 +78,8 @@ __all__ = [
     'RC4CryptFilterMixin', 'AESCryptFilterMixin', 'StandardAESCryptFilter',
     'StandardRC4CryptFilter', 'PubKeyAESCryptFilter', 'PubKeyRC4CryptFilter',
     'EnvelopeKeyDecrypter', 'SimpleEnvelopeKeyDecrypter',
-    'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY'
+    'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY',
+    'legacy_derive_object_key'
 ]
 
 logger = logging.getLogger(__name__)
@@ -875,25 +876,79 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
     _auth_failed = False
 
     def derive_shared_encryption_key(self) -> bytes:
+        """Always returns an empty byte string."""
         return b''  # pragma: nocover
 
     def derive_object_key(self, idnum, generation) -> bytes:
+        """
+        Always returns an empty byte string.
+
+        :param idnum:
+            Ignored.
+        :param generation:
+            Ignored.
+        :return:
+        """
         return b''
 
     def _set_security_handler(self, handler):
+        """
+        No-op.
+
+        :param handler:
+            Ignored.
+        :return:
+        """
         return
 
     def as_pdf_object(self):
+        """
+        Not implemented for this crypt filter.
+
+        :raise misc.PdfError:
+            Always.
+        """
         raise misc.PdfError("Identity filter cannot be serialised")
 
     def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
+        """
+        Identity function.
+
+        :param key:
+            Ignored.
+        :param plaintext:
+            Returned as-is.
+        :param params:
+            Ignored.
+        :return:
+            The original plaintext.
+        """
         return plaintext
 
     def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
+        """
+        Identity function.
+
+        :param key:
+            Ignored.
+        :param ciphertext:
+            Returned as-is.
+        :param params:
+            Ignored.
+        :return:
+            The original ciphertext.
+        """
         return ciphertext
 
 
 class RC4CryptFilterMixin(CryptFilter, abc.ABC):
+    """
+    Mixin for RC4-based crypt filters.
+
+    :param keylen:
+        Key length, in bytes. Defaults to 5.
+    """
+
     method = generic.NameObject('/V2')
     keylen = None
 
@@ -902,16 +957,52 @@ class RC4CryptFilterMixin(CryptFilter, abc.ABC):
         super().__init__(**kwargs)
 
     def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
+        """
+        Encrypt data using RC4.
+
+        :param key:
+            Local encryption key.
+        :param plaintext:
+            Plaintext to encrypt.
+        :param params:
+            Ignored.
+        :return:
+            Ciphertext.
+        """
         return symmetric.rc4_encrypt(key, plaintext)
 
     def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
+        """
+        Decrypt data using RC4.
+
+        :param key:
+            Local encryption key.
+        :param ciphertext:
+            Ciphertext to decrypt.
+        :param params:
+            Ignored.
+        :return:
+            Plaintext.
+        """
         return symmetric.rc4_encrypt(key, ciphertext)
 
     def derive_object_key(self, idnum, generation) -> bytes:
+        """
+        Derive the local key for the given object ID and generation number,
+        by calling :func:`.legacy_derive_object_key`.
+
+        :param idnum:
+            ID of the object being encrypted.
+        :param generation:
+            Generation number of the object being encrypted.
+        :return:
+            The local key.
+        """
         return legacy_derive_object_key(self.shared_key, idnum, generation)
 
 
 class AESCryptFilterMixin(CryptFilter, abc.ABC):
+    """Mixin for AES-based crypt filters."""
     keylen = None
     method = None
 
@@ -926,17 +1017,59 @@ class AESCryptFilterMixin(CryptFilter, abc.ABC):
         super().__init__(**kwargs)
 
     def encrypt(self, key, plaintext: bytes, params=None):
+        """
+        Encrypt data using AES in CBC mode, with PKCS#7 padding.
+
+        :param key:
+            The key to use.
+        :param plaintext:
+            The plaintext to be encrypted.
+        :param params:
+            Ignored.
+        :return:
+            The resulting ciphertext, prepended with a 16-byte initialisation
+            vector.
+        """
         iv, ciphertext = symmetric.aes_cbc_pkcs7_encrypt(
             key, plaintext, secrets.token_bytes(16)
         )
         return iv + ciphertext
 
     def decrypt(self, key, ciphertext: bytes, params=None) -> bytes:
+        """
+        Decrypt data using AES in CBC mode, with PKCS#7 padding.
+
+        :param key:
+            The key to use.
+        :param ciphertext:
+            The ciphertext to be decrypted, prepended with a 16-byte
+            initialisation vector.
+        :param params:
+            Ignored.
+        :return:
+            The resulting plaintext.
+        """
         iv, data = ciphertext[:16], ciphertext[16:]
         return symmetric.aes_cbc_pkcs7_decrypt(key, data, iv)
 
     def derive_object_key(self, idnum, generation) -> bytes:
-        if self._handler.version == SecurityHandlerVersion.AES256:
+        """
+        Derive the local key for the given object ID and generation number.
+
+        If the associated handler is of version
+        :attr:`.SecurityHandlerVersion.AES256` or greater, this method
+        simply returns the global key as-is.
+        If not, the computation is carried out by
+        :func:`.legacy_derive_object_key`.
+
+        :param idnum:
+            ID of the object being encrypted.
+        :param generation:
+            Generation number of the object being encrypted.
+        :return:
+            The local key.
+        """
+        if self._handler.version >= SecurityHandlerVersion.AES256:
             return self.shared_key
         else:
             return legacy_derive_object_key(
@@ -945,27 +1078,70 @@ class AESCryptFilterMixin(CryptFilter, abc.ABC):
 
 
 class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
+    """
+    AES crypt filter for the standard security handler.
+    """
     pass
 
 
 class PubKeyAESCryptFilter(PubKeyCryptFilter, AESCryptFilterMixin):
+    """
+    AES crypt filter for public key security handlers.
+    """
     pass
 
 
 class StandardRC4CryptFilter(StandardCryptFilter, RC4CryptFilterMixin):
+    """
+    RC4 crypt filter for the standard security handler.
+    """
     pass
 
 
 class PubKeyRC4CryptFilter(PubKeyCryptFilter, RC4CryptFilterMixin):
+    """
+    RC4 crypt filter for public key security handlers.
+    """
     pass
 
 
 STD_CF = generic.NameObject('/StdCF')
+"""
+Default name to use for the default crypt filter in the standard security
+handler.
+"""
+
 DEFAULT_CRYPT_FILTER = generic.NameObject('/DefaultCryptFilter')
+"""
+Default name to use for the default crypt filter in public key security
+handlers.
+"""
+
 IDENTITY = generic.NameObject('/Identity')
+"""
+Name of the identity crypt filter.
+"""
 
 
 class CryptFilterConfiguration:
+    """
+    Crypt filter store attached to a security handler.
+
+    Instances of this class are not designed to be reusable.
+
+    :param crypt_filters:
+        A dictionary mapping names to their corresponding crypt filters.
+    :param default_stream_filter:
+        Name of the default crypt filter to use for streams.
+    :param default_stream_filter:
+        Name of the default crypt filter to use for strings.
+    :param default_file_filter:
+        Name of the default crypt filter to use for embedded files.
+
+        .. note::
+            PyHanko currently is not aware of embedded files, so managing these
+            is the API user's responsibility.
+    """
 
     def __init__(self, crypt_filters: Dict[str, CryptFilter] = None,
                  default_stream_filter=IDENTITY, default_string_filter=IDENTITY,
@@ -996,35 +1172,75 @@ class CryptFilterConfiguration:
             or item in self._crypt_filters
         )
 
-    def values(self):
+    def filters(self):
+        """Enumerate all crypt filters in this configuration."""
         return self._crypt_filters.values()
 
     def set_security_handler(self, handler: 'SecurityHandler'):
+        """
+        Set the security handler on all crypt filters in this configuration.
+
+        :param handler:
+            A :class:`.SecurityHandler` instance.
+        """
         for cf in self._crypt_filters.values():
             cf._set_security_handler(handler)
 
     def get_for_stream(self):
+        """
+        Retrieve the default crypt filter to use with streams.
+
+        :return:
+            A :class:`.CryptFilter` instance.
+        """
         return self._default_stream_filter
 
     def get_for_string(self):
+        """
+        Retrieve the default crypt filter to use with strings.
+
+        :return:
+            A :class:`.CryptFilter` instance.
+        """
         return self._default_string_filter
 
     def get_for_embedded_file(self):
+        """
+        Retrieve the default crypt filter to use with embedded files.
+
+        :return:
+            A :class:`.CryptFilter` instance.
+        """
         return self._default_file_filter
 
     def as_pdf_object(self):
+        """
+        Serialise this crypt filter configuration to a dictionary object,
+        including all its subordinate crypt filters (with the exception of
+        the identity filter, if relevant).
+        """
         result = generic.DictionaryObject()
         result['/StmF'] = self._default_stream_filter_name
         result['/StrF'] = self._default_string_filter_name
         if self._default_file_filter_name is not None:
             result['/EFF'] = self._default_file_filter_name
         result['/CF'] = generic.DictionaryObject({
-            key: value.as_pdf_object()
+            generic.NameObject(key): value.as_pdf_object()
             for key, value in self._crypt_filters.items() if key != IDENTITY
         })
         return result
 
     def default_filters(self):
+        """
+        Return the "default" filters associated with this crypt filter
+        configuration, i.e. those registered as the defaults for strings
+        and streams, respectively.
+
+        These sometimes require special treatment (as per the specification).
+
+        :return:
+            A set with one or two elements.
+        """
         stmf = self._default_stream_filter
         strf = self._default_string_filter
         return {stmf, strf} if stmf is not strf else {stmf}
