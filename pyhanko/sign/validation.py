@@ -613,15 +613,18 @@ class EmbeddedPdfSignature:
         message = cms.ContentInfo.load(pkcs7_content)
         signed_data = message['content']
         self.signed_data: cms.SignedData = signed_data
-        sd_digest = signed_data['digest_algorithms'][0]
-        # FIXME I don't think this is always the correct choice.
-        #  It's the MD algorithm used within the CMS object to compute the
-        #  hash of all signed attributes, but the document hash may have
-        #  been computed using a different algorithm!
-        self.md_algorithm = sd_digest['algorithm'].native.lower()
 
         self.signer_info, self.signer_cert, _ = \
             _extract_signer_info_and_certs(signed_data)
+
+        # The PDF standard does not define a way to specify the digest algorithm
+        # used other than this one.
+        # However, RFC 5652 § 11.2 states that the message_digest attribute
+        # (which in our case is the PDF's ByteRange digest) is to be computed
+        # using the signer's digest algorithm. This can only refer
+        # to the corresponding SignerInfo entry.
+        digest_algo = self.signer_info['digest_algorithm']
+        self.md_algorithm = digest_algo['algorithm'].native.lower()
 
         # grab the revision to which the signature applies
         self.signed_revision = self.reader.xrefs.get_introducing_revision(
