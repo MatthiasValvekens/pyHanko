@@ -748,6 +748,9 @@ class CryptFilter:
 
 
 class StandardCryptFilter(CryptFilter, abc.ABC):
+    """
+    Crypt filter for use with the standard security handler.
+    """
     _handler: 'StandardSecurityHandler' = None
 
     @property
@@ -774,6 +777,25 @@ class StandardCryptFilter(CryptFilter, abc.ABC):
 
 
 class PubKeyCryptFilter(CryptFilter, abc.ABC):
+    """
+    Crypt filter for use with public key security handler.
+    These are a little more independent than their counterparts for
+    the standard security handlers, since different crypt filters
+    can cater to different sets of recipients.
+
+    :param recipients:
+        List of CMS objects encoding recipient information for this crypt
+        filters.
+    :param acts_as_default:
+        Indicates whether this filter is intended to be used in
+        ``/StrF`` or ``/StmF``.
+    :param encrypt_metadata:
+        Whether this crypt filter should encrypt document-level metadata.
+
+        .. warning::
+            See :class:`.SecurityHandlers` for some background on the
+            way pyHanko interprets this value.
+    """
     _handler: 'PubKeySecurityHandler' = None
 
     def __init__(self, *, recipients=None, acts_as_default=False,
@@ -796,7 +818,13 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         self._shared_key = self._recp_key_seed = None
 
     def add_recipients(self, certs: List[x509.Certificate]):
-        # this always adds one full CMS object to the Recipients array
+        """
+        Add recipients to this crypt filter.
+        This always adds one full CMS object to the Recipients array
+
+        :param certs:
+            A list of recipient certificates.
+        """
 
         if not self.acts_as_default and self.recipients:
             raise misc.PdfError(
@@ -823,6 +851,17 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         self.recipients.append(new_cms)
 
     def authenticate(self, credential) -> AuthResult:
+        """
+        Authenticate to this crypt filter in particular.
+        If used in ``/StmF`` or ``/StrF``, you don't need to worry about
+        calling this method directly.
+
+        :param credential:
+            The :class:`.EnvelopeKeyDecrypter` to authenticate with.
+        :return:
+            A :class:`AuthResult` object indicating the level of access
+            obtained.
+        """
         for recp in self.recipients:
             seed = read_seed_from_recipient_cms(recp, credential)
             if seed is not None:
@@ -1286,6 +1325,16 @@ def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
 
 @SecurityHandler.register
 class StandardSecurityHandler(SecurityHandler):
+    """
+    Implementation of the standard (password-based) security handler.
+
+    You shouldn't have to instantiate :class:`.StandardSecurityHandler` objects
+    yourself. For encrypting new documents, use :meth:`build_from_pw`
+    or :meth:`build_from_pw_legacy`.
+
+    For decrypting existing documents, pyHanko will take care of instantiating
+    security handlers through :meth:`.SecurityHandler.build`.
+    """
 
     @classmethod
     def get_name(cls) -> str:
@@ -1296,6 +1345,34 @@ class StandardSecurityHandler(SecurityHandler):
                              id1, desired_owner_pass, desired_user_pass=None,
                              keylen_bytes=16, use_aes128=True,
                              crypt_filter_config=None):
+        """
+        Initialise a legacy password-based security handler, to attach to a
+        :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
+
+        .. danger::
+            The functionality implemented by this handler is deprecated in the
+            PDF standard. We only provide it for testing purposes, and to
+            interface with legacy systems.
+
+        :param rev:
+            Security handler revision to use, see
+            :class:`.StandardSecuritySettingsRevision`.
+        :param id1:
+            The first part of the document ID.
+        :param desired_owner_pass:
+            Desired owner password.
+        :param desired_user_pass:
+            Desired user password.
+        :param keylen_bytes:
+            Length of the key (in bytes).
+        :param use_aes128:
+            Use AES-128 instead of RC4 (default: ``True``).
+        :param crypt_filter_config:
+            Custom crypt filter configuration. PyHanko will supply a reasonable
+            default if none is specified.
+        :return:
+            A :class:`StandardSecurityHandler` instance.
+        """
         desired_owner_pass = _legacy_normalise_pw(desired_owner_pass)
         desired_user_pass = (
             _legacy_normalise_pw(desired_user_pass)
@@ -1352,6 +1429,18 @@ class StandardSecurityHandler(SecurityHandler):
 
     @classmethod
     def build_from_pw(cls, desired_owner_pass, desired_user_pass=None):
+        """
+        Initialise a password-based security handler backed by AES-256,
+        to attach to a :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
+        This handler will use the new PDF 2.0 encryption scheme.
+
+        :param desired_owner_pass:
+            Desired owner password.
+        :param desired_user_pass:
+            Desired user password.
+        :return:
+            A :class:`StandardSecurityHandler` instance.
+        """
         owner_pw_bytes = _r6_normalise_pw(desired_owner_pass)
         user_pw_bytes = (
             _r6_normalise_pw(desired_user_pass)
@@ -1469,6 +1558,18 @@ class StandardSecurityHandler(SecurityHandler):
 
     @staticmethod
     def read_standard_cf_dictionary(cfdict):
+        """
+        Interpret a crypt filter dictionary for the standard security handler.
+
+        :param cfdict:
+            A crypt filter dictionary.
+        :return:
+            An appropriate :class:`.CryptFilter` object, or ``None``
+            if the crypt filter uses the ``/None`` method.
+        :raise NotImplementedError:
+            Raised when the crypt filter's ``/CFM`` entry indicates an unknown
+            crypt filter method.
+        """
         # TODO does a V4 handler default to /Identity unless the /Encrypt
         #  dictionary specifies a custom filter?
         try:
@@ -1591,6 +1692,18 @@ class StandardSecurityHandler(SecurityHandler):
         return AuthResult.FAILED, None
 
     def authenticate(self, credential, id1: bytes = None):
+        """
+        Authenticate a user to this security handler.
+
+        :param credential:
+            The credential to use (a password in this case).
+        :param id1:
+            First part of the document ID. This is mandatory for legacy
+            encryption handlers, but meaningless otherwise.
+        :return:
+            A :class:`AuthResult` object indicating the level of access
+            obtained.
+        """
         rev = self.revision
         if rev == StandardSecuritySettingsRevision.AES256:
             res, key = self._authenticate_r6(credential)
@@ -1650,6 +1763,15 @@ class StandardSecurityHandler(SecurityHandler):
         return result, key
 
     def get_file_encryption_key(self) -> bytes:
+        """
+        Retrieve the (global) file encryption key for this security handler.
+
+        :return:
+            The file encryption key as a :class:`bytes` object.
+        :raise misc.PdfReadError:
+            Raised if this security handler was instantiated from an encryption
+            dictionary and no credential is available.
+        """
         key = self._shared_key
         if key is None:
             raise misc.PdfReadError(
@@ -1661,6 +1783,10 @@ class StandardSecurityHandler(SecurityHandler):
 
 @enum.unique
 class PubKeyAdbeSubFilter(enum.Enum):
+    """
+    Enum describing the different subfilters that can be used for public key
+    encryption in the PDF specification.
+    """
     S3 = generic.NameObject('/adbe.pkcs7.s3')
     S4 = generic.NameObject('/adbe.pkcs7.s4')
     S5 = generic.NameObject('/adbe.pkcs7.s5')
@@ -1764,21 +1890,63 @@ def construct_recipient_cms(certificates: List[x509.Certificate], seed: bytes,
 
 # TODO implement a PKCS#11 version of this interface
 class EnvelopeKeyDecrypter:
+    """
+    General credential class for use with public key security handlers.
+
+    This allows the key decryption process to happen offline, e.g. on a smart
+    card.
+
+    :param cert:
+        The recipient's certificate.
+    """
+
     def __init__(self, cert: x509.Certificate):
         self.cert = cert
 
     def decrypt(self, encrypted_key: bytes,
                 algo_params: cms.KeyEncryptionAlgorithm) -> bytes:
+        """
+        Invoke the actual key decryption algorithm.
+
+        :param encrypted_key:
+            Payload to decrypt.
+        :param algo_params:
+            Specification of the encryption algorithm as a CMS object.
+        :return:
+            The decrypted payload.
+        """
         raise NotImplementedError
 
 
 class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
+    """
+    Implementation of :class:`.EnvelopeKeyDecrypter` where the private key
+    is an RSA key residing in memory.
+
+    :param cert:
+        The recipient's certificate.
+    :param private_key:
+        The recipient's private key, as a CMS object.
+    """
+
     def __init__(self, cert: x509.Certificate, private_key: PrivateKeyInfo):
         super().__init__(cert)
         self.private_key = private_key
 
     @staticmethod
     def load(key_file, cert_file, key_passphrase=None):
+        """
+        Load a key decrypter using key material from files on disk.
+
+        :param key_file:
+            File containing the recipient's private key.
+        :param cert_file:
+            File containing the recipient's certificate.
+        :param key_passphrase:
+            Passphrase for the key file, if applicable.
+        :return:
+            An instance of :class:`.SimpleEnvelopeKeyDecrypter`.
+        """
         try:
             # load cryptographic data (both PEM and DER are supported)
             with open(key_file, 'rb') as f:
@@ -1798,6 +1966,16 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
 
     @classmethod
     def load_pkcs12(cls, pfx_file, passphrase=None):
+        """
+        Load a key decrypter using key material from a PKCS#12 file on disk.
+
+        :param pfx_file:
+            Path to the PKCS#12 file containing the key material.
+        :param passphrase:
+            Passphrase for the private key, if applicable.
+        :return:
+            An instance of :class:`.SimpleEnvelopeKeyDecrypter`.
+        """
 
         try:
             with open(pfx_file, 'rb') as f:
@@ -1814,6 +1992,18 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
 
     def decrypt(self, encrypted_key: bytes,
                 algo_params: cms.KeyEncryptionAlgorithm) -> bytes:
+        """
+        Decrypt the payload using RSA with PKCS#1 v1.5 padding.
+        Other schemes are not (currently) supported by this implementation.
+
+        :param encrypted_key:
+            Payload to decrypt.
+        :param algo_params:
+            Specification of the encryption algorithm as a CMS object.
+            Must use ``rsaes_pkcs1v15``.
+        :return:
+            The decrypted payload.
+        """
         algo_name = algo_params['algorithm'].native
         if algo_name != 'rsaes_pkcs1v15':
             raise NotImplementedError(
@@ -1891,14 +2081,20 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
         )
     else:
         raise misc.PdfReadError(
-            f"Cipher {cipher_name} is not allowed in PDF."
-        )
+            f"Cipher {cipher_name} is not allowed in PDF 2.0."
+        )  # pragma: nocover
 
     return content[:20]
 
 
 @SecurityHandler.register
 class PubKeySecurityHandler(SecurityHandler):
+    """
+    Security handler for public key encryption in PDF.
+
+    As with the standard security handler, you essentially shouldn't ever
+    have to instantiate these yourself (see :meth:`build_from_certs`).
+    """
 
     @staticmethod
     def build_from_certs(certs: List[x509.Certificate],
@@ -1906,6 +2102,36 @@ class PubKeySecurityHandler(SecurityHandler):
                          version=SecurityHandlerVersion.AES256,
                          use_aes=True, use_crypt_filters=True,
                          encrypt_metadata=True) -> 'PubKeySecurityHandler':
+        """
+        Create a new public key security handler.
+
+        This method takes many parameters, but only ``certs`` is mandatory.
+        The default behaviour is to create a public key encryption handler
+        where the underlying symmetric encryption is provided by AES-256.
+
+        :param certs:
+            The recipients' certificates.
+        :param keylen_bytes:
+            The key length (in bytes). This is only relevant for legacy
+            security handlers.
+        :param version:
+            The security handler version to use.
+        :param use_aes:
+            Use AES-128 instead of RC4 (only meaningful if the ``version``
+            parameter is :attr:`~.SecurityHandlerVersion.RC4_OR_AES128`).
+        :param use_crypt_filters:
+            Whether to use crypt filters. This is mandatory for security
+            handlers of version :attr:`~.SecurityHandlerVersion.RC4_OR_AES128`
+            or higher.
+        :param encrypt_metadata:
+            Whether to encrypt document metadata.
+
+            .. warning::
+                See :class:`.SecurityHandlers` for some background on the
+                way pyHanko interprets this value.
+        :return:
+            An instance of :class:`.PubKeySecurityHandler`.
+        """
         subfilter = (
             PubKeyAdbeSubFilter.S5 if use_crypt_filters
             else PubKeyAdbeSubFilter.S4
@@ -2078,6 +2304,19 @@ class PubKeySecurityHandler(SecurityHandler):
 
     def authenticate(self, credential: EnvelopeKeyDecrypter, id1=None) \
             -> AuthResult:
+        """
+        Authenticate a user to this security handler.
+
+        :param credential:
+            The credential to use (an instance of :class:`.EnvelopeKeyDecrypter`
+            in this case).
+        :param id1:
+            First part of the document ID.
+            Public key encryption handlers ignore this key.
+        :return:
+            A :class:`AuthResult` object indicating the level of access
+            obtained.
+        """
         if not isinstance(credential, EnvelopeKeyDecrypter):
             raise misc.PdfReadError(
                 f"Pubkey authentication credential must be an instance of "
@@ -2095,6 +2334,17 @@ class PubKeySecurityHandler(SecurityHandler):
 
     @staticmethod
     def read_pubkey_cf_dictionary(cfdict, acts_as_default):
+        """
+        Read a crypt filter dictionary for a public key security handler.
+
+        :param cfdict:
+            A crypt filter dictionary.
+        :param acts_as_default:
+            Indicates whether this filter is intended to be used in
+            ``/StrF`` or ``/StmF``.
+        :return:
+            A :class:`.CryptFilter` object.
+        """
         try:
             cfm = cfdict['/CFM']
             recipients = cfdict['/Recipients']
