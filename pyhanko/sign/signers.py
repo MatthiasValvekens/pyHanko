@@ -4,7 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
+from io import BytesIO, BufferedIOBase
 from typing import Optional
 
 import tzlocal
@@ -39,8 +39,10 @@ from pyhanko.stamp import (
 __all__ = [
     'PdfSignatureMetadata',
     'Signer', 'SimpleSigner', 'PdfTimeStamper', 'PdfSigner',
-    'sign_pdf', 'load_certs_from_pemder',
-    'DEFAULT_MD', 'DEFAULT_SIGNING_STAMP_STYLE'
+    'PdfCMSEmbedder', 'SigObjSetup', 'SigAppearanceSetup', 'SigMDPSetup',
+    'PdfSignedData', 'SignatureObject', 'DocumentTimestamp',
+    'SigIOSetup', 'sign_pdf', 'load_certs_from_pemder',
+    'DEFAULT_MD', 'DEFAULT_SIGNING_STAMP_STYLE', 'DEFAULT_SIG_SUBFILTER'
 ]
 
 
@@ -91,7 +93,7 @@ class DERPlaceholder(generic.PdfObject):
 
     def __init__(self, bytes_reserved=None):
         self._placeholder = True
-        self.value = b'0' * (bytes_reserved or 8192)
+        self.value = b'0' * (bytes_reserved or 16 * 1024)
         self._offsets = None
 
     @property
@@ -115,8 +117,32 @@ class DERPlaceholder(generic.PdfObject):
             self._offsets = start, end
 
 
+DEFAULT_SIG_SUBFILTER = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+
+
 class PdfSignedData(generic.DictionaryObject):
-    def __init__(self, obj_type, subfilter: SigSeedSubFilter,
+    """
+    Generic class to model signature dictionaries in a PDF file.
+    See also :class:`.SignatureObject` and :class:`.DocumentTimestamp`.
+
+    :param obj_type:
+        The type of signature object.
+    :param subfilter:
+        See :class:`.SigSeedSubFilter`.
+    :param timestamp:
+        The timestamp to embed into the ``/M`` entry.
+    :param bytes_reserved:
+        The number of bytes to reserve for the signature.
+        Defaults to 16 KiB.
+
+        .. warning::
+            Since the CMS object is written to the output file as a hexadecimal
+            string, you should request **twice** the (estimated) number of bytes
+            in the DER-encoded version of the CMS object.
+    """
+
+    def __init__(self, obj_type,
+                 subfilter: SigSeedSubFilter = DEFAULT_SIG_SUBFILTER,
                  timestamp: datetime = None, bytes_reserved=None):
         if bytes_reserved is not None and bytes_reserved % 2 == 1:
             raise ValueError('bytes_reserved must be even')
@@ -140,6 +166,14 @@ class PdfSignedData(generic.DictionaryObject):
 
     def write_signature(self, writer: IncrementalPdfFileWriter, md_algorithm,
                         in_place=False, output=None, chunk_size=4096):
+        """
+        Generator coroutine that handles the document hash computation and
+        the actual filling of the placeholder data.
+
+        This is internal API; you should use use :class:`.PdfSigner`
+        wherever possible. If you *really* need fine-grained control,
+        use :class:`.PdfCMSEmbedder` instead.
+        """
         if in_place:
             output = writer.prev.stream
             writer.write_in_place()
@@ -183,7 +217,10 @@ class PdfSignedData(generic.DictionaryObject):
         digest_value = md.digest()
         signature_cms = yield digest_value
 
-        signature_bytes = signature_cms.dump()
+        if isinstance(signature_cms, bytes):
+            signature_bytes = signature_cms
+        else:
+            signature_bytes = signature_cms.dump()
         signature = binascii.hexlify(signature_bytes).upper()
 
         # might as well compute this
@@ -193,7 +230,7 @@ class PdfSignedData(generic.DictionaryObject):
             raise SigningError(
                 f"Final signature buffer larger than expected: "
                 f"allocated {bytes_reserved} bytes, but signature required"
-                f"{length} bytes long."
+                f"{length} bytes."
             )  # pragma: nocover
 
         # +1 to skip the '<'
@@ -210,9 +247,33 @@ class PdfSignedData(generic.DictionaryObject):
 
 
 class SignatureObject(PdfSignedData):
+    """
+    Class modelling a (placeholder for) a regular PDF signature.
 
-    def __init__(self, timestamp: datetime, subfilter, name=None, location=None,
-                 reason=None, bytes_reserved=None):
+    :param timestamp:
+        The timestamp to embed into the ``/M`` entry.
+    :param subfilter:
+        See :class:`.SigSeedSubFilter`.
+    :param bytes_reserved:
+        The number of bytes to reserve for the signature.
+        Defaults to 16 KiB.
+
+        .. warning::
+            Since the CMS object is written to the output file as a hexadecimal
+            string, you should request **twice** the (estimated) number of bytes
+            in the DER-encoded version of the CMS object.
+    :param name:
+        Signer name. You probably want to leave this blank, viewers should
+        default to the signer's subject name.
+    :param location:
+        Optional signing location.
+    :param reason:
+        Optional signing reason. May be restricted by seed values.
+    """
+
+    def __init__(self, timestamp: datetime,
+                 subfilter: SigSeedSubFilter = DEFAULT_SIG_SUBFILTER,
+                 name=None, location=None, reason=None, bytes_reserved=None):
         super().__init__(
             obj_type=pdf_name('/Sig'), subfilter=subfilter,
             timestamp=timestamp, bytes_reserved=bytes_reserved
@@ -227,6 +288,18 @@ class SignatureObject(PdfSignedData):
 
 
 class DocumentTimestamp(PdfSignedData):
+    """
+    Class modelling a (placeholder for) a regular PDF signature.
+
+    :param bytes_reserved:
+        The number of bytes to reserve for the signature.
+        Defaults to 16 KiB.
+
+        .. warning::
+            Since the CMS object is written to the output file as a hexadecimal
+            string, you should request **twice** the (estimated) number of bytes
+            in the DER-encoded version of the CMS object.
+    """
 
     def __init__(self, bytes_reserved=None):
         super().__init__(
@@ -272,7 +345,25 @@ class Signer:
     def __init__(self, prefer_pss=False):
         self.prefer_pss = prefer_pss
 
+    # TODO I guess that in theory, passing digest_algorithm should never
+    #  be necessary. Should review the ASN.1 syntax for certificates once more.
+
     def get_signature_mechanism(self, digest_algorithm):
+        """
+        Get the signature mechanism for this signer to use.
+        If :attr:`signature_mechanism` is set, it will be used.
+        Otherwise, this method will attempt to put together a default
+        based on mechanism used in the signer's certificate.
+
+        :param digest_algorithm:
+            Digest algorithm to use as part of the signature mechanism.
+            Only used if a signature mechanism object has to be put together
+            on-the-fly, and the digest algorithm could not be inferred from
+            the signer's certificate.
+        :return:
+            A :class:`.SignedDigestAlgorithm` object.
+        """
+
         if self.signature_mechanism is not None:
             return self.signature_mechanism
         if self.signing_cert is None:
@@ -597,7 +688,7 @@ class PdfSignatureMetadata:
     """
     The name of the digest algorithm to use.
     It should be supported by :mod:`hashlib`.
-    
+
     If ``None``, this will ordinarily default to the value of
     :const:`.DEFAULT_MD`, unless a seed value dictionary and/or a prior
     certification signature happen to be available.
@@ -992,19 +1083,13 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 # Wrapper around _prepare_sig_fields with some error reporting
 
 def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
-                            is_timestamp,
                             new_field_spec: Optional[SigFieldSpec] = None):
     root = pdf_out.root
-    # for feedback reasons
-    if is_timestamp:
-        attribute = 'timestamp_field_name'
-    else:
-        attribute = 'field_name'
     if field_name is None:
         if not existing_fields_only:
             raise SigningError(
-                'Not specifying %s is only allowed '
-                'when existing_fields_only=True' % attribute
+                'Not specifying a field name is only allowed '
+                'when existing_fields_only=True'
             )
 
         # most of the logic in _prepare_sig_field has to do with preparing
@@ -1026,8 +1111,8 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
         if others:
             raise SigningError(
                 'There are several empty signature fields. Please specify '
-                '%s. The options are %s, %s.' % (
-                    attribute, found_field_name, others
+                'a field name. The options are %s, %s.' % (
+                    found_field_name, others
                 )
             )
     else:
@@ -1049,6 +1134,346 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
         )
 
     return field_created, sig_field_ref
+
+
+@dataclass(frozen=True)
+class SigMDPSetup:
+
+    md_algorithm: str
+    """
+    Message digest algorithm to write into the signature reference dictionary,
+    if one is written at all.
+    
+    .. warning::
+        It is the caller's responsibility to make sure that this value agrees
+        with the value embedded into the CMS object, and with the algorithm
+        used to hash the document.
+        The low-level :class:`.PdfCMSEmbedder` API *will* simply take it at
+        face value.
+    """
+
+    certify: bool = False
+    """
+    Sign with an author (certification) signature, as opposed to an approval
+    signature. A document can contain at most one such signature, and it must
+    be the first one.
+    """
+
+    field_lock: Optional[FieldMDPSpec] = None
+    """
+    Field lock information to write to the signature reference dictionary.
+    """
+
+    docmdp_perms: Optional[MDPPerm] = None
+    """
+    DocMDP permissions to write to the signature reference dictionary.
+    """
+
+    def _apply(self, sig_obj_ref, writer):
+
+        certify = self.certify
+
+        if certify:
+            # To make a certification signature, we need to leave a record
+            #  in the document catalog.
+            root = writer.root
+            try:
+                perms = root['/Perms']
+            except KeyError:
+                root['/Perms'] = perms = generic.DictionaryObject()
+            perms[pdf_name('/DocMDP')] = sig_obj_ref
+            writer.update_container(perms)
+
+        lock = self.field_lock
+        md_algorithm = self.md_algorithm
+
+        reference_array = generic.ArrayObject()
+        if lock is not None:
+            reference_array.append(
+                fieldmdp_reference_dictionary(
+                    lock, md_algorithm, data_ref=writer.root_ref
+                )
+            )
+
+        docmdp_perms = self.docmdp_perms
+        if docmdp_perms is not None:
+            reference_array.append(
+                docmdp_reference_dictionary(md_algorithm, docmdp_perms)
+            )
+
+        if reference_array:
+            sig_obj_ref.get_object()['/Reference'] = reference_array
+
+
+@dataclass(frozen=True)
+class SigAppearanceSetup:
+    """
+    Signature appearance configuration.
+
+    Part of the low-level :class:`.PdfCMSEmbedder` API, see
+    :class:`SigObjSetup`.
+    """
+
+    style: TextStampStyle
+    """
+    Stamp style to use to generate the appearance.
+    """
+
+    timestamp: datetime
+    """
+    Timestamp to show in the signature appearance.
+    """
+
+    name: str
+    """
+    Signer name to show in the signature appearance.
+    """
+
+    text_params: dict = None
+    """
+    Additional text interpolation parameters to pass to the underlying
+    stamp style.
+    """
+
+    def _apply(self, sig_field, writer):
+        style = self.style
+        name = self.name
+        timestamp = self.timestamp
+        extra_text_params = self.text_params or {}
+        x1, y1, x2, y2 = sig_field[pdf_name('/Rect')]
+        w = abs(x1 - x2)
+        h = abs(y1 - y2)
+        if w and h:
+            # the field is probably a visible one, so we change its appearance
+            # stream to show some data about the signature
+            text_params = {
+                'signer': name,
+                'ts': timestamp.strftime(style.timestamp_format),
+                **extra_text_params
+            }
+            box = BoxConstraints(width=w, height=h)
+            if isinstance(style, QRStampStyle):
+                # extract the URL parameter
+                try:
+                    url = text_params.pop('url')
+                except KeyError:
+                    raise SigningError(
+                        "Signatures using a QR stamp style must pass "
+                        "a 'url' text parameter."
+                    )
+                stamp = QRStamp(
+                    writer, style=style, url=url,
+                    text_params=text_params, box=box
+                )
+            else:
+                stamp = TextStamp(
+                    writer, style=style, text_params=text_params,
+                    box=box
+                )
+            sig_field[
+                pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
+            try:
+                # if there was an entry like this, it's meaningless now
+                del sig_field[pdf_name('/AS')]
+            except KeyError:
+                pass
+
+
+@dataclass(frozen=True)
+class SigObjSetup:
+    """
+    Describes the signature dictionary to be embedded as the form field's value.
+    """
+
+    sig_placeholder: PdfSignedData
+    """
+    Bare-bones placeholder object, usually of type :class:`.SignatureObject`
+    or :class:`.DocumentTimestamp`.
+    
+    In particular, this determines the number of bytes to allocate for the
+    CMS object.
+    """
+
+    mdp_setup: Optional[SigMDPSetup] = None
+    """
+    Optional DocMDP settings, see :class:`.SigMDPSetup`.
+    """
+
+    appearance_setup: Optional[SigAppearanceSetup] = None
+    """
+    Optional appearance settings, see :class:`.SigAppearanceSetup`.
+    """
+
+
+@dataclass(frozen=True)
+class SigIOSetup:
+    """
+    I/O settings for writing signed PDF documents.
+
+    Objects of this type are used in the penultimate phase of
+    the :class:`.PdfCMSEmbedder` protocol.
+    """
+
+    md_algorithm: str
+    """
+    Message digest algorithm to use to compute the document hash.
+    It should be supported by :mod:`hashlib`.
+    
+    .. warning::
+        This is also the message digest algorithm that should appear in the
+        corresponding ``signerInfo`` entry in the CMS object that ends up
+        being embedded in the signature field.
+    """
+
+    in_place: bool = False
+    """
+    Sign the input in-place. If ``False``, write output to a :class:`.BytesIO`
+    object, or :attr:`output` if the latter is not ``None``.
+    """
+
+    chunk_size: int = 4096
+    """
+    Size of the internal buffer (in bytes) used to feed data to the message 
+    digest function if the input stream does not support ``memoryview``.
+    Default is 4096.
+    """
+
+    output: Optional[BufferedIOBase] = None
+    """
+    Write the output to the specified output stream. If ``None``, write to a 
+    new :class:`.BytesIO` object. Default is ``None``.
+
+    .. warning::
+        The output stream must also support reading and seeking.
+    """
+
+
+class PdfCMSEmbedder:
+    """
+    Low-level class that handles embedding CMS objects into PDF signature
+    fields.
+
+    It also takes care of appearance generation and DocMDP configuration,
+    but does not otherwise offer any of the conveniences of
+    :class:`.PdfSigner`.
+
+    :param new_field_spec:
+        :class:`.SigFieldSpec` to use when creating new fields on-the-fly.
+    """
+
+    def __init__(self, new_field_spec: Optional[SigFieldSpec] = None):
+        self.new_field_spec = new_field_spec
+
+    def write_cms(self, field_name: str, writer: IncrementalPdfFileWriter,
+                  existing_fields_only=False):
+        """
+        This method returns a generator coroutine that controls the process
+        of embedding CMS data into a PDF signature field.
+        Can be used for both timestamps and regular signatures.
+
+        .. danger::
+            This is a very low-level interface that performs virtually no
+            error checking, and is intended to be used in situations
+            where the construction of the CMS object to be embedded
+            is not under the caller's control (e.g. a remote signer
+            that produces full-fledged CMS objects).
+
+            In almost every other case, you're better of using
+            :class:`.PdfSigner` instead, with a custom :class:`.Signer`
+            implementation to handle the cryptographic operations if necessary.
+
+        The coroutine follows the following specific protocol.
+
+        1. First, it retrieves or creates the signature field to embed the
+           CMS object in, and yields a reference to said field.
+        2. The caller should then send in a :class:`.SigObjSetup` object, which
+           is subsequently processed by the coroutine. For convenience, the
+           coroutine will then yield a reference to the signature dictionary
+           (as embedded in the PDF writer).
+        3. Next, the caller should send a :class:`.SigIOSetup` object,
+           describing how the resulting document should be hashed and written
+           to the output. The coroutine will write the entire document with a
+           placeholder region reserved for the signature, compute the document's
+           hash and yield it to the caller.
+
+           From this point onwards, **no objects may be changed or added** to
+           the :class:`.IncrementalPdfFileWriter` currently in use.
+        4. Finally, the caller should pass in a CMS object to place inside
+           the signature dictionary. The CMS object can be supplied as a raw
+           :class:`bytes` object, or an :mod:`asn1crypto`-style object.
+           The coroutine's final yield is a tuple ``output, sig_contents``,
+           where ``output`` is the output stream used, and ``sig_contents`` is
+           the value of the signature dictionary's ``/Contents`` entry, given as
+           a hexadecimal string.
+
+        .. caution::
+            It is the caller's own responsibility to ensure that enough room
+            is available in the placeholder signature object to contain
+            the final CMS object.
+
+        :param field_name:
+            The name of the field to fill in. This should be a field of type
+            ``/Sig``.
+        :param writer:
+            An :class:`.IncrementalPdfFileWriter` containing the
+            document to sign.
+        :param existing_fields_only:
+            If ``True``, never create a new empty signature field to contain
+            the signature.
+            If ``False``, a new field may be created if no field matching
+            :attr:`~.PdfSignatureMetadata.field_name` exists.
+        :return:
+            A generator coroutine implementing the protocol described above.
+        """
+
+        new_field_spec = self.new_field_spec \
+            if not existing_fields_only else None
+        # start by creating or fetching the appropriate signature field
+        field_created, sig_field_ref = _get_or_create_sigfield(
+            field_name, writer,
+            existing_fields_only,
+            new_field_spec=new_field_spec
+        )
+
+        # yield control to caller to further process the field dictionary
+        # if necessary, request setup specs for sig object
+        sig_obj_setup = yield sig_field_ref
+        assert isinstance(sig_obj_setup, SigObjSetup)
+
+        sig_field = sig_field_ref.get_object()
+
+        # take care of the field's visual appearance (if applicable)
+        appearance_setup = sig_obj_setup.appearance_setup
+        if appearance_setup is not None:
+            appearance_setup._apply(sig_field, writer)
+
+        sig_obj = sig_obj_setup.sig_placeholder
+        sig_obj_ref = writer.add_object(sig_obj)
+
+        # fill in a reference to the (empty) signature object
+        sig_field[pdf_name('/V')] = sig_obj_ref
+
+        if not field_created:
+            # still need to mark it for updating
+            writer.mark_update(sig_field_ref)
+
+        mdp_setup = sig_obj_setup.mdp_setup
+        if mdp_setup is not None:
+            mdp_setup._apply(sig_obj_ref, writer)
+
+        # again, pass control to the caller
+        # and request I/O parameters for putting the cryptographic signature
+        # into the output.
+        # We pass a reference to the embedded signature object as a convenience.
+
+        sig_io = yield sig_obj_ref
+        assert isinstance(sig_io, SigIOSetup)
+
+        # pass control to the sig object's write_signature coroutine
+        yield from sig_obj.write_signature(
+            writer, sig_io.md_algorithm, in_place=sig_io.in_place,
+            output=sig_io.output, chunk_size=sig_io.chunk_size
+        )
 
 
 class PdfTimeStamper:
@@ -1083,7 +1508,6 @@ class PdfTimeStamper:
                       validation_paths=None,
                       timestamper: Optional[TimeStamper] = None, *,
                       in_place=False, output=None, chunk_size=4096):
-
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
@@ -1122,6 +1546,7 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
+
         timestamper = timestamper or self.default_timestamper
         field_name = self.generate_timestamp_field_name()
         if bytes_reserved is None:
@@ -1136,28 +1561,25 @@ class PdfTimeStamper:
             )
 
         timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
-        field_created, sig_field_ref = _get_or_create_sigfield(
-            field_name, pdf_out,
+
+        cms_writer = PdfCMSEmbedder().write_cms(
+            field_name=field_name, writer=pdf_out,
             # for LTA, requiring existing_fields_only doesn't make sense
             # since we should in principle be able to add document timestamps
             # ad infinitum.
-            existing_fields_only=False, is_timestamp=True
+            existing_fields_only=False
         )
-        sig_field = sig_field_ref.get_object()
-        timestamp_obj_ref = pdf_out.add_object(timestamp_obj)
-        sig_field[pdf_name('/V')] = timestamp_obj_ref
-        # this update is unnecessary in the vast majority of cases, but
-        #  let's do it anyway for consistency.
-        if not field_created:  # pragma: nocover
-            pdf_out.mark_update(timestamp_obj_ref)
 
-        wr = timestamp_obj.write_signature(
-            pdf_out, md_algorithm, in_place=in_place,
-            output=output, chunk_size=chunk_size
+        next(cms_writer)
+        cms_writer.send(SigObjSetup(sig_placeholder=timestamp_obj))
+
+        sig_io = SigIOSetup(
+            md_algorithm=md_algorithm,
+            in_place=in_place, output=output, chunk_size=chunk_size
         )
-        true_digest = next(wr)
+        true_digest = cms_writer.send(sig_io)
         timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
-        output, sig_contents = wr.send(timestamp_cms)
+        output, sig_contents = cms_writer.send(timestamp_cms)
 
         # update the DSS
         from pyhanko.sign import validation
@@ -1275,8 +1697,6 @@ class PdfSigner(PdfTimeStamper):
                  *, timestamper: TimeStamper = None,
                  stamp_style: Optional[TextStampStyle] = None,
                  new_field_spec: Optional[SigFieldSpec] = None):
-        """
-        """
         self.signature_meta = signature_meta
         if new_field_spec is not None and \
                 new_field_spec.sig_field_name != signature_meta.field_name:
@@ -1305,8 +1725,8 @@ class PdfSigner(PdfTimeStamper):
             super().generate_timestamp_field_name()
         )
 
-    def _apply_locking_rules(self, sig_field, sig_obj_ref, md_algorithm,
-                             pdf_out, sv_spec: SigSeedValueSpec = None):
+    def _apply_locking_rules(self, sig_field, md_algorithm,
+                             sv_spec: SigSeedValueSpec = None) -> SigMDPSetup:
         # this helper method handles /Lock dictionary and certification
         #  semantics.
 
@@ -1350,11 +1770,12 @@ class PdfSigner(PdfTimeStamper):
         meta_perms = self.signature_meta.docmdp_permissions
         meta_certify = self.signature_meta.certify
 
-        # only use meta_perms if we're trying to make a cert sig, or
-        # there already is some other docmdp_perms value in play.
+        # only pull meta_perms into the validation if we're trying to make a
+        # cert sig, or there already is some other docmdp_perms value available.
         # (in other words, if there's no SV dict or /Lock, and we're not
         # certifying, this will be skipped)
-        if meta_perms is not None and (meta_certify or docmdp_perms is not None):
+        if meta_perms is not None \
+                and (meta_certify or docmdp_perms is not None):
             if sv_lock_value_req and meta_perms not in sv_lock_values:
                 # in this case, we have to override
                 docmdp_perms = sv_lock_values[0]
@@ -1369,77 +1790,10 @@ class PdfSigner(PdfTimeStamper):
                     f"but the signature field settings do "
                     f"not allow that. Setting '{docmdp_perms}' instead."
                 )
-
-        if meta_certify:
-            # To make a certification signature, we need to leave a record
-            #  in the document catalog.
-            root = pdf_out.root
-            try:
-                perms = root['/Perms']
-            except KeyError:
-                root['/Perms'] = perms = generic.DictionaryObject()
-            perms[pdf_name('/DocMDP')] = sig_obj_ref
-            pdf_out.update_container(perms)
-
-        reference_array = generic.ArrayObject()
-        if lock is not None:
-            reference_array.append(
-                fieldmdp_reference_dictionary(
-                    lock, md_algorithm, data_ref=pdf_out.root_ref
-                )
-            )
-
-        if docmdp_perms is not None:
-            reference_array.append(
-                docmdp_reference_dictionary(md_algorithm, docmdp_perms)
-            )
-
-        if reference_array:
-            sig_obj_ref.get_object()['/Reference'] = reference_array
-
-    def _sig_field_appearance(self, sig_field, pdf_out, timestamp,
-                              extra_text_params):
-
-        name = self.signature_meta.name
-        if name is None:
-            name = self.signer.subject_name
-        x1, y1, x2, y2 = sig_field[pdf_name('/Rect')]
-        w = abs(x1 - x2)
-        h = abs(y1 - y2)
-        if w and h:
-            # the field is probably a visible one, so we change its appearance
-            # stream to show some data about the signature
-            text_params = {
-                'signer': name, 'ts': timestamp.strftime(
-                    self.stamp_style.timestamp_format
-                ),
-                **(extra_text_params or {})
-            }
-            box = BoxConstraints(width=w, height=h)
-            if isinstance(self.stamp_style, QRStampStyle):
-                # extract the URL parameter
-                try:
-                    url = extra_text_params.pop('url')
-                except (KeyError, AttributeError):
-                    raise SigningError(
-                        "Signatures using a QR stamp style must pass "
-                        "a 'url' text parameter."
-                    )
-                stamp = QRStamp(
-                    pdf_out, style=self.stamp_style, url=url,
-                    text_params=text_params, box=box
-                )
-            else:
-                stamp = TextStamp(
-                    pdf_out, style=self.stamp_style, text_params=text_params,
-                    box=box
-                )
-            sig_field[pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
-            try:
-                # if there was an entry like this, it's meaningless now
-                del sig_field[pdf_name('/AS')]
-            except KeyError:
-                pass
+        return SigMDPSetup(
+            certify=meta_certify, field_lock=lock, docmdp_perms=docmdp_perms,
+            md_algorithm=md_algorithm
+        )
 
     def _enforce_certification_constraints(self, reader: PdfFileReader):
         # TODO we really should take into account the /DocMDP constraints
@@ -1653,13 +2007,15 @@ class PdfSigner(PdfTimeStamper):
                 raise SigningError("The signer's certificate was not valid", e)
             validation_paths.append(signer_cert_validation_path)
 
-        new_field_spec = self.new_field_spec \
-            if not existing_fields_only else None
-        field_created, sig_field_ref = _get_or_create_sigfield(
-            signature_meta.field_name, pdf_out,
-            existing_fields_only, is_timestamp=False,
-            new_field_spec=new_field_spec
+        cms_writer = PdfCMSEmbedder(
+            new_field_spec=self.new_field_spec
+        ).write_cms(
+            field_name=signature_meta.field_name, writer=pdf_out,
+            existing_fields_only=existing_fields_only
         )
+
+        # let the CMS writer put in a field for us
+        sig_field_ref = next(cms_writer)
 
         sig_field = sig_field_ref.get_object()
 
@@ -1742,47 +2098,44 @@ class PdfSigner(PdfTimeStamper):
             # error margin (+ ensure that bytes_reserved is even)
             bytes_reserved = test_len + 2 * (test_len // 4)
 
-        # we need to add a signature object and a corresponding form field
-        # to the PDF file
-        # Here, we pass in the name as specified in the signature metadata.
-        # When it's None, the reader will/should derive it from the contents
-        # of the certificate.
+        sig_mdp_setup = self._apply_locking_rules(
+            sig_field, md_algorithm=md_algorithm, sv_spec=sv_spec
+        )
+
+        # Pass instructions to the CMS writer to set up the
+        # (PDF) signature object and its appearance
+        name_specified = signature_meta.name
+        sig_appearance = SigAppearanceSetup(
+            style=self.stamp_style,
+            name=name_specified or self.signer.subject_name,
+            timestamp=timestamp, text_params=appearance_text_params
+        )
         sig_obj = SignatureObject(
-            timestamp, name=signature_meta.name,
-            location=signature_meta.location,
-            reason=signature_meta.reason, bytes_reserved=bytes_reserved,
-            subfilter=subfilter
+            bytes_reserved=bytes_reserved, subfilter=subfilter,
+            timestamp=timestamp,
+            name=name_specified if name_specified else None,
+            location=signature_meta.location, reason=signature_meta.reason,
         )
-        sig_obj_ref = pdf_out.add_object(sig_obj)
+        cms_writer.send(SigObjSetup(
+            sig_placeholder=sig_obj,
+            mdp_setup=sig_mdp_setup,
+            appearance_setup=sig_appearance
+        ))
 
-        # fill in a reference to the (empty) signature object
-        sig_field[pdf_name('/V')] = sig_obj_ref
+        # pass in I/O parameters, get back a hash
+        true_digest = cms_writer.send(SigIOSetup(
+            md_algorithm=md_algorithm, in_place=in_place, chunk_size=chunk_size,
+            output=output
+        ))
 
-        if not field_created:
-            # still need to mark it for updating
-            pdf_out.mark_update(sig_field_ref)
-
-        # take care of the field's visual appearance (if applicable)
-        self._sig_field_appearance(
-            sig_field, pdf_out, timestamp, appearance_text_params
-        )
-
-        self._apply_locking_rules(
-            sig_field, sig_obj_ref, md_algorithm, pdf_out, sv_spec=sv_spec
-        )
-
-        wr = sig_obj.write_signature(
-            pdf_out, md_algorithm, in_place=in_place,
-            output=output, chunk_size=chunk_size
-        )
-        true_digest = next(wr)
-
+        # Tell the signer to construct a CMS object
         signature_cms = signer.sign(
             true_digest, md_algorithm,
             timestamp=timestamp, use_pades=use_pades,
             revocation_info=revinfo, timestamper=timestamper
         )
-        output, sig_contents = wr.send(signature_cms)
+        # ... and feed it to the CMS writer
+        output, sig_contents = cms_writer.send(signature_cms)
 
         if use_pades and signature_meta.embed_validation_info:
             from pyhanko.sign import validation

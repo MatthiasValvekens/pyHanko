@@ -10,6 +10,7 @@ from asn1crypto.algos import (
     SignedDigestAlgorithm, RSASSAPSSParams,
     MaskGenAlgorithm, DigestAlgorithm,
 )
+import tzlocal
 
 import pyhanko.pdf_utils.content
 from certvalidator.errors import PathValidationError
@@ -1576,3 +1577,63 @@ def test_sign_pss_md_discrepancy():
     assert sda.signature_algo == 'rsassa_pss'
     val_untrusted(emb)
 
+
+@freeze_time('2020-11-01')
+def test_direct_pdfcmsembedder_usage():
+    # CMS-agnostic signing example
+    #
+    # write an in-place certification signature using the PdfCMSEmbedder
+    # low-level API directly.
+
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+
+    # Phase 1: coroutine sets up the form field
+    cms_writer = signers.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    sig_field_ref = next(cms_writer)
+
+    # just for kicks, let's check
+    assert sig_field_ref.get_object()['/T'] == 'Signature'
+
+    # Phase 2: make a placeholder signature object,
+    # wrap it up together with the MDP config we want, and send that
+    # on to cms_writer
+    timestamp = datetime.now(tz=tzlocal.get_localzone())
+    sig_obj = signers.SignatureObject(timestamp=timestamp, bytes_reserved=8192)
+
+    md_algorithm = 'sha256'
+    cms_writer.send(
+        signers.SigObjSetup(
+            sig_placeholder=sig_obj,
+            mdp_setup=signers.SigMDPSetup(
+                md_algorithm=md_algorithm, certify=True,
+                docmdp_perms=fields.MDPPerm.NO_CHANGES
+            )
+        )
+    )
+
+    # Phase 3: write & hash the document (with placeholder)
+    document_hash = cms_writer.send(
+        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    # Phase 4: construct CMS signature object, and pass it on to cms_writer
+
+    # NOTE: I'm using a regular SimpleSigner here, but you can substitute
+    # whatever CMS supplier you want.
+
+    signer: signers.SimpleSigner = FROM_CA
+    # let's supply the CMS object as a raw bytestring
+    cms_bytes = signer.sign(
+        data_digest=document_hash, digest_algorithm=md_algorithm,
+        timestamp=timestamp
+    ).dump()
+    output, sig_contents = cms_writer.send(cms_bytes)
+
+    # we requested in-place output
+    assert output is input_buf
+
+    r = PdfFileReader(input_buf)
+    val_trusted(r.embedded_signatures[0])
