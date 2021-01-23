@@ -1960,9 +1960,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
         except (IOError, ValueError) as e:  # pragma: nocover
             logger.error('Could not load cryptographic material', e)
             return None
-        return SimpleEnvelopeKeyDecrypter(
-            cert=cert, private_key=asymmetric.load_private_key(private_key)
-        )
+        return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=private_key)
 
     @classmethod
     def load_pkcs12(cls, pfx_file, passphrase=None):
@@ -1986,9 +1984,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
 
         (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
 
-        return SimpleEnvelopeKeyDecrypter(
-            cert=cert, private_key=asymmetric.load_private_key(kinfo)
-        )
+        return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=kinfo)
 
     def decrypt(self, encrypted_key: bytes,
                 algo_params: cms.KeyEncryptionAlgorithm) -> bytes:
@@ -2011,7 +2007,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
                 f"not '{algo_name}'."
             )
         return asymmetric.rsa_pkcs1v15_decrypt(
-            self.private_key, encrypted_key
+            asymmetric.load_private_key(self.private_key), encrypted_key
         )
 
 
