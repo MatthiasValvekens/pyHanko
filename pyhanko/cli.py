@@ -477,7 +477,34 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
     ctx.obj[Ctx.STAMP_URL] = stamp_url
 
 
-def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
+def _open_for_signing(infile_path, signer_cert=None, signer_key=None):
+    from pyhanko.pdf_utils import crypt
+    infile = open(infile_path, 'rb')
+    writer = IncrementalPdfFileWriter(infile)
+
+    # TODO make this an option higher up the tree
+    # TODO mention filename in prompt
+    if writer.prev.encrypted:
+        sh = writer.prev.security_handler
+        if isinstance(sh, crypt.StandardSecurityHandler):
+            pdf_pass = getpass.getpass(
+                prompt='Password for encrypted file \'%s\': ' % infile_path
+            )
+            writer.encrypt(pdf_pass)
+        elif isinstance(sh, crypt.PubKeySecurityHandler) \
+                and signer_key is not None:
+            # attempt to decrypt using signer's credentials
+            cred = SimpleEnvelopeKeyDecrypter(signer_cert, signer_key)
+            writer.encrypt_pubkey(cred)
+        else:
+            raise click.ClickException(
+                "Input file appears to be encrypted, but appropriate "
+                "credentials are not available."
+            )
+    return writer
+
+
+def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
                          style, stamp_url, new_field_spec):
     with pyhanko_exception_manager():
@@ -485,15 +512,10 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
             timestamper = HTTPTimeStamper(timestamp_url)
         else:
             timestamper = None
-        writer = IncrementalPdfFileWriter(infile)
-
-        # TODO make this an option higher up the tree
-        # TODO mention filename in prompt
-        if writer.prev.encrypted:
-            pdf_pass = getpass.getpass(
-                prompt='Password for encrypted file: '
-            )
-            writer.encrypt(pdf_pass)
+        writer = _open_for_signing(
+            infile_path, signer_cert=signer.signing_cert,
+            signer_key=signer.signing_key
+        )
 
         text_params = None
         if stamp_url is not None:
@@ -511,12 +533,12 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile, outfile,
         outfile.write(buf)
         buf.release()
 
-        infile.close()
+        writer.prev.stream.close()
         outfile.close()
 
 
 @addsig.command(name='pemder', help='read key material from PEM/DER files')
-@click.argument('infile', type=click.File('rb'))
+@click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--key', help='file containing the private key (PEM/DER)', 
               type=readable_file, required=True)
@@ -557,7 +579,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
 
 
 @addsig.command(name='pkcs12', help='read key material from a PKCS#12 file')
-@click.argument('infile', type=click.File('rb'))
+@click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.argument('pfx', type=readable_file)
 @click.option('--chain', type=readable_file, multiple=True,
