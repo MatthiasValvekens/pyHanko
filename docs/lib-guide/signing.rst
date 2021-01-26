@@ -37,6 +37,7 @@ some minor implications for the API design (see
 
 .. |PdfSignatureMetadata| replace:: :class:`~.pyhanko.sign.signers.PdfSignatureMetadata`
 .. |Signer| replace:: :class:`~.pyhanko.sign.signers.Signer`
+.. |PdfCMSEmbedder| replace:: :class:`~.pyhanko.sign.signers.PdfCMSEmbedder`
 .. |PdfSigner| replace:: :class:`~.pyhanko.sign.signers.PdfSigner`
 .. |TimeStamper| replace:: :class:`~.pyhanko.sign.timestamps.TimeStamper`
 
@@ -247,6 +248,86 @@ CMS object, you'll most likely have to override
 construction of the CMS object itself.
 
 
+The low-level |PdfCMSEmbedder| API
+----------------------------------
+
+If even extending |Signer| doesn't cover your use case (e.g. because you want
+to take the construction of the signature CMS object out of pyHanko's hands
+entirely), all is not lost.
+The lowest-level "managed" API offered by pyHanko is the one provided by
+|PdfCMSEmbedder|. This class offers a coroutine-based interface
+that takes care of all PDF-specific operations, but otherwise gives you full
+control over what data ends up in the signature object's ``/Contents`` entry.
+
+.. note::
+    |PdfSigner| uses |PdfCMSEmbedder| under the hood, so you're still mostly
+    using the same code paths with this API.
+
+.. danger::
+    Some advanced features aren't available this deep in the API (mainly seed
+    value checking). Additionally, |PdfCMSEmbedder| doesn't really do any
+    input validation; you're on your own in that regard.
+
+
+Here is an example demonstrating its use, sourced more or less directly from
+the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
+
+.. code-block:: python
+
+    from datetime import datetime
+    from pyhanko.sign import signers
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+    from io import BytesIO
+
+    input_buf = BytesIO(b'<input file goes here>')
+    w = IncrementalPdfFileWriter(input_buf)
+
+    # Phase 1: coroutine sets up the form field, and returns a reference
+    cms_writer = signers.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    sig_field_ref = next(cms_writer)
+
+    # just for kicks, let's check
+    assert sig_field_ref.get_object()['/T'] == 'Signature'
+
+    # Phase 2: make a placeholder signature object,
+    # wrap it up together with the MDP config we want, and send that
+    # on to cms_writer
+    timestamp = datetime.now(tz=tzlocal.get_localzone())
+    sig_obj = signers.SignatureObject(timestamp=timestamp, bytes_reserved=8192)
+
+    md_algorithm = 'sha256'
+    # for demonstration purposes, let's do a certification signature instead
+    # of a plain old approval signature here
+    cms_writer.send(
+        signers.SigObjSetup(
+            sig_placeholder=sig_obj,
+            mdp_setup=signers.SigMDPSetup(
+                md_algorithm=md_algorithm, certify=True,
+                docmdp_perms=fields.MDPPerm.NO_CHANGES
+            )
+        )
+    )
+
+    # Phase 3: write & hash the document (with placeholder)
+    document_hash = cms_writer.send(
+        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    # Phase 4: construct the CMS object, and pass it on to cms_writer
+
+    # NOTE: I'm using a regular SimpleSigner here, but you can substitute
+    # whatever CMS supplier you want.
+
+    signer: signers.SimpleSigner = FROM_CA
+    # let's supply the CMS object as a raw bytestring
+    cms_bytes = signer.sign(
+        data_digest=document_hash, digest_algorithm=md_algorithm,
+        timestamp=timestamp
+    ).dump()
+    output, sig_contents = cms_writer.send(cms_bytes)
 
 
 .. rubric:: Footnotes
