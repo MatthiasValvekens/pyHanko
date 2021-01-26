@@ -251,7 +251,7 @@ class SignatureObject(PdfSignedData):
     Class modelling a (placeholder for) a regular PDF signature.
 
     :param timestamp:
-        The timestamp to embed into the ``/M`` entry.
+        The (optional) timestamp to embed into the ``/M`` entry.
     :param subfilter:
         See :class:`.SigSeedSubFilter`.
     :param bytes_reserved:
@@ -271,7 +271,7 @@ class SignatureObject(PdfSignedData):
         Optional signing reason. May be restricted by seed values.
     """
 
-    def __init__(self, timestamp: datetime,
+    def __init__(self, timestamp: Optional[datetime] = None,
                  subfilter: SigSeedSubFilter = DEFAULT_SIG_SUBFILTER,
                  name=None, location=None, reason=None, bytes_reserved=None):
         super().__init__(
