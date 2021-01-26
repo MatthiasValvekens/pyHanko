@@ -15,7 +15,7 @@ like pyHanko.
 The "inherited" parts mostly consist of the PDF parsing logic, filter
 implementations (though they've been heavily rewritten) and RC4 cryptography
 support. I stripped out most of the functionality that I considered "fluff"
-for the purposes of designing a DigSig tool, for two reasons:
+for the purposes of designing a DigSig tool, for several reasons:
 
 * When I started working on pyHanko, the PyPDF2 project was all but dead,
   the codebase largely untested and the internet was rife with complaints about
