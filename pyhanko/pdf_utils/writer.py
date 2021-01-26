@@ -861,10 +861,27 @@ class PdfFileWriter(BasePdfFileWriter):
         .. caution::
             While pyHanko supports legacy PDF encryption as well, the API
             to create new documents using outdated encryption is left
-            undocumented on purpose to discourage its use.
+            largely undocumented on purpose to discourage its use.
 
-            This caveat does _not_ apply to incremental updates added to
+            This caveat does *not* apply to incremental updates added to
             existing documents.
+
+        .. danger::
+            The PDF 2.0 standard mandates AES-256 in CBC mode, and also includes
+            12 bytes of known plaintext by design. This implies that a
+            sufficiently knowledgeable attacker can inject arbitrary content
+            into your encrypted files without knowledge of the password.
+
+            Adding a digital signature to the encrypted document is **not**
+            a foolproof way to deal with this either, since most viewers will
+            still allow the document to be opened before signatures are
+            validated, and therefore end users are still exposed to potentially
+            malicious content.
+
+            Until the standard supports authenticated encryption schemes, you
+            should **never** rely on its encryption provisions if tampering
+            is a concern.
+
 
         :param owner_pass:
             The desired owner password.
@@ -888,12 +905,7 @@ class PdfFileWriter(BasePdfFileWriter):
         their respective public keys.
 
         .. caution::
-            While pyHanko supports legacy PDF encryption as well, the API
-            to create new documents using outdated encryption is left
-            undocumented on purpose to discourage its use.
-
-            This caveat does _not_ apply to incremental updates added to
-            existing documents.
+            The caveats for :meth:`encrypt` also apply here.
 
         :param recipients:
             Certificates of the recipients that should be able to decrypt
