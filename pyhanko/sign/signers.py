@@ -511,6 +511,48 @@ class Signer:
 
         return cms.CMSAttributes(attrs)
 
+    def unsigned_attrs(self, digest_algorithm, signature: bytes,
+                       timestamper=None, dry_run=False) \
+            -> Optional[cms.CMSAttributes]:
+        """
+        Compute the unsigned attributes to embed into the CMS object.
+        This function is called after signing the hash of the signed attributes
+        (see :meth:`signed_attrs`).
+
+        By default, this method only handles timestamp requests, but other
+        functionality may be added by subclasses
+
+        If this method returns ``None``, no unsigned attributes will be
+        embedded.
+
+        :param digest_algorithm:
+            Digest algorithm used to hash the signed attributes.
+        :param signature:
+            Signature of the signed attribute hash.
+        :param timestamper:
+            Timestamp supplier to use.
+        :param dry_run:
+            Flag indicating "dry run" mode. If ``True``, only the approximate
+            size of the output matters, so cryptographic
+            operations can be replaced by placeholders.
+        :return:
+            The unsigned attributes to add, or ``None``.
+        """
+
+        if timestamper is not None:
+            # the timestamp server needs to cross-sign our signature
+            md = getattr(hashlib, digest_algorithm)()
+            md.update(signature)
+            if dry_run:
+                ts_token = timestamper.dummy_response(digest_algorithm)
+            else:
+                ts_token = timestamper.timestamp(
+                    md.digest(), digest_algorithm
+                )
+            return cms.CMSAttributes(
+                [simple_cms_attribute('signature_time_stamp_token', ts_token)]
+            )
+
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
         """
         Format the ``SignerInfo`` entry for a CMS signature.
@@ -625,19 +667,12 @@ class Signer:
 
         sig_info = self.signer_info(digest_algorithm, signed_attrs, signature)
 
-        if timestamper is not None:
-            # the timestamp server needs to cross-sign our signature
-            md = getattr(hashlib, digest_algorithm)()
-            md.update(signature)
-            if dry_run:
-                ts_token = timestamper.dummy_response(digest_algorithm)
-            else:
-                ts_token = timestamper.timestamp(
-                    md.digest(), digest_algorithm
-                )
-            sig_info['unsigned_attrs'] = cms.CMSAttributes(
-                [simple_cms_attribute('signature_time_stamp_token', ts_token)]
-            )
+        unsigned_attrs = self.unsigned_attrs(
+            digest_algorithm, signature, timestamper=timestamper,
+            dry_run=dry_run
+        )
+        if unsigned_attrs is not None:
+            sig_info['unsigned_attrs'] = unsigned_attrs
 
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
