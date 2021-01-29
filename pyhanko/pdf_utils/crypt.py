@@ -91,6 +91,17 @@ _encryption_padding = (
     b'\xa9\xfe\x64\x53\x69\x7a'
 )
 
+ALL_PERMS = -4
+"""
+Dummy value that translates to "everything is allowed" in an
+encrypted PDF document.
+"""
+
+
+def _as_signed(val: int):
+    # converts an integer to a signed int
+    return struct.unpack('<i', struct.pack('<I', val & 0xffffffff))[0]
+
 
 # Implementation of algorithm 3.2 of the PDF standard security handler,
 # section 3.5.2 of the PDF 1.6 reference.
@@ -343,13 +354,32 @@ def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
     return md5_hash[:min(16, len(shared_key) + 5)]
 
 
-class AuthResult(misc.OrderedEnum):
+class AuthStatus(misc.OrderedEnum):
     """
-    Describes the result of an authentication
+    Describes the status after an authentication attempt.
     """
+
     FAILED = 0
     USER = 1
     OWNER = 2
+
+
+@dataclass(frozen=True)
+class AuthResult:
+    """
+    Describes the result of an authentication attempt.
+    """
+
+    status: AuthStatus
+    """
+    Authentication status after the authentication attempt.
+    """
+
+    permission_flags: Optional[int] = None
+    """
+    Granular permission flags. The precise meaning depends on the security
+    handler.
+    """
 
 
 @enum.unique
@@ -547,7 +577,7 @@ class SecurityHandler:
         :param id1:
             The first part of the document ID of the document being accessed.
         :return:
-            A :class:`AuthResult` object indicating the level of access
+            An :class:`AuthResult` object indicating the level of access
             obtained.
         """
         raise NotImplementedError
@@ -582,13 +612,6 @@ class StandardSecuritySettingsRevision(misc.OrderedEnum):
     RC4_EXTENDED = 3
     RC4_OR_AES128 = 4
     AES256 = 6
-
-
-ALL_PERMS = -4
-"""
-Dummy value that translates to "everything is allowed" in an
-encrypted PDF document.
-"""
 
 
 class CryptFilter:
@@ -817,13 +840,15 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         super()._set_security_handler(handler)
         self._shared_key = self._recp_key_seed = None
 
-    def add_recipients(self, certs: List[x509.Certificate]):
+    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS):
         """
         Add recipients to this crypt filter.
         This always adds one full CMS object to the Recipients array
 
         :param certs:
             A list of recipient certificates.
+        :param perms:
+            The permission bits to assign to the listed recipients.
         """
 
         if not self.acts_as_default and self.recipients:
@@ -842,10 +867,8 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
                 "Adding recipients after deriving the shared key or "
                 "before authenticating is not possible."
             )
-        # TODO allow user to specify perms
-        perms = ALL_PERMS
         new_cms = construct_recipient_cms(
-            certs, self._recp_key_seed, perms,
+            certs, self._recp_key_seed, _as_signed(perms),
             include_permissions=self.acts_as_default
         )
         self.recipients.append(new_cms)
@@ -859,15 +882,15 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         :param credential:
             The :class:`.EnvelopeKeyDecrypter` to authenticate with.
         :return:
-            A :class:`AuthResult` object indicating the level of access
+            An :class:`AuthResult` object indicating the level of access
             obtained.
         """
         for recp in self.recipients:
-            seed = read_seed_from_recipient_cms(recp, credential)
+            seed, perms = read_seed_from_recipient_cms(recp, credential)
             if seed is not None:
                 self._recp_key_seed = seed
-                return AuthResult.USER
-        return AuthResult.FAILED
+                return AuthResult(AuthStatus.USER, perms)
+        return AuthResult(AuthStatus.FAILED)
 
     def derive_shared_encryption_key(self) -> bytes:
         if self._recp_key_seed is None:
@@ -1344,6 +1367,7 @@ class StandardSecurityHandler(SecurityHandler):
     def build_from_pw_legacy(cls, rev: StandardSecuritySettingsRevision,
                              id1, desired_owner_pass, desired_user_pass=None,
                              keylen_bytes=16, use_aes128=True,
+                             perms: int = ALL_PERMS,
                              crypt_filter_config=None):
         """
         Initialise a legacy password-based security handler, to attach to a
@@ -1367,6 +1391,8 @@ class StandardSecurityHandler(SecurityHandler):
             Length of the key (in bytes).
         :param use_aes128:
             Use AES-128 instead of RC4 (default: ``True``).
+        :param perms:
+            Permission bits to set (defined as an integer)
         :param crypt_filter_config:
             Custom crypt filter configuration. PyHanko will supply a reasonable
             default if none is specified.
@@ -1391,11 +1417,11 @@ class StandardSecurityHandler(SecurityHandler):
             desired_owner_pass, desired_user_pass, rev.value, keylen_bytes
         )
 
-        # TODO allow user to set perms, force unavailable perms to 1 if
-        #  encrypting with RC4_BASIC
-        perms = ALL_PERMS
-
+        # force perms to a 4-byte format
+        perms = _as_signed(perms & 0xfffffffc)
         if rev == StandardSecuritySettingsRevision.RC4_BASIC:
+            # some permissions are not available for these security handlers
+            perms = _as_signed(perms | 0xffffffc0)
             u_entry, key = _compute_u_value_r2(
                 desired_user_pass, o_entry, perms, id1
             )
@@ -1428,7 +1454,8 @@ class StandardSecurityHandler(SecurityHandler):
         return sh
 
     @classmethod
-    def build_from_pw(cls, desired_owner_pass, desired_user_pass=None):
+    def build_from_pw(cls, desired_owner_pass, desired_user_pass=None,
+                      perms=ALL_PERMS):
         """
         Initialise a password-based security handler backed by AES-256,
         to attach to a :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
@@ -1438,6 +1465,8 @@ class StandardSecurityHandler(SecurityHandler):
             Desired owner password.
         :param desired_user_pass:
             Desired user password.
+        :param perms:
+            Desired usage permissions.
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
@@ -1468,12 +1497,10 @@ class StandardSecurityHandler(SecurityHandler):
         )
         assert len(oe_seed) == 32
 
-        # TODO allow user to set perms
-        perms_bytes = b'\xfc\xff\xff\xff'
+        perms_bytes = struct.pack('<I', perms & 0xfffffffc)
         extd_perms_bytes = (
             perms_bytes + (b'\xff' * 4) + b'Tadb' + secrets.token_bytes(4)
         )
-        perms = struct.unpack('<i', perms_bytes)[0]
 
         # need to encrypt one 16 byte block in CBC mode with an
         # IV of 0 (equivalent to 1 block in ECB mode).
@@ -1523,7 +1550,7 @@ class StandardSecurityHandler(SecurityHandler):
             encrypt_metadata=encrypt_metadata
         )
         self.revision = revision
-        self.perms = perm_flags
+        self.perms = _as_signed(perm_flags)
         if revision == StandardSecuritySettingsRevision.AES256:
             if not (len(udata) == len(odata) == 48):
                 raise misc.PdfError(
@@ -1617,7 +1644,7 @@ class StandardSecurityHandler(SecurityHandler):
         return StandardSecurityHandler(
             version=v, revision=r, legacy_keylen=keylen,
             crypt_filter_config=cfc,
-            perm_flags=int(encrypt_dict.get('/P', ALL_PERMS)),
+            perm_flags=_as_signed(encrypt_dict.get('/P', ALL_PERMS)),
             odata=encrypt_dict['/O'].original_bytes[:48],
             udata=encrypt_dict['/U'].original_bytes[:48],
             oeseed=encrypt_dict.get_and_apply(
@@ -1639,7 +1666,7 @@ class StandardSecurityHandler(SecurityHandler):
         result['/Filter'] = generic.NameObject('/Standard')
         result['/O'] = generic.ByteStringObject(self.odata)
         result['/U'] = generic.ByteStringObject(self.udata)
-        result['/P'] = generic.NumberObject(self.perms)
+        result['/P'] = generic.NumberObject(_as_signed(self.perms))
         result['/V'] = generic.NumberObject(self.version.value)
         result['/R'] = generic.NumberObject(self.revision.value)
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
@@ -1674,7 +1701,7 @@ class StandardSecurityHandler(SecurityHandler):
     def _authenticate_legacy(self, id1: bytes, password):
         user_password, key = self._auth_user_password_legacy(id1, password)
         if user_password:
-            return AuthResult.USER, key
+            return AuthStatus.USER, key
         else:
             rev = self.revision
             key = _compute_o_value_legacy_prep(password, rev.value, self.keylen)
@@ -1688,10 +1715,10 @@ class StandardSecurityHandler(SecurityHandler):
                 userpass = val
             owner_password, key = self._auth_user_password_legacy(id1, userpass)
             if owner_password:
-                return AuthResult.OWNER, key
-        return AuthResult.FAILED, None
+                return AuthStatus.OWNER, key
+        return AuthStatus.FAILED, None
 
-    def authenticate(self, credential, id1: bytes = None):
+    def authenticate(self, credential, id1: bytes = None) -> AuthResult:
         """
         Authenticate a user to this security handler.
 
@@ -1701,9 +1728,10 @@ class StandardSecurityHandler(SecurityHandler):
             First part of the document ID. This is mandatory for legacy
             encryption handlers, but meaningless otherwise.
         :return:
-            A :class:`AuthResult` object indicating the level of access
+            An :class:`AuthResult` object indicating the level of access
             obtained.
         """
+        res: AuthStatus
         rev = self.revision
         if rev == StandardSecuritySettingsRevision.AES256:
             res, key = self._authenticate_r6(credential)
@@ -1718,24 +1746,27 @@ class StandardSecurityHandler(SecurityHandler):
             self._shared_key = key
         else:
             self._auth_failed = True
-        return res
+        return AuthResult(
+            status=res,
+            permission_flags=self.perms if res == AuthStatus.USER else None
+        )
 
     # Algorithm 2.A in ISO 32000-2 § 7.6.4.3.3
-    def _authenticate_r6(self, password) -> Tuple[AuthResult, Optional[bytes]]:
+    def _authenticate_r6(self, password) -> Tuple[AuthStatus, Optional[bytes]]:
         pw_bytes = _r6_normalise_pw(password)
         o_entry_split = _R6KeyEntry.from_bytes(self.odata)
         u_entry_split = _R6KeyEntry.from_bytes(self.udata)
 
         if _r6_password_authenticate(pw_bytes, o_entry_split, self.udata):
-            result = AuthResult.OWNER
+            result = AuthStatus.OWNER
             key = _r6_derive_file_key(
                 pw_bytes, o_entry_split, self.oeseed, self.udata
             )
         elif _r6_password_authenticate(pw_bytes, u_entry_split):
-            result = AuthResult.USER
+            result = AuthStatus.USER
             key = _r6_derive_file_key(pw_bytes, u_entry_split, self.ueseed)
         else:
-            return AuthResult.FAILED, None
+            return AuthStatus.FAILED, None
 
         # check the file key against the perms entry
 
@@ -2012,7 +2043,8 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
 
 
 def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
-                                 decrypter: EnvelopeKeyDecrypter):
+                                 decrypter: EnvelopeKeyDecrypter) \
+        -> Tuple[Optional[bytes], Optional[int]]:
     content_type = recipient_cms['content_type'].native
     if content_type != 'enveloped_data':
         raise misc.PdfReadError(
@@ -2046,7 +2078,7 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
             )
             break
     else:
-        return None
+        return None, None
 
     # we have the envelope key
     # next up: decrypting the envelope
@@ -2080,7 +2112,12 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
             f"Cipher {cipher_name} is not allowed in PDF 2.0."
         )  # pragma: nocover
 
-    return content[:20]
+    seed = content[:20]
+    perms: Optional[int] = None
+    if len(content) == 24:
+        # permissions are included
+        perms = struct.unpack('<i', content[20:])[0]
+    return seed, perms
 
 
 @SecurityHandler.register
@@ -2097,6 +2134,7 @@ class PubKeySecurityHandler(SecurityHandler):
                          keylen_bytes=16,
                          version=SecurityHandlerVersion.AES256,
                          use_aes=True, use_crypt_filters=True,
+                         perms: int=ALL_PERMS,
                          encrypt_metadata=True) -> 'PubKeySecurityHandler':
         """
         Create a new public key security handler.
@@ -2119,6 +2157,8 @@ class PubKeySecurityHandler(SecurityHandler):
             Whether to use crypt filters. This is mandatory for security
             handlers of version :attr:`~.SecurityHandlerVersion.RC4_OR_AES128`
             or higher.
+        :param perms:
+            Permission flags (as a 4-byte signed integer).
         :param encrypt_metadata:
             Whether to encrypt document metadata.
 
@@ -2151,7 +2191,7 @@ class PubKeySecurityHandler(SecurityHandler):
             encrypt_metadata=encrypt_metadata, crypt_filter_config=cfc,
             recipient_objs=None
         )
-        sh.add_recipients(certs)
+        sh.add_recipients(certs, perms=perms)
         return sh
 
     def __init__(self, version: SecurityHandlerVersion,
@@ -2288,7 +2328,7 @@ class PubKeySecurityHandler(SecurityHandler):
             )
         return result
 
-    def add_recipients(self, certs: List[x509.Certificate]):
+    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS):
         # add recipients to all *default* crypt filters
         # callers that want to do this more granularly are welcome to, but
         # then they have to do the legwork themselves.
@@ -2296,7 +2336,7 @@ class PubKeySecurityHandler(SecurityHandler):
         for cf in self.crypt_filter_config.default_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
-            cf.add_recipients(certs)
+            cf.add_recipients(certs, perms=perms)
 
     def authenticate(self, credential: EnvelopeKeyDecrypter, id1=None) \
             -> AuthResult:
@@ -2310,7 +2350,7 @@ class PubKeySecurityHandler(SecurityHandler):
             First part of the document ID.
             Public key encryption handlers ignore this key.
         :return:
-            A :class:`AuthResult` object indicating the level of access
+            An :class:`AuthResult` object indicating the level of access
             obtained.
         """
         if not isinstance(credential, EnvelopeKeyDecrypter):
@@ -2319,14 +2359,19 @@ class PubKeySecurityHandler(SecurityHandler):
                 f"EnvelopeKeyDecrypter, not {type(credential)}."
             )  # pragma: nocover
 
+        perms = 0xffffffff
         for cf in self.crypt_filter_config.default_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
             recp: cms.ContentInfo
             result = cf.authenticate(credential)
-            if result == AuthResult.FAILED:
-                return AuthResult.FAILED
-        return AuthResult.USER
+            if result.status == AuthStatus.FAILED:
+                return result
+            # these should really be the same for both filters, but hey,
+            # you never know. ANDing them seems to be the most reasonable
+            # course of action
+            perms &= result.permission_flags
+        return AuthResult(AuthStatus.USER, _as_signed(perms))
 
     @staticmethod
     def read_pubkey_cf_dictionary(cfdict, acts_as_default):

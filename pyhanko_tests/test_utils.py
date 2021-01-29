@@ -18,7 +18,7 @@ from pyhanko.pdf_utils.content import (
 )
 from pyhanko.pdf_utils.crypt import (
     StandardSecurityHandler,
-    StandardSecuritySettingsRevision, IdentityCryptFilter, AuthResult,
+    StandardSecuritySettingsRevision, IdentityCryptFilter, AuthStatus,
     PubKeySecurityHandler, SecurityHandlerVersion, CryptFilterConfiguration,
     StandardRC4CryptFilter, StandardAESCryptFilter, STD_CF,
     PubKeyRC4CryptFilter, PubKeyAESCryptFilter, PubKeyAdbeSubFilter,
@@ -715,7 +715,8 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw_legacy(
         rev, w._document_id[0].original_bytes, "ownersecret", "usersecret",
-        keylen_bytes=keylen_bytes, use_aes128=use_aes
+        keylen_bytes=keylen_bytes, use_aes128=use_aes,
+        perms=-44
     )
     w.security_handler = sh
     w._encrypt = w.add_object(sh.as_pdf_object())
@@ -726,8 +727,15 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
     out = BytesIO()
     w.write(out)
     r = PdfFileReader(out)
-    r.decrypt("ownersecret" if use_owner_pass else "usersecret")
+    result = r.decrypt("ownersecret" if use_owner_pass else "usersecret")
+    if use_owner_pass:
+        assert result.status == AuthStatus.OWNER
+        assert result.permission_flags is None
+    else:
+        assert result.status == AuthStatus.USER
+        assert result.permission_flags == -44
     page = r.root['/Pages']['/Kids'][0].get_object()
+    assert r.trailer['/Encrypt']['/P'] == -44
     assert '/ExtGState' in page['/Resources']
     # just a piece of data I know occurs in the decoded content stream
     # of the (only) page in VECTOR_IMAGE_PDF
@@ -753,7 +761,7 @@ def test_wrong_password(legacy):
     r = PdfFileReader(out)
     with pytest.raises(misc.PdfReadError):
         r.get_object(ref.reference)
-    assert r.decrypt("thispasswordiswrong") == AuthResult.FAILED
+    assert r.decrypt("thispasswordiswrong").status == AuthStatus.FAILED
     assert r.security_handler._auth_failed
     assert r.security_handler.get_string_filter()._auth_failed
     with pytest.raises(misc.PdfReadError):
@@ -834,7 +842,8 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
 
     sh = PubKeySecurityHandler.build_from_certs(
         [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=keylen,
-        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters
+        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
+        perms=-44
     )
     w.security_handler = sh
     w._encrypt = w.add_object(sh.as_pdf_object())
@@ -845,7 +854,9 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
     out = BytesIO()
     w.write(out)
     r = PdfFileReader(out)
-    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    assert result.status == AuthStatus.USER
+    assert result.permission_flags == -44
     page = r.root['/Pages']['/Kids'][0].get_object()
     assert '/ExtGState' in page['/Resources']
     # just a piece of data I know occurs in the decoded content stream
@@ -1130,6 +1141,17 @@ def test_copy_file():
     assert len(r.root['/Pages']['/Kids']) == 1
 
 
+def test_aes256_perm_read():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
+    result = r.decrypt("ownersecret")
+    assert result.permission_flags is None
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
+    result = r.decrypt("usersecret")
+    assert result.permission_flags == -4
+
+    assert r.trailer['/Encrypt']['/P'] == -4
+
+
 def test_copy_encrypted_file():
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
     r.decrypt("ownersecret")
@@ -1181,7 +1203,7 @@ def test_pubkey_wrong_cert():
     w.write(out)
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
-    assert result == AuthResult.FAILED
+    assert result.status == AuthStatus.FAILED
 
     with pytest.raises(misc.PdfError):
         r.get_object(ref.reference)

@@ -15,7 +15,7 @@ from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.crypt import (
     SimpleEnvelopeKeyDecrypter,
-    PubKeySecurityHandler, AuthResult,
+    PubKeySecurityHandler, AuthStatus,
 )
 
 from pyhanko.sign import signers
@@ -842,13 +842,13 @@ def decrypt_with_password(infile, outfile, password, force):
             if not password:
                 password = getpass.getpass(prompt='File password: ')
             auth_result = r.decrypt(password)
-            if auth_result == AuthResult.USER and not force:
+            if auth_result.status == AuthStatus.USER and not force:
                 raise click.ClickException(
                     "Password specified was the user password, not "
                     "the owner password. Pass --force to decrypt the "
                     "file anyway."
                 )
-            elif auth_result == AuthResult.FAILED:
+            elif auth_result.status == AuthStatus.FAILED:
                 raise click.ClickException("Password didn't match.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:
@@ -888,7 +888,7 @@ def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
                     "File was not encrypted with a public-key security handler."
                 )
             auth_result = r.decrypt_pubkey(sedk)
-            if auth_result == AuthResult.USER:
+            if auth_result.status == AuthStatus.USER:
                 # TODO read 2nd bit of perms in CMS enveloped data
                 #  is the one indicating that change of encryption is OK
                 if not force:
@@ -896,7 +896,7 @@ def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
                         "Change of encryption is typically not allowed with "
                         "user access. Pass --force to decrypt the file anyway."
                     )
-            elif auth_result == AuthResult.FAILED:
+            elif auth_result.status == AuthStatus.FAILED:
                 raise click.ClickException("Failed to decrypt the file.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:
