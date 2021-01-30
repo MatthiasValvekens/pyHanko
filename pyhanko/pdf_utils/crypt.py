@@ -53,7 +53,6 @@ uses of crypt filters:
 As long as you don't require access to encoded object data and/or raw encrypted
 object data, this distiction should be irrelevant to you as an API user.
 """
-
 import logging
 import abc
 import struct
@@ -63,8 +62,7 @@ from dataclasses import dataclass
 from hashlib import md5, sha256, sha384, sha512, sha1
 from typing import Dict, Type, Optional, Tuple, Union, List, Set
 
-from asn1crypto import x509, cms
-from asn1crypto.algos import EncryptionAlgorithmId
+from asn1crypto import x509, cms, algos
 from asn1crypto.keys import PublicKeyAlgorithm, PrivateKeyInfo
 from oscrypto import symmetric, asymmetric, keys as oskeys
 
@@ -602,6 +600,9 @@ class SecurityHandler:
         if name is None:
             return self.crypt_filter_config.get_for_stream()
         return self.crypt_filter_config[name]
+
+    def get_file_encryption_key(self) -> bytes:
+        raise NotImplementedError
 
 
 @enum.unique
@@ -1896,7 +1897,7 @@ def construct_recipient_cms(certificates: List[x509.Certificate], seed: bytes,
     rec_infos = [_recipient_info(envelope_key, cert) for cert in certificates]
 
     algo = cms.EncryptionAlgorithm({
-        'algorithm': EncryptionAlgorithmId('aes256_cbc'),
+        'algorithm': algos.EncryptionAlgorithmId('aes256_cbc'),
         'parameters': iv
     })
     encrypted_content_info = cms.EncryptedContentInfo({
@@ -2134,7 +2135,7 @@ class PubKeySecurityHandler(SecurityHandler):
                          keylen_bytes=16,
                          version=SecurityHandlerVersion.AES256,
                          use_aes=True, use_crypt_filters=True,
-                         perms: int=ALL_PERMS,
+                         perms: int = ALL_PERMS,
                          encrypt_metadata=True) -> 'PubKeySecurityHandler':
         """
         Create a new public key security handler.
@@ -2424,3 +2425,7 @@ class PubKeySecurityHandler(SecurityHandler):
             )
         else:
             raise NotImplementedError("No such crypt filter method: " + cfm)
+
+    def get_file_encryption_key(self) -> bytes:
+        # just grab the key from the default stream filter
+        return self.crypt_filter_config.get_for_stream().shared_key
