@@ -20,6 +20,7 @@ from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import general
 from pyhanko.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
@@ -120,52 +121,21 @@ class DERPlaceholder(generic.PdfObject):
 DEFAULT_SIG_SUBFILTER = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
 
-class PdfSignedData(generic.DictionaryObject):
-    """
-    Generic class to model signature dictionaries in a PDF file.
-    See also :class:`.SignatureObject` and :class:`.DocumentTimestamp`.
+class PdfByteRangeDigest(generic.DictionaryObject):
 
-    :param obj_type:
-        The type of signature object.
-    :param subfilter:
-        See :class:`.SigSeedSubFilter`.
-    :param timestamp:
-        The timestamp to embed into the ``/M`` entry.
-    :param bytes_reserved:
-        The number of bytes to reserve for the signature.
-        Defaults to 16 KiB.
-
-        .. warning::
-            Since the CMS object is written to the output file as a hexadecimal
-            string, you should request **twice** the (estimated) number of bytes
-            in the DER-encoded version of the CMS object.
-    """
-
-    def __init__(self, obj_type,
-                 subfilter: SigSeedSubFilter = DEFAULT_SIG_SUBFILTER,
-                 timestamp: datetime = None, bytes_reserved=None):
+    def __init__(self, data_key=pdf_name('/Contents'), *, bytes_reserved=None):
+        super().__init__()
         if bytes_reserved is not None and bytes_reserved % 2 == 1:
             raise ValueError('bytes_reserved must be even')
 
-        super().__init__(
-            {
-                pdf_name('/Type'): obj_type,
-                pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
-                pdf_name('/SubFilter'): subfilter.value,
-            }
-        )
-
-        if timestamp is not None:
-            self[pdf_name('/M')] = pdf_date(timestamp)
-
-        # initialise placeholders for /Contents and /ByteRange
-        sig_contents = DERPlaceholder(bytes_reserved=bytes_reserved)
-        self[pdf_name('/Contents')] = self.signature_contents = sig_contents
+        self.data_key = data_key
+        contents = DERPlaceholder(bytes_reserved=bytes_reserved)
+        self[data_key] = self.contents = contents
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
-    def write_signature(self, writer: IncrementalPdfFileWriter, md_algorithm,
-                        in_place=False, output=None, chunk_size=4096):
+    def fill(self, writer: BasePdfFileWriter, md_algorithm,
+             in_place=False, output=None, chunk_size=4096):
         """
         Generator coroutine that handles the document hash computation and
         the actual filling of the placeholder data.
@@ -174,7 +144,12 @@ class PdfSignedData(generic.DictionaryObject):
         wherever possible. If you *really* need fine-grained control,
         use :class:`.PdfCMSEmbedder` instead.
         """
+
         if in_place:
+            if not isinstance(writer, IncrementalPdfFileWriter):
+                raise TypeError(
+                    "in_place is only meaningful for incremental writers."
+                )  # pragma: nocover
             output = writer.prev.stream
             writer.write_in_place()
         else:
@@ -186,7 +161,7 @@ class PdfSignedData(generic.DictionaryObject):
         # retcon time: write the proper values of the /ByteRange entry
         #  in the signature object
         eof = output.tell()
-        sig_start, sig_end = self.signature_contents.offsets
+        sig_start, sig_end = self.contents.offsets
         self.byte_range.fill_offsets(output, sig_start, sig_end, eof)
 
         # compute the digests
@@ -215,21 +190,21 @@ class PdfSignedData(generic.DictionaryObject):
             misc.chunked_digest(temp_buffer, output, md, max_read=eof-sig_end)
 
         digest_value = md.digest()
-        signature_cms = yield digest_value
+        cms_data = yield digest_value
 
-        if isinstance(signature_cms, bytes):
-            signature_bytes = signature_cms
+        if isinstance(cms_data, bytes):
+            der_bytes = cms_data
         else:
-            signature_bytes = signature_cms.dump()
-        signature = binascii.hexlify(signature_bytes).upper()
+            der_bytes = cms_data.dump()
+        cms_hex = binascii.hexlify(der_bytes).upper()
 
         # might as well compute this
         bytes_reserved = sig_end - sig_start - 2
-        length = len(signature)
+        length = len(cms_hex)
         if length > bytes_reserved:
             raise SigningError(
-                f"Final signature buffer larger than expected: "
-                f"allocated {bytes_reserved} bytes, but signature required"
+                f"Final CMS buffer larger than expected: "
+                f"allocated {bytes_reserved} bytes, but CMS required "
                 f"{length} bytes."
             )  # pragma: nocover
 
@@ -239,11 +214,48 @@ class PdfSignedData(generic.DictionaryObject):
         # signature contents are NOT supposed to be encrypted.
         # Perhaps this falls under the "strings in encrypted containers"
         # denominator in § 7.6.1?
-        output.write(signature)
+        # Addition: the PDF 2.0 spec *does* spell out that this content
+        # is not to be encrypted.
+        output.write(cms_hex)
 
         output.seek(0)
-        padding = bytes(bytes_reserved // 2 - len(signature_bytes))
-        yield output, signature_bytes + padding
+        padding = bytes(bytes_reserved // 2 - len(der_bytes))
+        yield output, der_bytes + padding
+
+
+class PdfSignedData(PdfByteRangeDigest):
+    """
+    Generic class to model signature dictionaries in a PDF file.
+    See also :class:`.SignatureObject` and :class:`.DocumentTimestamp`.
+
+    :param obj_type:
+        The type of signature object.
+    :param subfilter:
+        See :class:`.SigSeedSubFilter`.
+    :param timestamp:
+        The timestamp to embed into the ``/M`` entry.
+    :param bytes_reserved:
+        The number of bytes to reserve for the signature.
+        Defaults to 16 KiB.
+
+        .. warning::
+            Since the CMS object is written to the output file as a hexadecimal
+            string, you should request **twice** the (estimated) number of bytes
+            in the DER-encoded version of the CMS object.
+    """
+
+    def __init__(self, obj_type,
+                 subfilter: SigSeedSubFilter = DEFAULT_SIG_SUBFILTER,
+                 timestamp: datetime = None, bytes_reserved=None):
+        super().__init__(bytes_reserved=bytes_reserved)
+        self.update({
+            pdf_name('/Type'): obj_type,
+            pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
+            pdf_name('/SubFilter'): subfilter.value,
+        })
+
+        if timestamp is not None:
+            self[pdf_name('/M')] = pdf_date(timestamp)
 
 
 class SignatureObject(PdfSignedData):
@@ -1505,7 +1517,7 @@ class PdfCMSEmbedder:
         assert isinstance(sig_io, SigIOSetup)
 
         # pass control to the sig object's write_signature coroutine
-        yield from sig_obj.write_signature(
+        yield from sig_obj.fill(
             writer, sig_io.md_algorithm, in_place=sig_io.in_place,
             output=sig_io.output, chunk_size=sig_io.chunk_size
         )
