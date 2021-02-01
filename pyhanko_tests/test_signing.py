@@ -293,6 +293,26 @@ def test_diff_fallback_ok(policy, skip_diff):
         assert status.docmdp_ok
 
 
+def test_no_diff_summary():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    # just do an incremental DSS update
+    DocumentSecurityStore.add_dss(
+        out, sig_contents=None, certs=(SELF_SIGN.signing_cert,)
+    )
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    status = validate_pdf_signature(emb, skip_diff=True)
+    assert emb.diff_result is None
+    assert status.modification_level is None
+    assert not status.docmdp_ok
+    assert status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
+    assert 'EXTENDED' in status.summary()
+
+
 @freeze_time('2020-11-01')
 def test_sign_with_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -1637,3 +1657,14 @@ def test_direct_pdfcmsembedder_usage():
 
     r = PdfFileReader(input_buf)
     val_trusted(r.embedded_signatures[0])
+
+    # add some stuff to the DSS for kicks
+    DocumentSecurityStore.add_dss(
+        output, sig_contents, certs=FROM_CA.cert_registry, ocsps=(FIXED_OCSP,)
+    )
+    r = PdfFileReader(input_buf)
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    val_trusted(r.embedded_signatures[0], extd=True)
+    assert dss is not None
+    assert len(dss.certs) == 3
+    assert len(dss.ocsps) == 1

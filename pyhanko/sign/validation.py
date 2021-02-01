@@ -1675,45 +1675,51 @@ class DocumentSecurityStore:
         ident = hashlib.sha1(contents).digest().hex().upper()
         return pdf_name('/' + ident)
 
-    def register_vri(self, identifier, paths, validation_context):
+    def register_vri(self, identifier, *, certs=(), ocsps=(), crls=()):
         """
         Register validation information for a set of signing certificates
         associated with a particular signature.
 
         :param identifier:
-            Identifier of the signature object (see `sig_content_identifier`)
-        :param paths:
-            Validation paths to add.
-        :param validation_context:
-            Validation context to source CRLs and OCSP responses from.
+            Identifier of the signature object (see `sig_content_identifier`).
+            If ``None``, only embed the data into the DSS without associating
+            it with any VRI.
+        :param certs:
+            Certificates to add.
+        :param ocsps:
+            OCSP responses to add.
+        :param crls:
+            CRLs to add.
         """
 
         if self.writer is None:
             raise TypeError('This DSS does not support updates.')
 
-        # embed any hardcoded ocsp responses and CRLs, if applicable
-        ocsps = set(
-            self._cms_objects_to_streams(
-                validation_context.ocsps, self._ocsps_seen, self.ocsps
+        ocsps = list(ocsps)
+        crls = list(crls)
+
+        ocsp_refs = set()
+        crl_refs = set()
+        cert_refs = {self._embed_cert(cert) for cert in certs}
+        if ocsps:
+            ocsp_refs = set(
+                self._cms_objects_to_streams(
+                    ocsps, self._ocsps_seen, self.ocsps
+                )
             )
-        )
-        crls = set(
-            self._cms_objects_to_streams(
-                validation_context.crls, self._crls_seen, self.crls
+        if crls:
+            crl_refs = set(
+                self._cms_objects_to_streams(crls, self._crls_seen, self.crls)
             )
-        )
-        path: ValidationPath
         # TODO while somewhat less common, CRL signing can also be delegated
         #  we should take that into account
-        cert_refs = set(self._embed_certs_from_ocsp(validation_context.ocsps))
-        for path in paths:
-            for cert in path:
-                cert_refs.add(self._embed_cert(cert))
+        cert_refs.update(set(self._embed_certs_from_ocsp(ocsps)))
 
-        vri = VRI(certs=cert_refs, ocsps=ocsps, crls=crls)
-        self.vri_entries[identifier] = self.writer.add_object(
-            vri.as_pdf_object()
-        )
+        if identifier is not None:
+            vri = VRI(certs=cert_refs, ocsps=ocsp_refs, crls=crl_refs)
+            self.vri_entries[identifier] = self.writer.add_object(
+                vri.as_pdf_object()
+            )
 
     def as_pdf_object(self):
         """
@@ -1838,16 +1844,29 @@ class DocumentSecurityStore:
         return dss
 
     @classmethod
-    def add_dss(cls, output_stream, sig_contents, paths,
-                validation_context):
+    def add_dss(cls, output_stream, sig_contents, *, certs=None,
+                ocsps=None, crls=None, paths=None, validation_context=None):
         """
-        Add or update a DSS, and add the new information to a specific VRI.
-        This will be done as an incremental update.
+        Add or update a DSS, and optionally associate the new information with a
+        VRI entry tied to a signature object.
+
+        The result is applied to the output stream as an incremental update.
+
+        You can either specify the CMS objects to include directly, or
+        pass them in as output from `certvalidator`.
 
         :param output_stream:
             Output stream to write to.
         :param sig_contents:
-            Contents of the new signature (used to compute the VRI hash)
+            Contents of the new signature (used to compute the VRI hash).
+            If ``None``, the information will not be added to any VRI
+            dictionary.
+        :param certs:
+            Certificates to include in the VRI entry.
+        :param ocsps:
+            OCSP responses to include in the VRI entry.
+        :param crls:
+            CRLs to include in the VRI entry.
         :param paths:
             Validation paths that have been established, and need to be added
             to the DSS.
@@ -1863,9 +1882,32 @@ class DocumentSecurityStore:
             created = True
             dss = cls(writer=writer)
 
-        identifier = DocumentSecurityStore.sig_content_identifier(sig_contents)
+        if sig_contents is not None:
+            identifier = DocumentSecurityStore.sig_content_identifier(
+                sig_contents
+            )
+        else:
+            identifier = None
 
-        dss.register_vri(identifier, paths, validation_context)
+        def _certs():
+            yield from certs or ()
+            path: ValidationPath
+            for path in (paths or ()):
+                yield from path
+
+        def _ocsps():
+            yield from ocsps or ()
+            if validation_context is not None:
+                yield from validation_context.ocsps
+
+        def _crls():
+            yield from crls or ()
+            if validation_context is not None:
+                yield from validation_context.crls
+
+        dss.register_vri(
+            identifier, certs=_certs(), ocsps=_ocsps(), crls=_crls()
+        )
         dss_dict = dss.as_pdf_object()
         # if we're updating the DSS, this is all we need to do.
         # if we're adding a fresh DSS, we need to register it.
