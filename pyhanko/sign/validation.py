@@ -412,7 +412,10 @@ class PdfSignatureStatus(SignatureStatus):
         if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
             yield 'UNTOUCHED'
         elif self.coverage == SignatureCoverageLevel.ENTIRE_REVISION:
-            yield 'EXTENDED_WITH_' + self.modification_level.name
+            if self.modification_level is not None:
+                yield 'EXTENDED_WITH_' + self.modification_level.name
+            else:
+                yield 'EXTENDED'
         else:
             yield 'NONSTANDARD_COVERAGE'
         if self.docmdp_ok:
