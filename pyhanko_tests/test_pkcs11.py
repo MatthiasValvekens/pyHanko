@@ -8,6 +8,7 @@ import os
 from io import BytesIO
 
 import pytest
+import logging
 from freezegun import freeze_time
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -16,9 +17,13 @@ from pyhanko.sign import signers, pkcs11
 from pyhanko_tests.samples import MINIMAL
 from pyhanko_tests.test_signing import val_trusted, SIMPLE_ECC_V_CONTEXT
 
+logger = logging.getLogger(__name__)
+
+SKIP_PKCS11 = False
 pkcs11_test_module = os.environ.get('PKCS11_TEST_MODULE', None)
 if not pkcs11_test_module:
-    raise RuntimeError("No path to PKCS#11 specified in PKCS11_TEST_MODULE")
+    logger.warning("Skipping PKCS#11 tests --- no PCKS#11 module specified")
+    SKIP_PKCS11 = True
 
 
 def _simple_sess(token='testrsa'):
@@ -30,6 +35,7 @@ def _simple_sess(token='testrsa'):
 default_other_certs = ('root', 'intermediate')
 
 
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
 @freeze_time('2020-11-01')
