@@ -5,7 +5,8 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
 
 import logging
-from asn1crypto.algos import SignedDigestAlgorithm
+
+from asn1crypto.algos import RSASSAPSSParams
 from pkcs11 import (
     Session, ObjectClass, Attribute, lib as pkcs11_lib, PKCS11Error
 )
@@ -96,9 +97,6 @@ class PKCS11Signer(Signer):
     """
     Signer implementation for PKCS11 devices.
 
-    Note: this class only supports the "RSA with PKCS#1 v1.5" scheme.
-    In particular, there's no ECDSA support (yet).
-
     :param pkcs11_session:
         The PKCS11 session object to use.
     :param cert_label:
@@ -122,7 +120,7 @@ class PKCS11Signer(Signer):
 
     def __init__(self, pkcs11_session: Session,
                  cert_label: str,
-                 ca_chain=None, key_label=None,
+                 ca_chain=None, key_label=None, prefer_pss=False,
                  other_certs_to_pull=(), bulk_fetch=True):
         """
         Initialise a PKCS11 signer.
@@ -143,10 +141,7 @@ class PKCS11Signer(Signer):
             self.bulk_fetch = bulk_fetch
         self._signing_cert = self._key_handle = None
         self._loaded = False
-        self.signature_mechanism = SignedDigestAlgorithm(
-            {'algorithm': 'rsassa_pkcs1v15'}
-        )
-        super().__init__()
+        super().__init__(prefer_pss=prefer_pss)
 
     def _init_cert_registry(self):
         # it's conceivable that one might want to load this separately from
@@ -172,15 +167,73 @@ class PKCS11Signer(Signer):
             return b'0' * 512
 
         self._load_objects()
-        from pkcs11 import Mechanism, SignMixin
+        from pkcs11 import Mechanism, SignMixin, MGF
+
         kh: SignMixin = self._key_handle
-        mech = {
-            'sha1': Mechanism.SHA1_RSA_PKCS,
-            'sha256': Mechanism.SHA256_RSA_PKCS,
-            'sha384': Mechanism.SHA384_RSA_PKCS,
-            'sha512': Mechanism.SHA512_RSA_PKCS,
-        }[digest_algorithm.lower()]
-        return kh.sign(data, mechanism=mech)
+        kwargs = {}
+        digest_algorithm = digest_algorithm.lower()
+        signature_mechanism = self.get_signature_mechanism(digest_algorithm)
+        signature_algo = signature_mechanism.signature_algo
+        transform = None
+        if signature_algo == 'rsassa_pkcs1v15':
+            kwargs['mechanism'] = {
+                'sha1': Mechanism.SHA1_RSA_PKCS,
+                'sha256': Mechanism.SHA256_RSA_PKCS,
+                'sha384': Mechanism.SHA384_RSA_PKCS,
+                'sha512': Mechanism.SHA512_RSA_PKCS,
+            }[digest_algorithm]
+        elif signature_algo == 'ecdsa':
+            # TODO test these, SoftHSM does not support these mechanisms
+            #  apparently (only raw ECDSA)
+            kwargs['mechanism'] = {
+                'sha1': Mechanism.ECDSA_SHA1,
+                'sha256': Mechanism.ECDSA_SHA256,
+                'sha384': Mechanism.ECDSA_SHA384,
+                'sha512': Mechanism.ECDSA_SHA512,
+            }[digest_algorithm]
+            from pkcs11.util.ec import encode_ecdsa_signature
+            transform = encode_ecdsa_signature
+        elif signature_algo == 'rsassa_pss':
+            params: RSASSAPSSParams = signature_mechanism['parameters']
+            assert digest_algorithm == \
+                   params['hash_algorithm']['algorithm'].native
+
+            # unpack PSS parameters into PKCS#11 language
+            kwargs['mechanism'] = {
+                'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
+                'sha256': Mechanism.SHA256_RSA_PKCS_PSS,
+                'sha384': Mechanism.SHA384_RSA_PKCS_PSS,
+                'sha512': Mechanism.SHA512_RSA_PKCS_PSS,
+            }[digest_algorithm]
+
+            pss_digest_param = {
+                'sha1': Mechanism.SHA_1,
+                'sha256': Mechanism.SHA256,
+                'sha384': Mechanism.SHA384,
+                'sha512': Mechanism.SHA512,
+            }[digest_algorithm]
+
+            pss_mgf_param = {
+                'sha1': MGF.SHA1,
+                'sha256': MGF.SHA256,
+                'sha384': MGF.SHA384,
+                'sha512': MGF.SHA512
+            }[params['mask_gen_algorithm']['parameters']['algorithm'].native]
+            pss_salt_len = params['salt_length'].native
+
+            kwargs['mechanism_param'] = (
+                pss_digest_param, pss_mgf_param, pss_salt_len
+            )
+        else:
+            raise PKCS11Error(
+                f"Signature algorithm '{signature_algo}' is not supported."
+            )
+
+        signature = kh.sign(data, **kwargs)
+        if transform is not None:
+            signature = transform(signature)
+
+        return signature
 
     def _load_other_certs(self) -> Set[x509.Certificate]:
         return set(self.__pull())
@@ -217,7 +270,7 @@ class PKCS11Signer(Signer):
         if not kh[Attribute.SIGN]:
             logger.warning(
                 f"The PKCS#11 device reports that the key with label "
-                f"{self.key_label} cannot be used for signing."
+                f"{self.key_label} cannot be used for signing!"
             )
         self._key_handle = kh
 

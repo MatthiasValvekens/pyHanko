@@ -349,7 +349,7 @@ class Signer:
     about trust.
     """
 
-    signature_mechanism: SignedDigestAlgorithm
+    signature_mechanism: SignedDigestAlgorithm = None
     """
     The (cryptographic) signature mechanism to use.
     """
