@@ -113,20 +113,6 @@ class SimpleFontEngine(FontEngine):
         return font_dict
 
 
-def format_type0_font_dictionary(cidfont_ref, cidfont_name, encoding,
-                                 tounicode_ref):
-    result = generic.DictionaryObject({
-        pdf_name('/Type'): pdf_name('/Font'),
-        pdf_name('/Subtype'): pdf_name('/Type0'),
-        pdf_name('/DescendantFonts'): generic.ArrayObject([cidfont_ref]),
-        pdf_name('/Encoding'): encoding,
-        pdf_name('/BaseFont'): pdf_name(f'/{cidfont_name}-{encoding}'),
-    })
-    if tounicode_ref is not None:
-        result['/ToUnicode'] = tounicode_ref
-    return result
-
-
 class GlyphAccumulator(FontEngine):
     """
     Utility to collect & measure glyphs from TrueType fonts.
@@ -263,13 +249,17 @@ class GlyphAccumulator(FontEngine):
         cidfont_obj.embed(writer, obj_stream=obj_stream)
         cidfont_ref = writer.add_object(cidfont_obj)
         to_unicode = self._format_tounicode_cmap(*cidfont_obj.ros)
-        # take the Identity-H encoding to inherit from the /Encoding
-        # entry specified in our CIDSystemInfo dict
-        type0 = format_type0_font_dictionary(
-            cidfont_ref=cidfont_ref, cidfont_name=cidfont_obj.name,
-            encoding=pdf_name('/Identity-H'),
-            tounicode_ref=writer.add_object(to_unicode)
-        )
+        type0 = generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/Font'),
+            pdf_name('/Subtype'): pdf_name('/Type0'),
+            pdf_name('/DescendantFonts'): generic.ArrayObject([cidfont_ref]),
+            # take the Identity-H encoding to inherit from the /Encoding
+            # entry specified in our CIDSystemInfo dict
+            pdf_name('/Encoding'): pdf_name('/Identity-H'),
+            pdf_name('/BaseFont'):
+                pdf_name('/%s-Identity-H' % cidfont_obj.name),
+            pdf_name('/ToUnicode'): writer.add_object(to_unicode)
+        })
         to_unicode.compress()
         # compute widths entry
         # (easiest to do here, since it seems we need the original CIDs)
@@ -358,7 +348,7 @@ class CIDFont(generic.DictionaryObject):
             }),
             pdf_name('/BaseFont'): pdf_name('/' + ps_name)
         })
-        self._font_descriptor = format_font_descriptor(self)
+        self._font_descriptor = FontDescriptor(self)
 
     def embed(self, writer: BasePdfFileWriter, obj_stream=None):
         fd = self._font_descriptor
@@ -409,37 +399,39 @@ class CIDFontType0(CIDFont):
         return font_stream_ref
 
 
-def format_font_descriptor(cf: CIDFont):
+class FontDescriptor(generic.DictionaryObject):
     """
-    Simplistic way to embed a font descriptor. It assumes all sorts of metadata
+    Lazy way to embed a font descriptor. It assumes all sorts of metadata
     to be present. If not, it'll probably fail with a gnarly error.
     """
-    tt = cf.tt
 
-    # Some metrics
-    hhea = tt['hhea']
-    head = tt['head']
-    bbox = [head.xMin, head.yMin, head.xMax, head.yMax]
-    os2 = tt['OS/2']
-    weight = os2.usWeightClass
-    stemv = int(10 + 220 * (weight - 50) / 900)
-    return generic.DictionaryObject({
-        pdf_name('/Type'): pdf_name('/FontDescriptor'),
-        pdf_name('/FontName'): pdf_name('/' + cf.name),
-        pdf_name('/Ascent'): generic.NumberObject(hhea.ascent),
-        pdf_name('/Descent'): generic.NumberObject(hhea.descent),
-        pdf_name('/FontBBox'): generic.ArrayObject(
-            map(generic.NumberObject, bbox)
-        ),
-        # FIXME I'm setting the Serif and Symbolic flags here, but
-        #  is there any way we can read/infer those from the TTF metadata?
-        pdf_name('/Flags'): generic.NumberObject(0b110),
-        pdf_name('/StemV'): generic.NumberObject(stemv),
-        pdf_name('/ItalicAngle'): generic.FloatObject(
-            tt['post'].italicAngle
-        ),
-        pdf_name('/CapHeight'): generic.NumberObject(os2.sCapHeight)
-    })
+    def __init__(self, cf: CIDFont):
+        tt = cf.tt
+
+        # Some metrics
+        hhea = tt['hhea']
+        head = tt['head']
+        bbox = [head.xMin, head.yMin, head.xMax, head.yMax]
+        os2 = tt['OS/2']
+        weight = os2.usWeightClass
+        stemv = int(10 + 220 * (weight - 50) / 900)
+        super().__init__({
+            pdf_name('/Type'): pdf_name('/FontDescriptor'),
+            pdf_name('/FontName'): pdf_name('/' + cf.name),
+            pdf_name('/Ascent'): generic.NumberObject(hhea.ascent),
+            pdf_name('/Descent'): generic.NumberObject(hhea.descent),
+            pdf_name('/FontBBox'): generic.ArrayObject(
+                map(generic.NumberObject, bbox)
+            ),
+            # FIXME I'm setting the Serif and Symbolic flags here, but
+            #  is there any way we can read/infer those from the TTF metadata?
+            pdf_name('/Flags'): generic.NumberObject(0b110),
+            pdf_name('/StemV'): generic.NumberObject(stemv),
+            pdf_name('/ItalicAngle'): generic.FloatObject(
+                tt['post'].italicAngle
+            ),
+            pdf_name('/CapHeight'): generic.NumberObject(os2.sCapHeight)
+        })
 
 
 @dataclass(frozen=True)
