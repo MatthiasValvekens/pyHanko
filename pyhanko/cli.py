@@ -635,14 +635,12 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
     session = beid.open_beid_session(lib, slot_no=slot_no)
-    label = 'Authentication' if use_auth_cert else 'Signature'
     if timestamp_url is not None:
         timestamper = HTTPTimeStamper(timestamp_url)
     else:
         timestamper = None
-    signer = beid.BEIDSigner(
-        session, label
-    )
+
+    signer = beid.BEIDSigner(session, use_auth_cert=use_auth_cert)
 
     stamp_url = ctx.obj[Ctx.STAMP_URL]
     text_params = None
