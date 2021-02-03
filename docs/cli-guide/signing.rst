@@ -5,7 +5,7 @@ Signing PDF files using pyHanko can be very simple or somewhat complicated,
 depending on the specific requirements of your use case.
 PyHanko offers support for both visible and invisible signatures, several
 baseline PAdES profiles, seed values, and creating signatures using PKCS#11
-devices\ [#pkcs11]_.
+devices.
 
 
 .. _pdf-signing-background:
@@ -212,10 +212,10 @@ certificates found in the PKCS#12 archive passed in.
 Signing a PDF file using a Belgian eID card
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-PyHanko also supports PKCS#11 devices to create signatures, although the CLI
-only exposes a wrapper for Belgian eID cards\ [#pkcs11]_.
-This should work on all platforms supported by the eID middleware (tested on
-Linux, macOS and Windows).
+PyHanko also supports creating signatures using PKCS#11 devices.
+In this section, we explain how that works for Belgian eID cards, but the
+general workflow for PKCS#11 devices using the ``pkcs11`` subcommand
+is very similar (you only have to specify the key/certificate labels yourself).
 
 To sign a PDF file using your eID card, use the ``beid`` subcommand to
 ``addsig``, with the ``--lib`` parameter to tell pyHanko where to look for the
@@ -449,18 +449,6 @@ file. Defining styles works the same way as pyHanko's stamping functionality;
 see :doc:`stamping` and :ref:`style-definitions` for details.
 
 .. rubric:: Footnotes
-.. [#pkcs11]
-    The PKCS#11 functionality is currently only exposed in the CLI for
-    Belgian eID cards, but it should be reasonably easy to write an
-    implementation that works for any (RSA-based) PKCS#11 device.
-    That being said, my experience with general PKCS#11 is limited, and I'm not
-    100% sure about current best practices for generic PKCS#11 clients
-    (key selection, key-certificate pairing, ...).
-    Additionally, the PKCS#11 module doesn't support ECC-based certificates yet,
-    because I currently don't have the means to test those.
-    The newest generation of BeID cards (Applet v1.8, launched in 2020) will
-    therefore probably take a while to be integrated into the CLI.
-    Discussion and (properly motivated) pull requests are certainly welcome!
 .. [#modpolexceptions]
     There are some legitimate modifications that cannot be prohibited by
     any document modification policy, such as the addition of document

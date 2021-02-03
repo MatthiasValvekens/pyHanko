@@ -18,7 +18,7 @@ from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler, AuthStatus,
 )
 
-from pyhanko.sign import signers
+from pyhanko.sign import signers, pkcs11
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign import validation, beid, fields
@@ -504,9 +504,17 @@ def _open_for_signing(infile_path, signer_cert=None, signer_key=None):
     return writer
 
 
+def get_text_params(ctx):
+    text_params = None
+    stamp_url = ctx.obj[Ctx.STAMP_URL]
+    if stamp_url is not None:
+        text_params = {'url': stamp_url}
+    return text_params
+
+
 def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
-                         style, stamp_url, new_field_spec):
+                         style, text_params, new_field_spec):
     with pyhanko_exception_manager():
         if timestamp_url is not None:
             timestamper = HTTPTimeStamper(timestamp_url)
@@ -517,24 +525,30 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
             signer_key=signer.signing_key
         )
 
-        text_params = None
-        if stamp_url is not None:
-            text_params = {'url': stamp_url}
-
-        result = signers.PdfSigner(
-            signature_meta, signer=signer, timestamper=timestamper,
-            stamp_style=style, new_field_spec=new_field_spec
-        ).sign_pdf(
-            writer, existing_fields_only=existing_fields_only,
-            appearance_text_params=text_params
+        generic_sign(
+            writer=writer, outfile=outfile,
+            signature_meta=signature_meta, signer=signer,
+            timestamper=timestamper, style=style, new_field_spec=new_field_spec,
+            existing_fields_only=existing_fields_only, text_params=text_params
         )
 
-        buf = result.getbuffer()
-        outfile.write(buf)
-        buf.release()
 
-        writer.prev.stream.close()
-        outfile.close()
+def generic_sign(*, writer, outfile, signature_meta, signer, timestamper,
+                 style, new_field_spec, existing_fields_only, text_params):
+    result = signers.PdfSigner(
+        signature_meta, signer=signer, timestamper=timestamper,
+        stamp_style=style, new_field_spec=new_field_spec
+    ).sign_pdf(
+        writer, existing_fields_only=existing_fields_only,
+        appearance_text_params=text_params
+    )
+
+    buf = result.getbuffer()
+    outfile.write(buf)
+    buf.release()
+
+    writer.prev.stream.close()
+    outfile.close()
 
 
 @addsig.command(name='pemder', help='read key material from PEM/DER files')
@@ -573,7 +587,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE], stamp_url=ctx.obj[Ctx.STAMP_URL],
+        style=ctx.obj[Ctx.STAMP_STYLE], text_params=get_text_params(ctx),
         new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     )
 
@@ -614,9 +628,61 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE], stamp_url=ctx.obj[Ctx.STAMP_URL],
+        style=ctx.obj[Ctx.STAMP_STYLE], text_params=get_text_params(ctx),
         new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
     )
+
+
+# TODO add options to specify extra certs to include
+
+@addsig.command(name='pkcs11', help='use generic PKCS#11 device to sign')
+@click.argument('infile', type=click.File('rb'))
+@click.argument('outfile', type=click.File('wb'))
+@click.option('--lib', help='path to PKCS#11 module',
+              type=readable_file, required=True)
+@click.option('--token-label', help='PKCS#11 token label', type=str,
+              required=True)
+@click.option('--cert-label', help='certificate label', type=str, required=True)
+@click.option('--key-label', help='key label', type=str, required=False)
+@click.option('--slot-no', help='specify PKCS#11 slot to use',
+              required=False, type=int, default=None)
+@click.option('--skip-user-pin', type=bool, show_default=True,
+              default=False, required=False, is_flag=True,
+              help='do not prompt for PIN (e.g. if the token has a PIN pad)')
+@click.pass_context
+def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
+                  cert_label, key_label, slot_no, skip_user_pin):
+    signature_meta = ctx.obj[Ctx.SIG_META]
+    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
+    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
+
+    if skip_user_pin:
+        user_pin = None
+    else:
+        user_pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
+
+    session = pkcs11.open_pkcs11_session(
+        lib_location=lib, slot_no=slot_no, token_label=token_label,
+        user_pin=user_pin
+    )
+    if timestamp_url is not None:
+        timestamper = HTTPTimeStamper(timestamp_url)
+    else:
+        timestamper = None
+
+    signer = pkcs11.PKCS11Signer(
+        session, cert_label=cert_label, key_label=key_label,
+    )
+
+    with pyhanko_exception_manager():
+        generic_sign(
+            writer=IncrementalPdfFileWriter(infile), outfile=outfile,
+            signature_meta=signature_meta, signer=signer,
+            timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
+            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+            existing_fields_only=existing_fields_only,
+            text_params=get_text_params(ctx)
+        )
 
 
 @addsig.command(name='beid', help='use Belgian eID to sign')
@@ -642,27 +708,15 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
 
     signer = beid.BEIDSigner(session, use_auth_cert=use_auth_cert)
 
-    stamp_url = ctx.obj[Ctx.STAMP_URL]
-    text_params = None
-    if stamp_url is not None:
-        text_params = {'url': stamp_url}
-
     with pyhanko_exception_manager():
-        writer = IncrementalPdfFileWriter(infile)
-        result = signers.PdfSigner(
-            signature_meta, signer=signer, timestamper=timestamper,
-            stamp_style=ctx.obj[Ctx.STAMP_STYLE],
-            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
-        ).sign_pdf(
-            writer, existing_fields_only=existing_fields_only,
-            appearance_text_params=text_params
+        generic_sign(
+            writer=IncrementalPdfFileWriter(infile), outfile=outfile,
+            signature_meta=signature_meta, signer=signer,
+            timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
+            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+            existing_fields_only=existing_fields_only,
+            text_params=get_text_params(ctx)
         )
-        buf = result.getbuffer()
-        outfile.write(buf)
-        buf.release()
-
-        infile.close()
-        outfile.close()
 
 
 def _index_page(page):

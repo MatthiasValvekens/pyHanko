@@ -46,6 +46,7 @@ Note that not all of these are necessarily exposed through the CLI.
     - If `cryptography` is installed, pyHanko can also produce and validate 
       RSASSA-PSS signatures (with arbitrary parameters).
     - PKCS11 support
+        - Available both from the library and through the CLI
         - Extra convenience wrapper for Belgian eID cards
  - Signature validation
     - Cryptographic integrity check
