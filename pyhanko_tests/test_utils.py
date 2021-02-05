@@ -486,7 +486,7 @@ def test_object_free():
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
     assert r.xrefs.xref_sections == 3
-    assert r.xrefs[generic.Reference(1, 0)] == generic.NullObject()
+    assert r.xrefs[generic.Reference(1, 0)] is None
     assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
     assert r.xrefs[generic.Reference(1, 1)] == 300
 
@@ -510,10 +510,48 @@ def test_object_free_no_override():
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
     assert r.xrefs.xref_sections == 4
-    assert r.xrefs[generic.Reference(1, 0)] == generic.NullObject()
-    assert r.xrefs[generic.Reference(1, 1)] == generic.NullObject()
+    assert r.xrefs[generic.Reference(1, 0)] is None
+    assert r.xrefs[generic.Reference(1, 1)] is None
     assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
     assert generic.Reference(1, 1) in r.xrefs.refs_freed_in_revision(3)
+
+
+def test_refree_dead_object():
+    # I've seen the pattern below in Acrobat output.
+    # (minus the second update)
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000000 00000 f',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000000 00001 f'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00001 n'],  # reintroduce as gen 1
+    ]
+
+    r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+    assert r.xrefs.xref_sections == 3
+    assert generic.Reference(1, 0) not in r.xrefs.refs_freed_in_revision(0)
+    assert generic.Reference(1, 0) not in r.xrefs.refs_freed_in_revision(1)
+    assert generic.Reference(1, 0) not in r.xrefs.explicit_refs_in_revision(1)
+    assert generic.Reference(1, 1) in r.xrefs.explicit_refs_in_revision(2)
+
+
+def test_forbid_obj_kill():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000000 00000 f'],  # this should be forbidden
+    ]
+    with pytest.raises(misc.PdfReadError):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
 
 
 def test_increase_gen_without_free():

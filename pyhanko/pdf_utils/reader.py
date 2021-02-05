@@ -79,9 +79,6 @@ class XRefCache:
         self.xref_locations = []
         self.in_obj_stream = {}
         self.standard_xrefs = {}
-        # keep track of the xref section that last changed an entry
-        #  (needed for some validation workflows)
-        self.last_change = {}
         # making this a dict doesn't make much sense
         self.history = defaultdict(list)
         self._current_section_ids = set()
@@ -91,6 +88,11 @@ class XRefCache:
         self._generations = {}
         self._previous_expected_free = {}
         self.xref_container_info = []
+
+        # Objects that were declared as 'xxxxxxx 00000 f' in the
+        # initial revision. This sometimes happens when PDF writers clean up
+        # dead objects in a file, but want to preserve existing object IDs
+        self._initially_dead_objects = set()
 
         self._obj_streams_by_revision = defaultdict(set)
 
@@ -111,9 +113,40 @@ class XRefCache:
     def free_ref(self, idnum, next_generation):
         if not idnum:
             return
+
+        # When rewriting files & removing dead objects, Acrobat will
+        # enter the deleted reference into the Xref table/stream with
+        # a 'next generation' ID of 0. It doesn't contradict the spec directly,
+        # but I assumed that this was the way to indicate that generation 0xffff
+        # had just been freed. Apparently not, because I've seen Acrobat
+        # put that same freed reference in later revisions with a next_gen
+        # number of 1. Bizarre.
+        #
+        # Anyhow, given the ubiquity of Adobe (Acrobat|Reader), it's probably
+        # prudent to special-case this one.
+        # In doing so, we're probably not dealing correctly with the case
+        # where the 0xffff'th generation of an object is freed, but I'm happy
+        # to assume that that will never happen in a legitimate file.
+        if not next_generation:
+            self._initially_dead_objects.add(idnum)
+            # remove any subsequent freeings of the 0th generation, since it
+            # never existed in the first place
+            zeroth_gen_ref = generic.Reference(idnum, 0)
+            later_revs = zip(self._freed_by_section, self._refs_by_section)
+            for freed, defd in later_revs:
+                try:
+                    freed.remove(zeroth_gen_ref)
+                except KeyError:
+                    continue  # not freed in this revision, move on
+
+                # also delete the record of the ref being modified in that
+                # generation (freed is a subset of defd by construction)
+                defd.remove(zeroth_gen_ref)
+            return
+
         # treat this as setting idnum, next_generation-1 to null
-        prev_generation = (next_generation - 1) if next_generation else 0xffff
-        self.standard_xrefs[(prev_generation, idnum)] = generic.NullObject()
+        prev_generation = next_generation - 1
+        self.standard_xrefs[(prev_generation, idnum)] = None
         null_ref = generic.Reference(idnum, prev_generation)
         self._current_section_freed.add(null_ref)
         self._current_section_ids.add(null_ref)
@@ -133,9 +166,6 @@ class XRefCache:
         except StopIteration:
             self._generations[idnum].add(prev_generation)
 
-        if idnum not in self.last_change:
-            # this revision is the last change
-            self.last_change[idnum] = self.xref_sections
         try:
             # remove from expected free dict
             expected_generation = self._previous_expected_free.pop(idnum)
@@ -150,6 +180,12 @@ class XRefCache:
             pass
 
     def put_ref(self, idnum, generation, start):
+        if idnum in self._initially_dead_objects:
+            # see comments in free_ref for justification
+            raise PdfReadError(
+                f"Spurious history for object {idnum}; is treated as dead "
+                f"reference later in file."
+            )
         if idnum in self._previous_expected_free:
             raise PdfReadError(
                 f"Generation {generation} of object {idnum} was "
@@ -164,7 +200,6 @@ class XRefCache:
             self._previous_expected_free[idnum] = generation
         if not self.used_later(idnum, generation):
             self.standard_xrefs[(generation, idnum)] = start
-            self.last_change[idnum] = self.xref_sections
             self._generations[idnum] = {generation}
         else:
             self._generations[idnum].add(generation)
@@ -180,7 +215,6 @@ class XRefCache:
         marker = (obj_stream_num, obj_stream_ix)
         if not self.used_later(idnum, 0):
             self.in_obj_stream[idnum] = marker
-            self.last_change[idnum] = self.xref_sections
             self._generations[idnum] = {0}
 
         self.history[(0, idnum)].append((self.xref_sections, marker))
@@ -190,8 +224,10 @@ class XRefCache:
     def total_revisions(self):
         return self.xref_sections
 
-    def get_last_change(self, idnum):
-        return self.xref_sections - 1 - self.last_change[idnum]
+    def get_last_change(self, ref: generic.Reference):
+        ref_hist = self.history[(ref.generation, ref.idnum)]
+        section, _ = ref_hist[0]
+        return self.xref_sections - 1 - section
 
     def object_streams_used_in(self, revision):
         return self._obj_streams_by_revision[self.xref_sections - 1 - revision]
@@ -733,9 +769,7 @@ class PdfFileReader(PdfHandler):
 
     def _read_object(self, ref, marker, never_decrypt=False):
         if marker is None:
-            raise PdfReadError(
-                f"Reference {ref} has been freed."
-            )
+            return generic.NullObject()
         elif isinstance(marker, tuple):
             # object in object stream
             (obj_stream_num, obj_stream_ix) = marker
@@ -1122,7 +1156,7 @@ class HistoricalResolver(PdfHandler):
             # we can grab it from the "normal" shared cache.
             reader = self.reader
             revision = self.revision
-            if reader.xrefs.get_last_change(ref.idnum) <= revision:
+            if reader.xrefs.get_last_change(ref) <= revision:
                 obj = reader.get_object(ref)
             else:
                 obj = reader.get_object(ref, revision)

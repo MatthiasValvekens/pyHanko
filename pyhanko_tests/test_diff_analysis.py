@@ -933,26 +933,25 @@ def test_rogue_backreferences():
 def test_sign_reject_freed(forbid_freeing):
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    w.root['/Blah'] = freed = w.add_object(generic.pdf_string('Hi there!'))
     out = signers.sign_pdf(
         w, signature_meta=signers.PdfSignatureMetadata(field_name='Sig1'),
         signer=FROM_CA
     )
 
-    # free the ref containing the /Info dictionary
+    # free the dummy object we created before signing
     # since we don't have support for freeing objects in the writer (yet),
     # do it manually
     r = PdfFileReader(out)
     last_startxref = r.last_startxref
 
-    # NOTE the linked list offsets are dummied out, but our Xref parser
-    # doesn't care
     len_out = out.seek(0, os.SEEK_END)
     out.write(
         b'\n'.join([
             b'xref',
             b'0 1',
             b'0000000000 65535 f ',
-            b'2 1',
+            b'%d 1' % freed.idnum,
             b'0000000000 00001 f ',
             b'trailer<</Prev %d>>' % last_startxref,
             b'startxref',
@@ -962,9 +961,8 @@ def test_sign_reject_freed(forbid_freeing):
     )
     r = PdfFileReader(out)
     last_rev = r.xrefs.xref_sections - 1
-    some_ref = generic.Reference(2, 0)
 
-    assert some_ref in r.xrefs.refs_freed_in_revision(last_rev)
+    assert freed.reference in r.xrefs.refs_freed_in_revision(last_rev)
 
     sig = r.embedded_signatures[0]
     assert sig.signed_revision == 2
@@ -975,7 +973,7 @@ def test_sign_reject_freed(forbid_freeing):
         def apply_qualified(self, old: HistoricalResolver,
                             new: HistoricalResolver):
             yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
-                some_ref, paths_checked=RawPdfPath('/Root', '/Pages')
+                freed.reference, paths_checked=RawPdfPath('/Root', '/Pages')
             )
 
     val_status = validate_pdf_signature(
