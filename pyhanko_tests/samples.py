@@ -18,6 +18,8 @@ MINIMAL_TWO_FIELDS = read_all(PDF_DATA_DIR + '/minimal-two-fields.pdf')
 SIMPLE_FORM = read_all(PDF_DATA_DIR + '/minimal-with-simple-form.pdf')
 TEXTFIELD_GROUP = read_all(PDF_DATA_DIR + '/minimal-with-textfield-group.pdf')
 TEXTFIELD_GROUP_VAR = read_all(PDF_DATA_DIR + '/minimal-with-textfield-group-var.pdf')
+MINIMAL_ONE_FIELD_TAGGED = read_all(PDF_DATA_DIR + '/minimal-with-field-tagged.pdf')
+MINIMAL_TWO_FIELDS_TAGGED = read_all(PDF_DATA_DIR + '/minimal-two-fields-tagged.pdf')
 
 
 # user/owner passwords are 'usersecret' and 'ownersecret' respectively

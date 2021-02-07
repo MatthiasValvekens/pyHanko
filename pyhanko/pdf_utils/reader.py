@@ -1088,6 +1088,51 @@ class RawPdfPath:
             and (self is other or self._tag() == other._tag())
         )
 
+    def access_on(self, from_obj, dereference_last=True) -> generic.PdfObject:
+        current_obj = from_obj
+        for ix, entry in enumerate(self.path):
+            # we put this here to make dereference_last work
+            if isinstance(current_obj, generic.IndirectObject):
+                current_obj = current_obj.get_object()
+            if isinstance(entry, str):
+                if isinstance(current_obj, generic.DictionaryObject):
+                    try:
+                        current_obj = current_obj.raw_get(entry)
+                        continue
+                    except KeyError:
+                        raise misc.PdfReadError(
+                            f"Encountered missing dictionary "
+                            f"entry {entry} at position {ix} in path {self}"
+                            f"from {from_obj}."
+                        )
+            elif isinstance(entry, int):
+                if isinstance(current_obj, generic.ArrayObject):
+                    if not (0 <= entry <= len(current_obj)):
+                        raise misc.PdfReadError(
+                            f"Encountered out-of-range array index "
+                            f"{entry} at position {ix} in path {self}"
+                            f"from {from_obj}."
+                        )
+                    current_obj = current_obj.raw_get(entry)
+                    continue
+            # if we get here, there's a typing issue
+            raise misc.PdfReadError(
+                f"Type error in path {self} at position {ix}."
+            )
+        if isinstance(current_obj, generic.IndirectObject) and dereference_last:
+            return current_obj.get_object()
+        else:
+            return current_obj
+
+    def access_reference_on(self, from_obj) -> generic.Reference:
+        ind_obj = self.access_on(from_obj, dereference_last=False)
+        if not isinstance(ind_obj, generic.IndirectObject):
+            raise misc.IndirectObjectExpected(
+                f"Final entity on path {self} starting from {from_obj} is not "
+                f"an indirect object."
+            )
+        return ind_obj.reference
+
     @staticmethod
     def _fmt_node(node):
         if isinstance(node, int):
@@ -1291,13 +1336,15 @@ class HistoricalResolver(PdfHandler):
         # We flatten everything when we're done
         def _compute_paths_to_refs(obj, cur_path: misc.ConsList,
                                    seen_in_path: misc.ConsList, *,
-                                   is_page_tree, page_tree_objs):
+                                   is_page_tree, page_tree_objs,
+                                   is_struct_tree, struct_tree_objs):
 
             # optimisation: page tree gets special treatment
             # to prevent unnecessary paths from being generated when the
             # tree is entered from the outside (e.g. by following /P on a form
             # field/widget annotation)
-            # TODO what about the structure tree?
+            # The structure tree is similarly special-cased.
+
             # Can we deal with this more systematically? The problem is that
             # there's no a priori way to state which path from an object
             # to the trailer is the "canonical" one. For page objects
@@ -1313,11 +1360,13 @@ class HistoricalResolver(PdfHandler):
                 obj = self(ref)
                 if not is_page_tree and ref in page_tree_objs:
                     return
+                if not is_struct_tree and ref in struct_tree_objs:
+                    return
             if isinstance(obj, generic.DictionaryObject):
                 for k, v in obj.items():
                     # another hack to eliminate some spurious extra paths
                     # that don't convey any useful information
-                    if k == '/Parent':
+                    if k == '/Parent' or (is_struct_tree and k == '/P'):
                         continue
 
                     _compute_paths_to_refs(
@@ -1326,14 +1375,28 @@ class HistoricalResolver(PdfHandler):
                             cur_path.head == '/Root' and k == '/Pages'
                             and cur_path.tail == misc.ConsList.empty()
                         ),
-                        page_tree_objs=page_tree_objs
+                        page_tree_objs=page_tree_objs,
+                        # for the struct tree: we definitely want to
+                        # consider the /ParentTree as an "external" feature
+                        # here, since it contains lots of references to
+                        # structure elements that only exist for indexing
+                        # purposes so they don't add any extra information
+                        # (in the sense that recursing into them accomplishes
+                        # nothing)
+                        is_struct_tree=is_struct_tree or (
+                            cur_path.head == '/StructTreeRoot' and k == '/K'
+                            and cur_path.tail == misc.ConsList.sing('/Root')
+                        ),
+                        struct_tree_objs=struct_tree_objs
                     )
             elif isinstance(obj, generic.ArrayObject):
                 for ix, v in enumerate(obj):
                     _compute_paths_to_refs(
                         v, cur_path.cons(ix), seen_in_path,
                         is_page_tree=is_page_tree,
-                        page_tree_objs=page_tree_objs
+                        page_tree_objs=page_tree_objs,
+                        is_struct_tree=is_struct_tree,
+                        struct_tree_objs=struct_tree_objs
                     )
 
         def _collect_page_tree_refs(pages_obj):
@@ -1345,14 +1408,56 @@ class HistoricalResolver(PdfHandler):
                 if kid.get('/Type', None) == '/Pages':
                     yield from _collect_page_tree_refs(kid)
 
+        def _collect_struct_tree_refs(struct_elem):
+            try:
+                children = struct_elem['/K']
+            except KeyError:
+                return
+
+            # if there's only one child, /K need not be an array
+            if not isinstance(children, generic.ArrayObject):
+                children = children,
+
+            for child in children:
+                child_ref = None
+                if isinstance(child, generic.IndirectObject):
+                    child_ref = child.reference
+                    child = child.get_object()
+
+                # The /K entry can also refer to content items.
+                # We don't care about those.
+                if not isinstance(child, generic.DictionaryObject):
+                    continue
+                try:
+                    if child['/Type'] != '/StructElem':
+                        continue
+                except KeyError:
+                    # If the child doesn't have a /Type entry, /StructElem
+                    # is the default (says so in the spec)
+                    pass
+
+                if child_ref is not None:
+                    yield child_ref
+
+                yield from _collect_struct_tree_refs(child)
+
         pages_ref = self.root.raw_get('/Pages')
         page_tree_nodes = set()
         page_tree_nodes.update(
             _collect_page_tree_refs(pages_obj=pages_ref.get_object())
         )
+        struct_tree_nodes = set()
+        try:
+            struct_tree_root_ref = self.root.raw_get('/StructTreeRoot')
+            struct_tree_nodes.update(
+                _collect_struct_tree_refs(struct_tree_root_ref.get_object())
+            )
+        except KeyError:
+            pass
         _compute_paths_to_refs(
             self.trailer_view, misc.ConsList.empty(), misc.ConsList.empty(),
-            is_page_tree=False, page_tree_objs=page_tree_nodes
+            is_page_tree=False, page_tree_objs=page_tree_nodes,
+            is_struct_tree=False, struct_tree_objs=struct_tree_nodes
         )
 
         self._indirect_object_access_cache = {

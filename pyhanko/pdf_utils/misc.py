@@ -265,6 +265,10 @@ class ConsList:
     def empty() -> 'ConsList':
         return ConsList(head=None)
 
+    @staticmethod
+    def sing(value) -> 'ConsList':
+        return ConsList(value, ConsList.empty())
+
     def __iter__(self):
         cur = self
         while cur.head is not None:

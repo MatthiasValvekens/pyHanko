@@ -1,5 +1,6 @@
 import datetime
 from fractions import Fraction
+from typing import Tuple
 
 import pytest
 from io import BytesIO
@@ -9,7 +10,7 @@ import pytz
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
-from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils import writer, generic, misc
 from fontTools import ttLib
 from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
@@ -24,6 +25,7 @@ from pyhanko.pdf_utils.crypt import (
     PubKeyRC4CryptFilter, PubKeyAESCryptFilter, PubKeyAdbeSubFilter,
     DEFAULT_CRYPT_FILTER,
 )
+from pyhanko.pdf_utils.rw_common import PdfHandler
 
 from .samples import *
 
@@ -1245,3 +1247,84 @@ def test_pubkey_wrong_cert():
 
     with pytest.raises(misc.PdfError):
         r.get_object(ref.reference)
+
+
+# noinspection PyMethodMayBeStatic
+class PathMockHandler(PdfHandler):
+    @property
+    def trailer_view(self) -> generic.DictionaryObject:
+        raise NotImplementedError
+
+    @property
+    def root_ref(self) -> generic.Reference:
+        raise NotImplementedError
+
+    @property
+    def document_id(self) -> Tuple[bytes, bytes]:
+        raise NotImplementedError
+
+    def get_object(self, ref, *_args, **_kwargs):
+        if ref.idnum == 0:
+            return generic.TextStringObject('OK')
+        else:
+            return generic.ArrayObject([generic.NumberObject(7)])
+
+
+path_test_obj = generic.DictionaryObject({
+    pdf_name('/Blah'): generic.DictionaryObject({
+        pdf_name('/Bleh'): generic.ArrayObject(
+            [generic.NumberObject(5), pdf_name('/Foo')]
+        ),
+        pdf_name('/Null'): generic.NullObject(),
+    }),
+    pdf_name('/WithRefs'): generic.DictionaryObject({
+        pdf_name('/Arr'): generic.IndirectObject(1, 0, PathMockHandler()),
+        pdf_name('/String'): generic.IndirectObject(0, 0, PathMockHandler())
+    })
+})
+
+
+@pytest.mark.parametrize('path, result', [
+    (RawPdfPath('/Blah', '/Bleh', 1), '/Foo'),
+    (RawPdfPath('/Blah', '/Bleh', 0), 5),
+    (RawPdfPath('/Blah', '/Null'), generic.NullObject()),
+    (RawPdfPath('/WithRefs', '/Arr', 0), 7),
+    (RawPdfPath('/WithRefs', '/String'), 'OK')
+])
+def test_path_access(path, result):
+    assert path.access_on(path_test_obj) == result
+
+
+@pytest.mark.parametrize('path', [
+    RawPdfPath(0), RawPdfPath('/Blah', '/Null', '/NothingLeft'),
+    RawPdfPath('/Blah', '/Bleh', '/NotADictionary'),
+    RawPdfPath('/TheresNoSuchKey'), RawPdfPath('/Blah', '/Bleh', 10000)
+])
+def test_path_access_failures(path):
+    with pytest.raises(misc.PdfReadError):
+        path.access_on(path_test_obj)
+
+
+def test_path_access_reference():
+    ref1 = RawPdfPath('/WithRefs', '/Arr').access_reference_on(path_test_obj)
+    assert ref1.idnum == 1
+
+    ref1 = RawPdfPath('/WithRefs', '/String').access_reference_on(path_test_obj)
+    assert ref1.idnum == 0
+
+    with pytest.raises(misc.IndirectObjectExpected):
+        RawPdfPath('/Blah').access_reference_on(path_test_obj)
+
+
+def test_tagged_path_count():
+
+    r = PdfFileReader(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
+    r = r.get_historical_resolver(0)
+    r._load_reverse_xref_cache()
+    # The path simplifier should eliminate all (pseudo-)duplicates refs except
+    # these three:
+    #  - one from the AcroForm hierarchy
+    #  - one from the pages tree (through /Annots)
+    #  - one from the structure tree
+    paths_to = r._indirect_object_access_cache[generic.Reference(7, 0, r)]
+    assert len(paths_to) == 3
