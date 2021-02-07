@@ -23,11 +23,7 @@ from pyhanko.sign.diff_analysis import (
 )
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import validate_pdf_signature
-from pyhanko_tests.samples import (
-    MINIMAL_ONE_FIELD, MINIMAL, MINIMAL_XREF,
-    read_all, PDF_DATA_DIR, SIMPLE_FORM, TEXTFIELD_GROUP, TEXTFIELD_GROUP_VAR,
-    MINIMAL_TWO_FIELDS,
-)
+from pyhanko_tests.samples import *
 from pyhanko_tests.test_signing import (
     FROM_CA, val_trusted, val_untrusted,
     val_trusted_but_modified, live_testing_vc, PADES, DUMMY_TS,
@@ -152,6 +148,7 @@ def test_double_sig_adobe_reader_second_created():
 
     s = r.embedded_signatures[1]
     val_untrusted(s)
+
 
 @freeze_time('2021-01-05')
 def test_bogus_metadata_manipulation():
@@ -1014,3 +1011,31 @@ def test_not_all_paths_cleared():
 
     r = PdfFileReader(out)
     val_trusted_but_modified(embedded_sig=r.embedded_signatures[0])
+
+
+@freeze_time('2020-11-01')
+def test_double_signature_tagged_file():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ), signer=FROM_CA
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
+
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    val_trusted(s)

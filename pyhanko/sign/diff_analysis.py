@@ -75,7 +75,7 @@ from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
 __all__ = [
     'ModificationLevel', 'SuspiciousModification',
-    'QualifiedWhitelistRule', 'WhitelistRule', 'qualify',
+    'QualifiedWhitelistRule', 'WhitelistRule', 'qualify', 'ReferenceUpdate',
     'DocInfoRule', 'DSSCompareRule', 'MetadataUpdateRule',
     'CatalogModificationRule', 'ObjectStreamRule', 'XrefStreamRule',
     'FormUpdatingRule', 'FormUpdate',
@@ -531,14 +531,54 @@ class FieldComparisonSpec:
         assert isinstance(field, generic.DictionaryObject)
         return field
 
-    def old_annotation_paths(self):
+    def expected_paths(self):
+        # these are the paths where we expect the form field to be referred to
+        paths = self._old_annotation_paths()
+        struct_path = self._find_in_structure_tree()
+        if struct_path is not None:
+            paths.add(struct_path)
+        paths.add(self.old_canonical_path)
+        return paths
+
+    def _find_in_structure_tree(self):
+        # collect paths (0 or 1) through which this field appears
+        #  in the file's structure tree.
+
+        # TODO check whether the structure element is a form control
+        #  (or something role-mapped to it)
+        # TODO if multiple paths exist, we should only whitelist the one
+        #  that corresponds to the StructParent entry, not just the first one
+
+        # Note: the path simplifier suppresses the extra cross-references
+        # from parent pointers in the tree and from the /ParentTree index.
+
+        old_field_ref = self.old_field_ref
+        old = self.old_field_ref.get_pdf_handler()
+        assert isinstance(old, HistoricalResolver)
+
+        if '/StructTreeRoot' not in old.root:
+            return
+
+        # check if the path ends in Form.K.Obj and
+        # starts with Root.StructTreeRoot.K
+        for pdf_path in old._get_usages_of_ref(old_field_ref):
+            # Root.StructTreeRoot.K is three, and K.Obj at the end is
+            # another 2
+            if '/StructTreeRoot' in pdf_path and len(pdf_path) >= 5:
+                root, struct_tree_root, k1 = pdf_path.path[:3]
+                k2, obj = pdf_path.path[-2:]
+                if k1 == k2 == '/K' and obj == '/Obj' and root == '/Root' \
+                        and struct_tree_root == '/StructTreeRoot':
+                    return pdf_path
+
+    def _old_annotation_paths(self):
         # collect path(s) through which this field is used as an annotation
         # the clean way to accomplish this would be to follow /P
         # and go from there, but /P is optional, so we have to get a little
         # creative.
         old_field_ref = self.old_field_ref
         if old_field_ref is None:
-            return set()
+            return set()  # pragma: nocover
 
         old = self.old_field_ref.get_pdf_handler()
         assert isinstance(old, HistoricalResolver)
@@ -874,14 +914,10 @@ class SigFieldModificationRule(BaseFieldModificationRule):
             # permissible even when the field is locked.
             valid_when_locked = self.compare_fields(spec)
 
-            # these are the paths where we expect to encounter this signature
-            # field
-            paths = spec.old_annotation_paths()
-            paths.add(spec.old_canonical_path)
             field_ref_update = FormUpdate(
                 updated_ref=spec.new_field_ref, field_name=fq_name,
                 valid_when_locked=valid_when_locked,
-                paths_checked=paths
+                paths_checked=spec.expected_paths()
             )
 
             if not previously_signed and now_signed:
@@ -994,14 +1030,12 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
 
         valid_when_locked = self.compare_fields(spec)
 
-        # these are the paths where we expect the form field to be referred to
-        paths = spec.old_annotation_paths()
-        paths.add(spec.old_canonical_path)
         yield (
             ModificationLevel.FORM_FILLING,
             FormUpdate(
                 updated_ref=spec.new_field_ref, field_name=fq_name,
-                valid_when_locked=valid_when_locked, paths_checked=paths
+                valid_when_locked=valid_when_locked,
+                paths_checked=spec.expected_paths()
             )
         )
         old_field = spec.old_field
