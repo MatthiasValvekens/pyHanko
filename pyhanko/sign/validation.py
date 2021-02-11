@@ -153,7 +153,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
                             validation_context: ValidationContext = None,
                             status_kwargs: dict = None,
                             key_usage_settings: KeyUsageConstraints = None,
-                            externally_invalid=False):
+                            encap_data_invalid=False):
     """
     Validate CMS and PKCS#7 signatures.
     """
@@ -198,7 +198,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
 
     # if the signature is invalid for some external reason, this flag is set
     #  (e.g. when the thing being signed is itself wrong)
-    valid &= not externally_invalid
+    valid &= not encap_data_invalid
     trusted = revoked = False
     path = None
     if valid:
@@ -226,7 +226,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            validation_context: ValidationContext = None,
                            status_kwargs: dict = None,
                            key_usage_settings: KeyUsageConstraints = None,
-                           externally_invalid=False):
+                           encap_data_invalid=False):
     """
     Validate a detached CMS signature (i.e. a ``SignedData`` object).
 
@@ -244,9 +244,11 @@ def validate_cms_signature(signed_data: cms.SignedData,
     :param key_usage_settings:
         A :class:`.KeyUsageConstraints` object specifying which key usage
         extensions must or must not be present in the signer's certificate.
-    :param externally_invalid:
-        If ``True``, there is an external reason why the signature cannot
-        be valid, but the remaining validation logic still has to be run.
+    :param encap_data_invalid:
+        If ``True``, the encapsulated data inside the CMS is invalid,
+        but the remaining validation logic still has to be run (e.g. a
+        timestamp token, which requires validation of the embedded message
+        imprint).
 
         This option is considered internal API, the semantics of which may
         change without notice in the future.
@@ -255,7 +257,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
     """
     status_kwargs = _validate_cms_signature(
         signed_data, status_cls, raw_digest, validation_context,
-        status_kwargs, key_usage_settings, externally_invalid
+        status_kwargs, key_usage_settings, encap_data_invalid
     )
     return status_cls(**status_kwargs)
 
@@ -1272,15 +1274,15 @@ def _validate_timestamp(tst_signed_data, validation_context,
             f"Timestamp token imprint is {tst_imprint.hex()}, but expected "
             f"{expected_tst_imprint.hex()}."
         )
-        externally_invalid = True
+        encap_data_invalid = True
     else:
-        externally_invalid = False
+        encap_data_invalid = False
     timestamp = tst_info['gen_time'].native
     timestamp_status: TimestampSignatureStatus = validate_cms_signature(
         tst_signed_data, status_cls=TimestampSignatureStatus,
         validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
-        externally_invalid=externally_invalid
+        encap_data_invalid=encap_data_invalid
     )
     return timestamp_status
 
@@ -1334,6 +1336,8 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
 
 # TODO verify formal PAdES requirements for timestamps
 # TODO verify other formal PAdES requirements (coverage, etc.)
+# TODO signature/verification policy-based validation! (PAdES-EPES-* etc)
+#  (this is a different beast, though)
 def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                validation_type: RevocationInfoValidationType,
                                validation_context_kwargs=None,
