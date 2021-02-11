@@ -1383,7 +1383,23 @@ def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
             _test_pades_revinfo_live_lta(w, requests_mock, output=out)
 
 
-def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
+def test_pades_revinfo_live_lta_direct_flush_newfile(requests_mock, tmp_path):
+    # test transparent handling of non-readable/seekable output buffers
+    from pathlib import Path
+    in_file: Path = tmp_path / "test.pdf"
+    in_file.write_bytes(MINIMAL_ONE_FIELD)
+    out_file: Path = tmp_path / "test-out.pdf"
+    with in_file.open('rb') as inf:
+        with out_file.open('wb') as out:
+            w = IncrementalPdfFileWriter(inf)
+            _test_pades_revinfo_live_lta_sign(w, requests_mock, output=out)
+        with out_file.open('rb') as out:
+            _test_pades_revinfo_live_lta_validate(
+                out, requests_mock, no_write=True
+            )
+
+
+def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
     with freeze_time('2020-11-01'):
         vc = live_testing_vc(requests_mock)
         out = signers.sign_pdf(
@@ -1393,6 +1409,11 @@ def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
                 use_pades_lta=True
             ), signer=FROM_CA, timestamper=DUMMY_TS, **kwargs
         )
+    return out
+
+
+def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False):
+    with freeze_time('2020-11-01'):
         r = PdfFileReader(out)
         dss = DocumentSecurityStore.read_dss(handler=r)
         vc = dss.as_validation_context({'trust_roots': TRUST_ROOTS})
@@ -1441,6 +1462,8 @@ def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
                 bootstrap_validation_context=live_testing_vc(requests_mock)
             )
 
+    if no_write:
+        return
     # check if updates work: use a second TSA for timestamp rollover
     with freeze_time('2028-12-01'):
         r = PdfFileReader(out)
@@ -1475,6 +1498,11 @@ def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
                 {'trust_roots': TRUST_ROOTS},
                 bootstrap_validation_context=live_testing_vc(requests_mock)
             )
+
+
+def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
+    out = _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs)
+    _test_pades_revinfo_live_lta_validate(out, requests_mock)
 
 
 # passing test_violation=False tests the signer, while test_violation=True

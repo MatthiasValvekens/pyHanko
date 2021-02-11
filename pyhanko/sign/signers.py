@@ -155,8 +155,23 @@ class PdfByteRangeDigest(generic.DictionaryObject):
             writer.write_in_place()
         else:
             # Render the PDF to a byte buffer with placeholder values
-            # for the signature data
-            output = BytesIO() if output is None else output
+            # for the signature data, or straight to the provided output stream
+            # if possible
+            if output is None:
+                output = BytesIO()
+            else:
+                # Rationale for the explicit writability check:
+                #  If the output buffer is not readable or not seekable, it's
+                #  about to be replaced with a BytesIO instance, and in that
+                #  case, the write error would only happen *after* the signing
+                #  operations are done. We want to avoid that scenario.
+                if not output.writable():
+                    raise IOError(
+                        "Output buffer is not writable"
+                    )  # pragma: nocover
+                if not output.seekable() or not output.readable():
+                    output = BytesIO()
+
             writer.write(output)
 
         # retcon time: write the proper values of the /ByteRange entry
@@ -1105,9 +1120,6 @@ def sign_pdf(pdf_out: BasePdfFileWriter,
         Write the output to the specified output stream.
         If ``None``, write to a new :class:`.BytesIO` object.
         Default is ``None``.
-
-        .. warning::
-            The output stream must also support reading and seeking.
     :return:
         The output stream containing the signed output.
     """
@@ -1389,9 +1401,6 @@ class SigIOSetup:
     """
     Write the output to the specified output stream. If ``None``, write to a 
     new :class:`.BytesIO` object. Default is ``None``.
-
-    .. warning::
-        The output stream must also support reading and seeking.
     """
 
 
@@ -1523,6 +1532,22 @@ class PdfCMSEmbedder:
         )
 
 
+def _finalise_output(orig_output, returned_output):
+
+    # The internal API transparently replaces non-readable/seekable
+    # buffers with BytesIO for signing operations, but we don't want to
+    # expose that to the public API user.
+
+    if orig_output is not None and orig_output is not returned_output:
+        # original output is a write-only buffer
+        assert isinstance(returned_output, BytesIO)
+        raw_buf = returned_output.getbuffer()
+        orig_output.write(raw_buf)
+        raw_buf.release()
+        return orig_output
+    return returned_output
+
+
 class PdfTimeStamper:
     """
     Class to encapsulate the process of appending document timestamps to
@@ -1580,9 +1605,6 @@ class PdfTimeStamper:
             Write the output to the specified output stream.
             If ``None``, write to a new :class:`.BytesIO` object.
             Default is ``None``.
-
-            .. warning::
-                The output stream must also support reading and seeking.
         :param in_place:
             Sign the original input stream in-place.
             This parameter overrides ``output``.
@@ -1626,14 +1648,16 @@ class PdfTimeStamper:
         )
         true_digest = cms_writer.send(sig_io)
         timestamp_cms = timestamper.timestamp(true_digest, md_algorithm)
-        output, sig_contents = cms_writer.send(timestamp_cms)
+        res_output, sig_contents = cms_writer.send(timestamp_cms)
 
         # update the DSS
         from pyhanko.sign import validation
         validation.DocumentSecurityStore.add_dss(
-            output_stream=output, sig_contents=sig_contents,
+            output_stream=res_output, sig_contents=sig_contents,
             paths=validation_paths, validation_context=validation_context
         )
+
+        output = _finalise_output(output, res_output)
 
         return output
 
@@ -2009,9 +2033,6 @@ class PdfSigner(PdfTimeStamper):
             Write the output to the specified output stream.
             If ``None``, write to a new :class:`.BytesIO` object.
             Default is ``None``.
-
-            .. warning::
-                The output stream must also support reading and seeking.
         :param in_place:
             Sign the original input stream in-place.
             This parameter overrides ``output``.
@@ -2185,22 +2206,25 @@ class PdfSigner(PdfTimeStamper):
             revocation_info=revinfo, timestamper=timestamper
         )
         # ... and feed it to the CMS writer
-        output, sig_contents = cms_writer.send(signature_cms)
+        res_output, sig_contents = cms_writer.send(signature_cms)
 
         if use_pades and signature_meta.embed_validation_info:
             from pyhanko.sign import validation
             validation.DocumentSecurityStore.add_dss(
-                output_stream=output, sig_contents=sig_contents,
+                output_stream=res_output, sig_contents=sig_contents,
                 paths=validation_paths, validation_context=validation_context
             )
 
             if timestamper is not None and signature_meta.use_pades_lta:
                 # append an LTV document timestamp
-                w = IncrementalPdfFileWriter(output)
+                w = IncrementalPdfFileWriter(res_output)
                 self.timestamp_pdf(
                     w, md_algorithm, validation_context,
                     validation_paths=ts_validation_paths, in_place=True,
                     timestamper=timestamper, chunk_size=chunk_size
                 )
 
+        # we put the finalisation step after the DSS manipulations, since
+        # otherwise we'd also run into issues with non-seekable output buffers
+        output = _finalise_output(output, res_output)
         return output
