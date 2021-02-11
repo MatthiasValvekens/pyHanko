@@ -25,7 +25,7 @@ from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.misc import PdfWriteError
-from pyhanko.pdf_utils.writer import PdfFileWriter
+from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import PdfTimeStamper
@@ -265,6 +265,18 @@ def test_simple_sign():
     assert not tampered.intact
     assert not tampered.valid
     assert tampered.summary() == 'INVALID'
+
+
+def test_simple_sign_fresh_doc():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = copy_into_new_writer(r)
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
 
 
 @pytest.mark.parametrize('policy, skip_diff',

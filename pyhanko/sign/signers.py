@@ -41,7 +41,8 @@ __all__ = [
     'PdfSignatureMetadata',
     'Signer', 'SimpleSigner', 'PdfTimeStamper', 'PdfSigner',
     'PdfCMSEmbedder', 'SigObjSetup', 'SigAppearanceSetup', 'SigMDPSetup',
-    'PdfSignedData', 'SignatureObject', 'DocumentTimestamp',
+    'PdfByteRangeDigest', 'PdfSignedData',
+    'SignatureObject', 'DocumentTimestamp',
     'SigIOSetup', 'sign_pdf', 'load_certs_from_pemder',
     'DEFAULT_MD', 'DEFAULT_SIGNING_STAMP_STYLE', 'DEFAULT_SIG_SUBFILTER'
 ]
@@ -1066,7 +1067,7 @@ SIG_DETAILS_DEFAULT_TEMPLATE = (
 )
 
 
-def sign_pdf(pdf_out: IncrementalPdfFileWriter,
+def sign_pdf(pdf_out: BasePdfFileWriter,
              signature_meta: PdfSignatureMetadata, signer: Signer,
              timestamper: TimeStamper = None,
              new_field_spec: Optional[SigFieldSpec] = None,
@@ -1129,7 +1130,8 @@ def sign_pdf(pdf_out: IncrementalPdfFileWriter,
 
 # Wrapper around _prepare_sig_fields with some error reporting
 
-def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
+def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
+                            existing_fields_only,
                             new_field_spec: Optional[SigFieldSpec] = None):
     root = pdf_out.root
     if field_name is None:
@@ -1144,9 +1146,7 @@ def _get_or_create_sigfield(field_name, pdf_out, existing_fields_only,
         # irrelevant in this special case, so we might as well short circuit
         # things.
         field_created = False
-        empty_fields = enumerate_sig_fields(
-            pdf_out.prev, filled_status=False
-        )
+        empty_fields = enumerate_sig_fields(pdf_out, filled_status=False)
         try:
             found_field_name, _, sig_field_ref = next(empty_fields)
         except StopIteration:
@@ -1411,7 +1411,7 @@ class PdfCMSEmbedder:
     def __init__(self, new_field_spec: Optional[SigFieldSpec] = None):
         self.new_field_spec = new_field_spec
 
-    def write_cms(self, field_name: str, writer: IncrementalPdfFileWriter,
+    def write_cms(self, field_name: str, writer: BasePdfFileWriter,
                   existing_fields_only=False):
         """
         This method returns a generator coroutine that controls the process
@@ -1984,7 +1984,7 @@ class PdfSigner(PdfTimeStamper):
         # LOCK_DOCUMENT is only enforced later
         return sv_spec
 
-    def sign_pdf(self, pdf_out: IncrementalPdfFileWriter,
+    def sign_pdf(self, pdf_out: BasePdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None, *,
                  appearance_text_params=None, in_place=False,
                  output=None, chunk_size=4096):
@@ -1992,7 +1992,8 @@ class PdfSigner(PdfTimeStamper):
         Sign a PDF file using the provided output writer.
 
         :param pdf_out:
-            An :class:`.IncrementalPdfFileWriter` containing the data to sign.
+            A PDF file writer (usually an :class:`.IncrementalPdfFileWriter`)
+            containing the data to sign.
         :param existing_fields_only:
             If ``True``, never create a new empty signature field to contain
             the signature.
@@ -2071,9 +2072,11 @@ class PdfSigner(PdfTimeStamper):
             sig_field, signer_cert_validation_path
         )
 
-        author_sig_md_algorithm = self._enforce_certification_constraints(
-            pdf_out.prev
-        )
+        author_sig_md_algorithm = None
+        if isinstance(pdf_out, IncrementalPdfFileWriter):
+            author_sig_md_algorithm = self._enforce_certification_constraints(
+                pdf_out.prev
+            )
         # priority order for the message digest algorithm
         #  (1) If signature_meta specifies a message digest algorithm, use it
         #      (it has been cleared by the SV dictionary checker already)

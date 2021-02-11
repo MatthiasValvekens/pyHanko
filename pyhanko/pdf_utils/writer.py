@@ -352,7 +352,18 @@ class BasePdfFileWriter(PdfHandler):
 
     @property
     def root_ref(self) -> generic.Reference:
+        """
+        :return:
+            A reference to the document catalog.
+        """
         return self._root.reference
+
+    def update_root(self):
+        """
+        Signal that the document catalog should be written to the output.
+        Equivalent to calling :meth:`mark_update` with :attr:`root_ref`.
+        """
+        pass
 
     def get_object(self, ido):
         if ido.pdf not in self._resolves_objs_from:

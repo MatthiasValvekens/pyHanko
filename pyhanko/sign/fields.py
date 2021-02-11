@@ -15,9 +15,9 @@ from oscrypto import keys as oskeys
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError, get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import (
     UnacceptableSignerError, SigningError,
     KeyUsageConstraints,
@@ -1188,7 +1188,7 @@ class SigFieldSpec:
 
 
 def _prepare_sig_field(sig_field_name, root,
-                       update_writer: IncrementalPdfFileWriter,
+                       update_writer: BasePdfFileWriter,
                        existing_fields_only=False, lock_sig_flags=True,
                        **kwargs):
     """
@@ -1360,7 +1360,7 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
                 continue
 
 
-def append_signature_field(pdf_out: IncrementalPdfFileWriter,
+def append_signature_field(pdf_out: BasePdfFileWriter,
                            sig_field_spec: SigFieldSpec):
     """
     Append signature fields to a PDF file.
