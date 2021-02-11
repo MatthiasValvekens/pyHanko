@@ -28,10 +28,10 @@ from pyhanko import __version__
 
 __all__ = [
     'ObjectStream', 'BasePdfFileWriter',
-    'PageObject', 'PdfFileWriter', 'init_xobject_dictionary'
+    'PageObject', 'PdfFileWriter', 'init_xobject_dictionary',
+    'copy_into_new_writer'
 ]
 
-# TODO include version number
 VENDOR = 'pyHanko ' + __version__
 
 
@@ -642,7 +642,7 @@ class BasePdfFileWriter(PdfHandler):
             The table mapping indirect references in the input to indirect
             references in the writer is not preserved between calls.
             Concretely, this means that invoking :meth:`import_object` twice
-            on the same input reader may cause objects duplication.
+            on the same input reader may cause object duplication.
 
         :param obj:
             The object to import.
@@ -917,6 +917,25 @@ class PdfFileWriter(BasePdfFileWriter):
 
 
 def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
+    """
+    Copy all objects in a given PDF handler into a new :class:`.PdfFileWriter`.
+    This operation will attempt to preserve the document catalog
+    of the original ``input_handler``.
+
+    Very roughly, calling this function and then immediately invoking
+    :meth:`~.BasePdfFileWriter.write` on the resulting writer should result
+    in an equivalent document as far as presentation is concerned.
+    As a general rule, behaviour that is controlled from outside the document
+    catalog (e.g. encryption) or that requires byte-for-byte equivalence with
+    the original (e.g. digital signatures) will not survive this translation.
+
+
+    :param input_handler:
+        :class:`.PdfHandler` to source objects from.
+    :return:
+        New :class:`.PdfFileWriter` containing all objects from the input
+        handler.
+    """
     w = PdfFileWriter(init_page_tree=False)
     input_root_ref = input_handler.root_ref
     output_root_ref = w.root_ref
