@@ -46,7 +46,7 @@ __all__ = [
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
     'ValidationInfoReadingError', 'SignatureValidationError',
-    'SigSeedValueValidationError'
+    'SigSeedValueValidationError', 'validate_sig_integrity'
 ]
 
 logger = logging.getLogger(__name__)
@@ -184,7 +184,8 @@ def validate_sig_integrity(signer_info: cms.SignedData,
 
     signature_algorithm: cms.SignedDigestAlgorithm = \
         signer_info['signature_algorithm']
-    md_algorithm = signer_info['digest_algorithm']['algorithm'].native
+    digest_algorithm_obj = signer_info['digest_algorithm']
+    md_algorithm = digest_algorithm_obj['algorithm'].native
     signature = signer_info['signature'].native
 
     # signed_attrs comes with some context-specific tagging
@@ -193,6 +194,40 @@ def validate_sig_integrity(signer_info: cms.SignedData,
     # TODO if there are no signed_attrs, we should validate the signature
     #  against actual_digest. Find some real-world exmples to test this
     #  Also, signed_attrs is mandatory if content_type is not id-data
+
+    # check the CMSAlgorithmProtection attr, if present
+    try:
+        cms_algid_protection, = find_cms_attribute(
+            signed_attrs, 'cms_algorithm_protection'
+        )
+        try:
+            signed_digest_algorithm = \
+                cms_algid_protection['digest_algorithm'].native
+            if signed_digest_algorithm != digest_algorithm_obj.native:
+                raise SignatureValidationError(
+                    "Digest algorithm does not match CMS algorithm protection "
+                    "attribute."
+                )
+            signed_sig_algorithm = \
+                cms_algid_protection['signature_algorithm'].native
+            if signed_sig_algorithm is not None and \
+                    signed_sig_algorithm != signature_algorithm.native:
+                raise SignatureValidationError(
+                    "Signature mechanism does not match CMS algorithm "
+                    "protection attribute."
+                )
+        except KeyError:
+            raise SignatureValidationError(
+                "CMS Algorithm Protection attribute not valid for signed data"
+            )
+    except KeyError:
+        pass
+    except SignatureValidationError:
+        raise
+    except ValueError:  # pragma: nocover
+        raise SignatureValidationError(
+            'Multiple CMS protection attributes present'
+        )
 
     signed_blob = signed_attrs.dump(force=True)
     try:
@@ -207,6 +242,7 @@ def validate_sig_integrity(signer_info: cms.SignedData,
             'Content type not found in signature, or multiple content-type '
             'attributes present.'
         )
+
     try:
         embedded_digest, = find_cms_attribute(signed_attrs, 'message_digest')
         embedded_digest = embedded_digest.native

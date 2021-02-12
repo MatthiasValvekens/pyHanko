@@ -491,8 +491,6 @@ class Signer:
                 'adobe_revocation_info_archival', revinfo
             )
 
-        return None
-
     def signed_attrs(self, data_digest: bytes, timestamp: datetime = None,
                      revocation_info=None, use_pades=False):
         """
@@ -669,11 +667,25 @@ class Signer:
             use_pades=use_pades
         )
 
-        # TODO decouple the document hashing MD from the CMS-internal MD
-        #  it's probably a good idea to allow digest_algorithm to be None
-        #  here if it's implied by the signature mechanism, but care is needed
-        #  to integrate it correctly with the signer and validator
+
         digest_algorithm = digest_algorithm.lower()
+        digest_algorithm_obj = algos.DigestAlgorithm(
+            {'algorithm': digest_algorithm}
+        )
+        # TODO not sure if PAdES allows this, need to check.
+        #  It *should*, but perhaps the version of CMS it is based on is too
+        #  old.
+        if not use_pades:
+            algid_protection = {'digest_algorithm': digest_algorithm_obj}
+            if self.signature_mechanism is not None:
+                algid_protection['signature_algorithm'] = \
+                    self.signature_mechanism
+            signed_attrs.append(
+                simple_cms_attribute(
+                    'cms_algorithm_protection',
+                    cms.CMSAlgorithmProtection(algid_protection)
+                )
+            )
         implied_hash_algo = None
         try:
             if self.signature_mechanism is not None:
@@ -701,10 +713,6 @@ class Signer:
         )
         if unsigned_attrs is not None:
             sig_info['unsigned_attrs'] = unsigned_attrs
-
-        digest_algorithm_obj = algos.DigestAlgorithm(
-            {'algorithm': digest_algorithm}
-        )
 
         # do not add the TS certs at this point
         certs = set(self.cert_registry)
