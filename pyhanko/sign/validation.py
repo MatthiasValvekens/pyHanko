@@ -5,7 +5,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import TypeVar, Type, Optional, Union
+from typing import TypeVar, Type, Optional, Union, Tuple
 
 from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
@@ -147,6 +147,87 @@ def _validate_raw(signature: bytes, signed_blob: bytes, cert: x509.Certificate,
     )
 
 
+def validate_sig_integrity(signer_info: cms.SignedData,
+                           cert: x509.Certificate,
+                           expected_content_type: str,
+                           actual_digest: bytes) -> Tuple[bool, bool]:
+    """
+    Validate the integrity of a signature for a particular signerInfo object
+    inside a CMS signed data container.
+
+    .. warning::
+        This function does not do any trust checks, and is considered
+        "dangerous" API because it is easy to misuse.
+
+    .. warning::
+        This function currently does not deal with the case where signed
+        attributes are absent.
+
+    :param signer_info:
+        A :class:`cms.SignerInfo` object.
+    :param cert:
+        The signer's certificate.
+
+        .. note::
+            This function will not attempt to extract certificates from
+            the signed data.
+    :param expected_content_type:
+        The expected value for the content type attribute (as a Python string,
+        see :class:`cms.ContentType`).
+    :param actual_digest:
+        The actual digest to be matched to the message digest attribute.
+    :return:
+        A tuple of two booleans. The first indicates whether the provided
+        digest matches the value in the signed attributes.
+        The second indicates whether the signature of the digest is valid.
+    """
+
+    signature_algorithm: cms.SignedDigestAlgorithm = \
+        signer_info['signature_algorithm']
+    md_algorithm = signer_info['digest_algorithm']['algorithm'].native
+    signature = signer_info['signature'].native
+
+    # signed_attrs comes with some context-specific tagging
+    # because it's an implicit field. This breaks validation
+    signed_attrs = signer_info['signed_attrs'].untag()
+    # TODO if there are no signed_attrs, we should validate the signature
+    #  against actual_digest. Find some real-world exmples to test this
+    #  Also, signed_attrs is mandatory if content_type is not id-data
+
+    signed_blob = signed_attrs.dump(force=True)
+    try:
+        content_type, = find_cms_attribute(signed_attrs, 'content_type')
+        content_type = content_type.native
+        if content_type != expected_content_type:
+            raise SignatureValidationError(
+                'Content type did not match expected value'
+            )
+    except (KeyError, ValueError):
+        raise SignatureValidationError(
+            'Content type not found in signature, or multiple content-type '
+            'attributes present.'
+        )
+    try:
+        embedded_digest, = find_cms_attribute(signed_attrs, 'message_digest')
+        embedded_digest = embedded_digest.native
+    except (KeyError, ValueError):
+        raise SignatureValidationError(
+            'Message digest not found in signature, or multiple message '
+            'digest attributes present.'
+        )
+    intact = actual_digest == embedded_digest
+
+    try:
+        _validate_raw(
+            signature, signed_blob, cert, signature_algorithm, md_algorithm
+        )
+        valid = True
+    except SignatureError:
+        valid = False
+
+    return intact, valid
+
+
 def _validate_cms_signature(signed_data: cms.SignedData,
                             status_cls: Type[StatusType] = SignatureStatus,
                             raw_digest: bytes = None,
@@ -161,44 +242,29 @@ def _validate_cms_signature(signed_data: cms.SignedData,
 
     signature_algorithm: cms.SignedDigestAlgorithm = \
         signer_info['signature_algorithm']
-    mechanism = signature_algorithm['algorithm'].native.lower()
-    md_algorithm = \
-        signer_info['digest_algorithm']['algorithm'].native.lower()
-    signature = signer_info['signature'].native
-    # signed_attrs comes with some context-specific tagging
-    # because it's an implicit field. This breaks validation
-    signed_attrs = signer_info['signed_attrs'].untag()
+    mechanism = signature_algorithm['algorithm'].native
+    md_algorithm = signer_info['digest_algorithm']['algorithm'].native
 
-    # TODO What to do if signed_attrs is absent?
-    # I guess I'll wait until someone complains that a valid signature
-    # isn't being validated correctly
+    expected_content_type = 'data'
     if raw_digest is None:
         # this means that there should be encapsulated data
-        # TODO Carefully read § 5.2.1 in RFC 5652, and compare with
-        #  the implementation in asn1crypto.
-        raw = signed_data['encap_content_info']['content'].parsed.dump()
+        eci = signed_data['encap_content_info']
+        expected_content_type = eci['content_type'].native
+
+        raw = eci['content'].parsed.dump()
         raw_digest = getattr(hashlib, md_algorithm)(raw).digest()
 
-    signed_blob = signed_attrs.dump(force=True)
-    try:
-        embedded_digest = find_cms_attribute(signed_attrs, 'message_digest')
-    except KeyError:
-        raise SignatureValidationError('Message digest not found in signature')
-    intact = raw_digest == embedded_digest[0].native
-
-    valid = False
-    if intact:
-        try:
-            _validate_raw(
-                signature, signed_blob, cert, signature_algorithm, md_algorithm
-            )
-            valid = True
-        except SignatureError:
-            valid = False
+    # first, do the cryptographic identity checks
+    intact, valid = validate_sig_integrity(
+        signer_info, cert, expected_content_type=expected_content_type,
+        actual_digest=raw_digest,
+    )
 
     # if the signature is invalid for some external reason, this flag is set
     #  (e.g. when the thing being signed is itself wrong)
-    valid &= not encap_data_invalid
+    valid &= not encap_data_invalid and intact
+
+    # next, validate trust
     trusted = revoked = False
     path = None
     if valid:
