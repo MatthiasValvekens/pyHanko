@@ -978,12 +978,15 @@ class SigFieldModificationRule(BaseFieldModificationRule):
         # enforce as a rigid rule here)
         if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
             sig_whitelist = ModificationLevel.LTA_UPDATES
+            valid_when_locked = True
         else:
             sig_whitelist = ModificationLevel.FORM_FILLING
+            valid_when_locked = False
 
         # first, whitelist the actual signature object
         yield sig_whitelist, FormUpdate(
-            updated_ref=current_value_ref, field_name=fq_name
+            updated_ref=current_value_ref, field_name=fq_name,
+            valid_when_locked=valid_when_locked
         )
 
         # since apparently Acrobat didn't get the memo about not having

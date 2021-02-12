@@ -611,7 +611,7 @@ def test_form_field_in_group_locked_postsign_modify_success(field_filled, fieldm
 def test_form_field_postsign_fill_pades_lt(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(SIMPLE_FORM))
     vc = live_testing_vc(requests_mock)
-    meta =signers.PdfSignatureMetadata(
+    meta = signers.PdfSignatureMetadata(
         field_name='Sig1', validation_context=vc,
         subfilter=PADES, embed_validation_info=True,
     )
@@ -627,6 +627,31 @@ def test_form_field_postsign_fill_pades_lt(requests_mock):
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     val_trusted(s, extd=True)
+
+
+@freeze_time('2020-11-01')
+def test_fieldmdp_all_pades_lta(requests_mock):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    vc = live_testing_vc(requests_mock)
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134),
+        field_mdp_spec=fields.FieldMDPSpec(action=fields.FieldMDPAction.ALL),
+        doc_mdp_update_value=fields.MDPPerm.FILL_FORMS
+    )
+    fields.append_signature_field(w, sp)
+    meta = signers.PdfSignatureMetadata(
+        field_name='SigNew', validation_context=vc, embed_validation_info=True,
+        subfilter=fields.SigSeedSubFilter.PADES, use_pades_lta=True
+    )
+
+    out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'SigNew'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
 @freeze_time('2020-11-01')
