@@ -1990,7 +1990,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
                     f.read()
                 )
         except (IOError, ValueError) as e:  # pragma: nocover
-            logger.error('Could not load cryptographic material', e)
+            logger.error('Could not load cryptographic material', exc_info=e)
             return None
         return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=private_key)
 
@@ -2011,7 +2011,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
             with open(pfx_file, 'rb') as f:
                 pfx_bytes = f.read()
         except IOError as e:  # pragma: nocover
-            logger.error(f'Could not open PKCS#12 file {pfx_file}.', e)
+            logger.error(f'Could not open PKCS#12 file {pfx_file}.', exc_info=e)
             return None
 
         (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)

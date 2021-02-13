@@ -948,7 +948,7 @@ class SimpleSigner(Signer):
         try:
             return set(load_certs_from_pemder(ca_chain_files))
         except (IOError, ValueError) as e:  # pragma: nocover
-            logger.error('Could not load CA chain', e)
+            logger.error('Could not load CA chain', exc_info=e)
             return None
 
     @classmethod
@@ -980,7 +980,7 @@ class SimpleSigner(Signer):
             with open(pfx_file, 'rb') as f:
                 pfx_bytes = f.read()
         except IOError as e:  # pragma: nocover
-            logger.error(f'Could not open PKCS#12 file {pfx_file}.', e)
+            logger.error(f'Could not open PKCS#12 file {pfx_file}.', exc_info=e)
             return None
 
         ca_chain = cls._load_ca_chain(ca_chain_files) \
@@ -1035,7 +1035,7 @@ class SimpleSigner(Signer):
                     f.read()
                 )
         except (IOError, ValueError) as e:  # pragma: nocover
-            logger.error('Could not load cryptographic material', e)
+            logger.error('Could not load cryptographic material', exc_info=e)
             return None
 
         ca_chain = cls._load_ca_chain(ca_chain_files) if ca_chain_files else []
