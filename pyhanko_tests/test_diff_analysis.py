@@ -106,6 +106,100 @@ def test_double_sig_add_field(file_ix):
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
+def test_double_sig_create_deep_field_post_sign():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    # create part of the structure already
+
+    fields._insert_or_get_field_at(
+        w, w.root['/AcroForm']['/Fields'], ('NewSigs', 'NewSig1'),
+        field_obj=generic.DictionaryObject({pdf_name('/FT'): pdf_name('/Sig')})
+    )
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA, in_place=True
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    fqn = 'NewSigs.NewSig2'
+    meta = signers.PdfSignatureMetadata(field_name=fqn)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = validate_pdf_signature(
+        s, signer_validation_context=SIMPLE_V_CONTEXT()
+    )
+    # the /Kids array of NewSigs was modified, which we don't allow (right now)
+    assert status.modification_level == ModificationLevel.OTHER
+
+
+@freeze_time('2020-11-01')
+def test_double_sig_fill_deep_field_post_sign():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    # create part of the structure already
+
+    fields._insert_or_get_field_at(
+        w, w.root['/AcroForm']['/Fields'], ('NewSigs', 'NewSig1'),
+        field_obj=fields.SignatureFormField(
+            'NewSig1', include_on_page=w.root['/Pages']['/Kids'].raw_get(0)
+        )
+    )
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA, in_place=True
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    fqn = 'NewSigs.NewSig1'
+    meta = signers.PdfSignatureMetadata(field_name=fqn)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
+
+    s = r.embedded_signatures[1]
+    val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_no_field_type():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA, in_place=True
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    fields._insert_or_get_field_at(
+        w, w.root['/AcroForm']['/Fields'], ('Blah',),
+    )
+    meta = signers.PdfSignatureMetadata(field_name='NewSig')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = validate_pdf_signature(
+        s, signer_validation_context=SIMPLE_V_CONTEXT()
+    )
+    assert status.modification_level == ModificationLevel.OTHER
+
+
 @pytest.mark.parametrize('infile_name', [
     'minimal-two-fields-signed-twice.pdf',
     'minimal-signed-twice-second-created.pdf',

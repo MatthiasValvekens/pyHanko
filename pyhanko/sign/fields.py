@@ -1390,7 +1390,7 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
             try:
                 yield from enumerate_sig_fields_in(
                     field['/Kids'], parent_name=fq_name, parents=current_path,
-                    with_name=with_name
+                    with_name=with_name, filled_status=filled_status
                 )
             except KeyError:
                 continue

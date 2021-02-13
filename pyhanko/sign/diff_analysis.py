@@ -707,10 +707,6 @@ class SigFieldCreationRule(FieldMDPRule):
             for fq_name, spec in context.field_specs.items():
                 if spec.field_type != '/Sig' or spec.old_field_ref:
                     continue
-                if '.' in fq_name:
-                    raise NotImplementedError(
-                        "Can't deal with signature fields that aren't top level"
-                    )
                 yield fq_name, spec.new_field_ref
 
         all_new_refs = dict(_collect())
@@ -1397,17 +1393,18 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
             try:
                 field_type = field.raw_get('/FT')
             except KeyError:
-                if inherited_ft is not None:
-                    field_type = inherited_ft
-                else:
-                    raise exc(
-                        f"Field type of {fq_name} could not be determined"
-                    )
+                field_type = inherited_ft
 
             try:
                 kids = field["/Kids"]
             except KeyError:
                 kids = generic.ArrayObject()
+
+            if not kids and field_type is None:
+                raise exc(
+                    f"Field type of terminal field {fq_name} could not be "
+                    f"determined"
+                )
             yield fq_name, (field_type, field_ref.reference, kids, ix)
 
     old_fields_by_name = dict(_make_list(old_fields, misc.PdfReadError))
