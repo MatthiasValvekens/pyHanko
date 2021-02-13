@@ -1,5 +1,5 @@
 """
-.. versionchanged: 0.3.0
+.. versionchanged:: 0.3.0
     Added support for PDF 2.0 encryption standards and crypt filters.
 
 Utilities for PDF encryption. This module covers all methods outlined in the
