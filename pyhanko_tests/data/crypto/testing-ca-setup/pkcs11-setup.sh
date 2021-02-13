@@ -12,7 +12,13 @@ TOKEN_NAME=testrsa
 #CA_BASEDIR="pyhanko_tests/data/crypto/testing-ca-ecdsa"
 #TOKEN_NAME=testecdsa
 SLOT_IX=0
-MODULE=/Users/matthias/.local/lib/softhsm/libsofthsm2.so
+
+if [[ -z "$1" ]] ; then
+    echo "Usage: pkcs11-setup.sh MODULE"
+    exit 1
+fi
+
+MODULE=$1
 TOOL="pkcs11-tool --module $MODULE --slot-index $SLOT_IX"
 
 
