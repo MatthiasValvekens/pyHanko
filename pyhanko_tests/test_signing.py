@@ -1791,6 +1791,59 @@ def test_no_email():
     assert cn in ap_data
 
 
+def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
+                              replace_with=None, resign=False):
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+    md_algorithm = 'sha256'
+
+    cms_writer = signers.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+    sig_obj = signers.SignatureObject(bytes_reserved=8192)
+
+    cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
+
+    document_hash = cms_writer.send(
+        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    signer: signers.SimpleSigner = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    cms_obj = signer.sign(
+        data_digest=document_hash, digest_algorithm=md_algorithm,
+    )
+    sd = cms_obj['content']
+    si, = sd['signer_infos']
+    signed_attrs = si['signed_attrs']
+    ix = next(
+        ix for ix, attr in enumerate(signed_attrs)
+        if attr['type'].native == attr_name
+    )
+
+    # mess with the attribute in the requested way
+    if delete:
+        del signed_attrs[ix]
+    elif duplicate:
+        vals = signed_attrs[ix]['values']
+        vals.append(vals[0])
+    else:
+        vals = signed_attrs[ix]['values']
+        vals[0] = replace_with
+
+    # ... and replace the signature if requested
+    if resign:
+        si['signature'] = \
+            signer.sign_raw(si['signed_attrs'].untag().dump(), md_algorithm)
+    return cms_writer.send(cms_obj)[0]
+
+
 @pytest.mark.parametrize('replacement_value', [
     cms.CMSAlgorithmProtection({
         'digest_algorithm': DigestAlgorithm({'algorithm': 'sha1'}),
@@ -1810,57 +1863,92 @@ def test_no_email():
     None
 ])
 def test_cms_algorithm_protection(replacement_value):
-    input_buf = BytesIO(MINIMAL)
-    w = IncrementalPdfFileWriter(input_buf)
-    md_algorithm = 'sha256'
-
-    cms_writer = signers.PdfCMSEmbedder().write_cms(
-        field_name='Signature', writer=w
-    )
-    next(cms_writer)
-
-    timestamp = datetime.now(tz=tzlocal.get_localzone())
-    sig_obj = signers.SignatureObject(timestamp=timestamp, bytes_reserved=8192)
-
-    cms_writer.send(
-        signers.SigObjSetup(sig_placeholder=sig_obj)
+    output = _tamper_with_signed_attrs(
+        'cms_algorithm_protection', duplicate=replacement_value is None,
+        replace_with=replacement_value, resign=True
     )
 
-    document_hash = cms_writer.send(
-        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
-    )
-
-    signer: signers.SimpleSigner = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry,
-        signature_mechanism=SignedDigestAlgorithm({
-            'algorithm': 'rsassa_pkcs1v15'
-        })
-    )
-    cms_obj = signer.sign(
-        data_digest=document_hash, digest_algorithm=md_algorithm,
-        timestamp=timestamp
-    )
-
-    # replace the CMSAlgorithmProtection object
-    sd = cms_obj['content']
-    si, = sd['signer_infos']
-    for attr in si['signed_attrs']:
-        if attr['type'].native == 'cms_algorithm_protection':
-            if replacement_value is None:
-                # duplicate the value
-                attr['values'].append(attr['values'][0])
-            else:
-                attr['values'][0] = replacement_value
-
-    # ... and the signature
-    si['signature'] = \
-        signer.sign_raw(si['signed_attrs'].untag().dump(), md_algorithm)
-    output, _ = cms_writer.send(cms_obj)
-
-    r = PdfFileReader(input_buf)
+    r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
+    with pytest.raises(SignatureValidationError):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )
+
+
+def test_signed_attrs_tampering():
+    # delete the (signed) CMSAlgorithmProtection attribute
+    # this should invalidate the signature
+
+    output = _tamper_with_signed_attrs('cms_algorithm_protection', delete=True)
+
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+
+    intact, valid = validate_sig_integrity(
+        emb.signer_info, emb.signer_cert, 'data', digest
+    )
+    # "intact" refers to the messageDigest attribute, which we didn't touch
+    assert intact and not valid
+
+
+def test_no_message_digest():
+    output = _tamper_with_signed_attrs(
+        'message_digest', delete=True, resign=True
+    )
+
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+
+    with pytest.raises(SignatureValidationError):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )
+
+
+def test_duplicate_content_type():
+    output = _tamper_with_signed_attrs(
+        'content_type', duplicate=True, resign=True
+    )
+
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+
+    with pytest.raises(SignatureValidationError):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )
+
+
+def test_no_content_type():
+    output = _tamper_with_signed_attrs('content_type', delete=True, resign=True)
+
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+
+    with pytest.raises(SignatureValidationError):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )
+
+
+def test_wrong_content_type():
+    # delete the (signed) CMSAlgorithmProtection attribute
+    # this should invalidate the signature
+
+    output = _tamper_with_signed_attrs(
+        'content_type', replace_with='enveloped_data', resign=True
+    )
+
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+
     with pytest.raises(SignatureValidationError):
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
