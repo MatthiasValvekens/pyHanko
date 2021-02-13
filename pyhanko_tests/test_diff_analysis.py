@@ -22,7 +22,8 @@ from pyhanko.sign.diff_analysis import (
     ReferenceUpdate, StandardDiffPolicy, DEFAULT_DIFF_POLICY,
 )
 from pyhanko.sign.general import SigningError
-from pyhanko.sign.validation import validate_pdf_signature
+from pyhanko.sign.validation import validate_pdf_signature, \
+    SignatureCoverageLevel
 from pyhanko_tests.samples import *
 from pyhanko_tests.test_signing import (
     FROM_CA, val_trusted, val_untrusted,
@@ -900,8 +901,7 @@ def test_tamper_sig_obj(policy, skip_diff):
     sig_obj = w.prev.embedded_signatures[0].sig_object
     sig_obj['/Bleh'] = generic.BooleanObject(False)
     w.update_container(sig_obj)
-    out = BytesIO()
-    w.write(out)
+    w.write_in_place()
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
@@ -910,10 +910,10 @@ def test_tamper_sig_obj(policy, skip_diff):
     )
     if skip_diff:
         assert emb.diff_result is None
-        assert status.modification_level is None
     else:
         assert isinstance(emb.diff_result, SuspiciousModification)
-        assert status.modification_level == ModificationLevel.OTHER
+    assert status.coverage == SignatureCoverageLevel.CONTIGUOUS_BLOCK_FROM_START
+    assert status.modification_level == ModificationLevel.OTHER
 
 
 def test_rogue_backreferences():

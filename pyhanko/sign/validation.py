@@ -736,7 +736,17 @@ class EmbeddedPdfSignature:
         self.md_algorithm = digest_algo['algorithm'].native.lower()
 
         # grab the revision to which the signature applies
-        self.signed_revision = self.reader.xrefs.get_introducing_revision(
+        # NOTE: We're using get_last_change here as opposed to
+        # get_introducing_revision. The distinction won't be relevant in most
+        # legitimate use cases, but get_last_change is more likely to be correct
+        # in cases where the signature obj was created by overriding an existing
+        # object (which is weird, but technically possible, I guess).
+        # Important note: the coverage checker will validate whether the
+        # xref table for that revision is actually covered by the signature,
+        # and raise the alarm if that's not the case.
+        # Therefore shenanigans with updating signature objects will be detected
+        # even before the diff checker runs.
+        self.signed_revision = self.reader.xrefs.get_last_change(
             sig_object_ref.reference
         )
         self.coverage = None
