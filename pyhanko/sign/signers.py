@@ -487,18 +487,26 @@ class Signer:
                 'adobe_revocation_info_archival', revinfo
             )
 
-    def signed_attrs(self, data_digest: bytes, timestamp: datetime = None,
+    def signed_attrs(self, data_digest: bytes, digest_algorithm: str,
+                     timestamp: datetime = None,
                      revocation_info=None, use_pades=False):
         """
+        .. versionchanged:: 0.4.0
+            Added positional ``digest_algorithm`` parameter _(breaking change)_.
+
         Format the signed attributes for a CMS signature.
 
         :param data_digest:
             Raw digest of the data to be signed.
+        :param digest_algorithm:
+            .. versionadded:: 0.4.0
+
+            Name of the digest algorithm used to compute the digest.
         :param timestamp:
             Current timestamp (ignored when ``use_pades`` is ``True``).
         :param revocation_info:
             Revocation information to embed; this should be the output
-            of a call to :meth:`.Signer.format_revinfo`
+            of a call to :meth:`.Signer.format_revinfo` or ``None``
             (ignored when ``use_pades`` is ``True``).
         :param use_pades:
             Respect PAdES requirements.
@@ -530,6 +538,23 @@ class Signer:
             # this is not allowed under PAdES, should use DSS instead
             if revocation_info:
                 attrs.append(revocation_info)
+
+            # TODO not sure if PAdES allows this, need to check.
+            #  It *should*, but perhaps the version of CMS it is based on is too
+            #  old, or it might not allow undefined signed attributes.
+            # In the meantime, we only add this attribute to non-PAdES sigs
+            algid_protection = cms.CMSAlgorithmProtection({
+                'digest_algorithm': algos.DigestAlgorithm(
+                    {'algorithm': digest_algorithm}
+                ),
+                'signature_algorithm':
+                    self.get_signature_mechanism(digest_algorithm)
+            })
+            attrs.append(
+                simple_cms_attribute(
+                    'cms_algorithm_protection', algid_protection
+                )
+            )
 
         return cms.CMSAttributes(attrs)
 
@@ -656,32 +681,17 @@ class Signer:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
 
+        digest_algorithm = digest_algorithm.lower()
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
         signed_attrs = self.signed_attrs(
-            data_digest, timestamp, revocation_info=revocation_info,
-            use_pades=use_pades
+            data_digest, digest_algorithm, timestamp,
+            revocation_info=revocation_info, use_pades=use_pades
         )
 
-        digest_algorithm = digest_algorithm.lower()
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
-        # TODO not sure if PAdES allows this, need to check.
-        #  It *should*, but perhaps the version of CMS it is based on is too
-        #  old, or it might not allow undefined signed attributes.
-        if not use_pades:
-            algid_protection = {
-                'digest_algorithm': digest_algorithm_obj,
-                'signature_algorithm':
-                    self.get_signature_mechanism(digest_algorithm)
-            }
-            signed_attrs.append(
-                simple_cms_attribute(
-                    'cms_algorithm_protection',
-                    cms.CMSAlgorithmProtection(algid_protection)
-                )
-            )
         implied_hash_algo = None
         try:
             if self.signature_mechanism is not None:

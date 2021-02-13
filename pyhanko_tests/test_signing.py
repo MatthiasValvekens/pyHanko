@@ -11,6 +11,7 @@ from asn1crypto.algos import (
     MaskGenAlgorithm, DigestAlgorithm,
 )
 import tzlocal
+from asn1crypto import cms
 
 import pyhanko.pdf_utils.content
 from certvalidator.errors import PathValidationError
@@ -22,7 +23,7 @@ from oscrypto import keys as oskeys
 
 from pyhanko import stamp
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.font import pdf_name
+from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.misc import PdfWriteError
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
@@ -33,7 +34,7 @@ from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, SignatureValidationError,
+    SignatureCoverageLevel, SignatureValidationError, validate_sig_integrity,
 )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
@@ -1788,3 +1789,79 @@ def test_no_email():
     ap_data = emb.sig_field['/AP']['/N'].data
     cn = signer.signing_cert.subject.native['common_name'].encode('ascii')
     assert cn in ap_data
+
+
+@pytest.mark.parametrize('replacement_value', [
+    cms.CMSAlgorithmProtection({
+        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha1'}),
+        'signature_algorithm': SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        )
+    }),
+    cms.CMSAlgorithmProtection({
+        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
+        'signature_algorithm': SignedDigestAlgorithm(
+            {'algorithm': 'sha512_rsa'}
+        )
+    }),
+    cms.CMSAlgorithmProtection({
+        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
+    }),
+    None
+])
+def test_cms_algorithm_protection(replacement_value):
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+    md_algorithm = 'sha256'
+
+    cms_writer = signers.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+
+    timestamp = datetime.now(tz=tzlocal.get_localzone())
+    sig_obj = signers.SignatureObject(timestamp=timestamp, bytes_reserved=8192)
+
+    cms_writer.send(
+        signers.SigObjSetup(sig_placeholder=sig_obj)
+    )
+
+    document_hash = cms_writer.send(
+        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    signer: signers.SimpleSigner = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    cms_obj = signer.sign(
+        data_digest=document_hash, digest_algorithm=md_algorithm,
+        timestamp=timestamp
+    )
+
+    # replace the CMSAlgorithmProtection object
+    sd = cms_obj['content']
+    si, = sd['signer_infos']
+    for attr in si['signed_attrs']:
+        if attr['type'].native == 'cms_algorithm_protection':
+            if replacement_value is None:
+                # duplicate the value
+                attr['values'].append(attr['values'][0])
+            else:
+                attr['values'][0] = replacement_value
+
+    # ... and the signature
+    si['signature'] = \
+        signer.sign_raw(si['signed_attrs'].untag().dump(), md_algorithm)
+    output, _ = cms_writer.send(cms_obj)
+
+    r = PdfFileReader(input_buf)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+    with pytest.raises(SignatureValidationError):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )

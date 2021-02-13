@@ -200,31 +200,29 @@ def validate_sig_integrity(signer_info: cms.SignedData,
         cms_algid_protection, = find_cms_attribute(
             signed_attrs, 'cms_algorithm_protection'
         )
-        try:
-            signed_digest_algorithm = \
-                cms_algid_protection['digest_algorithm'].native
-            if signed_digest_algorithm != digest_algorithm_obj.native:
-                raise SignatureValidationError(
-                    "Digest algorithm does not match CMS algorithm protection "
-                    "attribute."
-                )
-            signed_sig_algorithm = \
-                cms_algid_protection['signature_algorithm'].native
-            if signed_sig_algorithm is not None and \
-                    signed_sig_algorithm != signature_algorithm.native:
-                raise SignatureValidationError(
-                    "Signature mechanism does not match CMS algorithm "
-                    "protection attribute."
-                )
-        except KeyError:
+        signed_digest_algorithm = \
+            cms_algid_protection['digest_algorithm'].native
+        if signed_digest_algorithm != digest_algorithm_obj.native:
             raise SignatureValidationError(
-                "CMS Algorithm Protection attribute not valid for signed data"
+                "Digest algorithm does not match CMS algorithm protection "
+                "attribute."
+            )
+        signed_sig_algorithm = \
+            cms_algid_protection['signature_algorithm'].native
+        if signed_sig_algorithm is None:
+            raise SignatureValidationError(
+                "CMS algorithm protection attribute not valid for signed data"
+            )
+        elif signed_sig_algorithm != signature_algorithm.native:
+            raise SignatureValidationError(
+                "Signature mechanism does not match CMS algorithm "
+                "protection attribute."
             )
     except KeyError:
         pass
     except SignatureValidationError:
         raise
-    except ValueError:  # pragma: nocover
+    except ValueError:
         raise SignatureValidationError(
             'Multiple CMS protection attributes present'
         )
