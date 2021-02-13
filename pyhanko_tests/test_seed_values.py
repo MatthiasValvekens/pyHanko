@@ -651,6 +651,19 @@ def test_sv_mdp_must_certify():
     sign_with_sv(sv, meta, test_violation=True)
 
 
+def test_sv_mdp_must_certify_wrong_docmdp():
+
+    sv = fields.SigSeedValueSpec(
+        seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.FILL_FORMS),
+    )
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig', certify=True,
+        docmdp_permissions=fields.MDPPerm.NO_CHANGES
+    )
+    with pytest.raises(SigningError):
+        sign_with_sv(sv, meta)
+
+
 def test_sv_subfilter_unsupported():
     sv_spec = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.SUBFILTER,

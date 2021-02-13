@@ -62,11 +62,11 @@ class SigByteRangeObject(generic.PdfObject):
 
     def fill_offsets(self, stream, sig_start, sig_end, eof):
         if self._filled:
-            raise ValueError('Offsets already filled')
+            raise ValueError('Offsets already filled')  # pragma: nocover
         if self._range_object_offset is None:
             raise ValueError(
                 'Could not determine where to write /ByteRange value'
-            )
+            )  # pragma: nocover
 
         old_seek = stream.tell()
         self.first_region_len = sig_start
@@ -101,12 +101,8 @@ class DERPlaceholder(generic.PdfObject):
     @property
     def offsets(self):
         if self._offsets is None:
-            raise ValueError('No offsets available')
+            raise ValueError('No offsets available')  # pragma: nocover
         return self._offsets
-
-    @property
-    def original_bytes(self):
-        return self.value
 
     # always ignore encryption key, since this is a placeholder
     def write_to_stream(self, stream, handler=None, container_ref=None):
@@ -1889,10 +1885,7 @@ class PdfSigner(PdfTimeStamper):
             )
         if cd.permission == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
-        author_sig_md = cd.author_sig.get('/DigestAlgorithm', None)
-        if author_sig_md is not None:
-            return author_sig_md
-        return None
+        return cd.digest_method
 
     def _enforce_seed_value_constraints(self, sig_field, validation_path) \
             -> Optional[SigSeedValueSpec]:

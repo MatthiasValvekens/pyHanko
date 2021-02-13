@@ -243,6 +243,19 @@ def val_trusted_but_modified(embedded_sig: EmbeddedPdfSignature):
     return val_status
 
 
+def test_der_detect(tmp_path):
+    from pathlib import Path
+    tmp: Path = tmp_path / "test.der"
+    orig_bytes = SELF_SIGN.signing_cert.dump()
+    tmp.write_bytes(orig_bytes)
+    result, = signers.load_certs_from_pemder([str(tmp)])
+
+    # make sure the resulting object gets parsed fully, for good measure
+    # noinspection PyStatementEffect
+    result.native
+    assert result.dump() == orig_bytes
+
+
 def test_simple_sign():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -523,6 +536,15 @@ def test_sign_field_infer():
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     val_trusted(s)
+
+    w = IncrementalPdfFileWriter(out)
+
+    # shouldn't work now since all fields are taken
+    with pytest.raises(SigningError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+            existing_fields_only=True
+        )
 
 
 @freeze_time('2020-11-01')
@@ -1032,11 +1054,14 @@ def test_approval_sig():
 
 def test_approval_sig_md_match_author_sig():
 
+    # since this test didn't detect a regression because I made
+    # sha256 the default MD (instead of sha512), I made the test use
+    # SHA1, since that's definitely NEVER going to be a default.
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', certify=True,
-            md_algorithm='sha256'
+            md_algorithm='sha1'
         ), signer=FROM_CA
     )
     out.seek(0)
@@ -1050,7 +1075,7 @@ def test_approval_sig_md_match_author_sig():
     sigs = fields.enumerate_sig_fields(r)
     next(sigs)
     field_name, sig_obj, sig_field = next(sigs)
-    assert EmbeddedPdfSignature(r, sig_field).md_algorithm == 'sha256'
+    assert EmbeddedPdfSignature(r, sig_field).md_algorithm == 'sha1'
 
 
 @freeze_time('2020-11-01')
@@ -1708,3 +1733,58 @@ def test_direct_pdfcmsembedder_usage():
     assert dss is not None
     assert len(dss.certs) == 3
     assert len(dss.ocsps) == 1
+
+
+def test_bytes_reserved_even():
+    with pytest.raises(ValueError):
+        signers.PdfByteRangeDigest(bytes_reserved=1)
+
+
+def test_name_location():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', name='Bleh', location='Bluh'
+    )
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
+
+    assert emb.sig_object['/Name'] == 'Bleh'
+    assert emb.sig_object['/Location'] == 'Bluh'
+
+
+def test_no_email():
+
+    # just sign with any cert, don't care about validation etc.
+    # This is simply to test the name generation logic if no email address
+    # is available
+    signer = signers.SimpleSigner.load(
+        TESTING_CA_DIR + '/keys/tsa.key.pem',
+        TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem',
+        ca_chain_files=(),
+        key_passphrase=b'secret'
+    )
+
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+    )
+    pdf_signer = signers.PdfSigner(
+        meta, signer=signer, stamp_style=stamp.TextStampStyle(
+            stamp_text='%(signer)s\n%(ts)s',
+        ),
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = pdf_signer.sign_pdf(w, )
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
+
+    ap_data = emb.sig_field['/AP']['/N'].data
+    cn = signer.signing_cert.subject.native['common_name'].encode('ascii')
+    assert cn in ap_data
