@@ -459,12 +459,14 @@ class PdfSignatureStatus(SignatureStatus):
         an instance of :class:`.ModificationLevel` otherwise.
         """
 
+        coverage = self.coverage
         if self.diff_result is None:
-            if self.coverage == SignatureCoverageLevel.ENTIRE_REVISION:
+            if coverage == SignatureCoverageLevel.ENTIRE_REVISION:
                 # in this case, we can't know without the diff analysis result
                 return None
             return (
-                ModificationLevel.NONE if SignatureCoverageLevel.ENTIRE_FILE
+                ModificationLevel.NONE
+                if coverage == SignatureCoverageLevel.ENTIRE_FILE
                 else ModificationLevel.OTHER
             )
         elif isinstance(self.diff_result, DiffResult):
