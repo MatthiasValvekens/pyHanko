@@ -1531,17 +1531,6 @@ def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
     _test_pades_revinfo_live_lta_validate(out, requests_mock)
 
 
-# passing test_violation=False tests the signer, while test_violation=True
-#  instructs the signer to ignore all SV requirements, thus testing whether
-#  the validator catches the violations properly
-
-
-# helper function for filling in the text field in the SIMPLE_FORM example
-
-
-# helper function for filling in the text field in the TEXTFIELD_GROUP example
-
-
 @freeze_time('2020-11-01')
 def test_simple_qr_sign():
     style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")

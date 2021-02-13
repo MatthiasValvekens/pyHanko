@@ -108,12 +108,10 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         if isinstance(container_ref, generic.TrailerReference):
             # nothing to do, the trailer is always written
             return
-        elif isinstance(container_ref, generic.Reference):  # pragma: nocover
+        elif isinstance(container_ref, generic.Reference):
             self.mark_update(container_ref)
-        else:
-            raise ValueError(
-                f'Cannot use {container_ref} as an update reference.'
-            )
+            return
+        raise TypeError  # pragma: nocover
 
     def update_root(self):
         self.mark_update(self._root)

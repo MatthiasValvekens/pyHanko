@@ -1328,3 +1328,17 @@ def test_tagged_path_count():
     #  - one from the structure tree
     paths_to = r._indirect_object_access_cache[generic.Reference(7, 0, r)]
     assert len(paths_to) == 3
+
+
+def test_trailer_refs():
+    # This is a corner case in the reference handler that shouldn't really
+    # come up in real life. That said, it's easy to test for using a (somewhat
+    # contrived) example, so let's do that.
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    # Note: the container of the catalog is the thing root_ref points to,
+    # but root_ref, when viewed as a PDF object by itself (i.e. the indirect
+    # object embedded in the trailer) should have a TrailerReference as its
+    # container.
+    root_ref = w.trailer.raw_get('/Root')
+    assert isinstance(root_ref.container_ref, generic.TrailerReference)
+    w.update_container(root_ref)
