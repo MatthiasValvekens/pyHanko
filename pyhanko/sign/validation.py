@@ -1685,12 +1685,6 @@ class VRI:
     Relevant CRLs.
     """
 
-    def __iadd__(self, other):
-        self.certs.update(other.certs)
-        self.crls.update(other.crls)
-        self.ocsps.update(other.ocsps)
-        return self
-
     def as_pdf_object(self) -> generic.DictionaryObject:
         """
         :return:
