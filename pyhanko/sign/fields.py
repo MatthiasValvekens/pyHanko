@@ -22,7 +22,6 @@ from pyhanko.sign.general import (
     UnacceptableSignerError, SigningError,
     KeyUsageConstraints,
 )
-from pyhanko.stamp import AnnotAppearances
 
 __all__ = [
     'SigFieldSpec', 'SigSeedValFlags', 'SigCertConstraints',
@@ -1250,10 +1249,10 @@ def _prepare_sig_field(sig_field_name, root,
     page_ref = update_writer.find_page_for_modification(0)[0]
     sig_form_kwargs = {'include_on_page': page_ref}
     sig_form_kwargs.update(**kwargs)
-    sig_field = SignatureFormField(
-        sig_field_name, writer=update_writer, **sig_form_kwargs
-    )
-    sig_field_ref = sig_field.reference
+    sig_field = SignatureFormField(sig_field_name, **sig_form_kwargs)
+    sig_field_ref = update_writer.add_object(sig_field)
+    update_writer.register_annotation(page_ref, sig_field_ref)
+
     fields.append(sig_field_ref)
 
     # make sure /SigFlags is present. If not, create it
@@ -1401,43 +1400,26 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 
 
 class SignatureFormField(generic.DictionaryObject):
-    def __init__(self, field_name, include_on_page, *, writer,
-                 sig_object_ref=None, box=None,
-                 appearances: Optional[AnnotAppearances] = None):
+    def __init__(self, field_name, *, box=None, include_on_page=None,
+                 is_annotation=True,
+                 # this sets the "print" bit
+                 annot_flags=0b100):
 
         if box is not None:
-            visible = True
             rect = list(map(generic.FloatObject, box))
-            if appearances is not None:
-                ap = appearances.as_pdf_object()
-            else:
-                ap = None
         else:
             rect = [generic.FloatObject(0)] * 4
-            ap = None
-            visible = False
 
-        # this sets the "Print" bit, and activates "Locked" if the
-        # signature field is ready to be filled
-        flags = 0b100 if sig_object_ref is None else 0b10000100
         super().__init__({
             # Signature field properties
             pdf_name('/FT'): pdf_name('/Sig'),
             pdf_name('/T'): pdf_string(field_name),
-            # Annotation properties: bare minimum
-            pdf_name('/Type'): pdf_name('/Annot'),
-            pdf_name('/Subtype'): pdf_name('/Widget'),
-            pdf_name('/F'): generic.NumberObject(flags),
-            pdf_name('/P'): include_on_page,
-            pdf_name('/Rect'): generic.ArrayObject(rect)
         })
-        if sig_object_ref is not None:
-            self[pdf_name('/V')] = sig_object_ref
-        if ap is not None:
-            self[pdf_name('/AP')] = ap
-
-        # register ourselves
-        self.reference = self_reference = writer.add_object(self)
-        # if we're building an invisible form field, this is all there is to it
-        if visible:
-            writer.register_annotation(include_on_page, self_reference)
+        if is_annotation:
+            # Annotation properties: bare minimum
+            self['/Type'] = pdf_name('/Annot')
+            self['/Subtype'] = pdf_name('/Widget')
+            self['/F'] = generic.NumberObject(annot_flags)
+            self['/Rect'] = generic.ArrayObject(rect)
+            if include_on_page is not None:
+                self['/P'] = include_on_page
