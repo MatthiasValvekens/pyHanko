@@ -1076,7 +1076,7 @@ def test_approval_sig_md_match_author_sig():
     sigs = fields.enumerate_sig_fields(r)
     next(sigs)
     field_name, sig_obj, sig_field = next(sigs)
-    assert EmbeddedPdfSignature(r, sig_field).md_algorithm == 'sha1'
+    assert EmbeddedPdfSignature(r, sig_field, field_name).md_algorithm == 'sha1'
 
 
 @freeze_time('2020-11-01')

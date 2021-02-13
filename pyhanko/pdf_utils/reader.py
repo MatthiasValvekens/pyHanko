@@ -1045,8 +1045,8 @@ class PdfFileReader(PdfHandler):
 
         result = sorted(
             (
-                EmbeddedPdfSignature(self, sig_field)
-                for _, sig_obj, sig_field in sig_fields
+                EmbeddedPdfSignature(self, sig_field, fq_name)
+                for fq_name, sig_obj, sig_field in sig_fields
             ), key=lambda emb: emb.signed_revision
         )
         self._embedded_signatures = result

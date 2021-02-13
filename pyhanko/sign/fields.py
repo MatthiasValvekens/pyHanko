@@ -1186,6 +1186,48 @@ class SigFieldSpec:
         return result
 
 
+def _insert_or_get_field_at(writer: BasePdfFileWriter, fields, path,
+                            parent_ref=None, modified=False, field_obj=None):
+
+    current_partial, tail = path[0], path[1:]
+
+    for field_ref in fields:
+        assert isinstance(field_ref, generic.IndirectObject)
+        field = field_ref.get_object()
+        if field.get('/T', None) == current_partial:
+            break
+    else:
+        # have to insert a new element into the fields array
+        if field_obj is not None and not tail:
+            field = field_obj
+        else:
+            # create a generic field
+            field = generic.DictionaryObject()
+        field['/T'] = pdf_string(current_partial)
+        if parent_ref is not None:
+            field['/Parent'] = parent_ref
+        field_ref = writer.add_object(field)
+        fields.append(field_ref)
+        writer.update_container(fields)
+        modified = True
+
+    if not tail:
+        return modified, field_ref
+    # check for /Kids, and create it if necessary
+    try:
+        kids = field['/Kids']
+    except KeyError:
+        kids = field['/Kids'] = generic.ArrayObject()
+        writer.update_container(field)
+        modified = True
+
+    # recurse in to /Kids array
+    return _insert_or_get_field_at(
+        writer, kids, tail, parent_ref=field_ref,
+        modified=modified, field_obj=field_obj
+    )
+
+
 def _prepare_sig_field(sig_field_name, root,
                        update_writer: BasePdfFileWriter,
                        existing_fields_only=False, lock_sig_flags=True,
@@ -1238,22 +1280,17 @@ def _prepare_sig_field(sig_field_name, root,
     if sig_field_ref is not None:
         return False, sig_field_ref
 
-    if '.' in sig_field_name:
-        raise NotImplementedError(
-            "Creating fields deep in the form hierarchy is not supported"
-            "right now."
-        )
-
     # no signature field exists, so create one
     # default: grab a reference to the first page
     page_ref = update_writer.find_page_for_modification(0)[0]
     sig_form_kwargs = {'include_on_page': page_ref}
     sig_form_kwargs.update(**kwargs)
     sig_field = SignatureFormField(sig_field_name, **sig_form_kwargs)
-    sig_field_ref = update_writer.add_object(sig_field)
+    created, sig_field_ref = _insert_or_get_field_at(
+        update_writer, fields, path=sig_field_name.split('.'),
+        field_obj=sig_field
+    )
     update_writer.register_annotation(page_ref, sig_field_ref)
-
-    fields.append(sig_field_ref)
 
     # make sure /SigFlags is present. If not, create it
     sig_flags = 3 if lock_sig_flags else 1

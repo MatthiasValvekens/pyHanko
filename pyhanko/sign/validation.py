@@ -692,7 +692,7 @@ class EmbeddedPdfSignature:
     """
 
     def __init__(self, reader: PdfFileReader,
-                 sig_field: generic.DictionaryObject):
+                 sig_field: generic.DictionaryObject, fq_name: str):
         self.reader = reader
         if isinstance(sig_field, generic.IndirectObject):
             sig_field = sig_field.get_object()
@@ -756,6 +756,7 @@ class EmbeddedPdfSignature:
 
         self.diff_result = None
         self._integrity_checked = False
+        self.fq_name = fq_name
 
     @property
     def field_name(self):
@@ -763,7 +764,7 @@ class EmbeddedPdfSignature:
         :return:
             Name of the signature field.
         """
-        return self.sig_field['/T']
+        return self.fq_name
 
     # TODO also parse the signature object's /M entry
     @property

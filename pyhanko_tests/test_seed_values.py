@@ -391,7 +391,7 @@ def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, *,
         assert not status.seed_value_ok
     else:
         assert status.seed_value_ok
-    return EmbeddedPdfSignature(r, s.sig_field)
+    return EmbeddedPdfSignature(r, s.sig_field, s.fq_name)
 
 
 def test_sv_sign_md_req():

@@ -444,14 +444,31 @@ def test_deep_non_sig_field(variant, existing_only):
 
 
 @pytest.mark.parametrize('variant', [0, 1])
-def test_deep_non_sig_field_nocreate(variant):
-    # this case might be supported in the future, but for now we check for
-    # a NotImplementedError (since creating fields with dots in their (partial)
-    # names is not compliant with the standard)
+@freeze_time('2020-11-01')
+def test_create_deep_sig_field(variant):
     w = IncrementalPdfFileWriter(BytesIO(GROUP_VARIANTS[variant]))
     meta = signers.PdfSignatureMetadata(field_name='TextInput.NewSig')
-    with pytest.raises(NotImplementedError):
-        signers.sign_pdf(w, meta, signer=FROM_CA)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'TextInput.NewSig'
+    val_trusted(s)
+
+
+@pytest.mark.parametrize('variant', [0, 1, None])
+@freeze_time('2020-11-01')
+def test_create_multi_deep_sig_field(variant):
+    infile = GROUP_VARIANTS[variant] if variant is not None else MINIMAL
+    w = IncrementalPdfFileWriter(BytesIO(infile))
+    fqn = 'TextInput.Sigs.Blah.NewSig'
+    meta = signers.PdfSignatureMetadata(field_name=fqn)
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == fqn
+    val_trusted(s)
 
 
 @pytest.mark.parametrize('variant', [0, 1])
