@@ -667,19 +667,19 @@ class Signer:
             use_pades=use_pades
         )
 
-
         digest_algorithm = digest_algorithm.lower()
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
         # TODO not sure if PAdES allows this, need to check.
         #  It *should*, but perhaps the version of CMS it is based on is too
-        #  old.
+        #  old, or it might not allow undefined signed attributes.
         if not use_pades:
-            algid_protection = {'digest_algorithm': digest_algorithm_obj}
-            if self.signature_mechanism is not None:
-                algid_protection['signature_algorithm'] = \
-                    self.signature_mechanism
+            algid_protection = {
+                'digest_algorithm': digest_algorithm_obj,
+                'signature_algorithm':
+                    self.get_signature_mechanism(digest_algorithm)
+            }
             signed_attrs.append(
                 simple_cms_attribute(
                     'cms_algorithm_protection',
