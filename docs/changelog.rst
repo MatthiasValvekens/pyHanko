@@ -2,6 +2,122 @@
 Release history
 ***************
 
+0.4.0
+=====
+
+*Release date:* 2021-02-14
+
+
+New features and enhancements
+-----------------------------
+
+Encryption
+^^^^^^^^^^
+
+* Expose permission flags outside security handler
+* Make file encryption key straightforward to grab
+
+Signing
+^^^^^^^
+
+* Mildly refactor `PdfSignedData` for non-signing uses
+* Make DSS API more flexible
+   * Allow direct input of cert/ocsp/CRL objects as opposed to only certvalidator output
+   * Allow input to not be associated with any concrete VRI.
+* Greatly improved PKCS#11 support
+   * Added support for RSASSA-PSS and ECDSA.
+   * Added tests for RSA functionality using SoftHSMv2.
+   * Added a command to the CLI for generic PKCS#11.
+   * *Note:* Tests don't run in CI, and ECDSA is not included in the test suite yet (SoftHSMv2 doesn't seem to expose all the necessary mechanisms).
+* Factor out `unsigned_attrs` in signer, added a `digest_algorithm` parameter to `signed_attrs`.
+* Allow signing with any `BasePdfFileWriter` (in particular, this allows creating signatures in the initial revision of a PDF file)
+* Add `CMSAlgorithmProtection` attribute when possible
+  * *Note:* Not added to PAdES signatures for the time being.
+* Improved support for deep fields in the form hierarchy (arguably orthogonal to the standard, but it doesn't hurt to be flexible)
+
+
+Validation
+^^^^^^^^^^
+
+* Path handling improvements:
+   * Paths in the structure tree are also simplified.
+   * Paths can be resolved relative to objects in a file.
+* Limited support for tagged PDF in the validator.
+   * Existing form fields can be filled in without tripping up the modification analysis module.
+   * Adding new form fields to the structure tree after signing is not allowed for the time being.
+* Internal refactoring in CMS validation logic:
+   * Isolate cryptographic integrity validation from trust validation
+   * Rename `externally_invalid` API parameter to `encap_data_invalid`
+   * Validate `CMSAlgorithmProtection` when present.
+* Improved support for deep fields in the form hierarchy (arguably orthogonal to the standard, but it doesn't hurt to be flexible).
+* Added
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+* Export `copy_into_new_writer`.
+* Transparently handle non-seekable output streams in the signer.
+* Remove unused `__iadd__` implementation from VRI class.
+* Clean up some corner cases in `container_ref` handling.
+* Refactored `SignatureFormField` initialisation (internal API).
+
+Bugs fixed
+----------
+
+* Deal with some XRef processing edge cases.
+* Make `signed_revision` on embedded signatures more robust.
+* Fix an issue where DocTimeStamp additions would trigger `/All`-type field locks.
+* Fix some issues with `modification_level` handling in validation status reports.
+* Fix a few logging calls.
+* Fix some minor issues with signing API input validation logic.
+
+
+0.3.0
+=====
+
+*Release date:* 2021-01-26
+
+New features and enhancements
+-----------------------------
+
+Encryption
+^^^^^^^^^^
+
+* Reworked internal crypto API.
+* Added support for PDF 2.0 encryption.
+* Added support for public key encryption.
+* Got rid of the homegrown `RC4` class (not that it matters all to much, `RC4` isn't secure anyhow); all cryptographic operations in `crypt.py` are now delegated to `oscrypto`.
+
+
+Signing
+^^^^^^^
+
+* Encrypted files can now be signed from the CLI.
+* With the optional `cryptography` dependency, pyHanko can now create RSASSA-PSS signatures.
+* Factored out a low-level `PdfCMSEmbedder` API to cater to remote signing needs.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+* The document ID can now be accessed more conveniently.
+* The version number is now single-sourced in `version.py`.
+* Initialising the page tree in a `PdfFileWriter` is now optional.
+* Added a convenience function for copying files.
+
+Validation
+^^^^^^^^^^
+
+* With the optional `cryptography` dependency, pyHanko can now validate RSASSA-PSS signatures.
+* Difference analysis checker was upgraded with capabilities to handle multiply referenced objects in a more straightforward way. This required API changes, and it comes at a significant performance cost, but the added cost is probably justified. The changes to the API are limited to the `diff_analysis` module itself, and do not impact the general validation API whatsoever.
+
+
+Bugs fixed
+----------
+
+* Allow `/DR` and `/Version` updates in diff analysis
+* Fix revision handling in `trailer.flatten()`
+
+
 
 0.2.0
 =====
