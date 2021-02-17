@@ -841,7 +841,8 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         super()._set_security_handler(handler)
         self._shared_key = self._recp_key_seed = None
 
-    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS):
+    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS,
+                       ignore_key_usage=False):
         """
         Add recipients to this crypt filter.
         This always adds one full CMS object to the Recipients array
@@ -850,6 +851,8 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             A list of recipient certificates.
         :param perms:
             The permission bits to assign to the listed recipients.
+        :param ignore_key_usage:
+            If ``False``, the *keyEncipherment* key usage extension is required.
         """
 
         if not self.acts_as_default and self.recipients:
@@ -870,7 +873,8 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             )
         new_cms = construct_recipient_cms(
             certs, self._recp_key_seed, _as_signed(perms),
-            include_permissions=self.acts_as_default
+            include_permissions=self.acts_as_default,
+            ignore_key_usage=ignore_key_usage
         )
         self.recipients.append(new_cms)
 
@@ -1830,7 +1834,8 @@ def construct_envelope_content(seed: bytes, perms: int,
     return seed + (struct.pack('<i', perms) if include_permissions else b'')
 
 
-def _recipient_info(envelope_key: bytes, cert: x509.Certificate):
+def _recipient_info(envelope_key: bytes, cert: x509.Certificate,
+                    ignore_key_usage=False):
     pubkey = cert.public_key
     pubkey_algo_info: PublicKeyAlgorithm = pubkey['algorithm']
     algorithm_name = pubkey_algo_info['algorithm'].native
@@ -1841,6 +1846,14 @@ def _recipient_info(envelope_key: bytes, cert: x509.Certificate):
         )
 
     assert len(envelope_key) == 32
+
+    if not ignore_key_usage:
+        key_usage = cert.key_usage_value
+        if key_usage is None or 'key_encipherment' not in key_usage.native:
+            raise misc.PdfWriteError(
+                f"Certificate for subject {cert.subject.human_friendly} does "
+                f"not have the 'key_encipherment' key usage bit set."
+            )
 
     # TODO having support for oeap here would be cool, but as with PSS
     #  oscrypto only supports the default parameters.
@@ -1865,7 +1878,8 @@ def _recipient_info(envelope_key: bytes, cert: x509.Certificate):
 
 
 def construct_recipient_cms(certificates: List[x509.Certificate], seed: bytes,
-                            perms: int, include_permissions=True) \
+                            perms: int, include_permissions=True,
+                            ignore_key_usage=False) \
         -> cms.ContentInfo:
 
     # The content of the generated ContentInfo object
@@ -1894,7 +1908,10 @@ def construct_recipient_cms(certificates: List[x509.Certificate], seed: bytes,
     )
 
     # encrypt the envelope key for each recipient
-    rec_infos = [_recipient_info(envelope_key, cert) for cert in certificates]
+    rec_infos = [
+        _recipient_info(envelope_key, cert, ignore_key_usage=ignore_key_usage)
+        for cert in certificates
+    ]
 
     algo = cms.EncryptionAlgorithm({
         'algorithm': algos.EncryptionAlgorithmId('aes256_cbc'),
@@ -2136,7 +2153,8 @@ class PubKeySecurityHandler(SecurityHandler):
                          version=SecurityHandlerVersion.AES256,
                          use_aes=True, use_crypt_filters=True,
                          perms: int = ALL_PERMS,
-                         encrypt_metadata=True) -> 'PubKeySecurityHandler':
+                         encrypt_metadata=True,
+                         ignore_key_usage=False) -> 'PubKeySecurityHandler':
         """
         Create a new public key security handler.
 
@@ -2166,6 +2184,8 @@ class PubKeySecurityHandler(SecurityHandler):
             .. warning::
                 See :class:`.SecurityHandlers` for some background on the
                 way pyHanko interprets this value.
+        :param ignore_key_usage:
+            If ``False``, the *keyEncipherment* key usage extension is required.
         :return:
             An instance of :class:`.PubKeySecurityHandler`.
         """
@@ -2192,7 +2212,7 @@ class PubKeySecurityHandler(SecurityHandler):
             encrypt_metadata=encrypt_metadata, crypt_filter_config=cfc,
             recipient_objs=None
         )
-        sh.add_recipients(certs, perms=perms)
+        sh.add_recipients(certs, perms=perms, ignore_key_usage=ignore_key_usage)
         return sh
 
     def __init__(self, version: SecurityHandlerVersion,
@@ -2329,7 +2349,8 @@ class PubKeySecurityHandler(SecurityHandler):
             )
         return result
 
-    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS):
+    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS,
+                       ignore_key_usage=False):
         # add recipients to all *default* crypt filters
         # callers that want to do this more granularly are welcome to, but
         # then they have to do the legwork themselves.
@@ -2337,7 +2358,9 @@ class PubKeySecurityHandler(SecurityHandler):
         for cf in self.crypt_filter_config.default_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
-            cf.add_recipients(certs, perms=perms)
+            cf.add_recipients(
+                certs, perms=perms, ignore_key_usage=ignore_key_usage
+            )
 
     def authenticate(self, credential: EnvelopeKeyDecrypter, id1=None) \
             -> AuthResult:

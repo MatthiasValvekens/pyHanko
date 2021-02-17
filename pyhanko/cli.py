@@ -495,6 +495,15 @@ def _open_for_signing(infile_path, signer_cert=None, signer_key=None):
                 and signer_key is not None:
             # attempt to decrypt using signer's credentials
             cred = SimpleEnvelopeKeyDecrypter(signer_cert, signer_key)
+            logger.warning(
+                "The file \'%s\' appears to be encrypted using public-key "
+                "encryption. This is only partially supported in pyHanko's "
+                "CLI. PyHanko will attempt to decrypt the document using the "
+                "signer's public key, but be aware that using the same key "
+                "for both signing and decryption is considered bad practice. "
+                "Never use the same RSA key that you use to decrypt messages to"
+                "sign hashes that you didn't compute yourself!" % infile_path
+            )
             writer.encrypt_pubkey(cred)
         else:
             raise click.ClickException(

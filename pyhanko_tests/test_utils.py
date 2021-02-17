@@ -904,6 +904,57 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
 
 
+def test_key_encipherment_requirement():
+    with pytest.raises(misc.PdfWriteError):
+        PubKeySecurityHandler.build_from_certs(
+            [PUBKEY_SELFSIGNED_DECRYPTER.cert], keylen_bytes=32,
+            version=SecurityHandlerVersion.AES256,
+            use_aes=True, use_crypt_filters=True,
+            perms=-44
+        )
+
+
+@pytest.mark.parametrize("version, keylen, use_aes, use_crypt_filters", [
+    (SecurityHandlerVersion.AES256, 32, True, True),
+    (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
+    (SecurityHandlerVersion.RC4_OR_AES128, 16, False, True),
+    (SecurityHandlerVersion.RC4_OR_AES128, 5, False, True),
+    (SecurityHandlerVersion.RC4_40, 5, False, True),
+    (SecurityHandlerVersion.RC4_40, 5, False, False),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, True),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, False),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, True),
+    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
+])
+def test_key_encipherment_requirement_override(version, keylen, use_aes,
+                                               use_crypt_filters):
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_SELFSIGNED_DECRYPTER.cert], keylen_bytes=keylen,
+        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
+        perms=-44, ignore_key_usage=True
+    )
+    w.security_handler = sh
+    w._encrypt = w.add_object(sh.as_pdf_object())
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'),
+    )
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    result = r.decrypt_pubkey(PUBKEY_SELFSIGNED_DECRYPTER)
+    assert result.status == AuthStatus.USER
+    assert result.permission_flags == -44
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    # just a piece of data I know occurs in the decoded content stream
+    # of the (only) page in VECTOR_IMAGE_PDF
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
 def test_pubkey_alternative_filter():
     w = writer.PdfFileWriter()
 
@@ -1224,7 +1275,7 @@ def test_load_pkcs12():
     sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(
         "pyhanko_tests/data/crypto/selfsigned.pfx", b'exportsecret'
     )
-    assert sedk.cert.subject == PUBKEY_TEST_DECRYPTER.cert.subject
+    assert sedk.cert.subject == PUBKEY_SELFSIGNED_DECRYPTER.cert.subject
 
 
 def test_pubkey_wrong_cert():
@@ -1233,7 +1284,7 @@ def test_pubkey_wrong_cert():
 
     from oscrypto import keys
     recpt_cert = keys.parse_certificate(
-        read_all(TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem')
+        read_all(TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem')
     )
     test_data = b'This is test data!'
     dummy_stream = generic.StreamObject(stream_data=test_data)

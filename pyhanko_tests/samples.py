@@ -77,7 +77,16 @@ def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     )
 
 
+# These certs have the keyEncipherment extension active (yes, I know that
+# that isn't good key hygiene, esp. with RSA, but it's a testing setup)
 PUBKEY_TEST_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
+    "pyhanko_tests/data/crypto/testing-ca/keys/signer.key.pem",
+    "pyhanko_tests/data/crypto/testing-ca/intermediate/newcerts/signer.cert.pem",
+    b'secret'
+)
+
+# no keyEncipherment bit on this one
+PUBKEY_SELFSIGNED_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
     "pyhanko_tests/data/crypto/selfsigned.key.pem",
     "pyhanko_tests/data/crypto/selfsigned.cert.pem",
     b'secret'
