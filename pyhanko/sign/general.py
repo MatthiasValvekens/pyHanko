@@ -399,23 +399,51 @@ def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm):
     return pss_padding, md()
 
 
-def _validate_pss_raw(signature: bytes, data: bytes, cert: x509.Certificate,
-                      params: algos.RSASSAPSSParams, digest_algorithm: str):
-
-    pss_padding, hash_algo = _process_pss_params(params, digest_algorithm)
-
+def _validate_with_pyca_cryptography(signature: bytes, data: bytes,
+                                     cert: x509.Certificate, padding,
+                                     hash_algo, prehashed=False):
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
     from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
     from cryptography.exceptions import InvalidSignature
-    pub_key: RSAPublicKey = serialization.load_der_public_key(
+
+    pub_key = serialization.load_der_public_key(
         cert.public_key.dump()
     )
 
+    assert isinstance(pub_key, RSAPublicKey)
+
+    if prehashed:
+        hash_algo = Prehashed(hash_algo)
+
     try:
-        pub_key.verify(signature, data, pss_padding, hash_algo)
+        pub_key.verify(signature, data, padding, hash_algo)
     except InvalidSignature as e:
         # reraise using oscrypto-style exception
         raise SignatureError() from e
+
+
+def _validate_pss_raw(signature: bytes, data: bytes, cert: x509.Certificate,
+                      params: algos.RSASSAPSSParams, digest_algorithm: str,
+                      prehashed=False):
+
+    pss_padding, hash_algo = _process_pss_params(params, digest_algorithm)
+
+    _validate_with_pyca_cryptography(
+        signature, data, cert, pss_padding, hash_algo, prehashed=prehashed
+    )
+
+
+def _validate_rsa_pkcs1v15_prehashed(signature: bytes, digest: bytes,
+                                     cert: x509.Certificate,
+                                     digest_algorithm: str):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+    hash_algo = getattr(hashes, digest_algorithm.upper())()
+    _validate_with_pyca_cryptography(
+        signature, data=digest, cert=cert, padding=PKCS1v15(),
+        hash_algo=hash_algo, prehashed=True
+    )
 
 
 def _sign_pss_raw(data: bytes, signing_key: keys.PrivateKeyInfo,

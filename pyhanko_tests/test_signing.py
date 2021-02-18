@@ -356,6 +356,19 @@ def test_sign_with_trust():
 
 
 @freeze_time('2020-11-01')
+def test_verify_sig_without_signed_attrs():
+    # pyHanko never produces signatures of this type, but we should be able
+    # to validate them (this file was created using a modified version of
+    # pyHanko's signing code, which will never see the light of day)
+
+    with open(PDF_DATA_DIR + '/sig-no-signed-attrs.pdf', 'rb') as f:
+        r = PdfFileReader(f)
+        s = r.embedded_signatures[0]
+        assert s.field_name == 'Sig1'
+        val_trusted(s)
+
+
+@freeze_time('2020-11-01')
 def test_sign_with_ecdsa_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
