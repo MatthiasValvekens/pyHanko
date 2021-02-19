@@ -11,7 +11,6 @@ from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
 from certvalidator import InvalidCertificateError
 from certvalidator.path import ValidationPath
-from oscrypto import keys as oskeys
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
@@ -453,11 +452,11 @@ class SigCertConstraints:
             pass
         flags = SigCertConstraintFlags(pdf_dict.get('/Ff', 0))
         subjects = [
-            oskeys.parse_certificate(cert.original_bytes) for cert in
+            x509.Certificate.load(cert.original_bytes) for cert in
             pdf_dict.get('/Subject', ())
         ]
         issuers = [
-            oskeys.parse_certificate(cert.original_bytes) for cert in
+            x509.Certificate.load(cert.original_bytes) for cert in
             pdf_dict.get('/Issuer', ())
         ]
 

@@ -16,13 +16,16 @@ from datetime import datetime
 import requests
 import tzlocal
 from asn1crypto import tsp, algos, cms, x509, keys, core
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
 from certvalidator import CertificateValidator
-from oscrypto import asymmetric
 
 from . import general
 from .general import (
     SignatureStatus, simple_cms_attribute, CertificateStore,
-    SimpleCertificateStore,
+    SimpleCertificateStore, _get_pyca_cryptography_hash,
 )
 
 __all__ = [
@@ -303,9 +306,14 @@ class DummyTimeStamper(TimeStamper):
             ),
             simple_cms_attribute('message_digest', message_digest),
         ])
-        signature = asymmetric.rsa_pkcs1v15_sign(
-            asymmetric.load_private_key(self.tsa_key),
-            signed_attrs.dump(), md_algorithm
+        priv_key = serialization.load_der_private_key(
+            self.tsa_key.dump(), password=None
+        )
+        if not isinstance(priv_key, RSAPrivateKey):
+            raise NotImplementedError("Dummy timestamper is RSA-only.")
+        signature = priv_key.sign(
+            signed_attrs.dump(), PKCS1v15(),
+            _get_pyca_cryptography_hash(md_algorithm.upper())
         )
         sig_info = cms.SignerInfo({
             'version': 'v1',

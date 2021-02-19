@@ -14,7 +14,6 @@ from pkcs11 import (
 from typing import Set
 
 from asn1crypto import x509
-from oscrypto import keys as oskeys
 
 from pyhanko.sign.general import CertificateStore, SimpleCertificateStore
 from pyhanko.sign.signers import Signer
@@ -88,7 +87,7 @@ def _pull_cert(pkcs11_session: Session, label: str):
         raise PKCS11Error(
             f"Could not find (unique) cert with label '{label}'."
         )
-    return oskeys.parse_certificate(cert_obj[Attribute.VALUE])
+    return x509.Certificate.load(cert_obj[Attribute.VALUE])
 
 
 # TODO: perhaps attempt automatic key discovery if the labels aren't provided?
@@ -249,7 +248,7 @@ class PKCS11Signer(Signer):
             for cert_obj in q:
                 label = cert_obj[Attribute.LABEL]
                 if other_certs is None or label in other_certs:
-                    yield oskeys.parse_certificate(cert_obj[Attribute.VALUE])
+                    yield x509.Certificate.load(cert_obj[Attribute.VALUE])
         else:
             # fetch certs one by one
             for label in other_certs:

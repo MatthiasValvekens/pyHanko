@@ -6,6 +6,7 @@ import pytest
 from io import BytesIO
 
 import pytz
+from asn1crypto import x509
 
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -26,6 +27,7 @@ from pyhanko.pdf_utils.crypt import (
     DEFAULT_CRYPT_FILTER,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko.sign.general import load_cert_from_pemder
 
 from .samples import *
 
@@ -1282,9 +1284,8 @@ def test_pubkey_wrong_cert():
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
 
-    from oscrypto import keys
-    recpt_cert = keys.parse_certificate(
-        read_all(TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem')
+    recpt_cert = load_cert_from_pemder(
+        TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem'
     )
     test_data = b'This is test data!'
     dummy_stream = generic.StreamObject(stream_data=test_data)

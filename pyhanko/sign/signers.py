@@ -8,12 +8,18 @@ from io import BytesIO, BufferedIOBase
 from typing import Optional
 
 import tzlocal
-from asn1crypto import x509, cms, core, algos, pem, keys, pdf as asn1_pdf
+from asn1crypto import x509, cms, core, algos, keys, pdf as asn1_pdf
 from asn1crypto.algos import SignedDigestAlgorithm
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric.ec import \
+    EllipticCurvePrivateKey, ECDSA
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.serialization import pkcs12
+
 from certvalidator.errors import PathValidationError
 
 from certvalidator import ValidationContext, CertificateValidator
-from oscrypto import asymmetric, keys as oskeys
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
@@ -30,7 +36,11 @@ from pyhanko.sign.fields import (
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.sign.general import (
     simple_cms_attribute, CertificateStore,
-    SimpleCertificateStore, SigningError, _sign_pss_raw, optimal_pss_params,
+    SimpleCertificateStore, SigningError, optimal_pss_params,
+    load_certs_from_pemder, load_cert_from_pemder,
+    _process_pss_params, load_private_key_from_pemder,
+    _translate_pyca_cryptography_key_to_asn1,
+    _translate_pyca_cryptography_cert_to_asn1,
 )
 from pyhanko.stamp import (
     TextStampStyle, TextStamp, STAMP_ART_CONTENT,
@@ -397,10 +407,7 @@ class Signer:
         # Grab the certificate's algorithm (but forget about the digest)
         #  and use that to set up the default.
         # We'll specify the digest somewhere else.
-        cert_pubkey: asymmetric.PublicKey = asymmetric.load_public_key(
-            self.signing_cert.public_key
-        )
-        algo = cert_pubkey.algorithm
+        algo = self.signing_cert.public_key.algorithm
         params = None
         if algo == 'ec':
             mech = 'ecdsa'
@@ -872,36 +879,6 @@ class PdfSignatureMetadata:
     """
 
 
-def load_certs_from_pemder(cert_files):
-    """
-    A convenience function to load PEM/DER-encoded certificates from files.
-
-    :param cert_files:
-        An iterable of file names.
-    :return:
-        A generator producing :class:`.asn1crypto.x509.Certificate` objects.
-    """
-    for ca_chain_file in cert_files:
-        with open(ca_chain_file, 'rb') as f:
-            ca_chain_bytes = f.read()
-        # use the pattern from the asn1crypto docs
-        # to distinguish PEM/DER and read multiple certs
-        # from one PEM file (if necessary)
-        if pem.detect(ca_chain_bytes):
-            pems = pem.unarmor(ca_chain_bytes, multiple=True)
-            for type_name, _, der in pems:
-                if type_name is None or type_name.lower() == 'certificate':
-                    yield x509.Certificate.load(der)
-                else:  # pragma: nocover
-                    logger.debug(
-                        f'Skipping PEM block of type {type_name} in '
-                        f'{ca_chain_file}.'
-                    )
-        else:
-            # no need to unarmor, just try to load it immediately
-            yield x509.Certificate.load(ca_chain_bytes)
-
-
 class SimpleSigner(Signer):
     """
     Simple signer implementation where the key material is available in local
@@ -929,25 +906,31 @@ class SimpleSigner(Signer):
 
         signature_mechanism = self.get_signature_mechanism(digest_algorithm)
         mechanism = signature_mechanism.signature_algo
+        priv_key = serialization.load_der_private_key(
+            self.signing_key.dump(), password=None
+        )
+
         if mechanism == 'rsassa_pkcs1v15':
-            sign_func = asymmetric.rsa_pkcs1v15_sign
+            padding = PKCS1v15()
+            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            assert isinstance(priv_key, RSAPrivateKey)
+            return priv_key.sign(data, padding, hash_algo)
         elif mechanism == 'rsassa_pss':
-            return _sign_pss_raw(
-                data, self.signing_key, signature_mechanism['parameters'],
-                digest_algorithm
+            params = signature_mechanism['parameters']
+            padding, hash_algo = _process_pss_params(
+                params, digest_algorithm
             )
+            assert isinstance(priv_key, RSAPrivateKey)
+            return priv_key.sign(data, padding, hash_algo)
         elif mechanism == 'ecdsa':
-            sign_func = asymmetric.ecdsa_sign
+            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            assert isinstance(priv_key, EllipticCurvePrivateKey)
+            return priv_key.sign(data, signature_algorithm=ECDSA(hash_algo))
         else:  # pragma: nocover
             raise SigningError(
                 f"The signature mechanism {mechanism} "
                 "is unsupported by this signer."
             )
-
-        return sign_func(
-            asymmetric.load_private_key(self.signing_key),
-            data, digest_algorithm.lower()
-        )
 
     @classmethod
     def _load_ca_chain(cls, ca_chain_files=None):
@@ -994,7 +977,15 @@ class SimpleSigner(Signer):
         if ca_chain is None:  # pragma: nocover
             return None
 
-        (kinfo, cert, other_certs) = oskeys.parse_pkcs12(pfx_bytes, passphrase)
+        (private_key, cert, other_certs) = pkcs12.load_key_and_certificates(
+            pfx_bytes, passphrase
+        )
+        kinfo = _translate_pyca_cryptography_key_to_asn1(private_key)
+        cert = _translate_pyca_cryptography_cert_to_asn1(cert)
+        other_certs = set(
+            map(_translate_pyca_cryptography_cert_to_asn1, other_certs)
+        )
+
         cs = SimpleCertificateStore()
         cs.register_multiple(ca_chain | set(other_certs))
         return SimpleSigner(
@@ -1032,15 +1023,11 @@ class SimpleSigner(Signer):
         """
         try:
             # load cryptographic data (both PEM and DER are supported)
-            with open(key_file, 'rb') as f:
-                signing_key: keys.PrivateKeyInfo = oskeys.parse_private(
-                    f.read(), password=key_passphrase
-                )
-            with open(cert_file, 'rb') as f:
-                signing_cert: x509.Certificate = oskeys.parse_certificate(
-                    f.read()
-                )
-        except (IOError, ValueError) as e:  # pragma: nocover
+            signing_key = load_private_key_from_pemder(
+                key_file, passphrase=key_passphrase
+            )
+            signing_cert = load_cert_from_pemder(cert_file)
+        except (IOError, ValueError, TypeError) as e:  # pragma: nocover
             logger.error('Could not load cryptographic material', exc_info=e)
             return None
 

@@ -5,16 +5,15 @@ from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import TypeVar, Type, Optional, Union, Tuple
+from typing import TypeVar, Type, Optional, Union
 
 from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
 )
 from asn1crypto.x509 import Certificate
+
 from certvalidator import ValidationContext, CertificateValidator
 from certvalidator.path import ValidationPath
-from oscrypto import asymmetric
-from oscrypto.errors import SignatureError
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
@@ -34,8 +33,9 @@ from .fields import (
 )
 from .general import (
     SignatureStatus, find_cms_attribute,
-    UnacceptableSignerError, KeyUsageConstraints, _validate_pss_raw,
-    _validate_rsa_pkcs1v15_prehashed,
+    UnacceptableSignerError, KeyUsageConstraints,
+    SignatureValidationError,
+    validate_sig_integrity,
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -46,8 +46,7 @@ __all__ = [
     'apply_adobe_revocation_info',
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
-    'ValidationInfoReadingError', 'SignatureValidationError',
-    'SigSeedValueValidationError', 'validate_sig_integrity'
+    'ValidationInfoReadingError', 'SigSeedValueValidationError'
 ]
 
 logger = logging.getLogger(__name__)
@@ -55,11 +54,6 @@ logger = logging.getLogger(__name__)
 
 class ValidationInfoReadingError(ValueError):
     """Error reading validation info."""
-    pass
-
-
-class SignatureValidationError(ValueError):
-    """Error validating a signature."""
     pass
 
 
@@ -117,180 +111,6 @@ def _extract_signer_info_and_certs(signed_data: cms.SignedData):
     cert, other_certs = partition_certs(certs, signer_info)
 
     return signer_info, cert, other_certs
-
-
-# TODO: consider migrating away from oscrypto and doing everything using
-#  pyca/cryptography instead. API-wise I prefer pyca/cryptography, but
-#  fully extricating oscrypto would probably also require some modifications
-#  to the certvalidator library.
-
-def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
-                  signature_algorithm: cms.SignedDigestAlgorithm,
-                  md_algorithm: str, prehashed=False):
-    try:
-        verify_md = signature_algorithm.hash_algo
-    except ValueError:
-        verify_md = md_algorithm
-
-    sig_algo = signature_algorithm.signature_algo
-    if sig_algo == 'rsassa_pkcs1v15':
-        if prehashed:
-            try:
-                import cryptography
-            except ImportError:  # pragma: nocover
-                raise SignatureValidationError(
-                    "Encountered a signature where the document digest was "
-                    "signed directly. Since these digests are computed over "
-                    "potentially large chunks of data (which oscrypto's API "
-                    "does not support efficiently) pyHanko uses "
-                    "pyca/cryptography for validation in these cases. Please "
-                    "install the 'cryptography' package from pypi."
-                )
-            _validate_rsa_pkcs1v15_prehashed(
-                signature, signed_data, cert, verify_md
-            )
-            return
-
-        verify_func = asymmetric.rsa_pkcs1v15_verify
-    elif sig_algo == 'rsassa_pss':
-        _validate_pss_raw(
-            signature, signed_data, cert, signature_algorithm['parameters'],
-            digest_algorithm=verify_md, prehashed=prehashed
-        )
-        return
-    elif sig_algo == 'ecdsa':
-        verify_func = asymmetric.ecdsa_verify
-    else:  # pragma: nocover
-        raise SignatureValidationError(
-            f"Signature mechanism {sig_algo} is not supported."
-        )
-
-    verify_func(
-        asymmetric.load_public_key(cert.public_key), signature,
-        signed_data, hash_algorithm=verify_md
-    )
-
-
-def validate_sig_integrity(signer_info: cms.SignedData,
-                           cert: x509.Certificate,
-                           expected_content_type: str,
-                           actual_digest: bytes) -> Tuple[bool, bool]:
-    """
-    Validate the integrity of a signature for a particular signerInfo object
-    inside a CMS signed data container.
-
-    .. warning::
-        This function does not do any trust checks, and is considered
-        "dangerous" API because it is easy to misuse.
-
-    :param signer_info:
-        A :class:`cms.SignerInfo` object.
-    :param cert:
-        The signer's certificate.
-
-        .. note::
-            This function will not attempt to extract certificates from
-            the signed data.
-    :param expected_content_type:
-        The expected value for the content type attribute (as a Python string,
-        see :class:`cms.ContentType`).
-    :param actual_digest:
-        The actual digest to be matched to the message digest attribute.
-    :return:
-        A tuple of two booleans. The first indicates whether the provided
-        digest matches the value in the signed attributes.
-        The second indicates whether the signature of the digest is valid.
-    """
-
-    signature_algorithm: cms.SignedDigestAlgorithm = \
-        signer_info['signature_algorithm']
-    digest_algorithm_obj = signer_info['digest_algorithm']
-    md_algorithm = digest_algorithm_obj['algorithm'].native
-    signature = signer_info['signature'].native
-
-    # signed_attrs comes with some context-specific tagging
-    # because it's an implicit field. This breaks validation
-    signed_attrs = signer_info['signed_attrs'].untag()
-
-    if not signed_attrs:
-        embedded_digest = None
-        prehashed = True
-        signed_data = actual_digest
-    else:
-        prehashed = False
-        # check the CMSAlgorithmProtection attr, if present
-        try:
-            cms_algid_protection, = find_cms_attribute(
-                signed_attrs, 'cms_algorithm_protection'
-            )
-            signed_digest_algorithm = \
-                cms_algid_protection['digest_algorithm'].native
-            if signed_digest_algorithm != digest_algorithm_obj.native:
-                raise SignatureValidationError(
-                    "Digest algorithm does not match CMS algorithm protection "
-                    "attribute."
-                )
-            signed_sig_algorithm = \
-                cms_algid_protection['signature_algorithm'].native
-            if signed_sig_algorithm is None:
-                raise SignatureValidationError(
-                    "CMS algorithm protection attribute not valid for signed "
-                    "data"
-                )
-            elif signed_sig_algorithm != signature_algorithm.native:
-                raise SignatureValidationError(
-                    "Signature mechanism does not match CMS algorithm "
-                    "protection attribute."
-                )
-        except KeyError:
-            pass
-        except SignatureValidationError:
-            raise
-        except ValueError:
-            raise SignatureValidationError(
-                'Multiple CMS protection attributes present'
-            )
-
-        try:
-            content_type, = find_cms_attribute(signed_attrs, 'content_type')
-            content_type = content_type.native
-            if content_type != expected_content_type:
-                raise SignatureValidationError(
-                    'Content type did not match expected value'
-                )
-        except (KeyError, ValueError):
-            raise SignatureValidationError(
-                'Content type not found in signature, or multiple content-type '
-                'attributes present.'
-            )
-
-        try:
-            embedded_digest, = find_cms_attribute(
-                signed_attrs, 'message_digest'
-            )
-            embedded_digest = embedded_digest.native
-        except (KeyError, ValueError):
-            raise SignatureValidationError(
-                'Message digest not found in signature, or multiple message '
-                'digest attributes present.'
-            )
-
-        signed_data = signed_attrs.dump(force=True)
-    try:
-        _validate_raw(
-            signature, signed_data, cert, signature_algorithm, md_algorithm,
-            prehashed=prehashed
-        )
-        valid = True
-    except SignatureError:
-        valid = False
-
-    intact = (
-        actual_digest == embedded_digest
-        if embedded_digest is not None else valid
-    )
-
-    return intact, valid
 
 
 def _validate_cms_signature(signed_data: cms.SignedData,

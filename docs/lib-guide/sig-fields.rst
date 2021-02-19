@@ -189,9 +189,9 @@ for a ballot form of sorts, subject to the following requirements.
 .. code-block:: python
 
     from pyhanko.sign import fields
-    from oscrypto import keys
+    from pyhanko.sign.general import load_cert_from_pemder
 
-    franchising_ca = keys.parse_certificate(b'<certificate data goes here>')
+    franchising_ca = load_cert_from_pemder('path/to/certfile')
     sv = fields.SigSeedValueSpec(
         reasons=[
             'I vote in favour of the proposed measure',

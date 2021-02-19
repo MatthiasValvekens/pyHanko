@@ -49,7 +49,6 @@ setup(
     },
     install_requires=[
         'asn1crypto>=1.4.0',
-        'oscrypto>=1.2.1',
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
@@ -61,14 +60,13 @@ setup(
         'python-barcode>=0.13.1',
         'Pillow>=8.0.1',
         'pyyaml>=5.3.1',
+        'cryptography>=3.3.1'
     ],
     setup_requires=[
         'wheel', 'pytest-runner'
     ],
     extras_require={
-        # oscrypto also has an API function to handle PSS signing & validation,
-        # but not with arbitrary parameters. Only the defaults are supported.
-        'pss': ['cryptography>=3.3.1']
+        'extra_pubkey_algs': ['oscrypto>=1.2.1']
     },
     tests_require=[
         'pytest>=6.1.1',

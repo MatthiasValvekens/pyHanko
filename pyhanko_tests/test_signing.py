@@ -14,12 +14,12 @@ import tzlocal
 from asn1crypto import cms
 
 import pyhanko.pdf_utils.content
+import pyhanko.sign.general
 from certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
 from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
-from oscrypto import keys as oskeys
 
 from pyhanko import stamp
 from pyhanko.pdf_utils import generic
@@ -28,14 +28,16 @@ from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.misc import PdfWriteError
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import timestamps, fields, signers
-from pyhanko.sign.general import SigningError
+from pyhanko.sign.general import (
+    SigningError, SignatureValidationError, validate_sig_integrity,
+    load_private_key_from_pemder, load_cert_from_pemder, load_certs_from_pemder
+)
 from pyhanko.sign.signers import PdfTimeStamper
 from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, SignatureValidationError, validate_sig_integrity,
-)
+    SignatureCoverageLevel, )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
     NO_CHANGES_DIFF_POLICY,
@@ -81,43 +83,43 @@ ECC_ROOT_PATH = ECC_TESTING_CA_DIR + '/root/certs/ca.cert.pem'
 INTERM_PATH = TESTING_CA_DIR + '/intermediate/certs/ca.cert.pem'
 OCSP_PATH = TESTING_CA_DIR + '/intermediate/newcerts/ocsp.cert.pem'
 REVOKED_CERT_PATH = TESTING_CA_DIR + '/intermediate/newcerts/1002.pem'
-TRUST_ROOTS = list(signers.load_certs_from_pemder((ROOT_PATH,)))
+TRUST_ROOTS = list(load_certs_from_pemder((ROOT_PATH,)))
 
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
     TESTING_CA_DIR + '/intermediate/newcerts/signer.pfx',
     passphrase=b'exportsecret'
 )
 
-ROOT_CERT = oskeys.parse_certificate(read_all(ROOT_PATH))
-ECC_ROOT_CERT = oskeys.parse_certificate(read_all(ECC_ROOT_PATH))
-INTERM_CERT = oskeys.parse_certificate(read_all(INTERM_PATH))
-OCSP_CERT = oskeys.parse_certificate(read_all(OCSP_PATH))
-REVOKED_CERT = oskeys.parse_certificate(read_all(REVOKED_CERT_PATH))
+ROOT_CERT = load_cert_from_pemder(ROOT_PATH)
+ECC_ROOT_CERT = load_cert_from_pemder(ECC_ROOT_PATH)
+INTERM_CERT = load_cert_from_pemder(INTERM_PATH)
+OCSP_CERT = load_cert_from_pemder(OCSP_PATH)
+REVOKED_CERT = load_cert_from_pemder(REVOKED_CERT_PATH)
 NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
 SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
-OCSP_KEY = oskeys.parse_private(
-    read_all(TESTING_CA_DIR + '/keys/ocsp.key.pem'), b"secret"
+OCSP_KEY = load_private_key_from_pemder(
+    TESTING_CA_DIR + '/keys/ocsp.key.pem', b"secret"
 )
 
-TSA_CERT = oskeys.parse_certificate(
-    read_all(TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem')
+TSA_CERT = load_cert_from_pemder(
+    TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem'
 )
 DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=TSA_CERT,
-    tsa_key=oskeys.parse_private(
-        read_all(TESTING_CA_DIR + '/keys/tsa.key.pem'), password=b'secret'
+    tsa_key=load_private_key_from_pemder(
+        TESTING_CA_DIR + '/keys/tsa.key.pem', b'secret'
     ),
     certs_to_embed=FROM_CA.cert_registry,
 )
 
-TSA2_CERT = oskeys.parse_certificate(
-    read_all(TESTING_CA_DIR + '/root/newcerts/tsa2.cert.pem')
+TSA2_CERT = load_cert_from_pemder(
+    TESTING_CA_DIR + '/root/newcerts/tsa2.cert.pem'
 )
 DUMMY_TS2 = timestamps.DummyTimeStamper(
     tsa_cert=TSA2_CERT,
-    tsa_key=oskeys.parse_private(
-        read_all(TESTING_CA_DIR + '/keys/tsa2.key.pem'), password=b'secret'
+    tsa_key=load_private_key_from_pemder(
+        TESTING_CA_DIR + '/keys/tsa2.key.pem', b'secret'
     ),
     certs_to_embed=FROM_CA.cert_registry,
 )
@@ -249,7 +251,7 @@ def test_der_detect(tmp_path):
     tmp: Path = tmp_path / "test.der"
     orig_bytes = SELF_SIGN.signing_cert.dump()
     tmp.write_bytes(orig_bytes)
-    result, = signers.load_certs_from_pemder([str(tmp)])
+    result = load_cert_from_pemder(str(tmp))
 
     # make sure the resulting object gets parsed fully, for good measure
     # noinspection PyStatementEffect

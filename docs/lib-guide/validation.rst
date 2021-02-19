@@ -88,12 +88,12 @@ w.r.t. a specific trust root.
 
 .. code-block:: python
 
-    from oscrypto import keys
+    from pyhanko.sign.general import load_cert_from_pemder
     from certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
 
-    root_cert = keys.parse_certificate(b'<certificate data goes here>')
+    root_cert = load_cert_from_pemder('path/to/certfile')
     vc = ValidationContext(trust_roots=[root_cert])
 
     with open('document.pdf', 'rb') as doc:
@@ -143,13 +143,13 @@ The PAdES B-LTA validation example below should clarify that.
 
 .. code-block:: python
 
-    from oscrypto import keys
+    from pyhanko.sign.general import load_cert_from_pemder
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import (
         validate_pdf_ltv_signature, RevocationInfoValidationType
     )
 
-    root_cert = keys.parse_certificate(b'<certificate data goes here>')
+    root_cert = load_cert_from_pemder('path/to/certfile')
 
     with open('document.pdf', 'rb') as doc:
         r = PdfFileReader(doc)
@@ -245,14 +245,14 @@ To actually use a custom diff policy, you can proceed as follows.
 
 .. code-block:: python
 
-    from oscrypto import keys
+    from pyhanko.sign.general import load_cert_from_pemder
     from certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
 
     from my_awesome_module import CustomDiffPolicy
 
-    root_cert = keys.parse_certificate(b'<certificate data goes here>')
+    root_cert = load_cert_from_pemder('path/to/certfile')
     vc = ValidationContext(trust_roots=[root_cert])
 
     with open('document.pdf', 'rb') as doc:
@@ -303,12 +303,12 @@ Anyhow, to disable diff analysis completely, it suffices to pass the
 
 .. code-block:: python
 
-    from oscrypto import keys
+    from pyhanko.sign.general import load_cert_from_pemder
     from certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
 
-    root_cert = keys.parse_certificate(b'<certificate data goes here>')
+    root_cert = load_cert_from_pemder('path/to/certfile')
     vc = ValidationContext(trust_roots=[root_cert])
 
     with open('document.pdf', 'rb') as doc:

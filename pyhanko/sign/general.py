@@ -8,30 +8,44 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Set
-
+from typing import ClassVar, Set, Optional, Tuple
 
 import hashlib
 
-from asn1crypto import x509, cms, tsp, algos, keys
+from asn1crypto import x509, cms, tsp, algos, pem, keys
+
 # noinspection PyProtectedMember
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ec import (
+    EllipticCurvePublicKey, ECDSA
+)
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
+
 from certvalidator.path import ValidationPath
 
 from certvalidator import (
-    CertificateValidator, InvalidCertificateError,
-    PathBuildingError,
+    CertificateValidator, InvalidCertificateError, PathBuildingError,
 )
 from certvalidator.errors import RevokedError, PathValidationError
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+
 
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
     'CertificateStore', 'SimpleCertificateStore', 'SigningError',
-    'UnacceptableSignerError'
+    'UnacceptableSignerError',
+    'load_certs_from_pemder', 'load_cert_from_pemder',
+    'load_private_key_from_pemder'
 ]
 
-from oscrypto.errors import SignatureError
-
 logger = logging.getLogger(__name__)
+
+
+class SignatureValidationError(ValueError):
+    """Error validating a signature."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -223,9 +237,7 @@ class SignatureStatus:
             logger.warning(e)
         if not trusted:
             subj = cert.subject.human_friendly
-            logger.warning(
-                f"Chain of trust validation for {subj} failed."
-            )
+            logger.warning(f"Chain of trust validation for {subj} failed.")
         return trusted, revoked, path
 
 
@@ -359,13 +371,17 @@ class UnacceptableSignerError(SigningError):
     pass
 
 
-def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm):
-    # oscrypto doesn't support PSS with arbitrary parameters,
-    # so we rely on pyca/cryptography for this bit
+def _get_pyca_cryptography_hash(algorithm, prehashed=False):
+    hash_algo = getattr(hashes, algorithm.upper())()
+    return Prehashed(hash_algo) if prehashed else hash_algo
+
+
+def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm,
+                        prehashed=False):
 
     hash_algo: algos.DigestAlgorithm = params['hash_algorithm']
     md_name = hash_algo['algorithm'].native
-    if md_name != digest_algorithm:
+    if md_name.casefold() != digest_algorithm.casefold():
         raise ValueError(
             f"PSS MD '{md_name}' must agree with signature "
             f"MD '{digest_algorithm}'."
@@ -384,80 +400,13 @@ def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm):
         )
     salt_len: int = params['salt_length'].native
 
-    try:
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import padding
-    except ImportError:  # pragma: nocover
-        raise SigningError("pyca/cryptography is required for generic PSS")
-
-    mgf_md = getattr(hashes, mgf_md_name.upper())
-    md = getattr(hashes, md_name.upper())
+    mgf_md = _get_pyca_cryptography_hash(mgf_md_name, prehashed=False)
+    md = _get_pyca_cryptography_hash(md_name, prehashed=prehashed)
     pss_padding = padding.PSS(
-        mgf=padding.MGF1(algorithm=mgf_md()),
+        mgf=padding.MGF1(algorithm=mgf_md),
         salt_length=salt_len
     )
-    return pss_padding, md()
-
-
-def _validate_with_pyca_cryptography(signature: bytes, data: bytes,
-                                     cert: x509.Certificate, padding,
-                                     hash_algo, prehashed=False):
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
-    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-    from cryptography.exceptions import InvalidSignature
-
-    pub_key = serialization.load_der_public_key(
-        cert.public_key.dump()
-    )
-
-    assert isinstance(pub_key, RSAPublicKey)
-
-    if prehashed:
-        hash_algo = Prehashed(hash_algo)
-
-    try:
-        pub_key.verify(signature, data, padding, hash_algo)
-    except InvalidSignature as e:
-        # reraise using oscrypto-style exception
-        raise SignatureError() from e
-
-
-def _validate_pss_raw(signature: bytes, data: bytes, cert: x509.Certificate,
-                      params: algos.RSASSAPSSParams, digest_algorithm: str,
-                      prehashed=False):
-
-    pss_padding, hash_algo = _process_pss_params(params, digest_algorithm)
-
-    _validate_with_pyca_cryptography(
-        signature, data, cert, pss_padding, hash_algo, prehashed=prehashed
-    )
-
-
-def _validate_rsa_pkcs1v15_prehashed(signature: bytes, digest: bytes,
-                                     cert: x509.Certificate,
-                                     digest_algorithm: str):
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
-    hash_algo = getattr(hashes, digest_algorithm.upper())()
-    _validate_with_pyca_cryptography(
-        signature, data=digest, cert=cert, padding=PKCS1v15(),
-        hash_algo=hash_algo, prehashed=True
-    )
-
-
-def _sign_pss_raw(data: bytes, signing_key: keys.PrivateKeyInfo,
-                  params: algos.RSASSAPSSParams, digest_algorithm: str):
-
-    pss_padding, hash_algo = _process_pss_params(params, digest_algorithm)
-
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-    priv_key: RSAPrivateKey = serialization.load_der_private_key(
-        signing_key.dump(), password=None
-    )
-
-    return priv_key.sign(data=data, padding=pss_padding, algorithm=hash_algo)
+    return pss_padding, md
 
 
 def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str):
@@ -490,3 +439,256 @@ def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str):
         }),
         'salt_length': optimal_salt_len
     })
+
+
+def load_certs_from_pemder(cert_files):
+    """
+    A convenience function to load PEM/DER-encoded certificates from files.
+
+    :param cert_files:
+        An iterable of file names.
+    :return:
+        A generator producing :class:`.asn1crypto.x509.Certificate` objects.
+    """
+    for ca_chain_file in cert_files:
+        with open(ca_chain_file, 'rb') as f:
+            ca_chain_bytes = f.read()
+        # use the pattern from the asn1crypto docs
+        # to distinguish PEM/DER and read multiple certs
+        # from one PEM file (if necessary)
+        if pem.detect(ca_chain_bytes):
+            pems = pem.unarmor(ca_chain_bytes, multiple=True)
+            for type_name, _, der in pems:
+                if type_name is None or type_name.lower() == 'certificate':
+                    yield x509.Certificate.load(der)
+                else:  # pragma: nocover
+                    logger.debug(
+                        f'Skipping PEM block of type {type_name} in '
+                        f'{ca_chain_file}.'
+                    )
+        else:
+            # no need to unarmor, just try to load it immediately
+            yield x509.Certificate.load(ca_chain_bytes)
+
+
+def load_cert_from_pemder(cert_file):
+    """
+    A convenience function to load a single PEM/DER-encoded certificate
+    from a file.
+
+    :param cert_file:
+        A file name.
+    :return:
+        An :class:`.asn1crypto.x509.Certificate` object.
+    """
+    certs = list(load_certs_from_pemder([cert_file]))
+    if len(certs) != 1:
+        raise ValueError(
+            f"Number of certs in {cert_file} should be exactly 1"
+        )
+    return certs[0]
+
+
+def load_private_key_from_pemder(key_file, passphrase: Optional[bytes]) \
+        -> keys.PrivateKeyInfo:
+    """
+    A convenience function to load PEM/DER-encoded keys from files.
+
+    :param key_file:
+        File to read the key from.
+    :param passphrase:
+        Key passphrase.
+    :return:
+        A private key encoded as an unencrypted PKCS#8 PrivateKeyInfo object.
+    """
+    with open(key_file, 'rb') as f:
+        key_bytes = f.read()
+    load_fun = (
+        serialization.load_pem_private_key if pem.detect(key_bytes)
+        else serialization.load_der_private_key
+    )
+    return _translate_pyca_cryptography_key_to_asn1(
+        load_fun(key_bytes, password=passphrase)
+    )
+
+
+def _translate_pyca_cryptography_key_to_asn1(private_key) \
+        -> keys.PrivateKeyInfo:
+    # Store the cert and key as generic ASN.1 structures for more
+    # "standardised" introspection. This comes at the cost of some encoding/
+    # decoding operations, but those should be fairly insignificant in the
+    # grand scheme of things.
+    #
+    # Note: we're not losing any memory protections here:
+    #  (https://cryptography.io/en/latest/limitations.html)
+    # Arguably, memory safety is nigh impossible to obtain in a Python
+    # context anyhow, and people with that kind of Serious (TM) security
+    # requirements should be using HSMs to manage keys.
+    return keys.PrivateKeyInfo.load(
+        private_key.private_bytes(
+            serialization.Encoding.DER, serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption()
+        )
+    )
+
+
+def _translate_pyca_cryptography_cert_to_asn1(cert) -> x509.Certificate:
+    return x509.Certificate.load(
+        cert.public_bytes(serialization.Encoding.DER)
+    )
+
+
+def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
+                  signature_algorithm: cms.SignedDigestAlgorithm,
+                  md_algorithm: str, prehashed=False):
+    try:
+        md_algorithm = signature_algorithm.hash_algo.upper()
+    except (ValueError, AttributeError):
+        pass
+
+    verify_md = _get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
+
+    pub_key = serialization.load_der_public_key(
+        cert.public_key.dump()
+    )
+
+    sig_algo = signature_algorithm.signature_algo
+    if sig_algo == 'rsassa_pkcs1v15':
+        assert isinstance(pub_key, RSAPublicKey)
+        pub_key.verify(signature, signed_data, padding.PKCS1v15(), verify_md)
+    elif sig_algo == 'rsassa_pss':
+        assert isinstance(pub_key, RSAPublicKey)
+        pss_padding, hash_algo = _process_pss_params(
+            signature_algorithm['parameters'], md_algorithm,
+            prehashed=prehashed
+        )
+        pub_key.verify(signature, signed_data, pss_padding, hash_algo)
+    elif sig_algo == 'ecdsa':
+        assert isinstance(pub_key, EllipticCurvePublicKey)
+        pub_key.verify(signature, signed_data, ECDSA(verify_md))
+    else:  # pragma: nocover
+        raise SignatureValidationError(
+            f"Signature mechanism {sig_algo} is not supported."
+        )
+
+
+def validate_sig_integrity(signer_info: cms.SignedData,
+                           cert: x509.Certificate,
+                           expected_content_type: str,
+                           actual_digest: bytes) -> Tuple[bool, bool]:
+    """
+    Validate the integrity of a signature for a particular signerInfo object
+    inside a CMS signed data container.
+
+    .. warning::
+        This function does not do any trust checks, and is considered
+        "dangerous" API because it is easy to misuse.
+
+    :param signer_info:
+        A :class:`cms.SignerInfo` object.
+    :param cert:
+        The signer's certificate.
+
+        .. note::
+            This function will not attempt to extract certificates from
+            the signed data.
+    :param expected_content_type:
+        The expected value for the content type attribute (as a Python string,
+        see :class:`cms.ContentType`).
+    :param actual_digest:
+        The actual digest to be matched to the message digest attribute.
+    :return:
+        A tuple of two booleans. The first indicates whether the provided
+        digest matches the value in the signed attributes.
+        The second indicates whether the signature of the digest is valid.
+    """
+
+    signature_algorithm: cms.SignedDigestAlgorithm = \
+        signer_info['signature_algorithm']
+    digest_algorithm_obj = signer_info['digest_algorithm']
+    md_algorithm = digest_algorithm_obj['algorithm'].native
+    signature = signer_info['signature'].native
+
+    # signed_attrs comes with some context-specific tagging.
+    # We need to re-tag it with a universal SET OF tag.
+    signed_attrs = signer_info['signed_attrs'].untag()
+
+    if not signed_attrs:
+        embedded_digest = None
+        prehashed = True
+        signed_data = actual_digest
+    else:
+        prehashed = False
+        # check the CMSAlgorithmProtection attr, if present
+        try:
+            cms_algid_protection, = find_cms_attribute(
+                signed_attrs, 'cms_algorithm_protection'
+            )
+            signed_digest_algorithm = \
+                cms_algid_protection['digest_algorithm'].native
+            if signed_digest_algorithm != digest_algorithm_obj.native:
+                raise SignatureValidationError(
+                    "Digest algorithm does not match CMS algorithm protection "
+                    "attribute."
+                )
+            signed_sig_algorithm = \
+                cms_algid_protection['signature_algorithm'].native
+            if signed_sig_algorithm is None:
+                raise SignatureValidationError(
+                    "CMS algorithm protection attribute not valid for signed "
+                    "data"
+                )
+            elif signed_sig_algorithm != signature_algorithm.native:
+                raise SignatureValidationError(
+                    "Signature mechanism does not match CMS algorithm "
+                    "protection attribute."
+                )
+        except KeyError:
+            pass
+        except SignatureValidationError:
+            raise
+        except ValueError:
+            raise SignatureValidationError(
+                'Multiple CMS protection attributes present'
+            )
+
+        try:
+            content_type, = find_cms_attribute(signed_attrs, 'content_type')
+            content_type = content_type.native
+            if content_type != expected_content_type:
+                raise SignatureValidationError(
+                    'Content type did not match expected value'
+                )
+        except (KeyError, ValueError):
+            raise SignatureValidationError(
+                'Content type not found in signature, or multiple content-type '
+                'attributes present.'
+            )
+
+        try:
+            embedded_digest, = find_cms_attribute(
+                signed_attrs, 'message_digest'
+            )
+            embedded_digest = embedded_digest.native
+        except (KeyError, ValueError):
+            raise SignatureValidationError(
+                'Message digest not found in signature, or multiple message '
+                'digest attributes present.'
+            )
+
+        signed_data = signed_attrs.dump(force=True)
+    try:
+        _validate_raw(
+            signature, signed_data, cert, signature_algorithm, md_algorithm,
+            prehashed=prehashed
+        )
+        valid = True
+    except InvalidSignature:
+        valid = False
+
+    intact = (
+        actual_digest == embedded_digest
+        if embedded_digest is not None else valid
+    )
+
+    return intact, valid
