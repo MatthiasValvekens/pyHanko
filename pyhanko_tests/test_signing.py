@@ -259,6 +259,13 @@ def test_der_detect(tmp_path):
     assert result.dump() == orig_bytes
 
 
+def test_enforce_one_cert(tmp_path):
+
+    fname = TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem'
+    with pytest.raises(ValueError):
+        load_cert_from_pemder(fname)
+
+
 def test_simple_sign():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')

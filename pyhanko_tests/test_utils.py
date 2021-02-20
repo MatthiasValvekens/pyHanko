@@ -6,7 +6,6 @@ import pytest
 from io import BytesIO
 
 import pytz
-from asn1crypto import x509
 
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

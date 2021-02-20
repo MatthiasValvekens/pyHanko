@@ -211,14 +211,6 @@ def _rc4_encrypt(key, data):
     return encryptor.update(data) + encryptor.finalize()
 
 
-# this should be the same as _rc4_encrypt, but let's separate them
-# for good measure
-def _rc4_decrypt(key, data):
-    cipher = Cipher(algorithms.ARC4(key), mode=None)
-    decryptor = cipher.decryptor()
-    return decryptor.update(data) + decryptor.finalize()
-
-
 def _r6_derive_file_key(pw_bytes: bytes, entry: _R6KeyEntry, e_entry: bytes,
                         u_entry: Optional[bytes] = None):
     interm_key = _r6_hash_algo(pw_bytes, entry.key_salt, u_entry)
