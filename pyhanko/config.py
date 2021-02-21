@@ -6,16 +6,15 @@ from dataclasses import dataclass
 
 import yaml
 
-import pyhanko.sign.general
 from certvalidator import ValidationContext
 from pyhanko.pdf_utils.config_utils import (
     check_config_keys, ConfigurationError
 )
 from pyhanko.pdf_utils.misc import get_and_apply
-from pyhanko.sign import signers
 
 
 # TODO add stamp styles etc.
+from pyhanko.sign import load_certs_from_pemder
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 
@@ -99,7 +98,7 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
         if isinstance(trust, str):
             trust = (trust,)
         # add trust roots to the validation context, or replace them
-        trust_certs = list(pyhanko.sign.general.load_certs_from_pemder(trust))
+        trust_certs = list(load_certs_from_pemder(trust))
         if trust_replace:
             vc_kwargs['trust_roots'] = trust_certs
         else:
@@ -107,9 +106,7 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
     if other_certs:
         if isinstance(other_certs, str):
             other_certs = (other_certs,)
-        vc_kwargs['other_certs'] = list(
-            pyhanko.sign.general.load_certs_from_pemder(other_certs)
-        )
+        vc_kwargs['other_certs'] = list(load_certs_from_pemder(other_certs))
     return vc_kwargs
 
 

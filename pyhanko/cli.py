@@ -6,7 +6,6 @@ import click
 import logging
 import getpass
 
-import pyhanko.sign.general
 from certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
@@ -20,7 +19,9 @@ from pyhanko.pdf_utils.crypt import (
 )
 
 from pyhanko.sign import signers, pkcs11
-from pyhanko.sign.general import SigningError, SignatureValidationError
+from pyhanko.sign.general import (
+    SigningError, SignatureValidationError, load_certs_from_pemder
+)
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign import validation, beid, fields
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -858,7 +859,7 @@ def encrypt_file(infile, outfile, password, recipient):
     recipient_certs = None
     if recipient:
         recipient_certs = list(
-            pyhanko.sign.general.load_certs_from_pemder(cert_files=recipient)
+            load_certs_from_pemder(cert_files=recipient)
         )
 
     with pyhanko_exception_manager():
