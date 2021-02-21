@@ -1300,8 +1300,6 @@ def test_pades_revinfo_live_update(requests_mock):
 
 def test_update_no_sigs():
     r = PdfFileReader(BytesIO(MINIMAL))
-    rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
-    # check if updates work
     with pytest.raises(SigningError):
         PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
             r, dummy_ocsp_vc()
@@ -1551,6 +1549,13 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False):
 def _test_pades_revinfo_live_lta(w, requests_mock, **kwargs):
     out = _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs)
     _test_pades_revinfo_live_lta_validate(out, requests_mock)
+
+
+def test_pades_lta_dss_indirect_arrs(requests_mock):
+    testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
+    live_testing_vc(requests_mock)
+    with open(testfile, 'rb') as f:
+        _test_pades_revinfo_live_lta_validate(f, requests_mock, no_write=True)
 
 
 @freeze_time('2020-11-01')

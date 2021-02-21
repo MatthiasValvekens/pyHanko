@@ -1772,7 +1772,8 @@ class DocumentSecurityStore:
         dss_dict = dss_ref.get_object()
 
         cert_refs = {}
-        for cert_ref in dss_dict.get('/Certs', ()):
+        cert_ref_list = get_and_apply(dss_dict, '/Certs', list, default=())
+        for cert_ref in cert_ref_list:
             cert_stream: generic.StreamObject = cert_ref.get_object()
             cert: Certificate = Certificate.load(cert_stream.data)
             cert_refs[cert.issuer_serial] = cert_ref
