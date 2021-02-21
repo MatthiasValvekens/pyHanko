@@ -6,6 +6,12 @@ This page lists some TODOs and known limitations of pyHanko.
 * Expand, polish and rigorously test the validation functionality.
   The test suite covers a variety of scenarios already, but the difference
   checker in particular is still far from perfect.
+* LTV validation was implemented ad-hoc, and likely does not fully adhere to
+  the PAdES specification. This will require some effort to implement correctly.
+  In the meantime, you should treat the result as a pyHanko-specific
+  interpretation of the validity of the chain of trust based on the validation
+  info present in the file, not as a final judgment on whether the signature
+  complies with any particular PAdES profile.
 * The most lenient document modification policy (i.e. addition of comments and
   annotations) is not supported.
   Comments added to a signed PDF will therefore be considered "unsafe" changes,
