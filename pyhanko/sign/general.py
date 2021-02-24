@@ -657,8 +657,11 @@ def validate_sig_integrity(signer_info: cms.SignedData,
             content_type = content_type.native
             if content_type != expected_content_type:
                 raise SignatureValidationError(
-                    'Content type did not match expected value'
+                    f'Content type {content_type} did not match expected value '
+                    f'{expected_content_type}'
                 )
+        except SignatureValidationError:
+            raise
         except (KeyError, ValueError):
             raise SignatureValidationError(
                 'Content type not found in signature, or multiple content-type '
