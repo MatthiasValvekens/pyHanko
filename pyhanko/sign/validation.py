@@ -564,7 +564,9 @@ class EmbeddedPdfSignature:
             pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
             self.byte_range = sig_object['/ByteRange']
         except KeyError:
-            raise ValueError('Signature PDF object is not correctly formatted')
+            raise misc.PdfReadError(
+                'Signature PDF object is not correctly formatted'
+            )
 
         # we need the pkcs7_content raw, so we need to deencapsulate a couple
         # pieces of data here.
@@ -572,12 +574,14 @@ class EmbeddedPdfSignature:
             # it was a direct reference, so just grab the raw one
             pkcs7_content = pkcs7_content.raw_object
         elif isinstance(pkcs7_content, generic.IndirectObject):
-            pkcs7_content = reader.get_object(
-                pkcs7_content.reference, transparent_decrypt=False
-            )
+            raise misc.PdfReadError("/Contents in signature must be direct")
+
+        if not isinstance(pkcs7_content,
+                          (generic.TextStringObject, generic.ByteStringObject)):
+            raise misc.PdfReadError('/Contents must be string-like')
         self.pkcs7_content = pkcs7_content
 
-        message = cms.ContentInfo.load(pkcs7_content)
+        message = cms.ContentInfo.load(pkcs7_content.original_bytes)
         signed_data = message['content']
         self.signed_data: cms.SignedData = signed_data
 

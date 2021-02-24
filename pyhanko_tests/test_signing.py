@@ -25,7 +25,7 @@ from pyhanko import stamp
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
-from pyhanko.pdf_utils.misc import PdfWriteError
+from pyhanko.pdf_utils.misc import PdfWriteError, PdfReadError
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import (
@@ -2010,7 +2010,7 @@ def _tamper_with_sig_obj(tamper_fun):
 
     cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
 
-    tamper_fun(sig_obj)
+    tamper_fun(w, sig_obj)
 
     document_hash = cms_writer.send(
         signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
@@ -2032,7 +2032,7 @@ def _tamper_with_sig_obj(tamper_fun):
 @freeze_time('2020-11-01')
 def test_sig_delete_type():
     # test whether deleting /Type defaults to /Sig
-    def tamper(sig_obj):
+    def tamper(writer, sig_obj):
         del sig_obj['/Type']
     out = _tamper_with_sig_obj(tamper)
 
@@ -2069,7 +2069,7 @@ def test_timestamp_wrong_type():
 ])
 @freeze_time('2020-11-01')
 def test_sig_wrong_subfilter(wrong_subfilter):
-    def tamper(sig_obj):
+    def tamper(writer, sig_obj):
         if wrong_subfilter:
             sig_obj['/SubFilter'] = wrong_subfilter
         else:
@@ -2082,3 +2082,41 @@ def test_sig_wrong_subfilter(wrong_subfilter):
         val_trusted(emb)
 
 
+@freeze_time('2020-11-01')
+def test_sig_no_contents():
+    def tamper(writer, sig_obj):
+        # the placeholder object needs to be written to, to make the
+        # run its course
+        sig_obj['/FakeContents'] = sig_obj['/Contents']
+        del sig_obj['/Contents']
+    out = _tamper_with_sig_obj(tamper)
+
+    r = PdfFileReader(out)
+    with pytest.raises(PdfReadError, match='.*not correctly formatted.*'):
+        # noinspection PyStatementEffect
+        r.embedded_signatures[0]
+
+
+@freeze_time('2020-11-01')
+def test_sig_null_contents():
+    def tamper(writer, sig_obj):
+        sig_obj['/FakeContents'] = sig_obj['/Contents']
+        sig_obj['/Contents'] = generic.NullObject()
+    out = _tamper_with_sig_obj(tamper)
+
+    r = PdfFileReader(out)
+    with pytest.raises(PdfReadError, match='.*string-like.*'):
+        # noinspection PyStatementEffect
+        r.embedded_signatures[0]
+
+
+@freeze_time('2020-11-01')
+def test_sig_indirect_contents():
+    def tamper(writer, sig_obj):
+        sig_obj['/Contents'] = writer.add_object(sig_obj['/Contents'])
+    out = _tamper_with_sig_obj(tamper)
+
+    r = PdfFileReader(out)
+    with pytest.raises(PdfReadError, match='.*be direct.*'):
+        # noinspection PyStatementEffect
+        r.embedded_signatures[0]
