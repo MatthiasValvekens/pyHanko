@@ -360,7 +360,16 @@ def validate_signatures(ctx, infile, executive_summary,
     )
     with pyhanko_exception_manager():
         r = PdfFileReader(infile)
-        for ix, embedded_sig in enumerate(r.embedded_signatures):
+
+        # function to filter out timestamps
+        def is_sig(sig):
+            try:
+                return sig.sig_object['/Type'] == '/Sig'
+            except KeyError:
+                return True
+
+        sigs = filter(is_sig, r.embedded_signatures)
+        for ix, embedded_sig in enumerate(sigs):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
             status_str = _signature_status(
                 ltv_profile, ltv_obsessive, pretty_print, vc_kwargs,

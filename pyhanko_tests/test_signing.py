@@ -37,7 +37,7 @@ from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, )
+    SignatureCoverageLevel, validate_pdf_timestamp, )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
     NO_CHANGES_DIFF_POLICY,
@@ -1559,6 +1559,32 @@ def test_pades_lta_dss_indirect_arrs(requests_mock):
 
 
 @freeze_time('2020-11-01')
+def test_standalone_document_timestamp(requests_mock):
+    pdf_ts = signers.PdfTimeStamper(timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = pdf_ts.timestamp_pdf(w, md_algorithm='sha256', validation_context=vc)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    with pytest.raises(SignatureValidationError, match='.*must be /Sig.*'):
+        val_trusted(s, vc=vc)
+
+    status = validate_pdf_timestamp(embedded_sig=s, validation_context=vc)
+    assert status.valid and status.trusted
+    assert status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+    # tamper with the file
+    out.seek(0x9d)
+    out.write(b'4')
+    out.seek(0)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    tampered = validate_pdf_timestamp(embedded_sig=s, validation_context=vc)
+    assert not tampered.intact and not tampered.valid
+
+
+@freeze_time('2020-11-01')
 def test_simple_qr_sign():
     style = QRStampStyle(stamp_text="Hi, it's\n%(ts)s")
     signer = signers.PdfSigner(
@@ -1969,3 +1995,90 @@ def test_wrong_content_type():
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
         )
+
+
+def _tamper_with_sig_obj(tamper_fun):
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+    md_algorithm = 'sha256'
+
+    cms_writer = signers.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+    sig_obj = signers.SignatureObject(bytes_reserved=8192)
+
+    cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
+
+    tamper_fun(sig_obj)
+
+    document_hash = cms_writer.send(
+        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    signer: signers.SimpleSigner = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    cms_obj = signer.sign(
+        data_digest=document_hash, digest_algorithm=md_algorithm,
+    )
+    return cms_writer.send(cms_obj)[0]
+
+
+@freeze_time('2020-11-01')
+def test_sig_delete_type():
+    # test whether deleting /Type defaults to /Sig
+    def tamper(sig_obj):
+        del sig_obj['/Type']
+    out = _tamper_with_sig_obj(tamper)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    val_trusted(emb)
+
+    # ... but the doctimestamp validator shouldn't let that slide
+    # (yes, obviously this also isn't a valid timestamp token, hence the
+    #  match=... rule here)
+    with pytest.raises(SignatureValidationError,
+                       match='.*must be /DocTimeStamp.*'):
+        validate_pdf_timestamp(emb, validation_context=SIMPLE_V_CONTEXT())
+
+
+def test_timestamp_wrong_type():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    # Again:
+    # (yes, obviously this also isn't a valid timestamp token, hence the
+    #  match=... rule here)
+    with pytest.raises(SignatureValidationError,
+                       match='.*must be /DocTimeStamp.*'):
+        validate_pdf_timestamp(emb, validation_context=SIMPLE_V_CONTEXT())
+
+
+@pytest.mark.parametrize('wrong_subfilter', [
+    pdf_name('/abcde'), pdf_name("/ETSI.RFC3161"), None,
+    generic.NullObject()
+])
+@freeze_time('2020-11-01')
+def test_sig_wrong_subfilter(wrong_subfilter):
+    def tamper(sig_obj):
+        if wrong_subfilter:
+            sig_obj['/SubFilter'] = wrong_subfilter
+        else:
+            del sig_obj['/SubFilter']
+    out = _tamper_with_sig_obj(tamper)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    with pytest.raises(SignatureValidationError):
+        val_trusted(emb)
+
+

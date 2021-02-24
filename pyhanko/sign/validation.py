@@ -145,9 +145,10 @@ def _validate_cms_signature(signed_data: cms.SignedData,
         actual_digest=raw_digest,
     )
 
-    # if the signature is invalid for some external reason, this flag is set
-    #  (e.g. when the thing being signed is itself wrong)
-    valid &= not encap_data_invalid and intact
+    # if the data being encapsulated by the signature is itself invalid,
+    #  this flag is set
+    intact &= not encap_data_invalid
+    valid &= intact
 
     # next, validate trust
     trusted = revoked = False
@@ -251,51 +252,22 @@ class SignatureCoverageLevel(OrderedEnum):
 
 
 @dataclass(frozen=True)
-class PdfSignatureStatus(SignatureStatus):
-    """Class to indicate the validation status of a PDF signature."""
-
-    coverage: SignatureCoverageLevel
+class ModificationInfo:
+    coverage: SignatureCoverageLevel = None
     """
     Indicates how much of the document is covered by the signature.
     """
 
-    diff_result: Optional[Union[DiffResult, SuspiciousModification]]
+    diff_result: Optional[Union[DiffResult, SuspiciousModification]] = None
     """
     Result of the difference analysis run on the file:
-    
+
     * If ``None``, no difference analysis was run.
     * If the difference analysis was successful, this attribute will contain
       a :class:`DiffResult` object.
     * If the difference analysis failed due to unforeseen or suspicious
       modifications, the :class:`SuspiciousModification` exception thrown
       by the difference policy will be stored in this attribute.
-    """
-
-    docmdp_ok: Optional[bool]
-    """
-    Indicates whether the signature's :attr:`modification_level` is in line with
-    the document signature policy in force.
-    
-    If ``None``, compliance could not be determined.
-    """
-
-    signer_reported_dt: Optional[datetime] = None
-    """
-    Signer-reported signing time, if present in the signature.
-    
-    Generally speaking, this timestamp should not be taken as fact.
-    """
-
-    timestamp_validity: Optional[TimestampSignatureStatus] = None
-    """
-    Validation status of the timestamp token embedded in this signature, 
-    if present.
-    """
-
-    seed_value_constraint_error: Optional[SigSeedValueValidationError] = None
-    """
-    Records the reason for failure if the signature field's seed value
-    constraints didn't validate.
     """
 
     @property
@@ -322,6 +294,38 @@ class PdfSignatureStatus(SignatureStatus):
             return self.diff_result.modification_level
         else:
             return ModificationLevel.OTHER
+
+
+@dataclass(frozen=True)
+class PdfSignatureStatus(ModificationInfo, SignatureStatus):
+    """Class to indicate the validation status of a PDF signature."""
+
+    docmdp_ok: Optional[bool] = None
+    """
+    Indicates whether the signature's :attr:`modification_level` is in line with
+    the document signature policy in force.
+    
+    If ``None``, compliance could not be determined.
+    """
+
+    signer_reported_dt: Optional[datetime] = None
+    """
+    Signer-reported signing time, if present in the signature.
+    
+    Generally speaking, this timestamp should not be taken as fact.
+    """
+
+    timestamp_validity: Optional[TimestampSignatureStatus] = None
+    """
+    Validation status of the timestamp token embedded in this signature, 
+    if present.
+    """
+
+    seed_value_constraint_error: Optional[SigSeedValueValidationError] = None
+    """
+    Records the reason for failure if the signature field's seed value
+    constraints didn't validate.
+    """
 
     @property
     def bottom_line(self) -> bool:
@@ -488,6 +492,11 @@ class PdfSignatureStatus(SignatureStatus):
         return '\n'.join(
             fmt_section(hdr, body) for hdr, body in sections
         )
+
+
+@dataclass(frozen=True)
+class DocumentTimestampStatus(ModificationInfo, TimestampSignatureStatus):
+    """Class to indicate the validation status of a PDF document timestamp."""
 
 
 def _extract_reference_dict(signature_obj, method) \
@@ -1100,6 +1109,18 @@ def _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found):
         status_kwargs['seed_value_constraint_error'] = e
 
 
+def _validate_subfilter(subfilter_str, permitted_subfilters, err_msg):
+
+    try:
+        from pyhanko.sign.fields import SigSeedSubFilter
+        subfilter_ok = SigSeedSubFilter(subfilter_str) in permitted_subfilters
+    except ValueError:
+        subfilter_ok = False
+
+    if not subfilter_ok:
+        raise SignatureValidationError(err_msg % subfilter_str)
+
+
 def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None,
@@ -1130,15 +1151,19 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     """
 
     sig_object = embedded_sig.sig_object
-    # check whether the subfilter type is one we support
-    subfilter_str = sig_object['/SubFilter']
     try:
-        from pyhanko.sign.fields import SigSeedSubFilter
-        SigSeedSubFilter(subfilter_str)
-    except ValueError:
-        raise NotImplementedError(
-            "%s is not a recognized SubFilter type." % subfilter_str
-        )
+        if sig_object['/Type'] != '/Sig':
+            raise SignatureValidationError("Signature object type must be /Sig")
+    except KeyError:
+        pass
+
+    # check whether the subfilter type is one we support
+    subfilter_str = sig_object.get('/SubFilter', None)
+    _validate_subfilter(
+        subfilter_str,
+        (SigSeedSubFilter.ADOBE_PKCS7_DETACHED, SigSeedSubFilter.PADES),
+        "%s is not a recognized SubFilter type in signatures."
+    )
 
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
@@ -1161,10 +1186,11 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     tst_validity: Optional[SignatureStatus] = None
     if tst_signed_data is not None:
         assert embedded_sig.tst_signature_digest is not None
-        tst_validity = _validate_timestamp(
+        tst_validity_kwargs = _validate_timestamp(
             tst_signed_data, ts_validation_context,
             embedded_sig.tst_signature_digest
         )
+        tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
         status_kwargs['timestamp_validity'] = tst_validity
 
     status_kwargs = _validate_cms_signature(
@@ -1179,6 +1205,61 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     )
     _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found)
     return PdfSignatureStatus(**status_kwargs)
+
+
+def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
+                           validation_context: ValidationContext = None,
+                           diff_policy: DiffPolicy = None,
+                           skip_diff: bool = False) -> DocumentTimestampStatus:
+    """
+    Validate a PDF document timestamp.
+
+    :param embedded_sig:
+        Embedded signature to evaluate.
+    :param validation_context:
+        Validation context to use to validate the timestamp's chain of trust.
+    :param diff_policy:
+        Policy to evaluate potential incremental updates that were appended
+        to the signed revision of the document.
+        Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+    :param skip_diff:
+        If ``True``, skip the difference analysis step entirely.
+    :return:
+        The status of the PDF timestamp in question.
+    """
+
+    sig_object = embedded_sig.sig_object
+    invalid_obj_type = False
+    try:
+        if sig_object['/Type'] != '/DocTimeStamp':
+            invalid_obj_type = True
+    except KeyError:
+        invalid_obj_type = True
+
+    if invalid_obj_type:
+        raise SignatureValidationError(
+            "Signature object type must be /DocTimeStamp"
+        )
+
+    # check whether the subfilter type is one we support
+    subfilter_str = sig_object.get('/SubFilter', None)
+    _validate_subfilter(
+        subfilter_str, (SigSeedSubFilter.ETSI_RFC3161,),
+        "%s is not a recognized SubFilter type for timestamps."
+    )
+
+    embedded_sig.compute_integrity_info(
+        diff_policy=diff_policy, skip_diff=skip_diff
+    )
+
+    status_kwargs = _validate_timestamp(
+        embedded_sig.signed_data, validation_context,
+        embedded_sig.raw_digest
+    )
+
+    status_kwargs['coverage'] = embedded_sig.coverage
+    status_kwargs['diff_result'] = embedded_sig.diff_result
+    return DocumentTimestampStatus(**status_kwargs)
 
 
 class RevocationInfoValidationType(Enum):
@@ -1242,20 +1323,19 @@ def _validate_timestamp(tst_signed_data, validation_context,
     else:
         encap_data_invalid = False
     timestamp = tst_info['gen_time'].native
-    timestamp_status: TimestampSignatureStatus = validate_cms_signature(
-        tst_signed_data, status_cls=TimestampSignatureStatus,
-        validation_context=validation_context,
+    return _validate_cms_signature(
+        tst_signed_data, validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
         encap_data_invalid=encap_data_invalid
     )
-    return timestamp_status
 
 
 def _establish_timestamp_trust(tst_signed_data, bootstrap_validation_context,
                                expected_tst_imprint):
-    timestamp_status = _validate_timestamp(
+    timestamp_status_kwargs = _validate_timestamp(
         tst_signed_data, bootstrap_validation_context, expected_tst_imprint
     )
+    timestamp_status = TimestampSignatureStatus(**timestamp_status_kwargs)
 
     if not timestamp_status.valid or not timestamp_status.trusted:
         logger.warning(
