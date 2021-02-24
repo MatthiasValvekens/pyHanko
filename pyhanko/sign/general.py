@@ -676,7 +676,7 @@ def validate_sig_integrity(signer_info: cms.SignedData,
                 'digest attributes present.'
             )
 
-        signed_data = signed_attrs.dump(force=True)
+        signed_data = signed_attrs.dump()
     try:
         _validate_raw(
             signature, signed_data, cert, signature_algorithm, md_algorithm,
