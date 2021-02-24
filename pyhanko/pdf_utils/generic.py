@@ -334,6 +334,16 @@ class BooleanObject(PdfObject):
     def __bool__(self):
         return bool(self.value)
 
+    def __eq__(self, other):
+        return isinstance(other, (BooleanObject, bool)) \
+               and bool(self) == bool(other)
+
+    def __str__(self):
+        return str(bool(self))
+
+    def __repr__(self):
+        return str(self)
+
 
 class ArrayObject(list, PdfObject):
     """PDF array object. This class extends from Python's list class,
