@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
 
-from certvalidator.errors import PathValidationError
+from certvalidator.errors import PathValidationError, PathBuildingError
 
 from certvalidator import ValidationContext, CertificateValidator
 
@@ -2062,9 +2062,44 @@ class PdfSigner(PdfTimeStamper):
                 signer_cert_validation_path = validator.validate_usage(
                     {"non_repudiation"}
                 )
-            except PathValidationError as e:
-                raise SigningError("The signer's certificate was not valid", e)
+            except (PathBuildingError, PathValidationError) as e:
+                raise SigningError(
+                    "The signer's certificate could not be validated", e
+                )
             validation_paths.append(signer_cert_validation_path)
+
+            # If LTA:
+            # if the original document already included a document timestamp,
+            # we need to collect revocation information for it, to preserve
+            # the integrity of the timestamp chain
+            from .validation import get_timestamp_chain
+            if signature_meta.use_pades_lta \
+                    and isinstance(pdf_out, IncrementalPdfFileWriter):
+
+                # try to grab the most recent document timestamp
+                last_ts = None
+                try:
+                    last_ts = next(get_timestamp_chain(pdf_out.prev))
+                except StopIteration:
+                    pass
+
+                if last_ts is not None:
+                    ts_validator = CertificateValidator(
+                        last_ts.signer_cert,
+                        intermediate_certs=signer.cert_registry,
+                        validation_context=validation_context
+                    )
+                    try:
+                        last_ts_validation_path = ts_validator.validate_usage(
+                            set(), extended_key_usage={"time_stamping"}
+                        )
+                    except (PathBuildingError, PathValidationError) as e:
+                        raise SigningError(
+                            "Requested a PAdES-LTA signature on an existing "
+                            "document, but the most recent timestamp "
+                            "could not be validated.", e
+                        )
+                    validation_paths.append(last_ts_validation_path)
 
         cms_writer = PdfCMSEmbedder(
             new_field_spec=self.new_field_spec

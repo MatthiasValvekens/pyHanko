@@ -1458,22 +1458,29 @@ def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
     return out
 
 
-def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False):
+def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
+                                          has_more_sigs=False):
+    if has_more_sigs:
+        expected_modlevel = ModificationLevel.FORM_FILLING
+    else:
+        expected_modlevel = ModificationLevel.LTA_UPDATES
+
     with freeze_time('2020-11-01'):
         r = PdfFileReader(out)
         dss = DocumentSecurityStore.read_dss(handler=r)
         vc = dss.as_validation_context({'trust_roots': TRUST_ROOTS})
         assert dss is not None
-        assert len(dss.vri_entries) == 2
-        assert len(dss.certs) == 5
-        assert len(dss.ocsps) == len(vc.ocsps) == 1
-        assert len(dss.crls) == len(vc.crls) == 1
+        if not has_more_sigs:
+            assert len(dss.vri_entries) == 2
+            assert len(dss.certs) == 5
+            assert len(dss.ocsps) == len(vc.ocsps) == 1
+            assert len(dss.crls) == len(vc.crls) == 1
         rivt_pades = RevocationInfoValidationType.PADES_LT
         status = validate_pdf_ltv_signature(
             r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
         )
         assert status.valid and status.trusted
-        assert status.modification_level == ModificationLevel.LTA_UPDATES
+        assert status.modification_level == expected_modlevel
 
         sig_obj = r.embedded_signatures[1].sig_object
         assert sig_obj.get_object()['/Type'] == pdf_name('/DocTimeStamp')
@@ -1486,7 +1493,7 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False):
                 bootstrap_validation_context=bootstrap_vc
             )
             assert status.valid and status.trusted
-            assert status.modification_level == ModificationLevel.LTA_UPDATES
+            assert status.modification_level == expected_modlevel
 
     # test post-expiration, but before timestamp expires
     with freeze_time('2025-11-01'):
@@ -1523,7 +1530,7 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False):
             bootstrap_validation_context=vc
         )
         assert status.valid and status.trusted
-        assert status.modification_level == ModificationLevel.LTA_UPDATES
+        assert status.modification_level == expected_modlevel
 
     # the test that previously failed should now work
     with freeze_time('2035-11-01'):
@@ -1556,6 +1563,64 @@ def test_pades_lta_dss_indirect_arrs(requests_mock):
     live_testing_vc(requests_mock)
     with open(testfile, 'rb') as f:
         _test_pades_revinfo_live_lta_validate(f, requests_mock, no_write=True)
+
+
+def test_pades_lta_sign_twice(requests_mock):
+    stream = BytesIO(MINIMAL_TWO_FIELDS)
+    w = IncrementalPdfFileWriter(stream)
+    with freeze_time('2020-10-01'):
+        vc = live_testing_vc(requests_mock)
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=vc,
+                subfilter=PADES, embed_validation_info=True,
+                use_pades_lta=True
+            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+        )
+
+    w = IncrementalPdfFileWriter(stream)
+    with freeze_time('2020-11-01'):
+        vc = live_testing_vc(requests_mock)
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig2', validation_context=vc,
+                subfilter=PADES, embed_validation_info=True,
+                use_pades_lta=True
+            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+        )
+
+    # test if the first sig still validates
+    _test_pades_revinfo_live_lta_validate(
+        stream, requests_mock, no_write=True, has_more_sigs=True
+    )
+
+
+def test_pades_lta_sign_twice_post_expiry(requests_mock):
+    stream = BytesIO(MINIMAL_TWO_FIELDS)
+    w = IncrementalPdfFileWriter(stream)
+    with freeze_time('2020-10-01'):
+        vc = live_testing_vc(requests_mock)
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=vc,
+                subfilter=PADES, embed_validation_info=True,
+                use_pades_lta=True
+            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+        )
+
+    w = IncrementalPdfFileWriter(stream)
+    with freeze_time('2020-10-10'):
+        # intentionally load a VC in which the original TS does
+        # not validate
+        vc = SIMPLE_ECC_V_CONTEXT()
+        with pytest.raises(SigningError, match=".*most recent timestamp.*"):
+            signers.sign_pdf(
+                w, signers.PdfSignatureMetadata(
+                    field_name='Sig2', validation_context=vc,
+                    subfilter=PADES, embed_validation_info=True,
+                    use_pades_lta=True
+                ), signer=FROM_ECC_CA, timestamper=DUMMY_TS, in_place=True
+            )
 
 
 @freeze_time('2020-11-01')
