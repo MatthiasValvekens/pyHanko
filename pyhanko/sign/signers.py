@@ -1684,29 +1684,21 @@ class PdfTimeStamper:
         # TODO: add an option to validate the entire timestamp chain
         #  plus all signatures
         from .validation import (
-            EmbeddedPdfSignature, _establish_timestamp_trust,
-            DocumentSecurityStore
+            _establish_timestamp_trust, DocumentSecurityStore,
+            get_timestamp_chain
         )
 
-        all_signatures = reader.embedded_signatures
-        if not all_signatures:
-            raise SigningError("No signatures found.")
-        last_signature: EmbeddedPdfSignature = \
-            all_signatures[len(all_signatures) - 1]
-        last_signature.compute_digest()
-        last_signature.compute_tst_digest()
+        timestamps = get_timestamp_chain(reader)
+        try:
+            last_timestamp = next(timestamps)
+        except StopIteration:
+            raise SigningError("No document timestamps found")
 
-        # two cases: either the signature is a normal signature,
-        # or it is a document timestamp
-        if last_signature.sig_object['/Type'] == '/DocTimeStamp':
-            tst_token = last_signature.signed_data
-            expected_imprint = last_signature.external_digest
-        else:
-            # normal signature
-            tst_token = last_signature.attached_timestamp_data
-            if tst_token is None:  # pragma: nocover
-                raise SigningError("Final signature does not have a timestamp.")
-            expected_imprint = last_signature.tst_signature_digest
+        last_timestamp.compute_digest()
+        last_timestamp.compute_tst_digest()
+
+        tst_token = last_timestamp.signed_data
+        expected_imprint = last_timestamp.external_digest
 
         # run validation logic
         tst_status = _establish_timestamp_trust(
@@ -1721,7 +1713,7 @@ class PdfTimeStamper:
 
         # update the DSS
         DocumentSecurityStore.add_dss(
-            output, last_signature.pkcs7_content,
+            output, last_timestamp.pkcs7_content,
             paths=(tst_status.validation_path,),
             validation_context=validation_context
         )

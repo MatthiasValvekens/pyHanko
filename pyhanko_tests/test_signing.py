@@ -1283,7 +1283,7 @@ def test_pades_revinfo_live_update(requests_mock):
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
             field_name='Sig1', validation_context=vc,
-            subfilter=PADES, embed_validation_info=True
+            subfilter=PADES, embed_validation_info=True, use_pades_lta=True
         ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
@@ -1298,9 +1298,9 @@ def test_pades_revinfo_live_update(requests_mock):
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
-def test_update_no_sigs():
+def test_update_no_timestamps():
     r = PdfFileReader(BytesIO(MINIMAL))
-    with pytest.raises(SigningError):
+    with pytest.raises(SigningError, match='No document timestamps found'):
         PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
             r, dummy_ocsp_vc()
         )

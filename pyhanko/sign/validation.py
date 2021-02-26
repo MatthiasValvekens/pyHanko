@@ -5,7 +5,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import TypeVar, Type, Optional, Union
+from typing import TypeVar, Type, Optional, Union, Iterator
 
 from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
@@ -43,7 +43,7 @@ __all__ = [
     'SignatureCoverageLevel', 'PdfSignatureStatus',
     'EmbeddedPdfSignature', 'DocMDPInfo',
     'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
-    'apply_adobe_revocation_info',
+    'apply_adobe_revocation_info', 'get_timestamp_chain',
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
     'ValidationInfoReadingError', 'SigSeedValueValidationError'
@@ -707,7 +707,7 @@ class EmbeddedPdfSignature:
         that can later be passed to :class:`PdfSignatureStatus` as kwargs.
 
         This method is only available after calling
-        :meth:`.EmbeddedSig.compute_integrity_info`.
+        :meth:`.EmbeddedPdfSignature.compute_integrity_info`.
         """
 
         if not self._integrity_checked:
@@ -1369,15 +1369,30 @@ def _establish_timestamp_trust(tst_signed_data, bootstrap_validation_context,
     return timestamp_status
 
 
+def get_timestamp_chain(reader: PdfFileReader) \
+        -> Iterator[EmbeddedPdfSignature]:
+    """
+    Get the document timestamp chain of the associated reader, ordered
+    from new to old.
+
+    :param reader:
+        A :class:`.PdfFileReader`.
+    :return:
+        An iterable of :class:`.EmbeddedPdfSignature` objects representing
+        document timestamps.
+    """
+    return filter(
+        lambda sig: sig.sig_object.get('/Type', None) == '/DocTimeStamp',
+        reversed(reader.embedded_signatures)
+    )
+
+
 def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
                                    validation_context_kwargs, until_revision):
-    timestamps = [
-        emb_sig for emb_sig in reader.embedded_signatures
-        if emb_sig.sig_object['/Type'] == '/DocTimeStamp'
-    ]
+    timestamps = get_timestamp_chain(reader)
     validation_context_kwargs = dict(validation_context_kwargs)
     current_vc = bootstrap_validation_context
-    for emb_timestamp in reversed(timestamps):
+    for emb_timestamp in timestamps:
         if emb_timestamp.signed_revision < until_revision:
             break
 
