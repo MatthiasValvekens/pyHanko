@@ -2120,3 +2120,29 @@ def test_sig_indirect_contents():
     with pytest.raises(PdfReadError, match='.*be direct.*'):
         # noinspection PyStatementEffect
         r.embedded_signatures[0]
+
+
+@freeze_time('2020-11-01')
+def test_timestamp_with_different_digest():
+    ts = timestamps.DummyTimeStamper(
+        tsa_cert=TSA_CERT,
+        tsa_key=load_private_key_from_pemder(
+            TESTING_CA_DIR + '/keys/tsa.key.pem', b'secret'
+        ),
+        certs_to_embed=FROM_CA.cert_registry,
+        override_md='sha512'
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(md_algorithm='sha256'),
+        signer=FROM_CA, timestamper=ts,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    validity = val_trusted(s)
+    assert validity.timestamp_validity is not None
+    assert validity.timestamp_validity.trusted

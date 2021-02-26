@@ -1700,10 +1700,10 @@ class PdfTimeStamper:
         # or it is a document timestamp
         if last_signature.sig_object['/Type'] == '/DocTimeStamp':
             tst_token = last_signature.signed_data
-            expected_imprint = last_signature.raw_digest
+            expected_imprint = last_signature.external_digest
         else:
             # normal signature
-            tst_token = last_signature.external_timestamp_data
+            tst_token = last_signature.attached_timestamp_data
             if tst_token is None:  # pragma: nocover
                 raise SigningError("Final signature does not have a timestamp.")
             expected_imprint = last_signature.tst_signature_digest

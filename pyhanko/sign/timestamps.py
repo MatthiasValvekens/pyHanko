@@ -254,11 +254,13 @@ class DummyTimeStamper(TimeStamper):
     def __init__(self, tsa_cert: x509.Certificate,
                  tsa_key: keys.PrivateKeyInfo,
                  certs_to_embed: CertificateStore = None,
-                 fixed_dt: datetime = None):
+                 fixed_dt: datetime = None,
+                 override_md=None):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
         self.certs_to_embed = list(certs_to_embed) or []
         self.fixed_dt = fixed_dt
+        self.override_md = override_md
         super().__init__()
 
     def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
@@ -269,7 +271,9 @@ class DummyTimeStamper(TimeStamper):
         # TODO does the RFC
         status = tsp.PKIStatusInfo({'status': tsp.PKIStatus('granted')})
         message_imprint: tsp.MessageImprint = req['message_imprint']
-        md_algorithm = message_imprint['hash_algorithm']['algorithm'].native
+        md_algorithm = self.override_md
+        if md_algorithm is None:
+            md_algorithm = message_imprint['hash_algorithm']['algorithm'].native
         digest_algorithm_obj = algos.DigestAlgorithm({
             'algorithm': md_algorithm
         })

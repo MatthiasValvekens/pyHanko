@@ -596,6 +596,18 @@ class EmbeddedPdfSignature:
         # to the corresponding SignerInfo entry.
         digest_algo = self.signer_info['digest_algorithm']
         self.md_algorithm = digest_algo['algorithm'].native.lower()
+        eci = signed_data['encap_content_info']
+        content_type = eci['content_type'].native
+        if content_type == 'data':
+            # Case of a normal signature
+            self.external_md_algorithm = self.md_algorithm
+        elif content_type == 'tst_info':
+            # for timestamps, the hash algorithm in the messageImprint
+            # need not be the same as the one to digest the encapsulated data!
+            # RFC 8933 recommends to unify them, but it's not a given.
+            mi = eci['content'].parsed['message_imprint']
+            self.external_md_algorithm = \
+                mi['hash_algorithm']['algorithm'].native
 
         # grab the revision to which the signature applies
         # NOTE: We're using get_last_change here as opposed to
@@ -612,7 +624,7 @@ class EmbeddedPdfSignature:
             sig_object_ref.reference
         )
         self.coverage = None
-        self.raw_digest = None
+        self.external_digest = None
         self.total_len = None
         self._docmdp = self._fieldmdp = None
         self._docmdp_queried = self._fieldmdp_queried = False
@@ -652,7 +664,7 @@ class EmbeddedPdfSignature:
             pass
 
     @property
-    def external_timestamp_data(self) -> Optional[cms.SignedData]:
+    def attached_timestamp_data(self) -> Optional[cms.SignedData]:
         """
         :return:
             The signed data component of the timestamp token embedded in this
@@ -798,10 +810,10 @@ class EmbeddedPdfSignature:
         :return:
             The digest value.
         """
-        if self.raw_digest is not None:
-            return self.raw_digest
+        if self.external_digest is not None:
+            return self.external_digest
 
-        md = getattr(hashlib, self.md_algorithm)()
+        md = getattr(hashlib, self.external_md_algorithm)()
         stream = self.reader.stream
 
         # compute the digest
@@ -816,7 +828,7 @@ class EmbeddedPdfSignature:
             total_len += chunk_len
 
         self.total_len = total_len
-        self.raw_digest = digest = md.digest()
+        self.external_digest = digest = md.digest()
         return digest
 
     def compute_tst_digest(self) -> Optional[bytes]:
@@ -839,12 +851,16 @@ class EmbeddedPdfSignature:
             return self.tst_signature_digest
         # for timestamp validation: compute the digest of the signature
         #  (as embedded in the CMS object)
-        tst_data = self.external_timestamp_data
+        tst_data = self.attached_timestamp_data
         if tst_data is None:
             return None
 
+        eci = tst_data['encap_content_info']
+        mi = eci['content'].parsed['message_imprint']
+        tst_md_algorithm = mi['hash_algorithm']['algorithm'].native
+
         signature_bytes = self.signer_info['signature'].native
-        md = getattr(hashlib, self.md_algorithm)(signature_bytes)
+        md = getattr(hashlib, tst_md_algorithm)(signature_bytes)
         self.tst_signature_digest = digest = md.digest()
         return digest
 
@@ -1184,7 +1200,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
 
     # if we managed to find an (externally) signed timestamp,
     # we now proceed to validate it
-    tst_signed_data = embedded_sig.external_timestamp_data
+    tst_signed_data = embedded_sig.attached_timestamp_data
     # TODO compare value of embedded timestamp token with the timestamp
     #  attribute if both are present
     tst_validity: Optional[SignatureStatus] = None
@@ -1199,7 +1215,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
 
     status_kwargs = _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
-        raw_digest=embedded_sig.raw_digest,
+        raw_digest=embedded_sig.external_digest,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs, key_usage_settings=key_usage_settings
     )
@@ -1258,7 +1274,7 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
 
     status_kwargs = _validate_timestamp(
         embedded_sig.signed_data, validation_context,
-        embedded_sig.raw_digest
+        embedded_sig.external_digest
     )
 
     status_kwargs['coverage'] = embedded_sig.coverage
@@ -1367,7 +1383,7 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
 
         emb_timestamp.compute_digest()
         ts_status = _establish_timestamp_trust(
-            emb_timestamp.signed_data, current_vc, emb_timestamp.raw_digest
+            emb_timestamp.signed_data, current_vc, emb_timestamp.external_digest
         )
         # set up the validation kwargs for the next iteration
         _strict_vc_context_kwargs(
@@ -1477,7 +1493,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
 
     # FIXME in the LTA case, this is an unreasonable requirement (since the
     #  /DocTimeStamps can serve this purpose)
-    tst_signed_data = embedded_sig.external_timestamp_data
+    tst_signed_data = embedded_sig.attached_timestamp_data
     if tst_signed_data is None:
         raise SignatureValidationError(
             'LTV signatures require a trusted timestamp.'
@@ -1516,7 +1532,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     })
     status_kwargs = _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
-        raw_digest=embedded_sig.raw_digest,
+        raw_digest=embedded_sig.external_digest,
         validation_context=stored_vc, status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings
     )
