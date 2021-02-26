@@ -2,10 +2,10 @@ import binascii
 import hashlib
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO, BufferedIOBase
-from typing import Optional
+from typing import Optional, Set
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, keys, pdf as asn1_pdf
@@ -876,6 +876,18 @@ class PdfSignatureMetadata:
         For non-certification signatures, this is only explicitly allowed since 
         PDF 2.0 (ISO 32000-2), so older software may not respect this setting
         on approval signatures.
+    """
+
+    signer_key_usage: Set[str] = field(
+        default_factory=lambda: {"non_repudiation"}
+    )
+    """
+    Key usage extensions required for the signer's certificate.
+    Defaults to ``non_repudiation`` only, but sometimes ``digital_signature``
+    or a combination of both may be more appropriate.
+    See :class:`x509.KeyUsage` for a complete list.
+    
+    Only relevant if a validation context is also provided.
     """
 
 
@@ -2057,10 +2069,9 @@ class PdfSigner(PdfTimeStamper):
                 signer.signing_cert, intermediate_certs=signer.cert_registry,
                 validation_context=validation_context
             )
-            # TODO allow customisation of key usage parameters
             try:
                 signer_cert_validation_path = validator.validate_usage(
-                    {"non_repudiation"}
+                    signature_meta.signer_key_usage
                 )
             except (PathBuildingError, PathValidationError) as e:
                 raise SigningError(
