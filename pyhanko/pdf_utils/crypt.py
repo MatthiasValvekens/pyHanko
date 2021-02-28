@@ -171,6 +171,9 @@ def _legacy_normalise_pw(password: Union[str, bytes]) -> bytes:
 
 def _r6_normalise_pw(password: Union[str, bytes]) -> bytes:
     if isinstance(password, str):
+        # saslprep expects non-empty strings, apparently
+        if not password:
+            return b''
         from ._saslprep import saslprep
         password = saslprep(password).encode('utf-8')
     return password[:127]

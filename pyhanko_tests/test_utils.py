@@ -1265,7 +1265,23 @@ def test_copy_to_encrypted_file():
     out = BytesIO()
     w.write(out)
     r = PdfFileReader(out)
-    r.decrypt("ownersecret")
+    result = r.decrypt("ownersecret")
+    assert result.status == AuthStatus.OWNER
+    assert r.root_ref == old_root_ref
+    assert len(r.root['/AcroForm']['/Fields']) == 1
+    assert len(r.root['/Pages']['/Kids']) == 1
+
+
+def test_empty_user_pass():
+    r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    w = writer.copy_into_new_writer(r)
+    old_root_ref = w.root_ref
+    w.encrypt('ownersecret', '')
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    result = r.decrypt('')
+    assert result.status == AuthStatus.USER
     assert r.root_ref == old_root_ref
     assert len(r.root['/AcroForm']['/Fields']) == 1
     assert len(r.root['/Pages']['/Kids']) == 1
