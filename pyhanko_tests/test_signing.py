@@ -1300,10 +1300,9 @@ def test_pades_revinfo_live_update(requests_mock):
 
 def test_update_no_timestamps():
     r = PdfFileReader(BytesIO(MINIMAL))
-    with pytest.raises(SigningError, match='No document timestamps found'):
-        PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
-            r, dummy_ocsp_vc()
-        )
+    output = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
+        r, dummy_ocsp_vc(), in_place=False
+    )
 
 
 @freeze_time('2020-11-01')

@@ -1675,7 +1675,8 @@ class PdfTimeStamper:
         return output
 
     def update_archival_timestamp_chain(self, reader: PdfFileReader,
-                                        validation_context, in_place=True):
+                                        validation_context, in_place=True,
+                                        default_md_algorithm=DEFAULT_MD):
         """
         Validate the last timestamp in the timestamp chain on a PDF file, and
         write an updated version to an output stream.
@@ -1688,6 +1689,9 @@ class PdfTimeStamper:
         :param in_place:
             Sign the input in-place. If ``False``, write output to a
             :class:`.BytesIO` object.
+        :param default_md_algorithm:
+            Message digest to use if there are no preceding timestamps in the
+            file.
         :return:
             The output stream containing the signed output.
         """
@@ -1704,35 +1708,50 @@ class PdfTimeStamper:
         try:
             last_timestamp = next(timestamps)
         except StopIteration:
-            raise SigningError("No document timestamps found")
+            logger.warning(
+                "Document does not have any document timestamps yet. "
+                "This may cause unexpected results."
+            )
+            last_timestamp = None
 
-        last_timestamp.compute_digest()
-        last_timestamp.compute_tst_digest()
+        # Validate the previous timestamp if present
+        if last_timestamp is None:
+            md_algorithm = default_md_algorithm
+            tst_status = None
+        else:
+            last_timestamp.compute_digest()
+            last_timestamp.compute_tst_digest()
 
-        tst_token = last_timestamp.signed_data
-        expected_imprint = last_timestamp.external_digest
+            tst_token = last_timestamp.signed_data
+            expected_imprint = last_timestamp.external_digest
 
-        # run validation logic
-        tst_status = _establish_timestamp_trust(
-            tst_token, validation_context, expected_imprint
-        )
+            # run validation logic
+            tst_status = _establish_timestamp_trust(
+                tst_token, validation_context, expected_imprint
+            )
 
+            md_algorithm = tst_status.md_algorithm
+
+        # Prepare output
         if in_place:
             output = reader.stream
-        else:  # pragma: nocover
+        else:
             output = BytesIO()
+            # TODO chunk this
+            reader.stream.seek(0)
             output.write(reader.stream.read())
 
-        # update the DSS
-        DocumentSecurityStore.add_dss(
-            output, last_timestamp.pkcs7_content,
-            paths=(tst_status.validation_path,),
-            validation_context=validation_context
-        )
+        if last_timestamp is not None:
+            # update the DSS
+            DocumentSecurityStore.add_dss(
+                output, last_timestamp.pkcs7_content,
+                paths=(tst_status.validation_path,),
+                validation_context=validation_context
+            )
 
         # append a new timestamp
         return self.timestamp_pdf(
-            IncrementalPdfFileWriter(output), tst_status.md_algorithm,
+            IncrementalPdfFileWriter(output), md_algorithm,
             validation_context, in_place=True
         )
 
