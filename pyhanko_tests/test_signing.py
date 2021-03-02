@@ -1303,6 +1303,11 @@ def test_update_no_timestamps():
     output = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
         r, dummy_ocsp_vc(), in_place=False
     )
+    r = PdfFileReader(output)
+    status = validate_pdf_timestamp(
+        r.embedded_signatures[0], validation_context=SIMPLE_V_CONTEXT()
+    )
+    assert status.valid and status.trusted
 
 
 @freeze_time('2020-11-01')
