@@ -407,7 +407,7 @@ def list_sigfields(infile, skip_status):
 @signing.command(name='ltaupdate', help='update LTA timestamp')
 @click.argument('infile', type=click.File('r+b'))
 @click.option('--timestamp-url', help='URL for timestamp server',
-              required=False, type=str, default=None)
+              required=True, type=str, default=None)
 @trust_options
 @click.pass_context
 def lta_update(ctx, infile, validation_context, trust, trust_replace,
