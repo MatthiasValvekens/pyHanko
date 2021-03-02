@@ -5,7 +5,7 @@ Utility for writing incremental updates to existing PDF files.
 import os
 from typing import Union, Optional
 
-from . import generic
+from . import generic, misc
 from .crypt import EnvelopeKeyDecrypter
 
 from .reader import PdfFileReader
@@ -30,6 +30,8 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
     It has the additional advantage of providing an automatic audit trail of
     sorts.
     """
+
+    IO_CHUNK_SIZE = 4096
 
     def __init__(self, input_stream):
         self.input_stream = input_stream
@@ -120,9 +122,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         # copy the original data to the output
         input_pos = self.input_stream.tell()
         self.input_stream.seek(0)
-        # TODO there has to be a better way to do this that doesn't involve
-        #  loading the entire file into a separate buffer
-        stream.write(self.input_stream.read())
+        misc.chunked_write(
+            bytearray(self.IO_CHUNK_SIZE), self.input_stream, stream
+        )
         self.input_stream.seek(input_pos)
 
     def set_info(self, info: Optional[Union[generic.IndirectObject,

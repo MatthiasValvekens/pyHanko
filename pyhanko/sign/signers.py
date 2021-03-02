@@ -128,6 +128,28 @@ class DERPlaceholder(generic.PdfObject):
 DEFAULT_SIG_SUBFILTER = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
 
+def _prepare_signable_output(output):
+    # Render the PDF to a byte buffer with placeholder values
+    # for the signature data, or straight to the provided output stream
+    # if possible
+    if output is None:
+        output = BytesIO()
+    else:
+        # Rationale for the explicit writability check:
+        #  If the output buffer is not readable or not seekable, it's
+        #  about to be replaced with a BytesIO instance, and in that
+        #  case, the write error would only happen *after* the signing
+        #  operations are done. We want to avoid that scenario.
+        if not output.writable():
+            raise IOError(
+                "Output buffer is not writable"
+            )  # pragma: nocover
+        if not output.seekable() or not output.readable():
+            output = BytesIO()
+
+    return output
+
+
 class PdfByteRangeDigest(generic.DictionaryObject):
 
     def __init__(self, data_key=pdf_name('/Contents'), *, bytes_reserved=None):
@@ -160,23 +182,7 @@ class PdfByteRangeDigest(generic.DictionaryObject):
             output = writer.prev.stream
             writer.write_in_place()
         else:
-            # Render the PDF to a byte buffer with placeholder values
-            # for the signature data, or straight to the provided output stream
-            # if possible
-            if output is None:
-                output = BytesIO()
-            else:
-                # Rationale for the explicit writability check:
-                #  If the output buffer is not readable or not seekable, it's
-                #  about to be replaced with a BytesIO instance, and in that
-                #  case, the write error would only happen *after* the signing
-                #  operations are done. We want to avoid that scenario.
-                if not output.writable():
-                    raise IOError(
-                        "Output buffer is not writable"
-                    )  # pragma: nocover
-                if not output.seekable() or not output.readable():
-                    output = BytesIO()
+            output = _prepare_signable_output(output)
 
             writer.write(output)
 
@@ -1676,6 +1682,7 @@ class PdfTimeStamper:
 
     def update_archival_timestamp_chain(self, reader: PdfFileReader,
                                         validation_context, in_place=True,
+                                        output=None, chunk_size=4096,
                                         default_md_algorithm=DEFAULT_MD):
         """
         Validate the last timestamp in the timestamp chain on a PDF file, and
@@ -1686,9 +1693,17 @@ class PdfTimeStamper:
         :param validation_context:
             :class:`.certvalidator.ValidationContext` object to validate
             the last timestamp.
+        :param output:
+            Write the output to the specified output stream.
+            If ``None``, write to a new :class:`.BytesIO` object.
+            Default is ``None``.
         :param in_place:
-            Sign the input in-place. If ``False``, write output to a
-            :class:`.BytesIO` object.
+            Sign the original input stream in-place.
+            This parameter overrides ``output``.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``. Default is 4096.
         :param default_md_algorithm:
             Message digest to use if there are no preceding timestamps in the
             file.
@@ -1736,10 +1751,11 @@ class PdfTimeStamper:
         if in_place:
             output = reader.stream
         else:
-            output = BytesIO()
-            # TODO chunk this
+            output = _prepare_signable_output(output)
             reader.stream.seek(0)
-            output.write(reader.stream.read())
+            misc.chunked_write(
+                bytearray(chunk_size), reader.stream, output
+            )
 
         if last_timestamp is not None:
             # update the DSS

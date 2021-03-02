@@ -225,7 +225,7 @@ def _as_gen(x: Iterable[X]) -> Generator[X, None, None]:
     yield from x
 
 
-def chunked_digest(temp_buffer: bytearray, stream, md, max_read=None):
+def chunk_stream(temp_buffer: bytearray, stream, max_read=None):
     total_read = 0
     while max_read is None or total_read < max_read:
         # clamp the input buffer if necessary
@@ -244,7 +244,17 @@ def chunked_digest(temp_buffer: bytearray, stream, md, max_read=None):
             to_feed = memoryview(read_buffer)[:bytes_read]
         else:
             to_feed = read_buffer
-        md.update(to_feed)
+        yield to_feed
+
+
+def chunked_digest(temp_buffer: bytearray, stream, md, max_read=None):
+    for chunk in chunk_stream(temp_buffer, stream, max_read=max_read):
+        md.update(chunk)
+
+
+def chunked_write(temp_buffer: bytearray, stream, output, max_read=None):
+    for chunk in chunk_stream(temp_buffer, stream, max_read=max_read):
+        output.write(chunk)
 
 
 class Singleton(type):
