@@ -730,6 +730,8 @@ class SigFieldCreationRule(FieldMDPRule):
         # finally, deal with the signature fields themselves
         # The distinction between timestamps and signatures isn't relevant
         # yet, that's a problem for /V, which we don't bother with here.
+        field_ref_reverse = {}
+
         for fq_name, sigfield_ref in all_new_refs.items():
 
             # new field, so all its dependencies are good to go
@@ -748,9 +750,9 @@ class SigFieldCreationRule(FieldMDPRule):
             # checked by field listing routine already
             assert isinstance(sigfield, generic.DictionaryObject)
 
-            for _key in ('/AP', '/Lock', '/SV'):
+            def _handle_deps(pdf_dict, _key):
                 try:
-                    raw_value = sigfield.raw_get(_key)
+                    raw_value = pdf_dict.raw_get(_key)
 
                     deps = context.new.collect_dependencies(
                         raw_value,
@@ -764,7 +766,42 @@ class SigFieldCreationRule(FieldMDPRule):
                 except KeyError:
                     pass
 
-        # Next, check (widget) annotations: newly added signature fields may
+            for _key in ('/AP', '/Lock', '/SV'):
+                yield from _handle_deps(sigfield, _key)
+
+            # if the field has widget annotations in /Kids, add them to the
+            #  field_ref_reverse dictionary for annotation processing later
+            try:
+                kids_arr_ref = sigfield.raw_get('/Kids')
+                old = context.old
+                if isinstance(kids_arr_ref, generic.IndirectObject) \
+                        and old.is_ref_available(kids_arr_ref.reference):
+                    yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                        updated_ref=kids_arr_ref.reference, field_name=fq_name,
+                        valid_when_locked=True
+                    )
+                kid_refs = _arr_to_refs(
+                    kids_arr_ref.get_object(), SuspiciousModification
+                )
+                # process all widgets in /Kids
+                # in principle there should be only one, but we don't enforce
+                # that restriction here
+                # TODO make that togglable?
+                for kid in kid_refs:
+                    if '/T' not in kid.get_object():
+                        field_ref_reverse[kid] = fq_name
+                        if old.is_ref_available(kid):
+                            yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                                updated_ref=kid, field_name=fq_name,
+                                valid_when_locked=True
+                            )
+                        # pull in appearance dependencies
+                        yield from _handle_deps(kid.get_object(), '/AP')
+            except KeyError:
+                # No /Kids => assume the field is its own annotation
+                field_ref_reverse[sigfield_ref] = fq_name
+
+        # Now we process (widget) annotations: newly added signature fields may
         #  be added to the /Annots entry of any page. These are processed as LTA
         #  updates, because even invisible signature fields / timestamps might
         #  be added to /Annots (this isn't strictly necessary, but more
@@ -785,8 +822,6 @@ class SigFieldCreationRule(FieldMDPRule):
         # modifications
         old_page_root = context.old.root['/Pages']
         new_page_root = context.new.root['/Pages']
-
-        field_ref_reverse = {v: k for k, v in all_new_refs.items()}
 
         yield from qualify(
             ModificationLevel.LTA_UPDATES,
@@ -1382,7 +1417,10 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
             if not isinstance(field, generic.DictionaryObject):
                 raise exc("Fields must be dictionary objects")
 
-            name = field.raw_get('/T')
+            try:
+                name = field.raw_get('/T')
+            except KeyError:
+                continue
             if name in names_seen:
                 raise exc("Duplicate field name")
             elif '.' in name:

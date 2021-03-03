@@ -1174,6 +1174,12 @@ class SigFieldSpec:
     """
     # TODO add a reference to the docs on certification once those are written.
 
+    combine_annotation: bool = True
+    """
+    Flag controlling whether the field should be combined with its
+    annotation dictionary; ``True`` by default.
+    """
+
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
         if self.field_mdp_spec is None:
             return
@@ -1289,7 +1295,7 @@ def _prepare_sig_field(sig_field_name, root,
         update_writer, fields, path=sig_field_name.split('.'),
         field_obj=sig_field
     )
-    update_writer.register_annotation(page_ref, sig_field_ref)
+    sig_field.register_widget_annotation(update_writer, sig_field_ref)
 
     # make sure /SigFlags is present. If not, create it
     sig_flags = 3 if lock_sig_flags else 1
@@ -1412,9 +1418,9 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
     # use default appearance
     field_created, sig_field_ref = _prepare_sig_field(
         sig_field_spec.sig_field_name, root, update_writer=pdf_out,
-        existing_fields_only=False,
+        existing_fields_only=False, lock_sig_flags=False,
         box=sig_field_spec.box, include_on_page=page_ref,
-        lock_sig_flags=False
+        combine_annotation=sig_field_spec.combine_annotation
     )
     if not field_created:
         raise PdfWriteError(
@@ -1437,7 +1443,7 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, *, box=None, include_on_page=None,
-                 is_annotation=True,
+                 combine_annotation=True,
                  # this sets the "print" bit
                  annot_flags=0b100):
 
@@ -1451,11 +1457,31 @@ class SignatureFormField(generic.DictionaryObject):
             pdf_name('/FT'): pdf_name('/Sig'),
             pdf_name('/T'): pdf_string(field_name),
         })
-        if is_annotation:
-            # Annotation properties: bare minimum
-            self['/Type'] = pdf_name('/Annot')
-            self['/Subtype'] = pdf_name('/Widget')
-            self['/F'] = generic.NumberObject(annot_flags)
-            self['/Rect'] = generic.ArrayObject(rect)
-            if include_on_page is not None:
-                self['/P'] = include_on_page
+
+        if combine_annotation:
+            annot_dict = self
+        else:
+            annot_dict = generic.DictionaryObject()
+
+        # Annotation properties: bare minimum
+        annot_dict['/Type'] = pdf_name('/Annot')
+        annot_dict['/Subtype'] = pdf_name('/Widget')
+        annot_dict['/F'] = generic.NumberObject(annot_flags)
+        annot_dict['/Rect'] = generic.ArrayObject(rect)
+
+        self.page_ref = include_on_page
+        if include_on_page is not None:
+            annot_dict['/P'] = include_on_page
+
+        self.annot_dict = annot_dict
+
+    def register_widget_annotation(self, writer: BasePdfFileWriter,
+                                   sig_field_ref):
+        annot_dict = self.annot_dict
+        if annot_dict is not self:
+            annot_ref = writer.add_object(annot_dict)
+            self['/Kids'] = generic.ArrayObject([annot_ref])
+        else:
+            annot_ref = sig_field_ref
+        writer.register_annotation(self.page_ref, annot_ref)
+

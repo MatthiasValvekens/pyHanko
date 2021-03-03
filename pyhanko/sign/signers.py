@@ -1200,7 +1200,8 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
                 'box': new_field_spec.box,
                 'include_on_page': pdf_out.find_page_for_modification(
                     new_field_spec.on_page
-                )[0]
+                )[0],
+                'combine_annotation': new_field_spec.combine_annotation
             }
         else:
             sig_field_kwargs = {}
@@ -1313,12 +1314,12 @@ class SigAppearanceSetup:
     stamp style.
     """
 
-    def _apply(self, sig_field, writer):
+    def _apply(self, sig_annot, writer):
         style = self.style
         name = self.name
         timestamp = self.timestamp
         extra_text_params = self.text_params or {}
-        x1, y1, x2, y2 = sig_field[pdf_name('/Rect')]
+        x1, y1, x2, y2 = sig_annot[pdf_name('/Rect')]
         w = abs(x1 - x2)
         h = abs(y1 - y2)
         if w and h:
@@ -1348,11 +1349,11 @@ class SigAppearanceSetup:
                     writer, style=style, text_params=text_params,
                     box=box
                 )
-            sig_field[
+            sig_annot[
                 pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
             try:
                 # if there was an entry like this, it's meaningless now
-                del sig_field[pdf_name('/AS')]
+                del sig_annot[pdf_name('/AS')]
             except KeyError:
                 pass
 
@@ -1520,7 +1521,19 @@ class PdfCMSEmbedder:
         # take care of the field's visual appearance (if applicable)
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
-            appearance_setup._apply(sig_field, writer)
+            try:
+                sig_annot, = sig_field['/Kids']
+                sig_annot = sig_annot.get_object()
+            except (ValueError, TypeError):
+                raise SigningError(
+                    "Failed to access signature field's annotation. "
+                    "Signature field must have exactly one child annotation, "
+                    "or it must be combined with its annotation."
+                )
+            except KeyError:
+                sig_annot = sig_field
+
+            appearance_setup._apply(sig_annot, writer)
 
         sig_obj = sig_obj_setup.sig_placeholder
         sig_obj_ref = writer.add_object(sig_obj)

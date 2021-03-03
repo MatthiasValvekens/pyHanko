@@ -2215,3 +2215,92 @@ def test_timestamp_with_different_digest():
     validity = val_trusted(s)
     assert validity.timestamp_validity is not None
     assert validity.timestamp_validity.trusted
+
+
+def test_simple_sign_with_separate_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    signer = signers.PdfSigner(
+        signature_meta=meta, signer=SELF_SIGN,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', combine_annotation=False,
+            box=(20, 20, 80, 40)
+        )
+    )
+    out = signer.sign_pdf(w)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    assert '/AP' not in emb.sig_field
+    assert '/AP' in emb.sig_field['/Kids'][0]
+    val_untrusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_double_sign_with_separate_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    signer = signers.PdfSigner(
+        signature_meta=meta, signer=FROM_CA,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', combine_annotation=False,
+            box=(20, 20, 80, 40)
+        )
+    )
+    out = signer.sign_pdf(w, in_place=True)
+    w = IncrementalPdfFileWriter(out)
+    meta = signers.PdfSignatureMetadata(field_name='Sig2')
+    signer = signers.PdfSigner(
+        signature_meta=meta, signer=FROM_CA,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig2', combine_annotation=False,
+            box=(20, 120, 80, 140)
+        )
+    )
+    signer.sign_pdf(w, in_place=True)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    assert '/AP' not in emb.sig_field
+    assert '/AP' in emb.sig_field['/Kids'][0]
+    val_trusted(emb, extd=True)
+
+    emb = r.embedded_signatures[1]
+    assert emb.field_name == 'Sig2'
+    assert '/AP' not in emb.sig_field
+    assert '/AP' in emb.sig_field['/Kids'][0]
+    val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_validate_separate_annot_with_indir_kids():
+    with open(PDF_DATA_DIR + '/separate-annots-kids-indir.pdf', 'rb') as f:
+        r = PdfFileReader(f)
+        emb = r.embedded_signatures[0]
+        assert emb.field_name == 'Sig1'
+        assert '/AP' not in emb.sig_field
+        assert '/AP' in emb.sig_field['/Kids'][0]
+        val_trusted(emb, extd=True)
+
+        emb = r.embedded_signatures[1]
+        assert emb.field_name == 'Sig2'
+        assert '/AP' not in emb.sig_field
+        assert '/AP' in emb.sig_field['/Kids'][0]
+        val_trusted(emb)
+
+
+def test_sign_with_empty_kids():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    fields.append_signature_field(
+        w, fields.SigFieldSpec(
+            sig_field_name='Sig1', combine_annotation=False,
+            box=(20, 20, 80, 40)
+        )
+    )
+    w.root['/AcroForm']['/Fields'][0]['/Kids'] = generic.ArrayObject()
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+
+    with pytest.raises(SigningError, match="Failed to access.*annot.*"):
+        signers.sign_pdf(w, meta, signer=FROM_CA)
