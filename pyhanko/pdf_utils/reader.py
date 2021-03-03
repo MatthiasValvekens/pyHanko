@@ -831,7 +831,6 @@ class PdfFileReader(PdfHandler):
         assert xrefstream["/Type"] == "/XRef"
         xref_cache = self.xrefs
         xref_cache.xref_container_info.append((xrefstream_ref, stream.tell()))
-        self.cache_indirect_object(generation, idnum, xrefstream)
         xref_cache.read_xref_stream(xrefstream)
 
         self.trailer.add_trailer_revision(xrefstream)
