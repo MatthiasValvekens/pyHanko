@@ -2304,3 +2304,20 @@ def test_sign_with_empty_kids():
 
     with pytest.raises(SigningError, match="Failed to access.*annot.*"):
         signers.sign_pdf(w, meta, signer=FROM_CA)
+
+
+@freeze_time('2020-11-01')
+def test_sign_without_annot():
+    with open(PDF_DATA_DIR + '/minimal-annotless.pdf', 'rb') as f:
+        w = IncrementalPdfFileWriter(f)
+        meta = signers.PdfSignatureMetadata(field_name='Sig1')
+        out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    assert '/AP' not in emb.sig_field
+    assert '/Rect' not in emb.sig_field
+    assert '/Kids' not in emb.sig_field
+    assert '/Type' not in emb.sig_field
+    val_trusted(emb)

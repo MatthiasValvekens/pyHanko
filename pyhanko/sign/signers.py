@@ -1319,7 +1319,10 @@ class SigAppearanceSetup:
         name = self.name
         timestamp = self.timestamp
         extra_text_params = self.text_params or {}
-        x1, y1, x2, y2 = sig_annot[pdf_name('/Rect')]
+        try:
+            x1, y1, x2, y2 = sig_annot['/Rect']
+        except KeyError:
+            return
         w = abs(x1 - x2)
         h = abs(y1 - y2)
         if w and h:
@@ -1349,8 +1352,7 @@ class SigAppearanceSetup:
                     writer, style=style, text_params=text_params,
                     box=box
                 )
-            sig_annot[
-                pdf_name('/AP')] = stamp.as_appearances().as_pdf_object()
+            sig_annot['/AP'] = stamp.as_appearances().as_pdf_object()
             try:
                 # if there was an entry like this, it's meaningless now
                 del sig_annot[pdf_name('/AS')]
