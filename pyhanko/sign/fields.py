@@ -1444,8 +1444,8 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, *, box=None, include_on_page=None,
                  combine_annotation=True,
-                 # this sets the "print" bit
-                 annot_flags=0b100):
+                 # this sets the "print" and "lock" bits
+                 annot_flags=0b10000100):
 
         if box is not None:
             rect = list(map(generic.FloatObject, box))
