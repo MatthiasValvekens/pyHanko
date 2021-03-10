@@ -1745,9 +1745,9 @@ class PdfTimeStamper:
             last_timestamp = None
 
         # Validate the previous timestamp if present
+        tst_status = None
         if last_timestamp is None:
             md_algorithm = default_md_algorithm
-            tst_status = None
         else:
             last_timestamp.compute_digest()
             last_timestamp.compute_tst_digest()
