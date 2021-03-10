@@ -1344,7 +1344,8 @@ def _validate_timestamp(tst_signed_data, validation_context,
         encap_data_invalid = False
     timestamp = tst_info['gen_time'].native
     return _validate_cms_signature(
-        tst_signed_data, validation_context=validation_context,
+        tst_signed_data, status_cls=TimestampSignatureStatus,
+        validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
         encap_data_invalid=encap_data_invalid
     )
