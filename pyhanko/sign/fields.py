@@ -1458,6 +1458,7 @@ class SignatureFormField(generic.DictionaryObject):
             pdf_name('/T'): pdf_string(field_name),
         })
 
+        self.combine_annotation = combine_annotation
         if combine_annotation:
             annot_dict = self
         else:
@@ -1478,7 +1479,7 @@ class SignatureFormField(generic.DictionaryObject):
     def register_widget_annotation(self, writer: BasePdfFileWriter,
                                    sig_field_ref):
         annot_dict = self.annot_dict
-        if annot_dict is not self:
+        if not self.combine_annotation:
             annot_ref = writer.add_object(annot_dict)
             self['/Kids'] = generic.ArrayObject([annot_ref])
         else:
