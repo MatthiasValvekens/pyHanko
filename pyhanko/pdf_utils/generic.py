@@ -532,7 +532,7 @@ class FloatObject(decimal.Decimal, PdfObject):
         if self == self.to_integral():
             return str(self.quantize(decimal.Decimal(1)))
         else:
-            return "%g" % self
+            return str(self)
 
     def as_numeric(self):
         """

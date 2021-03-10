@@ -1424,3 +1424,9 @@ def test_bool_dunders():
 
     assert repr(bool_true) == str(bool_true) == 'True'
     assert repr(bool_false) == str(bool_false) == 'False'
+
+
+def test_pdf_num_precision():
+    assert repr(generic.FloatObject('32.00001')) == '32.00001'
+    assert repr(generic.FloatObject('32.92001')) == '32.92001'
+    assert repr(generic.FloatObject('32')) == '32'
