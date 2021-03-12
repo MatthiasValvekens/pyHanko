@@ -671,6 +671,23 @@ def field_with_lock_sp(include_docmdp):
     )
 
 
+def test_append_sigfield_second_page():
+    buf = BytesIO(MINIMAL_TWO_PAGES)
+    w = IncrementalPdfFileWriter(buf)
+    fields.append_signature_field(w, fields.SigFieldSpec('Sig1', on_page=1))
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+
+    pg1 = r.root['/Pages']['/Kids'][0]
+    assert '/Annots' not in pg1
+
+    pg2 = r.root['/Pages']['/Kids'][1]
+    assert '/Annots' in pg2
+    assert len(pg2['/Annots']) == 1
+    assert pg2['/Annots'][0]['/T'] == 'Sig1'
+
+
 @pytest.mark.parametrize('include_docmdp', [True, False])
 @freeze_time('2020-11-01')
 def test_add_sigfield_with_lock(include_docmdp):
