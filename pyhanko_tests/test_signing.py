@@ -276,6 +276,17 @@ def test_simple_sign():
     assert emb.field_name == 'Sig1'
     val_untrusted(emb)
 
+
+def test_simple_sign_tamper():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
+
     # try tampering with the file
     out.seek(0x9d)
     # this just changes the size of the media box, so the file should remain
