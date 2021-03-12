@@ -61,7 +61,7 @@ from enum import unique
 from io import BytesIO
 from typing import (
     Iterable, Optional, Set, Tuple, Generator, TypeVar, Dict,
-    List, Callable, Union
+    List, Callable, Union, Iterator
 )
 
 from pyhanko.pdf_utils.generic import Reference, PdfObject
@@ -1858,6 +1858,58 @@ class DiffPolicy:
         raise NotImplementedError
 
 
+def _find_orphans(hist_rev: HistoricalResolver):
+    """
+    Within a revision, find new refs that can't be reached from refs in the
+    older ones.
+    """
+
+    # Note: this function assumes that there is no shady behaviour with older
+    #  revisions referring to as-of-yet-undefined references in future
+    #  revisions.
+    # TODO I might want to put a failsafe in the PdfFileReader class's
+    #  dereferencing logic to prevent that.
+
+    # This assumption makes finding orphans relatively cheap: we only need to
+    # pull up the dependencies of the older objects that were overwritten
+    # in this exact revision, and we only have to recurse into branches that
+    # pass through new objects themselves.
+
+    new_refs = hist_rev.explicit_refs_in_revision()
+
+    previous = hist_rev.reader.get_historical_resolver(hist_rev.revision - 1)
+
+    # These are newly updated refs that already existed in older revisions.
+    #  We want to know which of the new refs are reachable from one of these.
+    updated_old_refs = set()
+    # The candidate orphans are all the others
+    candidate_orphans = set()
+    for ref in new_refs:
+        if previous.is_ref_available(ref):
+            # ref didn't exist in previous revision
+            candidate_orphans.add(ref)
+        else:
+            updated_old_refs.add(ref)
+
+    def _objs_to_check() -> Iterator[PdfObject]:
+        # check the trailer too!
+        yield hist_rev.trailer_view
+        for _ref in updated_old_refs:
+            # take care to return the historical value here
+            yield hist_rev(_ref)
+
+    obj_iter = _objs_to_check()
+    while candidate_orphans:
+        try:
+            obj = next(obj_iter)
+        except StopIteration:
+            break
+        candidate_orphans -= hist_rev.collect_dependencies(
+            obj, since_revision=hist_rev.revision
+        )
+    return candidate_orphans
+
+
 class StandardDiffPolicy(DiffPolicy):
     """
     Run a list of rules to analyse the differences between two revisions.
@@ -1881,14 +1933,21 @@ class StandardDiffPolicy(DiffPolicy):
             in which case allowing objects to be freed might be reasonable.
             That said, pyHanko takes the conservative default position to reject
             all object freeing instructions as suspect.
+    :param ignore_orphaned_objects:
+        Some PDF writers create objects that aren't used anywhere (tsk tsk).
+        Since those don't affect the "actual" document content, they can usually
+        be ignored. If ``True``, newly created orphaned objects will be
+        cleared at level :attr:`.ModificationLevel.LTA_UPDATES`.
+        Default is ``True``.
     """
 
     def __init__(self, global_rules: List[QualifiedWhitelistRule],
                  form_rule: Optional[FormUpdatingRule],
-                 reject_object_freeing=True):
+                 reject_object_freeing=True, ignore_orphaned_objects=True):
         self.global_rules = global_rules
         self.form_rule = form_rule
         self.reject_object_freeing = reject_object_freeing
+        self.ignore_orphaned_objects = ignore_orphaned_objects
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver,
               field_mdp_spec: Optional[FieldMDPSpec] = None,
@@ -1917,6 +1976,10 @@ class StandardDiffPolicy(DiffPolicy):
                 usages = old._get_usages_of_ref(_ref)
                 if usages:
                     yield _ref, (ModificationLevel.NONE, set(usages))
+
+        # orphaned objects are cleared at LTA update level
+        for _ref in _find_orphans(new):
+            explained[ModificationLevel.LTA_UPDATES].add(_ref)
 
         # This table records all the overridden refs that already existed
         # in the old revision, together with the different ways they can be

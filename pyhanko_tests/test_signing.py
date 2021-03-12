@@ -2332,3 +2332,38 @@ def test_sign_without_annot():
     assert '/Kids' not in emb.sig_field
     assert '/Type' not in emb.sig_field
     val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_sign_and_update_with_orphaned_obj():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    w = IncrementalPdfFileWriter(out)
+    w.add_object(generic.pdf_string("Hello there"))
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, extd=True)
+
+
+@freeze_time('2020-11-01')
+def test_sign_and_update_with_orphaned_obj_and_other_upd():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    w = IncrementalPdfFileWriter(out)
+    w.add_object(generic.pdf_string("Hello there"))
+    w.root['/Blah'] = w.add_object(
+        generic.pdf_string("Hello there too")
+    )
+    w.update_root()
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    val_trusted_but_modified(emb)
