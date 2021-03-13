@@ -2104,12 +2104,19 @@ class PdfSigner(PdfTimeStamper):
         signature_meta: PdfSignatureMetadata = self.signature_meta
         signer: Signer = self.signer
         validation_context = signature_meta.validation_context
-        if signature_meta.embed_validation_info and validation_context is None:
-            raise SigningError(
-                'A validation context must be provided if '
-                'validation/revocation info is to be embedded into the '
-                'signature.'
-            )
+        if signature_meta.embed_validation_info:
+            if validation_context is None:
+                raise SigningError(
+                    'A validation context must be provided if '
+                    'validation/revocation info is to be embedded into the '
+                    'signature.'
+                )
+            elif not validation_context._allow_fetching:
+                logger.warning(
+                    "Validation/revocation info will be embedded, but "
+                    "fetching is not allowed. This may give rise to unexpected "
+                    "results."
+                )
         validation_paths = []
         signer_cert_validation_path = None
         if validation_context is not None:
