@@ -257,7 +257,7 @@ def test_read_extd_key_usage(key_usage_str, key_usages):
 
 
 @pytest.mark.parametrize('key_usage_str', [
-    '0', '["non_repudiation", 2]', ""
+    '0', '["non_repudiation", 2]', "[1, 2, 3]", "abcdef"
 ])
 def test_key_usage_errors(key_usage_str):
     config_string = f"""
