@@ -173,7 +173,7 @@ class SignatureStatus:
 
     # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
     #  (probably legacy behaviour)
-    key_usage: ClassVar[Set[str]] = {'non_repudiation'}
+    key_usage: ClassVar[Set[str]] = {'digital_signature'}
     """
     Class property indicating which key usage extensions are required to be
     present on the signer's certificate.

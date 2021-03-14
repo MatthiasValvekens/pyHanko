@@ -22,6 +22,7 @@ from pyhanko.sign import signers, pkcs11
 from pyhanko.sign.general import (
     SigningError, SignatureValidationError, load_certs_from_pemder
 )
+from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign import validation, beid, fields
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -223,6 +224,18 @@ def _build_vc_kwargs(ctx, validation_context, trust,
         raise click.ClickException(msg)
 
 
+def _get_key_usage_settings(ctx, validation_context):
+    cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+    if cli_config is None:
+        return None
+
+    # note: validation_context can be None, this triggers fallback to the
+    # default validation context specified in the configuration file
+    # If we add support for specifying key usage settings as CLI arguments,
+    # using the same fallbacks as _build_cli_kwargs would probably be cleaner
+    return cli_config.get_signer_key_usages(name=validation_context)
+
+
 def trust_options(f):
     f = click.option(
         '--validation-context', help='use validation context from config',
@@ -277,18 +290,19 @@ def _select_style(ctx, style_name, url):
 
 
 def _signature_status(ltv_profile, ltv_obsessive,
-                      pretty_print, vc_kwargs,
+                      pretty_print, vc_kwargs, key_usage_settings,
                       executive_summary, embedded_sig):
     try:
         if ltv_profile is None:
             vc = ValidationContext(**vc_kwargs)
             status = validation.validate_pdf_signature(
-                embedded_sig,
+                embedded_sig, key_usage_settings=key_usage_settings,
                 signer_validation_context=vc
             )
         else:
             status = validation.validate_pdf_ltv_signature(
                 embedded_sig, ltv_profile,
+                key_usage_settings=key_usage_settings,
                 force_revinfo=ltv_obsessive,
                 validation_context_kwargs=vc_kwargs
             )
@@ -358,6 +372,8 @@ def validate_signatures(ctx, infile, executive_summary,
     vc_kwargs = _build_vc_kwargs(
         ctx, validation_context, trust, trust_replace, other_certs
     )
+
+    key_usage_settings = _get_key_usage_settings(ctx, validation_context)
     with pyhanko_exception_manager():
         r = PdfFileReader(infile)
 
@@ -373,6 +389,7 @@ def validate_signatures(ctx, infile, executive_summary,
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
             status_str = _signature_status(
                 ltv_profile, ltv_obsessive, pretty_print, vc_kwargs,
+                key_usage_settings,
                 executive_summary, embedded_sig
             )
             name = embedded_sig.field_name
@@ -466,12 +483,16 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
     else:
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
+    key_usage = DEFAULT_SIGNER_KEY_USAGE
     if with_validation_info:
         vc_kwargs = _build_vc_kwargs(
             ctx, validation_context, trust, trust_replace, other_certs,
             allow_fetching=True
         )
         vc = ValidationContext(**vc_kwargs)
+        key_usage_sett = _get_key_usage_settings(ctx, validation_context)
+        if key_usage_sett is not None and key_usage_sett.key_usage is not None:
+            key_usage = key_usage_sett.key_usage
     else:
         vc = None
     field_name, new_field_spec = parse_field_location_spec(
@@ -481,7 +502,7 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         field_name=field_name, location=location, reason=reason, name=name,
         certify=certify, subfilter=subfilter,
         embed_validation_info=with_validation_info,
-        validation_context=vc
+        validation_context=vc, signer_key_usage=key_usage
     )
     ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
     ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)

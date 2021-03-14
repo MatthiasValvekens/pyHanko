@@ -1,10 +1,12 @@
 import enum
 import logging
+import re
 from datetime import timedelta
 from typing import Dict, Optional, Union
 from dataclasses import dataclass
 
 import yaml
+from asn1crypto import x509
 
 from certvalidator import ValidationContext
 from pyhanko.pdf_utils.config_utils import (
@@ -15,6 +17,7 @@ from pyhanko.pdf_utils.misc import get_and_apply
 
 # TODO add stamp styles etc.
 from pyhanko.sign import load_certs_from_pemder
+from pyhanko.sign.general import KeyUsageConstraints
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 
@@ -60,18 +63,44 @@ class CLIConfig:
     time_tolerance: timedelta
     log_config: Dict[Optional[str], LogConfig]
 
-    # TODO graceful error handling
+    # TODO graceful error handling for syntax & type issues?
 
-    def get_validation_context(self, name=None, as_dict=False):
+    def _get_validation_settings_raw(self, name=None):
         name = name or self.default_validation_context
         try:
-            vc_config = self.validation_contexts[name]
+            return self.validation_contexts[name]
         except KeyError:
             raise ConfigurationError(
                 f"There is no validation context named '{name}'."
             )
+
+    def get_validation_context(self, name=None, as_dict=False):
+        vc_config = self._get_validation_settings_raw(name)
         vc_kwargs = parse_trust_config(vc_config, self.time_tolerance)
         return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
+
+    def get_signer_key_usages(self, name=None) -> KeyUsageConstraints:
+        vc_config = self._get_validation_settings_raw(name)
+
+        try:
+            key_usage_strings = vc_config['signer-key-usage']
+            key_usage = set(
+                _process_key_usages(key_usage_strings, extended=False)
+            )
+        except KeyError:
+            key_usage = None
+
+        try:
+            key_usage_strings = vc_config['signer-extd-key-usage']
+            extd_key_usage = set(
+                _process_key_usages(key_usage_strings, extended=True)
+            )
+        except KeyError:
+            extd_key_usage = None
+
+        return KeyUsageConstraints(
+            key_usage=key_usage, extd_key_usage=extd_key_usage
+        )
 
     def get_stamp_style(self, name=None) -> TextStampStyle:
         name = name or self.default_stamp_style
@@ -116,7 +145,9 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
 
 def parse_trust_config(trust_config, time_tolerance) -> dict:
     check_config_keys(
-        'ValidationContext', ('trust', 'trust-replace', 'other-certs'),
+        'ValidationContext',
+        ('trust', 'trust-replace', 'other-certs',
+         'signer-key-usage', 'signer-extd-key-usage'),
         trust_config
     )
     return init_validation_context_kwargs(
@@ -125,6 +156,47 @@ def parse_trust_config(trust_config, time_tolerance) -> dict:
         other_certs=trust_config.get('other-certs'),
         time_tolerance=time_tolerance
     )
+
+
+OID_REGEX = re.compile(r'\d(\.\d+)+')
+
+
+def _process_key_usages(key_usage_strings, extended=False):
+    err_msg = (
+        "Key usages and extended key usages must be specified as a "
+        "list of strings, or a string."
+    )
+    if isinstance(key_usage_strings, str):
+        key_usage_strings = (key_usage_strings,)
+    elif not isinstance(key_usage_strings, list):
+        raise ConfigurationError(err_msg)
+
+    usage_class = x509.KeyPurposeId if extended else x509.KeyUsage
+    valid_usages = usage_class._map.values()
+    for usage_string in key_usage_strings:
+        if not isinstance(usage_string, str):
+            raise ConfigurationError(
+                f"{err_msg} '{repr(usage_string)}' is not a string."
+            )
+        if usage_string in valid_usages:
+            yield usage_string
+        elif extended and OID_REGEX.fullmatch(usage_string):
+            # for extended key usages, we allow OIDs as well
+            # and natively translate them to human-readable form
+            # whenever possible
+            try:
+                usage_string = x509.KeyPurposeId._map[usage_string]
+            except KeyError:
+                logging.debug(
+                    f"Extended key usage extension {usage_string} was not "
+                    f"recognised by asn1crypto; using raw value."
+                )
+            yield usage_string
+        else:
+            extd = "extended " if extended else ""
+            raise ConfigurationError(
+                f"'{usage_string}' is not a valid {extd}key usage designation."
+            )
 
 
 DEFAULT_ROOT_LOGGER_LEVEL = logging.INFO

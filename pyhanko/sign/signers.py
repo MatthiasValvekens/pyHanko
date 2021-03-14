@@ -761,6 +761,11 @@ Default message digest algorithm used when computing digests for use in
 signatures.
 """
 
+DEFAULT_SIGNER_KEY_USAGE = {"non_repudiation"}
+"""
+Default key usage bits required for the signer's certificate.
+"""
+
 
 @dataclass(frozen=True)
 class PdfSignatureMetadata:
@@ -885,7 +890,7 @@ class PdfSignatureMetadata:
     """
 
     signer_key_usage: Set[str] = field(
-        default_factory=lambda: {"non_repudiation"}
+        default_factory=lambda: DEFAULT_SIGNER_KEY_USAGE
     )
     """
     Key usage extensions required for the signer's certificate.

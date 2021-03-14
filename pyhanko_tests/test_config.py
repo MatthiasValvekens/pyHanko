@@ -27,6 +27,10 @@ def test_read_vc_kwargs(trust_replace):
         assert 'trust_roots' not in vc_kwargs
         assert len(vc_kwargs['extra_trust_roots']) == 1
 
+    ku = cli_config.get_signer_key_usages()
+    assert ku.key_usage is None
+    assert ku.extd_key_usage is None
+
     with pytest.raises(ConfigurationError):
         cli_config.get_validation_context('theresnosuchvc')
 
@@ -206,3 +210,62 @@ WRONG_CONFIGS = [
 def test_read_logging_config_errors(config_str):
     with pytest.raises(ConfigurationError):
         config.parse_cli_config(config_str)
+
+
+@pytest.mark.parametrize('key_usage_str, key_usages', [
+    ('non_repudiation', {'non_repudiation'}),
+    ('[non_repudiation, digital_signature]',
+     {'non_repudiation', 'digital_signature'}),
+    ('[]', set()),
+])
+def test_read_key_usage(key_usage_str, key_usages):
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            signer-key-usage: {key_usage_str}
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    key_usage_settings = cli_config.get_signer_key_usages()
+    assert key_usage_settings.key_usage == key_usages
+    assert key_usage_settings.extd_key_usage is None
+
+
+@pytest.mark.parametrize('key_usage_str, key_usages', [
+    ('piv_content_signing', {'piv_content_signing'}),
+    ('[piv_content_signing, code_signing]',
+     {'piv_content_signing', 'code_signing'}),
+    ('[]', set()),
+    ('[2.16.840.1.101.3.6.7, code_signing]',
+     {'piv_content_signing', 'code_signing'}),
+    ('[2.16.840.1.101.3.6.7, "2.999"]',
+     {'piv_content_signing', '2.999'}),
+    ('2.16.840.1.101.3.6.7', {'piv_content_signing'}),
+    ('"2.999"', {'2.999'}),
+])
+def test_read_extd_key_usage(key_usage_str, key_usages):
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            signer-extd-key-usage: {key_usage_str}
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    key_usage_settings = cli_config.get_signer_key_usages()
+    assert key_usage_settings.key_usage is None
+    assert key_usage_settings.extd_key_usage == key_usages
+
+
+@pytest.mark.parametrize('key_usage_str', [
+    '0', '["non_repudiation", 2]', ""
+])
+def test_key_usage_errors(key_usage_str):
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            signer-extd-key-usage: {key_usage_str}
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    with pytest.raises(ConfigurationError):
+        cli_config.get_signer_key_usages()
