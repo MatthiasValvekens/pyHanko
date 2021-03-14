@@ -634,7 +634,7 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
     if passfile is None:
-        passphrase = getpass.getpass(prompt='Export passphrase: ')\
+        passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ')\
                         .encode('utf-8')
     else:
         passphrase = passfile.read()
