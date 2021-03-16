@@ -577,14 +577,14 @@ class BasePdfFileWriter(PdfHandler):
         """
         page_obj = page_ref.get_object()
         try:
-            annots_ref = page_obj.raw_get('/Annots')
-            if isinstance(annots_ref, generic.IndirectObject):
-                annots = annots_ref.get_object()
-                self.mark_update(annot_ref)
+            annot_arr_ref = page_obj.raw_get('/Annots')
+            if isinstance(annot_arr_ref, generic.IndirectObject):
+                annots = annot_arr_ref.get_object()
+                self.mark_update(annot_arr_ref)
             else:
                 # we need to update the entire page object if the annots array
                 # is a direct object
-                annots = annots_ref
+                annots = annot_arr_ref
                 self.mark_update(page_ref)
         except KeyError:
             annots = generic.ArrayObject()

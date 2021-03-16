@@ -659,6 +659,24 @@ def test_sign_new(file):
     val_trusted(e)
 
 
+@freeze_time('2020-11-01')
+def test_sign_with_indir_annots():
+    with open(PDF_DATA_DIR + '/minimal-one-field-indir-annots.pdf', 'rb') as f:
+        w = IncrementalPdfFileWriter(f)
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA
+        )
+        r = PdfFileReader(out)
+        e = r.embedded_signatures[0]
+        assert e.field_name == 'SigNew'
+        val_trusted(e)
+
+        annots_ref = r.root['/Pages']['/Kids'][0].raw_get('/Annots')
+        assert isinstance(annots_ref, generic.IndirectObject)
+        assert len(annots_ref.get_object()) == 2
+
+
+
 def field_with_lock_sp(include_docmdp):
     return fields.SigFieldSpec(
         'SigNew', box=(10, 74, 140, 134),
