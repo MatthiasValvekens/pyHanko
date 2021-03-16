@@ -506,6 +506,7 @@ def _extract_reference_dict(signature_obj, method) \
     except KeyError:
         return
     for ref in sig_refs:
+        ref = ref.get_object()
         if ref['/TransformMethod'] == method:
             return ref
 
@@ -515,7 +516,7 @@ def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
     if ref is None:
         return
     try:
-        raw_perms = ref.raw_get('/TransformParams').raw_get('/P')
+        raw_perms = ref['/TransformParams'].raw_get('/P')
         return MDPPerm(raw_perms)
     except (ValueError, KeyError) as e:  # pragma: nocover
         raise SignatureValidationError(

@@ -2402,3 +2402,25 @@ def test_sign_and_update_with_orphaned_obj_and_other_upd():
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     val_trusted_but_modified(emb)
+
+
+@freeze_time('2020-11-01')
+def test_indir_ref_in_sigref_dict(requests_mock):
+    fname = PDF_DATA_DIR + '/certified-with-indirect-refs-in-dir.pdf'
+    with open(fname, 'rb') as f:
+        content = f.read()
+
+    # first, try validating without additions
+    r = PdfFileReader(BytesIO(content))
+    emb = r.embedded_signatures[0]
+    val_trusted(emb)
+
+    w = IncrementalPdfFileWriter(BytesIO(content))
+
+    out = PdfTimeStamper(timestamper=DUMMY_TS).timestamp_pdf(
+        w, md_algorithm='sha256',
+        validation_context=live_testing_vc(requests_mock)
+    )
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    val_trusted(emb, extd=True)
