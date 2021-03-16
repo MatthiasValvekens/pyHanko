@@ -13,10 +13,6 @@ from pyhanko.config import (
 )
 from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
-from pyhanko.pdf_utils.crypt import (
-    SimpleEnvelopeKeyDecrypter,
-    PubKeySecurityHandler, AuthStatus,
-)
 
 from pyhanko.sign import signers, pkcs11
 from pyhanko.sign.general import (
@@ -28,6 +24,7 @@ from pyhanko.sign import validation, beid, fields
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils import crypt
 from pyhanko.sign.validation import (
     RevocationInfoValidationType
 )
@@ -356,10 +353,12 @@ def _signature_status(ltv_profile, ltv_obsessive,
               help='Fail trust validation if a certificate has no known CRL '
                    'or OCSP endpoints.',
               type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--password', required=False, type=str,
+              help='password to access the file (can also be read from stdin)')
 @click.pass_context
 def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
-                        other_certs, ltv_profile, ltv_obsessive):
+                        other_certs, ltv_profile, ltv_obsessive, password):
 
     if pretty_print and executive_summary:
         raise click.ClickException(
@@ -376,6 +375,18 @@ def validate_signatures(ctx, infile, executive_summary,
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
     with pyhanko_exception_manager():
         r = PdfFileReader(infile)
+        sh = r.security_handler
+        if isinstance(sh, crypt.StandardSecurityHandler):
+            if password is None:
+                password = getpass.getpass(prompt='File password: ')
+            auth_result = r.decrypt(password)
+            if auth_result.status == crypt.AuthStatus.FAILED:
+                raise click.ClickException("Password didn't match.")
+        elif sh is not None:
+            raise click.ClickException(
+                "The CLI supports only password-based encryption when "
+                "validating (for now)"
+            )
 
         # function to filter out timestamps
         def is_sig(sig):
@@ -510,7 +521,6 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
 
 
 def _open_for_signing(infile_path, signer_cert=None, signer_key=None):
-    from pyhanko.pdf_utils import crypt
     infile = open(infile_path, 'rb')
     writer = IncrementalPdfFileWriter(infile)
 
@@ -526,7 +536,7 @@ def _open_for_signing(infile_path, signer_cert=None, signer_key=None):
         elif isinstance(sh, crypt.PubKeySecurityHandler) \
                 and signer_key is not None:
             # attempt to decrypt using signer's credentials
-            cred = SimpleEnvelopeKeyDecrypter(signer_cert, signer_key)
+            cred = crypt.SimpleEnvelopeKeyDecrypter(signer_cert, signer_key)
             logger.warning(
                 "The file \'%s\' appears to be encrypted using public-key "
                 "encryption. This is only partially supported in pyHanko's "
@@ -881,10 +891,12 @@ def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
     type=click.Path(readable=True, dir_okay=False)
 )
 def encrypt_file(infile, outfile, password, recipient):
-    if bool(password) == bool(recipient):
+    if password and recipient:
         raise click.ClickException(
             "Specify either a password or a list of recipients."
         )
+    elif not password and not recipient:
+        password = getpass.getpass(prompt='Output file password: ')
 
     recipient_certs = None
     if recipient:
@@ -935,13 +947,13 @@ def decrypt_with_password(infile, outfile, password, force):
             if not password:
                 password = getpass.getpass(prompt='File password: ')
             auth_result = r.decrypt(password)
-            if auth_result.status == AuthStatus.USER and not force:
+            if auth_result.status == crypt.AuthStatus.USER and not force:
                 raise click.ClickException(
                     "Password specified was the user password, not "
                     "the owner password. Pass --force to decrypt the "
                     "file anyway."
                 )
-            elif auth_result.status == AuthStatus.FAILED:
+            elif auth_result.status == crypt.AuthStatus.FAILED:
                 raise click.ClickException("Password didn't match.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:
@@ -965,23 +977,26 @@ def decrypt_with_pemder(infile, outfile, key, cert, passfile, force):
     else:
         passphrase = passfile.read()
         passfile.close()
-    sedk = SimpleEnvelopeKeyDecrypter.load(key, cert, key_passphrase=passphrase)
+    sedk = crypt.SimpleEnvelopeKeyDecrypter.load(
+        key, cert, key_passphrase=passphrase
+    )
 
     _decrypt_pubkey(sedk, infile, outfile, force)
 
 
-def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
+def _decrypt_pubkey(sedk: crypt.SimpleEnvelopeKeyDecrypter, infile, outfile,
+                    force):
     with pyhanko_exception_manager():
         with open(infile, 'rb') as inf:
             r = PdfFileReader(inf)
             if r.security_handler is None:
                 raise click.ClickException("File is not encrypted.")
-            if not isinstance(r.security_handler, PubKeySecurityHandler):
+            if not isinstance(r.security_handler, crypt.PubKeySecurityHandler):
                 raise click.ClickException(
                     "File was not encrypted with a public-key security handler."
                 )
             auth_result = r.decrypt_pubkey(sedk)
-            if auth_result.status == AuthStatus.USER:
+            if auth_result.status == crypt.AuthStatus.USER:
                 # TODO read 2nd bit of perms in CMS enveloped data
                 #  is the one indicating that change of encryption is OK
                 if not force:
@@ -989,7 +1004,7 @@ def _decrypt_pubkey(sedk: SimpleEnvelopeKeyDecrypter, infile, outfile, force):
                         "Change of encryption is typically not allowed with "
                         "user access. Pass --force to decrypt the file anyway."
                     )
-            elif auth_result.status == AuthStatus.FAILED:
+            elif auth_result.status == crypt.AuthStatus.FAILED:
                 raise click.ClickException("Failed to decrypt the file.")
             w = copy_into_new_writer(r)
             with open(outfile, 'wb') as outf:
@@ -1010,6 +1025,8 @@ def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
     else:
         passphrase = passfile.read()
         passfile.close()
-    sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(pfx, passphrase=passphrase)
+    sedk = crypt.SimpleEnvelopeKeyDecrypter.load_pkcs12(
+        pfx, passphrase=passphrase
+    )
 
     _decrypt_pubkey(sedk, infile, outfile, force)
