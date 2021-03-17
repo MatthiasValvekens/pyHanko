@@ -328,7 +328,7 @@ def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
             'An error occurred while parsing the revocation information '
             'for this signature: ' + str(e)
         )
-        logger.error(msg, exc_info=e)
+        logger.error(msg)
         if pretty_print:
             return msg
         else:

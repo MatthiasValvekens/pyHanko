@@ -1564,8 +1564,10 @@ def retrieve_adobe_revocation_info(signer_info: cms.SignerInfo):
         revinfo: asn1_pdf.RevocationInfoArchival = find_cms_attribute(
             signer_info['signed_attrs'], "adobe_revocation_info_archival"
         )[0]
-    except KeyError:
-        raise ValidationInfoReadingError("No revocation info found")
+    except KeyError as e:
+        raise ValidationInfoReadingError(
+            "No revocation info archival attribute found"
+        ) from e
 
     ocsps = list(revinfo['ocsp'] or ())
     crls = list(revinfo['crl'] or ())
@@ -1883,8 +1885,8 @@ class DocumentSecurityStore:
         """
         try:
             dss_ref = handler.root.raw_get(pdf_name('/DSS'))
-        except KeyError:
-            raise ValidationInfoReadingError("No DSS found")
+        except KeyError as e:
+            raise ValidationInfoReadingError("No DSS found") from e
 
         dss_dict = dss_ref.get_object()
 
