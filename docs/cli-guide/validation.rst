@@ -22,6 +22,12 @@ and :ref:`configuration options <config-validation-context>`
 as for creating LTV signatures.
 
 
+.. warning::
+    By default, pyHanko requires signer certificates to have the non-repudiation key usage extension
+    bit set on signer certificates. If this is not suitable for your use case, take a look at
+    :ref:`key-usage-conf`.
+
+
 .. _validation-factors:
 
 Factors in play when validating a signature

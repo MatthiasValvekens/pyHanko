@@ -378,6 +378,11 @@ You can also predefine validation contexts in the configuration file, and select
 them using the ``--validation-context`` parameter.
 See :ref:`config-validation-context` for further information.
 
+.. warning::
+    By default, pyHanko requires signer certificates to have the non-repudiation key usage extension
+    bit set on signer certificates. If this is not suitable for your use case, take a look at
+    :ref:`key-usage-conf`.
+
 .. _lta-sigs:
 
 Long-term archival (LTA) needs

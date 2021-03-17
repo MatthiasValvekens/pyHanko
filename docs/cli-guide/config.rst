@@ -114,6 +114,57 @@ the ``default-validation-context`` top-level key, like so:
             trust-replace: false
 
 
+.. _key-usage-conf:
+
+Key usage settings
+^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 0.5.0
+
+There are two additional keys that can be added to a named validation context: ``signer-key-usage``
+and ``signer-extd-key-usage``. Both either take a string argument, or an array of strings.
+These define the necessary key usage (resp. extended key usage) extensions that need to be present
+in signer certificates.
+For ``signer-key-usage``, the possible values are as follows:
+
+* ``digital_signature``
+* ``non_repudiation``
+* ``key_encipherment``
+* ``data_encipherment``
+* ``key_agreement``
+* ``key_cert_sign``
+* ``crl_sign``
+* ``encipher_only``
+* ``decipher_only``
+
+We refer to § 4.2.1.3 in :rfc:`5280` for an explanation of what these values mean. By default,
+pyHanko requires signer certificates to have at least the ``non_repudiation`` extension, but you may
+want to change that depending on your requirements.
+
+Values for extended key usage extensions can be specified as human-readable names, or as OIDs.
+The human-readable names are derived from the names in :class:`asn1crypto.x509.KeyPurposeId` in
+``asn1crypto``. If you need a key usage extension that doesn't appear in the list, you can specify
+it as a dotted OID value instead. By default, pyHanko does not require any specific extended key
+usage extensions to be present on the signer's certificate.
+
+This is an example showcasing key usage settings for a validation context named ``setup-a``:
+
+.. code-block:: yaml
+
+    validation-contexts:
+        setup-a:
+            trust: customca.pem.cert
+            trust-replace: true
+            other-certs: some-cert.pem.cert
+            signer-key-usage: ["digital_signature", "non_repudiation"]
+            signer-extd-key-usage: ["code_signing", "2.999"]
+
+.. note::
+
+    These key usage settings are mainly intended for use with validation, but are also checked when
+    signing with an active validation context.
+
+
 .. _style-definitions:
 
 Styles for stamping and signature appearances
