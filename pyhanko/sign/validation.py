@@ -64,7 +64,7 @@ class SigSeedValueValidationError(SignatureValidationError):
     #  seed value that tripped the failure.
 
     def __init__(self, failure_message):
-        self.failure_message = failure_message
+        self.failure_message = str(failure_message)
         super().__init__(failure_message)
 
 
@@ -321,6 +321,11 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
     if present.
     """
 
+    has_seed_values: bool = False
+    """
+    Records whether the signature form field has seed values.
+    """
+
     seed_value_constraint_error: Optional[SigSeedValueValidationError] = None
     """
     Records the reason for failure if the signature field's seed value
@@ -474,21 +479,22 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
             f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
         )
 
-        if self.seed_value_ok:
-            sv_info = "There were no SV issues detected for this signature."
-        else:
-            sv_info = (
-                "The signature did not satisfy the SV constraints on "
-                "the signature field.\nError message: "
-                + self.seed_value_constraint_error.failure_message
-            )
-
         sections = [
             ("Signer info", about_signer), ("Integrity", validity_info),
             ("Signing time", timing_info),
-            ("Seed value constraints", sv_info),
-            ("Bottom line", bottom_line)
         ]
+        if self.has_seed_values:
+            if self.seed_value_ok:
+                sv_info = "There were no SV issues detected for this signature."
+            else:
+                sv_info = (
+                    "The signature did not satisfy the SV constraints on "
+                    "the signature field.\nError message: "
+                    + self.seed_value_constraint_error.failure_message
+                )
+            sections.append(("Seed value constraints", sv_info))
+
+        sections.append(("Bottom line", bottom_line))
         return '\n'.join(
             fmt_section(hdr, body) for hdr, body in sections
         )
@@ -960,14 +966,11 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
                              signing_cert, validation_path, timestamp_found):
 
     sv_spec = emb_sig.seed_value_spec
-    if sv_spec is None:
-        return
-
     if sv_spec.cert is not None:
         try:
             sv_spec.cert.satisfied_by(signing_cert, validation_path)
         except UnacceptableSignerError as e:
-            raise SigSeedValueValidationError(e)
+            raise SigSeedValueValidationError(e) from e
 
     if not timestamp_found and sv_spec.timestamp_required:
         raise SigSeedValueValidationError(
@@ -1117,6 +1120,10 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
 
 
 def _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found):
+    sv_spec = embedded_sig.seed_value_spec
+    if sv_spec is None:
+        return
+    status_kwargs['has_seed_values'] = True
     try:
         _validate_sv_constraints(
             embedded_sig, status_kwargs['signing_cert'],

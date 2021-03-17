@@ -387,9 +387,12 @@ def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, *,
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     status = validate_pdf_signature(s, dummy_ocsp_vc())
+    summary = status.pretty_print_details()
     if test_violation:
+        assert 'not satisfy the SV constraints' in summary
         assert not status.seed_value_ok
     else:
+        assert 'no SV issues' in summary
         assert status.seed_value_ok
     return EmbeddedPdfSignature(r, s.sig_field, s.fq_name)
 
