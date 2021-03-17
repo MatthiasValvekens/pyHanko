@@ -207,6 +207,8 @@ def _build_vc_kwargs(ctx, validation_context, trust,
 
         if allow_fetching is not None:
             result['allow_fetching'] = allow_fetching
+        else:
+            result.setdefault('allow_fetching', True)
 
         return result
     except click.ClickException:
@@ -286,11 +288,23 @@ def _select_style(ctx, style_name, url):
     return style
 
 
-def _signature_status(ltv_profile, ltv_obsessive,
+def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
                       pretty_print, vc_kwargs, key_usage_settings,
                       executive_summary, embedded_sig):
     try:
         if ltv_profile is None:
+            if soft_revocation_check and force_revinfo:
+                raise click.ClickException(
+                    "--soft-revocation-check is incompatible with "
+                    "--force-revinfo"
+                )
+            if force_revinfo:
+                rev_mode = 'require'
+            elif soft_revocation_check:
+                rev_mode = 'soft-fail'
+            else:
+                rev_mode = 'hard-fail'
+            vc_kwargs['revocation_mode'] = rev_mode
             vc = ValidationContext(**vc_kwargs)
             status = validation.validate_pdf_signature(
                 embedded_sig, key_usage_settings=key_usage_settings,
@@ -300,7 +314,7 @@ def _signature_status(ltv_profile, ltv_obsessive,
             status = validation.validate_pdf_ltv_signature(
                 embedded_sig, ltv_profile,
                 key_usage_settings=key_usage_settings,
-                force_revinfo=ltv_obsessive,
+                force_revinfo=force_revinfo,
                 validation_context_kwargs=vc_kwargs
             )
         if executive_summary and not pretty_print:
@@ -326,13 +340,6 @@ def _signature_status(ltv_profile, ltv_obsessive,
             return msg
         else:
             return 'INVALID'
-    except Exception as e:
-        msg = 'Generic processing error: ' + str(e)
-        logger.error(msg, exc_info=e)
-        if pretty_print:
-            return msg
-        else:
-            return 'MALFORMED'
 
 
 # TODO add an option to do LTV, but guess the profile
@@ -349,16 +356,21 @@ def _signature_status(ltv_profile, ltv_obsessive,
               help='LTV signature validation profile',
               type=click.Choice(RevocationInfoValidationType.as_tuple()),
               required=False)
-@click.option('--ltv-obsessive',
+@click.option('--force-revinfo',
               help='Fail trust validation if a certificate has no known CRL '
                    'or OCSP endpoints.',
+              type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--soft-revocation-check',
+              help='Do not fail validation on revocation checking failures '
+                   '(meaningless for LTV validation)',
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--password', required=False, type=str,
               help='password to access the file (can also be read from stdin)')
 @click.pass_context
 def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
-                        other_certs, ltv_profile, ltv_obsessive, password):
+                        other_certs, ltv_profile, force_revinfo,
+                        soft_revocation_check, password):
 
     if pretty_print and executive_summary:
         raise click.ClickException(
@@ -369,7 +381,7 @@ def validate_signatures(ctx, infile, executive_summary,
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     vc_kwargs = _build_vc_kwargs(
-        ctx, validation_context, trust, trust_replace, other_certs
+        ctx, validation_context, trust, trust_replace, other_certs,
     )
 
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
@@ -399,8 +411,8 @@ def validate_signatures(ctx, infile, executive_summary,
         for ix, embedded_sig in enumerate(sigs):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
             status_str = _signature_status(
-                ltv_profile, ltv_obsessive, pretty_print, vc_kwargs,
-                key_usage_settings,
+                ltv_profile, force_revinfo, soft_revocation_check,
+                pretty_print, vc_kwargs, key_usage_settings,
                 executive_summary, embedded_sig
             )
             name = embedded_sig.field_name
