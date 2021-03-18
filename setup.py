@@ -12,7 +12,7 @@ from setuptools.command.egg_info import egg_info
 PACKAGE_NAME = 'pyhanko-certvalidator'
 EGG_NAME = PACKAGE_NAME.replace('-', '_')
 PYTHON_PACKAGE_NAME = 'certvalidator'
-PACKAGE_VERSION = '0.12.1'
+PACKAGE_VERSION = '0.13.0'
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 

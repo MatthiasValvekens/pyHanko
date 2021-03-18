@@ -98,7 +98,8 @@ class ValidationContext():
                  whitelisted_certs=None, moment=None, allow_fetching=False, crls=None,
                  crl_fetch_params=None, ocsps=None, ocsp_fetch_params=None,
                  revocation_mode="soft-fail", weak_hash_algos=None,
-                 time_tolerance=timedelta(seconds=1)):
+                 time_tolerance=timedelta(seconds=1),
+                 retroactive_revinfo=False):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -177,6 +178,11 @@ class ValidationContext():
         :param time_tolerance:
             Time delta tolerance allowed in validity checks.
             Defaults to one second.
+
+        :param retroactive_revinfo:
+            Treat revocation info as retroactively valid, i.e. ignore the
+            ``this_update`` field in CRLs and OCSP responses.
+            Defaults to ``False``.
         """
 
         if crls is not None:
@@ -365,6 +371,7 @@ class ValidationContext():
         self.time_tolerance = (
             abs(time_tolerance) if time_tolerance else timedelta(0)
         )
+        self.retroactive_revinfo = retroactive_revinfo
 
     @property
     def crls(self):
