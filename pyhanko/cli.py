@@ -364,13 +364,20 @@ def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
               help='Do not fail validation on revocation checking failures '
                    '(meaningless for LTV validation)',
               type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--no-revocation-check',
+              help='Do not attempt to check revocation status '
+                   '(meaningless for LTV validation)',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--password', required=False, type=str,
               help='password to access the file (can also be read from stdin)')
 @click.pass_context
 def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
                         other_certs, ltv_profile, force_revinfo,
-                        soft_revocation_check, password):
+                        soft_revocation_check, no_revocation_check, password):
+
+    if no_revocation_check:
+        soft_revocation_check = True
 
     if pretty_print and executive_summary:
         raise click.ClickException(
@@ -382,6 +389,7 @@ def validate_signatures(ctx, infile, executive_summary,
 
     vc_kwargs = _build_vc_kwargs(
         ctx, validation_context, trust, trust_replace, other_certs,
+        allow_fetching=False if no_revocation_check else None
     )
 
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
