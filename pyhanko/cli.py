@@ -168,10 +168,16 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
 def _build_vc_kwargs(ctx, validation_context, trust,
-                     trust_replace, other_certs, allow_fetching=None):
+                     trust_replace, other_certs, retroactive_revinfo,
+                     allow_fetching=None):
     cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
     try:
         if validation_context is not None:
+            if any((trust, other_certs)):
+                raise click.ClickException(
+                    "--validation-context is incompatible with --trust "
+                    "and --other-certs"
+                )
             # load the desired context from config
             if cli_config is None:
                 raise click.ClickException("No config file specified.")
@@ -190,7 +196,9 @@ def _build_vc_kwargs(ctx, validation_context, trust,
         elif trust or other_certs:
             # load a validation profile using command line kwargs
             result = init_validation_context_kwargs(
-                trust, trust_replace, other_certs
+                trust=trust, trust_replace=trust_replace,
+                other_certs=other_certs,
+                retroactive_revinfo=retroactive_revinfo
             )
         elif cli_config is not None:
             # load the default settings from the CLI config
@@ -210,6 +218,10 @@ def _build_vc_kwargs(ctx, validation_context, trust,
         else:
             result.setdefault('allow_fetching', True)
 
+        # allow CLI --retroactive-revinfo flag to override settings
+        # if necessary
+        if retroactive_revinfo:
+            result['retroactive_revinfo'] = True
         return result
     except click.ClickException:
         raise
@@ -368,13 +380,18 @@ def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
               help='Do not attempt to check revocation status '
                    '(meaningless for LTV validation)',
               type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--retroactive-revinfo',
+              help='Treat revocation info as retroactively valid '
+                   '(i.e. ignore thisUpdate timestamp)',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--password', required=False, type=str,
               help='password to access the file (can also be read from stdin)')
 @click.pass_context
 def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
                         other_certs, ltv_profile, force_revinfo,
-                        soft_revocation_check, no_revocation_check, password):
+                        soft_revocation_check, no_revocation_check, password,
+                        retroactive_revinfo):
 
     if no_revocation_check:
         soft_revocation_check = True
@@ -389,6 +406,7 @@ def validate_signatures(ctx, infile, executive_summary,
 
     vc_kwargs = _build_vc_kwargs(
         ctx, validation_context, trust, trust_replace, other_certs,
+        retroactive_revinfo,
         allow_fetching=False if no_revocation_check else None
     )
 
@@ -456,13 +474,18 @@ def list_sigfields(infile, skip_status):
 @click.argument('infile', type=click.File('r+b'))
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=True, type=str, default=None)
+@click.option('--retroactive-revinfo',
+              help='Treat revocation info as retroactively valid '
+                   '(i.e. ignore thisUpdate timestamp)',
+              type=bool, is_flag=True, default=False, show_default=True)
 @trust_options
 @click.pass_context
 def lta_update(ctx, infile, validation_context, trust, trust_replace,
-               other_certs, timestamp_url):
+               other_certs, timestamp_url, retroactive_revinfo):
     with pyhanko_exception_manager():
         vc_kwargs = _build_vc_kwargs(
-            ctx, validation_context, trust, trust_replace, other_certs
+            ctx, validation_context, trust, trust_replace, other_certs,
+            retroactive_revinfo
         )
         timestamper = HTTPTimeStamper(timestamp_url)
         r = PdfFileReader(infile)
@@ -500,11 +523,15 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
     required=False, type=str
 )
 @trust_options
+@click.option('--retroactive-revinfo',
+              help='Treat revocation info as retroactively valid '
+                   '(i.e. ignore thisUpdate timestamp)',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
-           style_name, stamp_url, prefer_pss):
+           style_name, stamp_url, prefer_pss, retroactive_revinfo):
     ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
     ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
     ctx.obj[Ctx.PREFER_PSS] = prefer_pss
@@ -518,7 +545,7 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
     if with_validation_info:
         vc_kwargs = _build_vc_kwargs(
             ctx, validation_context, trust, trust_replace, other_certs,
-            allow_fetching=True
+            retroactive_revinfo, allow_fetching=True
         )
         vc = ValidationContext(**vc_kwargs)
         key_usage_sett = _get_key_usage_settings(ctx, validation_context)

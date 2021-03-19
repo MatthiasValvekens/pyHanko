@@ -61,6 +61,7 @@ class CLIConfig:
     default_validation_context: str
     default_stamp_style: str
     time_tolerance: timedelta
+    retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
 
     # TODO graceful error handling for syntax & type issues?
@@ -76,7 +77,9 @@ class CLIConfig:
 
     def get_validation_context(self, name=None, as_dict=False):
         vc_config = self._get_validation_settings_raw(name)
-        vc_kwargs = parse_trust_config(vc_config, self.time_tolerance)
+        vc_kwargs = parse_trust_config(
+            vc_config, self.time_tolerance, self.retroactive_revinfo
+        )
         return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
 
     def get_signer_key_usages(self, name=None) -> KeyUsageConstraints:
@@ -116,13 +119,21 @@ class CLIConfig:
         return cls.from_config(style_config)
 
 
-def init_validation_context_kwargs(trust, trust_replace, other_certs,
+def init_validation_context_kwargs(*, trust, trust_replace, other_certs,
+                                   retroactive_revinfo=False,
                                    time_tolerance=None):
-    vc_kwargs = {
-        'time_tolerance':
-            timedelta(seconds=DEFAULT_TIME_TOLERANCE) if time_tolerance is None
-            else time_tolerance
-    }
+    if not isinstance(time_tolerance, timedelta):
+        if time_tolerance is None:
+            time_tolerance = timedelta(seconds=DEFAULT_TIME_TOLERANCE)
+        elif isinstance(time_tolerance, int):
+            time_tolerance = timedelta(seconds=time_tolerance)
+        else:
+            raise ConfigurationError(
+                "time-tolerance parameter must be specified in seconds"
+            )
+    vc_kwargs = {'time_tolerance': time_tolerance}
+    if retroactive_revinfo:
+        vc_kwargs['retroactive_revinfo'] = True
     if trust:
         if isinstance(trust, str):
             trust = (trust,)
@@ -143,10 +154,12 @@ def init_validation_context_kwargs(trust, trust_replace, other_certs,
 #  in some cases)
 # Time-related settings are probably better off in the CLI.
 
-def parse_trust_config(trust_config, time_tolerance) -> dict:
+def parse_trust_config(trust_config, time_tolerance,
+                       retroactive_revinfo) -> dict:
     check_config_keys(
         'ValidationContext',
         ('trust', 'trust-replace', 'other-certs',
+         'time-tolerance', 'retroactive-revinfo',
          'signer-key-usage', 'signer-extd-key-usage'),
         trust_config
     )
@@ -154,7 +167,10 @@ def parse_trust_config(trust_config, time_tolerance) -> dict:
         trust=trust_config.get('trust'),
         trust_replace=trust_config.get('trust-replace', False),
         other_certs=trust_config.get('other-certs'),
-        time_tolerance=time_tolerance
+        time_tolerance=trust_config.get('time-tolerance', time_tolerance),
+        retroactive_revinfo=trust_config.get(
+            'retroactive-revinfo', retroactive_revinfo
+        )
     )
 
 
@@ -292,12 +308,19 @@ def parse_cli_config(yaml_str):
     default_stamp_style = config_dict.get(
         'default-stamp-style', DEFAULT_STAMP_STYLE
     )
-    time_tolerance = timedelta(
-        seconds=config_dict.get('time-tolerance', DEFAULT_TIME_TOLERANCE)
+    time_tolerance_seconds = config_dict.get(
+        'time-tolerance', DEFAULT_TIME_TOLERANCE
     )
+    if not isinstance(time_tolerance_seconds, int):
+        raise ConfigurationError(
+            "time-tolerance parameter must be specified in seconds"
+        )
+
+    time_tolerance = timedelta(seconds=time_tolerance_seconds)
+    retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
     return CLIConfig(
         validation_contexts=vcs, default_validation_context=default_vc,
-        time_tolerance=time_tolerance, stamp_styles=stamp_configs,
-        default_stamp_style=default_stamp_style,
+        time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
+        stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
         log_config=log_config
     )

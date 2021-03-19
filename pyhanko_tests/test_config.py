@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 import pytest
 
 from pyhanko import config, stamp
-from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL
+from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL, \
+    DEFAULT_TIME_TOLERANCE, init_validation_context_kwargs
 from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
@@ -269,3 +272,124 @@ def test_key_usage_errors(key_usage_str):
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     with pytest.raises(ConfigurationError):
         cli_config.get_signer_key_usages()
+
+
+@pytest.mark.parametrize('config_string, result', [
+    (f"""
+    time-tolerance: 5
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, 5),
+    (f"""
+    time-tolerance: 5
+    validation-contexts:
+        default:
+            time-tolerance: 7
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, 7),
+    (f"""
+    validation-contexts:
+        default:
+            time-tolerance: 7
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, 7),
+
+    (f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, DEFAULT_TIME_TOLERANCE)
+])
+def test_read_time_tolerance(config_string, result):
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    vc_kwargs = cli_config.get_validation_context(as_dict=True)
+    assert vc_kwargs['time_tolerance'] == timedelta(seconds=result)
+
+
+def test_read_time_tolerance_input_issues():
+    config_string = f"""
+    validation-contexts:
+        default:
+            time-tolerance: "this makes no sense"
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+    """
+    with pytest.raises(ConfigurationError, match='time-tolerance.*'):
+        cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+        cli_config.get_validation_context(as_dict=True)
+
+    config_string = f"""
+    time-tolerance: "this makes no sense"
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+    """
+    with pytest.raises(ConfigurationError, match='time-tolerance.*'):
+        cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+        cli_config.get_validation_context(as_dict=True)
+
+    vc_kwargs = init_validation_context_kwargs(
+        trust=[], trust_replace=False, other_certs=[]
+    )
+    assert 'retroactive_revinfo' not in vc_kwargs
+    assert vc_kwargs['time_tolerance'] == timedelta(
+        seconds=DEFAULT_TIME_TOLERANCE
+    )
+
+
+@pytest.mark.parametrize('config_string, result', [
+    (f"""
+    retroactive-revinfo: true
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, True),
+    (f"""
+    retroactive-revinfo: true
+    validation-contexts:
+        default:
+            retroactive-revinfo: false
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, False),
+    (f"""
+    retroactive-revinfo: false
+    validation-contexts:
+        default:
+            retroactive-revinfo: true
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, True),
+    (f"""
+    validation-contexts:
+        default:
+            retroactive-revinfo: true
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, True),
+    (f"""
+    validation-contexts:
+        default:
+            retroactive-revinfo: "yes"
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, True),
+    (f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+    """, False)
+])
+def test_read_retroactive_revinfo(config_string, result):
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    vc_kwargs = cli_config.get_validation_context(as_dict=True)
+    if result is False:
+        assert 'retroactive_revinfo' not in vc_kwargs
+    else:
+        assert vc_kwargs['retroactive_revinfo']
