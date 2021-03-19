@@ -2,7 +2,7 @@ name: pytest
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, "feature/*" ]
   pull_request:
     branches: [ master ]
 
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.9]  # 3.8 is taken care of by pytest-coverage
+        python-version: [3.7, 3.8, 3.9]
 
     steps:
     - uses: actions/checkout@v2
