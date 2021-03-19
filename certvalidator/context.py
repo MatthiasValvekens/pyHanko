@@ -183,6 +183,11 @@ class ValidationContext():
             Treat revocation info as retroactively valid, i.e. ignore the
             ``this_update`` field in CRLs and OCSP responses.
             Defaults to ``False``.
+
+            .. warning::
+                Be careful with this option, since it will cause incorrect
+                behaviour for CAs that make use of certificate holds or other
+                reversible revocation methods.
         """
 
         if crls is not None:

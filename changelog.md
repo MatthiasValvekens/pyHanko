@@ -1,5 +1,13 @@
 # changelog
 
+## 0.13.0
+ - Added an optional `retroactive_revinfo` flag to `ValidationContext` to ignore the
+   `thisUpdate` field in OCSP responses and CRLs. 
+   The effect of this is that CRLs and OCSP responses are also considered valid
+   for point-in-time validation with respect to a time in the past.
+   This is useful for some validation profiles. The default state of the flag
+   remains `False` nonetheless.
+
 ## 0.12.1
  - Fixed a packaging error.
 
