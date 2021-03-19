@@ -13,6 +13,8 @@ __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError'
 ]
 
+from io import BytesIO
+
 from typing import Callable, TypeVar, Generator, Iterable
 
 rd = lambda x: round(x, 4)
@@ -290,3 +292,43 @@ class ConsList:
 
     def __repr__(self):  # pragma: nocover
         return f"ConsList({list(reversed(list(self)))})"
+
+
+def prepare_rw_output_stream(output):
+    """
+    Prepare an output stream that supports both reading and writing.
+    Intended to be used for writing & updating signed files:
+    when producing a signature, we render the PDF to a byte buffer with
+    placeholder values for the signature data, or straight to the provided
+    output stream if possible.
+
+    More precisely: this function will return the original output stream
+    if it is writable, readable and seekable.
+    If the ``output`` parameter is ``None``, not readable or not seekable,
+    this function will return a :class:`.BytesIO` instance instead.
+    If the ``output`` parameter is not ``None`` and not writable,
+    :class:`.IOError` will be raised.
+
+    :param output:
+        A writable file-like object, or ``None``.
+    :return:
+        A file-like object that supports reading, writing and seeking.
+    """
+    if output is None:
+        output = BytesIO()
+    else:
+        # Rationale for the explicit writability check:
+        #  If the output buffer is not readable or not seekable, it's
+        #  about to be replaced with a BytesIO instance, and in that
+        #  case, the write error would only happen *after* the signing
+        #  operations are done. We want to avoid that scenario.
+        if not output.writable():
+            raise IOError(
+                "Output buffer is not writable"
+            )  # pragma: nocover
+        if not output.seekable() or not output.readable():
+            output = BytesIO()
+
+    return output
+
+

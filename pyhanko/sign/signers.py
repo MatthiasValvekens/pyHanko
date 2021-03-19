@@ -128,28 +128,6 @@ class DERPlaceholder(generic.PdfObject):
 DEFAULT_SIG_SUBFILTER = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
 
-def _prepare_signable_output(output):
-    # Render the PDF to a byte buffer with placeholder values
-    # for the signature data, or straight to the provided output stream
-    # if possible
-    if output is None:
-        output = BytesIO()
-    else:
-        # Rationale for the explicit writability check:
-        #  If the output buffer is not readable or not seekable, it's
-        #  about to be replaced with a BytesIO instance, and in that
-        #  case, the write error would only happen *after* the signing
-        #  operations are done. We want to avoid that scenario.
-        if not output.writable():
-            raise IOError(
-                "Output buffer is not writable"
-            )  # pragma: nocover
-        if not output.seekable() or not output.readable():
-            output = BytesIO()
-
-    return output
-
-
 class PdfByteRangeDigest(generic.DictionaryObject):
 
     def __init__(self, data_key=pdf_name('/Contents'), *, bytes_reserved=None):
@@ -182,7 +160,7 @@ class PdfByteRangeDigest(generic.DictionaryObject):
             output = writer.prev.stream
             writer.write_in_place()
         else:
-            output = _prepare_signable_output(output)
+            output = misc.prepare_rw_output_stream(output)
 
             writer.write(output)
 
@@ -1771,7 +1749,7 @@ class PdfTimeStamper:
         if in_place:
             output = reader.stream
         else:
-            output = _prepare_signable_output(output)
+            output = misc.prepare_rw_output_stream(output)
             reader.stream.seek(0)
             misc.chunked_write(
                 bytearray(chunk_size), reader.stream, output

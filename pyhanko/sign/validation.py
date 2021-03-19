@@ -46,6 +46,7 @@ __all__ = [
     'apply_adobe_revocation_info', 'get_timestamp_chain',
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
+    'collect_validation_info', 'add_validation_info',
     'ValidationInfoReadingError', 'SigSeedValueValidationError'
 ]
 
@@ -1690,6 +1691,116 @@ def enumerate_ocsp_certs(ocsp_response):
             yield from response['certs']
 
 
+def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
+                            validation_context: ValidationContext,
+                            skip_timestamp=False):
+    """
+    Query revocation info for a PDF signature using a validation context,
+    and store the results in a validation context.
+
+    This works by validating the signer's certificate against the provided
+    validation context, which causes revocation info to be cached for
+    later retrieval.
+
+    .. warning::
+        This function does *not* actually validate the signature, but merely
+        checks the signer certificate's chain of trust.
+
+    :param embedded_sig:
+        Embedded PDF signature to operate on.
+    :param validation_context:
+        Validation context to use.
+    :param skip_timestamp:
+        If the signature has a time stamp token attached to it, also collect
+        revocation information for the timestamp.
+    """
+
+    if validation_context.revocation_mode == 'soft-fail':
+        logger.warning(
+            "Revocation mode is set to soft-fail; collected revocation "
+            "information may be incomplete."
+        )
+
+    def _validate_signed_data(signed_data):
+        signer_info, cert, other_certs = \
+            _extract_signer_info_and_certs(signed_data)
+
+        validator = CertificateValidator(
+            cert, intermediate_certs=other_certs,
+            validation_context=validation_context
+        )
+        validator.validate_usage(key_usage=set())
+
+    _validate_signed_data(embedded_sig.signed_data)
+    if not skip_timestamp and embedded_sig.attached_timestamp_data is not None:
+        _validate_signed_data(embedded_sig.attached_timestamp_data)
+
+
+def add_validation_info(embedded_sig: EmbeddedPdfSignature,
+                        validation_context: ValidationContext,
+                        skip_timestamp=False, add_vri_entry=True,
+                        in_place=False, output=None, chunk_size=4096):
+    """
+    Add validation info (CRLs, OCSP responses, extra certificates) for a
+    signature to the DSS of a document in an incremental update.
+    This is a wrapper around :func:`collect_validation_info`.
+
+    :param embedded_sig:
+        The signature for which the revocation information needs to be
+        collected.
+    :param validation_context:
+        The validation context to use.
+    :param skip_timestamp:
+        If ``True``, do not attempt to validate the timestamp attached to
+        the signature, if one is present.
+    :param add_vri_entry:
+        Add a ``/VRI`` entry for this signature to the document security store.
+        Default is ``True``.
+    :param output:
+        Write the output to the specified output stream.
+        If ``None``, write to a new :class:`.BytesIO` object.
+        Default is ``None``.
+    :param in_place:
+        Sign the original input stream in-place.
+        This parameter overrides ``output``.
+    :param chunk_size:
+        Chunk size parameter to use when copying output to a new stream
+        (irrelevant if ``in_place`` is ``True``).
+    :return:
+        The (file-like) output object to which the result was written.
+    """
+
+    reader: PdfFileReader = embedded_sig.reader
+    if in_place:
+        output = reader.stream
+    # Take care of this first, so we get any errors re: stream properties out
+    # of the way before doing the (potentially) expensive validation operations
+    output = misc.prepare_rw_output_stream(output)
+
+    # if the output is not the same as the input reader's stream, copy the
+    # original file contents to the output before calling add_dss
+    if not in_place:
+        temp_buffer = bytearray(chunk_size)
+        reader.stream.seek(0)
+        misc.chunked_write(temp_buffer, reader.stream, output)
+
+    collect_validation_info(
+        embedded_sig, validation_context, skip_timestamp=skip_timestamp
+    )
+
+    # TODO Since add_dss has to re-parse the xref table, this is suboptimal
+    #  in terms of efficiency, but we can iterate on that later
+    if add_vri_entry:
+        sig_contents = embedded_sig.pkcs7_content.hex().encode('ascii')
+    else:
+        sig_contents = None
+
+    DocumentSecurityStore.add_dss(
+        output, sig_contents, validation_context=validation_context
+    )
+    return output
+
+
 class DocumentSecurityStore:
     """
     Representation of a DSS in Python.
@@ -1955,7 +2066,8 @@ class DocumentSecurityStore:
         :param output_stream:
             Output stream to write to.
         :param sig_contents:
-            Contents of the new signature (used to compute the VRI hash).
+            Contents of the new signature (used to compute the VRI hash), as
+            as a hexadecimal string, including any padding.
             If ``None``, the information will not be added to any VRI
             dictionary.
         :param certs:
