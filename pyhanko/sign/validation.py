@@ -1782,6 +1782,8 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
     :param skip_timestamp:
         If the signature has a time stamp token attached to it, also collect
         revocation information for the timestamp.
+    :return:
+        A list of validation paths.
     """
 
     if validation_context.revocation_mode == 'soft-fail':
@@ -1789,6 +1791,8 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
             "Revocation mode is set to soft-fail; collected revocation "
             "information may be incomplete."
         )
+
+    paths = []
 
     def _validate_signed_data(signed_data):
         signer_info, cert, other_certs = \
@@ -1798,11 +1802,14 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
             cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
-        validator.validate_usage(key_usage=set())
+        path = validator.validate_usage(key_usage=set())
+        paths.append(path)
 
     _validate_signed_data(embedded_sig.signed_data)
     if not skip_timestamp and embedded_sig.attached_timestamp_data is not None:
         _validate_signed_data(embedded_sig.attached_timestamp_data)
+
+    return paths
 
 
 def add_validation_info(embedded_sig: EmbeddedPdfSignature,
@@ -1853,7 +1860,7 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
         reader.stream.seek(0)
         misc.chunked_write(temp_buffer, reader.stream, output)
 
-    collect_validation_info(
+    paths = collect_validation_info(
         embedded_sig, validation_context, skip_timestamp=skip_timestamp
     )
 
@@ -1865,7 +1872,8 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
         sig_contents = None
 
     DocumentSecurityStore.add_dss(
-        output, sig_contents, validation_context=validation_context
+        output, sig_contents, validation_context=validation_context,
+        paths=paths
     )
     return output
 
