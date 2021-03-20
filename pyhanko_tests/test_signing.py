@@ -1645,6 +1645,16 @@ def test_pades_lta_sign_twice(requests_mock):
         stream, requests_mock, no_write=True, has_more_sigs=True
     )
 
+    # and the second one (i.e. 3rd in the embedded_signatures list),
+    # just because we can:
+    with freeze_time('2025-12-01'):
+        validate_pdf_ltv_signature(
+            PdfFileReader(stream).embedded_signatures[2],
+            validation_type=RevocationInfoValidationType.PADES_LTA,
+            validation_context_kwargs={'trust_roots': TRUST_ROOTS},
+            bootstrap_validation_context=live_testing_vc(requests_mock)
+        )
+
 
 def test_pades_lta_sign_twice_post_expiry(requests_mock):
     stream = BytesIO(MINIMAL_TWO_FIELDS)
@@ -2492,3 +2502,99 @@ def test_add_revinfo_without_timestamp(requests_mock):
                 emb_sig, RevocationInfoValidationType.PADES_LT,
                 {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True}
             )
+
+        # ... and certainly for LTA
+        with pytest.raises(SignatureValidationError,
+                           match='Purported.*LTA.*'):
+            validate_pdf_ltv_signature(
+                emb_sig, RevocationInfoValidationType.PADES_LTA,
+                {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True}
+            )
+
+
+def test_add_revinfo_and_timestamp(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    # create signature without revocation info
+    with freeze_time('2020-11-01'):
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA, in_place=True
+        )
+
+    # fast forward 1 month
+    with freeze_time('2020-12-01'):
+        vc = live_testing_vc(requests_mock)
+        r = PdfFileReader(out)
+        emb_sig = r.embedded_signatures[0]
+        out = add_validation_info(emb_sig, vc)
+
+        timestamper = signers.PdfTimeStamper(timestamper=DUMMY_TS)
+        timestamper.timestamp_pdf(
+            IncrementalPdfFileWriter(out), 'sha256', vc, in_place=True
+        )
+
+        r = PdfFileReader(out)
+        emb_sig = r.embedded_signatures[0]
+
+        # This should suffice for PAdES-LT, even without retroactive_revinfo
+        # (since the new timestamp is now effectively the only trusted record
+        #  of the signing time anyway)
+        status = validate_pdf_ltv_signature(
+            emb_sig, RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS}
+        )
+        assert status.valid and status.trusted
+        assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
+
+        # ... but PAdES-LTA should fail
+        with pytest.raises(SignatureValidationError,
+                           match='.*requires separate timestamps.*'):
+            validate_pdf_ltv_signature(
+                emb_sig, RevocationInfoValidationType.PADES_LTA,
+                {'trust_roots': TRUST_ROOTS}
+            )
+
+
+def test_add_revinfo_and_lta_timestamp(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+
+    # create signature without revocation info
+    with freeze_time('2020-11-01'):
+        out = signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA, in_place=True
+        )
+
+    # fast forward 1 month
+    with freeze_time('2020-12-01'):
+        vc = live_testing_vc(requests_mock)
+        r = PdfFileReader(out)
+        emb_sig = r.embedded_signatures[0]
+        out = add_validation_info(emb_sig, vc)
+
+        timestamper = signers.PdfTimeStamper(timestamper=DUMMY_TS)
+        timestamper.timestamp_pdf(
+            IncrementalPdfFileWriter(out), 'sha256', vc, in_place=True
+        )
+        timestamper.update_archival_timestamp_chain(PdfFileReader(out), vc)
+
+        r = PdfFileReader(out)
+        emb_sig = r.embedded_signatures[0]
+
+        status = validate_pdf_ltv_signature(
+            emb_sig, RevocationInfoValidationType.PADES_LTA,
+            {'trust_roots': TRUST_ROOTS}
+        )
+        assert status.valid and status.trusted
+        assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
+
+    # test post-expiration, but before timestamp expires
+    with freeze_time('2025-11-01'):
+        r = PdfFileReader(out)
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], RevocationInfoValidationType.PADES_LTA,
+            {'trust_roots': TRUST_ROOTS},
+            bootstrap_validation_context=live_testing_vc(requests_mock)
+        )
+        assert status.valid and status.trusted

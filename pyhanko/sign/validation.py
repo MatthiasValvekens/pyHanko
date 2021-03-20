@@ -1402,7 +1402,10 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
     timestamps = get_timestamp_chain(reader)
     validation_context_kwargs = dict(validation_context_kwargs)
     current_vc = bootstrap_validation_context
-    for emb_timestamp in timestamps:
+    ts_status = None
+    ts_count = -1
+    emb_timestamp = None
+    for ts_count, emb_timestamp in enumerate(timestamps):
         if emb_timestamp.signed_revision < until_revision:
             break
 
@@ -1420,13 +1423,16 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
             reader.get_historical_resolver(emb_timestamp.signed_revision)
         ).as_validation_context(validation_context_kwargs)
 
-    return current_vc
+    return emb_timestamp, ts_status, ts_count + 1, current_vc
 
 
 # TODO verify formal PAdES requirements for timestamps
 # TODO verify other formal PAdES requirements (coverage, etc.)
 # TODO signature/verification policy-based validation! (PAdES-EPES-* etc)
 #  (this is a different beast, though)
+# TODO "tolerant" timestamp validation, where we tolerate problems in the
+#  timestamp chain provided that newer timestamps are "strong" enough to
+#  cover the gap.
 def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                validation_type: RevocationInfoValidationType,
                                validation_context_kwargs=None,
@@ -1498,37 +1504,70 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     embedded_sig.compute_digest()
     embedded_sig.compute_tst_digest()
 
-    # first, we need to validate the timestamp (or timestamp chain) *now*
-    # in particular, this implies that we can't just use revocation info
-    # from the DSS yet, since we don't yet trust the timestamp to be accurate
-    # There are two main cases:
-    #  (a) We're doing PAdES B-LT or Adobe-style verification.
-    #      In that case, we simply attempt to validate the timestamp as-is.
-    #  (b) We're doing PAdES B-LTA. In this case, we first verify the document
-    #      timestamp chain until the revision in which the signature appears.
-    #      This is bootstrapped using the current validation context.
-    #      If successful, we obtain a new validation context set to a new
-    #      "known good" verification time. We then proceed as in (a) using this
-    #      new validation context instead of the current one.
-    if validation_type == RevocationInfoValidationType.PADES_LTA:
-        current_vc = _establish_timestamp_trust_lta(
-            reader, current_vc, validation_context_kwargs,
-            until_revision=embedded_sig.signed_revision
+    # If the validation profile is PAdES-type, then we validate the timestamp
+    #  chain now.
+    #  This is bootstrapped using the current validation context.
+    #  If successful, we obtain a new validation context set to a new
+    #  "known good" verification time. We then repeat the process using this
+    #  new validation context instead of the current one.
+    earliest_good_timestamp_st = None
+    ts_chain_length = 0
+    # also record the embedded sig object assoc. with the oldest applicable
+    # DTS in the timestamp chain
+    latest_dts = None
+    if validation_type != RevocationInfoValidationType.ADOBE_STYLE:
+        latest_dts, earliest_good_timestamp_st, ts_chain_length, current_vc = \
+            _establish_timestamp_trust_lta(
+                reader, current_vc, validation_context_kwargs,
+                until_revision=embedded_sig.signed_revision
+            )
+        # In PAdES-LTA, we should only rely on DSS information that is covered
+        # by an appropriate document timestamp.
+        # If the validation profile is PAdES-LTA, then we must have seen
+        # at least one document timestamp pass by, i.e. earliest_known_timestamp
+        # must be non-None by now.
+        if earliest_good_timestamp_st is None \
+                and validation_type == RevocationInfoValidationType.PADES_LTA:
+            raise SignatureValidationError(
+                "Purported PAdES-LTA signature does not have a timestamp chain."
+            )
+        # if this assertion fails, there's a bug in the validation code
+        assert validation_type == RevocationInfoValidationType.PADES_LT \
+               or ts_chain_length >= 1
+
+    # now that we have arrived at the revision with the signature,
+    # we can check for a timestamp token attribute there
+    # (This is allowed, regardless of whether we use Adobe-style LTV or
+    # a PAdES validation profile)
+    tst_signed_data = embedded_sig.attached_timestamp_data
+    if tst_signed_data is not None:
+        earliest_good_timestamp_st = _establish_timestamp_trust(
+            tst_signed_data, current_vc, embedded_sig.tst_signature_digest
+        )
+    elif validation_type == RevocationInfoValidationType.PADES_LTA \
+            and ts_chain_length == 1:
+        # TODO Pretty sure that this is the spirit of the LTA profile,
+        #  but are we being too harsh here? I don't think so, but it's worth
+        #  revisiting later
+        # For later review: I believe that this check is appropriate, because
+        # the timestamp that protects the signature should be verifiable
+        # using only information from the next DSS, which should in turn
+        # also be protected using a DTS. This requires at least two timestamps.
+        raise SignatureValidationError(
+            "PAdES-LTA signature requires separate timestamps protecting "
+            "the signature & the rest of the revocation info."
         )
 
-    # FIXME in the LTA case, this is an unreasonable requirement (since the
-    #  /DocTimeStamps can serve this purpose)
-    tst_signed_data = embedded_sig.attached_timestamp_data
-    if tst_signed_data is None:
+    # if, by now, we still don't have a trusted timestamp, there's a problem
+    # regardless of the validation profile in use.
+    if earliest_good_timestamp_st is None:
         raise SignatureValidationError(
             'LTV signatures require a trusted timestamp.'
         )
 
-    ts_result = _establish_timestamp_trust(
-        tst_signed_data, current_vc, embedded_sig.tst_signature_digest
+    _strict_vc_context_kwargs(
+        earliest_good_timestamp_st.timestamp, validation_context_kwargs
     )
-    timestamp = ts_result.timestamp
-    _strict_vc_context_kwargs(timestamp, validation_context_kwargs)
 
     if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
         ocsps, crls = retrieve_adobe_revocation_info(
@@ -1537,22 +1576,52 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         validation_context_kwargs['ocsps'] = ocsps
         validation_context_kwargs['crls'] = crls
         stored_vc = ValidationContext(**validation_context_kwargs)
-    else:
+    elif validation_type == RevocationInfoValidationType.PADES_LT:
+        # in this case, we don't care about whether the information
+        # in the DSS is protected by any timestamps, so just ingest everything
         stored_vc = dss.as_validation_context(validation_context_kwargs)
+    else:
+        # in the LTA profile, we should use only DSS information covered
+        # by the last relevant timestamp, so the correct VC is current_vc
+        current_vc.moment = earliest_good_timestamp_st.timestamp
+        stored_vc = current_vc
 
-    # next, we validate the timestamp *again*, this time using the data
-    # in the DSS / revocation info store.
-    timestamp_status: TimestampSignatureStatus = validate_cms_signature(
-        tst_signed_data, status_cls=TimestampSignatureStatus,
-        validation_context=stored_vc, status_kwargs={'timestamp': timestamp}
-    )
+    # Now, we evaluate the validity of the timestamp guaranteeing the signature
+    #  *within* the LTV context.
+    #   (i.e. we check whether there's enough revinfo to keep tabs on the
+    #   timestamp's validity)
+    # If the last timestamp comes from a timestamp token attached to the
+    # signature, it should be possible to validate it using only data from the
+    # DSS / revocation info store, so validate the timestamp *again*
+    # using those settings.
+
+    if tst_signed_data is not None or \
+            validation_type == RevocationInfoValidationType.PADES_LT:
+        if tst_signed_data is not None:
+            ts_to_validate = tst_signed_data
+        else:
+            # we're in the PAdES-LT case with a detached TST now.
+            # this should be conceptually equivalent to the above
+            # so we run the same check here
+            ts_to_validate = latest_dts.signed_data
+        timestamp_status: TimestampSignatureStatus = validate_cms_signature(
+            ts_to_validate, status_cls=TimestampSignatureStatus,
+            validation_context=stored_vc, status_kwargs={
+                'timestamp': earliest_good_timestamp_st.timestamp
+            }
+        )
+    else:
+        # In the LTA case, we don't have to do any further checks, since the
+        # _establish_timestamp_trust_lta handled that for us.
+        # We can therefore just take earliest_good_timestamp_st at face value.
+        timestamp_status = earliest_good_timestamp_st
 
     embedded_sig.compute_integrity_info(
         diff_policy=diff_policy, skip_diff=skip_diff
     )
     status_kwargs = embedded_sig.summarise_integrity_info()
     status_kwargs.update({
-        'signer_reported_dt': timestamp,
+        'signer_reported_dt': earliest_good_timestamp_st.timestamp,
         'timestamp_validity': timestamp_status
     })
     status_kwargs = _validate_cms_signature(
