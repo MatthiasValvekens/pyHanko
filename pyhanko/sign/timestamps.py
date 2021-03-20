@@ -258,7 +258,7 @@ class DummyTimeStamper(TimeStamper):
                  override_md=None):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
-        self.certs_to_embed = list(certs_to_embed) or []
+        self.certs_to_embed = list(certs_to_embed or ())
         self.fixed_dt = fixed_dt
         self.override_md = override_md
         super().__init__()
