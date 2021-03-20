@@ -494,6 +494,59 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
         )
 
 
+# TODO perhaps add an option here to fix the lack of a timestamp and/or
+#  warn if none is present
+
+@signing.command(name='ltvfix',
+                 help='add revocation information for a signature to the '
+                      'document security store')
+@click.argument('infile', type=click.File('r+b'))
+@click.option('--field', help='name of the signature field', required=True)
+@click.option('--timestamp-url', help='URL for timestamp server',
+              required=False, type=str, default=None)
+@click.option('--apply-lta-timestamp',
+              help='Apply a document timestamp after adding revocation info.',
+              required=False, type=bool, default=False, is_flag=True,
+              show_default=True)
+@trust_options
+@click.pass_context
+def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
+            validation_context, trust_replace, trust, other_certs):
+    if apply_lta_timestamp and not timestamp_url:
+        raise click.ClickException(
+            "Please specify a timestamp server using --timestamp-url."
+        )
+
+    vc_kwargs = _build_vc_kwargs(
+        ctx, validation_context, trust, trust_replace, other_certs,
+        retroactive_revinfo=False, allow_fetching=True
+    )
+    vc_kwargs['revocation_mode'] = 'hard-fail'
+    r = PdfFileReader(infile)
+
+    try:
+        emb_sig = next(
+            s for s in r.embedded_signatures
+            if s.sig_object.get('/Type', None) == '/Sig'
+            and s.field_name == field
+        )
+    except StopIteration:
+        raise click.ClickException(
+            f"Could not find a PDF signature labelled {field}."
+        )
+
+    output = validation.add_validation_info(
+        emb_sig, ValidationContext(**vc_kwargs), in_place=True
+    )
+
+    if apply_lta_timestamp:
+        timestamper = HTTPTimeStamper(timestamp_url)
+        signers.PdfTimeStamper(timestamper).timestamp_pdf(
+            IncrementalPdfFileWriter(output), signers.DEFAULT_MD,
+            ValidationContext(**vc_kwargs), in_place=True
+        )
+
+
 @signing.group(name='addsig', help='add a signature')
 @click.option('--field', help='name of the signature field', required=False)
 @click.option('--name', help='explicitly specify signer name', required=False)
