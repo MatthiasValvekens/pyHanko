@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from certvalidator.errors import PathValidationError, PathBuildingError
 
 from certvalidator import ValidationContext, CertificateValidator
+from pyhanko.ades.api import CAdESSignedAttrSpec
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
@@ -480,10 +481,14 @@ class Signer:
 
     def signed_attrs(self, data_digest: bytes, digest_algorithm: str,
                      timestamp: datetime = None,
-                     revocation_info=None, use_pades=False):
+                     revocation_info=None, use_pades=False,
+                     cades_meta: CAdESSignedAttrSpec=None,
+                     timestamper=None, dry_run=False):
         """
         .. versionchanged:: 0.4.0
             Added positional ``digest_algorithm`` parameter _(breaking change)_.
+        .. versionchanged:: 0.5.0
+            Added ``dry_run``, ``timestamper`` and ``cades_meta`` parameters.
 
         Format the signed attributes for a CMS signature.
 
@@ -501,6 +506,20 @@ class Signer:
             (ignored when ``use_pades`` is ``True``).
         :param use_pades:
             Respect PAdES requirements.
+        :param dry_run:
+            .. versionadded:: 0.5.0
+
+            Flag indicating "dry run" mode. If ``True``, only the approximate
+            size of the output matters, so cryptographic
+            operations can be replaced by placeholders.
+        :param timestamper:
+            .. versionadded:: 0.5.0
+
+            Timestamper to use when creating timestamp tokens.
+        :param cades_meta:
+            .. versionadded:: 0.5.0
+
+            Specification for CAdES-specific attributes.
         :return:
             An :class:`.asn1crypto.cms.CMSAttributes` object.
         """
@@ -546,6 +565,14 @@ class Signer:
                     'cms_algorithm_protection', algid_protection
                 )
             )
+
+        # apply CAdES-specific attributes regardless of use_pades
+        if cades_meta is not None:
+            cades_attrs = cades_meta.extra_signed_attributes(
+                data_digest, digest_algorithm, timestamper=timestamper,
+                dry_run=dry_run
+            )
+            attrs.extend(cades_attrs)
 
         return cms.CMSAttributes(attrs)
 
@@ -630,8 +657,9 @@ class Signer:
 
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
-             revocation_info=None, use_pades=False,
-             timestamper=None) -> cms.ContentInfo:
+             revocation_info=None, use_pades=False, timestamper=None,
+             cades_signed_attr_meta: CAdESSignedAttrSpec = None) \
+            -> cms.ContentInfo:
 
         """
         Produce a detached CMS signature from a raw data digest.
@@ -668,6 +696,10 @@ class Signer:
                 this might still hit the timestamping server (in order to
                 produce a realistic size estimate), but the dummy response will
                 be cached.
+        :param cades_signed_attr_meta:
+            .. versionadded:: 0.5.0
+
+            Specification for CAdES-specific attributes.
         :return:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
@@ -677,7 +709,9 @@ class Signer:
         # signed attributes of our message
         signed_attrs = self.signed_attrs(
             data_digest, digest_algorithm, timestamp,
-            revocation_info=revocation_info, use_pades=use_pades
+            revocation_info=revocation_info, use_pades=use_pades,
+            timestamper=timestamper, cades_meta=cades_signed_attr_meta,
+            dry_run=dry_run
         )
 
         digest_algorithm_obj = algos.DigestAlgorithm(
@@ -871,12 +905,21 @@ class PdfSignatureMetadata:
         default_factory=lambda: DEFAULT_SIGNER_KEY_USAGE
     )
     """
+    .. versionadded:: 0.5.0
+
     Key usage extensions required for the signer's certificate.
     Defaults to ``non_repudiation`` only, but sometimes ``digital_signature``
     or a combination of both may be more appropriate.
     See :class:`x509.KeyUsage` for a complete list.
     
     Only relevant if a validation context is also provided.
+    """
+
+    cades_signed_attr_spec: Optional[CAdESSignedAttrSpec] = None
+    """
+    .. versionadded:: 0.5.0
+
+    Specification for CAdES-specific attributes.
     """
 
 
@@ -2237,7 +2280,8 @@ class PdfSigner(PdfTimeStamper):
                 test_md, md_algorithm,
                 timestamp=timestamp, use_pades=use_pades,
                 dry_run=True, revocation_info=revinfo,
-                timestamper=timestamper
+                timestamper=timestamper,
+                cades_signed_attr_meta=signature_meta.cades_signed_attr_spec
             )
             test_len = len(test_signature_cms.dump()) * 2
             # External actors such as timestamping servers can't be relied on to
@@ -2279,7 +2323,8 @@ class PdfSigner(PdfTimeStamper):
         signature_cms = signer.sign(
             true_digest, md_algorithm,
             timestamp=timestamp, use_pades=use_pades,
-            revocation_info=revinfo, timestamper=timestamper
+            revocation_info=revinfo, timestamper=timestamper,
+            cades_signed_attr_meta=signature_meta.cades_signed_attr_spec
         )
         # ... and feed it to the CMS writer
         res_output, sig_contents = cms_writer.send(signature_cms)

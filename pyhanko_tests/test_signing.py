@@ -1,3 +1,4 @@
+import hashlib
 import re
 from datetime import datetime
 
@@ -8,13 +9,12 @@ import pytz
 from asn1crypto import ocsp, tsp
 from asn1crypto.algos import (
     SignedDigestAlgorithm, RSASSAPSSParams,
-    MaskGenAlgorithm, DigestAlgorithm,
+    MaskGenAlgorithm, DigestAlgorithm, DigestInfo,
 )
 import tzlocal
 from asn1crypto import cms
 
 import pyhanko.pdf_utils.content
-import pyhanko.sign.general
 from certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
@@ -22,6 +22,8 @@ from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
 
 from pyhanko import stamp
+from pyhanko.ades.api import CAdESSignedAttrSpec, GenericCommitment
+from pyhanko.ades.cades_asn1 import SignaturePolicyIdentifier, SignaturePolicyId
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
@@ -30,7 +32,8 @@ from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import (
     SigningError, SignatureValidationError, validate_sig_integrity,
-    load_private_key_from_pemder, load_cert_from_pemder, load_certs_from_pemder
+    load_private_key_from_pemder, load_cert_from_pemder, load_certs_from_pemder,
+    find_cms_attribute
 )
 from pyhanko.sign.signers import PdfTimeStamper
 from pyhanko.sign.validation import (
@@ -135,6 +138,15 @@ DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
 FIXED_OCSP = ocsp.OCSPResponse.load(
     read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der')
 )
+
+
+DUMMY_POLICY_ID = SignaturePolicyId({
+    'sig_policy_id': '2.999',
+    'sig_policy_hash': DigestInfo({
+        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
+        'digest': hashlib.sha256().digest()
+    })
+})
 
 
 # TODO rewrite tests using new in-place signing mechanism
@@ -2598,3 +2610,70 @@ def test_add_revinfo_and_lta_timestamp(requests_mock):
             bootstrap_validation_context=live_testing_vc(requests_mock)
         )
         assert status.valid and status.trusted
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_commitment():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        cades_signed_attr_spec=CAdESSignedAttrSpec(
+            commitment_type=GenericCommitment.PROOF_OF_ORIGIN.asn1
+        )
+    )
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+    indic = find_cms_attribute(
+        emb.signer_info['signed_attrs'], 'commitment_type'
+    )[0]
+    assert indic['commitment_type_id'].native == 'proof_of_origin'
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_content_sig():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        cades_signed_attr_spec=CAdESSignedAttrSpec(timestamp_content=True),
+    )
+    out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+    content_ts = find_cms_attribute(
+        emb.signer_info['signed_attrs'], 'content_time_stamp'
+    )[0]
+    eci = content_ts['content']['encap_content_info']
+    assert eci['content_type'].native == 'tst_info'
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_policy():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        cades_signed_attr_spec=CAdESSignedAttrSpec(
+            signature_policy_identifier=SignaturePolicyIdentifier({
+                'signature_policy_id': DUMMY_POLICY_ID
+            })
+        ),
+    )
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+    sp_id = find_cms_attribute(
+        emb.signer_info['signed_attrs'], 'signature_policy_identifier'
+    )[0]
+    assert sp_id.chosen['sig_policy_id'].native == '2.999'
