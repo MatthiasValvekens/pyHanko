@@ -4,6 +4,7 @@ pyhanko.sign package
 .. toctree::
    :maxdepth: 4
 
+   pyhanko.sign.ades
    pyhanko.sign.beid
    pyhanko.sign.diff_analysis
    pyhanko.sign.fields

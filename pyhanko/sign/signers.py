@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from certvalidator.errors import PathValidationError, PathBuildingError
 
 from certvalidator import ValidationContext, CertificateValidator
-from pyhanko.ades.api import CAdESSignedAttrSpec
+from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string

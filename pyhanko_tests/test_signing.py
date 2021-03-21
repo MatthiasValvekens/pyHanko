@@ -22,8 +22,10 @@ from certvalidator import ValidationContext, CertificateValidator
 from ocspbuilder import OCSPResponseBuilder
 
 from pyhanko import stamp
-from pyhanko.ades.api import CAdESSignedAttrSpec, GenericCommitment
-from pyhanko.ades.cades_asn1 import SignaturePolicyIdentifier, SignaturePolicyId
+from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
+from pyhanko.sign.ades.cades_asn1 import (
+    SignaturePolicyIdentifier, SignaturePolicyId
+)
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.images import PdfImage

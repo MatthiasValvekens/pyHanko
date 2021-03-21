@@ -3,13 +3,17 @@ from dataclasses import dataclass
 
 from typing import Optional
 
-from pyhanko.ades.cades_asn1 import CommitmentTypeIndication, \
-    SignaturePolicyIdentifier, CommitmentTypeIdentifier
+from .cades_asn1 import (
+    CommitmentTypeIndication, SignaturePolicyIdentifier,
+    CommitmentTypeIdentifier
+)
 from pyhanko.sign.general import simple_cms_attribute
 from pyhanko.sign.timestamps import TimeStamper
 
 __all__ = ['GenericCommitment', 'CAdESSignedAttrSpec']
 
+
+# TODO add semantics explanations from the standard
 
 @enum.unique
 class GenericCommitment(enum.Enum):
@@ -44,10 +48,10 @@ class CAdESSignedAttrSpec:
     Indicate whether the signature should include a signed timestamp.
     
     .. note::
-        This should be contrasted with _unsigned_ timestamps:
-        a signed timestamp proves that the signature was created _after_ some
-        point in time, while an _unsigned_ timestamp computed over the signed
-        content proves that the signature existed _before_ said point in time.
+        This should be contrasted with *unsigned* timestamps:
+        a signed timestamp proves that the signature was created *after* some
+        point in time, while an *unsigned* timestamp computed over the signed
+        content proves that the signature existed *before* said point in time.
     """
 
     signature_policy_identifier: Optional[SignaturePolicyIdentifier] = None
