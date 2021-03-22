@@ -107,6 +107,20 @@ of when the timestamp was made can be of crucial importance.
 PyHanko will tell you when a signature includes a timestamp token, and validate
 it along with the signature.
 
+.. note::
+    Strictly speaking, a timestamp token only provides proof that the signature
+    existed when the timestamp token was created. The signature itself may have
+    been generated long before that!
+
+    If you also need a "lower bound" on the signing time, you might want to
+    look into signed content timestamps (see
+    :attr:`~pyhanko.sign.signers.PdfSignatureMetadata.cades_signed_attr_spec`
+    and :attr:`~pyhanko.sign.ades.api.CAdESSignedAttrSpec.timestamp_content`).
+
+    Right now, pyHanko supports these when signing, but does not take them into
+    account in the validation process. They are also not available in the CLI
+    yet.
+
 
 Evaluating seed value constraints
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -137,3 +151,37 @@ seed value constraints were respected.
     complies with all the provisions required by a particular PAdES profile.
     Note that these are requirements on the signature itself, and have no
     bearing on possible later modifications to the document.
+
+
+Adding validation data to an existing signature
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sometimes, the validation data on a signature that was meant to have
+a long lifetime can be incomplete. This can have many causes, ranging
+from implementation problems to simple, temporary network issues.
+
+To remedy this problem, pyHanko can fetch and append current validation
+information through the ``ltvfix`` command.
+
+.. code-block:: bash
+
+    pyhanko sign ltvfix --field Sig1 document.pdf
+
+The ``ltvfix`` command supports the same arguments as ``validate`` to select
+a validation context and specify trust settings.
+
+.. warning::
+    By default, pyHanko's point-in-time validation requires OCSP responses
+    and CRLs to be valid at the time of signing. This is often problematic
+    when revocation information is added after the fact.
+
+    To emulate the default behaviour of Acrobat and other PDF viewers,
+    use the ``--retroactive-revinfo`` switch when validating.
+    This will cause pyHanko to treat CRLs and OCSP responses as valid
+    infinitely far back into the past.
+
+    *Note:* This *will* cause incorrect behaviour when validating signatures
+    backed by CAs that make use of certificate holds, but given that
+    content timestamps (i.e. timestamps proving that a signature was created
+    *after* some given time) aren't accounted for in pyHanko's trust model,
+    this is somewhat unavoidable for the time being.

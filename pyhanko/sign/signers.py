@@ -905,8 +905,6 @@ class PdfSignatureMetadata:
         default_factory=lambda: DEFAULT_SIGNER_KEY_USAGE
     )
     """
-    .. versionadded:: 0.5.0
-
     Key usage extensions required for the signer's certificate.
     Defaults to ``non_repudiation`` only, but sometimes ``digital_signature``
     or a combination of both may be more appropriate.
