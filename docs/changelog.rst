@@ -2,6 +2,99 @@
 Release history
 ***************
 
+0.5.0
+=====
+
+*Release date:* 2021-03-22
+
+Dependency changes
+------------------
+
+Update ``pyhanko-certvalidator`` dependency to ``0.13.0``.
+Dependency on ``cryptography`` is now mandatory, and ``oscrypto`` has been marked optional.
+This is because we now use the ``cryptography`` library for all signing and encryption operations,
+but some cryptographic algorithms listed in the PDF standard are not available in ``cryptography``,
+so we rely on ``oscrypto`` for those. This is only relevant for the *decryption* of files encrypted
+with a public-key security handler that uses DES, triple DES or RC2 to encrypt the key seed.
+
+In the public API, we exclusively work with ``asn1crypto`` representations of ASN.1 objects, to
+remain as backend-independent as possible.
+
+*Note:* While ``oscrypto`` is listed as optional in pyHanko's dependency list, it is still
+required in practice, since ``pyhanko-certvalidator`` depends on it.
+
+
+New features and enhancements
+-----------------------------
+
+
+Encryption
+^^^^^^^^^^
+
+ * Enforce ``keyEncipherment`` key extension by default when using public-key encryption
+ * Show a warning when signing a document using public-key encryption through the CLI.
+   We currently don't support using separate encryption credentials in the CLI, and using the same
+   key pair for decryption and signing is bad practice.
+ * Several minor CLI updates.
+
+
+Signing
+^^^^^^^
+
+ * Allow customisation of key usage requirements in signer & validator, also in the CLI.
+ * Actively preserve document timestamp chain in new PAdES-LTA signatures.
+ * Support setups where fields and annotations are separate (i.e. unmerged).
+ * Set the ``lock`` bit in the annotation flags by default.
+ * Tolerate signing fields that don't have any annotation associated with them.
+ * Broader support for PAdES / CAdES signed attributes.
+
+
+Validation
+^^^^^^^^^^
+
+ * Support validating PKCS #7 signatures that don't use ``signedAttrs``. Nowadays, those are rare in
+   the wild, but there's at least one common commercial PDF library that outputs such signatures by
+   default (vendor name redacted to protect the guilty).
+ * Timestamp-related fixes:
+     * Improve signature vs. document timestamp handling in the validation CLI.
+     * Improve & test handling of malformed signature dictionaries in PDF files.
+     * Align document timestamp updating logic with validation logic.
+     * Correct key usage check for time stamp validation.
+ * Allow customisation of key usage requirements in signer & validator, also in the CLI.
+ * Allow LTA update function to be used to start the timestamp chain as well as continue it.
+ * Tolerate indirect references in signature reference dictionaries.
+ * Improve some potential ambiguities in the PAdES-LT and PAdES-LTA validation logic.
+ * Revocation info handling changes:
+    * Support "retroactive" mode for revocation info (i.e. treat revocation info as valid in the
+      past).
+    * Added functionality to append current revocation information to existing signatures.
+    * Related CLI updates.
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Some key material loading functions were cleaned up a little to make them easier to use.
+ * I/O tweaks: use chunked writes with a fixed buffer when copying data for an incremental update
+ * Warn when revocation info is embedded with an offline validation context.
+ * Improve SV validation reporting.
+
+
+Bugs fixed
+----------
+
+ * Fix issue with ``/Certs`` not being properly dereferenced in the DSS (#4).
+ * Fix loss of precision on :class:`~pyhanko.pdf_utils.generic.FloatObject` serialisation (#5).
+ * Add missing dunders to :class:`~pyhanko.pdf_utils.generic.BooleanObject`.
+ * Do not use ``.dump()`` with ``force=True`` in validation.
+ * Corrected digest algorithm selection in timestamp validation.
+ * Correct handling of writes with empty user password.
+ * Do not automatically add xref streams to the object cache. This avoids a class of bugs with
+   some kinds of updates to files with broken xref streams.
+ * Due to a typo, the ``/Annots`` array of a page would not get updated correctly if it was an
+   indirect object. This has been corrected.
+
+
 0.4.0
 =====
 
