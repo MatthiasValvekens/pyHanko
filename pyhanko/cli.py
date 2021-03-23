@@ -303,20 +303,20 @@ def _select_style(ctx, style_name, url):
 def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
                       pretty_print, vc_kwargs, key_usage_settings,
                       executive_summary, embedded_sig):
+    if soft_revocation_check and force_revinfo:
+        raise click.ClickException(
+            "--soft-revocation-check is incompatible with "
+            "--force-revinfo"
+        )
+    if force_revinfo:
+        rev_mode = 'require'
+    elif soft_revocation_check:
+        rev_mode = 'soft-fail'
+    else:
+        rev_mode = 'hard-fail'
+    vc_kwargs['revocation_mode'] = rev_mode
     try:
         if ltv_profile is None:
-            if soft_revocation_check and force_revinfo:
-                raise click.ClickException(
-                    "--soft-revocation-check is incompatible with "
-                    "--force-revinfo"
-                )
-            if force_revinfo:
-                rev_mode = 'require'
-            elif soft_revocation_check:
-                rev_mode = 'soft-fail'
-            else:
-                rev_mode = 'hard-fail'
-            vc_kwargs['revocation_mode'] = rev_mode
             vc = ValidationContext(**vc_kwargs)
             status = validation.validate_pdf_signature(
                 embedded_sig, key_usage_settings=key_usage_settings,
@@ -374,7 +374,7 @@ def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--soft-revocation-check',
               help='Do not fail validation on revocation checking failures '
-                   '(meaningless for LTV validation)',
+                   '(only applied to on-line revocation checks)',
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--no-revocation-check',
               help='Do not attempt to check revocation status '
