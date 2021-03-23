@@ -573,7 +573,7 @@ def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
         )
 
 
-def validate_sig_integrity(signer_info: cms.SignedData,
+def validate_sig_integrity(signer_info: cms.SignerInfo,
                            cert: x509.Certificate,
                            expected_content_type: str,
                            actual_digest: bytes) -> Tuple[bool, bool]:
