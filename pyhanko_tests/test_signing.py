@@ -35,7 +35,7 @@ from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import (
     SigningError, SignatureValidationError, validate_sig_integrity,
     load_private_key_from_pemder, load_cert_from_pemder, load_certs_from_pemder,
-    find_cms_attribute
+    find_cms_attribute, WeakHashAlgorithmError
 )
 from pyhanko.sign.signers import PdfTimeStamper
 from pyhanko.sign.validation import (
@@ -156,7 +156,8 @@ DUMMY_POLICY_ID = SignaturePolicyId({
 def dummy_ocsp_vc():
     vc = ValidationContext(
         trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP],
-        other_certs=list(FROM_CA.cert_registry), allow_fetching=False
+        other_certs=list(FROM_CA.cert_registry), allow_fetching=False,
+        weak_hash_algos=set()
     )
     return vc
 
@@ -2053,7 +2054,7 @@ def test_cms_algorithm_protection(replacement_value):
     r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
-    with pytest.raises(SignatureValidationError):
+    with pytest.raises(SignatureValidationError, match='.*CMS.*'):
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
         )
@@ -2719,3 +2720,90 @@ def test_sign_with_policy():
         emb.signer_info['signed_attrs'], 'signature_policy_identifier'
     )[0]
     assert sp_id.chosen['sig_policy_id'].native == '2.999'
+
+
+@freeze_time('2020-11-01')
+def test_sign_weak_digest():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='md5')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    with pytest.raises(WeakHashAlgorithmError):
+        val_trusted(emb)
+
+    lenient_vc = ValidationContext(
+        trust_roots=[ROOT_CERT], weak_hash_algos=set()
+    )
+    val_trusted(emb, vc=lenient_vc)
+
+
+@freeze_time('2020-11-01')
+def test_sign_weak_digest_prevention():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='md5',
+        validation_context=SIMPLE_V_CONTEXT()
+    )
+    with pytest.raises(SigningError, match='.*weak.*'):
+        signers.sign_pdf(w, meta, signer=FROM_CA)
+
+
+@freeze_time('2020-11-01')
+def test_sign_weak_sig_digest():
+    # We have to jump through some hoops to put together a signature
+    # where the signing method's digest is not the same as the "external"
+    # digest. This is intentional, since it's bad practice.
+
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+
+    cms_writer = signers.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+
+    timestamp = datetime.now(tz=tzlocal.get_localzone())
+    sig_obj = signers.SignatureObject(timestamp=timestamp, bytes_reserved=8192)
+
+    external_md_algorithm = 'sha256'
+    cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
+
+    document_hash = cms_writer.send(
+        signers.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
+    )
+    signer = signers.SimpleSigner.load(
+        TESTING_CA_DIR + '/keys/signer.key.pem',
+        TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
+        ca_chain_files=(
+            TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+        key_passphrase=b'secret',
+    )
+    cms_obj = signer.sign(
+        data_digest=document_hash, digest_algorithm=external_md_algorithm,
+        timestamp=timestamp
+    )
+    si_obj: cms.SignerInfo = cms_obj['content']['signer_infos'][0]
+    bad_algo = SignedDigestAlgorithm({'algorithm': 'md5_rsa'})
+    si_obj['signature_algorithm'] = signer.signature_mechanism = bad_algo
+    attrs = si_obj['signed_attrs']
+    cms_prot = find_cms_attribute(attrs, 'cms_algorithm_protection')[0]
+    cms_prot['signature_algorithm'] = bad_algo
+    # recompute the signature
+    si_obj['signature'] = signer.sign_raw(attrs.untag().dump(), 'md5')
+    output, sig_contents = cms_writer.send(cms_obj)
+
+    # we requested in-place output
+    assert output is input_buf
+
+    r = PdfFileReader(input_buf)
+    emb = r.embedded_signatures[0]
+    with pytest.raises(WeakHashAlgorithmError):
+        val_trusted(emb)
+
+    lenient_vc = ValidationContext(
+        trust_roots=[ROOT_CERT], weak_hash_algos=set()
+    )
+    val_trusted(emb, vc=lenient_vc)

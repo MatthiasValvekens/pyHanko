@@ -35,7 +35,8 @@ from .general import (
     SignatureStatus, find_cms_attribute,
     UnacceptableSignerError, KeyUsageConstraints,
     SignatureValidationError,
-    validate_sig_integrity,
+    validate_sig_integrity, DEFAULT_WEAK_HASH_ALGORITHMS,
+    WeakHashAlgorithmError,
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -131,10 +132,18 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     """
     signer_info, cert, other_certs = _extract_signer_info_and_certs(signed_data)
 
+    weak_hash_algos = None
+    if validation_context is not None:
+        weak_hash_algos = validation_context.weak_hash_algos
+    if weak_hash_algos is None:
+        weak_hash_algos = DEFAULT_WEAK_HASH_ALGORITHMS
+
     signature_algorithm: cms.SignedDigestAlgorithm = \
         signer_info['signature_algorithm']
     mechanism = signature_algorithm['algorithm'].native
     md_algorithm = signer_info['digest_algorithm']['algorithm'].native
+    if md_algorithm in weak_hash_algos:
+        raise WeakHashAlgorithmError(md_algorithm)
 
     expected_content_type = 'data'
     if raw_digest is None:
@@ -149,6 +158,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
     intact, valid = validate_sig_integrity(
         signer_info, cert, expected_content_type=expected_content_type,
         actual_digest=raw_digest,
+        weak_hash_algorithms=weak_hash_algos
     )
 
     # if the data being encapsulated by the signature is itself invalid,

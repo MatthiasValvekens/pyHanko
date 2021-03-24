@@ -35,16 +35,25 @@ from cryptography.hazmat.primitives.asymmetric import padding
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
     'CertificateStore', 'SimpleCertificateStore', 'SigningError',
-    'UnacceptableSignerError',
+    'UnacceptableSignerError', 'WeakHashAlgorithmError',
+    'SignatureValidationError',
     'load_certs_from_pemder', 'load_cert_from_pemder',
-    'load_private_key_from_pemder'
+    'load_private_key_from_pemder',
+    'DEFAULT_WEAK_HASH_ALGORITHMS'
 ]
 
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_WEAK_HASH_ALGORITHMS = frozenset({'sha1', 'md5', 'md2'})
+
+
 class SignatureValidationError(ValueError):
     """Error validating a signature."""
+    pass
+
+
+class WeakHashAlgorithmError(SignatureValidationError):
     pass
 
 
@@ -541,11 +550,17 @@ def _translate_pyca_cryptography_cert_to_asn1(cert) -> x509.Certificate:
 
 def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
                   signature_algorithm: cms.SignedDigestAlgorithm,
-                  md_algorithm: str, prehashed=False):
+                  md_algorithm: str, prehashed=False,
+                  weak_hash_algorithms=DEFAULT_WEAK_HASH_ALGORITHMS):
     try:
-        md_algorithm = signature_algorithm.hash_algo.upper()
+        sig_md_algorithm = signature_algorithm.hash_algo
     except (ValueError, AttributeError):
-        pass
+        sig_md_algorithm = None
+
+    if sig_md_algorithm is not None:
+        if sig_md_algorithm in weak_hash_algorithms:
+            raise WeakHashAlgorithmError(md_algorithm)
+        md_algorithm = sig_md_algorithm.upper()
 
     verify_md = _get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
 
@@ -576,7 +591,9 @@ def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
 def validate_sig_integrity(signer_info: cms.SignerInfo,
                            cert: x509.Certificate,
                            expected_content_type: str,
-                           actual_digest: bytes) -> Tuple[bool, bool]:
+                           actual_digest: bytes,
+                           weak_hash_algorithms=DEFAULT_WEAK_HASH_ALGORITHMS) \
+        -> Tuple[bool, bool]:
     """
     Validate the integrity of a signature for a particular signerInfo object
     inside a CMS signed data container.
@@ -598,6 +615,8 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         see :class:`cms.ContentType`).
     :param actual_digest:
         The actual digest to be matched to the message digest attribute.
+    :param weak_hash_algorithms:
+        List, tuple or set of weak hashing algorithms.
     :return:
         A tuple of two booleans. The first indicates whether the provided
         digest matches the value in the signed attributes.
@@ -608,6 +627,8 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         signer_info['signature_algorithm']
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
+    if md_algorithm in weak_hash_algorithms:
+        raise WeakHashAlgorithmError(md_algorithm)
     signature = signer_info['signature'].native
 
     # signed_attrs comes with some context-specific tagging.
@@ -684,7 +705,7 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
     try:
         _validate_raw(
             signature, signed_data, cert, signature_algorithm, md_algorithm,
-            prehashed=prehashed
+            prehashed=prehashed, weak_hash_algorithms=weak_hash_algorithms
         )
         valid = True
     except InvalidSignature:

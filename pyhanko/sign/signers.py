@@ -2144,7 +2144,9 @@ class PdfSigner(PdfTimeStamper):
                 )
         validation_paths = []
         signer_cert_validation_path = None
+        weak_hash_algos = ()
         if validation_context is not None:
+            weak_hash_algos = validation_context.weak_hash_algos
             # validate cert
             # (this also keeps track of any validation data automagically)
             validator = CertificateValidator(
@@ -2238,6 +2240,13 @@ class PdfSigner(PdfTimeStamper):
         else:
             md_algorithm = DEFAULT_MD
 
+        if validation_context is not None \
+                and md_algorithm in validation_context.weak_hash_algos:
+            raise SigningError(
+                f"The hash algorithm {md_algorithm} is considered weak in the "
+                f"specified validation context. Please choose another."
+            )
+
         # same for the subfilter: try signature_meta and SV dict, fall back
         #  to /adbe.pkcs7.detached by default
         subfilter = signature_meta.subfilter
@@ -2265,6 +2274,7 @@ class PdfSigner(PdfTimeStamper):
 
         # do we need adobe-style revocation info?
         if signature_meta.embed_validation_info and not use_pades:
+            assert validation_context is not None  # checked earlier
             revinfo = Signer.format_revinfo(
                 ocsp_responses=validation_context.ocsps,
                 crls=validation_context.crls
