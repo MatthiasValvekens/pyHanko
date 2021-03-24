@@ -71,7 +71,8 @@ class ValidateTests(unittest.TestCase):
             context = ValidationContext(
                 trust_roots=ca_certs,
                 other_certs=other_certs,
-                allow_fetching=True
+                allow_fetching=True,
+                weak_hash_algos={'md2', 'md5'}
             )
             paths = context.certificate_registry.build_paths(cert)
             self.assertEqual(1, len(paths))
@@ -96,7 +97,8 @@ class ValidateTests(unittest.TestCase):
             allow_fetching=True,
             crl_fetch_params={'timeout': 30},
             ocsp_fetch_params={'timeout': 30},
-            revocation_mode='hard-fail'
+            revocation_mode='hard-fail',
+            weak_hash_algos={'md2', 'md5'}
         )
         paths = context.certificate_registry.build_paths(cert)
         self.assertEqual(1, len(paths))
@@ -121,7 +123,8 @@ class ValidateTests(unittest.TestCase):
             trust_roots=ca_certs,
             other_certs=other_certs,
             moment=moment,
-            ocsps=ocsp_responses
+            ocsps=ocsp_responses,
+            weak_hash_algos={'md2', 'md5'}
         )
         paths = context.certificate_registry.build_paths(cert)
         self.assertEqual(1, len(paths))
@@ -671,7 +674,8 @@ class ValidateTests(unittest.TestCase):
         context = ValidationContext(
             trust_roots=ca_certs,
             other_certs=other_certs,
-            crls=crls
+            crls=crls,
+            weak_hash_algos={'md2', 'md5'}
         )
 
         expected = (
@@ -703,7 +707,8 @@ class ValidateTests(unittest.TestCase):
         context = ValidationContext(
             trust_roots=ca_certs,
             other_certs=other_certs,
-            crls=crls
+            crls=crls,
+            weak_hash_algos={'md2', 'md5'}
         )
 
         expected = (
@@ -727,7 +732,8 @@ class ValidateTests(unittest.TestCase):
             trust_roots=ca_certs,
             other_certs=other_certs,
             crls=crls,
-            revocation_mode=revocation_mode
+            revocation_mode=revocation_mode,
+            weak_hash_algos={'md2', 'md5'}
         )
 
         paths = context.certificate_registry.build_paths(cert)

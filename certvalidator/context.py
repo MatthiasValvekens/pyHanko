@@ -173,7 +173,7 @@ class ValidationContext():
 
         :param weak_hash_algos:
             A set of unicode strings of hash algorithms that should be
-            considered weak. Valid options include: "md2", "md5", "sha1"
+            considered weak.
 
         :param time_tolerance:
             Time delta tolerance allowed in validity checks.
@@ -327,18 +327,8 @@ class ValidationContext():
                     ''',
                     type_name(weak_hash_algos)
                 ))
-
-            unsupported_hash_algos = weak_hash_algos - set(['md2', 'md5', 'sha1'])
-            if unsupported_hash_algos:
-                raise ValueError(pretty_message(
-                    '''
-                    weak_hash_algos must contain only the unicode strings "md2",
-                    "md5", "sha1", not %s
-                    ''',
-                    repr(unsupported_hash_algos)
-                ))
         else:
-            weak_hash_algos = set(['md2', 'md5'])
+            weak_hash_algos = set(['md2', 'md5', 'sha1'])
 
         self.certificate_registry = CertificateRegistry(
             trust_roots,
