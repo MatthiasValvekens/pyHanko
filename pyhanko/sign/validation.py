@@ -58,6 +58,11 @@ class ValidationInfoReadingError(ValueError):
     pass
 
 
+class NoDSSFoundError(ValidationInfoReadingError):
+    def __init__(self):
+        super().__init__("No DSS found")
+
+
 class SigSeedValueValidationError(SignatureValidationError):
     """Error validating a signature's seed value constraints."""
 
@@ -1419,9 +1424,12 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
         )
         # read the DSS at the current revision into a new
         # validation context object
-        current_vc = DocumentSecurityStore.read_dss(
-            reader.get_historical_resolver(emb_timestamp.signed_revision)
-        ).as_validation_context(validation_context_kwargs)
+        try:
+            current_vc = DocumentSecurityStore.read_dss(
+                reader.get_historical_resolver(emb_timestamp.signed_revision)
+            ).as_validation_context(validation_context_kwargs)
+        except NoDSSFoundError:
+            current_vc = ValidationContext(**validation_context_kwargs)
 
     return emb_timestamp, ts_status, ts_count + 1, current_vc
 
@@ -2051,17 +2059,19 @@ class DocumentSecurityStore:
         certs = list(self._load_certs()) + extra_certs
 
         if include_revinfo:
-            ocsps = validation_context_kwargs['ocsps'] = []
+            ocsps = list(validation_context_kwargs.pop('ocsps', ()))
             for ocsp_ref in self.ocsps:
                 ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
                 resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
                 ocsps.append(resp)
+            validation_context_kwargs['ocsps'] = ocsps
 
-            crls = validation_context_kwargs['crls'] = []
+            crls = list(validation_context_kwargs.pop('crls', ()))
             for crl_ref in self.crls:
                 crl_stream: generic.StreamObject = crl_ref.get_object()
                 crl = asn1_crl.CertificateList.load(crl_stream.data)
                 crls.append(crl)
+            validation_context_kwargs['crls'] = crls
 
         return ValidationContext(
             other_certs=certs, **validation_context_kwargs
@@ -2081,7 +2091,7 @@ class DocumentSecurityStore:
         try:
             dss_ref = handler.root.raw_get(pdf_name('/DSS'))
         except KeyError as e:
-            raise ValidationInfoReadingError("No DSS found") from e
+            raise NoDSSFoundError() from e
 
         dss_dict = dss_ref.get_object()
 

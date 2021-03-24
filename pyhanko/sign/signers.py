@@ -1634,8 +1634,8 @@ class PdfTimeStamper:
     #  validation regardless.
 
     def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                      md_algorithm, validation_context, bytes_reserved=None,
-                      validation_paths=None,
+                      md_algorithm, validation_context=None,
+                      bytes_reserved=None, validation_paths=None,
                       timestamper: Optional[TimeStamper] = None, *,
                       in_place=False, output=None, chunk_size=4096):
         """Timestamp the contents of ``pdf_out``.
@@ -1682,11 +1682,6 @@ class PdfTimeStamper:
             # see sign_pdf comments
             bytes_reserved = test_len + 2 * (test_len // 4)
 
-        if validation_paths is None:
-            validation_paths = list(
-                timestamper.validation_paths(validation_context)
-            )
-
         timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
 
         cms_writer = PdfCMSEmbedder().write_cms(
@@ -1709,11 +1704,17 @@ class PdfTimeStamper:
         res_output, sig_contents = cms_writer.send(timestamp_cms)
 
         # update the DSS
-        from pyhanko.sign import validation
-        validation.DocumentSecurityStore.add_dss(
-            output_stream=res_output, sig_contents=sig_contents,
-            paths=validation_paths, validation_context=validation_context
-        )
+        if validation_context is not None:
+            from pyhanko.sign import validation
+            if validation_paths is None:
+                validation_paths = list(
+                    timestamper.validation_paths(validation_context)
+                )
+
+            validation.DocumentSecurityStore.add_dss(
+                output_stream=res_output, sig_contents=sig_contents,
+                paths=validation_paths, validation_context=validation_context
+            )
 
         output = _finalise_output(output, res_output)
 

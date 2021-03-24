@@ -2489,6 +2489,46 @@ def test_add_revinfo_later(requests_mock, with_vri):
         assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
+@pytest.mark.parametrize('with_vri', [True, False])
+def test_add_revinfo_timestamp_separate_no_dss(requests_mock, with_vri):
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+
+    # create signature & timestamp without revocation info
+    with freeze_time('2020-11-01'):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA, in_place=True
+        )
+        signers.PdfTimeStamper(timestamper=DUMMY_TS).timestamp_pdf(
+            IncrementalPdfFileWriter(buf), 'sha256', in_place=True
+        )
+
+    # fast forward 1 month
+    with freeze_time('2020-12-01'):
+        vc = live_testing_vc(requests_mock)
+        r = PdfFileReader(buf)
+        emb_sig = r.embedded_signatures[0]
+        add_validation_info(emb_sig, vc, in_place=True, add_vri_entry=with_vri)
+
+        r = PdfFileReader(buf)
+        emb_sig = r.embedded_signatures[0]
+
+        # without retroactive revinfo, the validation should fail
+        status = validate_pdf_ltv_signature(
+            emb_sig, RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS}
+        )
+        assert status.valid and not status.trusted
+
+        # with retroactive revinfo, it should be OK
+        status = validate_pdf_ltv_signature(
+            emb_sig, RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True}
+        )
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
+
 def test_add_revinfo_without_timestamp(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
