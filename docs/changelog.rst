@@ -2,6 +2,17 @@
 Release history
 ***************
 
+0.5.1
+=====
+
+*Release date:* 2021-03-24
+
+Bugs fixed
+----------
+
+  * Fixed a packaging blunder that caused an import error on fresh installs.
+
+
 0.5.0
 =====
 

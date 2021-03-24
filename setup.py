@@ -20,7 +20,7 @@ def get_version():
 setup(
     name='pyHanko',
     version=get_version(),
-    packages=['pyhanko', 'pyhanko.pdf_utils', 'pyhanko.sign'],
+    packages=['pyhanko', 'pyhanko.pdf_utils', 'pyhanko.sign', 'pyhanko.sign.ades'],
     url='https://github.com/MatthiasValvekens/pyHanko',
     license='MIT',
     author='Matthias Valvekens',
