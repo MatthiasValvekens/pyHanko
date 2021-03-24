@@ -1,5 +1,8 @@
 # changelog
 
+## 0.13.1
+ - Consider SHA-1 weak by default, and do not hard-code the list of potential weak hash algos.
+
 ## 0.13.0
  - Added an optional `retroactive_revinfo` flag to `ValidationContext` to ignore the
    `thisUpdate` field in OCSP responses and CRLs. 
