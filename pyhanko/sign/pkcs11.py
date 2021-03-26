@@ -64,7 +64,7 @@ def open_pkcs11_session(lib_location, slot_no=None, token_label=None,
     else:
         token = slots[slot_no].get_token()
         if token_label is not None and token.label != token_label:
-            raise PKCS11Error('Token in slot %d is not BELPIC.' % slot_no)
+            raise PKCS11Error(f'Token in slot {slot_no} is not {token_label}.')
 
     kwargs = {}
     if user_pin is not None:
