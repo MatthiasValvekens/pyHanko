@@ -2240,8 +2240,7 @@ class PdfSigner(PdfTimeStamper):
         else:
             md_algorithm = DEFAULT_MD
 
-        if validation_context is not None \
-                and md_algorithm in validation_context.weak_hash_algos:
+        if md_algorithm in weak_hash_algos:
             raise SigningError(
                 f"The hash algorithm {md_algorithm} is considered weak in the "
                 f"specified validation context. Please choose another."
