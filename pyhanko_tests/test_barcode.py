@@ -1,5 +1,7 @@
 from io import BytesIO
 
+from freezegun import freeze_time
+
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
@@ -8,6 +10,7 @@ from pyhanko import stamp
 from pyhanko_tests.samples import MINIMAL
 
 
+@freeze_time('2020-11-01')
 def test_qr_fixed_size():
     writer = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     w = 280
