@@ -1,3 +1,6 @@
+import yaml
+from certomancer.registry import CertomancerConfig, ArchLabel
+
 from pyhanko.pdf_utils.crypt import SimpleEnvelopeKeyDecrypter
 
 
@@ -7,8 +10,6 @@ def read_all(fname):
 
 
 CRYPTO_DATA_DIR = 'pyhanko_tests/data/crypto'
-TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'
-ECC_TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca-ecdsa'
 PDF_DATA_DIR = 'pyhanko_tests/data/pdf'
 MINIMAL_PATH = PDF_DATA_DIR + '/minimal.pdf'
 MINIMAL = read_all(MINIMAL_PATH)
@@ -78,11 +79,9 @@ def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     )
 
 
-# These certs have the keyEncipherment extension active (yes, I know that
-# that isn't good key hygiene, esp. with RSA, but it's a testing setup)
 PUBKEY_TEST_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
-    "pyhanko_tests/data/crypto/testing-ca/keys/signer.key.pem",
-    "pyhanko_tests/data/crypto/testing-ca/intermediate/newcerts/signer.cert.pem",
+    f"{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem",
+    f"{CRYPTO_DATA_DIR}/testing-ca/interm/decrypter1.cert.pem",
     b'secret'
 )
 
@@ -92,3 +91,26 @@ PUBKEY_SELFSIGNED_DECRYPTER = SimpleEnvelopeKeyDecrypter.load(
     "pyhanko_tests/data/crypto/selfsigned.cert.pem",
     b'secret'
 )
+
+
+CERTOMANCER_CONFIG_PATH = CRYPTO_DATA_DIR + '/certomancer.yml'
+
+
+def _configure_certomancer():
+    with open(CERTOMANCER_CONFIG_PATH, 'r') as inf:
+        cfg_text = inf.read()
+    cfg = yaml.safe_load(cfg_text)
+
+    pki_archs = cfg['pki-architectures']
+    # Clone RSA config to get equivalent ECDSA setup
+    clone = dict(pki_archs['testing-ca'])
+    clone['keyset'] = 'testing-ca-ecdsa'
+    pki_archs['testing-ca-ecdsa'] = clone
+
+    return CertomancerConfig(cfg)
+
+
+CERTOMANCER = _configure_certomancer()
+TESTING_CA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca'))
+TESTING_CA_ECDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ecdsa'))
+TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'

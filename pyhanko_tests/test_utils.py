@@ -1300,7 +1300,7 @@ def test_pubkey_wrong_cert():
     w = writer.PdfFileWriter()
 
     recpt_cert = load_cert_from_pemder(
-        TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem'
+        TESTING_CA_DIR + '/interm/decrypter2.cert.pem'
     )
     test_data = b'This is test data!'
     dummy_stream = generic.StreamObject(stream_data=test_data)

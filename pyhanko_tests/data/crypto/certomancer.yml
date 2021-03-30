@@ -1,0 +1,238 @@
+external-url-prefix: "http://pyhanko.tests"
+keysets:
+  testing-ca:
+    path-prefix: pyhanko_tests/data/crypto/keys-rsa
+    keys:
+      root:
+        path: root_ca.key.pem
+        password: secret
+      interm:
+        path: intermediate_ca.key.pem
+        password: secret
+      tsa:
+        path: tsa.key.pem
+        password: secret
+      tsa2:
+        path: tsa2.key.pem
+        password: secret
+      interm-ocsp:
+        path: ocsp.key.pem
+        password: secret
+      signer1:
+        path: signer.key.pem
+        password: secret
+      signer2:
+        path: signer2.key.pem
+        password: secret
+  testing-ca-ecdsa:
+    path-prefix: pyhanko_tests/data/crypto/keys-ecdsa
+    keys:
+      root:
+        path: root_ca.key.pem
+        password: secret
+      interm:
+        path: intermediate_ca.key.pem
+        password: secret
+      tsa:
+        path: tsa.key.pem
+        password: secret
+      tsa2:
+        path: tsa2.key.pem
+        password: secret
+      interm-ocsp:
+        path: ocsp.key.pem
+        password: secret
+      signer1:
+        path: signer.key.pem
+        password: secret
+      signer2:
+        path: signer2.key.pem
+        password: secret
+
+pki-architectures:
+  testing-ca:
+    keyset: testing-ca
+    entity-defaults:
+      country-name: BE
+      organization-name: Example Inc
+      organizational-unit-name: Testing Authority
+    entities:
+      root:
+        common-name: Root CA
+      interm:
+        common-name: Intermediate CA
+      tsa:
+        common-name: Time Stamping Authority
+      interm-ocsp:
+        common-name: OCSP responder
+      signer1:
+        common-name: Alice
+        email-address: alice@example.com
+      signer2:
+        common-name: Bob
+        email-address: bob@example.com
+    certs:
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      interm:
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+              path-len-constraint: 0
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params: {crl-repo-names: [root]}
+      interm-ocsp:
+        issuer: interm
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+          - id: extended_key_usage
+            critical: true
+            value: [ocsp_signing]
+          - id: ocsp_no_check
+      tsa:
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+          - id: extended_key_usage
+            critical: true
+            value: [time_stamping]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params: {crl-repo-names: [root]}
+      tsa2:
+        template: tsa
+        subject: tsa
+        subject-key: tsa2
+        validity:
+          valid-from: "2028-01-01T00:00:00+0000"
+          valid-to: "2040-01-01T00:00:00+0000"
+      signer1:
+        issuer: interm
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, non_repudiation]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [interm]
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [interm]
+      decrypter1:
+        subject: signer1
+        issuer: interm
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [key_encipherment]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [interm]
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [interm]
+      decrypter2:
+        subject: signer2
+        template: decrypter1
+      signer2:
+        template: signer1
+        revocation:
+          revoked-since: "2020-12-01T00:00:00+0000"
+          reason: key_compromise
+      signer1-long:
+        subject: signer1
+        template: signer1
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+    services:
+      ocsp:
+        interm:
+          for-issuer: interm
+          responder-cert: interm-ocsp
+          signing-key: interm-ocsp
+      crl-repo:
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P90D"
+        interm:
+          for-issuer: interm
+          signing-key: interm
+          simulated-update-schedule: "P30D"
+      cert-repo:
+        root:
+          for-issuer: root
+          publish-issued-certs: yes
+        interm:
+          for-issuer: interm
+          publish-issued-certs: no
+      time-stamping:
+        tsa:
+          signing-key: tsa
+          signing-cert: tsa
+        tsa2:
+          signing-key: tsa2
+          signing-cert: tsa2

@@ -1,5 +1,4 @@
 import hashlib
-import re
 from datetime import datetime
 
 import pytest
@@ -13,13 +12,14 @@ from asn1crypto.algos import (
 )
 import tzlocal
 from asn1crypto import cms
+from certomancer.integrations.illusionist import Illusionist
+from certomancer.registry import CertLabel, KeyLabel
 
 import pyhanko.pdf_utils.content
 from certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
 from certvalidator import ValidationContext, CertificateValidator
-from ocspbuilder import OCSPResponseBuilder
 
 from pyhanko import stamp
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
@@ -34,8 +34,8 @@ from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import (
     SigningError, SignatureValidationError, validate_sig_integrity,
-    load_private_key_from_pemder, load_cert_from_pemder, load_certs_from_pemder,
-    find_cms_attribute, WeakHashAlgorithmError
+    load_cert_from_pemder, find_cms_attribute, WeakHashAlgorithmError,
+    SimpleCertificateStore, load_certs_from_pemder
 )
 from pyhanko.sign.signers import PdfTimeStamper
 from pyhanko.sign.validation import (
@@ -63,75 +63,61 @@ SELF_SIGN = signers.SimpleSigner.load(
     key_passphrase=b'secret'
 )
 
-FROM_CA = signers.SimpleSigner.load(
-    TESTING_CA_DIR + '/keys/signer.key.pem',
-    TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
-    ca_chain_files=(TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
-    key_passphrase=b'secret'
+ROOT_CERT = TESTING_CA.get_cert(CertLabel('root'))
+ECC_ROOT_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('root'))
+INTERM_CERT = TESTING_CA.get_cert(CertLabel('interm'))
+ECC_INTERM_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('interm'))
+OCSP_CERT = TESTING_CA.get_cert(CertLabel('interm-ocsp'))
+REVOKED_CERT = TESTING_CA.get_cert(CertLabel('signer2'))
+TSA_CERT = TESTING_CA.get_cert(CertLabel('tsa'))
+TSA2_CERT = TESTING_CA.get_cert(CertLabel('tsa2'))
+
+FROM_CA = signers.SimpleSigner(
+    signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
+    signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
+    cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
 )
 
-FROM_ECC_CA = signers.SimpleSigner.load(
-    ECC_TESTING_CA_DIR + '/keys/signer.key.pem',
-    ECC_TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
-    ca_chain_files=(ECC_TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
-    key_passphrase=b'secret'
+FROM_ECC_CA = signers.SimpleSigner(
+    signing_cert=TESTING_CA_ECDSA.get_cert(CertLabel('signer1')),
+    signing_key=TESTING_CA_ECDSA.key_set.get_private_key(KeyLabel('signer1')),
+    cert_registry=SimpleCertificateStore.from_certs(
+        [ECC_ROOT_CERT, ECC_INTERM_CERT]
+    )
 )
 
-REVOKED_SIGNER = signers.SimpleSigner.load(
-    TESTING_CA_DIR + '/keys/signer2.key.pem',
-    TESTING_CA_DIR + '/intermediate/newcerts/signer2.cert.pem',
-    ca_chain_files=(TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
-    key_passphrase=b'secret'
+
+REVOKED_SIGNER = signers.SimpleSigner(
+    signing_cert=TESTING_CA.get_cert(CertLabel('signer2')),
+    signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
+    cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
 )
 
-ROOT_PATH = TESTING_CA_DIR + '/root/certs/ca.cert.pem'
-ECC_ROOT_PATH = ECC_TESTING_CA_DIR + '/root/certs/ca.cert.pem'
-INTERM_PATH = TESTING_CA_DIR + '/intermediate/certs/ca.cert.pem'
-OCSP_PATH = TESTING_CA_DIR + '/intermediate/newcerts/ocsp.cert.pem'
-REVOKED_CERT_PATH = TESTING_CA_DIR + '/intermediate/newcerts/1002.pem'
-TRUST_ROOTS = list(load_certs_from_pemder((ROOT_PATH,)))
+TRUST_ROOTS = [TESTING_CA.get_cert(CertLabel('root'))]
 
 FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
-    TESTING_CA_DIR + '/intermediate/newcerts/signer.pfx',
-    passphrase=b'exportsecret'
+    TESTING_CA_DIR + '/interm/signer1.pfx', passphrase=None
 )
 
-ROOT_CERT = load_cert_from_pemder(ROOT_PATH)
-ECC_ROOT_CERT = load_cert_from_pemder(ECC_ROOT_PATH)
-INTERM_CERT = load_cert_from_pemder(INTERM_PATH)
-OCSP_CERT = load_cert_from_pemder(OCSP_PATH)
-REVOKED_CERT = load_cert_from_pemder(REVOKED_CERT_PATH)
 NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
 SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
-OCSP_KEY = load_private_key_from_pemder(
-    TESTING_CA_DIR + '/keys/ocsp.key.pem', b"secret"
-)
 
-TSA_CERT = load_cert_from_pemder(
-    TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem'
-)
+OCSP_KEY = TESTING_CA.key_set.get_private_key('interm-ocsp')
 DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=TSA_CERT,
-    tsa_key=load_private_key_from_pemder(
-        TESTING_CA_DIR + '/keys/tsa.key.pem', b'secret'
-    ),
-    certs_to_embed=FROM_CA.cert_registry,
+    tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
+    certs_to_embed=FROM_CA.cert_registry
 )
 
-TSA2_CERT = load_cert_from_pemder(
-    TESTING_CA_DIR + '/root/newcerts/tsa2.cert.pem'
-)
 DUMMY_TS2 = timestamps.DummyTimeStamper(
     tsa_cert=TSA2_CERT,
-    tsa_key=load_private_key_from_pemder(
-        TESTING_CA_DIR + '/keys/tsa2.key.pem', b'secret'
-    ),
-    certs_to_embed=FROM_CA.cert_registry,
+    tsa_key=TESTING_CA.key_set.get_private_key('tsa2'),
+    certs_to_embed=FROM_CA.cert_registry
 )
 
 DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
-    'http://example.com/tsa', https=False
+    'http://pyhanko.test/testing-ca/tsa/tsa', https=False
 )
 
 # with the testing CA setup update, this OCSP response is totally
@@ -167,47 +153,7 @@ def live_testing_vc(requests_mock):
         trust_roots=TRUST_ROOTS, allow_fetching=True,
         other_certs=[]
     )
-
-    def serve_ca_file(request, _context):
-        fpath = request.url.replace("http://ca.example.com", TESTING_CA_DIR)
-        with open(fpath, 'rb') as f:
-            content = f.read()
-        return content
-
-    requests_mock.register_uri(
-        'GET', re.compile(r"^http://ca\.example\.com/"), content=serve_ca_file
-    )
-
-    def serve_ocsp_response(request, _context):
-        req: ocsp.OCSPRequest = ocsp.OCSPRequest.load(request.body)
-        nonce = req.nonce_value.native
-        # we only look at the serial number, this is a dummy responder
-        # the return data is hardcoded (for now)
-        # TODO read it off from the OpenSSL CA index
-        for req_item in req['tbs_request']['request_list']:
-            serial = req_item['req_cert']['serial_number'].native
-            if serial == 0x1001:
-                bld = OCSPResponseBuilder('successful', FROM_CA.signing_cert,
-                                           'good')
-            elif serial == 0x1002:
-                revocation_date = datetime(2021, 1, 1, 0, 0, 0, tzinfo=pytz.utc)
-                bld = OCSPResponseBuilder('successful', REVOKED_CERT,
-                                           'key_compromise', revocation_date)
-            else:
-                bld = OCSPResponseBuilder('unauthorized')
-
-            bld.nonce = nonce
-            bld.certificate_issuer = INTERM_CERT
-            return bld.build(
-                responder_certificate=OCSP_CERT, responder_private_key=OCSP_KEY
-            ).dump()
-        raise ValueError
-
-    requests_mock.register_uri(
-        'POST', re.compile(r"^http://ocsp\.example\.com/"),
-        content=serve_ocsp_response
-    )
-
+    Illusionist(TESTING_CA).register(requests_mock)
     return vc
 
 
@@ -277,7 +223,9 @@ def test_der_detect(tmp_path):
 
 def test_enforce_one_cert(tmp_path):
 
-    fname = TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem'
+    fname = CRYPTO_DATA_DIR + '/some-chain.cert.pem'
+
+    assert len(list(load_certs_from_pemder([fname]))) == 2
     with pytest.raises(ValueError):
         load_cert_from_pemder(fname)
 
@@ -391,7 +339,6 @@ def test_sign_with_trust():
     val_trusted(s)
 
 
-@freeze_time('2020-11-01')
 def test_verify_sig_without_signed_attrs():
     # pyHanko never produces signatures of this type, but we should be able
     # to validate them (this file was created using a modified version of
@@ -401,7 +348,7 @@ def test_verify_sig_without_signed_attrs():
         r = PdfFileReader(f)
         s = r.embedded_signatures[0]
         assert s.field_name == 'Sig1'
-        val_trusted(s)
+        val_untrusted(s)
 
 
 @freeze_time('2020-11-01')
@@ -418,14 +365,14 @@ def test_sign_with_ecdsa_trust():
 
 @freeze_time('2020-11-01')
 def test_sign_with_explicit_ecdsa():
-    signer = signers.SimpleSigner.load(
-        ECC_TESTING_CA_DIR + '/keys/signer.key.pem',
-        ECC_TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
-        ca_chain_files=(
-            ECC_TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
-        key_passphrase=b'secret', signature_mechanism=SignedDigestAlgorithm(
-            {'algorithm': 'ecdsa'}
-        )
+    signer = signers.SimpleSigner(
+        signing_cert=TESTING_CA_ECDSA.get_cert(CertLabel('signer1')),
+        signing_key=TESTING_CA_ECDSA.key_set.get_private_key(
+            KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [ECC_ROOT_CERT, ECC_INTERM_CERT]
+        ),
+        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'ecdsa'})
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -467,7 +414,7 @@ def test_sign_with_new_field_spec():
         )
 
 
-@freeze_time('2020-11-01')
+@freeze_time('2020-12-05')
 def test_sign_with_revoked(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -514,7 +461,7 @@ def test_sign_with_later_revoked_nots(requests_mock):
 
     # there's no way to do a timestamp validation check here, so the checker
     # should assume the timestamp to be invalid
-    with freeze_time('2020-11-01'):
+    with freeze_time('2020-12-05'):
 
         r = PdfFileReader(out)
         s = r.embedded_signatures[0]
@@ -1628,7 +1575,17 @@ def test_pades_lta_dss_indirect_arrs(requests_mock):
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
     live_testing_vc(requests_mock)
     with open(testfile, 'rb') as f:
-        _test_pades_revinfo_live_lta_validate(f, requests_mock, no_write=True)
+        r = PdfFileReader(f)
+        validate_pdf_ltv_signature(
+            r.embedded_signatures[0],
+            validation_type=RevocationInfoValidationType.PADES_LTA,
+            # the cert embedded into this file uses a mock URL
+            # that doesn't work in the current testing architecture
+            validation_context_kwargs={
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+                'revocation_mode': 'soft-fail'
+            }
+        )
 
 
 def test_pades_lta_sign_twice(requests_mock):
@@ -1764,10 +1721,9 @@ def test_overspecify_cms_digest_algo():
     # TODO this behaviour is not ideal, but at least this test documents it
 
     signer = signers.SimpleSigner.load(
-        TESTING_CA_DIR + '/keys/signer.key.pem',
-        TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
-        ca_chain_files=(
-            TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
+        CRYPTO_DATA_DIR + '/selfsigned.key.pem',
+        CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
+        ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
         key_passphrase=b'secret',
         # specify an algorithm object that also mandates a specific
         # message digest
@@ -1785,7 +1741,7 @@ def test_overspecify_cms_digest_algo():
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    val_trusted(s)
+    val_untrusted(s)
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with pytest.raises(SigningError):
@@ -1947,8 +1903,8 @@ def test_no_email():
     # This is simply to test the name generation logic if no email address
     # is available
     signer = signers.SimpleSigner.load(
-        TESTING_CA_DIR + '/keys/tsa.key.pem',
-        TESTING_CA_DIR + '/root/newcerts/tsa.cert.pem',
+        CRYPTO_DATA_DIR + '/keys-rsa/tsa.key.pem',
+        CRYPTO_DATA_DIR + '/tsa.cert.pem',
         ca_chain_files=(),
         key_passphrase=b'secret'
     )
@@ -2266,10 +2222,7 @@ def test_sig_indirect_contents():
 @freeze_time('2020-11-01')
 def test_timestamp_with_different_digest():
     ts = timestamps.DummyTimeStamper(
-        tsa_cert=TSA_CERT,
-        tsa_key=load_private_key_from_pemder(
-            TESTING_CA_DIR + '/keys/tsa.key.pem', b'secret'
-        ),
+        tsa_cert=TSA_CERT, tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
         certs_to_embed=FROM_CA.cert_registry,
         override_md='sha512'
     )
@@ -2774,12 +2727,10 @@ def test_sign_weak_sig_digest():
     document_hash = cms_writer.send(
         signers.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
     )
-    signer = signers.SimpleSigner.load(
-        TESTING_CA_DIR + '/keys/signer.key.pem',
-        TESTING_CA_DIR + '/intermediate/newcerts/signer.cert.pem',
-        ca_chain_files=(
-            TESTING_CA_DIR + '/intermediate/certs/ca-chain.cert.pem',),
-        key_passphrase=b'secret',
+    signer = signers.SimpleSigner(
+        signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
+        signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
     )
     cms_obj = signer.sign(
         data_digest=document_hash, digest_algorithm=external_md_algorithm,

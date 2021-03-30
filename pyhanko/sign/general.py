@@ -8,7 +8,7 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Set, Optional, Tuple
+from typing import ClassVar, Set, Optional, Tuple, Iterable
 
 import hashlib
 
@@ -353,6 +353,12 @@ class SimpleCertificateStore(CertificateStore):
     Unopinionated replacement for certvalidator's CertificateRegistry in cases
     where we explicitly don't care about whether the certs are trusted or not.
     """
+
+    @classmethod
+    def from_certs(cls, certs: Iterable[x509.Certificate]):
+        s = SimpleCertificateStore()
+        s.certs = {cert.issuer_serial: cert for cert in certs}
+        return s
 
     def __init__(self):
         self.certs = {}

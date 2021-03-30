@@ -7,8 +7,10 @@
 set -e
 
 
-CA_BASEDIR="pyhanko_tests/data/crypto/testing-ca"
+CRYPTO_BASEDIR="pyhanko_tests/data/crypto"
+CA_BASEDIR="$CRYPTO_BASEDIR/testing-ca"
 TOKEN_NAME=testrsa
+KEYDIR="$CRYPTO_BASEDIR/keys-rsa"
 #CA_BASEDIR="pyhanko_tests/data/crypto/testing-ca-ecdsa"
 #TOKEN_NAME=testecdsa
 SLOT_IX=0
@@ -50,9 +52,6 @@ cleanup () {
 
 trap cleanup EXIT
 
-
-KEYDIR="$CA_BASEDIR/keys"
-
 # function to save a key pair in pkcs8 format
 # (assumes the passphrase is "secret")
 transcode_key () {
@@ -80,7 +79,7 @@ import_cert () {
 
 # Import signer cert
 transcode_key signer
-transcode_cert intermediate/newcerts/signer signer
+transcode_cert interm/signer1 signer
 import_key signer 01
 import_cert signer 02
 
@@ -88,17 +87,17 @@ import_cert signer 02
 if [[ "$WITH_EXTRA_SIGNER" = yes ]] ; then
     # Import  signer2 cert
     transcode_key signer2
-    transcode_cert intermediate/newcerts/signer2 signer2
+    transcode_cert interm/signer2 signer2
     import_key signer2 11
     import_cert signer2 12
 fi
 
 
 # import root CA cert
-transcode_cert root/certs/ca root
+transcode_cert root/root root
 import_cert root 21
 
 
 # import intermediate CA cert
-transcode_cert intermediate/certs/ca intermediate
+transcode_cert root/interm intermediate
 import_cert intermediate 31

@@ -16,9 +16,9 @@ def test_read_vc_kwargs(trust_replace):
     config_string = f"""
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             trust-replace: {'true' if trust_replace else 'false'}
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
@@ -225,7 +225,7 @@ def test_read_key_usage(key_usage_str, key_usages):
     config_string = f"""
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-key-usage: {key_usage_str}
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
@@ -250,7 +250,7 @@ def test_read_extd_key_usage(key_usage_str, key_usages):
     config_string = f"""
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-extd-key-usage: {key_usage_str}
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
@@ -266,7 +266,7 @@ def test_key_usage_errors(key_usage_str):
     config_string = f"""
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-extd-key-usage: {key_usage_str}
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
@@ -279,30 +279,30 @@ def test_key_usage_errors(key_usage_str):
     time-tolerance: 5
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, 5),
     (f"""
     time-tolerance: 5
     validation-contexts:
         default:
             time-tolerance: 7
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, 7),
     (f"""
     validation-contexts:
         default:
             time-tolerance: 7
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, 7),
 
     (f"""
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, DEFAULT_TIME_TOLERANCE)
 ])
 def test_read_time_tolerance(config_string, result):
@@ -316,7 +316,7 @@ def test_read_time_tolerance_input_issues():
     validation-contexts:
         default:
             time-tolerance: "this makes no sense"
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
     """
     with pytest.raises(ConfigurationError, match='time-tolerance.*'):
         cli_config: config.CLIConfig = config.parse_cli_config(config_string)
@@ -326,7 +326,7 @@ def test_read_time_tolerance_input_issues():
     time-tolerance: "this makes no sense"
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
     """
     with pytest.raises(ConfigurationError, match='time-tolerance.*'):
         cli_config: config.CLIConfig = config.parse_cli_config(config_string)
@@ -346,44 +346,44 @@ def test_read_time_tolerance_input_issues():
     retroactive-revinfo: true
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, True),
     (f"""
     retroactive-revinfo: true
     validation-contexts:
         default:
             retroactive-revinfo: false
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, False),
     (f"""
     retroactive-revinfo: false
     validation-contexts:
         default:
             retroactive-revinfo: true
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, True),
     (f"""
     validation-contexts:
         default:
             retroactive-revinfo: true
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, True),
     (f"""
     validation-contexts:
         default:
             retroactive-revinfo: "yes"
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, True),
     (f"""
     validation-contexts:
         default:
-            trust: '{TESTING_CA_DIR}/root/certs/ca.cert.pem'
-            other-certs: '{TESTING_CA_DIR}/intermediate/certs/ca-chain.cert.pem'
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """, False)
 ])
 def test_read_retroactive_revinfo(config_string, result):

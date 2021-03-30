@@ -5,6 +5,8 @@
 # NOTE: on macos, you need to set the "$OPENSSL" variable to a 
 # non-SIP-protected binary for the time manipulation tricks to work
 
+# NOTE2: This script has been deprecated in favour of a Certomancer-based approach.
+
 set -e
 set -o pipefail
 
