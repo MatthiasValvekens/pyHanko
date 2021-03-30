@@ -423,13 +423,6 @@ def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str):
 
     digest_algorithm = digest_algorithm.lower()
 
-    try:
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import padding
-        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-    except ImportError:  # pragma: nocover
-        raise SigningError("pyca/cryptography is required for generic PSS")
-
     key: RSAPublicKey = serialization.load_der_public_key(
         cert.public_key.dump()
     )
