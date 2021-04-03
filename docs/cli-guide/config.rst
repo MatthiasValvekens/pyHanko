@@ -32,9 +32,9 @@ Here's an example.
         root-level: ERROR
         root-output: stderr
         by-module:
-            certvalidator:
+            pyhanko_certvalidator:
                 level: DEBUG
-                output: certvalidator.log
+                output: pyhanko_certvalidator.log
             pyhanko.sign:
                 level: DEBUG
 

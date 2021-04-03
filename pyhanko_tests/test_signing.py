@@ -16,10 +16,10 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
 
 import pyhanko.pdf_utils.content
-from certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
-from certvalidator import ValidationContext, CertificateValidator
+from pyhanko_certvalidator import ValidationContext, CertificateValidator
 
 from pyhanko import stamp
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment

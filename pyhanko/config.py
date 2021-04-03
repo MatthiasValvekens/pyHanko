@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import yaml
 from asn1crypto import x509
 
-from certvalidator import ValidationContext
+from pyhanko_certvalidator import ValidationContext
 from pyhanko.pdf_utils.config_utils import (
     check_config_keys, ConfigurationError
 )

@@ -9,8 +9,8 @@ from typing import List, Optional, Union, Set
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
-from certvalidator import InvalidCertificateError
-from certvalidator.path import ValidationPath
+from pyhanko_certvalidator import InvalidCertificateError
+from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string

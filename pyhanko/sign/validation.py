@@ -12,8 +12,8 @@ from asn1crypto import (
 )
 from asn1crypto.x509 import Certificate
 
-from certvalidator import ValidationContext, CertificateValidator
-from certvalidator.path import ValidationPath
+from pyhanko_certvalidator import ValidationContext, CertificateValidator
+from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
@@ -1462,7 +1462,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :param validation_type:
         Validation profile to use.
     :param validation_context_kwargs:
-        Keyword args to instantiate :class:`.certvalidator.ValidationContext`
+        Keyword args to instantiate :class:`.pyhanko_certvalidator.ValidationContext`
         objects needed over the course of the validation.
     :param bootstrap_validation_context:
         Validation context used to validate the current timestamp.
@@ -2153,7 +2153,7 @@ class DocumentSecurityStore:
         The result is applied to the output stream as an incremental update.
 
         You can either specify the CMS objects to include directly, or
-        pass them in as output from `certvalidator`.
+        pass them in as output from `pyhanko_certvalidator`.
 
         :param output_stream:
             Output stream to write to.

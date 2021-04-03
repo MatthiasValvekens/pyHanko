@@ -6,7 +6,7 @@ import click
 import logging
 import getpass
 
-from certvalidator import ValidationContext
+from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
     CLIConfig, LogConfig, StdLogOutput, parse_logging_config

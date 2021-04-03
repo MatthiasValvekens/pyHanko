@@ -22,12 +22,12 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
 
-from certvalidator.path import ValidationPath
+from pyhanko_certvalidator.path import ValidationPath
 
-from certvalidator import (
+from pyhanko_certvalidator import (
     CertificateValidator, InvalidCertificateError, PathBuildingError,
 )
-from certvalidator.errors import RevokedError, PathValidationError
+from pyhanko_certvalidator.errors import RevokedError, PathValidationError
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
@@ -234,7 +234,7 @@ class SignatureStatus:
         path = None
 
         try:
-            # validate usage without going through certvalidator
+            # validate usage without going through pyhanko_certvalidator
             key_usage_settings.validate(cert)
             path = validator.validate_usage(key_usage=set())
             trusted = True
@@ -350,7 +350,7 @@ class CertificateStore:
 
 class SimpleCertificateStore(CertificateStore):
     """
-    Unopinionated replacement for certvalidator's CertificateRegistry in cases
+    Unopinionated replacement for pyhanko_certvalidator's CertificateRegistry in cases
     where we explicitly don't care about whether the certs are trusted or not.
     """
 

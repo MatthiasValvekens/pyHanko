@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from certvalidator import CertificateValidator
+from pyhanko_certvalidator import CertificateValidator
 
 from . import general
 from .general import (

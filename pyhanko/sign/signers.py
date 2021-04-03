@@ -17,9 +17,9 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
 
-from certvalidator.errors import PathValidationError, PathBuildingError
+from pyhanko_certvalidator.errors import PathValidationError, PathBuildingError
 
-from certvalidator import ValidationContext, CertificateValidator
+from pyhanko_certvalidator import ValidationContext, CertificateValidator
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 
 from pyhanko.pdf_utils import generic, misc
@@ -1646,7 +1646,7 @@ class PdfTimeStamper:
         :param md_algorithm:
             The hash algorithm to use when computing message digests.
         :param validation_context:
-            The :class:`.certvalidator.ValidationContext`
+            The :class:`.pyhanko_certvalidator.ValidationContext`
             against which the TSA response should be validated.
             This validation context will also be used to update the DSS.
         :param bytes_reserved:
@@ -1731,7 +1731,7 @@ class PdfTimeStamper:
         :param reader:
             A :class:`PdfReader` encapsulating the input file.
         :param validation_context:
-            :class:`.certvalidator.ValidationContext` object to validate
+            :class:`.pyhanko_certvalidator.ValidationContext` object to validate
             the last timestamp.
         :param output:
             Write the output to the specified output stream.

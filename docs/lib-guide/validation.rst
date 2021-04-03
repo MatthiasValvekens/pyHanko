@@ -18,7 +18,7 @@ Validation functionality
 .. |SignatureStatus| replace:: :class:`~.pyhanko.sign.general.SignatureStatus`
 .. |PdfSignatureStatus| replace:: :class:`~.pyhanko.sign.validation.PdfSignatureStatus`
 .. |DocumentSecurityStore| replace:: :class:`~.pyhanko.sign.validation.DocumentSecurityStore`
-.. |ValidationContext| replace:: :class:`~.certvalidator.ValidationContext`
+.. |ValidationContext| replace:: :class:`~.pyhanko_certvalidator.ValidationContext`
 
 General API design
 ------------------
@@ -61,7 +61,7 @@ Validating a PDF signature
 --------------------------
 
 All validation in pyHanko is done with respect to a certain *validation context*
-(an object of type :class:`.certvalidator.ValidationContext`).
+(an object of type :class:`.pyhanko_certvalidator.ValidationContext`).
 This object tells pyHanko what the trusted certificates are, and transparently
 provides mechanisms to request and keep track of revocation data.
 For LTV validation purposes, a |ValidationContext| can also specify a point in
@@ -89,7 +89,7 @@ w.r.t. a specific trust root.
 .. code-block:: python
 
     from pyhanko.sign.general import load_cert_from_pemder
-    from certvalidator import ValidationContext
+    from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
 
@@ -246,7 +246,7 @@ To actually use a custom diff policy, you can proceed as follows.
 .. code-block:: python
 
     from pyhanko.sign.general import load_cert_from_pemder
-    from certvalidator import ValidationContext
+    from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
 
@@ -304,7 +304,7 @@ Anyhow, to disable diff analysis completely, it suffices to pass the
 .. code-block:: python
 
     from pyhanko.sign.general import load_cert_from_pemder
-    from certvalidator import ValidationContext
+    from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
 

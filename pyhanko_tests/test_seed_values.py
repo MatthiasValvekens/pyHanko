@@ -1,7 +1,7 @@
 from io import BytesIO
 
 import pytest
-from certvalidator import CertificateValidator
+from pyhanko_certvalidator import CertificateValidator
 from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic
