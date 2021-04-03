@@ -1,4 +1,4 @@
-# *certvalidator* Usage
+# *pyhanko_certvalidator* Usage
 
  - [Basic Path Validation](#basic-path-validation)
  - [TLS/SSL Server Validation](#tlsssl-server-validation)
@@ -17,7 +17,7 @@ a byte string of a DER or PEM-encoded X.509 certificate, or an instance of
 `asn1crypto.x509.Certificate`.
 
 ```python
-from certvalidator import CertificateValidator
+from pyhanko_certvalidator import CertificateValidator
 
 
 with open('/path/to/cert.crt', 'rb') as f:
@@ -33,7 +33,7 @@ instance of `asn1crypto.x509.Certificate`.
 
 ```python
 from asn1crypto import pem
-from certvalidator import CertificateValidator
+from pyhanko_certvalidator import CertificateValidator
 
 
 end_entity_cert = None
@@ -53,10 +53,10 @@ Once the `CertificateValidator()` object has been constructed, the method
 the end-entity certificate. The first parameter is a `set` of required key
 usage purposes required for the certificate to be valid. If an error occurs
 trying to build a path or check the key usage, a
-`certvalidator.errors.PathValidationError` exception will be raised.
+`pyhanko_certvalidator.errors.PathValidationError` exception will be raised.
 
 ```python
-from certvalidator import CertificateValidator, errors
+from pyhanko_certvalidator import CertificateValidator, errors
 
 
 with open('/path/to/cert.crt', 'rb') as f:
@@ -81,7 +81,7 @@ usage should only be checked if the extension is present, pass `True` to the
 third parameter, `extended_optional`.
 
 ```python
-from certvalidator import CertificateValidator, errors
+from pyhanko_certvalidator import CertificateValidator, errors
 
 
 with open('/path/to/cert.crt', 'rb') as f:
@@ -107,7 +107,7 @@ key usage parameters are automatically checked.*
 
 ```python
 from oscrypto import tls
-from certvalidator import CertificateValidator, errors
+from pyhanko_certvalidator import CertificateValidator, errors
 
 session = tls.TLSSession(manual_validation=True)
 connection = tls.TLSSocket('www.google.com', 443, session=session)
@@ -166,7 +166,7 @@ attribute of the `asn1crypto.x509.Certificate()` causing the error will be the
 most useful method.
 
 ```python
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
@@ -190,7 +190,7 @@ list of weak hash algorithms to the `weak_hash_algos` keyword parameter of
 
 ```python
 from __future__ import unicode_literals
-rom certvalidator import CertificateValidator, ValidationContext
+rom pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
@@ -210,7 +210,7 @@ and Safari on OS X.
 
 When revocation checks are desired, they are configured via the
 `ValidationContext()`. It is possible to provide CRLs and OCSP responses that
-have been fetched out-of-band, or allow the *certvalidator* package to fetch
+have been fetched out-of-band, or allow the *pyhanko_certvalidator* package to fetch
 them itself.
 
 #### Allow Fetching
@@ -219,7 +219,7 @@ To allow the fetching of CRLs or OCSP responses, the `allow_fetching` parameter
 of `ValidationContext()` must be `True`.
 
 ```python
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
@@ -247,7 +247,7 @@ be a list of byte strings containing the DER-encoded OCSP responses, or
 `asn1crypto.ocsp.OCSPResponse` objects.
 
 ```python
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
@@ -290,7 +290,7 @@ unicode string of: `"soft-fail"`, `"hard-fail"` or `"require"`.
 
 ```python
 from __future__ import unicode_literals
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
@@ -314,7 +314,7 @@ The certificates should be byte strings of DER or PEM-encoded X.509
 certificates, or `asn1crypto.x509.Certificate` objects.
 
 ```python
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()
@@ -337,7 +337,7 @@ validator = CertificateValidator(end_entity_cert, validation_context=context)
 
 ### Custom Trust Roots/CA Certs
 
-By default, *certvalidator* uses the trust roots provided by the operating
+By default, *pyhanko_certvalidator* uses the trust roots provided by the operating
 system to build a validation path.
 
 To use a custom list, provide a list of byte strings containing DER or
@@ -346,7 +346,7 @@ PEM-encoded X.509 certificates or `asn1crypto.x509.Certificate` objects to the
 
 ```python
 from asn1crypto import pem
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 trust_roots = []
 with open('/path/to/ca_certs.bundle', 'rb') as f:
@@ -365,7 +365,7 @@ To simply add one or more extra trust roots, pass the list to the
 
 ```python
 from asn1crypto import pem
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 extra_trust_roots = []
 with open('/path/to/extra_ca_certs.bundle', 'rb') as f:
@@ -393,7 +393,7 @@ UTC timezone, `asn1crypto.util.timezone.utc` can be used.
 ```python
 from datetime import datetime
 from asn1crypto.util import timezone
-from certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
     end_entity_cert = f.read()

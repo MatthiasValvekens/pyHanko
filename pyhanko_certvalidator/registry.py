@@ -283,7 +283,7 @@ class CertificateRegistry():
             instance of asn1crypto.x509.Certificate
 
         :return:
-            A list of certvalidator.path.ValidationPath objects that represent
+            A list of pyhanko_certvalidator.path.ValidationPath objects that represent
             the possible paths from the end-entity certificate to one of the CA
             certs.
         """
@@ -337,7 +337,7 @@ class CertificateRegistry():
             results are found.
 
         :param failed_paths:
-            A list of certvalidator.path.ValidationPath objects that failed due
+            A list of pyhanko_certvalidator.path.ValidationPath objects that failed due
             to no matching issuer before reaching a certificate from the CA
             certs list
         """

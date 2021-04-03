@@ -4,8 +4,8 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 import os
 
 
-package_name = "pyhanko-certvalidator"
-python_package_name = "certvalidator"
+package_name = "pyhanko-pyhanko_certvalidator"
+python_package_name = "pyhanko_certvalidator"
 
 other_packages = []
 
@@ -19,8 +19,8 @@ build_root = os.path.abspath(os.path.join(package_root, '..'))
 
 md_source_map = {
     'docs/api.md': [
-        'certvalidator/__init__.py',
-        'certvalidator/context.py',
+        'pyhanko_certvalidator/__init__.py',
+        'pyhanko_certvalidator/context.py',
     ],
 }
 

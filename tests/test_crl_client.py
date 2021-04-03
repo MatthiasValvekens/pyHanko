@@ -5,9 +5,9 @@ import unittest
 import os
 
 from asn1crypto import x509, pem
-from certvalidator import crl_client
-from certvalidator.context import ValidationContext
-from certvalidator.validate import verify_crl
+from pyhanko_certvalidator import crl_client
+from pyhanko_certvalidator.context import ValidationContext
+from pyhanko_certvalidator.validate import verify_crl
 
 
 tests_root = os.path.dirname(__file__)

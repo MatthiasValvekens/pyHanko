@@ -69,7 +69,7 @@ def test_classes():
     tests_dir = os.path.dirname(os.path.abspath(__file__))
 
     _import_from(
-        'certvalidator',
+        'pyhanko_certvalidator',
         os.path.join(tests_dir, '..')
     )
 

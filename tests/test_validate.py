@@ -8,11 +8,11 @@ import os
 
 from asn1crypto import crl, ocsp, pem, x509
 from asn1crypto.util import timezone
-from certvalidator import crl_client, ocsp_client
-from certvalidator.context import ValidationContext
-from certvalidator.path import ValidationPath
-from certvalidator.validate import validate_path
-from certvalidator.errors import PathValidationError, RevokedError
+from pyhanko_certvalidator import crl_client, ocsp_client
+from pyhanko_certvalidator.context import ValidationContext
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.validate import validate_path
+from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 
 from ._unittest_compat import patch
 from .unittest_data import data_decorator, data

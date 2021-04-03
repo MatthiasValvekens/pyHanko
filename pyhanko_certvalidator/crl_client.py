@@ -38,7 +38,7 @@ def fetch(cert, use_deltas=True, user_agent=None, timeout=10):
         raise TypeError('cert must be an instance of asn1crypto.x509.Certificate, not %s' % type_name(cert))
 
     if user_agent is None:
-        user_agent = 'certvalidator %s' % __version__
+        user_agent = 'pyhanko_certvalidator %s' % __version__
     elif not isinstance(user_agent, str_cls):
         raise TypeError('user_agent must be a unicode string, not %s' % type_name(user_agent))
 
@@ -111,7 +111,7 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
     output = []
 
     if user_agent is None:
-        user_agent = 'certvalidator %s' % __version__
+        user_agent = 'pyhanko_certvalidator %s' % __version__
     elif not isinstance(user_agent, str_cls):
         raise TypeError('user_agent must be a unicode string, not %s' % type_name(user_agent))
 

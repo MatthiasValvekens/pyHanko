@@ -19,7 +19,7 @@ from .registry import CertificateRegistry
 
 class ValidationContext():
 
-    # A certvalidator.registry.CertificateRegistry() object
+    # A pyhanko_certvalidator.registry.CertificateRegistry() object
     certificate_registry = None
 
     # A set of unicode strings of hash algorithms to be considered weak. Valid
@@ -31,7 +31,7 @@ class ValidationContext():
 
     # A dict with keys being an asn1crypto.x509.Certificate.signature byte
     # string of a certificate. Each value is a
-    # certvalidator.path.ValidationPath object of a fully-validated path
+    # pyhanko_certvalidator.path.ValidationPath object of a fully-validated path
     # for that certificate.
     _validate_map = None
 
@@ -143,7 +143,7 @@ class ValidationContext():
 
         :param crl_fetch_params:
             None or a dict of keyword args to pass to
-            certvalidator.crl_client.fetch() when fetching CRLs or associated
+            pyhanko_certvalidator.crl_client.fetch() when fetching CRLs or associated
             certificates. Only applicable when allow_fetching=True.
 
         :param ocsps:
@@ -153,7 +153,7 @@ class ValidationContext():
 
         :param ocsp_fetch_params:
             None or a dict of keyword args to pass to
-            certvalidator.ocsp_client.fetch() when fetching OSCP responses.
+            pyhanko_certvalidator.ocsp_client.fetch() when fetching OSCP responses.
             Only applicable when allow_fetching=True.
 
         :param allow_fetching:
@@ -441,7 +441,7 @@ class ValidationContext():
             An asn1crypto.x509.Certificate object
 
         :param path:
-            A certvalidator.path.ValidationPath object for the cert
+            A pyhanko_certvalidator.path.ValidationPath object for the cert
 
         :return:
             A list of asn1crypto.crl.CertificateList objects
@@ -547,7 +547,7 @@ class ValidationContext():
             An ans1crypto.x509.Certificate object
 
         :param path:
-            A certvalidator.path.ValidationPath object
+            A pyhanko_certvalidator.path.ValidationPath object
         """
 
         self._validate_map[cert.signature] = path
@@ -561,7 +561,7 @@ class ValidationContext():
             An asn1crypto.x509.Certificate object
 
         :return:
-            None if not validated, or a certvalidator.path.ValidationPath
+            None if not validated, or a pyhanko_certvalidator.path.ValidationPath
             object of the validation path
         """
 

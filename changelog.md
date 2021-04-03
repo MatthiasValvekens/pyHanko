@@ -1,5 +1,12 @@
 # changelog
 
+## 0.14.0
+
+ - Raise RequestError if CRL / OCSP client returns a status code other than 200.
+   Previously, this would fail with a cryptic ASN.1 deserialisation error instead.
+ - Rename Python package to `pyhanko_certvalidator` to avoid the potential name conflict
+   with the upstream `certvalidator` package.
+
 ## 0.13.1
  - Consider SHA-1 weak by default, and do not hard-code the list of potential weak hash algos.
 

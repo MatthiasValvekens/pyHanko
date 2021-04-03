@@ -7,8 +7,8 @@ import os
 
 from asn1crypto import pem, x509
 from asn1crypto.util import timezone
-from certvalidator import CertificateValidator, ValidationContext
-from certvalidator.errors import PathValidationError
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathValidationError
 
 from ._unittest_compat import patch
 

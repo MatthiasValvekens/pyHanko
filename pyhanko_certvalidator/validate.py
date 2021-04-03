@@ -32,15 +32,15 @@ def validate_path(validation_context, path):
     and are left up to the consuming application to process and/or fail on.
 
     :param validation_context:
-        A certvalidator.context.ValidationContext object to use for
+        A pyhanko_certvalidator.context.ValidationContext object to use for
         configuring validation behavior
 
     :param path:
-        A certvalidator.path.ValidationPath object of the path to validate
+        A pyhanko_certvalidator.path.ValidationPath object of the path to validate
 
     :raises:
-        certvalidator.errors.PathValidationError - when an error occurs validating the path
-        certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+        pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+        pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
 
     :return:
         The final certificate in the path - an instance of
@@ -53,14 +53,14 @@ def validate_path(validation_context, path):
 def validate_tls_hostname(validation_context, cert, hostname):
     """
     Validates the end-entity certificate from a
-    certvalidator.path.ValidationPath object to ensure that the certificate
+    pyhanko_certvalidator.path.ValidationPath object to ensure that the certificate
     is valid for the hostname provided and that the certificate is valid for
     the purpose of a TLS connection.
 
     THE CERTIFICATE PATH MUST BE VALIDATED SEPARATELY VIA validate_path()!
 
     :param validation_context:
-        A certvalidator.context.ValidationContext object to use for
+        A pyhanko_certvalidator.context.ValidationContext object to use for
         configuring validation behavior
 
     :param cert:
@@ -70,14 +70,14 @@ def validate_tls_hostname(validation_context, cert, hostname):
         A unicode string of the TLS server hostname
 
     :raises:
-        certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
+        pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
     """
 
     if not isinstance(validation_context, ValidationContext):
         raise TypeError(pretty_message(
             '''
             validation_context must be an instance of
-            certvalidator.context.ValidationContext, not %s
+            pyhanko_certvalidator.context.ValidationContext, not %s
             ''',
             type_name(validation_context)
         ))
@@ -110,13 +110,13 @@ def validate_tls_hostname(validation_context, cert, hostname):
 def validate_usage(validation_context, cert, key_usage, extended_key_usage, extended_optional):
     """
     Validates the end-entity certificate from a
-    certvalidator.path.ValidationPath object to ensure that the certificate
+    pyhanko_certvalidator.path.ValidationPath object to ensure that the certificate
     is valid for the key usage and extended key usage purposes specified.
 
     THE CERTIFICATE PATH MUST BE VALIDATED SEPARATELY VIA validate_path()!
 
     :param validation_context:
-        A certvalidator.context.ValidationContext object to use for
+        A pyhanko_certvalidator.context.ValidationContext object to use for
         configuring validation behavior
 
     :param cert:
@@ -133,14 +133,14 @@ def validate_usage(validation_context, cert, key_usage, extended_key_usage, exte
         considered valid
 
     :raises:
-        certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
+        pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
     """
 
     if not isinstance(validation_context, ValidationContext):
         raise TypeError(pretty_message(
             '''
             validation_context must be an instance of
-            certvalidator.context.ValidationContext, not %s
+            pyhanko_certvalidator.context.ValidationContext, not %s
             ''',
             type_name(validation_context)
         ))
@@ -210,11 +210,11 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     OCSP responder certificates.
 
     :param validation_context:
-        A certvalidator.context.ValidationContext object to use for
+        A pyhanko_certvalidator.context.ValidationContext object to use for
         configuring validation behavior
 
     :param path:
-        A certvalidator.path.ValidationPath object of the path to validate
+        A pyhanko_certvalidator.path.ValidationPath object of the path to validate
 
     :param end_entity_name_override:
         A unicode string of the name to use for the final certificate in the
@@ -229,7 +229,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     if not isinstance(path, ValidationPath):
         raise TypeError(pretty_message(
             '''
-            path must be an instance of certvalidator.path.ValidationPath,
+            path must be an instance of pyhanko_certvalidator.path.ValidationPath,
             not %s
             ''',
             type_name(path)
@@ -239,7 +239,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
         raise TypeError(pretty_message(
             '''
             validation_context must be an instance of
-            certvalidator.context.ValidationContext, not %s
+            pyhanko_certvalidator.context.ValidationContext, not %s
             ''',
             type_name(validation_context)
         ))
@@ -837,10 +837,10 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
         An asn1cyrpto.x509.Certificate object to verify the OCSP reponse for
 
     :param path:
-        A certvalidator.path.ValidationPath object for the cert
+        A pyhanko_certvalidator.path.ValidationPath object for the cert
 
     :param validation_context:
-        A certvalidator.context.ValidationContext object to use for caching
+        A pyhanko_certvalidator.context.ValidationContext object to use for caching
         validation information
 
     :param cert_description:
@@ -852,9 +852,9 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
         certificate when including in exception messages
 
     :raises:
-        certvalidator.errors.OCSPNoMatchesError - when none of the OCSP responses match the certificate
-        certvalidator.errors.OCSPValidationIndeterminateError - when the OCSP response could not be verified
-        certvalidator.errors.RevokedError - when the OCSP response indicates the certificate has been revoked
+        pyhanko_certvalidator.errors.OCSPNoMatchesError - when none of the OCSP responses match the certificate
+        pyhanko_certvalidator.errors.OCSPValidationIndeterminateError - when the OCSP response could not be verified
+        pyhanko_certvalidator.errors.RevokedError - when the OCSP response indicates the certificate has been revoked
     """
 
     if not isinstance(cert, x509.Certificate):
@@ -868,7 +868,7 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
     if not isinstance(path, ValidationPath):
         raise TypeError(pretty_message(
             '''
-            path must be an instance of certvalidator.path.ValidationPath,
+            path must be an instance of pyhanko_certvalidator.path.ValidationPath,
             not %s
             ''',
             type_name(path)
@@ -878,7 +878,7 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
         raise TypeError(pretty_message(
             '''
             validation_context must be an instance of
-            certvalidator.context.ValidationContext, not %s
+            pyhanko_certvalidator.context.ValidationContext, not %s
             ''',
             type_name(validation_context)
         ))
@@ -1162,13 +1162,13 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         An asn1cyrpto.x509.Certificate object to check for in the CRLs
 
     :param path:
-        A certvalidator.path.ValidationPath object of the cert's validation path
+        A pyhanko_certvalidator.path.ValidationPath object of the cert's validation path
 
     :param certificate_lists:
         A list of asn1crypto.crl.CertificateList objects
 
     :param validation_context:
-        A certvalidator.context.ValidationContext object to use for caching
+        A pyhanko_certvalidator.context.ValidationContext object to use for caching
         validation information
 
     :param use_deltas:
@@ -1183,9 +1183,9 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         certificate when including in exception messages
 
     :raises:
-        certvalidator.errors.CRLNoMatchesError - when none of the CRLs match the certificate
-        certvalidator.errors.CRLValidationError - when any error occurs trying to verify the CertificateList
-        certvalidator.errors.RevokedError - when the CRL indicates the certificate has been revoked
+        pyhanko_certvalidator.errors.CRLNoMatchesError - when none of the CRLs match the certificate
+        pyhanko_certvalidator.errors.CRLValidationError - when any error occurs trying to verify the CertificateList
+        pyhanko_certvalidator.errors.RevokedError - when the CRL indicates the certificate has been revoked
     """
 
     if not isinstance(cert, x509.Certificate):
@@ -1199,7 +1199,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
     if not isinstance(path, ValidationPath):
         raise TypeError(pretty_message(
             '''
-            path must be an instance of certvalidator.path.ValidationPath,
+            path must be an instance of pyhanko_certvalidator.path.ValidationPath,
             not %s
             ''',
             type_name(path)
@@ -1209,7 +1209,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         raise TypeError(pretty_message(
             '''
             validation_context must be an instance of
-            certvalidator.context.ValidationContext, not %s
+            pyhanko_certvalidator.context.ValidationContext, not %s
             ''',
             type_name(validation_context)
         ))
@@ -1772,7 +1772,7 @@ def _verify_signature(certificate_list, crl_issuer):
         An asn1crypto.x509.Certificate object of the CRL issuer
 
     :raises:
-        certvalidator.errors.CRLValidationError - when the signature is invalid or uses an unsupported algorithm
+        pyhanko_certvalidator.errors.CRLValidationError - when the signature is invalid or uses an unsupported algorithm
     """
 
     signature_algo = certificate_list['signature_algorithm'].signature_algo

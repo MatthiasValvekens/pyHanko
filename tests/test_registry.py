@@ -5,7 +5,7 @@ import unittest
 import os
 
 from asn1crypto import pem, x509
-from certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.registry import CertificateRegistry
 
 
 tests_root = os.path.dirname(__file__)

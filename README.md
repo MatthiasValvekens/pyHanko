@@ -68,7 +68,7 @@ Unsupported features:
 
 ## Current Release
 
-0.13.0 - [changelog](changelog.md)
+0.14.0 - [changelog](changelog.md)
 
 ## Dependencies
 
@@ -79,7 +79,7 @@ Unsupported features:
 ## Installation
 
 ```bash
-pip install certvalidator
+pip install pyhanko-certvalidator
 ```
 
 ## License

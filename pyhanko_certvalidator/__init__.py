@@ -22,13 +22,13 @@ __all__ = [
 
 class CertificateValidator():
 
-    # A certvalidator.context.ValidationContext object
+    # A pyhanko_certvalidator.context.ValidationContext object
     _context = None
 
     # An asn1crypto.x509.Certificate object
     _certificate = None
 
-    # A certvalidator.path.ValidationPath object - only set once validated
+    # A pyhanko_certvalidator.path.ValidationPath object - only set once validated
     _path = None
 
     def __init__(self, end_entity_cert, intermediate_certs=None, validation_context=None):
@@ -43,7 +43,7 @@ class CertificateValidator():
             constructing certificate paths for validation.
 
         :param validation_context:
-            A certvalidator.context.ValidationContext() object that controls
+            A pyhanko_certvalidator.context.ValidationContext() object that controls
             validation options
         """
 
@@ -67,7 +67,7 @@ class CertificateValidator():
             raise TypeError(pretty_message(
                 '''
                 validation_context must be an instance of
-                certvalidator.context.ValidationContext, not %s
+                pyhanko_certvalidator.context.ValidationContext, not %s
                 ''',
                 type_name(validation_context)
             ))
@@ -86,8 +86,8 @@ class CertificateValidator():
         is found, or all fail.
 
         :raises:
-            certvalidator.errors.PathValidationError - when an error occurs validating the path
-            certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+            pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+            pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
         """
 
         if self._path is not None:
@@ -181,12 +181,12 @@ class CertificateValidator():
             considered valid
 
         :raises:
-            certvalidator.errors.PathValidationError - when an error occurs validating the path
-            certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
-            certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
+            pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+            pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+            pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
 
         :return:
-            A certvalidator.path.ValidationPath object of the validated
+            A pyhanko_certvalidator.path.ValidationPath object of the validated
             certificate validation path
         """
 
@@ -210,12 +210,12 @@ class CertificateValidator():
             A unicode string of the TLS server hostname
 
         :raises:
-            certvalidator.errors.PathValidationError - when an error occurs validating the path
-            certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
-            certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
+            pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+            pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+            pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
 
         :return:
-            A certvalidator.path.ValidationPath object of the validated
+            A pyhanko_certvalidator.path.ValidationPath object of the validated
             certificate validation path
         """
 

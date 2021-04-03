@@ -9,8 +9,8 @@ import time
 
 from oscrypto import tls
 from oscrypto.errors import TLSVerificationError
-from certvalidator import CertificateValidator, ValidationContext
-from certvalidator.errors import PathValidationError, PathBuildingError
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathValidationError, PathBuildingError
 
 if sys.version_info < (3,):
     str_cls = unicode  # noqa
@@ -134,7 +134,7 @@ def run():
             _color(
                 'red',
                 'DIFF',
-                'oscrypto and certvalidator results for %s are different' % info[0],
+                'oscrypto and pyhanko_certvalidator results for %s are different' % info[0],
                 None,
                 os_result,
                 cv_result

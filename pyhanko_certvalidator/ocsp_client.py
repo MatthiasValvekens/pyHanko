@@ -57,7 +57,7 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
         raise TypeError('nonce must be a bool, not %s' % type_name(nonce))
 
     if user_agent is None:
-        user_agent = 'certvalidator %s' % __version__
+        user_agent = 'pyhanko_certvalidator %s' % __version__
     elif not isinstance(user_agent, str_cls):
         raise TypeError('user_agent must be a unicode string, not %s' % type_name(user_agent))
 

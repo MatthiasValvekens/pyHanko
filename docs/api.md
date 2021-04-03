@@ -1,4 +1,4 @@
-# *certvalidator* API Documentation
+# *pyhanko_certvalidator* API Documentation
 
 ### `CertificateValidator()` class
 
@@ -17,7 +17,7 @@
 > >         constructing certificate paths for validation.
 > >
 > >     :param validation_context:
-> >         A certvalidator.context.ValidationContext() object that controls
+> >         A pyhanko_certvalidator.context.ValidationContext() object that controls
 > >         validation options
 > >     """
 > > ```
@@ -31,12 +31,12 @@
 > >         A unicode string of the TLS server hostname
 > >
 > >     :raises:
-> >         certvalidator.errors.PathValidationError - when an error occurs validating the path
-> >         certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
-> >         certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
+> >         pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+> >         pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+> >         pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
 > >
 > >     :return:
-> >         A certvalidator.path.ValidationPath object of the validated
+> >         A pyhanko_certvalidator.path.ValidationPath object of the validated
 > >         certificate validation path
 > >     """
 > > ```
@@ -89,12 +89,12 @@
 > >         considered valid
 > >
 > >     :raises:
-> >         certvalidator.errors.PathValidationError - when an error occurs validating the path
-> >         certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
-> >         certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
+> >         pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+> >         pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+> >         pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
 > >
 > >     :return:
-> >         A certvalidator.path.ValidationPath object of the validated
+> >         A pyhanko_certvalidator.path.ValidationPath object of the validated
 > >         certificate validation path
 > >     """
 > > ```
@@ -154,7 +154,7 @@
 > >
 > >     :param crl_fetch_params:
 > >         None or a dict of keyword args to pass to
-> >         certvalidator.crl_client.fetch() when fetching CRLs or associated
+> >         pyhanko_certvalidator.crl_client.fetch() when fetching CRLs or associated
 > >         certificates. Only applicable when allow_fetching=True.
 > >
 > >     :param ocsps:
@@ -164,7 +164,7 @@
 > >
 > >     :param ocsp_fetch_params:
 > >         None or a dict of keyword args to pass to
-> >         certvalidator.ocsp_client.fetch() when fetching OSCP responses.
+> >         pyhanko_certvalidator.ocsp_client.fetch() when fetching OSCP responses.
 > >         Only applicable when allow_fetching=True.
 > >
 > >     :param allow_fetching:

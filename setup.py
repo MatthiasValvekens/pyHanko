@@ -11,8 +11,8 @@ from setuptools.command.egg_info import egg_info
 
 PACKAGE_NAME = 'pyhanko-certvalidator'
 EGG_NAME = PACKAGE_NAME.replace('-', '_')
-PYTHON_PACKAGE_NAME = 'certvalidator'
-PACKAGE_VERSION = '0.13.1'
+PYTHON_PACKAGE_NAME = 'pyhanko_certvalidator'
+PACKAGE_VERSION = '0.14.0'
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -86,7 +86,7 @@ class CleanCommand(Command):
 
 
 readme = ''
-with codecs.open(os.path.join(PACKAGE_ROOT, 'readme.md'), 'r', 'utf-8') as f:
+with codecs.open(os.path.join(PACKAGE_ROOT, 'README.md'), 'r', 'utf-8') as f:
     readme = f.read()
 
 
@@ -115,7 +115,6 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: Implementation :: PyPy',
 
         'Topic :: Security :: Cryptography',
     ],
@@ -127,7 +126,7 @@ setup(
         'asn1crypto>=1.2.0',
         'oscrypto>=1.1.0'
     ],
-    packages=['certvalidator'],
+    packages=[PYTHON_PACKAGE_NAME],
     package_data=package_data,
 
     test_suite='tests.make_suite',

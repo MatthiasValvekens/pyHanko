@@ -5,10 +5,10 @@ import unittest
 import os
 
 from asn1crypto import pem, x509
-from certvalidator import ocsp_client
-from certvalidator.registry import CertificateRegistry
-from certvalidator.context import ValidationContext
-from certvalidator.validate import verify_ocsp_response
+from pyhanko_certvalidator import ocsp_client
+from pyhanko_certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.context import ValidationContext
+from pyhanko_certvalidator.validate import verify_ocsp_response
 
 
 tests_root = os.path.dirname(__file__)

@@ -1,6 +1,6 @@
-# certvalidator Documentation
+# pyhanko_certvalidator Documentation
 
-*certvalidator* is a Python library for validating X.509 certificates and paths.
+*pyhanko_certvalidator* is a Python library for validating X.509 certificates and paths.
 
 The documentation consists of the following topics:
 
@@ -10,7 +10,7 @@ The documentation consists of the following topics:
 
 ## Implementation Details
 
-*certvalidator* implements the following algorithms:
+*pyhanko_certvalidator* implements the following algorithms:
 
  - [X.509/CRL] [Certificate Path Validation algorithm from RFC 5280 Section 5](https://tools.ietf.org/html/rfc5280#section-6)
    - Minus name constraints
