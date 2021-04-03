@@ -99,6 +99,8 @@ def fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=1
                 url=ocsp_url, timeout=timeout, headers=headers,
                 data=ocsp_request.dump()
             )
+            if response.status_code != 200:
+                raise RequestException(f"status code {response.status_code}")
             ocsp_response = ocsp.OCSPResponse.load(response.content)
             status = ocsp_response['response_status'].native
             if status != 'successful':

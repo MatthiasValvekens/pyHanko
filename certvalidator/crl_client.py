@@ -3,6 +3,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 import requests
 from asn1crypto import crl, x509, cms, pem
+from requests import RequestException
 
 from ._types import str_cls, type_name
 from .version import __version__
@@ -75,6 +76,8 @@ def _grab_crl(user_agent, url, timeout):
         'User-Agent': user_agent
     }
     response = requests.get(url=url, timeout=timeout, headers=headers)
+    if response.status_code != 200:
+        raise RequestException(f"status code {response.status_code}")
     data = response.content
     if pem.detect(data):
         _, _, data = pem.unarmor(data)
