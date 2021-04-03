@@ -53,7 +53,7 @@ setup(
         'qrcode>=6.1',
         'tzlocal>=2.1',
         'python-pkcs11>=0.6.0',
-        'pyhanko-certvalidator==0.12.1',
+        'pyhanko-certvalidator==0.14.1',
         'fonttools>=4.13.0',
         'click>=7.1.2',
         'requests>=2.24.0',
