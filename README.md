@@ -150,18 +150,6 @@ The following command will run the linter:
 python run.py lint
 ```
 
-Support for code coverage can be installed via:
-
-```bash
-pip install --user -r requires/coverage
-```
-
-Coverage is measured by running:
-
-```bash
-python run.py coverage
-```
-
 To install the packages requires to generate the API documentation, run:
 
 ```bash
