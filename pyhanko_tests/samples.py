@@ -107,7 +107,7 @@ def _configure_certomancer():
     clone['keyset'] = 'testing-ca-ecdsa'
     pki_archs['testing-ca-ecdsa'] = clone
 
-    return CertomancerConfig(cfg)
+    return CertomancerConfig(cfg, key_search_dir=CRYPTO_DATA_DIR)
 
 
 CERTOMANCER = _configure_certomancer()

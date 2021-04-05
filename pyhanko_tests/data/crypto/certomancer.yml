@@ -1,7 +1,7 @@
 external-url-prefix: "http://pyhanko.tests"
 keysets:
   testing-ca:
-    path-prefix: pyhanko_tests/data/crypto/keys-rsa
+    path-prefix: keys-rsa
     keys:
       root:
         path: root_ca.key.pem
@@ -25,7 +25,7 @@ keysets:
         path: signer2.key.pem
         password: secret
   testing-ca-ecdsa:
-    path-prefix: pyhanko_tests/data/crypto/keys-ecdsa
+    path-prefix: keys-ecdsa
     keys:
       root:
         path: root_ca.key.pem
