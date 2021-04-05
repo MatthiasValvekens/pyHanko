@@ -265,7 +265,12 @@ class PKCS11Signer(Signer):
             Attribute.LABEL: self.key_label,
             Attribute.CLASS: ObjectClass.PRIVATE_KEY
         })
-        kh, = list(q)
+        try:
+            kh, = list(q)
+        except ValueError as e:
+            raise PKCS11Error(
+                "Could not determine private key handle."
+            ) from e
         if not kh[Attribute.SIGN]:
             logger.warning(
                 f"The PKCS#11 device reports that the key with label "

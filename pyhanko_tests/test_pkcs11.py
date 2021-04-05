@@ -10,6 +10,7 @@ from io import BytesIO
 import pytest
 import logging
 from freezegun import freeze_time
+from pkcs11 import PKCS11Error
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -54,6 +55,22 @@ def test_simple_sign(bulk_fetch, pss):
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_wrong_key_label(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess() as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, 'signer', other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch, key_label='NoSuchKeyExists'
+        )
+        with pytest.raises(PKCS11Error, match='.*private key handle.*'):
+            signers.sign_pdf(w, meta, signer=signer)
 
 
 @pytest.mark.xfail  # fails due to lack of (proper) support in SoftHSMv2
