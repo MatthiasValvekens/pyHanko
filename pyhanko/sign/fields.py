@@ -1233,10 +1233,24 @@ def _insert_or_get_field_at(writer: BasePdfFileWriter, fields, path,
     )
 
 
+def _ensure_sig_flags(writer, lock_sig_flags: bool = True):
+    # make sure /SigFlags is present. If not, create it
+    # 3 = use append-only mode
+
+    form = writer.root['/AcroForm']
+
+    if lock_sig_flags:
+        orig_sig_flags = form.get('/SigFlags', None)
+        form['/SigFlags'] = generic.NumberObject(3)
+        if orig_sig_flags != 3:
+            writer.update_container(form)
+    else:
+        form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(1))
+
+
 def _prepare_sig_field(sig_field_name, root,
                        update_writer: BasePdfFileWriter,
-                       existing_fields_only=False, lock_sig_flags=True,
-                       **kwargs):
+                       existing_fields_only=False, **kwargs):
     """
     Returns a tuple of a boolean and a reference to a signature field.
     The boolean is ``True`` if the field was created, and ``False`` otherwise.
@@ -1297,9 +1311,6 @@ def _prepare_sig_field(sig_field_name, root,
     )
     sig_field.register_widget_annotation(update_writer, sig_field_ref)
 
-    # make sure /SigFlags is present. If not, create it
-    sig_flags = 3 if lock_sig_flags else 1
-    form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(sig_flags))
     # if a field was added to an existing form, register an extra update
     if not form_created:
         update_writer.update_container(fields)
@@ -1418,10 +1429,11 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
     # use default appearance
     field_created, sig_field_ref = _prepare_sig_field(
         sig_field_spec.sig_field_name, root, update_writer=pdf_out,
-        existing_fields_only=False, lock_sig_flags=False,
+        existing_fields_only=False,
         box=sig_field_spec.box, include_on_page=page_ref,
         combine_annotation=sig_field_spec.combine_annotation
     )
+    _ensure_sig_flags(writer=pdf_out, lock_sig_flags=False)
     if not field_created:
         raise PdfWriteError(
             'Signature field with name %s already exists.'

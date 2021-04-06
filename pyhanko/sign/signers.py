@@ -32,7 +32,7 @@ from pyhanko.sign import general
 from pyhanko.sign.fields import (
     enumerate_sig_fields, _prepare_sig_field,
     SigSeedValueSpec, SigSeedValFlags, SigSeedSubFilter, MDPPerm, FieldMDPSpec,
-    SigFieldSpec, SeedLockDocument
+    SigFieldSpec, SeedLockDocument, _ensure_sig_flags
 )
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.sign.general import (
@@ -1234,8 +1234,10 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
         field_created, sig_field_ref = _prepare_sig_field(
             field_name, root, update_writer=pdf_out,
             existing_fields_only=existing_fields_only,
-            lock_sig_flags=True, **sig_field_kwargs
+            **sig_field_kwargs
         )
+
+    _ensure_sig_flags(writer=pdf_out, lock_sig_flags=True)
 
     return field_created, sig_field_ref
 
