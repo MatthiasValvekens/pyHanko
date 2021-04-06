@@ -681,15 +681,14 @@ def test_add_sigfield_with_lock(include_docmdp):
     s = r.embedded_signatures[0]
     assert s.field_name == 'SigNew'
     refs = s.sig_object.get_object()['/Reference']
-    assert len(refs) == (2 if include_docmdp else 1)
+    assert len(refs) == 1
     ref = refs[0]
     assert ref['/TransformMethod'] == '/FieldMDP'
     assert ref['/TransformParams']['/Fields'] == generic.ArrayObject(['blah'])
     assert ref.raw_get('/Data').reference == r.root_ref
     assert '/Perms' not in r.root
     if include_docmdp:
-        ref = refs[1]
-        assert ref['/TransformMethod'] == '/DocMDP'
+        # test if the Acrobat-compatibility hack was included
         assert ref['/TransformParams']['/P'] == 1
     val_trusted(s)
 
@@ -715,7 +714,7 @@ def test_double_sign_lock_second():
     val_trusted(s, extd=True)
 
     s = r.embedded_signatures[1]
-    assert len(s.sig_object.get_object()['/Reference']) == 2
+    assert len(s.sig_object.get_object()['/Reference']) == 1
 
     val_trusted(s)
 

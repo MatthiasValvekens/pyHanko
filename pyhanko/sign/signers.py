@@ -893,7 +893,8 @@ class PdfSignatureMetadata:
     docmdp_permissions: MDPPerm = MDPPerm.FILL_FORMS
     """
     Indicates the document modification policy that will be in force after    
-    this signature is created.
+    this signature is created. Only relevant for certification signatures
+    or signatures that apply locking.
     
     .. warning::
         For non-certification signatures, this is only explicitly allowed since 
@@ -1275,8 +1276,15 @@ class SigMDPSetup:
     def _apply(self, sig_obj_ref, writer):
 
         certify = self.certify
+        docmdp_perms = self.docmdp_perms
+
+        lock = self.field_lock
+        md_algorithm = self.md_algorithm
+
+        reference_array = generic.ArrayObject()
 
         if certify:
+            assert docmdp_perms is not None
             # To make a certification signature, we need to leave a record
             #  in the document catalog.
             root = writer.root
@@ -1286,23 +1294,21 @@ class SigMDPSetup:
                 root['/Perms'] = perms = generic.DictionaryObject()
             perms[pdf_name('/DocMDP')] = sig_obj_ref
             writer.update_container(perms)
-
-        lock = self.field_lock
-        md_algorithm = self.md_algorithm
-
-        reference_array = generic.ArrayObject()
-        if lock is not None:
-            reference_array.append(
-                fieldmdp_reference_dictionary(
-                    lock, md_algorithm, data_ref=writer.root_ref
-                )
-            )
-
-        docmdp_perms = self.docmdp_perms
-        if docmdp_perms is not None:
             reference_array.append(
                 docmdp_reference_dictionary(md_algorithm, docmdp_perms)
             )
+
+        if lock is not None:
+            fieldmdp_ref = fieldmdp_reference_dictionary(
+                lock, md_algorithm, data_ref=writer.root_ref
+            )
+            reference_array.append(fieldmdp_ref)
+
+            if docmdp_perms is not None:
+                # NOTE: this is NOT spec-compatible, but emulates Acrobat
+                # behaviour
+                fieldmdp_ref['/TransformParams']['/P'] = \
+                    generic.NumberObject(docmdp_perms.value)
 
         if reference_array:
             sig_obj_ref.get_object()['/Reference'] = reference_array
@@ -1878,8 +1884,13 @@ class PdfSigner(PdfTimeStamper):
 
     def _apply_locking_rules(self, sig_field, md_algorithm,
                              sv_spec: SigSeedValueSpec = None) -> SigMDPSetup:
+        # TODO allow equivalent functionality to the /Lock dictionary
+        #  to be specified in PdfSignatureMetadata
+
         # this helper method handles /Lock dictionary and certification
         #  semantics.
+        # The fallback rules are messy and ad-hoc; behaviour is mostly
+        # documented by tests.
 
         # read recommendations and/or requirements from the SV dictionary
         if sv_spec is not None and not self._ignore_sv:
@@ -1896,7 +1907,7 @@ class PdfSigner(PdfTimeStamper):
             sv_lock_values = None
             sv_lock_value_req = False
 
-        lock = None
+        lock = lock_dict = None
         # init the DocMDP value with what the /LockDocument setting in the SV
         # dict recommends. If the constraint is mandatory, it might conflict
         # with the /Lock dictionary, but we'll deal with that later.
@@ -1941,6 +1952,18 @@ class PdfSigner(PdfTimeStamper):
                     f"but the signature field settings do "
                     f"not allow that. Setting '{docmdp_perms}' instead."
                 )
+
+        # if not certifying and docmdp_perms is not None, ensure the
+        # appropriate permission in the Lock dictionary is set
+        if not meta_certify and docmdp_perms is not None:
+            if lock_dict is None:
+                # set a field lock that doesn't do anything
+                sig_field['/Lock'] = lock_dict = generic.DictionaryObject({
+                    pdf_name('/Action'): pdf_name('/Include'),
+                    pdf_name('/Fields'): generic.ArrayObject()
+                })
+            lock_dict['/P'] = generic.NumberObject(docmdp_perms.value)
+
         return SigMDPSetup(
             certify=meta_certify, field_lock=lock, docmdp_perms=docmdp_perms,
             md_algorithm=md_algorithm

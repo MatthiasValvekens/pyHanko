@@ -775,7 +775,8 @@ class EmbeddedPdfSignature:
     def docmdp_level(self) -> Optional[MDPPerm]:
         """
         :return:
-            The document modification policy required by this signature.
+            The document modification policy required by this signature or
+            its Lock dictionary.
 
             .. warning::
                 This does not take into account the DocMDP requirements of
@@ -788,11 +789,16 @@ class EmbeddedPdfSignature:
                 the earlier signature with the stricter DocMDP policy.
 
         """
-        # TODO fall back to reading /Lock in case the signing software
-        #  ignored the /Lock dictionary when building up the signature object
         if self._docmdp_queried:
             return self._docmdp
         docmdp = _extract_docmdp_for_sig(signature_obj=self.sig_object)
+
+        if docmdp is None:
+            try:
+                lock_dict = self.sig_field['/Lock']
+                docmdp = MDPPerm(lock_dict['/P'])
+            except KeyError:
+                pass
         self._docmdp = docmdp
         self._docmdp_queried = True
         return docmdp
