@@ -235,7 +235,7 @@ of :class:`~.pyhanko.sign.signers.SimpleSigner` and
 This subsection merely highlights some of the issues you should keep in mind.
 
 First, if all you want to do is implement a signing device or technique that's
-not supported by pyHanko\ [#cryptoparams]_, it should be sufficient to implement
+not supported by pyHanko, it should be sufficient to implement
 :meth:`~.pyhanko.sign.signers.Signer.sign_raw`.
 This method computes the raw cryptographic signature of some data (typically
 a document hash) with the appropriate key material.
@@ -331,13 +331,6 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
 
 
 .. rubric:: Footnotes
-
-.. [#cryptoparams]
-   ... and doesn't require any cryptographic parameters. Signature mechanisms
-   with parameters (such as RSA-PSS) are a bit more tricky.
-   RSA-PSS is on the roadmap for pyHanko; once that has been implemented, using
-   custom signature mechanisms with parameters should also become a bit more
-   straightforward.
 
 .. [#signerdryrun]
    The ``dry_run`` flag is used in the estimation of the CMS object's size.

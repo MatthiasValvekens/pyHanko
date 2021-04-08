@@ -431,11 +431,11 @@ generate one using Python's ``uuid`` module.
     point-in-time validation, the only sensible answer seems to be to leave
     this judgment call up to the discretion of the validator.
 
-    It is also useful to note that some certificate authorities will reissue
-    their roots with the same key pair and a later expiration date\
-    [#reissuingroot]_.
-    Due to the way PKIX validation works, these certificates will typically
-    work as drop-in replacements for the older ones.
+    It is also useful to note that some certificate authorities implement key
+    rollover by cross-signing their new roots with their old roots and
+    vice-versa. Provided these cross-signed certificates are available to the
+    validator, these should allow older chains of trust to be validated
+    against the newer roots.
 
 Customising signature appearances
 ---------------------------------
@@ -459,8 +459,8 @@ see :doc:`stamping` and :ref:`style-definitions` for details.
     any document modification policy, such as the addition of document
     timestamps and updates to the document security store.
 .. [#validationscope]
-    The author has it on good authority that a rigorous validation specification
-    is beyond the scope of the PDF standard itself.
+    The author has it on good authority that a rigorous incremental update
+    validation specification is beyond the scope of the PDF standard itself.
 .. [#disclaimer]
     This obviously also applies to pyHanko itself; be aware that pyHanko's
     :doc:`license </license>` doesn't make any fitness-for-purpose guarantees,
@@ -468,6 +468,3 @@ see :doc:`stamping` and :ref:`style-definitions` for details.
 .. [#nnserial]
     The certificate's serial number is in fact equal to the holder's
     national registry number.
-.. [#reissuingroot]
-    Author's note: it's not clear to me whether this is good PKI practice, and
-    how common it is.
