@@ -30,6 +30,7 @@ from pyhanko.pdf_utils.generic import (
 )
 from pyhanko.pdf_utils.content import ResourceType, PdfContent, RawContent
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin
+from pyhanko.pdf_utils.qr import PdfStreamQRImage
 
 
 __all__ = [
@@ -527,7 +528,6 @@ class QRStamp(TextStamp):
         qr.add_data(self.url)
         qr.make()
 
-        from pyhanko.pdf_utils.barcodes import PdfStreamQRImage
         img = qr.make_image(image_factory=PdfStreamQRImage)
         command_stream = img.render_command_stream()
 

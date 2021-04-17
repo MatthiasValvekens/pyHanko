@@ -19,7 +19,6 @@ The image data handling is done by
 import uuid
 from fractions import Fraction
 
-from PIL.ImagePalette import ImagePalette
 from typing import Union
 
 from .layout import BoxConstraints
@@ -28,7 +27,17 @@ from .content import ResourceType, PdfResources, PdfContent
 from . import generic
 from .writer import BasePdfFileWriter
 
-from PIL import Image
+try:
+    from PIL import Image
+    from PIL.ImagePalette import ImagePalette
+except ImportError as e:  # pragma: nocover
+    raise ImportError(
+        "pyhanko.pdf_utils.images requires pyHanko to be installed with "
+        "the [image-support] option. You can install missing "
+        "dependencies by running "
+        "\"pip install 'pyHanko[image-support]'\".", e
+    )
+
 
 __all__ = ['pil_image', 'PdfImage']
 

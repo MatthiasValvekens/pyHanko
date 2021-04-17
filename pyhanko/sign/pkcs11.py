@@ -7,9 +7,17 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 import logging
 
 from asn1crypto.algos import RSASSAPSSParams
-from pkcs11 import (
-    Session, ObjectClass, Attribute, lib as pkcs11_lib, PKCS11Error
-)
+
+try:
+    from pkcs11 import (
+        Session, ObjectClass, Attribute, lib as pkcs11_lib, PKCS11Error
+    )
+except ImportError as e:  # pragma: nocover
+    raise ImportError(
+        "pyhanko.sign.pkcs11 requires pyHanko to be installed with "
+        "the [pkcs11] option. You can install missing "
+        "dependencies by running \"pip install 'pyHanko[pkcs11]'\".", e
+    )
 
 from typing import Set
 

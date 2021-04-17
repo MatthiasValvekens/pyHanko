@@ -1,3 +1,7 @@
+.. warning::
+    This guide assumes that pyHanko is installed with all optional dependencies, including
+    those required for PKCS#11 support and image support.
+
 Signing PDF files
 =================
 

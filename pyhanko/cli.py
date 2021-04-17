@@ -14,13 +14,12 @@ from pyhanko.config import (
 from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
 
-from pyhanko.sign import signers, pkcs11
+from pyhanko.sign import signers, validation, fields
 from pyhanko.sign.general import (
     SigningError, SignatureValidationError, load_certs_from_pemder
 )
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
 from pyhanko.sign.timestamps import HTTPTimeStamper
-from pyhanko.sign import validation, beid, fields
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -36,6 +35,12 @@ __all__ = ['cli']
 
 logger = logging.getLogger(__name__)
 
+
+try:
+    import pkcs11
+    pkcs11_available = True
+except ImportError:
+    pkcs11_available = False
 
 def logging_setup(log_configs):
     log_config: LogConfig
@@ -786,7 +791,6 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
 
 # TODO add options to specify extra certs to include
 
-@addsig.command(name='pkcs11', help='use generic PKCS#11 device to sign')
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--lib', help='path to PKCS#11 module',
@@ -803,6 +807,7 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
 @click.pass_context
 def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
                   cert_label, key_label, slot_no, skip_user_pin):
+    from pyhanko.sign import pkcs11
     signature_meta = ctx.obj[Ctx.SIG_META]
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
@@ -836,7 +841,6 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
         )
 
 
-@addsig.command(name='beid', help='use Belgian eID to sign')
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--lib', help='path to libbeidpkcs11 library file',
@@ -848,6 +852,7 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
               required=False, type=int, default=None)
 @click.pass_context
 def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
+    from pyhanko.sign import beid
     signature_meta = ctx.obj[Ctx.SIG_META]
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
@@ -868,6 +873,27 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
             existing_fields_only=existing_fields_only,
             text_params=get_text_params(ctx)
         )
+
+
+def _pkcs11_cmd(name, hlp, fun):
+    addsig.command(name=name, help=hlp)(fun)
+
+
+PKCS11_COMMANDS = [
+    ('pkcs11', 'use generic PKCS#11 device to sign', addsig_pkcs11),
+    ('beid', 'use Belgian eID to sign', addsig_beid)
+]
+
+if pkcs11_available:
+    for args in PKCS11_COMMANDS:
+        _pkcs11_cmd(*args)
+else:
+    def _unavailable():
+        raise click.ClickException(
+            "This subcommand requires python-pkcs11 to be installed."
+        )
+    for name, hlp, fun in PKCS11_COMMANDS:
+        _pkcs11_cmd(name, hlp + ' [dependencies missing]', _unavailable)
 
 
 def _index_page(page):
