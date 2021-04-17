@@ -19,8 +19,18 @@ PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
 and can be installed using `pip`:
 
 ```bash
+   pip install pyHanko
+```
+
+Note: starting from version 0.6.0 (which hasn't been released yet), you'll have to run
+
+```bash
    pip install 'pyHanko[pkcs11,image-support]'
 ```
+
+to install additional dependencies for PKCS#11 and image support. These dependencies were part of the core requirements in earlier versions,
+but have now been made optional.
+
 
 ### Overview
 The code in this repository functions both as a library and as a command-line tool.
