@@ -124,7 +124,8 @@ setup(
     install_requires=[
         'requests>=2.24.0',
         'asn1crypto>=1.2.0',
-        'oscrypto>=1.1.0'
+        'oscrypto>=1.1.0',
+        'uritools>=3.0.1'
     ],
     packages=[PYTHON_PACKAGE_NAME],
     package_data=package_data,

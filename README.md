@@ -49,9 +49,6 @@ revocation checks.
    - Caching of CRLs/OCSP responses
  - CRL and OCSP HTTP clients
  - Point-in-time validation
-
-Unsupported features:
- 
  - Name constraints
 
 ## Related Crypto Libraries

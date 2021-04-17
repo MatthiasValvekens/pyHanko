@@ -17,7 +17,7 @@ from .path import ValidationPath
 from .registry import CertificateRegistry
 
 
-class ValidationContext():
+class ValidationContext:
 
     # A pyhanko_certvalidator.registry.CertificateRegistry() object
     certificate_registry = None

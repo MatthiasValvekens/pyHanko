@@ -8,6 +8,8 @@ import oscrypto.errors
 from ._errors import pretty_message
 from ._types import str_cls, type_name
 from .context import ValidationContext
+from .name_trees import PermittedSubtrees, ExcludedSubtrees, NameSubtree, \
+    GeneralNameType, process_general_subtrees
 from .errors import (
     CRLNoMatchesError,
     CRLValidationError,
@@ -25,8 +27,7 @@ from .path import ValidationPath
 def validate_path(validation_context, path):
     """
     Validates the path using the algorithm from
-    https://tools.ietf.org/html/rfc5280#section-6.1, with the exception
-    that name constraints are not checked or enforced.
+    https://tools.ietf.org/html/rfc5280#section-6.1.
 
     Critical extensions on the end-entity certificate are not validated
     and are left up to the consuming application to process and/or fail on.
@@ -268,11 +269,20 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     # Step 1: initialization
 
     # Step 1 a
-    valid_policy_tree = PolicyTreeRoot('any_policy', set(), set(['any_policy']))
+    valid_policy_tree = PolicyTreeRoot('any_policy', set(), {'any_policy'})
 
-    # Steps 1 b-c skipped since they relate to name constraints
+    # Steps 1 b-c
+    # TODO allow custom initialisation from validation context
+    permitted_subtrees = PermittedSubtrees({
+        name_type: {NameSubtree.universal_tree(name_type)}
+        for name_type in GeneralNameType
+    })
+    excluded_subtrees = ExcludedSubtrees({
+        name_type: set() for name_type in GeneralNameType
+    })
 
     # Steps 1 d-f
+    # TODO put these inputs in the validation context
     # We do not use initial-explicit-policy, initial-any-policy-inhibit or
     # initial-policy-mapping-inhibit, so they are all set to the path length + 1
     explicit_policy = path_length + 1
@@ -295,6 +305,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     completed_path = ValidationPath(trust_anchor)
     validation_context.record_validation(trust_anchor, completed_path)
 
+    cert: x509.Certificate
     cert = trust_anchor
     while index <= last_index:
         cert = path[index]
@@ -462,7 +473,31 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 _cert_type(index, last_index, end_entity_name_override),
             ))
 
-        # Steps 2 b-c skipped since they relate to name constraints
+        # Steps 2 b-c
+        if index == last_index or not cert.self_issued:
+            # name constraint processing
+            whitelist_result = permitted_subtrees.accept_cert(cert)
+            if not whitelist_result:
+                raise PathValidationError(pretty_message(
+                    '''
+                    The path could not be validated because not all names of
+                    the %s are in the permitted namespace of the issuing
+                    authority. %s
+                    ''',
+                    _cert_type(index, last_index, end_entity_name_override),
+                    whitelist_result.error_message
+                ))
+            blacklist_result = excluded_subtrees.accept_cert(cert)
+            if not blacklist_result:
+                raise PathValidationError(pretty_message(
+                    '''
+                    The path could not be validated because some names of
+                    the %s are excluded from the namespace of the issuing
+                    authority. %s
+                    ''',
+                    _cert_type(index, last_index, end_entity_name_override),
+                    blacklist_result.error_message
+                ))
 
         # Steps 2 d
         if cert.certificate_policies_value and valid_policy_tree is not None:
@@ -613,7 +648,20 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             if copy_params:
                 working_public_key['algorithm']['parameters'] = copy_params
 
-            # Step 3 g skipped since it relates to name constraints
+            # Step 3 g
+            nc_value: x509.NameConstraints = cert.name_constraints_value
+            if nc_value is not None:
+                new_permitted_subtrees = nc_value['permitted_subtrees']
+                if new_permitted_subtrees is not None:
+                    permitted_subtrees.intersect_with(
+                        process_general_subtrees(new_permitted_subtrees)
+                    )
+                new_excluded_subtrees = nc_value['excluded_subtrees']
+                if new_excluded_subtrees is not None:
+                    excluded_subtrees.union_with(
+                        process_general_subtrees(new_excluded_subtrees)
+                    )
+
 
             # Step 3 h
             if not cert.self_issued:
@@ -678,7 +726,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
 
         # Step 3 o
         # Check for critical unsupported extensions
-        supported_extensions = set([
+        supported_extensions = {
             'authority_information_access',
             'authority_key_identifier',
             'basic_constraints',
@@ -692,7 +740,9 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
             'policy_mappings',
             'policy_constraints',
             'inhibit_any_policy',
-        ])
+            'name_constraints',
+            'subject_alt_name'
+        }
         unsupported_critical_extensions = cert.critical_extensions - supported_extensions
         if unsupported_critical_extensions:
             raise PathValidationError(pretty_message(
