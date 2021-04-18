@@ -71,6 +71,8 @@ revocation checks.
 
  - *asn1crypto*
  - *oscrypto*
+ - *uritools*
+ - *requests*
  - Python 3.7, 3.8 or 3.9
 
 ## Installation

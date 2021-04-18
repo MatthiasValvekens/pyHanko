@@ -260,8 +260,10 @@ class PermittedSubtrees:
         # However, initial-permitted-subtrees (by default) includes a
         # universal acceptor for each name type in our implementation,
         # which seems to be what most implementations do.
+
+        # We deep-copy the initial permitted subtrees
         trees: Dict[GeneralNameType, List[Set[NameSubtree]]] = {
-            name_type: [initial_permitted_subtrees.get(name_type, set())]
+            name_type: [set(initial_permitted_subtrees.get(name_type, ()))]
             for name_type in GeneralNameType
         }
         self._trees = trees
@@ -304,7 +306,10 @@ class ExcludedSubtrees:
         # here, we don't need to remember individual generations of blacklists,
         # we can just take unions to strictify conditions as we move along the
         # path under scrutiny.
-        self._trees: PKIXSubtrees = initial_excluded_subtrees
+        self._trees: PKIXSubtrees = {
+            name_type: set(tree_set)
+            for name_type, tree_set in initial_excluded_subtrees.items()
+        }
 
     def union_with(self, trees: PKIXSubtrees):
         # only change the values that appear in the new tree set!
