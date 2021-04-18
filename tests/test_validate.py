@@ -124,6 +124,52 @@ class ValidateTests(unittest.TestCase):
         with self.assertRaisesRegex(RevokedError, expected):
             validate_path(context, path)
 
+    def test_rsassa_pss(self):
+        cert = self._load_cert_object('testing-ca-pss', 'signer1.cert.pem')
+        ca_certs = [
+            self._load_cert_object('testing-ca-pss', 'root.cert.pem')
+        ]
+        other_certs = [
+            self._load_cert_object('testing-ca-pss', 'interm.cert.pem')
+        ]
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=False,
+            revocation_mode='soft-fail',
+            weak_hash_algos={'md2', 'md5'}
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+        validate_path(context, path)
+
+    def test_rsassa_pss_exclusive(self):
+        cert = self._load_cert_object(
+            'testing-ca-pss-exclusive', 'signer1.cert.pem'
+        )
+        ca_certs = [
+            self._load_cert_object('testing-ca-pss-exclusive', 'root.cert.pem')
+        ]
+        other_certs = [
+            self._load_cert_object(
+                'testing-ca-pss-exclusive', 'interm.cert.pem'
+            )
+        ]
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=False,
+            revocation_mode='soft-fail',
+            weak_hash_algos={'md2', 'md5'}
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+        validate_path(context, path)
+
     @data('ocsp_info', True)
     def openssl_ocsp(self, ca_file, other_files, cert_file, ocsp_files, path_len, moment, excp_class, excp_msg):
         ca_certs = [self._load_cert_object('openssl-ocsp', ca_file)]

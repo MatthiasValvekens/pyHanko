@@ -125,6 +125,7 @@ setup(
         'requests>=2.24.0',
         'asn1crypto>=1.2.0',
         'oscrypto>=1.1.0',
+        'cryptography>=3.3.1',
         'uritools>=3.0.1'
     ],
     packages=[PYTHON_PACKAGE_NAME],

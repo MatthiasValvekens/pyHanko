@@ -23,7 +23,7 @@ revocation checks.
  - X.509 path building
  - X.509 basic path validation
    - Signatures
-     - RSA, DSA and EC algorithms
+     - RSA (including PSS padding), DSA and EC algorithms
    - Name chaining
    - Validity dates
    - Basic constraints extension

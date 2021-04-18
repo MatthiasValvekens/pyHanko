@@ -1,9 +1,11 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-from asn1crypto import x509, crl
-from oscrypto import asymmetric
-import oscrypto.errors
+from asn1crypto import x509, crl, algos
+from asn1crypto.keys import PublicKeyInfo
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa, ec, dsa
 
 from ._errors import pretty_message
 from ._types import str_cls, type_name
@@ -324,27 +326,23 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                 hash_algo
             ))
 
-        if signature_algo == 'rsassa_pkcs1v15':
-            verify_func = asymmetric.rsa_pkcs1v15_verify
-        elif signature_algo == 'dsa':
-            verify_func = asymmetric.dsa_verify
-        elif signature_algo == 'ecdsa':
-            verify_func = asymmetric.ecdsa_verify
-        else:
+        try:
+            _validate_sig(
+                signature=cert['signature_value'].native,
+                signed_data=cert['tbs_certificate'].dump(),
+                public_key_info=working_public_key,
+                sig_algo=signature_algo, hash_algo=hash_algo,
+                parameters=cert['signature_algorithm']['parameters']
+            )
+        except PSSParameterMismatch:
             raise PathValidationError(pretty_message(
                 '''
-                The path could not be validated because the signature of %s
-                uses the unsupported algorithm %s
+                The signature parameters for %s do not match the constraints
+                on the public key.
                 ''',
-                _cert_type(index, last_index, end_entity_name_override, definite=True),
-                signature_algo
+                _cert_type(index, last_index, end_entity_name_override, definite=True)
             ))
-
-        try:
-            key_object = asymmetric.load_public_key(working_public_key)
-            verify_func(key_object, cert['signature_value'].native, cert['tbs_certificate'].dump(), hash_algo)
-
-        except (oscrypto.errors.SignatureError):
+        except InvalidSignature:
             raise PathValidationError(pretty_message(
                 '''
                 The path could not be validated because the signature of %s
@@ -638,6 +636,9 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
 
             # Handle inheritance of DSA parameters from a signing CA to the
             # next in the chain
+            # NOTE: we don't perform this step for RSASSA-PSS since there the
+            #  parameters are drawn form the signature parameters, where they
+            #  must always be present.
             copy_params = None
             if cert.public_key.algorithm == 'dsa' and cert.public_key.hash_algo is None:
                 if working_public_key.algorithm == 'dsa':
@@ -831,7 +832,7 @@ def _cert_type(index, last_index, end_entity_name_override, definite=False):
     return prefix + 'end-entity certificate'
 
 
-def _self_signed(cert):
+def _self_signed(cert: x509.Certificate):
     """
     Determines if a certificate is self-signed
 
@@ -853,27 +854,16 @@ def _self_signed(cert):
     signature_algo = cert['signature_algorithm'].signature_algo
     hash_algo = cert['signature_algorithm'].hash_algo
 
-    if signature_algo == 'rsassa_pkcs1v15':
-        verify_func = asymmetric.rsa_pkcs1v15_verify
-    elif signature_algo == 'dsa':
-        verify_func = asymmetric.dsa_verify
-    elif signature_algo == 'ecdsa':
-        verify_func = asymmetric.ecdsa_verify
-    else:
-        raise PathValidationError(pretty_message(
-            '''
-            Unable to verify the signature of the certificate since it uses
-            the unsupported algorithm %s
-            ''',
-            signature_algo
-        ))
-
     try:
-        key_object = asymmetric.load_certificate(cert)
-        verify_func(key_object, cert['signature_value'].native, cert['tbs_certificate'].dump(), hash_algo)
+        _validate_sig(
+            signature=cert['signature_value'].native,
+            signed_data=cert['tbs_certificate'].dump(),
+            public_key_info=cert.public_key,
+            sig_algo=signature_algo, hash_algo=hash_algo,
+            parameters=cert['signature_algorithm']['parameters']
+        )
         return True
-
-    except (oscrypto.errors.SignatureError):
+    except InvalidSignature:
         return False
 
 
@@ -1128,30 +1118,22 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
         signature_algo = response['signature_algorithm'].signature_algo
         hash_algo = response['signature_algorithm'].hash_algo
 
-        if signature_algo == 'rsassa_pkcs1v15':
-            verify_func = asymmetric.rsa_pkcs1v15_verify
-        elif signature_algo == 'dsa':
-            verify_func = asymmetric.dsa_verify
-        elif signature_algo == 'ecdsa':
-            verify_func = asymmetric.ecdsa_verify
-        else:
-            failures.append((
-                pretty_message(
-                    '''
-                    Unable to verify OCSP response since response signature
-                    uses the unsupported algorithm %s
-                    ''',
-                    signature_algo
-                ),
-                ocsp_response
-            ))
-            continue
-
         # Verify that the response was properly signed by the validated certificate
         try:
-            key_object = asymmetric.load_certificate(signing_cert)
-            verify_func(key_object, response['signature'].native, tbs_response.dump(), hash_algo)
-        except (oscrypto.errors.SignatureError):
+            _validate_sig(
+                signature=response['signature'].native,
+                signed_data=tbs_response.dump(),
+                public_key_info=signing_cert.public_key,
+                sig_algo=signature_algo, hash_algo=hash_algo,
+                parameters=response['signature_algorithm']['parameters']
+            )
+        except PSSParameterMismatch:
+            failures.append((
+                'The signature parameters on the OCSP response do not match '
+                'the constraints on the public key',
+                ocsp_response
+            ))
+        except InvalidSignature:
             failures.append((
                 'Unable to verify OCSP response signature',
                 ocsp_response
@@ -1828,30 +1810,19 @@ def _verify_signature(certificate_list, crl_issuer):
     signature_algo = certificate_list['signature_algorithm'].signature_algo
     hash_algo = certificate_list['signature_algorithm'].hash_algo
 
-    if signature_algo == 'rsassa_pkcs1v15':
-        verify_func = asymmetric.rsa_pkcs1v15_verify
-    elif signature_algo == 'dsa':
-        verify_func = asymmetric.dsa_verify
-    elif signature_algo == 'ecdsa':
-        verify_func = asymmetric.ecdsa_verify
-    else:
-        raise CRLValidationError(pretty_message(
-            '''
-            Unable to verify the CertificateList since the signature uses the
-            unsupported algorithm %s
-            ''',
-            signature_algo
-        ))
-
     try:
-        key_object = asymmetric.load_certificate(crl_issuer)
-        verify_func(
-            key_object,
-            certificate_list['signature'].native,
-            certificate_list['tbs_cert_list'].dump(),
-            hash_algo
+        _validate_sig(
+            signature=certificate_list['signature'].native,
+            signed_data=certificate_list['tbs_cert_list'].dump(),
+            public_key_info=crl_issuer.public_key,
+            sig_algo=signature_algo, hash_algo=hash_algo,
+            parameters=certificate_list['signature_algorithm']['parameters']
         )
-    except (oscrypto.errors.SignatureError):
+    except PSSParameterMismatch as e:
+        raise CRLValidationError(
+            'Invalid signature parameters on CertificateList'
+        ) from e
+    except InvalidSignature:
         raise CRLValidationError('Unable to verify the signature of the CertificateList')
 
 
@@ -2038,3 +2009,60 @@ class PolicyTreeNode(PolicyTreeRoot):
         self.qualifier_set = qualifier_set
         self.expected_policy_set = expected_policy_set
         self.children = []
+
+
+class PSSParameterMismatch(InvalidSignature):
+    pass
+
+
+def _validate_sig(signature: bytes, signed_data: bytes,
+                  public_key_info: PublicKeyInfo,
+                  sig_algo: str, hash_algo: str, parameters=None):
+
+    hash_algo = getattr(hashes, hash_algo.upper())()
+
+    # pyca/cryptography can't load PSS-exclusive keys without some help:
+    if public_key_info.algorithm == 'rsassa_pss':
+        public_key_info = public_key_info.copy()
+        assert isinstance(parameters, algos.RSASSAPSSParams)
+        pss_key_params = public_key_info['algorithm']['parameters'].native
+        if pss_key_params is not None and pss_key_params != parameters.native:
+            raise PSSParameterMismatch(
+                "Public key info includes PSS parameters that do not match "
+                "those on the signature"
+            )
+        # set key type to generic RSA, discard parameters
+        public_key_info['algorithm'] = {'algorithm': 'rsa'}
+
+    pub_key = serialization.load_der_public_key(public_key_info.dump())
+
+    if sig_algo == 'rsassa_pkcs1v15':
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        pub_key.verify(signature, signed_data, padding.PKCS1v15(), hash_algo)
+    elif sig_algo == 'rsassa_pss':
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        assert isinstance(parameters, algos.RSASSAPSSParams)
+        mga: algos.MaskGenAlgorithm = parameters['mask_gen_algorithm']
+        if not mga['algorithm'].native == 'mgf1':
+            raise NotImplementedError("Only MFG1 is supported")
+
+        mgf_md_name = mga['parameters']['algorithm'].native
+
+        salt_len: int = parameters['salt_length'].native
+
+        mgf_md = getattr(hashes, mgf_md_name.upper())()
+        pss_padding = padding.PSS(
+            mgf=padding.MGF1(algorithm=mgf_md),
+            salt_length=salt_len
+        )
+        pub_key.verify(signature, signed_data, pss_padding, hash_algo)
+    elif sig_algo == 'dsa':
+        assert isinstance(pub_key, dsa.DSAPublicKey)
+        pub_key.verify(signature, signed_data, hash_algo)
+    elif sig_algo == 'ecdsa':
+        assert isinstance(pub_key, ec.EllipticCurvePublicKey)
+        pub_key.verify(signature, signed_data, ec.ECDSA(hash_algo))
+    else:  # pragma: nocover
+        raise NotImplementedError(
+            f"Signature mechanism {sig_algo} is not supported."
+        )
