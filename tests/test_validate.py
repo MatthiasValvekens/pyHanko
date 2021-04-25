@@ -923,6 +923,29 @@ class ValidateTests(unittest.TestCase):
                 'with more than 200 characters.  This explicitText is over 200 '
                 'characters long'
             ),
+            (
+                '41012_valid_policy_mapping_test12_with_testpol1',
+                'ValidPolicyMappingTest12EE.crt',
+                ['P12Mapping1to3CACert.crt'], ['P12Mapping1to3CACRL.crl'],
+                'q7:  This is the user notice from qualifier 7 associated with '
+                'NIST-test-policy-3.  This user notice should be displayed '
+                'when  NIST-test-policy-1 is in the '
+                'user-constrained-policy-set',
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
+            ),
+            (
+                '41012_valid_policy_mapping_test12_with_testpol2',
+                'ValidPolicyMappingTest12EE.crt',
+                ['P12Mapping1to3CACert.crt'], ['P12Mapping1to3CACRL.crl'],
+                'q8:  This is the user notice from qualifier 8 associated with '
+                'anyPolicy.  This user notice should be displayed when '
+                'NIST-test-policy-2 is in the user-constrained-policy-set',
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(2)
+                ]))
+            ),
         )
 
     def test_408020_cps_pointer_qualifier_test20(self):
@@ -2944,6 +2967,73 @@ class ValidateTests(unittest.TestCase):
                 )
             ),
             (
+                '41001_valid_policy_mapping_test2_with_testpol1',
+                'ValidPolicyMappingTest1EE.crt',
+                [
+                    'Mapping1to2CACert.crt',
+                ],
+                [
+                    'Mapping1to2CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
+            ),
+            (
+                '41001_valid_policy_mapping_test2_with_testpol2',
+                'ValidPolicyMappingTest1EE.crt',
+                [
+                    'Mapping1to2CACert.crt',
+                ],
+                [
+                    'Mapping1to2CACRL.crl',
+                ],
+                3,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(2)
+                ]))
+            ),
+            (
+                '41001_valid_policy_mapping_test2_inhibit_mapping',
+                'ValidPolicyMappingTest1EE.crt',
+                [
+                    'Mapping1to2CACert.crt',
+                ],
+                [
+                    'Mapping1to2CACRL.crl',
+                ],
+                3,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(initial_policy_mapping_inhibit=True)
+            ),
+            (
+                '41001_valid_policy_mapping_test2_inhibit_mapping_testpol1',
+                'ValidPolicyMappingTest1EE.crt',
+                [
+                    'Mapping1to2CACert.crt',
+                ],
+                [
+                    'Mapping1to2CACRL.crl',
+                ],
+                3,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(1)]),
+                    initial_policy_mapping_inhibit=True
+                )
+            ),
+            (
                 '41002_invalid_policy_mapping_test2',
                 'InvalidPolicyMappingTest2EE.crt',
                 [
@@ -2955,9 +3045,63 @@ class ValidateTests(unittest.TestCase):
                 3,
                 True,
                 PathValidationError,
-                (
-                    'The path could not be validated because there is no valid '
-                    'set of policies for the end-entity certificate'
+                EE_POLICY_ERROR
+            ),
+            (
+                '41002_invalid_policy_mapping_test2_inhibit_mapping',
+                'InvalidPolicyMappingTest2EE.crt',
+                [
+                    'Mapping1to2CACert.crt',
+                ],
+                [
+                    'Mapping1to2CACRL.crl',
+                ],
+                3,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(initial_policy_mapping_inhibit=True)
+            ),
+            (
+                '41003_valid_policy_mapping_test3_with_testpol1',
+                'ValidPolicyMappingTest3EE.crt',
+                [
+                    'P12Mapping1to3CACert.crt',
+                    'P12Mapping1to3subCACert.crt',
+                    'P12Mapping1to3subsubCACert.crt',
+                ],
+                [
+                    'P12Mapping1to3CACRL.crl',
+                    'P12Mapping1to3subCACRL.crl',
+                    'P12Mapping1to3subsubCACRL.crl',
+                ],
+                5,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(1)]),
+                )
+            ),
+            (
+                '41003_valid_policy_mapping_test3_with_testpol2',
+                'ValidPolicyMappingTest3EE.crt',
+                [
+                    'P12Mapping1to3CACert.crt',
+                    'P12Mapping1to3subCACert.crt',
+                    'P12Mapping1to3subsubCACert.crt',
+                ],
+                [
+                    'P12Mapping1to3CACRL.crl',
+                    'P12Mapping1to3subCACRL.crl',
+                    'P12Mapping1to3subsubCACRL.crl',
+                ],
+                5,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(2)]),
                 )
             ),
             (
@@ -2979,6 +3123,82 @@ class ValidateTests(unittest.TestCase):
                 (
                     'The path could not be validated because there is no valid '
                     'set of policies for the end-entity certificate'
+                )
+            ),
+            (
+                '41005_valid_policy_mapping_test5_with_testpol1',
+                'ValidPolicyMappingTest5EE.crt',
+                [
+                    'P1Mapping1to234CACert.crt',
+                    'P1Mapping1to234subCACert.crt',
+                ],
+                [
+                    'P1Mapping1to234CACRL.crl',
+                    'P1Mapping1to234subCACRL.crl',
+                ],
+                4,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(1)]),
+                )
+            ),
+            (
+                '41005_valid_policy_mapping_test5_with_testpol6',
+                'ValidPolicyMappingTest5EE.crt',
+                [
+                    'P1Mapping1to234CACert.crt',
+                    'P1Mapping1to234subCACert.crt',
+                ],
+                [
+                    'P1Mapping1to234CACRL.crl',
+                    'P1Mapping1to234subCACRL.crl',
+                ],
+                4,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(6)]),
+                )
+            ),
+            (
+                '41006_valid_policy_mapping_test6_with_testpol1',
+                'ValidPolicyMappingTest6EE.crt',
+                [
+                    'P1Mapping1to234CACert.crt',
+                    'P1Mapping1to234subCACert.crt',
+                ],
+                [
+                    'P1Mapping1to234CACRL.crl',
+                    'P1Mapping1to234subCACRL.crl',
+                ],
+                4,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(1)]),
+                )
+            ),
+            (
+                '41006_valid_policy_mapping_test6_with_testpol6',
+                'ValidPolicyMappingTest6EE.crt',
+                [
+                    'P1Mapping1to234CACert.crt',
+                    'P1Mapping1to234subCACert.crt',
+                ],
+                [
+                    'P1Mapping1to234CACRL.crl',
+                    'P1Mapping1to234subCACRL.crl',
+                ],
+                4,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([nist_test_policy(6)]),
                 )
             ),
             (
@@ -3066,6 +3286,7 @@ class ValidateTests(unittest.TestCase):
                 None,
                 None
             ),
+            # 4.10.12 has been included in the user notice qualifier tests
             (
                 '41013_valid_policy_mapping_test13',
                 'ValidPolicyMappingTest13EE.crt',
@@ -3361,6 +3582,23 @@ class ValidateTests(unittest.TestCase):
                 True,
                 None,
                 None
+            ),
+            (
+                '41203_inhibit_any_policy_test3_initial_inhibit',
+                'inhibitAnyPolicyTest3EE.crt',
+                [
+                    'inhibitAnyPolicy1CACert.crt',
+                    'inhibitAnyPolicy1subCA1Cert.crt',
+                ],
+                [
+                    'inhibitAnyPolicy1CACRL.crl',
+                    'inhibitAnyPolicy1subCA1CRL.crl',
+                ],
+                4,
+                True,
+                PathValidationError,
+                INTERM_POLICY_ERROR,
+                PKIXValidationParams(initial_any_policy_inhibit=True)
             ),
             (
                 '41204_invalid_inhibit_any_policy_test4',
