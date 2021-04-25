@@ -11,7 +11,7 @@ from asn1crypto.util import timezone
 from pyhanko_certvalidator import crl_client, ocsp_client
 from pyhanko_certvalidator.context import ValidationContext, \
     PKIXValidationParams
-from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
 from pyhanko_certvalidator.validate import validate_path
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 
@@ -831,6 +831,137 @@ class ValidateTests(unittest.TestCase):
                         self.assertIn(pol.user_domain_policy_id,
                                       params.user_initial_policy_set)
 
+    @data('nist_user_notice_info', True)
+    def nist_user_notice(self, cert_filename, other_cert_files, crl_files,
+                         expected_user_notice,
+                         params: PKIXValidationParams = None):
+        cert = self._load_nist_cert(cert_filename)
+        ca_certs = [self._load_nist_cert('TrustAnchorRootCertificate.crt')]
+        other_certs = [self._load_nist_cert(filename) for filename in other_cert_files]
+        crls = [self._load_nist_crl(filename) for filename in crl_files]
+        crls.append(self._load_nist_crl('TrustAnchorRootCRL.crl'))
+
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            crls=crls,
+            revocation_mode="require",
+            weak_hash_algos={'md2', 'md5'}
+        )
+
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path: ValidationPath = paths[0]
+        validate_path(context, path, parameters=params)
+
+        qps = path.qualified_policies()
+        self.assertEqual(1, len(qps))
+
+        qp: QualifiedPolicy
+        qp, = qps
+        self.assertEqual(1, len(qp.qualifiers))
+        qual_obj, = qp.qualifiers
+        self.assertEqual(qual_obj['policy_qualifier_id'].native, 'user_notice')
+        self.assertEqual(
+            qual_obj['qualifier']['explicit_text'].native, expected_user_notice
+        )
+
+    @staticmethod
+    def nist_user_notice_info():
+        return (
+            (
+                '40815_user_notice_qualifier_test15',
+                'UserNoticeQualifierTest15EE.crt',
+                [], [],
+                'q1:  This is the user notice from qualifier 1.  '
+                'This certificate is for test purposes only'
+            ),
+            (
+                '40816_user_notice_qualifier_test16',
+                'UserNoticeQualifierTest16EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                'q1:  This is the user notice from qualifier 1.  '
+                'This certificate is for test purposes only'
+            ),
+            (
+                '40817_user_notice_qualifier_test17',
+                'UserNoticeQualifierTest17EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                'q3:  This is the user notice from qualifier 3.  '
+                'This certificate is for test purposes only'
+            ),
+            (
+                '40818_user_notice_qualifier_test18',
+                'UserNoticeQualifierTest18EE.crt',
+                ['PoliciesP12CACert.crt'], ['PoliciesP12CACRL.crl'],
+                'q4:  This is the user notice from qualifier 4 associated with '
+                'NIST-test-policy-1.  This certificate is for test purposes '
+                'only',
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
+            ),
+            (
+                '40818_user_notice_qualifier_test18',
+                'UserNoticeQualifierTest18EE.crt',
+                ['PoliciesP12CACert.crt'], ['PoliciesP12CACRL.crl'],
+                'q5:  This is the user notice from qualifier 5 associated with '
+                'anyPolicy.  This user notice should be associated with '
+                'NIST-test-policy-2',
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(2)
+                ]))
+            ),
+            (
+                '40818_user_notice_qualifier_test19',
+                'UserNoticeQualifierTest19EE.crt',
+                [], [],
+                'q6:  Section 4.2.1.5 of RFC 3280 states the maximum size of '
+                'explicitText is 200 characters, but warns that some '
+                'non-conforming CAs exceed this limit.  Thus RFC 3280 states '
+                'that certificate users SHOULD gracefully handle explicitText '
+                'with more than 200 characters.  This explicitText is over 200 '
+                'characters long'
+            ),
+        )
+
+    def test_408020_cps_pointer_qualifier_test20(self):
+        cert = self._load_nist_cert('CPSPointerQualifierTest20EE.crt')
+        ca_certs = [self._load_nist_cert('TrustAnchorRootCertificate.crt')]
+        other_certs = [self._load_nist_cert('GoodCACert.crt')]
+        crls = [
+            self._load_nist_crl('GoodCACRL.crl'),
+            self._load_nist_crl('TrustAnchorRootCRL.crl')
+        ]
+
+        context = ValidationContext(
+            trust_roots=ca_certs, other_certs=other_certs, crls=crls,
+            revocation_mode="require",
+            weak_hash_algos={'md2', 'md5'}
+        )
+
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path: ValidationPath = paths[0]
+        validate_path(context, path)
+
+        qps = path.qualified_policies()
+        self.assertEqual(1, len(qps))
+
+        qp: QualifiedPolicy
+        qp, = qps
+        self.assertEqual(1, len(qp.qualifiers))
+        qual_obj, = qp.qualifiers
+        self.assertEqual(
+            qual_obj['policy_qualifier_id'].native,
+            'certification_practice_statement'
+        )
+        self.assertEqual(
+            qual_obj['qualifier'].native,
+            'http://csrc.nist.gov/groups/ST/crypto_apps_infra/csor/'
+            'pki_registration.html#PKITest'
+
+        )
 
     @staticmethod
     def nist_info():
