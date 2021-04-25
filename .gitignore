@@ -12,3 +12,4 @@ tests/output/
 coverage.xml
 
 .idea
+*.swp
