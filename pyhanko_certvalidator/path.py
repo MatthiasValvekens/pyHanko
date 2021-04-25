@@ -1,7 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-from collections import Set
+from typing import Set
 from dataclasses import dataclass
 
 from asn1crypto import pem, x509
@@ -13,9 +13,20 @@ from .errors import DuplicateCertificateError
 
 @dataclass(frozen=True)
 class QualifiedPolicy:
-    user_domain_policy_id: str
     issuer_domain_policy_id: str
+    """
+    Policy OID in the issuer domain (i.e. as listed on the certificate).
+    """
+
+    user_domain_policy_id: str
+    """
+    Policy OID of the equivalent policy in the user domain.
+    """
+
     qualifiers: frozenset
+    """
+    Set of x509.PolicyQualifierInfo objects.
+    """
 
 
 class ValidationPath():
