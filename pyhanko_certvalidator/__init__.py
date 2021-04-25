@@ -4,7 +4,7 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 from asn1crypto import pem
 from asn1crypto.x509 import Certificate
 
-from .context import ValidationContext
+from .context import ValidationContext, PKIXValidationParams
 from .errors import ValidationError, PathBuildingError, InvalidCertificateError
 from .validate import validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
@@ -31,7 +31,12 @@ class CertificateValidator():
     # A pyhanko_certvalidator.path.ValidationPath object - only set once validated
     _path = None
 
-    def __init__(self, end_entity_cert, intermediate_certs=None, validation_context=None):
+    # A pyhanko_certvalidator.context.PKIXValidationParams object
+    _params = None
+
+    def __init__(self, end_entity_cert, intermediate_certs=None,
+                 validation_context: ValidationContext = None,
+                 pkix_params: PKIXValidationParams = None):
         """
         :param end_entity_cert:
             An asn1crypto.x509.Certificate object or a byte string of the DER or
@@ -43,8 +48,20 @@ class CertificateValidator():
             constructing certificate paths for validation.
 
         :param validation_context:
-            A pyhanko_certvalidator.context.ValidationContext() object that controls
-            validation options
+            A pyhanko_certvalidator.context.ValidationContext() object that
+            controls generic validation options and tracks revocation data.
+
+            The same validation context will also be used in the validation
+            of relevant certificates found in OCSP responses and/or CRLs.
+
+        :param pkix_params:
+            A pyhanko_certvalidator.context.PKIXValidationParams() object that
+            controls advanced PKIX validation parameters used to validate
+            the end-entity certificate. These can be used to constrain
+            policy processing and names.
+
+            Ancillary validation of CRLs and OCSP responses ignore these
+            settings.
         """
 
         if not isinstance(end_entity_cert, Certificate):
@@ -79,6 +96,7 @@ class CertificateValidator():
 
         self._context = validation_context
         self._certificate = end_entity_cert
+        self._params = pkix_params
 
     def _validate_path(self):
         """
@@ -118,7 +136,7 @@ class CertificateValidator():
 
         for candidate_path in paths:
             try:
-                validate_path(self._context, candidate_path)
+                validate_path(self._context, candidate_path, self._params)
                 self._path = candidate_path
                 return
             except (ValidationError) as e:

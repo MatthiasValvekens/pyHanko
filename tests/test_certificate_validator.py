@@ -7,7 +7,8 @@ import os
 
 from asn1crypto import pem, x509
 from asn1crypto.util import timezone
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext, \
+    PKIXValidationParams
 from pyhanko_certvalidator.errors import PathValidationError
 
 from ._unittest_compat import patch
@@ -99,3 +100,39 @@ class CertificateValidatorTests(unittest.TestCase):
 
         # If whitelist does not work, this will raise exception for key usage
         validator.validate_usage(set(['crl_sign']))
+
+    def test_certvalidator_with_params(self):
+
+        cert = self._load_nist_cert('ValidPolicyMappingTest12EE.crt')
+        ca_certs = [self._load_nist_cert('TrustAnchorRootCertificate.crt')]
+        other_certs = [self._load_nist_cert('P12Mapping1to3CACert.crt')]
+
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            revocation_mode="soft-fail",
+            weak_hash_algos={'md2', 'md5'}
+        )
+
+        validator = CertificateValidator(
+            cert, validation_context=context,
+            pkix_params=PKIXValidationParams(
+                user_initial_policy_set=frozenset(['2.16.840.1.101.3.2.1.48.1'])
+            )
+        )
+        path = validator.validate_usage(key_usage={'digital_signature'})
+
+        # check if we got the right policy processing
+        # (i.e. if our params got through)
+        qps = path.qualified_policies()
+
+        qp, = qps
+        self.assertEqual(1, len(qp.qualifiers))
+        qual_obj, = qp.qualifiers
+        self.assertEqual(qual_obj['policy_qualifier_id'].native, 'user_notice')
+        self.assertEqual(
+            qual_obj['qualifier']['explicit_text'].native,
+            'q7:  This is the user notice from qualifier 7 associated with '
+            'NIST-test-policy-3.  This user notice should be displayed '
+            'when  NIST-test-policy-1 is in the user-constrained-policy-set'
+        )
