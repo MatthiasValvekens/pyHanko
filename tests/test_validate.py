@@ -9,7 +9,8 @@ import os
 from asn1crypto import crl, ocsp, pem, x509
 from asn1crypto.util import timezone
 from pyhanko_certvalidator import crl_client, ocsp_client
-from pyhanko_certvalidator.context import ValidationContext
+from pyhanko_certvalidator.context import ValidationContext, \
+    PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.validate import validate_path
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
@@ -36,6 +37,20 @@ EE_NAME_CONSTRAINT_BLACKLIST_FAILURE = (
     'the end-entity certificate are excluded from the namespace of the issuing '
     'authority.'
 )
+
+EE_POLICY_ERROR = (
+    'The path could not be validated because there is no valid '
+    'set of policies for the end-entity certificate'
+)
+
+INTERM_POLICY_ERROR = (
+    'The path could not be validated because there is no valid '
+    'set of policies for intermediate certificate \\d'
+)
+
+
+def nist_test_policy(no):
+    return '2.16.840.1.101.3.2.1.48.' + str(int(no))
 
 
 @data_decorator
@@ -777,7 +792,9 @@ class ValidateTests(unittest.TestCase):
             validate_path(context, path)
 
     @data('nist_info', True)
-    def nist(self, cert_filename, other_cert_files, crl_files, path_len, require_rev, excp_class, excp_msg):
+    def nist(self, cert_filename, other_cert_files, crl_files, path_len,
+             require_rev, excp_class, excp_msg,
+             params: PKIXValidationParams=None):
         cert = self._load_nist_cert(cert_filename)
         ca_certs = [self._load_nist_cert('TrustAnchorRootCertificate.crt')]
         other_certs = [self._load_nist_cert(filename) for filename in other_cert_files]
@@ -796,14 +813,24 @@ class ValidateTests(unittest.TestCase):
 
         paths = context.certificate_registry.build_paths(cert)
         self.assertEqual(1, len(paths))
-        path = paths[0]
+        path: ValidationPath = paths[0]
         self.assertEqual(path_len, len(path))
 
         if excp_class:
             with self.assertRaisesRegex(excp_class, excp_msg):
-                validate_path(context, path)
+                validate_path(context, path, parameters=params)
         else:
-            validate_path(context, path)
+            validate_path(context, path, parameters=params)
+
+            # sanity check
+            if params is not None and \
+                    params.user_initial_policy_set != {'any_policy'}:
+                qps = path.qualified_policies()
+                if qps is not None:
+                    for pol in qps:
+                        self.assertIn(pol.user_domain_policy_id,
+                                      params.user_initial_policy_set)
+
 
     @staticmethod
     def nist_info():
@@ -2041,6 +2068,68 @@ class ValidateTests(unittest.TestCase):
                 )
             ),
             (
+                '40801_all_certs_same_policy_test1_norestr',
+                'ValidCertificatePathTest1EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                3, True,
+                None, None
+            ),
+            (
+                '40801_all_certs_same_policy_test1_explicit_policy',
+                'ValidCertificatePathTest1EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                3, True,
+                None, None,
+                PKIXValidationParams(initial_explicit_policy=True)
+            ),
+            (
+                '40801_all_certs_same_policy_test1_with_constraints1',
+                'ValidCertificatePathTest1EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                3, True,
+                None, None,
+                PKIXValidationParams(
+                    initial_explicit_policy=True,
+                    user_initial_policy_set=frozenset([nist_test_policy(1)])
+                )
+            ),
+            (
+                '40801_all_certs_same_policy_test1_with_constraint_mismatch',
+                'ValidCertificatePathTest1EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                3, True,
+                PathValidationError, EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    initial_explicit_policy=True,
+                    user_initial_policy_set=frozenset([nist_test_policy(2)])
+                )
+            ),
+            (
+                '40801_all_certs_same_policy_test1_with_constraint_'
+                'mismatch_ignored',
+                'ValidCertificatePathTest1EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                3, True,
+                None, None,
+                PKIXValidationParams(
+                    initial_explicit_policy=False,
+                    user_initial_policy_set=frozenset([nist_test_policy(2)])
+                )
+            ),
+            (
+                '40801_all_certs_same_policy_test1_with_constraints2',
+                'ValidCertificatePathTest1EE.crt',
+                ['GoodCACert.crt'], ['GoodCACRL.crl'],
+                3, True,
+                None, None,
+                PKIXValidationParams(
+                    initial_explicit_policy=False,
+                    user_initial_policy_set=frozenset(
+                        [nist_test_policy(1), nist_test_policy(2)]
+                    ),
+                )
+            ),
+            (
                 '40802_all_certificates_no_policies_test2',
                 'AllCertificatesNoPoliciesTest2EE.crt',
                 [
@@ -2053,6 +2142,21 @@ class ValidateTests(unittest.TestCase):
                 True,
                 None,
                 None
+            ),
+            (
+                '40802_all_certificates_no_policies_test2_force_explicit',
+                'AllCertificatesNoPoliciesTest2EE.crt',
+                [
+                    'NoPoliciesCACert.crt',
+                ],
+                [
+                    'NoPoliciesCACRL.crl',
+                ],
+                3,
+                True,
+                PathValidationError,
+                INTERM_POLICY_ERROR,
+                PKIXValidationParams(initial_explicit_policy=True)
             ),
             (
                 '40803_different_policies_test3',
@@ -2069,6 +2173,45 @@ class ValidateTests(unittest.TestCase):
                 True,
                 None,
                 None
+            ),
+            (
+                '40803_different_policies_test3_force_explicit',
+                'DifferentPoliciesTest3EE.crt',
+                [
+                    'GoodCACert.crt',
+                    'PoliciesP2subCACert.crt',
+                ],
+                [
+                    'GoodCACRL.crl',
+                    'PoliciesP2subCACRL.crl',
+                ],
+                4,
+                True,
+                PathValidationError,
+                INTERM_POLICY_ERROR,
+                PKIXValidationParams(initial_explicit_policy=True)
+            ),
+            (
+                '40803_different_policies_test3_force_explicit_with_user_set',
+                'DifferentPoliciesTest3EE.crt',
+                [
+                    'GoodCACert.crt',
+                    'PoliciesP2subCACert.crt',
+                ],
+                [
+                    'GoodCACRL.crl',
+                    'PoliciesP2subCACRL.crl',
+                ],
+                4,
+                True,
+                PathValidationError,
+                INTERM_POLICY_ERROR,
+                PKIXValidationParams(
+                    initial_explicit_policy=True,
+                    user_initial_policy_set=frozenset([
+                        nist_test_policy(1), nist_test_policy(2)
+                    ])
+                )
             ),
             (
                 '40804_different_policies_test4',
@@ -2109,7 +2252,7 @@ class ValidateTests(unittest.TestCase):
                 )
             ),
             (
-                '40806_overlapping_policies_test3',
+                '40806_overlapping_policies_test6',
                 'OverlappingPoliciesTest6EE.crt',
                 [
                     'PoliciesP1234CACert.crt',
@@ -2125,6 +2268,71 @@ class ValidateTests(unittest.TestCase):
                 True,
                 None,
                 None
+            ),
+            (
+                '40806_overlapping_policies_test6_with_testpol1',
+                'OverlappingPoliciesTest6EE.crt',
+                [
+                    'PoliciesP1234CACert.crt',
+                    'PoliciesP1234subCAP123Cert.crt',
+                    'PoliciesP1234subsubCAP123P12Cert.crt',
+                ],
+                [
+                    'PoliciesP1234CACRL.crl',
+                    'PoliciesP1234subCAP123CRL.crl',
+                    'PoliciesP1234subsubCAP123P12CRL.crl',
+                ],
+                5,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
+            ),
+            (
+                '40806_overlapping_policies_test6_with_testpol2',
+                'OverlappingPoliciesTest6EE.crt',
+                [
+                    'PoliciesP1234CACert.crt',
+                    'PoliciesP1234subCAP123Cert.crt',
+                    'PoliciesP1234subsubCAP123P12Cert.crt',
+                ],
+                [
+                    'PoliciesP1234CACRL.crl',
+                    'PoliciesP1234subCAP123CRL.crl',
+                    'PoliciesP1234subsubCAP123P12CRL.crl',
+                ],
+                5,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    # this should still fail due to policy constraints
+                    initial_explicit_policy=False,
+                    user_initial_policy_set=frozenset([nist_test_policy(2)]))
+            ),
+            (
+                '40806_overlapping_policies_test6_with_testpol2_explicit',
+                'OverlappingPoliciesTest6EE.crt',
+                [
+                    'PoliciesP1234CACert.crt',
+                    'PoliciesP1234subCAP123Cert.crt',
+                    'PoliciesP1234subsubCAP123P12Cert.crt',
+                ],
+                [
+                    'PoliciesP1234CACRL.crl',
+                    'PoliciesP1234subCAP123CRL.crl',
+                    'PoliciesP1234subsubCAP123P12CRL.crl',
+                ],
+                5,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(
+                    initial_explicit_policy=True,
+                    user_initial_policy_set=frozenset([nist_test_policy(2)])
+                )
             ),
             (
                 '40807_different_policies_test7',
@@ -2206,7 +2414,41 @@ class ValidateTests(unittest.TestCase):
                 None
             ),
             (
-                '40811_all_certificates_any_policy_test10',
+                '40810_all_certificates_same_policies_test10_with_testpol1',
+                'AllCertificatesSamePoliciesTest10EE.crt',
+                [
+                    'PoliciesP12CACert.crt',
+                ],
+                [
+                    'PoliciesP12CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
+            ),
+            (
+                '40810_all_certificates_same_policies_test10_with_testpol2',
+                'AllCertificatesSamePoliciesTest10EE.crt',
+                [
+                    'PoliciesP12CACert.crt',
+                ],
+                [
+                    'PoliciesP12CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(2)
+                ]))
+            ),
+            (
+                '40811_all_certificates_any_policy_test11',
                 'AllCertificatesanyPolicyTest11EE.crt',
                 [
                     'anyPolicyCACert.crt',
@@ -2218,6 +2460,23 @@ class ValidateTests(unittest.TestCase):
                 True,
                 None,
                 None
+            ),
+            (
+                '40811_all_certificates_any_policy_test11_constrained',
+                'AllCertificatesanyPolicyTest11EE.crt',
+                [
+                    'anyPolicyCACert.crt',
+                ],
+                [
+                    'anyPolicyCACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
             ),
             (
                 '40812_different_policies_test12',
@@ -2251,6 +2510,82 @@ class ValidateTests(unittest.TestCase):
                 None
             ),
             (
+                '40813_all_certificates_same_policies_test13_with_testpol1',
+                'AllCertificatesSamePoliciesTest13EE.crt',
+                [
+                    'PoliciesP123CACert.crt',
+                ],
+                [
+                    'PoliciesP123CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([
+                        nist_test_policy(1)
+                    ])
+                )
+            ),
+            (
+                '40813_all_certificates_same_policies_test13_with_testpol2',
+                'AllCertificatesSamePoliciesTest13EE.crt',
+                [
+                    'PoliciesP123CACert.crt',
+                ],
+                [
+                    'PoliciesP123CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([
+                        nist_test_policy(2)
+                    ])
+                )
+            ),
+            (
+                '40813_all_certificates_same_policies_test13_with_testpol3',
+                'AllCertificatesSamePoliciesTest13EE.crt',
+                [
+                    'PoliciesP123CACert.crt',
+                ],
+                [
+                    'PoliciesP123CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([
+                        nist_test_policy(3)
+                    ])
+                )
+            ),
+            (
+                '40813_all_certificates_same_policies_test13_with_testpol1_2',
+                'AllCertificatesSamePoliciesTest13EE.crt',
+                [
+                    'PoliciesP123CACert.crt',
+                ],
+                [
+                    'PoliciesP123CACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(
+                    user_initial_policy_set=frozenset([
+                        nist_test_policy(1), nist_test_policy(2)
+                    ])
+                )
+            ),
+            (
                 '40814_any_policy_test14',
                 'AnyPolicyTest14EE.crt',
                 [
@@ -2263,6 +2598,57 @@ class ValidateTests(unittest.TestCase):
                 True,
                 None,
                 None
+            ),
+            (
+                '40814_any_policy_test14_with_testpol1',
+                'AnyPolicyTest14EE.crt',
+                [
+                    'anyPolicyCACert.crt',
+                ],
+                [
+                    'anyPolicyCACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1)
+                ]))
+            ),
+            (
+                '40814_any_policy_test14_with_testpol1_2',
+                'AnyPolicyTest14EE.crt',
+                [
+                    'anyPolicyCACert.crt',
+                ],
+                [
+                    'anyPolicyCACRL.crl',
+                ],
+                3,
+                True,
+                None,
+                None,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(1), nist_test_policy(2)
+                ]))
+            ),
+            (
+                '40814_any_policy_test14_with_testpol2',
+                'AnyPolicyTest14EE.crt',
+                [
+                    'anyPolicyCACert.crt',
+                ],
+                [
+                    'anyPolicyCACRL.crl',
+                ],
+                3,
+                True,
+                PathValidationError,
+                EE_POLICY_ERROR,
+                PKIXValidationParams(user_initial_policy_set=frozenset([
+                    nist_test_policy(2)
+                ]))
             ),
             (
                 '40901_valid_require_explicit_policy_test1',

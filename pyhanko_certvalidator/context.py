@@ -2,6 +2,7 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import socket
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import binascii
 
@@ -13,6 +14,8 @@ from . import ocsp_client, crl_client
 from ._errors import pretty_message
 from ._types import type_name, byte_cls, str_cls
 from .errors import SoftFailError
+from .name_trees import default_permitted_subtrees, PKIXSubtrees, \
+    default_excluded_subtrees
 from .path import ValidationPath
 from .registry import CertificateRegistry
 
@@ -611,3 +614,79 @@ class ValidationContext:
         """
 
         return self._crl_issuer_map.get(certificate_list.signature)
+
+
+@dataclass(frozen=True)
+class PKIXValidationParams:
+    user_initial_policy_set: frozenset = frozenset(['any_policy'])
+    """
+    Set of policies that the user is willing to accept. By default, any policy
+    is acceptable.
+    
+    When setting this parameter to a non-default value, you probably want to
+    set :attr:`initial_explicit_policy` as well.
+    
+    .. note::
+        These are specified in the policy domain of the trust root(s), and
+        subject to policy mapping by intermediate certificate authorities.
+    """
+
+    initial_policy_mapping_inhibit: bool = False
+    """
+    Flag indicating whether policy mapping is forbidden along the entire    
+    certification chains. By default, policy mapping is permitted.
+    
+    .. note::
+        Policy constraints on intermediate certificates may force policy mapping
+        to be inhibited from some point onwards.
+    """
+
+    initial_explicit_policy: bool = False
+    """
+    Flag indicating whether path validation must terminate with at least one
+    permissible policy; see :attr:`user_initial_policy_set`.
+    By default, no such requirement is imposed.
+    
+    .. note::
+        If :attr:`user_initial_policy_set` is set to its default value of
+        ``{'any_policy'}``, the effect is that the path validation must accept
+        at least one policy, without specifying which.
+        
+    .. warning::
+        Due to widespread mis-specification of policy extensions in the wild,
+        many real-world certification chains terminate with an empty set
+        (or rather, tree) of valid policies. Therefore, this flag is set to 
+        ``False`` by default.
+    """
+
+    initial_any_policy_inhibit: bool = False
+    """
+    Flag indicating whether ``anyPolicy`` should be left unprocessed when it
+    appears in a certificate. By default, ``anyPolicy`` is always processed
+    when it appears.
+    """
+
+    initial_permitted_subtrees: PKIXSubtrees = \
+        field(default_factory=default_permitted_subtrees)
+    """
+    Set of permitted subtrees for each name type, indicating restrictions
+    to impose on subject names (and alternative names) in the certification
+    path.
+    
+    By default, all names are permitted.
+    This behaviour can be modified by name constraints on intermediate CA
+    certificates.
+    """
+
+    initial_excluded_subtrees: PKIXSubtrees = field(
+        default_factory=default_excluded_subtrees
+    )
+    """
+    Set of excluded subtrees for each name type, indicating restrictions
+    to impose on subject names (and alternative names) in the certification
+    path.
+
+    By default, no names are excluded.
+    This behaviour can be modified by name constraints on intermediate CA
+    certificates.
+    """

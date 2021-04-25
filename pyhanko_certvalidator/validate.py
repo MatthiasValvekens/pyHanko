@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+from typing import Iterable, Optional
+
 from asn1crypto import x509, crl, algos
 from asn1crypto.keys import PublicKeyInfo
 from cryptography.exceptions import InvalidSignature
@@ -9,9 +11,9 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa, ec, dsa
 
 from ._errors import pretty_message
 from ._types import str_cls, type_name
-from .context import ValidationContext
-from .name_trees import PermittedSubtrees, ExcludedSubtrees, NameSubtree, \
-    GeneralNameType, process_general_subtrees
+from .context import ValidationContext, PKIXValidationParams
+from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
+    process_general_subtrees
 from .errors import (
     CRLNoMatchesError,
     CRLValidationError,
@@ -23,10 +25,11 @@ from .errors import (
     RevokedError,
     SoftFailError,
 )
-from .path import ValidationPath
+from .path import ValidationPath, QualifiedPolicy
 
 
-def validate_path(validation_context, path):
+def validate_path(validation_context, path,
+                  parameters: PKIXValidationParams = None):
     """
     Validates the path using the algorithm from
     https://tools.ietf.org/html/rfc5280#section-6.1.
@@ -41,6 +44,10 @@ def validate_path(validation_context, path):
     :param path:
         A pyhanko_certvalidator.path.ValidationPath object of the path to validate
 
+    :param parameters:
+        Additional input parameters to the PKIX validation algorithm.
+        These are not used when validating CRLs and OCSP responses.
+
     :raises:
         pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
         pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
@@ -50,7 +57,7 @@ def validate_path(validation_context, path):
         asn1crypto.x509.Certificate
     """
 
-    return _validate_path(validation_context, path)
+    return _validate_path(validation_context, path, parameters=parameters)
 
 
 def validate_tls_hostname(validation_context, cert, hostname):
@@ -205,7 +212,8 @@ def validate_usage(validation_context, cert, key_usage, extended_key_usage, exte
         ))
 
 
-def _validate_path(validation_context, path, end_entity_name_override=None):
+def _validate_path(validation_context, path, end_entity_name_override=None,
+                   parameters: PKIXValidationParams = None):
     """
     Internal copy of validate_path() that allows overriding the name of the
     end-entity certificate as used in exception messages. This functionality is
@@ -224,6 +232,10 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
         path. This is necessary when dealing with indirect CRL issuers or
         OCSP responder certificates.
 
+    :param parameters:
+        Additional input parameters to the PKIX validation algorithm.
+        These are not used when validating CRLs and OCSP responses.
+
     :return:
         The final certificate in the path - an instance of
         asn1crypto.x509.Certificate
@@ -232,8 +244,8 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     if not isinstance(path, ValidationPath):
         raise TypeError(pretty_message(
             '''
-            path must be an instance of pyhanko_certvalidator.path.ValidationPath,
-            not %s
+            path must be an instance of
+            pyhanko_certvalidator.path.ValidationPath, not %s
             ''',
             type_name(path)
         ))
@@ -263,10 +275,10 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
 
     # We skip the trust anchor when measuring the path since technically
     # the trust anchor is not part of the path
+    # TODO If the trust anchor has NameConstraints etc., we might want to
+    #  intersect those with the parameters that were passed in, and make that
+    #  behaviour togglable.
     path_length = len(path) - 1
-
-    # We don't accept any certificate policy or name constraint values as input
-    # and instead just start allowing everything during initialization
 
     # Step 1: initialization
 
@@ -274,22 +286,25 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
     valid_policy_tree = PolicyTreeRoot('any_policy', set(), {'any_policy'})
 
     # Steps 1 b-c
-    # TODO allow custom initialisation from validation context
-    permitted_subtrees = PermittedSubtrees({
-        name_type: {NameSubtree.universal_tree(name_type)}
-        for name_type in GeneralNameType
-    })
-    excluded_subtrees = ExcludedSubtrees({
-        name_type: set() for name_type in GeneralNameType
-    })
+    parameters = parameters or PKIXValidationParams()
+    permitted_subtrees = PermittedSubtrees(
+        parameters.initial_permitted_subtrees
+    )
+    excluded_subtrees = ExcludedSubtrees(parameters.initial_excluded_subtrees)
 
     # Steps 1 d-f
-    # TODO put these inputs in the validation context
-    # We do not use initial-explicit-policy, initial-any-policy-inhibit or
-    # initial-policy-mapping-inhibit, so they are all set to the path length + 1
-    explicit_policy = path_length + 1
-    inhibit_any_policy = path_length + 1
-    policy_mapping = path_length + 1
+    explicit_policy = (
+        0 if parameters.initial_explicit_policy
+        else path_length + 1
+    )
+    inhibit_any_policy = (
+        0 if parameters.initial_any_policy_inhibit
+        else path_length + 1
+    )
+    policy_mapping = (
+        0 if parameters.initial_policy_mapping_inhibit
+        else path_length + 1
+    )
 
     # Steps 1 g-i
     working_public_key = trust_anchor.public_key
@@ -551,11 +566,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                             )
 
             # Step 2 d 3
-            for node in valid_policy_tree.walk_up(index - 1):
-                if not node.children:
-                    node.parent.remove_child(node)
-            if len(valid_policy_tree.children) == 0:
-                valid_policy_tree = None
+            valid_policy_tree = _prune_policy_tree(valid_policy_tree, index - 1)
 
         # Step 2 e
         if cert.certificate_policies_value is None:
@@ -623,11 +634,9 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
                             for node in valid_policy_tree.at_depth(index):
                                 if node.valid_policy == issuer_domain_policy:
                                     node.parent.remove_child(node)
-                            for node in valid_policy_tree.walk_up(index - 1):
-                                if not node.children:
-                                    node.parent.remove_child(node)
-                            if len(valid_policy_tree.children) == 0:
-                                valid_policy_tree = None
+                            valid_policy_tree = _prune_policy_tree(
+                                valid_policy_tree, index - 1
+                            )
 
             # Step 3 c
             working_issuer_name = cert.subject
@@ -778,17 +787,43 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
 
     # Step 4 g
 
+    acceptable_policies = parameters.user_initial_policy_set
     # Step 4 g i
     if valid_policy_tree is None:
         intersection = None
 
     # Step 4 g ii
-    else:
+    elif acceptable_policies == {'any_policy'}:
         intersection = valid_policy_tree
 
-    # Step 4 g iii is skipped since the initial policy set is always any_policy
+    # Step 4 g iii
+    else:
+        intersection = _prune_unacceptable_policies(
+            path_length, valid_policy_tree, acceptable_policies
+        )
 
-    if explicit_policy == 0 and intersection is None:
+    if intersection is not None:
+        # collect policies in a user-friendly format and attach them to the
+        # path object
+        def _enum_policies():
+            accepted_policy: PolicyTreeNode
+            for accepted_policy in intersection.at_depth(path_length):
+                listed_pol = accepted_policy.valid_policy
+                yield QualifiedPolicy(
+                    # the first ancestor that is a child of any_policy
+                    # will have an ID that makes sense in the user's policy
+                    # domain (here 'ancestor' includes the node itself)
+                    user_domain_policy_id=next(
+                        ancestor.valid_policy
+                        for ancestor in accepted_policy.path_to_root()
+                        if ancestor.parent.valid_policy == 'any_policy'
+                    ),
+                    issuer_domain_policy_id=listed_pol,
+                    qualifiers=frozenset(accepted_policy.qualifier_set)
+                )
+
+        path._set_qualified_policies(_enum_policies())
+    elif explicit_policy == 0:
         raise PathValidationError(pretty_message(
             '''
             The path could not be validated because there is no valid set of
@@ -798,6 +833,67 @@ def _validate_path(validation_context, path, end_entity_name_override=None):
         ))
 
     return cert
+
+
+def _prune_policy_tree(valid_policy_tree, depth):
+    for node in valid_policy_tree.walk_up(depth):
+        if not node.children:
+            node.parent.remove_child(node)
+    if not valid_policy_tree.children:
+        valid_policy_tree = None
+    return valid_policy_tree
+
+
+def _prune_unacceptable_policies(path_length, valid_policy_tree,
+                                 acceptable_policies) \
+        -> Optional['PolicyTreeRoot']:
+    # Step 4 g iii 1: compute nodes that branch off any_policy
+    #  In other words, find all policies that are valid and meaningful in
+    #  the trust root(s) namespace. We don't care about what policy mapping
+    #  transformed them into; that's taken care of by the validation
+    #  algorithm.
+    #  Note: set() consumes the iterator to avoid operating on the tree
+    #  while iterating over it. Performance is probably not a concern
+    #  anyhow.
+    valid_policy_node_set = set(valid_policy_tree.nodes_in_current_domain())
+
+    # Step 4 g iii 2: eliminate unacceptable policies
+    def _filter_acceptable():
+        for policy_node in valid_policy_node_set:
+            policy_id = policy_node.valid_policy
+            if policy_id == 'any_policy' or \
+                    policy_id in acceptable_policies:
+                yield policy_id
+            else:
+                policy_node.parent.remove_child(policy_node)
+
+    # list of policies that were explicitly valid
+    valid_and_acceptable = set(_filter_acceptable())
+
+    # Step 4 g iii 3: if the final layer contains an anyPolicy node
+    # (there can be at most one), expand it out into acceptable policies
+    # that are not explicitly qualified already
+    try:
+        final_any_policy: PolicyTreeNode = next(
+            policy_node for policy_node
+            in valid_policy_tree.at_depth(path_length)
+            if policy_node.valid_policy == 'any_policy'
+        )
+        wildcard_parent = final_any_policy.parent
+        assert wildcard_parent is not None
+        wildcard_quals = final_any_policy.qualifier_set
+        for acceptable_policy in \
+                (acceptable_policies - valid_and_acceptable):
+            wildcard_parent.add_child(
+                acceptable_policy, wildcard_quals, {acceptable_policy}
+            )
+        # prune the anyPolicy node
+        wildcard_parent.remove_child(final_any_policy)
+    except StopIteration:
+        pass
+
+    # Step 4 g iii 4: prune the policy tree
+    return _prune_policy_tree(valid_policy_tree, path_length - 1)
 
 
 def _cert_type(index, last_index, end_entity_name_override, definite=False):
@@ -1978,6 +2074,17 @@ class PolicyTreeRoot():
                     yield grandchild
             yield child
 
+    def nodes_in_current_domain(self) -> Iterable['PolicyTreeNode']:
+        """
+        Returns a generator yielding all nodes in the tree that are children
+        of an ``any_policy`` node.
+        """
+
+        for child in self.children:
+            yield child
+            if child.valid_policy == 'any_policy':
+                yield from child.nodes_in_current_domain()
+
 
 class PolicyTreeNode(PolicyTreeRoot):
     """
@@ -2009,6 +2116,12 @@ class PolicyTreeNode(PolicyTreeRoot):
         self.qualifier_set = qualifier_set
         self.expected_policy_set = expected_policy_set
         self.children = []
+
+    def path_to_root(self):
+        node = self
+        while node is not None:
+            yield node
+            node = node.parent
 
 
 class PSSParameterMismatch(InvalidSignature):

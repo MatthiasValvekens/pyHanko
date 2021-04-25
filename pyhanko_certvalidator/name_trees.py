@@ -333,3 +333,14 @@ class ExcludedSubtrees:
             )
         except StopIteration:
             return NameConstraintValidationResult()
+
+
+def default_permitted_subtrees() -> PKIXSubtrees:
+    return {
+        name_type: {NameSubtree.universal_tree(name_type)}
+        for name_type in GeneralNameType
+    }
+
+
+def default_excluded_subtrees() -> PKIXSubtrees:
+    return {name_type: set() for name_type in GeneralNameType}

@@ -1,11 +1,21 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+from collections import Set
+from dataclasses import dataclass
+
 from asn1crypto import pem, x509
 
 from ._errors import pretty_message
 from ._types import byte_cls, type_name
 from .errors import DuplicateCertificateError
+
+
+@dataclass(frozen=True)
+class QualifiedPolicy:
+    user_domain_policy_id: str
+    issuer_domain_policy_id: str
+    qualifiers: frozenset
 
 
 class ValidationPath():
@@ -20,6 +30,8 @@ class ValidationPath():
     # A set of asn1crypto.x509.Certificate.issuer_serial byte strings of
     # certificates that are already in ._certs
     _cert_hashes = None
+
+    _qualified_policies = None
 
     def __init__(self, end_entity_cert=None):
         """
@@ -221,6 +233,12 @@ class ValidationPath():
         self._certs.insert(0, cert)
 
         return self
+
+    def _set_qualified_policies(self, policies):
+        self._qualified_policies = frozenset(policies)
+
+    def qualified_policies(self) -> Set[QualifiedPolicy]:
+        return self._qualified_policies
 
     def __len__(self):
         return len(self._certs)
