@@ -1,7 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-from typing import Set
+from typing import FrozenSet
 from dataclasses import dataclass
 
 from asn1crypto import pem, x509
@@ -246,9 +246,9 @@ class ValidationPath():
         return self
 
     def _set_qualified_policies(self, policies):
-        self._qualified_policies = frozenset(policies)
+        self._qualified_policies = policies
 
-    def qualified_policies(self) -> Set[QualifiedPolicy]:
+    def qualified_policies(self) -> FrozenSet[QualifiedPolicy]:
         return self._qualified_policies
 
     def __len__(self):

@@ -1,10 +1,13 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+from collections import defaultdict
+from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from asn1crypto import x509, crl, algos
 from asn1crypto.keys import PublicKeyInfo
+from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa, ec, dsa
@@ -212,6 +215,241 @@ def validate_usage(validation_context, cert, key_usage, extended_key_usage, exte
         ))
 
 
+@dataclass
+class _PathValidationState:
+    """
+    State variables that need to be maintained while traversing a certification
+    path
+    """
+
+    valid_policy_tree: Optional['PolicyTreeRoot']
+    explicit_policy: int
+    inhibit_any_policy: int
+    policy_mapping: int
+    max_path_length: int
+    working_public_key: x509.PublicKeyInfo
+    working_issuer_name: x509.Name
+    permitted_subtrees: PermittedSubtrees
+    excluded_subtrees: ExcludedSubtrees
+
+    def update_policy_restrictions(self, cert: x509.Certificate):
+        # Step 3 h
+        if not cert.self_issued:
+            # Step 3 h 1
+            if self.explicit_policy != 0:
+                self.explicit_policy -= 1
+            # Step 3 h 2
+            if self.policy_mapping != 0:
+                self.policy_mapping -= 1
+            # Step 3 h 3
+            if self.inhibit_any_policy != 0:
+                self.inhibit_any_policy -= 1
+
+        # Step 3 i
+        policy_constraints = cert.policy_constraints_value
+        if policy_constraints:
+            # Step 3 i 1
+            require_explicit_policy = \
+                policy_constraints['require_explicit_policy'].native
+            if require_explicit_policy is not None:
+                self.explicit_policy = min(
+                    self.explicit_policy, require_explicit_policy
+                )
+            # Step 3 i 2
+            inhibit_policy_mapping = \
+                policy_constraints['inhibit_policy_mapping'].native
+            if inhibit_policy_mapping is not None:
+                self.policy_mapping = min(
+                    self.policy_mapping, inhibit_policy_mapping
+                )
+
+        # Step 3 j
+        if cert.inhibit_any_policy_value is not None:
+            self.inhibit_any_policy = min(
+                cert.inhibit_any_policy_value.native,
+                self.inhibit_any_policy
+            )
+
+    def process_policies(self, index: int,
+                         certificate_policies, any_policy_uninhibited,
+                         describe_current_cert):
+
+        if certificate_policies and self.valid_policy_tree is not None:
+            self.valid_policy_tree = _update_policy_tree(
+                certificate_policies, self.valid_policy_tree,
+                depth=index,
+                any_policy_uninhibited=any_policy_uninhibited
+            )
+
+        # Step 2 e
+        elif certificate_policies is None:
+            self.valid_policy_tree = None
+
+        # Step 2 f
+        if self.valid_policy_tree is None and self.explicit_policy <= 0:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because there is no valid set
+                of policies for %s
+                ''',
+                describe_current_cert(definite=True)
+            ))
+
+    def check_name_constraints(self, cert, describe_current_cert):
+        # name constraint processing
+        whitelist_result = self.permitted_subtrees.accept_cert(cert)
+        if not whitelist_result:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because not all names of
+                the %s are in the permitted namespace of the issuing
+                authority. %s
+                ''',
+                describe_current_cert(),
+                whitelist_result.error_message
+            ))
+        blacklist_result = self.excluded_subtrees.accept_cert(cert)
+        if not blacklist_result:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because some names of
+                the %s are excluded from the namespace of the issuing
+                authority. %s
+                ''',
+                describe_current_cert(),
+                blacklist_result.error_message
+            ))
+
+    def check_certificate_signature(self, cert, weak_hash_algos,
+                                    describe_current_cert):
+
+        signature_algo = cert['signature_algorithm'].signature_algo
+        hash_algo = cert['signature_algorithm'].hash_algo
+
+        if hash_algo in weak_hash_algos:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because the signature of %s
+                uses the weak hash algorithm %s
+                ''',
+                describe_current_cert(definite=True),
+                hash_algo
+            ))
+
+        try:
+            _validate_sig(
+                signature=cert['signature_value'].native,
+                signed_data=cert['tbs_certificate'].dump(),
+                public_key_info=self.working_public_key,
+                sig_algo=signature_algo, hash_algo=hash_algo,
+                parameters=cert['signature_algorithm']['parameters']
+            )
+        except PSSParameterMismatch:
+            raise PathValidationError(pretty_message(
+                '''
+                The signature parameters for %s do not match the constraints
+                on the public key.
+                ''',
+                describe_current_cert(definite=True)
+            ))
+        except InvalidSignature:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because the signature of %s
+                could not be verified
+                ''',
+                describe_current_cert(definite=True)
+            ))
+
+
+def _update_policy_tree(certificate_policies,
+                        valid_policy_tree: 'PolicyTreeRoot', depth: int,
+                        any_policy_uninhibited: bool) \
+        -> Optional['PolicyTreeRoot']:
+    cert_any_policy = None
+    cert_policy_identifiers = set()
+
+    # Step 2 d 1
+    for policy in certificate_policies:
+        policy_identifier = policy['policy_identifier'].native
+
+        if policy_identifier == 'any_policy':
+            cert_any_policy = policy
+            continue
+
+        cert_policy_identifiers.add(policy_identifier)
+
+        policy_qualifiers = policy['policy_qualifiers']
+
+        policy_id_match = False
+        parent_any_policy = None
+
+        # Step 2 d 1 i
+        for node in valid_policy_tree.at_depth(depth - 1):
+            if node.valid_policy == 'any_policy':
+                parent_any_policy = node
+            if policy_identifier not in node.expected_policy_set:
+                continue
+            policy_id_match = True
+            node.add_child(
+                policy_identifier,
+                policy_qualifiers,
+                {policy_identifier}
+            )
+
+        # Step 2 d 1 ii
+        if not policy_id_match and parent_any_policy:
+            parent_any_policy.add_child(
+                policy_identifier,
+                policy_qualifiers,
+                {policy_identifier}
+            )
+
+    # Step 2 d 2
+    if cert_any_policy and any_policy_uninhibited:
+        for node in valid_policy_tree.at_depth(depth - 1):
+            for expected_policy_identifier in node.expected_policy_set:
+                if expected_policy_identifier not in cert_policy_identifiers:
+                    node.add_child(
+                        expected_policy_identifier,
+                        cert_any_policy['policy_qualifiers'],
+                        {expected_policy_identifier}
+                    )
+
+    # Step 2 d 3
+    valid_policy_tree = _prune_policy_tree(valid_policy_tree, depth - 1)
+    return valid_policy_tree
+
+
+def _prune_policy_tree(valid_policy_tree, depth):
+    for node in valid_policy_tree.walk_up(depth):
+        if not node.children:
+            node.parent.remove_child(node)
+    if not valid_policy_tree.children:
+        valid_policy_tree = None
+    return valid_policy_tree
+
+
+# TODO allow delegation to calling library here?
+SUPPORTED_EXTENSIONS = frozenset([
+    'authority_information_access',
+    'authority_key_identifier',
+    'basic_constraints',
+    'crl_distribution_points',
+    'extended_key_usage',
+    'freshest_crl',
+    'key_identifier',
+    'key_usage',
+    'ocsp_no_check',
+    'certificate_policies',
+    'policy_mappings',
+    'policy_constraints',
+    'inhibit_any_policy',
+    'name_constraints',
+    'subject_alt_name'
+])
+
+
 def _validate_path(validation_context, path, end_entity_name_override=None,
                    parameters: PKIXValidationParams = None):
     """
@@ -281,527 +519,198 @@ def _validate_path(validation_context, path, end_entity_name_override=None,
     path_length = len(path) - 1
 
     # Step 1: initialization
-
-    # Step 1 a
-    valid_policy_tree = PolicyTreeRoot('any_policy', set(), {'any_policy'})
-
-    # Steps 1 b-c
     parameters = parameters or PKIXValidationParams()
-    permitted_subtrees = PermittedSubtrees(
-        parameters.initial_permitted_subtrees
-    )
-    excluded_subtrees = ExcludedSubtrees(parameters.initial_excluded_subtrees)
 
-    # Steps 1 d-f
-    explicit_policy = (
-        0 if parameters.initial_explicit_policy
-        else path_length + 1
+    state = _PathValidationState(
+        # Step 1 a
+        valid_policy_tree=PolicyTreeRoot('any_policy', set(), {'any_policy'}),
+        # Steps 1 b-c
+        permitted_subtrees=PermittedSubtrees(
+            parameters.initial_permitted_subtrees
+        ),
+        excluded_subtrees=ExcludedSubtrees(
+            parameters.initial_excluded_subtrees
+        ),
+        # Steps 1 d-f
+        explicit_policy=(
+            0 if parameters.initial_explicit_policy
+            else path_length + 1
+        ),
+        inhibit_any_policy=(
+            0 if parameters.initial_any_policy_inhibit
+            else path_length + 1
+        ),
+        policy_mapping=(
+            0 if parameters.initial_policy_mapping_inhibit
+            else path_length + 1
+        ),
+        # Steps 1 g-j
+        working_public_key=trust_anchor.public_key,
+        working_issuer_name=trust_anchor.subject,
+        # Step 1 k
+        max_path_length=(
+            path_length if trust_anchor.max_path_length is None
+            else trust_anchor.max_path_length
+        )
     )
-    inhibit_any_policy = (
-        0 if parameters.initial_any_policy_inhibit
-        else path_length + 1
-    )
-    policy_mapping = (
-        0 if parameters.initial_policy_mapping_inhibit
-        else path_length + 1
-    )
-
-    # Steps 1 g-i
-    working_public_key = trust_anchor.public_key
-    # Step 1 j
-    working_issuer_name = trust_anchor.subject
-    # Step 1 k
-    max_path_length = path_length
-    if trust_anchor.max_path_length is not None:
-        max_path_length = trust_anchor.max_path_length
 
     # Step 2: basic processing
-    index = 1
-    last_index = len(path) - 1
-
     completed_path = ValidationPath(trust_anchor)
     validation_context.record_validation(trust_anchor, completed_path)
 
     cert: x509.Certificate
     cert = trust_anchor
-    while index <= last_index:
+    for index in range(1, path_length + 1):
         cert = path[index]
 
+        describe_current_cert = _describe_cert(
+            index, path_length, end_entity_name_override
+        )
         # Step 2 a 1
-        signature_algo = cert['signature_algorithm'].signature_algo
-        hash_algo = cert['signature_algorithm'].hash_algo
-
-        if hash_algo in validation_context.weak_hash_algos:
-            raise PathValidationError(pretty_message(
-                '''
-                The path could not be validated because the signature of %s
-                uses the weak hash algorithm %s
-                ''',
-                _cert_type(index, last_index, end_entity_name_override, definite=True),
-                hash_algo
-            ))
-
-        try:
-            _validate_sig(
-                signature=cert['signature_value'].native,
-                signed_data=cert['tbs_certificate'].dump(),
-                public_key_info=working_public_key,
-                sig_algo=signature_algo, hash_algo=hash_algo,
-                parameters=cert['signature_algorithm']['parameters']
-            )
-        except PSSParameterMismatch:
-            raise PathValidationError(pretty_message(
-                '''
-                The signature parameters for %s do not match the constraints
-                on the public key.
-                ''',
-                _cert_type(index, last_index, end_entity_name_override, definite=True)
-            ))
-        except InvalidSignature:
-            raise PathValidationError(pretty_message(
-                '''
-                The path could not be validated because the signature of %s
-                could not be verified
-                ''',
-                _cert_type(index, last_index, end_entity_name_override, definite=True)
-            ))
+        state.check_certificate_signature(
+            cert, validation_context.weak_hash_algos, describe_current_cert
+        )
 
         # Step 2 a 2
         if not validation_context.is_whitelisted(cert):
-            validity = cert['tbs_certificate']['validity']
             tolerance = validation_context.time_tolerance
-            if moment < validity['not_before'].native - tolerance:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because %s is not valid
-                    until %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True),
-                    validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ')
-                ))
-            if moment > validity['not_after'].native + tolerance:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because %s expired %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True),
-                    validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ')
-                ))
+            validity = cert['tbs_certificate']['validity']
+            _check_validity(
+                validity=validity, moment=moment, tolerance=tolerance,
+                describe_current_cert=describe_current_cert
+            )
 
         # Step 2 a 3 - CRL/OCSP
         if not validation_context._skip_revocation_checks:
-            status_good = False
-            revocation_check_failed = False
-            matched = False
-            soft_fail = False
-            failures = []
-            expect_revinfo = bool(
-                cert.ocsp_urls or cert.crl_distribution_points
+            _check_revocation(
+                cert=cert, validation_context=validation_context,
+                path=path,
+                end_entity_name_override=end_entity_name_override,
+                describe_current_cert=describe_current_cert
             )
-
-            if cert.ocsp_urls or validation_context.revocation_mode == 'require':
-                try:
-                    verify_ocsp_response(
-                        cert,
-                        path,
-                        validation_context,
-                        cert_description=_cert_type(
-                            index,
-                            last_index,
-                            end_entity_name_override,
-                            definite=True
-                        ),
-                        end_entity_name_override=end_entity_name_override
-                    )
-                    status_good = True
-                    matched = True
-                except (OCSPValidationIndeterminateError) as e:
-                    failures.extend([failure[0] for failure in e.failures])
-                    revocation_check_failed = True
-                    matched = True
-                except (SoftFailError):
-                    soft_fail = True
-                except (OCSPNoMatchesError):
-                    pass
-
-            if not status_good and (cert.crl_distribution_points or validation_context.revocation_mode == 'require'):
-                try:
-                    cert_description = _cert_type(index, last_index, end_entity_name_override, definite=True)
-                    verify_crl(
-                        cert,
-                        path,
-                        validation_context,
-                        cert_description=cert_description,
-                        end_entity_name_override=end_entity_name_override
-                    )
-                    revocation_check_failed = False
-                    status_good = True
-                    matched = True
-                except (CRLValidationIndeterminateError) as e:
-                    failures.extend([failure[0] for failure in e.failures])
-                    revocation_check_failed = True
-                    matched = True
-                except (SoftFailError):
-                    soft_fail = True
-                except (CRLNoMatchesError):
-                    pass
-
-            # The certificate has CRL/OCSP entries but we couldn't query any of
-            # them. This should fail the validation if hard-fail is turned on.
-            expected_revinfo_not_found = not matched and (
-                # with 'require' the fact that there's no match (irrespective
-                # of certificate properties) is enough to cause a failure.
-                validation_context.revocation_mode == 'require'
-                or (
-                    expect_revinfo
-                    and validation_context.revocation_mode == 'hard-fail'
-                )
-            )
-            if not soft_fail:
-                if not status_good and matched and revocation_check_failed:
-                    raise PathValidationError(pretty_message(
-                        '''
-                        The path could not be validated because the %s revocation
-                        checks failed: %s
-                        ''',
-                        _cert_type(index, last_index, end_entity_name_override),
-                        '; '.join(failures)
-                    ))
-                if expected_revinfo_not_found:
-                    raise PathValidationError(pretty_message(
-                        '''
-                        The path could not be validated because no revocation
-                        information could be found for %s
-                        ''',
-                        _cert_type(index, last_index, end_entity_name_override, definite=True)
-                    ))
 
         # Step 2 a 4
-        if cert.issuer != working_issuer_name:
+        if cert.issuer != state.working_issuer_name:
             raise PathValidationError(pretty_message(
                 '''
                 The path could not be validated because the %s issuer name
                 could not be matched
                 ''',
-                _cert_type(index, last_index, end_entity_name_override),
+                describe_current_cert(),
             ))
 
         # Steps 2 b-c
-        if index == last_index or not cert.self_issued:
-            # name constraint processing
-            whitelist_result = permitted_subtrees.accept_cert(cert)
-            if not whitelist_result:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because not all names of
-                    the %s are in the permitted namespace of the issuing
-                    authority. %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override),
-                    whitelist_result.error_message
-                ))
-            blacklist_result = excluded_subtrees.accept_cert(cert)
-            if not blacklist_result:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because some names of
-                    the %s are excluded from the namespace of the issuing
-                    authority. %s
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override),
-                    blacklist_result.error_message
-                ))
+        if index == path_length or not cert.self_issued:
+            state.check_name_constraints(cert, describe_current_cert)
 
         # Steps 2 d
-        if cert.certificate_policies_value and valid_policy_tree is not None:
+        state.process_policies(
+            index,
+            cert.certificate_policies_value,
+            #  (see step 2 d 2)
+            any_policy_uninhibited=(
+                state.inhibit_any_policy > 0 or
+                (index < path_length and cert.self_issued)
+            ),
+            describe_current_cert=describe_current_cert
+        )
 
-            cert_any_policy = None
-            cert_policy_identifiers = set()
-
-            # Step 2 d 1
-            for policy in cert.certificate_policies_value:
-                policy_identifier = policy['policy_identifier'].native
-
-                if policy_identifier == 'any_policy':
-                    cert_any_policy = policy
-                    continue
-
-                cert_policy_identifiers.add(policy_identifier)
-
-                policy_qualifiers = policy['policy_qualifiers']
-
-                policy_id_match = False
-                parent_any_policy = None
-
-                # Step 2 d 1 i
-                for node in valid_policy_tree.at_depth(index - 1):
-                    if node.valid_policy == 'any_policy':
-                        parent_any_policy = node
-                    if policy_identifier not in node.expected_policy_set:
-                        continue
-                    policy_id_match = True
-                    node.add_child(
-                        policy_identifier,
-                        policy_qualifiers,
-                        set([policy_identifier])
-                    )
-
-                # Step 2 d 1 ii
-                if not policy_id_match and parent_any_policy:
-                    parent_any_policy.add_child(
-                        policy_identifier,
-                        policy_qualifiers,
-                        set([policy_identifier])
-                    )
-
-            # Step 2 d 2
-            if cert_any_policy and (inhibit_any_policy > 0 or (index < path_length and cert.self_issued)):
-                for node in valid_policy_tree.at_depth(index - 1):
-                    for expected_policy_identifier in node.expected_policy_set:
-                        if expected_policy_identifier not in cert_policy_identifiers:
-                            node.add_child(
-                                expected_policy_identifier,
-                                cert_any_policy['policy_qualifiers'],
-                                set([expected_policy_identifier])
-                            )
-
-            # Step 2 d 3
-            valid_policy_tree = _prune_policy_tree(valid_policy_tree, index - 1)
-
-        # Step 2 e
-        if cert.certificate_policies_value is None:
-            valid_policy_tree = None
-
-        # Step 2 f
-        if valid_policy_tree is None and explicit_policy <= 0:
-            raise PathValidationError(pretty_message(
-                '''
-                The path could not be validated because there is no valid set
-                of policies for %s
-                ''',
-                _cert_type(index, last_index, end_entity_name_override, definite=True),
-            ))
-
-        if index != last_index:
+        if index < path_length:
             # Step 3: prepare for certificate index+1
+            _prepare_next_step(
+                index, cert, state,
+                describe_current_cert=describe_current_cert
+            )
 
-            if cert.policy_mappings_value:
-                policy_map = {}
-                for mapping in cert.policy_mappings_value:
-                    issuer_domain_policy = mapping['issuer_domain_policy'].native
-                    subject_domain_policy = mapping['subject_domain_policy'].native
-
-                    if issuer_domain_policy not in policy_map:
-                        policy_map[issuer_domain_policy] = set()
-                    policy_map[issuer_domain_policy].add(subject_domain_policy)
-
-                    # Step 3 a
-                    if issuer_domain_policy == 'any_policy' or subject_domain_policy == 'any_policy':
-                        raise PathValidationError(pretty_message(
-                            '''
-                            The path could not be validated because %s contains
-                            a policy mapping for the "any policy"
-                            ''',
-                            _cert_type(index, last_index, end_entity_name_override, definite=True)
-                        ))
-
-                # Step 3 b
-                if valid_policy_tree is not None:
-                    for mapping in cert.policy_mappings_value:
-                        issuer_domain_policy = mapping['issuer_domain_policy'].native
-
-                        # Step 3 b 1
-                        if policy_mapping > 0:
-                            issuer_domain_policy_match = False
-                            cert_any_policy = None
-
-                            for node in valid_policy_tree.at_depth(index):
-                                if node.valid_policy == 'any_policy':
-                                    cert_any_policy = node
-                                if node.valid_policy == issuer_domain_policy:
-                                    issuer_domain_policy_match = True
-                                    node.expected_policy_set = policy_map[issuer_domain_policy]
-
-                            if not issuer_domain_policy_match and cert_any_policy:
-                                cert_any_policy.parent.add_child(
-                                    issuer_domain_policy,
-                                    cert_any_policy.qualifier_set,
-                                    policy_map[issuer_domain_policy]
-                                )
-
-                        # Step 3 b 2
-                        elif policy_mapping == 0:
-                            for node in valid_policy_tree.at_depth(index):
-                                if node.valid_policy == issuer_domain_policy:
-                                    node.parent.remove_child(node)
-                            valid_policy_tree = _prune_policy_tree(
-                                valid_policy_tree, index - 1
-                            )
-
-            # Step 3 c
-            working_issuer_name = cert.subject
-
-            # Steps 3 d-f
-
-            # Handle inheritance of DSA parameters from a signing CA to the
-            # next in the chain
-            # NOTE: we don't perform this step for RSASSA-PSS since there the
-            #  parameters are drawn form the signature parameters, where they
-            #  must always be present.
-            copy_params = None
-            if cert.public_key.algorithm == 'dsa' and cert.public_key.hash_algo is None:
-                if working_public_key.algorithm == 'dsa':
-                    copy_params = working_public_key['algorithm']['parameters'].copy()
-
-            working_public_key = cert.public_key
-
-            if copy_params:
-                working_public_key['algorithm']['parameters'] = copy_params
-
-            # Step 3 g
-            nc_value: x509.NameConstraints = cert.name_constraints_value
-            if nc_value is not None:
-                new_permitted_subtrees = nc_value['permitted_subtrees']
-                if new_permitted_subtrees is not None:
-                    permitted_subtrees.intersect_with(
-                        process_general_subtrees(new_permitted_subtrees)
-                    )
-                new_excluded_subtrees = nc_value['excluded_subtrees']
-                if new_excluded_subtrees is not None:
-                    excluded_subtrees.union_with(
-                        process_general_subtrees(new_excluded_subtrees)
-                    )
-
-
-            # Step 3 h
-            if not cert.self_issued:
-                # Step 3 h 1
-                if explicit_policy != 0:
-                    explicit_policy -= 1
-                # Step 3 h 2
-                if policy_mapping != 0:
-                    policy_mapping -= 1
-                # Step 3 h 3
-                if inhibit_any_policy != 0:
-                    inhibit_any_policy -= 1
-
-            # Step 3 i
-            if cert.policy_constraints_value:
-                # Step 3 i 1
-                require_explicit_policy = cert.policy_constraints_value['require_explicit_policy'].native
-                if require_explicit_policy is not None and require_explicit_policy < explicit_policy:
-                    explicit_policy = require_explicit_policy
-                # Step 3 i 2
-                inhibit_policy_mapping = cert.policy_constraints_value['inhibit_policy_mapping'].native
-                if inhibit_policy_mapping is not None and inhibit_policy_mapping < policy_mapping:
-                    policy_mapping = inhibit_policy_mapping
-
-            # Step 3 j
-            if cert.inhibit_any_policy_value:
-                inhibit_any_policy = min(cert.inhibit_any_policy_value.native, inhibit_any_policy)
-
-            # Step 3 k
-            if not cert.ca:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because %s is not a CA
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True)
-                ))
-
-            # Step 3 l
-            if not cert.self_issued:
-                if max_path_length == 0:
-                    raise PathValidationError(pretty_message(
-                        '''
-                        The path could not be validated because it exceeds the
-                        maximum path length
-                        '''
-                    ))
-                max_path_length -= 1
-
-            # Step 3 m
-            if cert.max_path_length is not None and cert.max_path_length < max_path_length:
-                max_path_length = cert.max_path_length
-
-            # Step 3 n
-            if cert.key_usage_value and 'key_cert_sign' not in cert.key_usage_value.native:
-                raise PathValidationError(pretty_message(
-                    '''
-                    The path could not be validated because %s is not allowed
-                    to sign certificates
-                    ''',
-                    _cert_type(index, last_index, end_entity_name_override, definite=True)
-                ))
-
-        # Step 3 o
+        # Step 3 o / 4 f
         # Check for critical unsupported extensions
-        supported_extensions = {
-            'authority_information_access',
-            'authority_key_identifier',
-            'basic_constraints',
-            'crl_distribution_points',
-            'extended_key_usage',
-            'freshest_crl',
-            'key_identifier',
-            'key_usage',
-            'ocsp_no_check',
-            'certificate_policies',
-            'policy_mappings',
-            'policy_constraints',
-            'inhibit_any_policy',
-            'name_constraints',
-            'subject_alt_name'
-        }
-        unsupported_critical_extensions = cert.critical_extensions - supported_extensions
+        unsupported_critical_extensions = \
+            cert.critical_extensions - SUPPORTED_EXTENSIONS
         if unsupported_critical_extensions:
             raise PathValidationError(pretty_message(
                 '''
                 The path could not be validated because %s contains the
                 following unsupported critical extension%s: %s
                 ''',
-                _cert_type(index, last_index, end_entity_name_override, definite=True),
+                describe_current_cert(definite=True),
                 's' if len(unsupported_critical_extensions) != 1 else '',
                 ', '.join(sorted(unsupported_critical_extensions)),
             ))
 
         if validation_context:
+            # TODO I left this in from the original code,
+            #  but caching intermediate results might not be appropriate at all
+            #  times. For example, handling for self-issued certs is different
+            #  depending on whether they're treated as an end-entity or not.
             completed_path = completed_path.copy().append(cert)
             validation_context.record_validation(cert, completed_path)
 
-        index += 1
-
     # Step 4: wrap-up procedure
-
-    # Step 4 a
-    if explicit_policy != 0:
-        explicit_policy -= 1
-
-    # Step 4 b
-    if cert.policy_constraints_value:
-        if cert.policy_constraints_value['require_explicit_policy'].native == 0:
-            explicit_policy = 0
 
     # Steps 4 c-e skipped since this method doesn't output it
     # Step 4 f skipped since this method defers that to the calling application
+    # --> only policy processing remains
 
+    qualified_policies = _finish_policy_processing(
+        state=state, cert=cert,
+        acceptable_policies=parameters.user_initial_policy_set,
+        path_length=path_length,
+        cert_description=_describe_cert(
+            path_length, path_length, end_entity_name_override
+        )(definite=True)
+    )
+    path._set_qualified_policies(qualified_policies)
+    # TODO cache valid policies on intermediate certs too?
+    completed_path._set_qualified_policies(qualified_policies)
+
+    return cert
+
+
+def _check_validity(validity: Validity, moment, tolerance,
+                    describe_current_cert):
+    if moment < validity['not_before'].native - tolerance:
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because %s is not valid
+            until %s
+            ''',
+            describe_current_cert(definite=True),
+            validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ')
+        ))
+    if moment > validity['not_after'].native + tolerance:
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because %s expired %s
+            ''',
+            describe_current_cert(definite=True),
+            validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ')
+        ))
+
+
+def _finish_policy_processing(state, cert, acceptable_policies, path_length,
+                              cert_description):
+    # Step 4 a
+    if state.explicit_policy != 0:
+        state.explicit_policy -= 1
+    # Step 4 b
+    if cert.policy_constraints_value:
+        if cert.policy_constraints_value['require_explicit_policy'].native == 0:
+            state.explicit_policy = 0
     # Step 4 g
-
-    acceptable_policies = parameters.user_initial_policy_set
     # Step 4 g i
-    if valid_policy_tree is None:
+    if state.valid_policy_tree is None:
         intersection = None
 
     # Step 4 g ii
     elif acceptable_policies == {'any_policy'}:
-        intersection = valid_policy_tree
+        intersection = state.valid_policy_tree
 
     # Step 4 g iii
     else:
         intersection = _prune_unacceptable_policies(
-            path_length, valid_policy_tree, acceptable_policies
+            path_length, state.valid_policy_tree, acceptable_policies
         )
-
+    qualified_policies = frozenset()
     if intersection is not None:
         # collect policies in a user-friendly format and attach them to the
         # path object
@@ -822,26 +731,252 @@ def _validate_path(validation_context, path, end_entity_name_override=None,
                     qualifiers=frozenset(accepted_policy.qualifier_set)
                 )
 
-        path._set_qualified_policies(_enum_policies())
-    elif explicit_policy == 0:
+        qualified_policies = frozenset(_enum_policies())
+    elif state.explicit_policy == 0:
         raise PathValidationError(pretty_message(
             '''
             The path could not be validated because there is no valid set of
             policies for %s
             ''',
-            _cert_type(last_index, last_index, end_entity_name_override, definite=True)
+            cert_description
+        ))
+    return qualified_policies
+
+
+def _check_revocation(cert, validation_context, path, end_entity_name_override,
+                      describe_current_cert):
+    status_good = False
+    revocation_check_failed = False
+    matched = False
+    soft_fail = False
+    failures = []
+    expect_revinfo = bool(
+        cert.ocsp_urls or cert.crl_distribution_points
+    )
+    if cert.ocsp_urls or validation_context.revocation_mode == 'require':
+        try:
+            verify_ocsp_response(
+                cert,
+                path,
+                validation_context,
+                cert_description=describe_current_cert(definite=True),
+                end_entity_name_override=end_entity_name_override
+            )
+            status_good = True
+            matched = True
+        except (OCSPValidationIndeterminateError) as e:
+            failures.extend([failure[0] for failure in e.failures])
+            revocation_check_failed = True
+            matched = True
+        except (SoftFailError):
+            soft_fail = True
+        except (OCSPNoMatchesError):
+            pass
+    if not status_good and (
+            cert.crl_distribution_points or validation_context.revocation_mode == 'require'):
+        try:
+            cert_description = describe_current_cert(definite=True)
+            verify_crl(
+                cert,
+                path,
+                validation_context,
+                cert_description=cert_description,
+                end_entity_name_override=end_entity_name_override
+            )
+            revocation_check_failed = False
+            status_good = True
+            matched = True
+        except (CRLValidationIndeterminateError) as e:
+            failures.extend([failure[0] for failure in e.failures])
+            revocation_check_failed = True
+            matched = True
+        except (SoftFailError):
+            soft_fail = True
+        except (CRLNoMatchesError):
+            pass
+    # The certificate has CRL/OCSP entries but we couldn't query any of
+    # them. This should fail the validation if hard-fail is turned on.
+    expected_revinfo_not_found = not matched and (
+        # with 'require' the fact that there's no match (irrespective
+        # of certificate properties) is enough to cause a failure.
+            validation_context.revocation_mode == 'require'
+            or (
+                    expect_revinfo
+                    and validation_context.revocation_mode == 'hard-fail'
+            )
+    )
+    if not soft_fail:
+        if not status_good and matched and revocation_check_failed:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because the %s revocation
+                checks failed: %s
+                ''',
+                describe_current_cert(),
+                '; '.join(failures)
+            ))
+        if expected_revinfo_not_found:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because no revocation
+                information could be found for %s
+                ''',
+                describe_current_cert(definite=True)
+            ))
+
+
+def _prepare_next_step(index, cert: x509.Certificate,
+                       state: _PathValidationState,
+                       describe_current_cert):
+    if cert.policy_mappings_value:
+        policy_map = _enumerate_policy_mappings(
+            cert.policy_mappings_value,
+            describe_current_cert=describe_current_cert
+        )
+
+        # Step 3 b
+        if state.valid_policy_tree is not None:
+            state.valid_policy_tree = _apply_policy_mapping(
+                policy_map, state.valid_policy_tree, depth=index,
+                policy_mapping_uninhibited=state.policy_mapping > 0
+            )
+
+    # Step 3 c
+    state.working_issuer_name = cert.subject
+
+    # Steps 3 d-f
+
+    # Handle inheritance of DSA parameters from a signing CA to the
+    # next in the chain
+    # NOTE: we don't perform this step for RSASSA-PSS since there the
+    #  parameters are drawn form the signature parameters, where they
+    #  must always be present.
+    copy_params = None
+    if cert.public_key.algorithm == 'dsa' \
+            and cert.public_key.hash_algo is None:
+        if state.working_public_key.algorithm == 'dsa':
+            key_alg = state.working_public_key['algorithm']
+            copy_params = key_alg['parameters'].copy()
+
+    if copy_params:
+        working_public_key = cert.public_key.copy()
+        working_public_key['algorithm']['parameters'] = copy_params
+        state.working_public_key = working_public_key
+    else:
+        state.working_public_key = cert.public_key
+
+    # Step 3 g
+    nc_value: x509.NameConstraints = cert.name_constraints_value
+    if nc_value is not None:
+        new_permitted_subtrees = nc_value['permitted_subtrees']
+        if new_permitted_subtrees is not None:
+            state.permitted_subtrees.intersect_with(
+                process_general_subtrees(new_permitted_subtrees)
+            )
+        new_excluded_subtrees = nc_value['excluded_subtrees']
+        if new_excluded_subtrees is not None:
+            state.excluded_subtrees.union_with(
+                process_general_subtrees(new_excluded_subtrees)
+            )
+
+    # Step 3 h-j
+    state.update_policy_restrictions(cert)
+
+    # Step 3 k
+    if not cert.ca:
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because %s is not a CA
+            ''',
+            describe_current_cert(definite=True)
         ))
 
-    return cert
+    # Step 3 l
+    if not cert.self_issued:
+        if state.max_path_length == 0:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because it exceeds the
+                maximum path length
+                '''
+            ))
+        state.max_path_length -= 1
+
+    # Step 3 m
+    if cert.max_path_length is not None \
+            and cert.max_path_length < state.max_path_length:
+        state.max_path_length = cert.max_path_length
+
+    # Step 3 n
+    if cert.key_usage_value \
+            and 'key_cert_sign' not in cert.key_usage_value.native:
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because %s is not allowed
+            to sign certificates
+            ''',
+            describe_current_cert(definite=True)
+        ))
 
 
-def _prune_policy_tree(valid_policy_tree, depth):
-    for node in valid_policy_tree.walk_up(depth):
-        if not node.children:
-            node.parent.remove_child(node)
-    if not valid_policy_tree.children:
-        valid_policy_tree = None
+def _enumerate_policy_mappings(mappings: Iterable[x509.PolicyMapping],
+                               describe_current_cert):
+    policy_map = defaultdict(set)
+    for mapping in mappings:
+        issuer_domain_policy = mapping['issuer_domain_policy'].native
+        subject_domain_policy = mapping['subject_domain_policy'].native
+
+        policy_map[issuer_domain_policy].add(subject_domain_policy)
+
+        # Step 3 a
+        if issuer_domain_policy == 'any_policy' \
+                or subject_domain_policy == 'any_policy':
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because %s contains
+                a policy mapping for the "any policy"
+                ''',
+                describe_current_cert(definite=True)
+            ))
+
+    return policy_map
+
+
+def _apply_policy_mapping(policy_map, valid_policy_tree, depth: int,
+                          policy_mapping_uninhibited: bool):
+
+    for issuer_domain_policy, subject_domain_policies in policy_map.items():
+
+        # Step 3 b 1
+        if policy_mapping_uninhibited:
+            issuer_domain_policy_match = False
+            cert_any_policy = None
+
+            for node in valid_policy_tree.at_depth(depth):
+                if node.valid_policy == 'any_policy':
+                    cert_any_policy = node
+                if node.valid_policy == issuer_domain_policy:
+                    issuer_domain_policy_match = True
+                    node.expected_policy_set = subject_domain_policies
+
+            if not issuer_domain_policy_match and cert_any_policy:
+                cert_any_policy.parent.add_child(
+                    issuer_domain_policy,
+                    cert_any_policy.qualifier_set,
+                    subject_domain_policies
+                )
+
+        # Step 3 b 2
+        else:
+            for node in valid_policy_tree.at_depth(depth):
+                if node.valid_policy == issuer_domain_policy:
+                    node.parent.remove_child(node)
+            valid_policy_tree = _prune_policy_tree(
+                valid_policy_tree, depth - 1
+            )
     return valid_policy_tree
+
+
 
 
 def _prune_unacceptable_policies(path_length, valid_policy_tree,
@@ -896,7 +1031,7 @@ def _prune_unacceptable_policies(path_length, valid_policy_tree,
     return _prune_policy_tree(valid_policy_tree, path_length - 1)
 
 
-def _cert_type(index, last_index, end_entity_name_override, definite=False):
+def _describe_cert(index, last_index, end_entity_name_override):
     """
     :param index:
         An integer of the index of the certificate in the path
@@ -909,23 +1044,21 @@ def _cert_type(index, last_index, end_entity_name_override, definite=False):
         in the path. Used for indirect CRL issuer and OCSP responder
         certificates.
 
-    :param definite:
-        When returning the string "end-entity certificate", passing this flag
-        as True will prepend "the " to the result
-
     :return:
         A unicode string describing the position of a certificate in the chain
     """
 
-    if index != last_index:
-        return 'intermediate certificate %s' % index
+    def _describe(definite=False):
+        if index != last_index:
+            return 'intermediate certificate %s' % index
 
-    prefix = 'the ' if definite else ''
+        prefix = 'the ' if definite else ''
 
-    if end_entity_name_override is not None:
-        return prefix + end_entity_name_override
+        if end_entity_name_override is not None:
+            return prefix + end_entity_name_override
 
-    return prefix + 'end-entity certificate'
+        return prefix + 'end-entity certificate'
+    return _describe
 
 
 def _self_signed(cert: x509.Certificate):
