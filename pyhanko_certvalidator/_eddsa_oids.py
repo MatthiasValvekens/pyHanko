@@ -98,8 +98,10 @@ HASH_ALGO_MAP = {
     'sha256_ecdsa': 'sha256',
     'sha384_ecdsa': 'sha384',
     'sha512_ecdsa': 'sha512',
-    'ed25519': None,
-    'ed448': None,
+    # baked into the signing algorithm
+    'ed25519': 'sha512',
+    # idem
+    'ed448': 'shake256',
 }
 
 

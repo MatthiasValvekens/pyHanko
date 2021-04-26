@@ -2270,9 +2270,6 @@ def _validate_sig(signature: bytes, signed_data: bytes,
                   public_key_info: PublicKeyInfo,
                   sig_algo: str, hash_algo: str, parameters=None):
 
-    if hash_algo is not None:
-        hash_algo = getattr(hashes, hash_algo.upper())()
-
     # pyca/cryptography can't load PSS-exclusive keys without some help:
     if public_key_info.algorithm == 'rsassa_pss':
         public_key_info = public_key_info.copy()
@@ -2290,6 +2287,7 @@ def _validate_sig(signature: bytes, signed_data: bytes,
 
     if sig_algo == 'rsassa_pkcs1v15':
         assert isinstance(pub_key, rsa.RSAPublicKey)
+        hash_algo = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, padding.PKCS1v15(), hash_algo)
     elif sig_algo == 'rsassa_pss':
         assert isinstance(pub_key, rsa.RSAPublicKey)
@@ -2307,12 +2305,15 @@ def _validate_sig(signature: bytes, signed_data: bytes,
             mgf=padding.MGF1(algorithm=mgf_md),
             salt_length=salt_len
         )
+        hash_algo = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, pss_padding, hash_algo)
     elif sig_algo == 'dsa':
         assert isinstance(pub_key, dsa.DSAPublicKey)
+        hash_algo = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, hash_algo)
     elif sig_algo == 'ecdsa':
         assert isinstance(pub_key, ec.EllipticCurvePublicKey)
+        hash_algo = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, ec.ECDSA(hash_algo))
     elif sig_algo == 'ed25519':
         assert isinstance(pub_key, ed25519.Ed25519PublicKey)
