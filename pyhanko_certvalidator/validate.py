@@ -10,8 +10,11 @@ from asn1crypto.keys import PublicKeyInfo
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa, ec, dsa
+from cryptography.hazmat.primitives.asymmetric import (
+    padding, rsa, ec, dsa, ed25519, ed448
+)
 
+from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
 from ._types import str_cls, type_name
 from .context import ValidationContext, PKIXValidationParams
@@ -29,6 +32,10 @@ from .errors import (
     SoftFailError,
 )
 from .path import ValidationPath, QualifiedPolicy
+
+
+# make sure EdDSA OIDs are known to asn1crypto
+register_eddsa_oids()
 
 
 def validate_path(validation_context, path,
@@ -975,8 +982,6 @@ def _apply_policy_mapping(policy_map, valid_policy_tree, depth: int,
                 valid_policy_tree, depth - 1
             )
     return valid_policy_tree
-
-
 
 
 def _prune_unacceptable_policies(path_length, valid_policy_tree,
@@ -2265,7 +2270,8 @@ def _validate_sig(signature: bytes, signed_data: bytes,
                   public_key_info: PublicKeyInfo,
                   sig_algo: str, hash_algo: str, parameters=None):
 
-    hash_algo = getattr(hashes, hash_algo.upper())()
+    if hash_algo is not None:
+        hash_algo = getattr(hashes, hash_algo.upper())()
 
     # pyca/cryptography can't load PSS-exclusive keys without some help:
     if public_key_info.algorithm == 'rsassa_pss':
@@ -2308,6 +2314,12 @@ def _validate_sig(signature: bytes, signed_data: bytes,
     elif sig_algo == 'ecdsa':
         assert isinstance(pub_key, ec.EllipticCurvePublicKey)
         pub_key.verify(signature, signed_data, ec.ECDSA(hash_algo))
+    elif sig_algo == 'ed25519':
+        assert isinstance(pub_key, ed25519.Ed25519PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo == 'ed448':
+        assert isinstance(pub_key, ed448.Ed448PublicKey)
+        pub_key.verify(signature, signed_data)
     else:  # pragma: nocover
         raise NotImplementedError(
             f"Signature mechanism {sig_algo} is not supported."

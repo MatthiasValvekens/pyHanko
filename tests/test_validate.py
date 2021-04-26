@@ -185,6 +185,50 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(3, len(path))
         validate_path(context, path)
 
+    def test_ed25519(self):
+        cert = self._load_cert_object('testing-ca-ed25519', 'signer.cert.pem')
+        ca_certs = [
+            self._load_cert_object('testing-ca-ed25519', 'root.cert.pem')
+        ]
+        other_certs = [
+            self._load_cert_object('testing-ca-ed25519', 'interm.cert.pem')
+        ]
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=False,
+            revocation_mode='soft-fail',
+            weak_hash_algos={'md2', 'md5'},
+            moment=datetime(2020, 11, 1, tzinfo=timezone.utc)
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+        validate_path(context, path)
+
+    def test_ed448(self):
+        cert = self._load_cert_object('testing-ca-ed448', 'signer.cert.pem')
+        ca_certs = [
+            self._load_cert_object('testing-ca-ed448', 'root.cert.pem')
+        ]
+        other_certs = [
+            self._load_cert_object('testing-ca-ed448', 'interm.cert.pem')
+        ]
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=False,
+            revocation_mode='soft-fail',
+            weak_hash_algos={'md2', 'md5'},
+            moment=datetime(2020, 11, 1, tzinfo=timezone.utc)
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+        validate_path(context, path)
+
     @data('ocsp_info', True)
     def openssl_ocsp(self, ca_file, other_files, cert_file, ocsp_files, path_len, moment, excp_class, excp_msg):
         ca_certs = [self._load_cert_object('openssl-ocsp', ca_file)]
