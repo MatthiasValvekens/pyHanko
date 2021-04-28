@@ -28,8 +28,8 @@ PUBLIC_KEY_SPECS = {
     # We override the field spec with ECPoint so that users can easily
     # decompose the byte string into the constituent X and Y coords
     'ec': (keys.ECPointBitString, None),
-    'ed25519': core.OctetString,
-    'ed448': core.OctetString,
+    'ed25519': (core.OctetBitString, None),
+    'ed448': (core.OctetBitString, None),
     'dh': core.Integer,
 }
 
@@ -127,7 +127,13 @@ def _hash_algo(self):
     ))
 
 
+_registered = False
+
+
 def register_eddsa_oids():
+    global _registered
+    if _registered:
+        return
     ed25519_oid = '1.3.101.112'
     ed448_oid = '1.3.101.113'
 
@@ -151,3 +157,5 @@ def register_eddsa_oids():
     # need to patch in these callback methods as well
     keys.PrivateKeyInfo._spec_callbacks['private_key'] = _private_key_spec
     keys.PublicKeyInfo._spec_callbacks['public_key'] = _public_key_spec
+
+    _registered = True
