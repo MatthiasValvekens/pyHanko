@@ -7,7 +7,6 @@ The tools in this module allow pyHanko to obtain such tokens from
 authorities.
 """
 
-import hashlib
 import struct
 import os
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from datetime import datetime
 import requests
 import tzlocal
 from asn1crypto import tsp, algos, cms, x509, keys, core
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
@@ -25,7 +24,7 @@ from pyhanko_certvalidator import CertificateValidator
 from . import general
 from .general import (
     SignatureStatus, simple_cms_attribute, CertificateStore,
-    SimpleCertificateStore, _get_pyca_cryptography_hash,
+    SimpleCertificateStore, get_pyca_cryptography_hash,
 )
 
 __all__ = [
@@ -122,8 +121,9 @@ class TimeStamper:
             return self._dummy_response_cache[md_algorithm]
         except KeyError:
             pass
-        md = getattr(hashlib, md_algorithm)()
-        dummy = self.timestamp(md.digest(), md_algorithm)
+        md_spec = get_pyca_cryptography_hash(md_algorithm)
+        md = hashes.Hash(md_spec)
+        dummy = self.timestamp(md.finalize(), md_algorithm)
         self._dummy_response_cache[md_algorithm] = dummy
         for cert in extract_ts_certs(dummy, self.cert_registry):
             self._certs[cert.issuer_serial] = cert
@@ -298,7 +298,10 @@ class DummyTimeStamper(TimeStamper):
 
         tst_info = tsp.TSTInfo(tst_info)
         tst_info_data = tst_info.dump()
-        message_digest = getattr(hashlib, md_algorithm)(tst_info_data).digest()
+        md_spec = get_pyca_cryptography_hash(md_algorithm)
+        md = hashes.Hash(md_spec)
+        md.update(tst_info_data)
+        message_digest_value = md.finalize()
         signed_attrs = cms.CMSAttributes([
             simple_cms_attribute('content_type', 'tst_info'),
             simple_cms_attribute(
@@ -308,7 +311,7 @@ class DummyTimeStamper(TimeStamper):
                 'signing_certificate',
                 general.as_signing_certificate(self.tsa_cert)
             ),
-            simple_cms_attribute('message_digest', message_digest),
+            simple_cms_attribute('message_digest', message_digest_value),
         ])
         priv_key = serialization.load_der_private_key(
             self.tsa_key.dump(), password=None
@@ -317,7 +320,7 @@ class DummyTimeStamper(TimeStamper):
             raise NotImplementedError("Dummy timestamper is RSA-only.")
         signature = priv_key.sign(
             signed_attrs.dump(), PKCS1v15(),
-            _get_pyca_cryptography_hash(md_algorithm.upper())
+            get_pyca_cryptography_hash(md_algorithm.upper())
         )
         sig_info = cms.SignerInfo({
             'version': 'v1',

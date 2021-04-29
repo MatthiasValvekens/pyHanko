@@ -38,7 +38,7 @@ __all__ = [
     'UnacceptableSignerError', 'WeakHashAlgorithmError',
     'SignatureValidationError',
     'load_certs_from_pemder', 'load_cert_from_pemder',
-    'load_private_key_from_pemder',
+    'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
     'DEFAULT_WEAK_HASH_ALGORITHMS'
 ]
 
@@ -387,7 +387,7 @@ class UnacceptableSignerError(SigningError):
     pass
 
 
-def _get_pyca_cryptography_hash(algorithm, prehashed=False):
+def get_pyca_cryptography_hash(algorithm, prehashed=False):
     hash_algo = getattr(hashes, algorithm.upper())()
     return Prehashed(hash_algo) if prehashed else hash_algo
 
@@ -416,8 +416,8 @@ def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm,
         )
     salt_len: int = params['salt_length'].native
 
-    mgf_md = _get_pyca_cryptography_hash(mgf_md_name, prehashed=False)
-    md = _get_pyca_cryptography_hash(md_name, prehashed=prehashed)
+    mgf_md = get_pyca_cryptography_hash(mgf_md_name, prehashed=False)
+    md = get_pyca_cryptography_hash(md_name, prehashed=prehashed)
     pss_padding = padding.PSS(
         mgf=padding.MGF1(algorithm=mgf_md),
         salt_length=salt_len
@@ -432,10 +432,10 @@ def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str):
     key: RSAPublicKey = serialization.load_der_public_key(
         cert.public_key.dump()
     )
-    md = getattr(hashes, digest_algorithm.upper())
+    md = get_pyca_cryptography_hash(digest_algorithm)
     # the PSS salt calculation function is not in the .pyi file, apparently.
     # noinspection PyUnresolvedReferences
-    optimal_salt_len = padding.calculate_max_pss_salt_length(key, md())
+    optimal_salt_len = padding.calculate_max_pss_salt_length(key, md)
     return algos.RSASSAPSSParams({
         'hash_algorithm': algos.DigestAlgorithm({
             'algorithm': digest_algorithm
@@ -561,7 +561,7 @@ def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
             raise WeakHashAlgorithmError(md_algorithm)
         md_algorithm = sig_md_algorithm.upper()
 
-    verify_md = _get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
+    verify_md = get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
 
     pub_key = serialization.load_der_public_key(
         cert.public_key.dump()

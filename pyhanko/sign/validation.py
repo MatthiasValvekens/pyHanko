@@ -11,6 +11,7 @@ from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
 )
 from asn1crypto.x509 import Certificate
+from cryptography.hazmat.primitives import hashes
 
 from pyhanko_certvalidator import ValidationContext, CertificateValidator
 from pyhanko_certvalidator.path import ValidationPath
@@ -36,6 +37,7 @@ from .general import (
     UnacceptableSignerError, KeyUsageConstraints,
     SignatureValidationError,
     validate_sig_integrity, DEFAULT_WEAK_HASH_ALGORITHMS,
+    get_pyca_cryptography_hash,
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -148,7 +150,10 @@ def _validate_cms_signature(signed_data: cms.SignedData,
         expected_content_type = eci['content_type'].native
 
         raw = eci['content'].parsed.dump()
-        raw_digest = getattr(hashlib, md_algorithm)(raw).digest()
+        md_spec = get_pyca_cryptography_hash(md_algorithm)
+        md = hashes.Hash(md_spec)
+        md.update(raw)
+        raw_digest = md.finalize()
 
     # first, do the cryptographic identity checks
     intact, valid = validate_sig_integrity(
@@ -837,7 +842,8 @@ class EmbeddedPdfSignature:
         if self.external_digest is not None:
             return self.external_digest
 
-        md = getattr(hashlib, self.external_md_algorithm)()
+        md_spec = get_pyca_cryptography_hash(self.external_md_algorithm)
+        md = hashes.Hash(md_spec)
         stream = self.reader.stream
 
         # compute the digest
@@ -852,7 +858,7 @@ class EmbeddedPdfSignature:
             total_len += chunk_len
 
         self.total_len = total_len
-        self.external_digest = digest = md.digest()
+        self.external_digest = digest = md.finalize()
         return digest
 
     def compute_tst_digest(self) -> Optional[bytes]:
@@ -884,8 +890,10 @@ class EmbeddedPdfSignature:
         tst_md_algorithm = mi['hash_algorithm']['algorithm'].native
 
         signature_bytes = self.signer_info['signature'].native
-        md = getattr(hashlib, tst_md_algorithm)(signature_bytes)
-        self.tst_signature_digest = digest = md.digest()
+        tst_md_spec = get_pyca_cryptography_hash(tst_md_algorithm)
+        md = hashes.Hash(tst_md_spec)
+        md.update(signature_bytes)
+        self.tst_signature_digest = digest = md.finalize()
         return digest
 
     def evaluate_signature_coverage(self) -> SignatureCoverageLevel:

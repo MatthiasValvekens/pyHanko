@@ -1,5 +1,4 @@
 import binascii
-import hashlib
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -41,7 +40,7 @@ from pyhanko.sign.general import (
     load_certs_from_pemder, load_cert_from_pemder,
     _process_pss_params, load_private_key_from_pemder,
     _translate_pyca_cryptography_key_to_asn1,
-    _translate_pyca_cryptography_cert_to_asn1,
+    _translate_pyca_cryptography_cert_to_asn1, get_pyca_cryptography_hash,
 )
 from pyhanko.stamp import (
     TextStampStyle, TextStamp, STAMP_ART_CONTENT,
@@ -172,7 +171,8 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         self.byte_range.fill_offsets(output, sig_start, sig_end, eof)
 
         # compute the digests
-        md = getattr(hashlib, md_algorithm)()
+        md_spec = get_pyca_cryptography_hash(md_algorithm)
+        md = hashes.Hash(md_spec)
 
         # attempt to get a memoryview for automatic buffering
         output_buffer = None
@@ -186,7 +186,11 @@ class PdfByteRangeDigest(generic.DictionaryObject):
 
         if output_buffer is not None:
             # these are memoryviews, so slices should not copy stuff around
+            #   (also, the interface files for pyca/cryptography don't specify
+            #    that memoryviews are allowed, but they are)
+            # noinspection PyTypeChecker
             md.update(output_buffer[:sig_start])
+            # noinspection PyTypeChecker
             md.update(output_buffer[sig_end:eof])
             output_buffer.release()
         else:
@@ -196,7 +200,7 @@ class PdfByteRangeDigest(generic.DictionaryObject):
             output.seek(sig_end)
             misc.chunked_digest(temp_buffer, output, md, max_read=eof-sig_end)
 
-        digest_value = md.digest()
+        digest_value = md.finalize()
         cms_data = yield digest_value
 
         if isinstance(cms_data, bytes):
@@ -608,13 +612,15 @@ class Signer:
 
         if timestamper is not None:
             # the timestamp server needs to cross-sign our signature
-            md = getattr(hashlib, digest_algorithm)()
+
+            md_spec = get_pyca_cryptography_hash(digest_algorithm)
+            md = hashes.Hash(md_spec)
             md.update(signature)
             if dry_run:
                 ts_token = timestamper.dummy_response(digest_algorithm)
             else:
                 ts_token = timestamper.timestamp(
-                    md.digest(), digest_algorithm
+                    md.finalize(), digest_algorithm
                 )
             return cms.CMSAttributes(
                 [simple_cms_attribute('signature_time_stamp_token', ts_token)]
@@ -796,7 +802,7 @@ class PdfSignatureMetadata:
     md_algorithm: str = None
     """
     The name of the digest algorithm to use.
-    It should be supported by :mod:`hashlib`.
+    It should be supported by `pyca/cryptography`.
 
     If ``None``, this will ordinarily default to the value of
     :const:`.DEFAULT_MD`, unless a seed value dictionary and/or a prior
@@ -957,7 +963,7 @@ class SimpleSigner(Signer):
 
         if mechanism == 'rsassa_pkcs1v15':
             padding = PKCS1v15()
-            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            hash_algo = get_pyca_cryptography_hash(digest_algorithm)
             assert isinstance(priv_key, RSAPrivateKey)
             return priv_key.sign(data, padding, hash_algo)
         elif mechanism == 'rsassa_pss':
@@ -968,7 +974,7 @@ class SimpleSigner(Signer):
             assert isinstance(priv_key, RSAPrivateKey)
             return priv_key.sign(data, padding, hash_algo)
         elif mechanism == 'ecdsa':
-            hash_algo = getattr(hashes, digest_algorithm.upper())()
+            hash_algo = get_pyca_cryptography_hash(digest_algorithm)
             assert isinstance(priv_key, EllipticCurvePrivateKey)
             return priv_key.sign(data, signature_algorithm=ECDSA(hash_algo))
         else:  # pragma: nocover
@@ -1432,7 +1438,7 @@ class SigIOSetup:
     md_algorithm: str
     """
     Message digest algorithm to use to compute the document hash.
-    It should be supported by :mod:`hashlib`.
+    It should be supported by `pyca/cryptography`.
     
     .. warning::
         This is also the message digest algorithm that should appear in the
@@ -2318,7 +2324,8 @@ class PdfSigner(PdfTimeStamper):
             revinfo = None
 
         if bytes_reserved is None:
-            test_md = getattr(hashlib, md_algorithm)().digest()
+            md_spec = get_pyca_cryptography_hash(md_algorithm)
+            test_md = hashes.Hash(md_spec).finalize()
             test_signature_cms = signer.sign(
                 test_md, md_algorithm,
                 timestamp=timestamp, use_pades=use_pades,
