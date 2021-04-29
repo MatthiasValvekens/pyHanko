@@ -399,6 +399,8 @@ class Signer:
         elif algo == 'rsa':
             if self.prefer_pss:
                 mech = 'rsassa_pss'
+                if digest_algorithm is None:
+                    raise ValueError("Digest algorithm required")
                 params = optimal_pss_params(
                     self.signing_cert, digest_algorithm
                 )
@@ -1867,9 +1869,17 @@ class PdfSigner(PdfTimeStamper):
         self.signer = signer
         stamp_style = stamp_style or DEFAULT_SIGNING_STAMP_STYLE
         self.stamp_style: TextStampStyle = stamp_style
+        try:
+            self.signer_hash_algo = self.signer.get_signature_mechanism(None).hash_algo
+        except ValueError:
+            self.signer_hash_algo = None
 
         self.new_field_spec = new_field_spec
         super().__init__(timestamper)
+
+    @property
+    def default_md_for_signer(self) -> Optional[str]:
+        return self.signature_meta.md_algorithm or self.signer_hash_algo
 
     def generate_timestamp_field_name(self) -> str:
         """
@@ -2078,7 +2088,7 @@ class PdfSigner(PdfTimeStamper):
                 )
         if (flags & SigSeedValFlags.DIGEST_METHOD) \
                 and sv_spec.digest_methods is not None:
-            selected_md = self.signature_meta.md_algorithm
+            selected_md = self.default_md_for_signer
             if selected_md is not None:
                 selected_md = selected_md.lower()
                 if selected_md not in sv_spec.digest_methods:
@@ -2256,8 +2266,8 @@ class PdfSigner(PdfTimeStamper):
         else:
             sv_md_algorithm = None
 
-        if self.signature_meta.md_algorithm is not None:
-            md_algorithm = self.signature_meta.md_algorithm
+        if self.default_md_for_signer is not None:
+            md_algorithm = self.default_md_for_signer
         elif sv_md_algorithm is not None:
             md_algorithm = sv_md_algorithm
         elif author_sig_md_algorithm is not None:
