@@ -9,6 +9,9 @@ from typing import List, Optional, Union, Set
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
+
+from pyhanko.pdf_utils.content import RawContent
+from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko_certvalidator import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 
@@ -1147,6 +1150,10 @@ class SigFieldSpec:
     box: (int, int, int, int) = None
     """
     Bounding box of the signature field, if applicable.
+
+    Typically specified in ``ll_x``, ``ll_y``, ``ur_x``, ``ur_y`` format,
+    where ``ll_*`` refers to the lower left and ``ur_*`` to the upper right
+    corner.
     """
 
     seed_value_dict: SigSeedValueSpec = None
@@ -1426,7 +1433,6 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
     root = pdf_out.root
 
     page_ref = pdf_out.find_page_for_modification(sig_field_spec.on_page)[0]
-    # use default appearance
     field_created, sig_field_ref = _prepare_sig_field(
         sig_field_spec.sig_field_name, root, update_writer=pdf_out,
         existing_fields_only=False,
@@ -1447,6 +1453,26 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
             sig_field_spec.seed_value_dict.as_pdf_object()
         )
         sig_field[pdf_name('/SV')] = sv_ref
+
+    if sig_field_spec.box is not None:
+        llx, lly, urx, ury = sig_field_spec.box
+        w = abs(urx - llx)
+        h = abs(ury - lly)
+        # TODO: allow appearance customisation through sig_field_spec
+        if w and h:
+            sig_field[pdf_name('/AP')] = ap_dict = generic.DictionaryObject()
+            # draw a simple rectangle
+            appearance_cmds = [
+                b'q',
+                b'q 0.95 0.95 0.95 rg 0 0 %g %g re f Q' % (w, h),  # background
+                b'0.5 w 0 0 %g %g re S' % (w, h),  # border
+                b'Q'
+            ]
+            ap_stream = RawContent(
+                b' '.join(appearance_cmds),
+                box=BoxConstraints(width=w, height=h)
+            ).as_form_xobject()
+            ap_dict[pdf_name('/N')] = pdf_out.add_object(ap_stream)
 
     lock = sig_field_spec.format_lock_dictionary()
     if lock is not None:
