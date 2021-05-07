@@ -1430,3 +1430,11 @@ def test_pdf_num_precision():
     assert repr(generic.FloatObject('32.00001')) == '32.00001'
     assert repr(generic.FloatObject('32.92001')) == '32.92001'
     assert repr(generic.FloatObject('32')) == '32'
+
+
+@pytest.mark.parametrize('arr_str', [b'[1 1 1]', b'[1 1 1\x00\x00\x00]',
+                                     b'[1\x00\x001 1 ]'])
+def test_array_null_bytes(arr_str):
+    stream = BytesIO(arr_str)
+    parsed = generic.ArrayObject.read_from_stream(stream, generic.Reference(1))
+    assert parsed == [1, 1, 1]

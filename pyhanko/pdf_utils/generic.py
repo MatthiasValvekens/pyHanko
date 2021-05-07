@@ -163,7 +163,8 @@ def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
     tok = stream.read(1)
     stream.seek(-1, os.SEEK_CUR)  # reset to start
     idx = OBJECT_PREFIXES.find(tok)
-    strict = container_ref.get_pdf_handler().strict
+    handler = container_ref.get_pdf_handler()
+    strict = handler is None or handler.strict
     if idx == 0:
         # name object
         result = NameObject.read_from_stream(
@@ -400,13 +401,8 @@ class ArrayObject(list, PdfObject):
         if tmp != b"[":
             raise PdfReadError("Could not read array")
         while True:
-            # skip leading whitespace
-            tok = stream.read(1)
-            while tok.isspace():
-                tok = stream.read(1)
-            stream.seek(-1, os.SEEK_CUR)
-            # check for array ending
-            peekahead = stream.read(1)
+            # skip leading whitespace & check for array ending
+            peekahead = read_non_whitespace(stream)
             if peekahead == b"]":
                 break
             stream.seek(-1, os.SEEK_CUR)
