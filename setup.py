@@ -76,7 +76,7 @@ setup(
         'pytest>=6.1.1',
         'requests-mock>=1.8.0',
         'freezegun',
-        'certomancer==0.1.1'
+        'certomancer==0.5.0'
     ],
     keywords="signature pdf pades digital-signature pkcs11"
 )
