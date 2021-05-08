@@ -1,5 +1,13 @@
 # changelog
 
+## 0.15.0
+
+ - Use `pyca/cryptography` for signature validation. `oscrypto` is still included to access the system trust list.
+ - Support RSASSA-PSS and EdDSA certificates.
+ - Support name constraints.
+ - Support all input parameters to the PKIX validation algorithm (acceptable policy set, policy mapping inhibition, ...).
+ - Further increase PKITS coverage.
+
 ## 0.14.1
 
  - No code changes, rerelease because distribution package was polluted due to improper build
