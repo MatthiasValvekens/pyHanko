@@ -48,7 +48,8 @@ __all__ = [
     'apply_adobe_revocation_info', 'get_timestamp_chain',
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
-    'collect_validation_info', 'add_validation_info',
+    'validate_pdf_timestamp', 'collect_validation_info',
+    'add_validation_info',
     'ValidationInfoReadingError', 'SigSeedValueValidationError'
 ]
 
