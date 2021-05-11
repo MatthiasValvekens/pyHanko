@@ -60,7 +60,7 @@ import secrets
 import enum
 from dataclasses import dataclass
 from hashlib import md5, sha256, sha384, sha512, sha1
-from typing import Dict, Type, Optional, Tuple, Union, List, Set
+from typing import Dict, Type, Optional, Tuple, Union, List, Set, Callable
 
 from asn1crypto import x509, cms, algos
 from asn1crypto.keys import PublicKeyAlgorithm, PrivateKeyInfo
@@ -81,8 +81,8 @@ __all__ = [
     'RC4CryptFilterMixin', 'AESCryptFilterMixin', 'StandardAESCryptFilter',
     'StandardRC4CryptFilter', 'PubKeyAESCryptFilter', 'PubKeyRC4CryptFilter',
     'EnvelopeKeyDecrypter', 'SimpleEnvelopeKeyDecrypter',
-    'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY',
-    'legacy_derive_object_key'
+    'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY', 'legacy_derive_object_key',
+    'CryptFilterBuilder'
 ]
 
 logger = logging.getLogger(__name__)
@@ -435,6 +435,11 @@ class SecurityHandlerVersion(misc.OrderedEnum):
     Placeholder value for custom security handlers.
     """
 
+    def as_pdf_object(self) -> generic.PdfObject:
+        val = self.value
+        return generic.NullObject() if val is None \
+            else generic.NumberObject(val)
+
 
 class SecurityHandler:
     """
@@ -650,6 +655,15 @@ class StandardSecuritySettingsRevision(misc.OrderedEnum):
     RC4_EXTENDED = 3
     RC4_OR_AES128 = 4
     AES256 = 6
+    OTHER = None
+    """
+    Placeholder value for custom security handlers.
+    """
+
+    def as_pdf_object(self) -> generic.PdfObject:
+        val = self.value
+        return generic.NullObject() if val is None \
+            else generic.NumberObject(val)
 
 
 class CryptFilter:
@@ -1388,6 +1402,17 @@ def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
     )
 
 
+CryptFilterBuilder = Callable[[generic.DictionaryObject], CryptFilter]
+"""
+Type alias for a callable that produces a crypt filter from a dictionary.
+"""
+
+
+def _build_legacy_standard_crypt_filter(cfdict: generic.DictionaryObject):
+    keylen_bits = cfdict.get('/Length', 40)
+    return StandardRC4CryptFilter(keylen=keylen_bits // 8)
+
+
 @SecurityHandler.register
 class StandardSecurityHandler(SecurityHandler):
     """
@@ -1401,9 +1426,50 @@ class StandardSecurityHandler(SecurityHandler):
     security handlers through :meth:`.SecurityHandler.build`.
     """
 
+    __known_crypt_filters: Dict[generic.NameObject, CryptFilterBuilder] = {
+        '/V2': _build_legacy_standard_crypt_filter,
+        '/AESV2': lambda _: StandardAESCryptFilter(keylen=16),
+        '/AESV3': lambda _: StandardAESCryptFilter(keylen=32),
+        '/Identity': lambda _: IdentityCryptFilter()
+    }
+
     @classmethod
     def get_name(cls) -> str:
         return generic.NameObject('/Standard')
+
+    @classmethod
+    def register_crypt_filter(cls, method: generic.NameObject,
+                              factory: CryptFilterBuilder):
+        cls.__known_crypt_filters[method] = factory
+
+    @classmethod
+    def read_standard_cf_dictionary(cls, cfdict: generic.DictionaryObject) \
+            -> Optional[CryptFilter]:
+        """
+        Interpret a crypt filter dictionary for the standard security handler.
+
+        :param cfdict:
+            A crypt filter dictionary.
+        :return:
+            An appropriate :class:`.CryptFilter` object, or ``None``
+            if the crypt filter uses the ``/None`` method.
+        :raise NotImplementedError:
+            Raised when the crypt filter's ``/CFM`` entry indicates an unknown
+            crypt filter method.
+        """
+        # TODO does a V4 handler default to /Identity unless the /Encrypt
+        #  dictionary specifies a custom filter?
+        try:
+            cfm = cfdict['/CFM']
+        except KeyError:
+            return None
+        if cfm == '/None':
+            return None
+        try:
+            factory = cls.__known_crypt_filters[cfm]
+        except KeyError:
+            raise NotImplementedError("No such crypt filter method: " + cfm)
+        return factory(cfdict)
 
     @classmethod
     def build_from_pw_legacy(cls, rev: StandardSecuritySettingsRevision,
@@ -1563,6 +1629,26 @@ class StandardSecurityHandler(SecurityHandler):
         sh._shared_key = encryption_key
         return sh
 
+    @staticmethod
+    def _check_r6_values(udata, odata, oeseed, ueseed, encrypted_perms, rev=6):
+
+        if not (len(udata) == len(odata) == 48):
+            raise misc.PdfError(
+                "/U and /O entries must be 48 bytes long in a "
+                f"rev. {rev} security handler"
+            )  # pragma: nocover
+        if not oeseed or not ueseed or \
+                not (len(oeseed) == len(ueseed) == 32):
+            raise misc.PdfError(
+                "/UE and /OE must be present and be 32 bytes long in a "
+                f"rev. {rev} security handler"
+            )  # pragma: nocover
+        if not encrypted_perms or len(encrypted_perms) != 16:
+            raise misc.PdfError(
+                "/Perms must be present and be 16 bytes long in a "
+                f"rev. {rev} security handler"
+            )  # pragma: nocover
+
     def __init__(self, version: SecurityHandlerVersion,
                  revision: StandardSecuritySettingsRevision,
                  legacy_keylen,  # in bytes, not bits
@@ -1586,24 +1672,11 @@ class StandardSecurityHandler(SecurityHandler):
         self.revision = revision
         self.perms = _as_signed(perm_flags)
         if revision == StandardSecuritySettingsRevision.AES256:
-            if not (len(udata) == len(odata) == 48):
-                raise misc.PdfError(
-                    "/U and /O entries must be 48 bytes long in a "
-                    "rev. 6 security handler"
-                )  # pragma: nocover
-            if not oeseed or not ueseed or \
-                    not (len(oeseed) == len(ueseed) == 32):
-                raise misc.PdfError(
-                    "/UE and /OE must be present and be 32 bytes long in a "
-                    "rev. 6 security handler"
-                )  # pragma: nocover
+            StandardSecurityHandler._check_r6_values(
+                udata, odata, oeseed, ueseed, encrypted_perms
+            )
             self.oeseed = oeseed
             self.ueseed = ueseed
-            if not encrypted_perms or len(encrypted_perms) != 16:
-                raise misc.PdfError(
-                    "/Perms must be present and be 16 bytes long in a "
-                    "rev. 6 security handler"
-                )  # pragma: nocover
             self.encrypted_perms = encrypted_perms
         else:
             if not (len(udata) == len(odata) == 32):
@@ -1617,67 +1690,24 @@ class StandardSecurityHandler(SecurityHandler):
         self._shared_key = None
         self._auth_failed = False
 
-    @staticmethod
-    def read_standard_cf_dictionary(cfdict):
-        """
-        Interpret a crypt filter dictionary for the standard security handler.
-
-        :param cfdict:
-            A crypt filter dictionary.
-        :return:
-            An appropriate :class:`.CryptFilter` object, or ``None``
-            if the crypt filter uses the ``/None`` method.
-        :raise NotImplementedError:
-            Raised when the crypt filter's ``/CFM`` entry indicates an unknown
-            crypt filter method.
-        """
-        # TODO does a V4 handler default to /Identity unless the /Encrypt
-        #  dictionary specifies a custom filter?
-        try:
-            cfm = cfdict['/CFM']
-        except KeyError:
-            return None
-        if cfm == '/None':
-            return None
-        elif cfm == '/V2':
-            keylen_bits = cfdict.get('/Length', 40)
-            return StandardRC4CryptFilter(keylen=keylen_bits // 8)
-        elif cfm == '/AESV2':
-            return StandardAESCryptFilter(keylen=16)
-        elif cfm == '/AESV3':
-            return StandardAESCryptFilter(keylen=32)
-        else:
-            raise NotImplementedError("No such crypt filter method: " + cfm)
-
     @classmethod
-    def instantiate_from_pdf_object(cls,
-                                    encrypt_dict: generic.DictionaryObject):
-        v = SecurityHandlerVersion(encrypt_dict['/V'])
-        r = StandardSecuritySettingsRevision(encrypt_dict['/R'])
+    def gather_encryption_metadata(cls,
+                                   encrypt_dict: generic.DictionaryObject) \
+            -> dict:
+        """
+        Gather and preprocess the "easy" metadata values in an encryption
+        dictionary, and turn them into constructor kwargs.
+
+        This function processes ``/Length``, ``/P``, ``/Perms``, ``/O``, ``/U``,
+        ``/OE``, ``/UE`` and ``/EncryptMetadata``.
+        """
+
         keylen_bits = encrypt_dict.get('/Length', 40)
         if (keylen_bits % 8) != 0:
             raise misc.PdfError("Key length must be a multiple of 8")
         keylen = keylen_bits // 8
-        stmf = encrypt_dict.get('/StmF', IDENTITY)
-        strf = encrypt_dict.get('/StrF', IDENTITY)
-        eff = encrypt_dict.get('/EFF', stmf)
-
-        try:
-            crypt_filters = {
-                name: StandardSecurityHandler.read_standard_cf_dictionary(
-                    cfdict
-                )
-                for name, cfdict in encrypt_dict['/CF'].items()
-            }
-            cfc = CryptFilterConfiguration(
-                crypt_filters=crypt_filters, default_stream_filter=stmf,
-                default_string_filter=strf, default_file_filter=eff
-            )
-        except KeyError:
-            cfc = None
-        return StandardSecurityHandler(
-            version=v, revision=r, legacy_keylen=keylen,
-            crypt_filter_config=cfc,
+        return dict(
+            legacy_keylen=keylen,
             perm_flags=_as_signed(encrypt_dict.get('/P', ALL_PERMS)),
             odata=encrypt_dict['/O'].original_bytes[:48],
             udata=encrypt_dict['/U'].original_bytes[:48],
@@ -1695,22 +1725,55 @@ class StandardSecurityHandler(SecurityHandler):
             )
         )
 
+    @classmethod
+    def process_crypt_filters(cls, encrypt_dict: generic.DictionaryObject) \
+            -> Optional[CryptFilterConfiguration]:
+
+        stmf = encrypt_dict.get('/StmF', IDENTITY)
+        strf = encrypt_dict.get('/StrF', IDENTITY)
+        eff = encrypt_dict.get('/EFF', stmf)
+
+        try:
+            crypt_filters = {
+                name: cls.read_standard_cf_dictionary(
+                    cfdict
+                )
+                for name, cfdict in encrypt_dict['/CF'].items()
+            }
+            return CryptFilterConfiguration(
+                crypt_filters=crypt_filters, default_stream_filter=stmf,
+                default_string_filter=strf, default_file_filter=eff
+            )
+        except KeyError:
+            return None
+
+    @classmethod
+    def instantiate_from_pdf_object(cls,
+                                    encrypt_dict: generic.DictionaryObject):
+        v = SecurityHandlerVersion(encrypt_dict['/V'])
+        r = StandardSecuritySettingsRevision(encrypt_dict['/R'])
+        return StandardSecurityHandler(
+            version=v, revision=r,
+            crypt_filter_config=cls.process_crypt_filters(encrypt_dict),
+            **cls.gather_encryption_metadata(encrypt_dict)
+        )
+
     def as_pdf_object(self):
         result = generic.DictionaryObject()
         result['/Filter'] = generic.NameObject('/Standard')
         result['/O'] = generic.ByteStringObject(self.odata)
         result['/U'] = generic.ByteStringObject(self.udata)
         result['/P'] = generic.NumberObject(_as_signed(self.perms))
-        result['/V'] = generic.NumberObject(self.version.value)
-        result['/R'] = generic.NumberObject(self.revision.value)
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
         result['/Length'] = generic.NumberObject(self.keylen * 8)
+        result['/V'] = self.version.as_pdf_object()
+        result['/R'] = self.revision.as_pdf_object()
         if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
             result['/EncryptMetadata'] \
                 = generic.BooleanObject(self.encrypt_metadata)
             result.update(self.crypt_filter_config.as_pdf_object())
-        if self.revision == StandardSecuritySettingsRevision.AES256:
+        if self.revision >= StandardSecuritySettingsRevision.AES256:
             result['/OE'] = generic.ByteStringObject(self.oeseed)
             result['/UE'] = generic.ByteStringObject(self.ueseed)
             result['/Perms'] = generic.ByteStringObject(self.encrypted_perms)
