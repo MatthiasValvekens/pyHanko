@@ -23,7 +23,7 @@ from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler, SecurityHandlerVersion, CryptFilterConfiguration,
     StandardRC4CryptFilter, StandardAESCryptFilter, STD_CF,
     PubKeyRC4CryptFilter, PubKeyAESCryptFilter, PubKeyAdbeSubFilter,
-    DEFAULT_CRYPT_FILTER,
+    DEFAULT_CRYPT_FILTER, build_crypt_filter,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import load_cert_from_pemder
@@ -1438,3 +1438,14 @@ def test_array_null_bytes(arr_str):
     stream = BytesIO(arr_str)
     parsed = generic.ArrayObject.read_from_stream(stream, generic.Reference(1))
     assert parsed == [1, 1, 1]
+
+
+def test_crypt_filter_build_failures():
+    cfdict = generic.DictionaryObject()
+    assert build_crypt_filter({}, cfdict) is None
+    cfdict['/CFM'] = generic.NameObject('/None')
+    assert build_crypt_filter({}, cfdict) is None
+
+    with pytest.raises(NotImplementedError):
+        cfdict['/CFM'] = generic.NameObject('/NoSuchCF')
+        build_crypt_filter({}, cfdict)

@@ -82,7 +82,7 @@ __all__ = [
     'StandardRC4CryptFilter', 'PubKeyAESCryptFilter', 'PubKeyRC4CryptFilter',
     'EnvelopeKeyDecrypter', 'SimpleEnvelopeKeyDecrypter',
     'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY', 'legacy_derive_object_key',
-    'CryptFilterBuilder'
+    'CryptFilterBuilder', 'build_crypt_filter'
 ]
 
 logger = logging.getLogger(__name__)
@@ -1408,6 +1408,37 @@ Type alias for a callable that produces a crypt filter from a dictionary.
 """
 
 
+def build_crypt_filter(reg: Dict[generic.NameObject, CryptFilterBuilder],
+                       cfdict: generic.DictionaryObject) \
+        -> Optional[CryptFilter]:
+    """
+    Interpret a crypt filter dictionary for a security handler.
+
+    :param reg:
+        A registry of named crypt filters.
+    :param cfdict:
+        A crypt filter dictionary.
+    :return:
+        An appropriate :class:`.CryptFilter` object, or ``None``
+        if the crypt filter uses the ``/None`` method.
+    :raise NotImplementedError:
+        Raised when the crypt filter's ``/CFM`` entry indicates an unknown
+        crypt filter method.
+    """
+
+    try:
+        cfm = cfdict['/CFM']
+    except KeyError:
+        return None
+    if cfm == '/None':
+        return None
+    try:
+        factory = reg[cfm]
+    except KeyError:
+        raise NotImplementedError("No such crypt filter method: " + cfm)
+    return factory(cfdict)
+
+
 def _build_legacy_standard_crypt_filter(cfdict: generic.DictionaryObject):
     keylen_bits = cfdict.get('/Length', 40)
     return StandardRC4CryptFilter(keylen=keylen_bits // 8)
@@ -1459,17 +1490,7 @@ class StandardSecurityHandler(SecurityHandler):
         """
         # TODO does a V4 handler default to /Identity unless the /Encrypt
         #  dictionary specifies a custom filter?
-        try:
-            cfm = cfdict['/CFM']
-        except KeyError:
-            return None
-        if cfm == '/None':
-            return None
-        try:
-            factory = cls.__known_crypt_filters[cfm]
-        except KeyError:
-            raise NotImplementedError("No such crypt filter method: " + cfm)
-        return factory(cfdict)
+        return build_crypt_filter(cls.__known_crypt_filters, cfdict)
 
     @classmethod
     def build_from_pw_legacy(cls, rev: StandardSecuritySettingsRevision,
