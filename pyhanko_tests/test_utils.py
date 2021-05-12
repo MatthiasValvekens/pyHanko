@@ -1012,29 +1012,28 @@ def test_pubkey_encryption_s5_requires_cfs():
 
 def test_pubkey_encryption_dict_errors():
     sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
-    original = sh.as_pdf_object()
 
-    encrypt = generic.DictionaryObject(original)
+    encrypt = generic.DictionaryObject(sh.as_pdf_object())
     encrypt['/SubFilter'] = pdf_name('/asdflakdsjf')
     with pytest.raises(misc.PdfReadError):
         PubKeySecurityHandler.build(encrypt)
 
-    encrypt = generic.DictionaryObject(original)
+    encrypt = generic.DictionaryObject(sh.as_pdf_object())
     encrypt['/Length'] = generic.NumberObject(13)
     with pytest.raises(misc.PdfError):
         PubKeySecurityHandler.build(encrypt)
 
-    encrypt = generic.DictionaryObject(original)
+    encrypt = generic.DictionaryObject(sh.as_pdf_object())
     del encrypt['/CF']['/DefaultCryptFilter']['/CFM']
     with pytest.raises(misc.PdfReadError):
         PubKeySecurityHandler.build(encrypt)
 
-    encrypt = generic.DictionaryObject(original)
+    encrypt = generic.DictionaryObject(sh.as_pdf_object())
     del encrypt['/CF']['/DefaultCryptFilter']['/Recipients']
     with pytest.raises(misc.PdfReadError):
         PubKeySecurityHandler.build(encrypt)
 
-    encrypt = generic.DictionaryObject(original)
+    encrypt = generic.DictionaryObject(sh.as_pdf_object())
     encrypt['/CF']['/DefaultCryptFilter']['/CFM'] = pdf_name('/None')
     with pytest.raises(misc.PdfReadError):
         PubKeySecurityHandler.build(encrypt)
