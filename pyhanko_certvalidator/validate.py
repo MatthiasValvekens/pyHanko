@@ -1237,14 +1237,17 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
         retroactive = validation_context.retroactive_revinfo
         tolerance = validation_context.time_tolerance
 
-        if not retroactive and moment < cert_response['this_update'].native - tolerance:
+        this_update = cert_response['this_update'].native
+        if this_update is not None and not retroactive \
+                and moment < this_update - tolerance:
             failures.append((
                 'OCSP response is from after the validation time',
                 ocsp_response
             ))
             continue
 
-        if moment > cert_response['next_update'].native + tolerance:
+        next_update = cert_response['next_update'].native
+        if next_update is not None and moment > next_update + tolerance:
             failures.append((
                 'OCSP response is from before the validation time',
                 ocsp_response
