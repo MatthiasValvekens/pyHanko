@@ -1,5 +1,9 @@
 # changelog
 
+## 0.15.1
+
+ - Gracefully handle lack of thisUpdate / nextUpdate in OCSP responses.
+
 ## 0.15.0
 
  - Use `pyca/cryptography` for signature validation. `oscrypto` is still included to access the system trust list.
