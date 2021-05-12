@@ -23,7 +23,7 @@ from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler, SecurityHandlerVersion, CryptFilterConfiguration,
     StandardRC4CryptFilter, StandardAESCryptFilter, STD_CF,
     PubKeyRC4CryptFilter, PubKeyAESCryptFilter, PubKeyAdbeSubFilter,
-    DEFAULT_CRYPT_FILTER, build_crypt_filter,
+    DEFAULT_CRYPT_FILTER, build_crypt_filter, SecurityHandler,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import load_cert_from_pemder
@@ -1012,7 +1012,7 @@ def test_pubkey_encryption_s5_requires_cfs():
 
 def test_pubkey_encryption_dict_errors():
     sh = PubKeySecurityHandler.build_from_certs([PUBKEY_TEST_DECRYPTER.cert])
-    original= sh.as_pdf_object()
+    original = sh.as_pdf_object()
 
     encrypt = generic.DictionaryObject(original)
     encrypt['/SubFilter'] = pdf_name('/asdflakdsjf')
@@ -1026,6 +1026,11 @@ def test_pubkey_encryption_dict_errors():
 
     encrypt = generic.DictionaryObject(original)
     del encrypt['/CF']['/DefaultCryptFilter']['/CFM']
+    with pytest.raises(misc.PdfReadError):
+        PubKeySecurityHandler.build(encrypt)
+
+    encrypt = generic.DictionaryObject(original)
+    del encrypt['/CF']['/DefaultCryptFilter']['/Recipients']
     with pytest.raises(misc.PdfReadError):
         PubKeySecurityHandler.build(encrypt)
 
@@ -1442,10 +1447,68 @@ def test_array_null_bytes(arr_str):
 
 def test_crypt_filter_build_failures():
     cfdict = generic.DictionaryObject()
-    assert build_crypt_filter({}, cfdict) is None
+    assert build_crypt_filter({}, cfdict, False) is None
     cfdict['/CFM'] = generic.NameObject('/None')
-    assert build_crypt_filter({}, cfdict) is None
+    assert build_crypt_filter({}, cfdict, False) is None
 
     with pytest.raises(NotImplementedError):
         cfdict['/CFM'] = generic.NameObject('/NoSuchCF')
-        build_crypt_filter({}, cfdict)
+        build_crypt_filter({}, cfdict, False)
+
+
+@pytest.mark.parametrize('on_subclass', [True, False])
+def test_custom_crypt_filter_type(on_subclass):
+    w = writer.PdfFileWriter()
+    custom_cf_type = pdf_name('/CustomCFType')
+
+    class CustomCFClass(StandardRC4CryptFilter):
+        def __init__(self):
+            super().__init__(keylen=16)
+        method = custom_cf_type
+
+    if on_subclass:
+        class NewStandardSecurityHandler(StandardSecurityHandler):
+            pass
+        sh_class = NewStandardSecurityHandler
+        assert sh_class._known_crypt_filters is \
+               not StandardSecurityHandler._known_crypt_filters
+        assert '/V2' in sh_class._known_crypt_filters
+        SecurityHandler.register(sh_class)
+    else:
+        sh_class = StandardSecurityHandler
+
+    sh_class.register_crypt_filter(
+        custom_cf_type, lambda _, __: CustomCFClass(),
+    )
+    cfc = CryptFilterConfiguration(
+        crypt_filters={STD_CF: CustomCFClass()},
+        default_string_filter=STD_CF, default_stream_filter=STD_CF
+    )
+    sh = sh_class.build_from_pw_legacy(
+        rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
+        id1=w.document_id[0], desired_user_pass="usersecret",
+        desired_owner_pass="ownersecret",
+        keylen_bytes=16, crypt_filter_config=cfc
+    )
+    assert isinstance(sh, sh_class)
+    w._assign_security_handler(sh)
+    test_data = b'This is test data!'
+    dummy_stream = generic.StreamObject(stream_data=test_data)
+    ref = w.add_object(dummy_stream)
+
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    r.decrypt("ownersecret")
+    obj: generic.StreamObject = r.get_object(ref.reference)
+    assert obj.data == test_data
+
+    obj: generic.DecryptedObjectProxy = \
+        r.get_object(ref.reference, transparent_decrypt=False)
+    assert isinstance(obj.raw_object, generic.StreamObject)
+    assert obj.raw_object.encoded_data != test_data
+
+    # restore security handler registry state
+    del sh_class._known_crypt_filters[custom_cf_type]
+    if on_subclass:
+        SecurityHandler.register(StandardSecurityHandler)
