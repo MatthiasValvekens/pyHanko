@@ -369,7 +369,8 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
             timestamp_ok = ts.valid and ts.trusted
         return (
             self.valid and self.trusted and self.seed_value_ok
-            and self.docmdp_ok and timestamp_ok
+            and (self.docmdp_ok or self.modification_level is None)
+            and timestamp_ok
         )
 
     @property
@@ -436,7 +437,6 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
         if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
             modification_str = "The signature covers the entire file."
         else:
-            modlvl_string = "Some modifications may be illegitimate"
             if self.modification_level is not None:
                 if self.modification_level == ModificationLevel.LTA_UPDATES:
                     modlvl_string = \
@@ -446,12 +446,16 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
                         "All modifications relate to signing and form filling "
                         "operations"
                     )
-            modification_str = (
-                "The signature does not cover the entire file.\n"
-                f"{modlvl_string}, and they appear to be "
-                f"{'' if self.docmdp_ok else 'in'}compatible with the "
-                "current document modification policy."
-            )
+                else:
+                    modlvl_string = "Some modifications may be illegitimate"
+                modification_str = (
+                    "The signature does not cover the entire file.\n"
+                    f"{modlvl_string}, and they appear to be "
+                    f"{'' if self.docmdp_ok else 'in'}compatible with the "
+                    "current document modification policy."
+                )
+            else:
+                modification_str = "Incremental update analysis was skipped"
 
         validity_info = (
             "The signature is cryptographically "

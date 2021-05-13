@@ -719,6 +719,81 @@ def test_double_sign_lock_second():
     val_trusted(s)
 
 
+@freeze_time('2020-11-01')
+def test_skip_diff_scenario_1():
+    # Test if skip_diff behaves as expected
+    # scenario 1: sign a locked file
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='SigFirst', certify=True,
+            docmdp_permissions=fields.MDPPerm.NO_CHANGES
+        ), signer=FROM_CA,
+    )
+    w = IncrementalPdfFileWriter(out)
+
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA
+    )
+
+    # dummy out certification enforcer
+    pdf_signer._enforce_certification_constraints = lambda _: None
+
+    out = pdf_signer.sign_pdf(w)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # should be OK with skip_diff
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    assert status.docmdp_ok is None
+    assert status.bottom_line
+    assert 'skipped' in status.pretty_print_details()
+
+    # ... but not otherwise
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+    assert status.docmdp_ok is False
+    assert not status.bottom_line
+    assert 'incompatible with the current document modification' \
+           in status.pretty_print_details()
+
+
+@freeze_time('2020-11-01')
+def test_skip_diff_scenario_2():
+    # Test if skip_diff behaves as expected
+    # scenario 2: do something blatantly illegal in the second revision
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigFirst'),
+        signer=FROM_CA,
+    )
+
+    from pyhanko.pdf_utils.content import RawContent
+    w = IncrementalPdfFileWriter(out)
+    w.add_content_to_page(
+        0, RawContent(b'q BT /F1 18 Tf 0 50 Td (Sneaky text!) Tj ET Q')
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # should be OK with skip_diff
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    assert status.docmdp_ok is None
+    assert status.bottom_line
+    assert 'skipped' in status.pretty_print_details()
+
+    # ... but not otherwise
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+    assert status.docmdp_ok is False
+    assert not status.bottom_line
+    report = status.pretty_print_details()
+    assert 'illegitimate' in report
+    assert 'incompatible with the current document modification' in report
+
+
 def test_enumerate_empty():
 
     with pytest.raises(StopIteration):
