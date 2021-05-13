@@ -609,7 +609,9 @@ class SigCertConstraints:
                 try:
                     KeyUsageConstraints(
                         key_usage=ku.must_have_set(),
-                        key_usage_forbidden=ku.forbidden_set()
+                        key_usage_forbidden=ku.forbidden_set(),
+                        # This is the way ISO 32k does things
+                        match_all_key_usages=True
                     ).validate(signer)
                     break
                 except InvalidCertificateError:
