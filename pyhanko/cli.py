@@ -431,15 +431,7 @@ def validate_signatures(ctx, infile, executive_summary,
                 "validating (for now)"
             )
 
-        # function to filter out timestamps
-        def is_sig(sig):
-            try:
-                return sig.sig_object['/Type'] == '/Sig'
-            except KeyError:
-                return True
-
-        sigs = filter(is_sig, r.embedded_signatures)
-        for ix, embedded_sig in enumerate(sigs):
+        for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
             status_str = _signature_status(
                 ltv_profile, force_revinfo, soft_revocation_check,
@@ -531,9 +523,7 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
 
     try:
         emb_sig = next(
-            s for s in r.embedded_signatures
-            if s.sig_object.get('/Type', None) == '/Sig'
-            and s.field_name == field
+            s for s in r.embedded_regular_signatures if s.field_name == field
         )
     except StopIteration:
         raise click.ClickException(

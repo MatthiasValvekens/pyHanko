@@ -659,6 +659,18 @@ class EmbeddedPdfSignature:
         self.fq_name = fq_name
 
     @property
+    def sig_object_type(self) -> generic.NameObject:
+        """
+        Returns the type of the embedded signature object.
+        For ordinary signatures, this will be ``/Sig``.
+        In the case of a document timestamp, ``/DocTimeStamp`` is returned.
+
+        :return:
+            A PDF name object describing the type of signature.
+        """
+        return self.sig_object.get('/Type', pdf_name('/Sig'))
+
+    @property
     def field_name(self):
         """
         :return:
@@ -1205,11 +1217,8 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     """
 
     sig_object = embedded_sig.sig_object
-    try:
-        if sig_object['/Type'] != '/Sig':
-            raise SignatureValidationError("Signature object type must be /Sig")
-    except KeyError:
-        pass
+    if embedded_sig.sig_object_type != '/Sig':
+        raise SignatureValidationError("Signature object type must be /Sig")
 
     # check whether the subfilter type is one we support
     subfilter_str = sig_object.get('/SubFilter', None)
@@ -1282,21 +1291,13 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
         The status of the PDF timestamp in question.
     """
 
-    sig_object = embedded_sig.sig_object
-    invalid_obj_type = False
-    try:
-        if sig_object['/Type'] != '/DocTimeStamp':
-            invalid_obj_type = True
-    except KeyError:
-        invalid_obj_type = True
-
-    if invalid_obj_type:
+    if embedded_sig.sig_object_type != '/DocTimeStamp':
         raise SignatureValidationError(
             "Signature object type must be /DocTimeStamp"
         )
 
     # check whether the subfilter type is one we support
-    subfilter_str = sig_object.get('/SubFilter', None)
+    subfilter_str = embedded_sig.sig_object.get('/SubFilter', None)
     _validate_subfilter(
         subfilter_str, (SigSeedSubFilter.ETSI_RFC3161,),
         "%s is not a recognized SubFilter type for timestamps."

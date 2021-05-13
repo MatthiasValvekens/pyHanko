@@ -1299,11 +1299,16 @@ def test_pades_revinfo_live_update(requests_mock):
     # check if updates work
     out = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(r, vc)
     r = PdfFileReader(out)
+    emb_sig = r.embedded_signatures[0]
     status = validate_pdf_ltv_signature(
-        r.embedded_signatures[0], rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
+        emb_sig, rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
     )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert len(r.embedded_signatures) == 3
+    assert len(r.embedded_regular_signatures) == 1
+    assert len(r.embedded_timestamp_signatures) == 2
+    assert emb_sig is r.embedded_regular_signatures[0]
 
 
 def test_update_no_timestamps():

@@ -1033,7 +1033,7 @@ class PdfFileReader(PdfHandler):
     def embedded_signatures(self):
         """
         :return:
-            The signatures embedded in this document, in signing order;
+            The signature objects embedded in this document, in signing order;
             see :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`.
         """
         if self._embedded_signatures is not None:
@@ -1050,6 +1050,32 @@ class PdfFileReader(PdfHandler):
         )
         self._embedded_signatures = result
         return result
+
+    @property
+    def embedded_regular_signatures(self):
+        """
+        :return:
+            The signature objects of type ``/Sig`` embedded in this document,
+            in signing order;
+            see :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`.
+        """
+        return [
+            emb_sig for emb_sig in self.embedded_signatures
+            if emb_sig.sig_object_type == '/Sig'
+        ]
+
+    @property
+    def embedded_timestamp_signatures(self):
+        """
+        :return:
+            The signature objects of type ``/DocTimeStamp`` embedded in
+            this document, in signing order;
+            see :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`.
+        """
+        return [
+            emb_sig for emb_sig in self.embedded_signatures
+            if emb_sig.sig_object_type == '/DocTimeStamp'
+        ]
 
 
 def convert_to_int(d, size):
