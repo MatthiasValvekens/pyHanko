@@ -8,8 +8,16 @@ user-provided configuration (e.g. from a Yaml file).
 """
 
 import dataclasses
+import re
 
-__all__ = ['ConfigurationError', 'ConfigurableMixin']
+__all__ = [
+    'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
+    'OID_REGEX', 'process_oid', 'process_oids', 'process_bit_string_flags'
+]
+
+from typing import Type
+
+from asn1crypto.core import ObjectIdentifier, BitString
 
 
 class ConfigurationError(ValueError):
@@ -95,3 +103,68 @@ def check_config_keys(config_name, expected_keys, config_dict):
             f"in configuration for {config_name}: "
             f"{','.join(key.replace('_', '-') for key in unexpected_keys)}."
         )
+
+
+OID_REGEX = re.compile(r'\d(\.\d+)+')
+
+
+def process_oid(asn1crypto_class: Type[ObjectIdentifier], id_string,
+                param_name):
+    if not isinstance(id_string, str):
+        raise ConfigurationError(
+            f"Identifier '{repr(id_string)}' in '{param_name}' is not a string."
+        )
+    if OID_REGEX.fullmatch(id_string):
+        # Attempt to translate OID strings to human-readable form
+        # whenever possible
+        return asn1crypto_class.map(id_string)
+    else:
+        try:
+            # try to see if the usage string maps to an OID before
+            # proceeding
+            asn1crypto_class.unmap(id_string)
+        except ValueError:
+            raise ConfigurationError(
+                f"'{id_string}' in '{param_name}' is not a valid "
+                f"{asn1crypto_class.__name__}"
+            )
+        return id_string
+
+
+def _ensure_strings(strings, param_name):
+
+    err_msg = (
+        f"'{param_name}' must be specified as a "
+        "list of strings, or a string."
+    )
+    if isinstance(strings, str):
+        strings = (strings,)
+    elif not isinstance(strings, (list, tuple)):
+        raise ConfigurationError(err_msg)
+
+    return strings
+
+
+def process_oids(asn1crypto_class: Type[ObjectIdentifier], strings, param_name):
+    strings = _ensure_strings(strings, param_name)
+    for usage_string in strings:
+        yield process_oid(asn1crypto_class, usage_string, param_name)
+
+
+def process_bit_string_flags(asn1crypto_class: Type[BitString], strings,
+                             param_name):
+    strings = _ensure_strings(strings, param_name)
+    valid_values = asn1crypto_class._map.values()
+    for flag_string in strings:
+        if not isinstance(flag_string, str):
+            raise ConfigurationError(
+                f"Flag identifier '{repr(flag_string)}' is not a string."
+            )
+        elif flag_string not in valid_values:
+            raise ConfigurationError(
+                f"'{repr(flag_string)}' is not a valid "
+                f"{asn1crypto_class.__name__} flag name."
+            )
+        # Use yield to keep the API consistent with process_oids, we don't
+        # change anything
+        yield flag_string

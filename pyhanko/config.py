@@ -1,19 +1,16 @@
 import enum
 import logging
-import re
 from datetime import timedelta
 from typing import Dict, Optional, Union
 from dataclasses import dataclass
 
 import yaml
-from asn1crypto import x509
 
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.pdf_utils.config_utils import (
     check_config_keys, ConfigurationError
 )
 from pyhanko.pdf_utils.misc import get_and_apply
-
 
 # TODO add stamp styles etc.
 from pyhanko.sign import load_certs_from_pemder
@@ -86,24 +83,27 @@ class CLIConfig:
         vc_config = self._get_validation_settings_raw(name)
 
         try:
-            key_usage_strings = vc_config['signer-key-usage']
-            key_usage = set(
-                _process_key_usages(key_usage_strings, extended=False)
-            )
+            policy_settings = dict(vc_config['signer-key-usage-policy'])
         except KeyError:
-            key_usage = None
+            policy_settings = {}
+
+        # fallbacks to stay compatible with the simpler 0.5.0 signer-key-usage
+        # and signer-extd-key-usage settings: copy old settings keys to
+        # their corresponding values in the new one
+
+        try:
+            key_usage_strings = vc_config['signer-key-usage']
+            policy_settings.setdefault('key-usage', key_usage_strings)
+        except KeyError:
+            pass
 
         try:
             key_usage_strings = vc_config['signer-extd-key-usage']
-            extd_key_usage = set(
-                _process_key_usages(key_usage_strings, extended=True)
-            )
+            policy_settings.setdefault('extd-key-usage', key_usage_strings)
         except KeyError:
-            extd_key_usage = None
+            pass
 
-        return KeyUsageConstraints(
-            key_usage=key_usage, extd_key_usage=extd_key_usage
-        )
+        return KeyUsageConstraints.from_config(policy_settings)
 
     def get_stamp_style(self, name=None) -> TextStampStyle:
         name = name or self.default_stamp_style
@@ -160,7 +160,8 @@ def parse_trust_config(trust_config, time_tolerance,
         'ValidationContext',
         ('trust', 'trust-replace', 'other-certs',
          'time-tolerance', 'retroactive-revinfo',
-         'signer-key-usage', 'signer-extd-key-usage'),
+         'signer-key-usage', 'signer-extd-key-usage',
+         'signer-key-usage-policy'),
         trust_config
     )
     return init_validation_context_kwargs(
@@ -172,47 +173,6 @@ def parse_trust_config(trust_config, time_tolerance,
             'retroactive-revinfo', retroactive_revinfo
         )
     )
-
-
-OID_REGEX = re.compile(r'\d(\.\d+)+')
-
-
-def _process_key_usages(key_usage_strings, extended=False):
-    err_msg = (
-        "Key usages and extended key usages must be specified as a "
-        "list of strings, or a string."
-    )
-    if isinstance(key_usage_strings, str):
-        key_usage_strings = (key_usage_strings,)
-    elif not isinstance(key_usage_strings, list):
-        raise ConfigurationError(err_msg)
-
-    usage_class = x509.KeyPurposeId if extended else x509.KeyUsage
-    valid_usages = usage_class._map.values()
-    for usage_string in key_usage_strings:
-        if not isinstance(usage_string, str):
-            raise ConfigurationError(
-                f"{err_msg} '{repr(usage_string)}' is not a string."
-            )
-        if usage_string in valid_usages:
-            yield usage_string
-        elif extended and OID_REGEX.fullmatch(usage_string):
-            # for extended key usages, we allow OIDs as well
-            # and natively translate them to human-readable form
-            # whenever possible
-            try:
-                usage_string = x509.KeyPurposeId._map[usage_string]
-            except KeyError:
-                logging.debug(
-                    f"Extended key usage extension {usage_string} was not "
-                    f"recognised by asn1crypto; using raw value."
-                )
-            yield usage_string
-        else:
-            extd = "extended " if extended else ""
-            raise ConfigurationError(
-                f"'{usage_string}' is not a valid {extd}key usage designation."
-            )
 
 
 DEFAULT_ROOT_LOGGER_LEVEL = logging.INFO

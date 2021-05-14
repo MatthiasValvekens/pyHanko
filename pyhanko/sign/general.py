@@ -22,6 +22,8 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
 
+from pyhanko.pdf_utils.config_utils import ConfigurableMixin, \
+    process_bit_string_flags, process_oids
 from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko_certvalidator import (
@@ -67,10 +69,8 @@ def _match_usages(required: set, present: set, need_all: bool):
         return bool(required & present)
 
 
-# TODO expose the new options in this class in config.
-
 @dataclass(frozen=True)
-class KeyUsageConstraints:
+class KeyUsageConstraints(ConfigurableMixin):
     """
     Convenience class to pass around key usage requirements and validate them.
     Intended to be flexible enough to handle both PKIX and ISO 32000 certificate
@@ -216,6 +216,30 @@ class KeyUsageConstraints:
             raise InvalidCertificateError(
                 "The extended key usages for which this certificate is valid "
                 f"do not match the active key usage policy. {ok_list}"
+            )
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
+
+        # Deal with KeyUsage values first
+        # might as well expose key_usage_forbidden while we're at it
+        for key_usage_sett in ('key_usage', 'key_usage_forbidden'):
+            affected_flags = config_dict.get(key_usage_sett, None)
+            if affected_flags is not None:
+                config_dict[key_usage_sett] = set(
+                    process_bit_string_flags(
+                        x509.KeyUsage, affected_flags,
+                        key_usage_sett.replace('_', '-')
+                    )
+                )
+
+        extd_key_usage = config_dict.get('extd_key_usage', None)
+        if extd_key_usage is not None:
+            config_dict['extd_key_usage'] = set(
+                process_oids(
+                    x509.KeyPurposeId, extd_key_usage, 'extd-key-usage'
+                )
             )
 
 

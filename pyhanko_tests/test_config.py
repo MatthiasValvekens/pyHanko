@@ -257,17 +257,89 @@ def test_read_extd_key_usage(key_usage_str, key_usages):
     key_usage_settings = cli_config.get_signer_key_usages()
     assert key_usage_settings.key_usage is None
     assert key_usage_settings.extd_key_usage == key_usages
+    assert not key_usage_settings.match_all_key_usages
+
+
+def test_read_key_usage_policy_1():
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            signer-key-usage-policy:
+                key-usage: [digital_signature, non_repudiation]
+                match-all-key-usages: true
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    key_usage_settings = cli_config.get_signer_key_usages()
+    assert key_usage_settings.key_usage \
+           == {'digital_signature', 'non_repudiation'}
+    assert key_usage_settings.key_usage_forbidden is None
+    assert key_usage_settings.extd_key_usage is None
+    assert key_usage_settings.match_all_key_usages
+
+
+def test_read_key_usage_policy_2():
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            signer-key-usage-policy:
+                key-usage: [digital_signature, non_repudiation]
+                extd-key-usage: '2.999'
+                explicit-extd-key-usage-required: true
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    key_usage_settings = cli_config.get_signer_key_usages()
+    assert key_usage_settings.key_usage \
+           == {'digital_signature', 'non_repudiation'}
+    assert key_usage_settings.extd_key_usage == {'2.999'}
+    assert key_usage_settings.explicit_extd_key_usage_required
+
+
+def test_read_key_usage_policy_3():
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            signer-key-usage-policy:
+                key-usage: [digital_signature, non_repudiation]
+                key-usage-forbidden: data_encipherment
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    key_usage_settings = cli_config.get_signer_key_usages()
+    assert key_usage_settings.key_usage \
+           == {'digital_signature', 'non_repudiation'}
+    assert key_usage_settings.key_usage_forbidden == {'data_encipherment'}
+    assert key_usage_settings.extd_key_usage is None
+    assert not key_usage_settings.match_all_key_usages
 
 
 @pytest.mark.parametrize('key_usage_str', [
-    '0', '["non_repudiation", 2]', "[1, 2, 3]", "abcdef"
+    '0', '["non_repudiation", 2]', "[1, 2, 3]", "abcdef",
+    '["no_such_key_usage"]',
+])
+def test_extd_key_usage_errors(key_usage_str):
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            signer-extd-key-usage: {key_usage_str}
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    with pytest.raises(ConfigurationError):
+        cli_config.get_signer_key_usages()
+
+
+@pytest.mark.parametrize('key_usage_str', [
+    '0', '["non_repudiation", 2]', "[1, 2, 3]", "abcdef",
+    '["no_such_key_usage"]',
 ])
 def test_key_usage_errors(key_usage_str):
     config_string = f"""
     validation-contexts:
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
-            signer-extd-key-usage: {key_usage_str}
+            signer-key-usage: {key_usage_str}
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     with pytest.raises(ConfigurationError):
