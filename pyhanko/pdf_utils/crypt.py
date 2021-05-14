@@ -418,7 +418,7 @@ class AuthResult:
 
 
 @enum.unique
-class SecurityHandlerVersion(misc.OrderedEnum):
+class SecurityHandlerVersion(misc.VersionEnum):
     """
     Indicates the security handler's version.
 
@@ -439,6 +439,23 @@ class SecurityHandlerVersion(misc.OrderedEnum):
         val = self.value
         return generic.NullObject() if val is None \
             else generic.NumberObject(val)
+
+    @classmethod
+    def from_number(cls, value) -> 'SecurityHandlerVersion':
+        try:
+            return SecurityHandlerVersion(value)
+        except ValueError:
+            return SecurityHandlerVersion.OTHER
+
+    def check_key_length(self, key_length: int) -> int:
+        if self == SecurityHandlerVersion.RC4_40:
+            return 5
+        elif self == SecurityHandlerVersion.AES256:
+            return 32
+        elif not (5 <= key_length <= 16) \
+                and self <= SecurityHandlerVersion.RC4_OR_AES128:
+            raise misc.PdfError("Key length must be between 5 and 16")
+        return key_length
 
 
 class SecurityHandler:
@@ -481,19 +498,11 @@ class SecurityHandler:
                  crypt_filter_config: 'CryptFilterConfiguration',
                  encrypt_metadata=True):
         self.version = version
-        if version == SecurityHandlerVersion.RC4_40:
-            legacy_keylen = 5
-        elif not (5 <= legacy_keylen <= 16) \
-                and version <= SecurityHandlerVersion.RC4_OR_AES128:
-            raise misc.PdfError("Key length must be between 5 and 16")
-        elif version == SecurityHandlerVersion.AES256:
-            legacy_keylen = 32
-
         if crypt_filter_config is None:
             raise misc.PdfError("No crypt filter configuration")
         crypt_filter_config.set_security_handler(self)
 
-        self.keylen = legacy_keylen
+        self.keylen = version.check_key_length(legacy_keylen)
         self.crypt_filter_config = crypt_filter_config
         self.encrypt_metadata = encrypt_metadata
 
@@ -707,7 +716,7 @@ class SecurityHandler:
 
 
 @enum.unique
-class StandardSecuritySettingsRevision(misc.OrderedEnum):
+class StandardSecuritySettingsRevision(misc.VersionEnum):
     """Indicate the standard security handler revision to emulate."""
 
     RC4_BASIC = 2
@@ -723,6 +732,13 @@ class StandardSecuritySettingsRevision(misc.OrderedEnum):
         val = self.value
         return generic.NullObject() if val is None \
             else generic.NumberObject(val)
+
+    @classmethod
+    def from_number(cls, value) -> 'StandardSecuritySettingsRevision':
+        try:
+            return StandardSecuritySettingsRevision(value)
+        except ValueError:
+            return StandardSecuritySettingsRevision.OTHER
 
 
 class CryptFilter:
@@ -927,7 +943,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         Whether this crypt filter should encrypt document-level metadata.
 
         .. warning::
-            See :class:`.SecurityHandlers` for some background on the
+            See :class:`.SecurityHandler` for some background on the
             way pyHanko interprets this value.
     """
     _handler: 'PubKeySecurityHandler' = None
@@ -1536,10 +1552,11 @@ class StandardSecurityHandler(SecurityHandler):
                              id1, desired_owner_pass, desired_user_pass=None,
                              keylen_bytes=16, use_aes128=True,
                              perms: int = ALL_PERMS,
-                             crypt_filter_config=None):
+                             crypt_filter_config=None, **kwargs):
         """
         Initialise a legacy password-based security handler, to attach to a
         :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
+        Any remaining keyword arguments will be passed to the constructor.
 
         .. danger::
             The functionality implemented by this handler is deprecated in the
@@ -1617,17 +1634,20 @@ class StandardSecurityHandler(SecurityHandler):
             perm_flags=perms, odata=o_entry,
             udata=u_entry, encrypt_metadata=True,
             crypt_filter_config=crypt_filter_config,
+            **kwargs
         )
         sh._shared_key = key
         return sh
 
     @classmethod
     def build_from_pw(cls, desired_owner_pass, desired_user_pass=None,
-                      perms=ALL_PERMS):
+                      perms=ALL_PERMS, **kwargs):
         """
         Initialise a password-based security handler backed by AES-256,
         to attach to a :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
         This handler will use the new PDF 2.0 encryption scheme.
+
+        Any remaining keyword arguments will be passed to the constructor.
 
         :param desired_owner_pass:
             Desired owner password.
@@ -1684,7 +1704,8 @@ class StandardSecurityHandler(SecurityHandler):
             revision=StandardSecuritySettingsRevision.AES256,
             legacy_keylen=32, perm_flags=perms, odata=o_entry,
             udata=u_entry, oeseed=oe_seed, ueseed=ue_seed,
-            encrypted_perms=encrypted_perms, encrypt_metadata=True
+            encrypted_perms=encrypted_perms, encrypt_metadata=True,
+            **kwargs
         )
         sh._shared_key = encryption_key
         return sh
@@ -1731,7 +1752,7 @@ class StandardSecurityHandler(SecurityHandler):
         )
         self.revision = revision
         self.perms = _as_signed(perm_flags)
-        if revision == StandardSecuritySettingsRevision.AES256:
+        if revision >= StandardSecuritySettingsRevision.AES256:
             StandardSecurityHandler._check_r6_values(
                 udata, odata, oeseed, ueseed, encrypted_perms
             )
@@ -1788,8 +1809,8 @@ class StandardSecurityHandler(SecurityHandler):
     @classmethod
     def instantiate_from_pdf_object(cls,
                                     encrypt_dict: generic.DictionaryObject):
-        v = SecurityHandlerVersion(encrypt_dict['/V'])
-        r = StandardSecuritySettingsRevision(encrypt_dict['/R'])
+        v = SecurityHandlerVersion.from_number(encrypt_dict['/V'])
+        r = StandardSecuritySettingsRevision.from_number(encrypt_dict['/R'])
         return StandardSecurityHandler(
             version=v, revision=r,
             crypt_filter_config=cls.process_crypt_filters(encrypt_dict),
@@ -1868,7 +1889,7 @@ class StandardSecurityHandler(SecurityHandler):
         """
         res: AuthStatus
         rev = self.revision
-        if rev == StandardSecuritySettingsRevision.AES256:
+        if rev >= StandardSecuritySettingsRevision.AES256:
             res, key = self._authenticate_r6(credential)
         else:
             if id1 is None:
@@ -2354,14 +2375,15 @@ class PubKeySecurityHandler(SecurityHandler):
                          version=SecurityHandlerVersion.AES256,
                          use_aes=True, use_crypt_filters=True,
                          perms: int = ALL_PERMS,
-                         encrypt_metadata=True,
-                         ignore_key_usage=False) -> 'PubKeySecurityHandler':
+                         encrypt_metadata=True, ignore_key_usage=False,
+                         **kwargs) -> 'PubKeySecurityHandler':
         """
         Create a new public key security handler.
 
         This method takes many parameters, but only ``certs`` is mandatory.
         The default behaviour is to create a public key encryption handler
         where the underlying symmetric encryption is provided by AES-256.
+        Any remaining keyword arguments will be passed to the constructor.
 
         :param certs:
             The recipients' certificates.
@@ -2383,7 +2405,7 @@ class PubKeySecurityHandler(SecurityHandler):
             Whether to encrypt document metadata.
 
             .. warning::
-                See :class:`.SecurityHandlers` for some background on the
+                See :class:`.SecurityHandler` for some background on the
                 way pyHanko interprets this value.
         :param ignore_key_usage:
             If ``False``, the *keyEncipherment* key usage extension is required.
@@ -2408,10 +2430,11 @@ class PubKeySecurityHandler(SecurityHandler):
                     keylen_bytes, recipients=None,
                     encrypt_metadata=encrypt_metadata
                 )
+        # noinspection PyArgumentList
         sh = cls(
             version, subfilter, keylen_bytes,
             encrypt_metadata=encrypt_metadata, crypt_filter_config=cfc,
-            recipient_objs=None
+            recipient_objs=None, **kwargs
         )
         sh.add_recipients(certs, perms=perms, ignore_key_usage=ignore_key_usage)
         return sh
@@ -2481,11 +2504,48 @@ class PubKeySecurityHandler(SecurityHandler):
         return cf
 
     @classmethod
-    def instantiate_from_pdf_object(cls,
-                                    encrypt_dict: generic.DictionaryObject):
-        v = SecurityHandlerVersion(encrypt_dict['/V'])
+    def process_crypt_filters(cls, encrypt_dict: generic.DictionaryObject) \
+            -> Optional['CryptFilterConfiguration']:
+        cfc = super().process_crypt_filters(encrypt_dict)
+        subfilter = cls._determine_subfilter(encrypt_dict)
+
+        if cfc is not None and subfilter != PubKeyAdbeSubFilter.S5:
+            raise misc.PdfReadError(
+                "Crypt filters require /adbe.pkcs7.s5 as the declared "
+                "handler."
+            )
+        elif cfc is None and subfilter == PubKeyAdbeSubFilter.S5:
+            raise misc.PdfReadError(
+                "/adbe.pkcs7.s5 handler requires crypt filters."
+            )
+        return cfc
+
+    @classmethod
+    def gather_pub_key_metadata(cls, encrypt_dict: generic.DictionaryObject):
+        keylen_bits = encrypt_dict.get('/Length', 128)
+        if (keylen_bits % 8) != 0:
+            raise misc.PdfError("Key length must be a multiple of 8")
+        keylen = keylen_bits // 8
+
+        recipients = misc.get_and_apply(
+            encrypt_dict, '/Recipients',
+            lambda lst: [cms.ContentInfo.load(x.original_bytes) for x in lst]
+        )
+
+        # TODO get encrypt_metadata handling in line with ISO 32k
+        #  (needs to happen at the crypt filter level instead)
+        encrypt_metadata = encrypt_dict.get_and_apply(
+            '/EncryptMetadata', bool, default=True
+        )
+        return dict(
+            legacy_keylen=keylen, recipient_objs=recipients,
+            encrypt_metadata=encrypt_metadata
+        )
+
+    @classmethod
+    def _determine_subfilter(cls, encrypt_dict: generic.DictionaryObject):
         try:
-            subfilter = misc.get_and_apply(
+            return misc.get_and_apply(
                 encrypt_dict, '/SubFilter', PubKeyAdbeSubFilter, default=(
                     PubKeyAdbeSubFilter.S5 if '/CF' in encrypt_dict
                     else PubKeyAdbeSubFilter.S4
@@ -2497,34 +2557,16 @@ class PubKeySecurityHandler(SecurityHandler):
                 + encrypt_dict['/SubFilter']
             )
 
-        keylen_bits = encrypt_dict.get('/Length', 128)
-        if (keylen_bits % 8) != 0:
-            raise misc.PdfError("Key length must be a multiple of 8")
-        keylen = keylen_bits // 8
+    @classmethod
+    def instantiate_from_pdf_object(cls,
+                                    encrypt_dict: generic.DictionaryObject):
+        v = SecurityHandlerVersion.from_number(encrypt_dict['/V'])
 
-        cfc = cls.process_crypt_filters(encrypt_dict)
-
-        if cfc is not None and subfilter != PubKeyAdbeSubFilter.S5:
-            raise misc.PdfReadError(
-                "Crypt filters require /adbe.pkcs7.s5 as the declared "
-                "handler."
-            )
-        elif cfc is None and subfilter == PubKeyAdbeSubFilter.S5:
-            raise misc.PdfReadError(
-                "/adbe.pkcs7.s5 handler requires crypt filters."
-            )
-
-        recipients = misc.get_and_apply(
-            encrypt_dict, '/Recipients',
-            lambda lst: [cms.ContentInfo.load(x.original_bytes) for x in lst]
-        )
         return PubKeySecurityHandler(
-            version=v, pubkey_handler_subfilter=subfilter,
-            legacy_keylen=keylen, recipient_objs=recipients,
-            crypt_filter_config=cfc,
-            encrypt_metadata=encrypt_dict.get_and_apply(
-                '/EncryptMetadata', bool, default=True
-            )
+            version=v,
+            pubkey_handler_subfilter=cls._determine_subfilter(encrypt_dict),
+            crypt_filter_config=cls.process_crypt_filters(encrypt_dict),
+            **cls.gather_pub_key_metadata(encrypt_dict)
         )
 
     def as_pdf_object(self):

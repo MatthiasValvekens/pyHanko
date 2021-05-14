@@ -1511,3 +1511,64 @@ def test_custom_crypt_filter_type(on_subclass):
     del sh_class._known_crypt_filters[custom_cf_type]
     if on_subclass:
         SecurityHandler.register(StandardSecurityHandler)
+
+
+def test_security_handler_version_deser():
+    assert SecurityHandlerVersion.from_number(5) \
+           == SecurityHandlerVersion.AES256
+    assert SecurityHandlerVersion.from_number(6) == SecurityHandlerVersion.OTHER
+    assert SecurityHandlerVersion.from_number(None) \
+           == SecurityHandlerVersion.OTHER
+
+    assert StandardSecuritySettingsRevision.from_number(6) \
+           == StandardSecuritySettingsRevision.AES256
+    assert StandardSecuritySettingsRevision.from_number(7) \
+           == StandardSecuritySettingsRevision.OTHER
+
+
+def test_ordered_enum():
+
+    class Version(misc.OrderedEnum):
+        VER1 = 1
+        VER2 = 2
+
+    assert Version.VER2 > Version.VER1
+    assert Version.VER2 >= Version.VER1
+    assert not (Version.VER1 > Version.VER1)
+
+    assert Version.VER1 < Version.VER2
+    assert Version.VER1 <= Version.VER2
+    assert not (Version.VER1 < Version.VER1)
+
+
+def test_version_enum():
+
+    class Version(misc.VersionEnum):
+        VER1 = 1
+        VER2 = 2
+        FUTURE = None
+
+    assert Version.VER2 > Version.VER1
+    assert Version.VER2 >= Version.VER1
+    assert Version.FUTURE > Version.VER1
+    assert Version.FUTURE >= Version.VER1
+    assert not (Version.FUTURE > Version.FUTURE)
+    assert not (Version.VER2 >= Version.FUTURE)
+    assert not (Version.VER2 > Version.FUTURE)
+
+    assert Version.VER1 < Version.VER2
+    assert Version.VER1 <= Version.VER2
+    assert Version.VER1 < Version.FUTURE
+    assert Version.VER1 <= Version.FUTURE
+    assert not (Version.FUTURE < Version.FUTURE)
+    assert not (Version.FUTURE <= Version.VER2)
+    assert not (Version.FUTURE < Version.VER2)
+
+
+def test_key_len():
+    with pytest.raises(misc.PdfError):
+        SecurityHandlerVersion.RC4_OR_AES128.check_key_length(20)
+    assert SecurityHandlerVersion.RC4_OR_AES128.check_key_length(6) == 6
+    assert SecurityHandlerVersion.AES256.check_key_length(6) == 32
+    assert SecurityHandlerVersion.RC4_40.check_key_length(32) == 5
+    assert SecurityHandlerVersion.RC4_LONGER_KEYS.check_key_length(16) == 16

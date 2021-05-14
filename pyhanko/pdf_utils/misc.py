@@ -173,22 +173,78 @@ class OrderedEnum(Enum):
     def __ge__(self, other):
         if self.__class__ is other.__class__:
             return self.value >= other.value
-        return NotImplemented
+        raise NotImplementedError
 
     def __gt__(self, other):
         if self.__class__ is other.__class__:
             return self.value > other.value
-        return NotImplemented
+        raise NotImplementedError
 
     def __le__(self, other):
         if self.__class__ is other.__class__:
             return self.value <= other.value
-        return NotImplemented
+        raise NotImplementedError
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:
             return self.value < other.value
-        return NotImplemented
+        raise NotImplementedError
+
+
+class VersionEnum(Enum):
+    """
+    Ordered enum with support for ``None``, for future-proofing version-based
+    enums. In such enums, the value ``None`` can be used as a stand-in for
+    "any future version".
+    """
+
+    def __ge__(self, other):
+        if self.__class__ is other.__class__:
+            val = self.value
+            other_val = other.value
+            if val is None:
+                return True
+            elif other_val is None:
+                return False
+            else:
+                return val >= other_val
+        raise NotImplementedError
+
+    def __gt__(self, other):
+        if self.__class__ is other.__class__:
+            val = self.value
+            other_val = other.value
+            if val is None:
+                return other_val is not None
+            elif other_val is None:
+                return False
+            else:
+                return val > other_val
+        raise NotImplementedError
+
+    def __le__(self, other):
+        if self.__class__ is other.__class__:
+            val = self.value
+            other_val = other.value
+            if other_val is None:
+                return True
+            elif val is None:
+                return False
+            else:
+                return val <= other_val
+        raise NotImplementedError
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            val = self.value
+            other_val = other.value
+            if other_val is None:
+                return val is not None
+            elif val is None:
+                return False
+            else:
+                return val < other_val
+        raise NotImplementedError
 
 
 class LazyJoin:
