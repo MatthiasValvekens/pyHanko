@@ -37,10 +37,11 @@ logger = logging.getLogger(__name__)
 
 
 try:
-    import pkcs11
+    import pkcs11  # lgtm [py/unused-import]
     pkcs11_available = True
 except ImportError:
     pkcs11_available = False
+
 
 def logging_setup(log_configs):
     log_config: LogConfig
