@@ -50,11 +50,12 @@ Note that not all of these are necessarily exposed through the CLI.
         - PAdES baseline profiles B-B, B-T, B-LT and B-LTA are all supported.
         - Adobe-style revocation info embedding is also supported.
     - RFC 3161 timestamp server support
-    - Support for multiple signatures (all modifications are executed using incremental updates to preserve
-      cryptographic integrity)
+    - Support for multiple signatures (all modifications are executed using incremental updates to 
+      preserve cryptographic integrity)
     - Supports both RSA & ECDSA
-    - If `cryptography` is installed, pyHanko can also produce and validate 
-      RSASSA-PSS signatures (with arbitrary parameters).
+      - RSA padding modes: PKCS#1 v1.5 and RSASSA-PSS
+      - ECDSA curves: anything supported by the `cryptography` library, 
+        see [here](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/#elliptic-curves).
     - PKCS11 support
         - Available both from the library and through the CLI
         - Extra convenience wrapper for Belgian eID cards
@@ -66,7 +67,7 @@ Note that not all of these are necessarily exposed through the CLI.
       updates made after signing (experimental)
     - Signature seed value constraint validation
  - Encryption
-    - All encryption methods in ISO 32000-2 are supported in the `0.3.0` release.
+    - All encryption methods in ISO 32000-2 are supported.
  - CLI & configuration
     - YAML-based configuration (optional for most features)
     - CLI based on `click` 
