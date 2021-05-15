@@ -2,6 +2,115 @@
 Release history
 ***************
 
+0.6.0
+=====
+
+*Release date:* 2021-05-15
+
+
+Dependency changes
+------------------
+
+.. warning::
+    pyHanko's ``0.6.0`` release includes quite a few changes to dependencies, some of which may
+    break compatibility with existing code. Review this section carefully before updating.
+
+The ``pyhanko-certvalidator`` dependency was updated to ``0.15.1``.
+This update adds support for name constraints, RSASSA-PSS and EdDSA for the purposes of X.509 path
+validation, OCSP checking and CRL validation.
+
+.. warning::
+    Since ``pyhanko-certvalidator`` has considerably diverged from "mainline" ``certvalidator``,
+    the Python package containing its modules was also renamed from ``certvalidator`` to
+    ``pyhanko_certvalidator``, to avoid potential namespace conflicts down the line. You should
+    update your code to reflect this change.
+
+    Concretely,
+
+    .. code-block:: python
+
+        from certvalidator import ValidationContext
+
+    turns into
+
+    .. code-block:: python
+
+        from pyhanko_certvalidator import ValidationContext
+
+    in the new release.
+
+There were several changes to dependencies with native binary components:
+
+ * The Pillow dependency has been relaxed to ``>=7.2.0``, and is now optional.
+   The same goes for ``python-barcode``. Image & 1D barcode support now needs to be installed
+   explicitly using the ``[image-support]`` installation parameter.
+
+ * PKCS#11 support has also been made optional, and can be added using the ``[pkcs11]``
+   installation parameter.
+
+The test suite now makes use of `Certomancer <https://github.com/MatthiasValvekens/certomancer>`_.
+This also removed the dependency on ``ocspbuilder``.
+
+
+New features and enhancements
+-----------------------------
+
+
+Signing
+^^^^^^^
+
+ * Make preferred hash inference more robust.
+ * Populate ``/AP`` when creating an empty visible signature field (necessary in PDF 2.0)
+
+
+Validation
+^^^^^^^^^^
+
+ * Timestamp and DSS handling tweaks:
+
+   * Preserve OCSP resps / CRLs from validation kwargs when reading the DSS.
+   * Gracefully process revisions that don't have a DSS.
+   * When creating document timestamps, the ``validation_context`` parameter is now optional.
+
+ * Enforce ``certvalidator``'s ``weak_hash_algos`` when validating PDF signatures as well.
+   Previously, this setting only applied to certificate validation.
+   By default, MD5 and SHA-1 are considered weak (for digital signing purposes).
+
+ * Expose ``DocTimeStamp``/``Sig`` distinction in a more user-friendly manner.
+
+    * The ``sig_object_type`` property on :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`
+      now returns the signature's type as a PDF name object.
+    * :class:`~pyhanko.pdf_utils.reader.PdfFileReader` now has two extra convenience properties
+      named ``embedded_regular_signatures`` and ``embedded_timestamp_signatures``, that return a
+      list of all regular signatures and document timestamps, respectively.
+
+
+Encryption
+^^^^^^^^^^
+
+ * Refactor internal APIs in pyHanko's security handler implementation to make them easier to
+   extend. Note that while anyone is free to register their own crypt filters for whatever purpose,
+   pyHanko's security handler is still considered internal API, so behaviour is subject to change
+   between minor version upgrades (even after ``1.0.0``).
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Broaden the scope of ``--soft-revocation-check``.
+ * Corrected a typo in the signature of ``validate_sig_integrity``.
+ * Less opaque error message on missing PKCS#11 key handle.
+ * Ad-hoc hash selection now relies on ``pyca/cryptography`` rather than ``hashlib``.
+
+
+Bugs fixed
+----------
+
+ * Correct handling of DocMDP permissions in approval signatures.
+ * Refactor & correct handling of SigFlags when signing prepared form fields in unsigned files.
+ * Fixed issue with trailing whitespace and/or ``NUL`` bytes in array literals.
+ * Corrected the export lists of various modules.
+
+
 0.5.1
 =====
 

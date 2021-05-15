@@ -19,17 +19,10 @@ PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
 and can be installed using `pip`:
 
 ```bash
-   pip install pyHanko
-```
-
-Note: starting from version 0.6.0 (which hasn't been released yet), you'll have to run
-
-```bash
    pip install 'pyHanko[pkcs11,image-support]'
 ```
 
-to install additional dependencies for PKCS#11 and image support. These dependencies were part of the core requirements in earlier versions,
-but have now been made optional.
+This `pip` invocation includes the optional dependencies required for PKCS#11 and image support.
 
 
 ### Overview
@@ -67,7 +60,7 @@ Note that not all of these are necessarily exposed through the CLI.
       updates made after signing (experimental)
     - Signature seed value constraint validation
  - Encryption
-    - All encryption methods in ISO 32000-2 are supported.
+    - All encryption methods in PDF 2.0 are supported.
  - CLI & configuration
     - YAML-based configuration (optional for most features)
     - CLI based on `click` 
