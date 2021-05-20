@@ -95,7 +95,11 @@ FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
 # /AS: current appearance state
 # /V: field value
 # /F: (widget) annotation flags
-VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V', '/F'}
+# /DA: default appearance
+# /Q: quadding
+VALUE_UPDATE_KEYS = (
+    FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V', '/F', '/DA', '/Q'}
+)
 VRI_KEY_PATTERN = re.compile('/[A-Z0-9]{40}')
 
 
@@ -1100,7 +1104,7 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             )
 
 
-ACROFORM_EXEMPT_STRICT_COMPARISON = {'/Fields', '/DR'}
+ACROFORM_EXEMPT_STRICT_COMPARISON = {'/Fields', '/DR', '/DA', '/Q'}
 
 
 class FormUpdatingRule:
