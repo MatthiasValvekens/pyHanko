@@ -1047,11 +1047,6 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
 
     This rule will take field locks into account if the
     :class:`.FieldComparisonContext` includes a :class:`.FieldMDPSpec`.
-
-    For (invisible) document timestamps, this is allowed at
-    :class:`.ModificationLevel.LTA_UPDATES`, but in all other cases
-    the modification level will be bumped to
-    :class:`.ModificationLevel.FORM_FILLING`.
     """
 
     def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
