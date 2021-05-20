@@ -121,8 +121,14 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
             'User-Agent': user_agent
         }
         response = requests.get(url=url, timeout=timeout, headers=headers)
-
-        content_type = response.headers['Content-Type'].strip()
+        if response.status_code != 200:
+            raise RequestException(f"status code {response.status_code}")
+        try:
+            content_type = response.headers['Content-Type'].strip()
+        except KeyError:
+            raise RequestException(
+                f"Unclear content type when fetching issuer certificate for CRL"
+            )
         response_data = response.content
 
         if content_type == 'application/pkix-cert':
@@ -135,6 +141,9 @@ def fetch_certs(certificate_list, user_agent=None, timeout=10):
                     if cert_choice.name == 'certificate':
                         output.append(cert_choice.chosen)
         else:
-            raise ValueError('Unknown content type of %s when fetching issuer certificate for CRL' % repr(content_type))
+            raise RequestException(
+                f"Unknown content type '{repr(content_type)}' "
+                f"when fetching issuer certificate for CRL"
+            )
 
     return output
