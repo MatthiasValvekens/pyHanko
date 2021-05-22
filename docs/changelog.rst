@@ -2,6 +2,28 @@
 Release history
 ***************
 
+0.6.1
+=====
+
+*Release date:* 2021-05-22
+
+
+Dependency changes
+------------------
+
+ - Update ``pyhanko-certvalidator`` to ``0.15.2``
+ - Replace constraint on ``certomancer`` and ``pyhanko-certvalidator`` by
+   soft minor version constraint (``~=``)
+ - Set version bound for ``freezegun``
+
+
+Bugs fixed
+----------
+
+ - Add ``/Q`` and ``/DA`` keys to the whitelist for incremental update analysis
+   on form fields.
+
+
 0.6.0
 =====
 
