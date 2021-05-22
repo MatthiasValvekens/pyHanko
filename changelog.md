@@ -1,5 +1,10 @@
 # changelog
 
+## 0.15.2
+
+ - Properly handle missing Content-Type header in server response when fetching CA certificates
+   referenced in a CRL.
+
 ## 0.15.1
 
  - Gracefully handle lack of thisUpdate / nextUpdate in OCSP responses.
