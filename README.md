@@ -51,27 +51,16 @@ revocation checks.
  - Point-in-time validation
  - Name constraints
 
-## Related Crypto Libraries
-
-*certvalidator* is part of the modularcrypto family of Python packages:
-
- - [asn1crypto](https://github.com/wbond/asn1crypto)
- - [oscrypto](https://github.com/wbond/oscrypto)
- - [csrbuilder](https://github.com/wbond/csrbuilder)
- - [certbuilder](https://github.com/wbond/certbuilder)
- - [crlbuilder](https://github.com/wbond/crlbuilder)
- - [ocspbuilder](https://github.com/wbond/ocspbuilder)
- - [certvalidator](https://github.com/wbond/certvalidator)
-
 ## Current Release
 
-0.14.1 - [changelog](changelog.md)
+![pypi](https://img.shields.io/pypi/v/pyhanko-certvalidator.svg) - [changelog](changelog.md)
 
 ## Dependencies
 
  - *asn1crypto*
- - *oscrypto*
+ - *cryptography*
  - *uritools*
+ - *oscrypto*
  - *requests*
  - Python 3.7, 3.8 or 3.9
 
