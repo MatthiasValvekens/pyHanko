@@ -5,7 +5,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import TypeVar, Type, Optional, Union, Iterator
+from typing import TypeVar, Type, Optional, Union, Iterator, IO
 
 from asn1crypto import (
     cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
@@ -49,7 +49,8 @@ __all__ = [
     'apply_adobe_revocation_info', 'get_timestamp_chain',
     'read_certification_data', 'validate_pdf_ltv_signature',
     'validate_pdf_signature', 'validate_cms_signature',
-    'validate_pdf_timestamp', 'collect_validation_info',
+    'validate_detached_cms', 'validate_pdf_timestamp',
+    'collect_validation_info',
     'add_validation_info',
     'ValidationInfoReadingError', 'SigSeedValueValidationError'
 ]
@@ -108,16 +109,20 @@ def partition_certs(certs, signer_info):
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 
-def _extract_signer_info_and_certs(signed_data: cms.SignedData):
-    certs = [c.parse() for c in signed_data['certificates']]
-
+def _extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
     try:
         signer_info, = signed_data['signer_infos']
+        return signer_info
     except ValueError:  # pragma: nocover
         raise ValueError(
             'signer_infos should contain exactly one entry'
         )
 
+
+def _extract_signer_info_and_certs(signed_data: cms.SignedData):
+    certs = [c.parse() for c in signed_data['certificates']]
+
+    signer_info = _extract_signer_info(signed_data)
     cert, other_certs = partition_certs(certs, signer_info)
 
     return signer_info, cert, other_certs
@@ -230,6 +235,30 @@ def validate_cms_signature(signed_data: cms.SignedData,
         status_kwargs, key_usage_settings, encap_data_invalid
     )
     return status_cls(**status_kwargs)
+
+
+def validate_detached_cms(input_data: Union[bytes, IO],
+                          signed_data: cms.SignedData,
+                          validation_context: ValidationContext = None,
+                          key_usage_settings: KeyUsageConstraints = None,
+                          chunk_size=DEFAULT_CHUNK_SIZE,
+                          max_read=None) -> SignatureStatus:
+
+    signer_info = _extract_signer_info(signed_data)
+    digest_algorithm = signer_info['digest_algorithm']['algorithm'].native
+    h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
+    if isinstance(input_data, bytes):
+        h.update(input_data)
+    else:
+        temp_buf = bytearray(chunk_size)
+        misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)
+    digest_bytes = h.finalize()
+
+    return validate_cms_signature(
+        signed_data, raw_digest=digest_bytes,
+        validation_context=validation_context,
+        key_usage_settings=key_usage_settings
+    )
 
 
 @unique

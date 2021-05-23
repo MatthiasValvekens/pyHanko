@@ -43,8 +43,8 @@ from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, validate_pdf_timestamp, add_validation_info,
-    validate_cms_signature
+    validate_detached_cms, SignatureCoverageLevel,
+    validate_pdf_timestamp, add_validation_info, validate_cms_signature
 )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
@@ -2855,13 +2855,13 @@ def test_sign_weak_sig_digest():
 )
 def test_generic_data_sign(input_data, detached):
 
-    # the first test will have consumed the data, so reset the stream
-    if isinstance(input_data, BytesIO):
-        input_data.seek(0)
-
     signature = FROM_CA.sign_general_data(
         input_data, 'sha256', detached=detached
     )
+
+    # reset the stream
+    if isinstance(input_data, BytesIO):
+        input_data.seek(0)
 
     # re-parse just to make sure we're starting fresh
     signature = cms.ContentInfo.load(signature.dump())
@@ -2880,9 +2880,18 @@ def test_generic_data_sign(input_data, detached):
     if detached:
         assert eci['content_type'].native == 'data'
         assert eci['content'].native is None
+
+        status = validate_detached_cms(input_data, content)
+        assert status.valid
+        assert status.intact
+        if isinstance(input_data, BytesIO):
+            input_data.seek(0)
     else:
         assert eci['content_type'].native == 'data'
         assert eci['content'].native == b'Hello world!'
+
+    assert status.valid
+    assert status.intact
 
 
 def test_cms_v3_sign():
