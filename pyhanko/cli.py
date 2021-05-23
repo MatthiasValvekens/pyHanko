@@ -1,10 +1,14 @@
 import sys
 from contextlib import contextmanager
+from datetime import datetime
 from enum import Enum, auto
 
 import click
 import logging
 import getpass
+
+import tzlocal
+from asn1crypto import pem
 
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
@@ -99,6 +103,7 @@ class Ctx(Enum):
     STAMP_URL = auto()
     NEW_FIELD_SPEC = auto()
     PREFER_PSS = auto()
+    DETACH_PEM = auto()
 
 
 @click.group()
@@ -165,7 +170,7 @@ def cli(ctx, config, verbose):
         logging.debug('There was no configuration to parse.')
 
 
-@cli.group(help='sign PDF files', name='sign')
+@cli.group(help='sign PDFs and other files', name='sign')
 def signing():
     pass
 
@@ -572,6 +577,17 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
     required=False, type=str
 )
 @trust_options
+@click.option(
+    '--detach', type=bool, is_flag=True, default=False,
+    help=(
+        'write only the signature CMS object to the output file; '
+        'this can be used to sign non-PDF files'
+    )
+)
+@click.option(
+    '--detach-pem', help='output PEM data instead of DER when using --detach',
+    type=bool, is_flag=True, default=False
+)
 @click.option('--retroactive-revinfo',
               help='Treat revocation info as retroactively valid '
                    '(i.e. ignore thisUpdate timestamp)',
@@ -580,10 +596,16 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
-           style_name, stamp_url, prefer_pss, retroactive_revinfo):
+           style_name, stamp_url, prefer_pss, retroactive_revinfo,
+           detach, detach_pem):
     ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
     ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
     ctx.obj[Ctx.PREFER_PSS] = prefer_pss
+
+    if detach:
+        ctx.obj[Ctx.DETACH_PEM] = detach_pem
+        ctx.obj[Ctx.SIG_META] = None
+        return  # everything else doesn't apply
 
     if use_pades:
         subfilter = fields.SigSeedSubFilter.PADES
@@ -659,6 +681,32 @@ def get_text_params(ctx):
     return text_params
 
 
+def detached_sig(signer: signers.Signer, infile_path, outfile,
+                 timestamp_url, use_pem):
+
+    with pyhanko_exception_manager():
+        if timestamp_url is not None:
+            timestamper = HTTPTimeStamper(timestamp_url)
+            timestamp = None
+        else:
+            timestamper = None
+            # in this case, embed the signing time as an unsigned attr
+            timestamp = datetime.now(tz=tzlocal.get_localzone())
+
+        with open(infile_path, 'rb') as inf:
+            signature = signer.sign_general_data(
+                inf, signers.DEFAULT_MD, timestamper=timestamper,
+                timestamp=timestamp
+            )
+
+        output_bytes = signature.dump()
+        if use_pem:
+            output_bytes = pem.armor('PKCS7', output_bytes)
+
+        # outfile is managed by Click
+        outfile.write(output_bytes)
+
+
 def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
                          style, text_params, new_field_spec):
@@ -672,7 +720,7 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
             signer_key=signer.signing_key
         )
 
-        generic_sign(
+        generic_sign_pdf(
             writer=writer, outfile=outfile,
             signature_meta=signature_meta, signer=signer,
             timestamper=timestamper, style=style, new_field_spec=new_field_spec,
@@ -680,8 +728,8 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
         )
 
 
-def generic_sign(*, writer, outfile, signature_meta, signer, timestamper,
-                 style, new_field_spec, existing_fields_only, text_params):
+def generic_sign_pdf(*, writer, outfile, signature_meta, signer, timestamper,
+                     style, new_field_spec, existing_fields_only, text_params):
     result = signers.PdfSigner(
         signature_meta, signer=signer, timestamper=timestamper,
         stamp_style=style, new_field_spec=new_field_spec
@@ -730,6 +778,12 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
         cert_file=cert, key_file=key, key_passphrase=passphrase,
         ca_chain_files=chain, prefer_pss=ctx.obj[Ctx.PREFER_PSS]
     )
+
+    if ctx.obj[Ctx.SIG_META] is None:
+        return detached_sig(
+            signer, infile, outfile, timestamp_url=timestamp_url,
+            use_pem=ctx.obj[Ctx.DETACH_PEM]
+        )
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
@@ -771,6 +825,11 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
         pfx_file=pfx, passphrase=passphrase, ca_chain_files=chain,
         prefer_pss=ctx.obj[Ctx.PREFER_PSS]
     )
+    if ctx.obj[Ctx.SIG_META] is None:
+        return detached_sig(
+            signer, infile, outfile, timestamp_url=timestamp_url,
+            use_pem=ctx.obj[Ctx.DETACH_PEM]
+        )
     return addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
@@ -780,9 +839,35 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     )
 
 
+def _sign_pkcs11(ctx, session, signer, infile, outfile, timestamp_url):
+    with pyhanko_exception_manager():
+        with session:
+            if ctx.obj[Ctx.SIG_META] is None:
+                return detached_sig(
+                    signer, infile, outfile, timestamp_url=timestamp_url,
+                    use_pem=ctx.obj[Ctx.DETACH_PEM]
+                )
+
+            if timestamp_url is not None:
+                timestamper = HTTPTimeStamper(timestamp_url)
+            else:
+                timestamper = None
+
+            with open(infile, 'rb') as inf:
+                generic_sign_pdf(
+                    writer=IncrementalPdfFileWriter(inf),
+                    outfile=outfile,
+                    signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
+                    timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
+                    new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+                    existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
+                    text_params=get_text_params(ctx)
+                )
+
 # TODO add options to specify extra certs to include
 
-@click.argument('infile', type=click.File('rb'))
+
+@click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--lib', help='path to PKCS#11 module',
               type=readable_file, required=True)
@@ -799,8 +884,6 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
 def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
                   cert_label, key_label, slot_no, skip_user_pin):
     from pyhanko.sign import pkcs11
-    signature_meta = ctx.obj[Ctx.SIG_META]
-    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
     if skip_user_pin:
@@ -812,27 +895,13 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
         lib_location=lib, slot_no=slot_no, token_label=token_label,
         user_pin=user_pin
     )
-    if timestamp_url is not None:
-        timestamper = HTTPTimeStamper(timestamp_url)
-    else:
-        timestamper = None
-
     signer = pkcs11.PKCS11Signer(
         session, cert_label=cert_label, key_label=key_label,
     )
-
-    with pyhanko_exception_manager():
-        generic_sign(
-            writer=IncrementalPdfFileWriter(infile), outfile=outfile,
-            signature_meta=signature_meta, signer=signer,
-            timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
-            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-            existing_fields_only=existing_fields_only,
-            text_params=get_text_params(ctx)
-        )
+    _sign_pkcs11(ctx, session, signer, infile, outfile, timestamp_url)
 
 
-@click.argument('infile', type=click.File('rb'))
+@click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--lib', help='path to libbeidpkcs11 library file',
               type=readable_file, required=True)
@@ -844,26 +913,11 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
 @click.pass_context
 def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     from pyhanko.sign import beid
-    signature_meta = ctx.obj[Ctx.SIG_META]
-    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
     session = beid.open_beid_session(lib, slot_no=slot_no)
-    if timestamp_url is not None:
-        timestamper = HTTPTimeStamper(timestamp_url)
-    else:
-        timestamper = None
-
-    signer = beid.BEIDSigner(session, use_auth_cert=use_auth_cert)
-
-    with pyhanko_exception_manager():
-        generic_sign(
-            writer=IncrementalPdfFileWriter(infile), outfile=outfile,
-            signature_meta=signature_meta, signer=signer,
-            timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
-            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-            existing_fields_only=existing_fields_only,
-            text_params=get_text_params(ctx)
-        )
+    with session:
+        signer = beid.BEIDSigner(session, use_auth_cert=use_auth_cert)
+        _sign_pkcs11(ctx, session, signer, infile, outfile, timestamp_url)
 
 
 def _pkcs11_cmd(name, hlp, fun):
