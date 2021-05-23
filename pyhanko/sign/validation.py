@@ -274,11 +274,6 @@ def validate_cms_signature(signed_data: cms.SignedData,
     return status_cls(**status_kwargs)
 
 
-# TODO maybe refactor validate_pdf_signature & friends a little to make use of
-#  this function too, instead of relying on stuff that's cached on
-#  EmbeddedPdfSignature (because the benefit of caching is negligible here
-#  anyhow)
-
 def collect_timing_info(signer_info: cms.SignerInfo,
                         ts_validation_context: ValidationContext):
 
@@ -1377,25 +1372,14 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     )
     status_kwargs = embedded_sig.summarise_integrity_info()
 
-    # try to find an embedded timestamp
-    signer_reported_dt = embedded_sig.self_reported_timestamp
-    if signer_reported_dt is not None:
-        status_kwargs['signer_reported_dt'] = signer_reported_dt
-
-    # if we managed to find an (externally) signed timestamp,
-    # we now proceed to validate it
-    tst_signed_data = embedded_sig.attached_timestamp_data
-    # TODO compare value of embedded timestamp token with the timestamp
-    #  attribute if both are present
-    tst_validity: Optional[SignatureStatus] = None
-    if tst_signed_data is not None:
-        assert embedded_sig.tst_signature_digest is not None
-        tst_validity_kwargs = _validate_timestamp(
-            tst_signed_data, ts_validation_context,
-            embedded_sig.tst_signature_digest
-        )
-        tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
-        status_kwargs['timestamp_validity'] = tst_validity
+    status_kwargs.update(
+        collect_timing_info(embedded_sig.signer_info, ts_validation_context)
+    )
+    if 'signer_reported_dt' not in status_kwargs:
+        # maybe the PDF signature dictionary declares /M
+        signer_reported_dt = embedded_sig.self_reported_timestamp
+        if signer_reported_dt is not None:
+            status_kwargs['signer_reported_dt'] = signer_reported_dt
 
     status_kwargs = _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
@@ -1403,6 +1387,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs, key_usage_settings=key_usage_settings
     )
+    tst_validity = status_kwargs.get('timestamp_validity', None)
     timestamp_found = (
         tst_validity is not None
         and tst_validity.valid and tst_validity.trusted
