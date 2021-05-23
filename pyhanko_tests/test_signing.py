@@ -353,6 +353,14 @@ def test_verify_sig_without_signed_attrs():
         val_untrusted(s)
 
 
+def test_verify_sig_with_ski_sid():
+    with open(PDF_DATA_DIR + '/sig-with-ski-sid.pdf', 'rb') as f:
+        r = PdfFileReader(f)
+        s = r.embedded_signatures[0]
+        assert s.field_name == 'Sig1'
+        val_untrusted(s)
+
+
 @freeze_time('2020-11-01')
 def test_sign_with_ecdsa_trust():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))

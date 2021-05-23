@@ -79,23 +79,34 @@ class SigSeedValueValidationError(SignatureValidationError):
         super().__init__(failure_message)
 
 
+def _get_signer_predicate(sid: cms.SignerIdentifier):
+    if sid.name == 'issuer_and_serial_number':
+        issuer = sid.chosen['issuer']
+        serial_number = sid.chosen['serial_number'].native
+        return lambda c: c.issuer == issuer and c.serial_number == serial_number
+    elif sid.name == 'subject_key_identifier':
+        # subject key identifier (not all certs have this, but that shouldn't
+        # be an issue in this case)
+        ski = sid.chosen.native
+        logger.warning(
+            "The signature in this file seems to be identified by a subject "
+            "key identifier --- this is legal in CMS, but many PDF viewers and "
+            "SDKs do not support this."
+        )
+        return lambda c: c.key_identifier == ski
+    raise NotImplementedError
+
+
 def partition_certs(certs, signer_info):
     # The 'certificates' entry is defined as a set in PCKS#7.
     # In particular, we cannot make any assumptions about the order.
     # This means that we have to manually dig through the list to find
     # the actual signer
-    iss_sn = signer_info['sid']
-    # TODO Figure out how the subject key identifier thing works
-    if iss_sn.name != 'issuer_and_serial_number':
-        raise NotImplementedError(
-            'Can only look up certificates by issuer and serial number'
-        )
-    issuer = iss_sn.chosen['issuer']
-    serial_number = iss_sn.chosen['serial_number'].native
+    predicate = _get_signer_predicate(signer_info['sid'])
     cert = None
     other_certs = []
     for c in certs:
-        if c.issuer == issuer and c.serial_number == serial_number:
+        if predicate(c):
             cert = c
         else:
             other_certs.append(c)
