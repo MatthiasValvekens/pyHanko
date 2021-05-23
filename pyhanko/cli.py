@@ -8,7 +8,7 @@ import logging
 import getpass
 
 import tzlocal
-from asn1crypto import pem
+from asn1crypto import pem, cms
 
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
@@ -311,9 +311,8 @@ def _select_style(ctx, style_name, url):
     return style
 
 
-def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
-                      pretty_print, vc_kwargs, key_usage_settings,
-                      executive_summary, embedded_sig):
+def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
+
     if soft_revocation_check and force_revinfo:
         raise click.ClickException(
             "--soft-revocation-check is incompatible with "
@@ -326,20 +325,49 @@ def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
     else:
         rev_mode = 'hard-fail'
     vc_kwargs['revocation_mode'] = rev_mode
+    return vc_kwargs
+
+
+def _signature_status(ltv_profile, vc_kwargs, force_revinfo, key_usage_settings,
+                      embedded_sig):
+    if ltv_profile is None:
+        vc = ValidationContext(**vc_kwargs)
+        status = validation.validate_pdf_signature(
+            embedded_sig, key_usage_settings=key_usage_settings,
+            signer_validation_context=vc
+        )
+    else:
+        status = validation.validate_pdf_ltv_signature(
+            embedded_sig, ltv_profile,
+            key_usage_settings=key_usage_settings,
+            force_revinfo=force_revinfo,
+            validation_context_kwargs=vc_kwargs
+        )
+    return status
+
+
+def _validate_detached(infile, sig_infile, validation_context,
+                       key_usage_settings):
+    sig_bytes = sig_infile.read()
     try:
-        if ltv_profile is None:
-            vc = ValidationContext(**vc_kwargs)
-            status = validation.validate_pdf_signature(
-                embedded_sig, key_usage_settings=key_usage_settings,
-                signer_validation_context=vc
-            )
-        else:
-            status = validation.validate_pdf_ltv_signature(
-                embedded_sig, ltv_profile,
-                key_usage_settings=key_usage_settings,
-                force_revinfo=force_revinfo,
-                validation_context_kwargs=vc_kwargs
-            )
+        if pem.detect(sig_bytes):
+            _, _, sig_bytes = pem.unarmor(sig_bytes)
+        content_info = cms.ContentInfo.load(sig_bytes)
+        if content_info['content_type'].native != 'signed_data':
+            raise click.ClickException("CMS content type is not signedData")
+    except ValueError as e:
+        raise click.ClickException("Could not parse CMS object") from e
+
+    return validation.validate_detached_cms(
+        infile, signed_data=content_info['content'],
+        signer_validation_context=validation_context,
+        key_usage_settings=key_usage_settings
+    )
+
+
+def _signature_status_str(status_callback, pretty_print, executive_summary):
+    try:
+        status = status_callback()
         if executive_summary and not pretty_print:
             return 'VALID' if status.bottom_line else 'INVALID'
         elif pretty_print:
@@ -397,12 +425,19 @@ def _signature_status(ltv_profile, force_revinfo, soft_revocation_check,
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--password', required=False, type=str,
               help='password to access the file (can also be read from stdin)')
+@click.option(
+    '--detached', type=click.File('rb'),
+    help=(
+        'Read signature CMS object from the indicated file; '
+        'this can be used to verify signatures on non-PDF files'
+    )
+)
 @click.pass_context
 def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
                         other_certs, ltv_profile, force_revinfo,
                         soft_revocation_check, no_revocation_check, password,
-                        retroactive_revinfo):
+                        retroactive_revinfo, detached):
 
     if no_revocation_check:
         soft_revocation_check = True
@@ -422,7 +457,22 @@ def validate_signatures(ctx, infile, executive_summary,
     )
 
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
+    vc_kwargs = _prepare_vc(
+        vc_kwargs, soft_revocation_check=soft_revocation_check,
+        force_revinfo=force_revinfo
+    )
     with pyhanko_exception_manager():
+        if detached is not None:
+            status_str = _signature_status_str(
+                status_callback=lambda: _validate_detached(
+                    infile, detached, ValidationContext(**vc_kwargs),
+                    key_usage_settings
+                ),
+                pretty_print=pretty_print, executive_summary=executive_summary
+            )
+            print(status_str)
+            return
+
         r = PdfFileReader(infile)
         sh = r.security_handler
         if isinstance(sh, crypt.StandardSecurityHandler):
@@ -439,10 +489,13 @@ def validate_signatures(ctx, infile, executive_summary,
 
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
-            status_str = _signature_status(
-                ltv_profile, force_revinfo, soft_revocation_check,
-                pretty_print, vc_kwargs, key_usage_settings,
-                executive_summary, embedded_sig
+            status_str = _signature_status_str(
+                status_callback=lambda: _signature_status(
+                    ltv_profile=ltv_profile, force_revinfo=force_revinfo,
+                    vc_kwargs=vc_kwargs, key_usage_settings=key_usage_settings,
+                    embedded_sig=embedded_sig
+                ),
+                pretty_print=pretty_print, executive_summary=executive_summary
             )
             name = embedded_sig.field_name
 
