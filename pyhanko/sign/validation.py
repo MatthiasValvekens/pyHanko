@@ -19,7 +19,8 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import OrderedEnum, get_and_apply
+from pyhanko.pdf_utils.misc import OrderedEnum, get_and_apply, \
+    DEFAULT_CHUNK_SIZE
 from pyhanko.pdf_utils.reader import (
     PdfFileReader, XRefCache, process_data_at_eof,
 )
@@ -1848,7 +1849,8 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
 def add_validation_info(embedded_sig: EmbeddedPdfSignature,
                         validation_context: ValidationContext,
                         skip_timestamp=False, add_vri_entry=True,
-                        in_place=False, output=None, chunk_size=4096):
+                        in_place=False, output=None,
+                        chunk_size=DEFAULT_CHUNK_SIZE):
     """
     Add validation info (CRLs, OCSP responses, extra certificates) for a
     signature to the DSS of a document in an incremental update.

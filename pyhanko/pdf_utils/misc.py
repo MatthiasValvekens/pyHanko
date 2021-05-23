@@ -11,12 +11,18 @@ from enum import Enum
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError',
-    'get_and_apply'
+    'get_and_apply', 'DEFAULT_CHUNK_SIZE'
 ]
 
 from io import BytesIO
 
 from typing import Callable, TypeVar, Generator, Iterable
+
+
+DEFAULT_CHUNK_SIZE = 4096
+"""
+Default chunk size for stream I/O.
+"""
 
 rd = lambda x: round(x, 4)
 

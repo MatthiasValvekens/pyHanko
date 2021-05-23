@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
 
+from pyhanko.pdf_utils.misc import DEFAULT_CHUNK_SIZE
 from pyhanko_certvalidator.errors import PathValidationError, PathBuildingError
 
 from pyhanko_certvalidator import ValidationContext, CertificateValidator
@@ -142,7 +143,7 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
     def fill(self, writer: BasePdfFileWriter, md_algorithm,
-             in_place=False, output=None, chunk_size=4096):
+             in_place=False, output=None, chunk_size=DEFAULT_CHUNK_SIZE):
         """
         Generator coroutine that handles the document hash computation and
         the actual filling of the placeholder data.
@@ -1452,11 +1453,10 @@ class SigIOSetup:
     object, or :attr:`output` if the latter is not ``None``.
     """
 
-    chunk_size: int = 4096
+    chunk_size: int = DEFAULT_CHUNK_SIZE
     """
     Size of the internal buffer (in bytes) used to feed data to the message 
     digest function if the input stream does not support ``memoryview``.
-    Default is 4096.
     """
 
     output: Optional[BufferedIOBase] = None
@@ -1653,7 +1653,8 @@ class PdfTimeStamper:
                       md_algorithm, validation_context=None,
                       bytes_reserved=None, validation_paths=None,
                       timestamper: Optional[TimeStamper] = None, *,
-                      in_place=False, output=None, chunk_size=4096):
+                      in_place=False, output=None,
+                      chunk_size=DEFAULT_CHUNK_SIZE):
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
@@ -1685,7 +1686,7 @@ class PdfTimeStamper:
         :param chunk_size:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
-            ``memoryview``. Default is 4096.
+            ``memoryview``.
         :return:
             The output stream containing the signed output.
         """
@@ -1738,7 +1739,8 @@ class PdfTimeStamper:
 
     def update_archival_timestamp_chain(self, reader: PdfFileReader,
                                         validation_context, in_place=True,
-                                        output=None, chunk_size=4096,
+                                        output=None,
+                                        chunk_size=DEFAULT_CHUNK_SIZE,
                                         default_md_algorithm=DEFAULT_MD):
         """
         Validate the last timestamp in the timestamp chain on a PDF file, and
@@ -1759,7 +1761,7 @@ class PdfTimeStamper:
         :param chunk_size:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
-            ``memoryview``. Default is 4096.
+            ``memoryview``.
         :param default_md_algorithm:
             Message digest to use if there are no preceding timestamps in the
             file.
@@ -2129,7 +2131,7 @@ class PdfSigner(PdfTimeStamper):
     def sign_pdf(self, pdf_out: BasePdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None, *,
                  appearance_text_params=None, in_place=False,
-                 output=None, chunk_size=4096):
+                 output=None, chunk_size=DEFAULT_CHUNK_SIZE):
         """
         Sign a PDF file using the provided output writer.
 
@@ -2157,7 +2159,7 @@ class PdfSigner(PdfTimeStamper):
         :param chunk_size:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
-            ``memoryview``. Default is 4096.
+            ``memoryview``.
         :return:
             The output stream containing the signed data.
         """
