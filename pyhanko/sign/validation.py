@@ -119,6 +119,43 @@ def _extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
         )
 
 
+def _extract_self_reported_ts(signer_info: cms.SignerInfo) \
+        -> Optional[datetime]:
+    try:
+        sa = signer_info['signed_attrs']
+        st = find_cms_attribute(sa, 'signing_time')[0]
+        return st.native
+    except KeyError:
+        pass
+
+
+def _extract_tst_data(signer_info) -> Optional[cms.SignedData]:
+    try:
+        ua = signer_info['unsigned_attrs']
+        tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
+        tst_signed_data = tst['content']
+        return tst_signed_data
+    except KeyError:
+        pass
+
+
+def _compute_tst_digest(signer_info: cms.SignerInfo) -> Optional[bytes]:
+
+    tst_data = _extract_tst_data(signer_info)
+    if tst_data is None:
+        return None
+
+    eci = tst_data['encap_content_info']
+    mi = eci['content'].parsed['message_imprint']
+    tst_md_algorithm = mi['hash_algorithm']['algorithm'].native
+
+    signature_bytes = signer_info['signature'].native
+    tst_md_spec = get_pyca_cryptography_hash(tst_md_algorithm)
+    md = hashes.Hash(tst_md_spec)
+    md.update(signature_bytes)
+    return md.finalize()
+
+
 def _extract_signer_info_and_certs(signed_data: cms.SignedData):
     certs = [c.parse() for c in signed_data['certificates']]
 
@@ -237,13 +274,191 @@ def validate_cms_signature(signed_data: cms.SignedData,
     return status_cls(**status_kwargs)
 
 
+# TODO maybe refactor validate_pdf_signature & friends a little to make use of
+#  this function too, instead of relying on stuff that's cached on
+#  EmbeddedPdfSignature (because the benefit of caching is negligible here
+#  anyhow)
+
+def collect_timing_info(signer_info: cms.SignerInfo,
+                        ts_validation_context: ValidationContext):
+
+    status_kwargs = {}
+
+    # timestamp-related validation
+    signer_reported_dt = _extract_self_reported_ts(signer_info)
+    if signer_reported_dt is not None:
+        status_kwargs['signer_reported_dt'] = signer_reported_dt
+
+    tst_signed_data = _extract_tst_data(signer_info)
+    if tst_signed_data is not None:
+        tst_validity_kwargs = _validate_timestamp(
+            tst_signed_data, ts_validation_context,
+            _compute_tst_digest(signer_info)
+        )
+        tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
+        status_kwargs['timestamp_validity'] = tst_validity
+    return status_kwargs
+
+
+@dataclass(frozen=True)
+class StandardCMSSignatureStatus(SignatureStatus):
+    """
+    Status of a standard "end-entity" CMS signature, potentially with
+    timing information embedded inside.
+    """
+
+    signer_reported_dt: Optional[datetime] = None
+    """
+    Signer-reported signing time, if present in the signature.
+
+    Generally speaking, this timestamp should not be taken as fact.
+    """
+
+    timestamp_validity: Optional[TimestampSignatureStatus] = None
+    """
+    Validation status of the timestamp token embedded in this signature, 
+    if present.
+    """
+
+    @property
+    def bottom_line(self) -> bool:
+        """
+        Formulates a general judgment on the validity of this signature.
+        This takes into account the cryptographic validity of the signature,
+        the signature's chain of trust and the validity of the timestamp token
+        (if present).
+
+        :return:
+            ``True`` if all constraints are satisfied, ``False`` otherwise.
+        """
+
+        ts = self.timestamp_validity
+        if ts is None:
+            timestamp_ok = True
+        else:
+            timestamp_ok = ts.valid and ts.trusted
+        return (
+                self.intact and self.valid and self.trusted and timestamp_ok
+        )
+
+    def summary_fields(self):
+        yield from super().summary_fields()
+
+        if self.timestamp_validity is not None:
+            yield 'TIMESTAMP_TOKEN<%s>' % (
+                '|'.join(self.timestamp_validity.summary_fields())
+            )
+
+    def pretty_print_details(self):
+        def fmt_section(hdr, body):
+            return '\n'.join(
+                (hdr, '-' * len(hdr), body, '\n')
+            )
+        sections = self.pretty_print_sections()
+        bottom_line = (
+            f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
+        )
+        sections.append(("Bottom line", bottom_line))
+        return '\n'.join(
+            fmt_section(hdr, body) for hdr, body in sections
+        )
+
+    def pretty_print_sections(self):
+        cert: x509.Certificate = self.signing_cert
+
+        def _trust_anchor(status: SignatureStatus):
+            if status.validation_path is not None:
+                trust_anchor: x509.Certificate = status.validation_path[0]
+                return trust_anchor.subject.human_friendly
+            else:
+                return "No path to trust anchor found."
+
+        if self.trusted:
+            trust_status = "trusted"
+        elif self.revoked:
+            trust_status = "revoked"
+        else:
+            trust_status = "untrusted"
+        about_signer = (
+            f"Certificate subject: \"{cert.subject.human_friendly}\"\n"
+            f"Certificate SHA1 fingerprint: {cert.sha1.hex()}\n"
+            f"Certificate SHA256 fingerprint: {cert.sha256.hex()}\n"
+            f"Trust anchor: \"{_trust_anchor(self)}\"\n"
+            f"The signer's certificate is {trust_status}."
+        )
+
+        validity_info = (
+            "The signature is cryptographically "
+            f"{'' if self.intact and self.valid else 'un'}sound."
+        )
+
+        ts = self.signer_reported_dt
+        tst_status = self.timestamp_validity
+        about_tsa = ''
+        if tst_status is not None:
+            ts = tst_status.timestamp
+            tsa = tst_status.signing_cert
+
+            about_tsa = (
+                "The signing time is guaranteed by a time stamping authority.\n"
+                f"TSA certificate subject: \"{tsa.subject.human_friendly}\"\n"
+                f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
+                f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
+                f"TSA cert trust anchor: \"{_trust_anchor(tst_status)}\"\n"
+                "The TSA certificate is "
+                f"{'' if tst_status.trusted else 'un'}trusted."
+            )
+        elif ts is not None:
+            about_tsa = "The signing time is self-reported by the signer."
+
+        if ts is not None:
+            signing_time_str = ts.isoformat()
+        else:
+            signing_time_str = "unknown"
+
+        timing_info = (
+            f"Signing time: {signing_time_str}\n{about_tsa}"
+        )
+
+        return [
+            ("Signer info", about_signer), ("Integrity", validity_info),
+            ("Signing time", timing_info),
+        ]
+
+
 def validate_detached_cms(input_data: Union[bytes, IO],
                           signed_data: cms.SignedData,
-                          validation_context: ValidationContext = None,
+                          signer_validation_context: ValidationContext = None,
+                          ts_validation_context: ValidationContext = None,
                           key_usage_settings: KeyUsageConstraints = None,
                           chunk_size=DEFAULT_CHUNK_SIZE,
-                          max_read=None) -> SignatureStatus:
+                          max_read=None) -> StandardCMSSignatureStatus:
+    """
+    Validate a detached CMS signature.
 
+    :param input_data:
+        The input data to sign. This can be either a :class:`bytes` object
+        or a file-type object.
+    :param signed_data:
+        The :class:`cms.SignedData` object containing the signature to verify.
+    :param signer_validation_context:
+        Validation context to use to verify the signer certificate's trust.
+    :param ts_validation_context:
+        Validation context to use to verify the TSA certificate's trust, if
+        a timestamp token is present.
+        By default, the same validation context as that of the signer is used.
+    :param key_usage_settings:
+        Key usage parameters for the signer.
+    :param chunk_size:
+        Chunk size to use when consuming input data.
+    :param max_read:
+        Maximal number of bytes to read from the input stream.
+    :return:
+        A description of the signature's status.
+    """
+
+    if ts_validation_context is None:
+        ts_validation_context = signer_validation_context
     signer_info = _extract_signer_info(signed_data)
     digest_algorithm = signer_info['digest_algorithm']['algorithm'].native
     h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
@@ -255,8 +470,10 @@ def validate_detached_cms(input_data: Union[bytes, IO],
     digest_bytes = h.finalize()
 
     return validate_cms_signature(
-        signed_data, raw_digest=digest_bytes,
-        validation_context=validation_context,
+        signed_data, status_cls=StandardCMSSignatureStatus,
+        raw_digest=digest_bytes,
+        validation_context=signer_validation_context,
+        status_kwargs=collect_timing_info(signer_info, ts_validation_context),
         key_usage_settings=key_usage_settings
     )
 
@@ -344,7 +561,7 @@ class ModificationInfo:
 
 
 @dataclass(frozen=True)
-class PdfSignatureStatus(ModificationInfo, SignatureStatus):
+class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
     """Class to indicate the validation status of a PDF signature."""
 
     docmdp_ok: Optional[bool] = None
@@ -353,19 +570,6 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
     the document signature policy in force.
     
     If ``None``, compliance could not be determined.
-    """
-
-    signer_reported_dt: Optional[datetime] = None
-    """
-    Signer-reported signing time, if present in the signature.
-    
-    Generally speaking, this timestamp should not be taken as fact.
-    """
-
-    timestamp_validity: Optional[TimestampSignatureStatus] = None
-    """
-    Validation status of the timestamp token embedded in this signature, 
-    if present.
     """
 
     has_seed_values: bool = False
@@ -398,7 +602,7 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
         else:
             timestamp_ok = ts.valid and ts.trusted
         return (
-            self.valid and self.trusted and self.seed_value_ok
+            self.intact and self.valid and self.trusted and self.seed_value_ok
             and (self.docmdp_ok or self.modification_level is None)
             and timestamp_ok
         )
@@ -435,35 +639,9 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
                 yield 'ACCEPTABLE_MODIFICATIONS'
         else:
             yield 'ILLEGAL_MODIFICATIONS'
-        if self.timestamp_validity is not None:
-            yield 'TIMESTAMP_TOKEN<%s>' % (
-                '|'.join(self.timestamp_validity.summary_fields())
-            )
 
-    def pretty_print_details(self):
-        cert: x509.Certificate = self.signing_cert
-
-        def _trust_anchor(status: SignatureStatus):
-            if status.validation_path is not None:
-                trust_anchor: x509.Certificate = status.validation_path[0]
-                return trust_anchor.subject.human_friendly
-            else:
-                return "No path to trust anchor found."
-
-        if self.trusted:
-            trust_status = "trusted"
-        elif self.revoked:
-            trust_status = "revoked"
-        else:
-            trust_status = "untrusted"
-        about_signer = (
-            f"Certificate subject: \"{cert.subject.human_friendly}\"\n"
-            f"Certificate SHA1 fingerprint: {cert.sha1.hex()}\n"
-            f"Certificate SHA256 fingerprint: {cert.sha256.hex()}\n"
-            f"Trust anchor: \"{_trust_anchor(self)}\"\n"
-            f"The signer's certificate is {trust_status}."
-        )
-
+    def pretty_print_sections(self):
+        sections = super().pretty_print_sections()
         if self.coverage == SignatureCoverageLevel.ENTIRE_FILE:
             modification_str = "The signature covers the entire file."
         else:
@@ -487,53 +665,7 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
             else:
                 modification_str = "Incremental update analysis was skipped"
 
-        validity_info = (
-            "The signature is cryptographically "
-            f"{'' if self.intact and self.valid else 'un'}sound.\n"
-            f"{modification_str}"
-        )
-
-        ts = self.signer_reported_dt
-        tst_status = self.timestamp_validity
-        about_tsa = ''
-        if tst_status is not None:
-            ts = tst_status.timestamp
-            tsa = tst_status.signing_cert
-
-            about_tsa = (
-                "The signing time is guaranteed by a time stamping authority.\n"
-                f"TSA certificate subject: \"{tsa.subject.human_friendly}\"\n"
-                f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
-                f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
-                f"TSA cert trust anchor: \"{_trust_anchor(tst_status)}\"\n"
-                "The TSA certificate is "
-                f"{'' if tst_status.trusted else 'un'}trusted."
-            )
-        elif ts is not None:
-            about_tsa = "The signing time is self-reported by the signer."
-
-        if ts is not None:
-            signing_time_str = ts.isoformat()
-        else:
-            signing_time_str = "unknown"
-
-        timing_info = (
-            f"Signing time: {signing_time_str}\n{about_tsa}"
-        )
-
-        def fmt_section(hdr, body):
-            return '\n'.join(
-                (hdr, '-' * len(hdr), body, '\n')
-            )
-
-        bottom_line = (
-            f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
-        )
-
-        sections = [
-            ("Signer info", about_signer), ("Integrity", validity_info),
-            ("Signing time", timing_info),
-        ]
+        sections.append(("Modifications", modification_str))
         if self.has_seed_values:
             if self.seed_value_ok:
                 sv_info = "There were no SV issues detected for this signature."
@@ -545,10 +677,7 @@ class PdfSignatureStatus(ModificationInfo, SignatureStatus):
                 )
             sections.append(("Seed value constraints", sv_info))
 
-        sections.append(("Bottom line", bottom_line))
-        return '\n'.join(
-            fmt_section(hdr, body) for hdr, body in sections
-        )
+        return sections
 
 
 @dataclass(frozen=True)
@@ -712,7 +841,6 @@ class EmbeddedPdfSignature:
         """
         return self.fq_name
 
-    # TODO also parse the signature object's /M entry
     @property
     def self_reported_timestamp(self) -> Optional[datetime]:
         """
@@ -720,12 +848,9 @@ class EmbeddedPdfSignature:
             The signing time as reported by the signer, if embedded in the
             signature's signed attributes.
         """
-        try:
-            sa = self.signer_info['signed_attrs']
-            st = find_cms_attribute(sa, 'signed_time')[0]
-            return st.native
-        except KeyError:
-            pass
+        ts = _extract_self_reported_ts(self.signer_info)
+        if ts is not None:
+            return ts
 
         try:
             st_as_pdf_date = self.sig_object['/M']
@@ -740,13 +865,7 @@ class EmbeddedPdfSignature:
             The signed data component of the timestamp token embedded in this
             signature, if present.
         """
-        try:
-            ua = self.signer_info['unsigned_attrs']
-            tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
-            tst_signed_data = tst['content']
-            return tst_signed_data
-        except KeyError:
-            pass
+        return _extract_tst_data(self.signer_info)
 
     def compute_integrity_info(self, diff_policy=None, skip_diff=False):
         """
@@ -926,21 +1045,9 @@ class EmbeddedPdfSignature:
 
         if self.tst_signature_digest is not None:
             return self.tst_signature_digest
-        # for timestamp validation: compute the digest of the signature
-        #  (as embedded in the CMS object)
-        tst_data = self.attached_timestamp_data
-        if tst_data is None:
-            return None
-
-        eci = tst_data['encap_content_info']
-        mi = eci['content'].parsed['message_imprint']
-        tst_md_algorithm = mi['hash_algorithm']['algorithm'].native
-
-        signature_bytes = self.signer_info['signature'].native
-        tst_md_spec = get_pyca_cryptography_hash(tst_md_algorithm)
-        md = hashes.Hash(tst_md_spec)
-        md.update(signature_bytes)
-        self.tst_signature_digest = digest = md.finalize()
+        self.tst_signature_digest = digest = _compute_tst_digest(
+            self.signer_info
+        )
         return digest
 
     def evaluate_signature_coverage(self) -> SignatureCoverageLevel:

@@ -2921,3 +2921,33 @@ def test_cms_v3_sign():
     assert eci['content_type'].native == 'signed_data'
     inner_eci = eci['content'].parsed['encap_content_info']
     assert inner_eci['content'].native == b'Hello world!'
+
+
+def test_detached_cms_with_self_reported_timestamp():
+    dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
+    signature = FROM_CA.sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamp=dt
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = validate_detached_cms(b'Hello world!', signature['content'])
+    assert status.signer_reported_dt == dt
+    assert status.timestamp_validity is None
+    assert 'self-reported' in status.pretty_print_details()
+    assert status.valid
+    assert status.intact
+
+
+@freeze_time('2020-11-01')
+def test_detached_cms_with_tst():
+    signature = FROM_CA.sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = validate_detached_cms(b'Hello world!', signature['content'])
+    assert status.signer_reported_dt is None
+    assert status.timestamp_validity.intact
+    assert status.timestamp_validity.valid
+    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert 'The TSA certificate is untrusted' in status.pretty_print_details()
+    assert status.valid
+    assert status.intact
