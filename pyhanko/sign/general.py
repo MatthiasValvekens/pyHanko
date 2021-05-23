@@ -36,6 +36,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
+    'validate_sig_integrity',
     'CertificateStore', 'SimpleCertificateStore',
     'KeyUsageConstraints',
     'SigningError', 'UnacceptableSignerError', 'WeakHashAlgorithmError',
