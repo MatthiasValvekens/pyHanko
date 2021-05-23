@@ -3,8 +3,8 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from io import BytesIO, BufferedIOBase
-from typing import Optional, Set, Union
+from io import BytesIO
+from typing import Optional, Set, Union, IO
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, keys, pdf as asn1_pdf
@@ -798,7 +798,7 @@ class Signer:
             'content': cms.SignedData(signed_data)
         })
 
-    def sign_general_data(self, input_data: Union[BufferedIOBase, bytes,
+    def sign_general_data(self, input_data: Union[IO, bytes,
                                                   cms.ContentInfo,
                                                   cms.EncapsulatedContentInfo],
                           digest_algorithm: str, detached=True,
@@ -1589,7 +1589,7 @@ class SigIOSetup:
     digest function if the input stream does not support ``memoryview``.
     """
 
-    output: Optional[BufferedIOBase] = None
+    output: Optional[IO] = None
     """
     Write the output to the specified output stream. If ``None``, write to a 
     new :class:`.BytesIO` object. Default is ``None``.
