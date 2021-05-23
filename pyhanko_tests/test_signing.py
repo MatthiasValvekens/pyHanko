@@ -2,10 +2,11 @@ import hashlib
 from datetime import datetime
 
 import pytest
+import itertools
 from io import BytesIO
 
 import pytz
-from asn1crypto import ocsp, tsp
+from asn1crypto import ocsp, tsp, core
 from asn1crypto.algos import (
     SignedDigestAlgorithm, RSASSAPSSParams,
     MaskGenAlgorithm, DigestAlgorithm, DigestInfo,
@@ -42,7 +43,8 @@ from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
-    SignatureCoverageLevel, validate_pdf_timestamp, add_validation_info
+    SignatureCoverageLevel, validate_pdf_timestamp, add_validation_info,
+    validate_cms_signature
 )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
@@ -2837,3 +2839,76 @@ def test_sign_weak_sig_digest():
         trust_roots=[ROOT_CERT], weak_hash_algos=set()
     )
     val_trusted(emb, vc=lenient_vc)
+
+
+@pytest.mark.parametrize('input_data, detached', list(itertools.product(
+        [
+            b'Hello world!', BytesIO(b'Hello world!'),
+            # v1 CMS -> PKCS#7 compatible -> use cms.ContentInfo
+            cms.ContentInfo({
+                'content_type': 'data',
+                'content': b'Hello world!'
+            })
+        ],
+        [True, False]
+    ))
+)
+def test_generic_data_sign(input_data, detached):
+
+    # the first test will have consumed the data, so reset the stream
+    if isinstance(input_data, BytesIO):
+        input_data.seek(0)
+
+    signature = FROM_CA.sign_general_data(
+        input_data, 'sha256', detached=detached
+    )
+
+    # re-parse just to make sure we're starting fresh
+    signature = cms.ContentInfo.load(signature.dump())
+
+    if isinstance(input_data, core.Sequence):
+        detached = False
+    raw_digest = hashlib.sha256(b'Hello world!').digest() if detached else None
+    content = signature['content']
+    assert content['version'].native == 'v1'
+    assert isinstance(content, cms.SignedData)
+    status = validate_cms_signature(content, raw_digest=raw_digest)
+    assert status.valid
+    assert status.intact
+
+    eci = content['encap_content_info']
+    if detached:
+        assert eci['content_type'].native == 'data'
+        assert eci['content'].native is None
+    else:
+        assert eci['content_type'].native == 'data'
+        assert eci['content'].native == b'Hello world!'
+
+
+def test_cms_v3_sign():
+    inner_obj = FROM_CA.sign_general_data(
+        b'Hello world!', 'sha256', detached=False
+    )
+
+    signature = FROM_CA.sign_general_data(
+        cms.EncapsulatedContentInfo({
+            'content_type': 'signed_data',
+            'content': inner_obj['content'].untag()
+        }),
+        'sha256'
+    )
+
+    # re-parse just to make sure we're starting fresh
+    signature = cms.ContentInfo.load(signature.dump())
+
+    content = signature['content']
+    assert content['version'].native == 'v3'
+    assert isinstance(content, cms.SignedData)
+    status = validate_cms_signature(content, raw_digest=None)
+    assert status.valid
+    assert status.intact
+
+    eci = content['encap_content_info']
+    assert eci['content_type'].native == 'signed_data'
+    inner_eci = eci['content'].parsed['encap_content_info']
+    assert inner_eci['content'].native == b'Hello world!'

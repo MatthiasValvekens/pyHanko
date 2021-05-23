@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO, BufferedIOBase
-from typing import Optional, Set
+from typing import Optional, Set, Union
 
 import tzlocal
 from asn1crypto import x509, cms, core, algos, keys, pdf as asn1_pdf
@@ -487,7 +487,7 @@ class Signer:
             )
 
     def signed_attrs(self, data_digest: bytes, digest_algorithm: str,
-                     timestamp: datetime = None,
+                     timestamp: datetime = None, content_type='data',
                      revocation_info=None, use_pades=False,
                      cades_meta: CAdESSignedAttrSpec=None,
                      timestamper=None, dry_run=False):
@@ -527,12 +527,18 @@ class Signer:
             .. versionadded:: 0.5.0
 
             Specification for CAdES-specific attributes.
+        :param content_type:
+            CMS content type of the encapsulated data. Default is `data`.
+
+            .. danger::
+                This parameter is internal API, and non-default values must not
+                be used to produce PDF signatures.
         :return:
             An :class:`.asn1crypto.cms.CMSAttributes` object.
         """
 
         attrs = [
-            simple_cms_attribute('content_type', 'data'),
+            simple_cms_attribute('content_type', content_type),
             simple_cms_attribute('message_digest', data_digest),
             # required by PAdES
             simple_cms_attribute(
@@ -667,8 +673,8 @@ class Signer:
     def sign(self, data_digest: bytes, digest_algorithm: str,
              timestamp: datetime = None, dry_run=False,
              revocation_info=None, use_pades=False, timestamper=None,
-             cades_signed_attr_meta: CAdESSignedAttrSpec = None) \
-            -> cms.ContentInfo:
+             cades_signed_attr_meta: CAdESSignedAttrSpec = None,
+             encap_content_info=None) -> cms.ContentInfo:
 
         """
         Produce a detached CMS signature from a raw data digest.
@@ -679,7 +685,13 @@ class Signer:
             Digest algorithm to use. This should be the same digest method
             as the one used to hash the (external) content.
         :param timestamp:
-            Current timestamp (ignored when ``use_pades`` is ``True``).
+            Signing time to embed into the signed attributes
+            (will be ignored if ``use_pades`` is ``True``).
+
+            .. note::
+                This timestamp value is to be interpreted as an unfounded
+                assertion by the signer, which may or may not be good enough
+                for your purposes.
         :param dry_run:
             If ``True``, the actual signing step will be replaced with
             a placeholder.
@@ -708,10 +720,24 @@ class Signer:
         :param cades_signed_attr_meta:
             .. versionadded:: 0.5.0
 
-            Specification for CAdES-specific attributes.
+            Specification for CAdES-specific signed attributes.
+        :param encap_content_info:
+            Data to encapsulate in the CMS object.
+
+            .. danger::
+                This parameter is internal API, and must not be used to produce
+                PDF signatures.
         :return:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
+
+        encap_content_info = encap_content_info or {'content_type': 'data'}
+        if isinstance(encap_content_info, core.Sequence):
+            # could be cms.ContentInfo or cms.EncapsulatedContentInfo depending
+            # on circumstances, so let's just stick to Sequence
+            content_type = encap_content_info['content_type'].native
+        else:
+            content_type = encap_content_info.get('content_type', 'data')
 
         digest_algorithm = digest_algorithm.lower()
         # the piece of data we'll actually sign is a DER-encoded version of the
@@ -720,7 +746,7 @@ class Signer:
             data_digest, digest_algorithm, timestamp,
             revocation_info=revocation_info, use_pades=use_pades,
             timestamper=timestamper, cades_meta=cades_signed_attr_meta,
-            dry_run=dry_run
+            dry_run=dry_run, content_type=content_type
         )
 
         digest_algorithm_obj = algos.DigestAlgorithm(
@@ -759,9 +785,9 @@ class Signer:
         certs.add(self.signing_cert)
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
-            'version': 'v1',
+            'version': 'v1' if content_type == 'data' else 'v3',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
-            'encap_content_info': {'content_type': 'data'},
+            'encap_content_info': encap_content_info,
             'certificates': certs,
             'signer_infos': [sig_info]
         }
@@ -771,6 +797,110 @@ class Signer:
             'content_type': cms.ContentType('signed_data'),
             'content': cms.SignedData(signed_data)
         })
+
+    def sign_general_data(self, input_data: Union[BufferedIOBase, bytes,
+                                                  cms.ContentInfo,
+                                                  cms.EncapsulatedContentInfo],
+                          digest_algorithm: str, detached=True,
+                          timestamp: datetime = None,
+                          use_cades=False, timestamper=None,
+                          cades_signed_attr_meta: CAdESSignedAttrSpec = None,
+                          chunk_size=DEFAULT_CHUNK_SIZE,
+                          max_read=None) -> cms.ContentInfo:
+        """
+        Produce a CMS signature for an arbitrary data stream
+        (not necessarily PDF data).
+
+        :param input_data:
+            The input data to sign. This can be either a :class:`bytes` object
+            a file-type object, a :class:`cms.ContentInfo` object or
+            a :class:`cms.EncapsulatedContentInfo` object.
+
+            .. warning::
+                ``asn1crypto`` mandates :class:`cms.ContentInfo` for CMS v1
+                signatures. In practical terms, this means that you need to
+                use :class:`cms.ContentInfo` if the content type is ``data``,
+                and :class:`cms.EncapsulatedContentInfo` otherwise.
+
+            .. warning::
+                We currently only support CMS v1 and v3 signatures.
+                This is only a concern if you need attribute certificate
+                support, in which case you can override the CMS version number
+                yourself (this will not invalidate any signatures).
+        :param digest_algorithm:
+            The name of the digest algorithm to use.
+        :param detached:
+            If ``True``, create a CMS detached signature (i.e. an object where
+            the encapsulated content is not embedded in the signature object
+            itself). This is the default. If ``False``, the content to be
+            signed will be embedded as encapsulated content.
+
+            .. note::
+                If ``input_data`` is of type :class:`cms.ContentInfo` or
+                :class:`cms.EncapsulatedContentInfo`, the implied value of this
+                parameter is ``False``.
+
+        :param timestamp:
+            Signing time to embed into the signed attributes
+            (will be ignored if ``use_cades`` is ``True``).
+
+            .. note::
+                This timestamp value is to be interpreted as an unfounded
+                assertion by the signer, which may or may not be good enough
+                for your purposes.
+        :param use_cades:
+            Construct a CAdES-style CMS object.
+        :param timestamper:
+            :class:`.PdfTimeStamper` to use to create a signature timestamp
+
+            .. note::
+                If you want to create a *content* timestamp (as opposed to
+                a *signature* timestamp), see :class:`.CAdESSignedAttrSpec`.
+        :param cades_signed_attr_meta:
+            Specification for CAdES-specific signed attributes.
+        :param chunk_size:
+            Chunk size to use when consuming input data.
+        :param max_read:
+            Maximal number of bytes to read from the input stream.
+        :return:
+            A CMS ContentInfo object of type signedData.
+        """
+        h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
+        encap_content_info = None
+        if isinstance(input_data, core.Sequence):
+            encap_content_info = input_data
+            h.update(bytes(encap_content_info['content']))
+        elif isinstance(input_data, bytes):
+            h.update(input_data)
+            if not detached:
+                # use dicts instead of Asn1Value objects, to leave asn1crypto
+                # to decide whether to use cms.ContentInfo or
+                # cms.EncapsulatedContentInfo (for backwards compat with PCKS#7)
+                encap_content_info = {
+                    'content_type': 'data', 'content': input_data
+                }
+        elif not detached:
+            # input stream is a buffer, and we're in 'enveloping' mode
+            # read the entire thing into memory, since we need to embed
+            # it anyway
+            input_bytes = input_data.read(max_read)
+            h.update(input_bytes)
+            # see above
+            encap_content_info = {
+                'content_type': 'data',
+                'content': input_bytes
+            }
+        else:
+            temp_buf = bytearray(chunk_size)
+            misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)
+        digest_bytes = h.finalize()
+
+        return self.sign(
+            data_digest=digest_bytes, digest_algorithm=digest_algorithm,
+            timestamp=timestamp, use_pades=use_cades,
+            timestamper=timestamper, encap_content_info=encap_content_info,
+            cades_signed_attr_meta=cades_signed_attr_meta
+        )
 
 
 # TODO I've encountered TSAs that will spew invalid timestamps when presented

@@ -151,7 +151,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
         eci = signed_data['encap_content_info']
         expected_content_type = eci['content_type'].native
 
-        raw = eci['content'].parsed.dump()
+        raw = bytes(eci['content'])
         md_spec = get_pyca_cryptography_hash(md_algorithm)
         md = hashes.Hash(md_spec)
         md.update(raw)
