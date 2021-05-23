@@ -36,7 +36,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
-    'validate_sig_integrity',
+    'extract_message_digest', 'validate_sig_integrity',
     'CertificateStore', 'SimpleCertificateStore',
     'KeyUsageConstraints',
     'SigningError', 'UnacceptableSignerError', 'WeakHashAlgorithmError',
@@ -370,6 +370,14 @@ class SignatureStatus:
             subj = cert.subject.human_friendly
             logger.warning(f"Chain of trust validation for {subj} failed.")
         return trusted, revoked, path
+
+    @property
+    def _trust_anchor(self):
+        if self.validation_path is not None:
+            trust_anchor: x509.Certificate = self.validation_path[0]
+            return trust_anchor.subject.human_friendly
+        else:
+            return "No path to trust anchor found."
 
 
 def simple_cms_attribute(attr_type, value):
@@ -708,6 +716,19 @@ def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
         )
 
 
+def extract_message_digest(signer_info: cms.SignerInfo):
+    try:
+        embedded_digest, = find_cms_attribute(
+            signer_info['signed_attrs'], 'message_digest'
+        )
+        return embedded_digest.native
+    except (KeyError, ValueError):
+        raise SignatureValidationError(
+            'Message digest not found in signature, or multiple message '
+            'digest attributes present.'
+        )
+
+
 def validate_sig_integrity(signer_info: cms.SignerInfo,
                            cert: x509.Certificate,
                            expected_content_type: str,
@@ -810,16 +831,7 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
                 'attributes present.'
             )
 
-        try:
-            embedded_digest, = find_cms_attribute(
-                signed_attrs, 'message_digest'
-            )
-            embedded_digest = embedded_digest.native
-        except (KeyError, ValueError):
-            raise SignatureValidationError(
-                'Message digest not found in signature, or multiple message '
-                'digest attributes present.'
-            )
+        embedded_digest = extract_message_digest(signer_info)
 
         signed_data = signed_attrs.dump()
     try:

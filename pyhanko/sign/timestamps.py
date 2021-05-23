@@ -67,6 +67,21 @@ class TimestampSignatureStatus(SignatureStatus):
     Value of the timestamp token as a datetime object.
     """
 
+    def describe_timestamp_trust(self):
+        tsa = self.signing_cert
+
+        return (
+            "This timestamp is backed by a time stamping authority.\n"
+            "The timestamp token is cryptographically "
+            f"{'' if self.intact and self.valid else 'un'}sound.\n"
+            f"TSA certificate subject: \"{tsa.subject.human_friendly}\"\n"
+            f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
+            f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
+            f"TSA cert trust anchor: \"{self._trust_anchor}\"\n"
+            "The TSA certificate is "
+            f"{'' if self.trusted else 'un'}trusted."
+        )
+
 
 def extract_ts_certs(ts_token, store: CertificateStore):
     ts_signed_data = ts_token['content']

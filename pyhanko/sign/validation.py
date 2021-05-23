@@ -38,7 +38,7 @@ from .general import (
     UnacceptableSignerError, KeyUsageConstraints,
     SignatureValidationError,
     validate_sig_integrity, DEFAULT_WEAK_HASH_ALGORITHMS,
-    get_pyca_cryptography_hash,
+    get_pyca_cryptography_hash, extract_message_digest,
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -129,10 +129,14 @@ def _extract_self_reported_ts(signer_info: cms.SignerInfo) \
         pass
 
 
-def _extract_tst_data(signer_info) -> Optional[cms.SignedData]:
+def _extract_tst_data(signer_info, signed=False) -> Optional[cms.SignedData]:
     try:
-        ua = signer_info['unsigned_attrs']
-        tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
+        if signed:
+            sa = signer_info['signed_attrs']
+            tst = find_cms_attribute(sa, 'content_time_stamp')[0]
+        else:
+            ua = signer_info['unsigned_attrs']
+            tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
         tst_signed_data = tst['content']
         return tst_signed_data
     except KeyError:
@@ -284,14 +288,26 @@ def collect_timing_info(signer_info: cms.SignerInfo,
     if signer_reported_dt is not None:
         status_kwargs['signer_reported_dt'] = signer_reported_dt
 
-    tst_signed_data = _extract_tst_data(signer_info)
+    tst_signed_data = _extract_tst_data(signer_info, signed=False)
     if tst_signed_data is not None:
         tst_validity_kwargs = _validate_timestamp(
             tst_signed_data, ts_validation_context,
-            _compute_tst_digest(signer_info)
+            _compute_tst_digest(signer_info),
         )
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
         status_kwargs['timestamp_validity'] = tst_validity
+
+    content_tst_signed_data = _extract_tst_data(signer_info, signed=True)
+    if content_tst_signed_data is not None:
+        content_tst_validity_kwargs = _validate_timestamp(
+            content_tst_signed_data, ts_validation_context,
+            expected_tst_imprint=extract_message_digest(signer_info)
+        )
+        content_tst_validity = TimestampSignatureStatus(
+            **content_tst_validity_kwargs
+        )
+        status_kwargs['content_timestamp_validity'] = content_tst_validity
+
     return status_kwargs
 
 
@@ -311,8 +327,14 @@ class StandardCMSSignatureStatus(SignatureStatus):
 
     timestamp_validity: Optional[TimestampSignatureStatus] = None
     """
-    Validation status of the timestamp token embedded in this signature, 
-    if present.
+    Validation status of the signature timestamp token embedded in this 
+    signature, if present.
+    """
+
+    content_timestamp_validity: Optional[TimestampSignatureStatus] = None
+    """
+    Validation status of the content timestamp token embedded in this 
+    signature, if present.
     """
 
     @property
@@ -332,8 +354,15 @@ class StandardCMSSignatureStatus(SignatureStatus):
             timestamp_ok = True
         else:
             timestamp_ok = ts.valid and ts.trusted
+
+        content_ts = self.content_timestamp_validity
+        if content_ts is None:
+            content_timestamp_ok = True
+        else:
+            content_timestamp_ok = content_ts.valid and content_ts.trusted
         return (
                 self.intact and self.valid and self.trusted and timestamp_ok
+                and content_timestamp_ok
         )
 
     def summary_fields(self):
@@ -361,13 +390,6 @@ class StandardCMSSignatureStatus(SignatureStatus):
     def pretty_print_sections(self):
         cert: x509.Certificate = self.signing_cert
 
-        def _trust_anchor(status: SignatureStatus):
-            if status.validation_path is not None:
-                trust_anchor: x509.Certificate = status.validation_path[0]
-                return trust_anchor.subject.human_friendly
-            else:
-                return "No path to trust anchor found."
-
         if self.trusted:
             trust_status = "trusted"
         elif self.revoked:
@@ -378,7 +400,7 @@ class StandardCMSSignatureStatus(SignatureStatus):
             f"Certificate subject: \"{cert.subject.human_friendly}\"\n"
             f"Certificate SHA1 fingerprint: {cert.sha1.hex()}\n"
             f"Certificate SHA256 fingerprint: {cert.sha256.hex()}\n"
-            f"Trust anchor: \"{_trust_anchor(self)}\"\n"
+            f"Trust anchor: \"{self._trust_anchor}\"\n"
             f"The signer's certificate is {trust_status}."
         )
 
@@ -387,34 +409,33 @@ class StandardCMSSignatureStatus(SignatureStatus):
             f"{'' if self.intact and self.valid else 'un'}sound."
         )
 
-        ts = self.signer_reported_dt
+        timing_infos = []
+        reported_ts = self.signer_reported_dt
+        if reported_ts is not None:
+            timing_infos.append(
+                f"Signing time as reported by signer: {reported_ts.isoformat()}"
+            )
+
         tst_status = self.timestamp_validity
-        about_tsa = ''
         if tst_status is not None:
             ts = tst_status.timestamp
-            tsa = tst_status.signing_cert
-
-            about_tsa = (
-                "The signing time is guaranteed by a time stamping authority.\n"
-                f"TSA certificate subject: \"{tsa.subject.human_friendly}\"\n"
-                f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
-                f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
-                f"TSA cert trust anchor: \"{_trust_anchor(tst_status)}\"\n"
-                "The TSA certificate is "
-                f"{'' if tst_status.trusted else 'un'}trusted."
+            timing_infos.append(
+                f"Signature timestamp token: {ts.isoformat()}\n"
+                f"The token is guaranteed to be newer than the signature.\n"
+                f"{tst_status.describe_timestamp_trust()}"
             )
-        elif ts is not None:
-            about_tsa = "The signing time is self-reported by the signer."
-
-        if ts is not None:
-            signing_time_str = ts.isoformat()
-        else:
-            signing_time_str = "unknown"
-
+        content_tst_status = self.timestamp_validity
+        if tst_status is not None:
+            ts = content_tst_status.timestamp
+            timing_infos.append(
+                f"Content timestamp token: {ts.isoformat()}\n"
+                f"The token is guaranteed to be older than the signature.\n"
+                f"{content_tst_status.describe_timestamp_trust()}"
+            )
         timing_info = (
-            f"Signing time: {signing_time_str}\n{about_tsa}"
+            "No available information about the signing time."
+            if not timing_infos else '\n\n'.join(timing_infos)
         )
-
         return [
             ("Signer info", about_signer), ("Integrity", validity_info),
             ("Signing time", timing_info),
@@ -595,7 +616,7 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
         if ts is None:
             timestamp_ok = True
         else:
-            timestamp_ok = ts.valid and ts.trusted
+            timestamp_ok = ts.intact and ts.valid and ts.trusted
         return (
             self.intact and self.valid and self.trusted and self.seed_value_ok
             and (self.docmdp_ok or self.modification_level is None)

@@ -2884,6 +2884,8 @@ def test_generic_data_sign(input_data, detached):
         status = validate_detached_cms(input_data, content)
         assert status.valid
         assert status.intact
+        assert 'No available information about the signing time.' \
+               in status.pretty_print_details()
         if isinstance(input_data, BytesIO):
             input_data.seek(0)
     else:
@@ -2932,7 +2934,7 @@ def test_detached_cms_with_self_reported_timestamp():
     status = validate_detached_cms(b'Hello world!', signature['content'])
     assert status.signer_reported_dt == dt
     assert status.timestamp_validity is None
-    assert 'self-reported' in status.pretty_print_details()
+    assert 'reported by signer' in status.pretty_print_details()
     assert status.valid
     assert status.intact
 
@@ -2949,5 +2951,29 @@ def test_detached_cms_with_tst():
     assert status.timestamp_validity.valid
     assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
     assert 'The TSA certificate is untrusted' in status.pretty_print_details()
+    assert status.valid
+    assert status.intact
+
+
+@freeze_time('2020-11-01')
+def test_detached_cms_with_content_tst():
+    signature = FROM_CA.sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        cades_signed_attr_meta=CAdESSignedAttrSpec(timestamp_content=True)
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = validate_detached_cms(b'Hello world!', signature['content'])
+    assert status.signer_reported_dt is None
+    assert status.timestamp_validity.intact
+    assert status.timestamp_validity.valid
+    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.content_timestamp_validity
+    assert status.timestamp_validity.intact
+    assert status.timestamp_validity.valid
+    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    pretty_print = status.pretty_print_details()
+    assert 'The TSA certificate is untrusted' in pretty_print
+    assert 'Content timestamp' in pretty_print
+    assert 'Signature timestamp' in pretty_print
     assert status.valid
     assert status.intact
