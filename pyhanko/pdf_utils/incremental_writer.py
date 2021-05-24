@@ -8,7 +8,7 @@ from typing import Union, Optional
 from . import generic, misc
 from .crypt import EnvelopeKeyDecrypter
 
-from .reader import PdfFileReader
+from .reader import PdfFileReader, parse_catalog_version
 from .generic import pdf_name
 from .content import PdfContent
 from .writer import BasePdfFileWriter
@@ -51,13 +51,26 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         if self._info is not None:
             self.trailer['/Info'] = self._info
         self._resolves_objs_from = (self, prev)
-        if self.prev.input_version < self.output_version:
-            root = root_ref.get_object()
-            version_str = pdf_name('/%d.%d' % self.output_version)
-            root[pdf_name('/Version')] = version_str
-            self.update_root()
+        self.ensure_output_version(self.__class__.output_version)
 
         self.security_handler = prev.security_handler
+
+    def ensure_output_version(self, version):
+        # check header
+        if self.prev.input_version >= version:
+            return
+        # check root
+        root = self.root
+        try:
+            ver = root[pdf_name('/Version')]
+            cur_version = parse_catalog_version(ver)
+            if cur_version is not None and cur_version >= version:
+                return
+        except (KeyError, ValueError, TypeError):
+            pass
+        version_str = pdf_name('/%d.%d' % version)
+        root[pdf_name('/Version')] = version_str
+        self.update_root()
 
     @classmethod
     def _handle_id(cls, prev):

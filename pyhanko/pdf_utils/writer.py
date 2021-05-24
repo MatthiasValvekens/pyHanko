@@ -303,6 +303,10 @@ class BasePdfFileWriter(PdfHandler):
         else:
             self._info = info
 
+    def ensure_output_version(self, version):
+        if self.output_version < version:
+            self.output_version = version
+
     def set_info(self, info: Optional[Union[generic.IndirectObject,
                                       generic.DictionaryObject]]):
         """

@@ -1572,3 +1572,62 @@ def test_key_len():
     assert SecurityHandlerVersion.AES256.check_key_length(6) == 32
     assert SecurityHandlerVersion.RC4_40.check_key_length(32) == 5
     assert SecurityHandlerVersion.RC4_LONGER_KEYS.check_key_length(16) == 16
+
+
+def test_ensure_version_newfile():
+
+    r = PdfFileReader(BytesIO(MINIMAL))
+
+    w = writer.copy_into_new_writer(r)
+    w.ensure_output_version(version=(2, 0))
+
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.input_version == (2, 0)
+
+
+def test_ensure_version_update_noop():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.input_version == (1, 7)
+
+
+def test_ensure_version_update():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    w.ensure_output_version(version=(2, 0))
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.input_version == (2, 0)
+
+
+def test_ensure_version_update_twice():
+    out = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(out)
+    w.ensure_output_version(version=(1, 8))
+    w.write_in_place()
+    r = PdfFileReader(out)
+    assert r.input_version == (1, 8)
+    w = IncrementalPdfFileWriter(out)
+    w.ensure_output_version(version=(2, 0))
+    w.write_in_place()
+    r = PdfFileReader(out)
+    assert r.input_version == (2, 0)
+
+
+def test_ensure_version_update_twice_smaller():
+    out = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(out)
+    w.ensure_output_version(version=(2, 0))
+    w.write_in_place()
+    r = PdfFileReader(out)
+    assert r.input_version == (2, 0)
+    w = IncrementalPdfFileWriter(out)
+    w.ensure_output_version(version=(1, 7))
+    w.add_object(generic.pdf_string('Bleh'))
+    w.write_in_place()
+    r = PdfFileReader(out)
+    assert r.input_version == (2, 0)

@@ -32,10 +32,19 @@ from .rw_common import PdfHandler
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['PdfFileReader', 'HistoricalResolver']
+__all__ = ['PdfFileReader', 'HistoricalResolver', 'parse_catalog_version']
 
 header_regex = re.compile(b'%PDF-(\\d).(\\d)')
 catalog_version_regex = re.compile(r'/(\d).(\d)')
+
+
+def parse_catalog_version(version_str) -> Optional[Tuple[int, int]]:
+    m = catalog_version_regex.match(str(version_str))
+    if m is not None:
+        major = int(m.group(1))
+        minor = int(m.group(2))
+        return major, minor
+
 
 # General remark:
 # PyPDF2 parses all files backwards.
@@ -613,11 +622,7 @@ class PdfFileReader(PdfHandler):
             # reference, but in theory it's possible
             if isinstance(version, generic.IndirectObject):
                 version = self.get_object(version.reference, never_decrypt=True)
-            m = catalog_version_regex.match(str(version))
-            if m is not None:
-                major = int(m.group(1))
-                minor = int(m.group(2))
-                self.input_version = (major, minor)
+            self.input_version = parse_catalog_version(version)
         except KeyError:
             pass
 
