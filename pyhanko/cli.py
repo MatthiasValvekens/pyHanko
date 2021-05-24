@@ -833,11 +833,11 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     )
 
     if ctx.obj[Ctx.SIG_META] is None:
-        return detached_sig(
+        detached_sig(
             signer, infile, outfile, timestamp_url=timestamp_url,
             use_pem=ctx.obj[Ctx.DETACH_PEM]
         )
-    return addsig_simple_signer(
+    addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
@@ -879,11 +879,11 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
         prefer_pss=ctx.obj[Ctx.PREFER_PSS]
     )
     if ctx.obj[Ctx.SIG_META] is None:
-        return detached_sig(
+        detached_sig(
             signer, infile, outfile, timestamp_url=timestamp_url,
             use_pem=ctx.obj[Ctx.DETACH_PEM]
         )
-    return addsig_simple_signer(
+    addsig_simple_signer(
         signer, infile, outfile, timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
