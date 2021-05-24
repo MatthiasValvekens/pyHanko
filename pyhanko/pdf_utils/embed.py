@@ -232,7 +232,7 @@ class FileSpec:
             result['/RF'] = rf = generic.DictionaryObject()
             if f_related:
                 rf['/F'] = RelatedFileSpec.fmt_related_files(f_related)
-            if uf_related:
+            if uf_related and self.file_name is not None:
                 rf['/UF'] = RelatedFileSpec.fmt_related_files(uf_related)
 
         return result
@@ -305,4 +305,3 @@ def embed_file(pdf_writer: writer.BasePdfFileWriter, spec: FileSpec):
         root_af_arr.append(spec_obj_ref)
     else:
         pdf_writer.ensure_output_version(version=(1, 7))
-

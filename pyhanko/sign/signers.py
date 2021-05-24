@@ -22,7 +22,7 @@ from pyhanko_certvalidator.errors import PathValidationError, PathBuildingError
 from pyhanko_certvalidator import ValidationContext, CertificateValidator
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 
-from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils import generic, misc, embed
 from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
@@ -2531,3 +2531,81 @@ class PdfSigner(PdfTimeStamper):
         # otherwise we'd also run into issues with non-seekable output buffers
         output = _finalise_output(output, res_output)
         return output
+
+
+def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
+                           file_spec_string: str,
+                           payload: embed.EmbeddedFileObject,
+                           cms_obj: cms.ContentInfo, extension='.sig',
+                           file_name: Optional[str] = None,
+                           file_spec_kwargs=None, cms_file_spec_kwargs=None):
+    """
+    Embed some data as an embedded file stream into a PDF, and associate it
+    with a CMS object.
+
+    The resulting CMS object will also be turned into an embedded file, and
+    associated with the original payload through a related file relationship.
+
+    This can be used to bundle (non-PDF) detached signatures with PDF
+    attachments, for example.
+
+    :param pdf_writer:
+        The PDF writer to use.
+    :param file_spec_string:
+        See :attr:`embed.FileSpec.file_spec_string`.
+    :param payload:
+        Payload object.
+    :param cms_obj:
+        CMS object pertaining to the payload.
+    :param extension:
+        File extension to use for the CMS attachment.
+    :param file_name:
+        See :attr:`embed.FileSpec.file_name`.
+    :param file_spec_kwargs:
+        Extra arguments to pass to the :class:`embed.FileSpec` constructor
+        for the main attachment specification.
+    :param cms_file_spec_kwargs:
+        Extra arguments to pass to the :class:`embed.FileSpec` constructor
+        for the CMS attachment specification.
+    """
+
+    # prepare an embedded file object for the signature
+    now = datetime.now(tz=tzlocal.get_localzone())
+    cms_ef_obj = embed.EmbeddedFileObject.from_file_data(
+        pdf_writer=pdf_writer,
+        data=cms_obj.dump(), compress=False,
+        mime_type='application/pkcs7-mime',
+        params=embed.EmbeddedFileParams(
+            creation_date=now, modification_date=now
+        )
+    )
+
+    # replace extension
+    cms_data_f = file_spec_string.rsplit('.', 1)[0] + extension
+
+    # deal with new-style Unicode file names
+    cms_data_uf = uf_related_files = None
+    if file_name is not None:
+        cms_data_uf = file_name.rsplit('.', 1)[0] + extension
+        uf_related_files = [
+            embed.RelatedFileSpec(cms_data_uf, embedded_data=cms_ef_obj)
+        ]
+
+    spec = embed.FileSpec(
+        file_spec_string=file_spec_string, file_name=file_name,
+        embedded_data=payload,
+        f_related_files=[
+            embed.RelatedFileSpec(cms_data_f, embedded_data=cms_ef_obj)
+        ],
+        uf_related_files=uf_related_files,
+        **(file_spec_kwargs or {}),
+    )
+
+    embed.embed_file(pdf_writer, spec)
+
+    # also embed the CMS data as a standalone attachment
+    cms_spec = embed.FileSpec(
+        file_spec_string=cms_data_f, file_name=cms_data_uf,
+        embedded_data=cms_ef_obj, **(cms_file_spec_kwargs or {})
+    )
+    embed.embed_file(pdf_writer, cms_spec)

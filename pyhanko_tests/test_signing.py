@@ -27,7 +27,7 @@ from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
 from pyhanko.sign.ades.cades_asn1 import (
     SignaturePolicyIdentifier, SignaturePolicyId
 )
-from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils import generic, embed
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.misc import PdfWriteError, PdfReadError
@@ -2985,3 +2985,45 @@ def test_detached_cms_with_content_tst():
     assert 'Signature timestamp' in pretty_print
     assert status.valid
     assert status.intact
+
+
+def test_embed_signed_attachment():
+    dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
+    signature = FROM_CA.sign_general_data(
+        VECTOR_IMAGE_PDF, 'sha256', timestamp=dt
+    )
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    signers.embed_payload_with_cms(
+        w, file_spec_string='attachment.pdf',
+        payload=embed.EmbeddedFileObject.from_file_data(
+            w, data=VECTOR_IMAGE_PDF, mime_type='application/pdf',
+            params=embed.EmbeddedFileParams(
+                creation_date=dt, modification_date=dt
+            )
+        ),
+        cms_obj=signature,
+        file_name='添付ファイル.pdf',
+        file_spec_kwargs={'description': "Signed attachment test"}
+    )
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    emb_lst = r.root['/Names']['/EmbeddedFiles']['/Names']
+    assert len(emb_lst) == 4
+    assert emb_lst[0] == 'attachment.pdf'
+    spec_obj = emb_lst[1]
+    assert spec_obj['/UF'] == '添付ファイル.pdf'
+    stream = spec_obj['/EF']['/F']
+    assert stream.data == VECTOR_IMAGE_PDF
+    assert spec_obj['/RF']['/F'][0] == 'attachment.sig'
+    assert spec_obj['/RF']['/UF'][0] == '添付ファイル.sig'
+    rel_file_ref = spec_obj['/RF']['/F'].raw_get(1).reference
+
+    assert emb_lst[2] == 'attachment.sig'
+    spec_obj = emb_lst[3]
+    assert spec_obj['/UF'] == '添付ファイル.sig'
+    stream = spec_obj['/EF']['/F']
+    assert stream.data == signature.dump()
+    assert stream.container_ref == rel_file_ref
