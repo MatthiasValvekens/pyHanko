@@ -8,6 +8,7 @@ pyhanko.pdf\_utils package
    pyhanko.pdf_utils.config_utils
    pyhanko.pdf_utils.content
    pyhanko.pdf_utils.crypt
+   pyhanko.pdf_utils.embed
    pyhanko.pdf_utils.filters
    pyhanko.pdf_utils.font
    pyhanko.pdf_utils.generic
