@@ -1977,8 +1977,9 @@ class StandardDiffPolicy(DiffPolicy):
                     yield _ref, (ModificationLevel.NONE, set(usages))
 
         # orphaned objects are cleared at LTA update level
-        for _ref in _find_orphans(new):
-            explained[ModificationLevel.LTA_UPDATES].add(_ref)
+        if self.ignore_orphaned_objects:
+            for _ref in _find_orphans(new):
+                explained[ModificationLevel.LTA_UPDATES].add(_ref)
 
         # This table records all the overridden refs that already existed
         # in the old revision, together with the different ways they can be

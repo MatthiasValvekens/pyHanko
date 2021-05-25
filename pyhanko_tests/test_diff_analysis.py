@@ -19,7 +19,7 @@ from pyhanko.sign import signers, fields
 from pyhanko.sign.diff_analysis import (
     ModificationLevel,
     NO_CHANGES_DIFF_POLICY, SuspiciousModification, QualifiedWhitelistRule,
-    ReferenceUpdate, StandardDiffPolicy, DEFAULT_DIFF_POLICY,
+    ReferenceUpdate, StandardDiffPolicy, DEFAULT_DIFF_POLICY, XrefStreamRule,
 )
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import validate_pdf_signature, \
@@ -1175,3 +1175,41 @@ def test_double_signature_tagged_file():
     s = r.embedded_signatures[1]
     assert s.field_name == 'Sig2'
     val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('ignored', [True, False])
+def test_orphan(ignored):
+    out = BytesIO(MINIMAL_ONE_FIELD)
+    w = IncrementalPdfFileWriter(out)
+    signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.NO_CHANGES
+        ),
+        signer=FROM_CA, in_place=True
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    w.add_object(generic.pdf_string('Bleh'))
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    policy = StandardDiffPolicy(
+        global_rules=[
+            XrefStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
+        ],
+        form_rule=None,
+        ignore_orphaned_objects=ignored
+    )
+    status = validate_pdf_signature(
+        s, SIMPLE_V_CONTEXT(), diff_policy=policy
+    )
+    if ignored:
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
+        assert status.docmdp_ok
+    else:
+        assert status.modification_level == ModificationLevel.OTHER
+        assert not status.docmdp_ok
+
