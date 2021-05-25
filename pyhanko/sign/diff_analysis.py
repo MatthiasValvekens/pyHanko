@@ -660,6 +660,14 @@ class FormUpdate(ReferenceUpdate):
     This is only relevant if :attr:`field_name` is not ``None``.
     """
 
+    valid_when_certifying: bool = True
+    """
+    Flag indicating whether the update is valid when checking against an
+    explicit DocMDP policy. Default is ``True``.
+    If ``False``, the change will only be accepted if we are evaluating changes
+    to a document after an approval signature.
+    """
+
 
 class FieldMDPRule:
     """
@@ -678,6 +686,25 @@ class FieldMDPRule:
         raise NotImplementedError
 
 
+def is_annot_visible(annot_dict):
+    try:
+        x1, y1, x2, y2 = annot_dict['/Rect']
+        area = abs(x1 - x2) * abs(y1 - y2)
+    except (TypeError, ValueError, KeyError):
+        area = 0
+
+    return bool(area)
+
+
+def is_field_visible(field_dict):
+    if '/Kids' not in field_dict:
+        return is_annot_visible(field_dict)
+    else:
+        return is_annot_visible(field_dict) or any(
+            is_annot_visible(kid.get_object()) for kid in field_dict['/Kids']
+        )
+
+
 class SigFieldCreationRule(FieldMDPRule):
     """
     This rule allows signature fields to be created at the root of the form
@@ -690,10 +717,20 @@ class SigFieldCreationRule(FieldMDPRule):
     The creation of invisible signature fields is considered a modification
     at level :attr:`.ModificationLevel.LTA_UPDATES`, but appearance-related
     changes will be qualified with :attr:`.ModificationLevel.FORM_FILLING`.
+
+    :param allow_new_visible_after_certify:
+        Creating new visible signature fields is disallowed after
+        certification signatures by default; this is stricter than Acrobat.
+        Set this parameter to ``True`` to disable this check.
+    :param approve_widget_bindings:
+        Set to ``False`` to reject new widget annotation registrations
+        associated with approved new fields.
     """
 
-    def __init__(self, approve_widget_bindings=True):
+    def __init__(self, approve_widget_bindings=True,
+                 allow_new_visible_after_certify=False):
         self.approve_widget_bindings = approve_widget_bindings
+        self.allow_new_visible_after_certify = allow_new_visible_after_certify
 
     def apply(self, context: FieldComparisonContext) \
             -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
@@ -738,19 +775,28 @@ class SigFieldCreationRule(FieldMDPRule):
 
         for fq_name, sigfield_ref in all_new_refs.items():
 
-            # new field, so all its dependencies are good to go
+            # New field, so all its dependencies are good to go
             # that said, only the field itself is cleared at LTA update level,
+            # (and only if it is invisible)
             # the other deps bump the modification level up to FORM_FILL
 
             # Since LTA updates should arguably not trigger field locks either
             # (relevant for FieldMDP settings that use /All or /Exclude),
             # we pass valid_when_locked=True on these updates
-            if context.old.is_ref_available(sigfield_ref):
-                yield ModificationLevel.LTA_UPDATES, FormUpdate(
-                    updated_ref=sigfield_ref, field_name=fq_name,
-                    valid_when_locked=True
-                )
             sigfield = sigfield_ref.get_object()
+            visible = is_field_visible(sigfield)
+            mod_level = (
+                ModificationLevel.FORM_FILLING
+                if visible else ModificationLevel.LTA_UPDATES
+            )
+            if context.old.is_ref_available(sigfield_ref):
+                yield mod_level, FormUpdate(
+                    updated_ref=sigfield_ref, field_name=fq_name,
+                    valid_when_locked=not visible,
+                    valid_when_certifying=(
+                        not visible or self.allow_new_visible_after_certify
+                    )
+                )
             # checked by field listing routine already
             assert isinstance(sigfield, generic.DictionaryObject)
 
@@ -780,9 +826,9 @@ class SigFieldCreationRule(FieldMDPRule):
                 old = context.old
                 if isinstance(kids_arr_ref, generic.IndirectObject) \
                         and old.is_ref_available(kids_arr_ref.reference):
-                    yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                    yield mod_level, FormUpdate(
                         updated_ref=kids_arr_ref.reference, field_name=fq_name,
-                        valid_when_locked=True
+                        valid_when_locked=not visible
                     )
                 kid_refs = _arr_to_refs(
                     kids_arr_ref.get_object(), SuspiciousModification
@@ -795,9 +841,9 @@ class SigFieldCreationRule(FieldMDPRule):
                     if '/T' not in kid.get_object():
                         field_ref_reverse[kid] = fq_name
                         if old.is_ref_available(kid):
-                            yield ModificationLevel.LTA_UPDATES, FormUpdate(
+                            yield mod_level, FormUpdate(
                                 updated_ref=kid, field_name=fq_name,
-                                valid_when_locked=True
+                                valid_when_locked=not visible
                             )
                         # pull in appearance dependencies
                         yield from _handle_deps(kid.get_object(), '/AP')
@@ -1002,16 +1048,12 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                 f"Value of signature field {fq_name} is not a dictionary"
             )
 
-        try:
-            x1, y1, x2, y2 = new_field['/Rect']
-            area = abs(x1 - x2) * abs(y1 - y2)
-        except (TypeError, ValueError, KeyError):
-            area = 0
+        visible = is_field_visible(new_field)
 
         # /DocTimeStamps added for LTA validation purposes shouldn't have
         # an appearance (as per the recommendation in ISO 32000-2, which we
         # enforce as a rigid rule here)
-        if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not area:
+        if sig_obj.raw_get('/Type') == '/DocTimeStamp' and not visible:
             sig_whitelist = ModificationLevel.LTA_UPDATES
             valid_when_locked = True
         else:
@@ -2037,6 +2079,12 @@ class StandardDiffPolicy(DiffPolicy):
                             f"because the form field {field_name} is locked."
                         )
                     changed_form_fields.add(fu.field_name)
+                if doc_mdp is not None and not fu.valid_when_certifying:
+                    raise SuspiciousModification(
+                        f"Update of {fu.updated_ref} is only allowed "
+                        f"after an approval signature, not a certification "
+                        f"signature."
+                    )
 
         unexplained_lta = new_xrefs - explained[ModificationLevel.LTA_UPDATES]
         unexplained_formfill = \

@@ -17,7 +17,7 @@ from pyhanko.pdf_utils.reader import (
 )
 from pyhanko.sign import signers, fields
 from pyhanko.sign.diff_analysis import (
-    ModificationLevel,
+    ModificationLevel, is_annot_visible, is_field_visible,
     NO_CHANGES_DIFF_POLICY, SuspiciousModification, QualifiedWhitelistRule,
     ReferenceUpdate, StandardDiffPolicy, DEFAULT_DIFF_POLICY, XrefStreamRule,
 )
@@ -76,10 +76,7 @@ DOUBLE_SIG_TESTDATA_FILES = [
 def test_double_sig_add_field(file_ix):
     w = IncrementalPdfFileWriter(BytesIO(DOUBLE_SIG_TESTDATA_FILES[file_ix]))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', certify=True,
-            docmdp_permissions=fields.MDPPerm.FILL_FORMS
-        ),
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
         signer=FROM_CA,
     )
 
@@ -300,10 +297,7 @@ def test_bogus_metadata_manipulation():
 def test_double_sig_add_field_annots_indirect():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', certify=True,
-            docmdp_permissions=fields.MDPPerm.FILL_FORMS
-        ),
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
         signer=FROM_CA,
     )
 
@@ -336,13 +330,10 @@ def test_double_sig_add_field_annots_indirect():
 
 
 @freeze_time('2020-11-01')
-def test_double_sig_add_visible_field():
+def test_double_sig_add_visible_field_approval():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', certify=True,
-            docmdp_permissions=fields.MDPPerm.FILL_FORMS
-        ), signer=FROM_CA
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
     )
 
     # create a new signature field after signing
@@ -365,6 +356,34 @@ def test_double_sig_add_visible_field():
     s = r.embedded_signatures[1]
     assert s.field_name == 'SigNew'
     val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_double_sig_add_visible_field_certify():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ), signer=FROM_CA
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+
+    sp = fields.SigFieldSpec(
+        'SigNew', box=(10, 74, 140, 134)
+    )
+    fields.append_signature_field(w, sp)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    s.compute_integrity_info(DEFAULT_DIFF_POLICY)
+    assert isinstance(s.diff_result, SuspiciousModification)
+    assert 'only allowed after an approval signature' in str(s.diff_result)
 
 
 def set_text_field(writer, val):
@@ -1213,3 +1232,33 @@ def test_orphan(ignored):
         assert status.modification_level == ModificationLevel.OTHER
         assert not status.docmdp_ok
 
+
+def test_is_field_visible():
+    assert not is_annot_visible({})
+    assert not is_field_visible({})
+    assert not is_annot_visible({'/Rect': 1})
+    assert not is_annot_visible({'/Rect': None})
+    assert is_field_visible(
+        {'/Kids': [
+            generic.DictionaryObject({
+                generic.pdf_name('/Rect'): generic.ArrayObject([1, 2, 3, 4])
+            }),
+        ]}
+    )
+    assert is_field_visible(
+        {'/Kids': [
+            generic.DictionaryObject({
+                generic.pdf_name('/Rect'): generic.ArrayObject([0, 0, 0, 0])
+            }),
+            generic.DictionaryObject({
+                generic.pdf_name('/Rect'): generic.ArrayObject([1, 2, 3, 4])
+            }),
+        ]}
+    )
+    assert not is_field_visible(
+        {'/Kids': [
+            generic.DictionaryObject({
+                generic.pdf_name('/Rect'): generic.ArrayObject([0, 0, 0, 0])
+            }),
+        ]}
+    )
