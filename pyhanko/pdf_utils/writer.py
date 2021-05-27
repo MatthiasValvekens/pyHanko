@@ -826,7 +826,7 @@ class PageObject(generic.DictionaryObject):
         super().__init__({
             pdf_name('/Type'): pdf_name('/Page'),
             pdf_name('/MediaBox'): generic.ArrayObject(
-                map(generic.NumberObject, media_box)
+                map(generic.FloatObject, media_box)
             ),
             pdf_name('/Resources'): resources,
             pdf_name('/Contents'): contents
