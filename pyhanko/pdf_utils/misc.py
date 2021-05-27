@@ -11,7 +11,7 @@ from enum import Enum
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError',
-    'get_and_apply', 'DEFAULT_CHUNK_SIZE'
+    'get_and_apply', 'get_courier', 'DEFAULT_CHUNK_SIZE'
 ]
 
 from io import BytesIO
@@ -163,6 +163,11 @@ def peek(itr):
 
 
 def get_courier():
+    """
+    :return:
+        A resource dictionary representing the standard Courier font
+        (or one of its metric equivalents).
+    """
     from .generic import pdf_name, DictionaryObject
     return DictionaryObject({
         pdf_name('/Type'): pdf_name('/Font'),

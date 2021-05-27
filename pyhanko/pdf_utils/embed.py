@@ -8,7 +8,7 @@ from .generic import pdf_name, pdf_string
 
 __all__ = [
     'embed_file', 'EmbeddedFileObject', 'EmbeddedFileParams',
-    'FileSpec', 'RelatedFileSpec',
+    'FileSpec', 'RelatedFileSpec', 'wrap_encrypted_payload'
 ]
 
 from .misc import get_courier
