@@ -153,6 +153,8 @@ seed value constraints were respected.
     bearing on possible later modifications to the document.
 
 
+.. _ltv-fix:
+
 Adding validation data to an existing signature
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

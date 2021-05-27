@@ -326,8 +326,9 @@ signatures.
     information after the fact, together with a document timestamp.
     Obviously, this is predicated on the certificate's still being valid
     when the revocation information is compiled.
-    This workflow is not (yet) supported in pyHanko, and is also not
-    guaranteed to be acceptable in all X.509 validation models.
+    This workflow is not guaranteed to be acceptable in all X.509 validation
+    models, but is supported in pyHanko through the ``ltvfix`` subcommand; see
+    :ref:`ltv-fix`.
   * This approach is used in the PAdES baseline profiles B-LT and B-LTA
     defined by ETSI, and the (mildly modified) versions subsumed into
     ISO 32000-2 (PDF 2.0). As such, it is not part of ISO 32000-1 'proper'.
