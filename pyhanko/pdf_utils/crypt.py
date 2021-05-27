@@ -660,6 +660,14 @@ class SecurityHandler:
             return self.crypt_filter_config.get_for_stream()
         return self.crypt_filter_config[name]
 
+    def get_embedded_file_filter(self):
+        """
+        :return:
+            The crypt filter responsible for decrypting embedded files
+            for this security handler.
+        """
+        return self.crypt_filter_config.get_for_embedded_file()
+
     def get_file_encryption_key(self) -> bytes:
         raise NotImplementedError
 
@@ -756,6 +764,7 @@ class CryptFilter:
 
     _handler: 'SecurityHandler' = None
     _shared_key: Optional[bytes] = None
+    _embedded_only = False
 
     def _set_security_handler(self, handler):
         """
@@ -851,7 +860,10 @@ class CryptFilter:
         """
         result = generic.DictionaryObject({
             # TODO handle /AuthEvent properly
-            generic.NameObject('/AuthEvent'): generic.NameObject('/DocOpen'),
+            generic.NameObject('/AuthEvent'): (
+                generic.NameObject('/EFOpen') if self._embedded_only
+                else generic.NameObject('/DocOpen')
+            ),
             generic.NameObject('/CFM'): self.method
         })
         return result
@@ -881,6 +893,9 @@ class CryptFilter:
             The local key to use for this object.
         """
         raise NotImplementedError
+
+    def set_embedded_only(self):
+        self._embedded_only = True
 
     @property
     def shared_key(self) -> bytes:
@@ -1406,6 +1421,28 @@ class CryptFilterConfiguration:
         """
         return self._default_file_filter
 
+    @property
+    def stream_filter_name(self) -> generic.NameObject:
+        """
+        The name of the default crypt filter to use with streams.
+        """
+        return self._default_stream_filter_name
+
+    @property
+    def string_filter_name(self) -> generic.NameObject:
+        """
+        The name of the default crypt filter to use with streams.
+        """
+        return self._default_string_filter_name
+
+    @property
+    def embedded_file_filter_name(self) -> generic.NameObject:
+        """
+        Retrieve the name of the default crypt filter to use with embedded
+        files.
+        """
+        return self._default_file_filter_name
+
     def as_pdf_object(self):
         """
         Serialise this crypt filter configuration to a dictionary object,
@@ -1632,8 +1669,7 @@ class StandardSecurityHandler(SecurityHandler):
         sh = cls(
             version=version, revision=rev, legacy_keylen=keylen_bytes,
             perm_flags=perms, odata=o_entry,
-            udata=u_entry, encrypt_metadata=True,
-            crypt_filter_config=crypt_filter_config,
+            udata=u_entry, crypt_filter_config=crypt_filter_config,
             **kwargs
         )
         sh._shared_key = key
@@ -1641,7 +1677,7 @@ class StandardSecurityHandler(SecurityHandler):
 
     @classmethod
     def build_from_pw(cls, desired_owner_pass, desired_user_pass=None,
-                      perms=ALL_PERMS, **kwargs):
+                      perms=ALL_PERMS, encrypt_metadata=True, **kwargs):
         """
         Initialise a password-based security handler backed by AES-256,
         to attach to a :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
@@ -1655,6 +1691,9 @@ class StandardSecurityHandler(SecurityHandler):
             Desired user password.
         :param perms:
             Desired usage permissions.
+        :param encrypt_metadata:
+            Whether to set up the security handler for encrypting metadata
+            as well.
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
@@ -1687,7 +1726,9 @@ class StandardSecurityHandler(SecurityHandler):
 
         perms_bytes = struct.pack('<I', perms & 0xfffffffc)
         extd_perms_bytes = (
-            perms_bytes + (b'\xff' * 4) + b'Tadb' + secrets.token_bytes(4)
+            perms_bytes + (b'\xff' * 4)
+            + (b'T' if encrypt_metadata else b'F')
+            + b'adb' + secrets.token_bytes(4)
         )
 
         # need to encrypt one 16 byte block in ECB mode
@@ -1704,7 +1745,7 @@ class StandardSecurityHandler(SecurityHandler):
             revision=StandardSecuritySettingsRevision.AES256,
             legacy_keylen=32, perm_flags=perms, odata=o_entry,
             udata=u_entry, oeseed=oe_seed, ueseed=ue_seed,
-            encrypted_perms=encrypted_perms, encrypt_metadata=True,
+            encrypted_perms=encrypted_perms, encrypt_metadata=encrypt_metadata,
             **kwargs
         )
         sh._shared_key = encryption_key

@@ -6,9 +6,10 @@ import pytest
 import tzlocal
 from freezegun import freeze_time
 
+from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils import writer, embed, generic, misc
+from pyhanko.pdf_utils import writer, embed, generic, misc, crypt
 from pyhanko_tests.samples import *
 
 
@@ -168,3 +169,56 @@ def test_embed_without_ef_stream():
     err_msg = "File spec does not have an embedded file stream"
     with pytest.raises(misc.PdfWriteError, match=err_msg):
         embed.embed_file(w, spec)
+
+
+def test_encrypt_efs():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = writer.copy_into_new_writer(r)
+    cf = crypt.StandardAESCryptFilter(keylen=32)
+    cf.set_embedded_only()
+    sh = crypt.StandardSecurityHandler.build_from_pw(
+        'secret', crypt_filter_config=crypt.CryptFilterConfiguration(
+            {crypt.STD_CF: cf},
+            default_stream_filter=crypt.IDENTITY,
+            default_string_filter=crypt.IDENTITY,
+            default_file_filter=crypt.STD_CF
+        ),
+        encrypt_metadata=False
+    )
+    w._assign_security_handler(sh)
+    modified = datetime.now(tz=tzlocal.get_localzone())
+    created = modified - timedelta(days=1)
+    _embed_test(
+        w, fname='vector-test.pdf', ufname='テスト.pdf',
+        data=VECTOR_IMAGE_PDF,
+        created=created, modified=modified
+    )
+
+    out = BytesIO()
+    w.write(out)
+
+
+    r = PdfFileReader(out)
+    # should be able to access this without authenticating
+    assert b'Hello' in r.root['/Pages']['/Kids'][0]['/Contents'].data
+    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF']\
+        .raw_get('/F')
+
+    result = r.decrypt('secret')
+    assert result.status == AuthStatus.OWNER
+
+    assert ef_stm.get_object()._has_crypt_filter
+    assert ef_stm.get_object().data == VECTOR_IMAGE_PDF
+
+
+def test_decrypt_ef_without_explicit_crypt_filter():
+    # such files violate the spec, but since we can deal with them gracefully,
+    # we certainly should
+
+    with open(PDF_DATA_DIR + '/embedded-encrypted-nocf.pdf', 'rb') as inf:
+        r = PdfFileReader(inf)
+        ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'] \
+            .raw_get('/F')
+        r.decrypt('secret')
+        assert not ef_stm.get_object()._has_crypt_filter
+        assert ef_stm.get_object().data == VECTOR_IMAGE_PDF

@@ -1261,6 +1261,13 @@ class StreamObject(DictionaryObject):
         """
         self.apply_filter(pdf_name('/FlateDecode'), allow_duplicates=None)
 
+    @property
+    def is_embedded_file_stream(self):
+        try:
+            return self.raw_get('/Type') == '/EmbeddedFile'
+        except KeyError:
+            return False
+
     def write_to_stream(self, stream, handler=None, container_ref=None):
         data = self.encoded_data
         if handler is not None and container_ref is not None and \
@@ -1402,7 +1409,10 @@ class DecryptedObjectProxy(PdfObject):
                     # in the stream.
                     decrypted_data = obj.encoded_data
                 else:
-                    cf = handler.get_string_filter()
+                    if obj.is_embedded_file_stream:
+                        cf = handler.get_embedded_file_filter()
+                    else:
+                        cf = handler.get_stream_filter()
                     local_key = cf.derive_object_key(
                         container_ref.idnum, container_ref.generation
                     )

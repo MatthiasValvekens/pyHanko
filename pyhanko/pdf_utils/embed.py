@@ -91,7 +91,7 @@ class EmbeddedFileObject(generic.StreamObject):
 
         super().__init__(
             dict_data=dict_data, stream_data=stream_data,
-            encoded_data=encoded_data, handler=pdf_writer
+            encoded_data=encoded_data, handler=pdf_writer.security_handler
         )
         self['/Type'] = generic.pdf_name('/EmbeddedFile')
         if mime_type is not None:
@@ -104,8 +104,18 @@ class EmbeddedFileObject(generic.StreamObject):
         self.params = params
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
-        # apply the parameters before serialisation
+        # deal with "encrypt embedded files only" mode
+        # (we do this here to make sure the user doesn't add any other crypt
+        # filters after this one)
+        if handler is not None and not self._has_crypt_filter:
+            cfc = handler.crypt_filter_config
+            ef_filter_name = cfc.embedded_file_filter_name
+            stream_filter_name = cfc.stream_filter_name
+            if ef_filter_name is not None and \
+                    ef_filter_name != stream_filter_name:
+                self.add_crypt_filter(ef_filter_name)
 
+        # apply the parameters before serialisation
         params = self.params
         if params is not None:
             self['/Params'] = param_dict = generic.DictionaryObject()

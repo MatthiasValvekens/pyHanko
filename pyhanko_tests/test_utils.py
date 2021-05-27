@@ -1499,6 +1499,9 @@ def test_custom_crypt_filter_type(on_subclass):
     w.write(out)
     r = PdfFileReader(out)
     r.decrypt("ownersecret")
+
+    cfc = r.security_handler.crypt_filter_config
+    assert cfc.stream_filter_name == cfc.string_filter_name
     obj: generic.StreamObject = r.get_object(ref.reference)
     assert obj.data == test_data
 
