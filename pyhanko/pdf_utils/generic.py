@@ -779,8 +779,14 @@ class TextStringObject(str, PdfObject):
             bytearr = encode_pdfdocencoding(self)
         except UnicodeEncodeError:
             bytearr = codecs.BOM_UTF16_BE + self.encode("utf-16be")
+
+        cf = None
         if handler is not None and container_ref is not None:
-            cf = handler.get_string_filter()
+            cf_name = handler.crypt_filter_config.string_filter_name
+            # apply default processing if the filter is the identity filter
+            cf = None if cf_name == '/Identity' else handler.get_string_filter()
+
+        if cf is not None:
             local_key = cf.derive_object_key(
                 container_ref.idnum, container_ref.generation
             )
