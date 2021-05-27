@@ -3,13 +3,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List
 
-from . import generic, writer, misc
+from . import generic, writer, misc, crypt
 from .generic import pdf_name, pdf_string
 
 __all__ = [
     'embed_file', 'EmbeddedFileObject', 'EmbeddedFileParams',
     'FileSpec', 'RelatedFileSpec',
 ]
+
+from .misc import get_courier
 
 
 @dataclass(frozen=True)
@@ -166,8 +168,6 @@ class RelatedFileSpec:
 
 @dataclass(frozen=True)
 class FileSpec:
-    # TODO encrypted payload
-
     # TODO collection item dictionaries
 
     # TODO thumbnail support
@@ -315,3 +315,140 @@ def embed_file(pdf_writer: writer.BasePdfFileWriter, spec: FileSpec):
         root_af_arr.append(spec_obj_ref)
     else:
         pdf_writer.ensure_output_version(version=(1, 7))
+
+
+def wrap_encrypted_payload(plaintext_payload: bytes, *,
+                           password: str = None,
+                           security_handler: crypt.SecurityHandler = None,
+                           file_spec_string: str = 'attachment.pdf',
+                           params: EmbeddedFileParams = None,
+                           file_name: Optional[str] = None,
+                           description='Wrapped document',
+                           include_explanation_page=True) \
+        -> writer.PdfFileWriter:
+    """
+    Include a PDF document as an encrypted attachment in a wrapper document.
+
+    This function sets certain flags in the wrapper document's collection
+    dictionary to instruct compliant PDF viewers to display the attachment
+    instead of the wrapping document. Viewers that do not fully support
+    PDF collections will display a landing page instead, explaining
+    how to open the attachment manually.
+
+    Using this method mitigates some weaknesses in the PDF standard's encryption
+    provisions, and makes it harder to manipulate the encrypted attachment
+    without knowing the encryption key.
+
+    .. danger::
+        Until PDF supports authenticated encryption mechanisms, this is
+        a mitigation strategy, not a foolproof defence mechanism.
+
+    .. warning::
+        While users of viewers that do not support PDF collections can still
+        open the attached file manually, the viewer still has to support
+        PDF files where only the attachments are encrypted.
+
+    .. note::
+        This is not quite the same as the "unencrypted wrapper document"
+        pattern discussed in the PDF 2.0 specification. The latter is intended
+        to support nonstandard security handlers. This function uses a standard
+        security handler on the wrapping document to encrypt the attachment
+        as a binary blob.
+        Moreover, the functionality in this function is available in PDF 1.7
+        viewers as well.
+
+    :param plaintext_payload:
+        The plaintext payload.
+    :param security_handler:
+        The security handler to use on the wrapper document.
+        If ``None``, a security handler will be constructed based on the
+        ``password`` parameter.
+    :param password:
+        Password to encrypt the attachment with.
+        Will be ignored if ``security_handler`` is provided.
+    :param file_spec_string:
+        PDFDocEncoded file spec string for the attachment.
+    :param params:
+        Embedded file parameters to use.
+    :param file_name:
+        Unicode file name for the attachment.
+    :param description:
+        Description for the attachment
+    :param include_explanation_page:
+        If ``False``, do not generate an explanation page in the wrapper
+        document. This setting could be useful if you want to customise the
+        wrapper document's behaviour yourself.
+    :return:
+        A :class:`~writer.PdfFileWriter` representing the wrapper document.
+    """
+    w = writer.PdfFileWriter()
+
+    cf = crypt.StandardAESCryptFilter(keylen=32)
+    cf.set_embedded_only()
+    if security_handler is None:
+        if password is None:
+            raise ValueError(
+                "Either 'security_handler' or 'password' must be provided"
+            )
+        security_handler = crypt.StandardSecurityHandler.build_from_pw(
+            password, crypt_filter_config=crypt.CryptFilterConfiguration(
+                {crypt.STD_CF: cf},
+                default_stream_filter=crypt.IDENTITY,
+                default_string_filter=crypt.IDENTITY,
+                default_file_filter=crypt.STD_CF
+            ),
+            encrypt_metadata=False
+        )
+    w._assign_security_handler(security_handler)
+
+    w.root['/Collection'] = collection_dict = generic.DictionaryObject()
+    collection_dict['/Type'] = pdf_name('/Collection')
+    collection_dict['/D'] = generic.TextStringObject(file_spec_string)
+    collection_dict['/View'] = pdf_name('/H')  # hide "Collection" view
+
+    ef_obj = EmbeddedFileObject.from_file_data(
+        w, data=plaintext_payload, mime_type='application/pdf',
+        params=params or EmbeddedFileParams()
+    )
+
+    spec = FileSpec(
+        file_spec_string=file_spec_string, file_name=file_name,
+        embedded_data=ef_obj, description=description
+    )
+    embed_file(w, spec)
+
+    if include_explanation_page:
+        resources = generic.DictionaryObject({
+            pdf_name('/Font'): generic.DictionaryObject({
+                pdf_name('/F1'): get_courier()
+            })
+        })
+
+        # TODO make it easy to customise this
+        #  (i.e. don't require the user to put together a page object by
+        #   themselves)
+        stream_content = '''
+        BT
+            /F1 10 Tf 10 830 Td 12 TL
+            (This document is a wrapper for an encrypted attachment.) '
+            (Your viewer should prompt for a password and ) '
+            (open the attached file automatically.) Tj
+            (If not, navigate to the attached document manually.) ' T*
+            (In addition, your viewer must support encryption ) '
+            (scoped to embedded files.) Tj
+        ET
+        '''
+
+        stream = generic.StreamObject(
+            stream_data=stream_content.encode('latin1')
+        )
+        explanation_page = writer.PageObject(
+            contents=w.add_object(stream),
+            # A4 media box
+            media_box=(0, 0, 595.28, 841.89),
+            resources=resources
+        )
+
+        w.insert_page(explanation_page)
+
+    return w

@@ -222,3 +222,30 @@ def test_decrypt_ef_without_explicit_crypt_filter():
         r.decrypt('secret')
         assert not ef_stm.get_object()._has_crypt_filter
         assert ef_stm.get_object().data == VECTOR_IMAGE_PDF
+
+
+def test_wrapper_doc_underspecified():
+    with pytest.raises(ValueError, match='Either.*must be provided'):
+        embed.wrap_encrypted_payload(b'bacadsflkj')
+
+
+def test_wrapper_doc():
+    w = embed.wrap_encrypted_payload(
+        VECTOR_IMAGE_PDF, password='secret'
+    )
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    assert b'attached file' in r.root['/Pages']['/Kids'][0]['/Contents'].data
+
+    assert r.root['/Collection']['/D'] == 'attachment.pdf'
+    assert r.root['/Collection']['/View'] == '/H'
+    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'] \
+        .raw_get('/F')
+
+    result = r.decrypt('secret')
+    assert result.status == AuthStatus.OWNER
+
+    assert ef_stm.get_object()._has_crypt_filter
+    assert ef_stm.get_object().data == VECTOR_IMAGE_PDF
