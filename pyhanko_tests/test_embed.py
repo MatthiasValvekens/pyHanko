@@ -225,8 +225,11 @@ def test_decrypt_ef_without_explicit_crypt_filter():
 
 
 def test_wrapper_doc_underspecified():
-    with pytest.raises(ValueError, match='Either.*must be provided'):
+    with pytest.raises(ValueError, match='exactly one of.*must be'):
         embed.wrap_encrypted_payload(b'bacadsflkj')
+
+    with pytest.raises(ValueError, match='exactly one of.*must be'):
+        embed.wrap_encrypted_payload(b'bacadsflkj', password='a', certs=[])
 
 
 def test_wrapper_doc():
@@ -246,6 +249,28 @@ def test_wrapper_doc():
 
     result = r.decrypt('secret')
     assert result.status == AuthStatus.OWNER
+
+    assert ef_stm.get_object()._has_crypt_filter
+    assert ef_stm.get_object().data == VECTOR_IMAGE_PDF
+
+
+def test_wrapper_doc_pubkey():
+    w = embed.wrap_encrypted_payload(
+        VECTOR_IMAGE_PDF, certs=[PUBKEY_TEST_DECRYPTER.cert]
+    )
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    assert b'attached file' in r.root['/Pages']['/Kids'][0]['/Contents'].data
+
+    assert r.root['/Collection']['/D'] == 'attachment.pdf'
+    assert r.root['/Collection']['/View'] == '/H'
+    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'] \
+        .raw_get('/F')
+
+    result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    assert result.status == AuthStatus.USER
 
     assert ef_stm.get_object()._has_crypt_filter
     assert ef_stm.get_object().data == VECTOR_IMAGE_PDF

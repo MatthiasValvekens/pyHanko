@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List
 
+from asn1crypto import x509
+
 from . import generic, writer, misc, crypt
 from .generic import pdf_name, pdf_string
 
@@ -319,6 +321,7 @@ def embed_file(pdf_writer: writer.BasePdfFileWriter, spec: FileSpec):
 
 def wrap_encrypted_payload(plaintext_payload: bytes, *,
                            password: str = None,
+                           certs: List[x509.Certificate] = None,
                            security_handler: crypt.SecurityHandler = None,
                            file_spec_string: str = 'attachment.pdf',
                            params: EmbeddedFileParams = None,
@@ -362,9 +365,13 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
     :param security_handler:
         The security handler to use on the wrapper document.
         If ``None``, a security handler will be constructed based on the
-        ``password`` parameter.
+        ``password`` or ``certs`` parameter.
     :param password:
         Password to encrypt the attachment with.
+        Will be ignored if ``security_handler`` is provided.
+    :param certs:
+        Encrypt the file using PDF public-key encryption, targeting the
+        keys in the provided certificates.
         Will be ignored if ``security_handler`` is provided.
     :param file_spec_string:
         PDFDocEncoded file spec string for the attachment.
@@ -383,22 +390,41 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
     """
     w = writer.PdfFileWriter()
 
-    cf = crypt.StandardAESCryptFilter(keylen=32)
-    cf.set_embedded_only()
     if security_handler is None:
-        if password is None:
+        if (password is None) == (certs is None):
             raise ValueError(
-                "Either 'security_handler' or 'password' must be provided"
+                "If 'security_handler' is not provided, "
+                "exactly one of 'password' or 'cert' must be."
             )
-        security_handler = crypt.StandardSecurityHandler.build_from_pw(
-            password, crypt_filter_config=crypt.CryptFilterConfiguration(
-                {crypt.STD_CF: cf},
-                default_stream_filter=crypt.IDENTITY,
-                default_string_filter=crypt.IDENTITY,
-                default_file_filter=crypt.STD_CF
-            ),
-            encrypt_metadata=False
-        )
+        if password is None:
+            # set up pubkey security handler
+            cf = crypt.PubKeyAESCryptFilter(
+                keylen=32, acts_as_default=False,
+                encrypt_metadata=False
+            )
+            cf.set_embedded_only()
+            security_handler = crypt.PubKeySecurityHandler(
+                version=crypt.SecurityHandlerVersion.AES256,
+                pubkey_handler_subfilter=crypt.PubKeyAdbeSubFilter.S5,
+                legacy_keylen=None, encrypt_metadata=False,
+                crypt_filter_config=crypt.CryptFilterConfiguration(
+                    {crypt.DEF_EMBEDDED_FILE: cf},
+                    default_file_filter=crypt.DEF_EMBEDDED_FILE
+                ),
+            )
+            cf.add_recipients(certs)
+        else:
+            # set up standard security handler
+            cf = crypt.StandardAESCryptFilter(keylen=32)
+            cf.set_embedded_only()
+            security_handler = crypt.StandardSecurityHandler.build_from_pw(
+                password,
+                crypt_filter_config=crypt.CryptFilterConfiguration(
+                    {crypt.STD_CF: cf},
+                    default_file_filter=crypt.STD_CF
+                ),
+                encrypt_metadata=False
+            )
     w._assign_security_handler(security_handler)
 
     w.root['/Collection'] = collection_dict = generic.DictionaryObject()
