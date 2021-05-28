@@ -1048,7 +1048,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         md.update(self._recp_key_seed)
         for recp in self.recipients:
             md.update(recp.dump())
-        if not self.encrypt_metadata:
+        if not self.encrypt_metadata and self.acts_as_default:
             md.update(b'\xff\xff\xff\xff')
         return md.digest()[:self.keylen]
 
@@ -1325,6 +1325,12 @@ Default name to use for the default crypt filter in public key security
 handlers.
 """
 
+DEF_EMBEDDED_FILE = generic.NameObject('/DefEmbeddedFile')
+"""
+Default name to use for the EFF crypt filter in public key security
+handlers for documents where only embedded files are encrypted.
+"""
+
 IDENTITY = generic.NameObject('/Identity')
 """
 Name of the identity crypt filter.
@@ -1460,20 +1466,21 @@ class CryptFilterConfiguration:
         })
         return result
 
-    def default_filters(self):
+    def standard_filters(self):
         """
-        Return the "default" filters associated with this crypt filter
-        configuration, i.e. those registered as the defaults for strings
-        and streams, respectively.
+        Return the "standard" filters associated with this crypt filter
+        configuration, i.e. those registered as the defaults for strings,
+        streams and embedded files, respectively.
 
         These sometimes require special treatment (as per the specification).
 
         :return:
-            A set with one or two elements.
+            A set with one, two or three elements.
         """
         stmf = self._default_stream_filter
         strf = self._default_string_filter
-        return {stmf, strf} if stmf is not strf else {stmf}
+        eff = self._default_file_filter
+        return {stmf, strf, eff}
 
 
 def _std_rc4_config(keylen):
@@ -2639,7 +2646,7 @@ class PubKeySecurityHandler(SecurityHandler):
         # callers that want to do this more granularly are welcome to, but
         # then they have to do the legwork themselves.
 
-        for cf in self.crypt_filter_config.default_filters():
+        for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
             cf.add_recipients(
@@ -2668,7 +2675,7 @@ class PubKeySecurityHandler(SecurityHandler):
             )  # pragma: nocover
 
         perms = 0xffffffff
-        for cf in self.crypt_filter_config.default_filters():
+        for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
             recp: cms.ContentInfo
@@ -2678,7 +2685,8 @@ class PubKeySecurityHandler(SecurityHandler):
             # these should really be the same for both filters, but hey,
             # you never know. ANDing them seems to be the most reasonable
             # course of action
-            perms &= result.permission_flags
+            if result.permission_flags is not None:
+                perms &= result.permission_flags
         return AuthResult(AuthStatus.USER, _as_signed(perms))
 
     def get_file_encryption_key(self) -> bytes:
