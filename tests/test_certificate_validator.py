@@ -136,3 +136,18 @@ class CertificateValidatorTests(unittest.TestCase):
             'NIST-test-policy-3.  This user notice should be displayed '
             'when  NIST-test-policy-1 is in the user-constrained-policy-set'
         )
+
+    def test_self_signed_with_policy(self):
+        # tests whether a corner case in the policy validation logic when the
+        # path length is zero is handled gracefully
+        cert = self._load_cert_object('self-signed-with-policy.crt')
+        context = ValidationContext(trust_roots=[cert], allow_fetching=False)
+        validator = CertificateValidator(cert, validation_context=context)
+        path = validator.validate_usage({'digital_signature'})
+        qp, = path.qualified_policies()
+        # Note: the cert declares a concrete policy, but for the purposes
+        # of PKIX validation, any policy is valid, since we're validating
+        # a self-signed certificate (so everything breaks down anyway)
+        self.assertEqual(qp.user_domain_policy_id, 'any_policy')
+        self.assertEqual(qp.issuer_domain_policy_id, 'any_policy')
+

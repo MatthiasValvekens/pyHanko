@@ -725,15 +725,24 @@ def _finish_policy_processing(state, cert, acceptable_policies, path_length,
             accepted_policy: PolicyTreeNode
             for accepted_policy in intersection.at_depth(path_length):
                 listed_pol = accepted_policy.valid_policy
-                yield QualifiedPolicy(
+                if listed_pol != 'any_policy':
                     # the first ancestor that is a child of any_policy
                     # will have an ID that makes sense in the user's policy
                     # domain (here 'ancestor' includes the node itself)
-                    user_domain_policy_id=next(
+                    user_domain_policy_id = next(
                         ancestor.valid_policy
                         for ancestor in accepted_policy.path_to_root()
                         if ancestor.parent.valid_policy == 'any_policy'
-                    ),
+                    )
+                else:
+                    # any_policy can't be mapped, so we don't have to do
+                    # any walking up the tree. This also covers the corner case
+                    # where the path length is 0 (in this case, PKIX validation
+                    # is pointless, but we have to deal with it gracefully)
+                    user_domain_policy_id = 'any_policy'
+
+                yield QualifiedPolicy(
+                    user_domain_policy_id=user_domain_policy_id,
                     issuer_domain_policy_id=listed_pol,
                     qualifiers=frozenset(accepted_policy.qualifier_set)
                 )
