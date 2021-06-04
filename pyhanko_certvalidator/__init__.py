@@ -17,6 +17,7 @@ __all__ = [
     '__version_info__',
     'CertificateValidator',
     'ValidationContext',
+    'PKIXValidationParams'
 ]
 
 
