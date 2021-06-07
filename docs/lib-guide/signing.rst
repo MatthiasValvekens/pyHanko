@@ -231,7 +231,7 @@ Extending |Signer|
 Providing detailed guidance on how to implement your own |Signer| subclass
 is beyond the scope of this guide |---| the implementations
 of :class:`~.pyhanko.sign.signers.SimpleSigner` and
-:class:`~.pyhanko.sign.signers.PKCS11Signer` should help.
+:class:`~.pyhanko.sign.pkcs11.PKCS11Signer` should help.
 This subsection merely highlights some of the issues you should keep in mind.
 
 First, if all you want to do is implement a signing device or technique that's
