@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class LayoutError(ValueError):
+    """Indicates an error in a layout computation."""
     pass
 
 
@@ -159,6 +160,8 @@ class BoxConstraints:
 
 
 class InnerScaling(enum.Enum):
+    """Class representing a scaling convention."""
+
     NO_SCALING = enum.auto()
     """Never scale content."""
 
@@ -179,6 +182,8 @@ class InnerScaling(enum.Enum):
 
 
 class AxisAlignment(enum.Enum):
+    """Class representing one-dimensional alignment along an axis."""
+
     ALIGN_MIN = enum.auto()
     """
     Align maximally towards the negative end of the axis.
@@ -236,12 +241,31 @@ _alignment_opposites = {
 
 @dataclass(frozen=True)
 class Positioning(ConfigurableMixin):
+    """
+    Class describing the position and scaling of an object in a container.
+    """
+
     x_pos: int
+    """Horizontal coordinate"""
+
     y_pos: int
+    """Vertical coordinate"""
+
     x_scale: float
+    """Horizontal scaling"""
+
     y_scale: float
+    """Vertical scaling"""
 
     def as_cm(self):
+        """
+        Convenience method to convert this :class:`.Positioning` into a PDF
+        ``cm`` operator.
+
+        :return:
+            A byte string representing the ``cm`` operator corresponding
+            to this :class:`.Positioning`.
+        """
         return b'%g 0 0 %g %g %g cm' % (
             self.x_scale, self.y_scale, self.x_pos, self.y_pos
         )
@@ -271,6 +295,8 @@ def _aln_height(alignment: AxisAlignment, container_box: BoxConstraints,
 
 @dataclass(frozen=True)
 class Margins(ConfigurableMixin):
+    """Class describing a set of margins."""
+
     left: int = 0
 
     right: int = 0
@@ -281,10 +307,19 @@ class Margins(ConfigurableMixin):
 
     @classmethod
     def uniform(cls, num):
+        """
+        Return a set of uniform margins.
+
+        :param num:
+            The uniform margin to apply to all four sides.
+        :return:
+            ``Margins(num, num, num, num)``
+        """
         return Margins(num, num, num, num)
 
     @staticmethod
     def effective(dim_name, container_len, pre, post):
+        """Internal helper method to compute effective margins."""
         eff = container_len - pre - post
         if eff < 0:
             raise LayoutError(
@@ -294,19 +329,41 @@ class Margins(ConfigurableMixin):
         return eff
 
     def effective_width(self, width):
+        """
+        Compute width without margins.
+
+        :param width:
+            The container width.
+        :return:
+            The width after subtracting the left and right margins.
+        :raises LayoutError:
+            if the container width is too short to accommodate the margins.
+        """
         return Margins.effective('width', width, self.left, self.right)
 
     def effective_height(self, height):
+        """
+        Compute height without margins.
+
+        :param height:
+            The container height.
+        :return:
+            The height after subtracting the top and bottom margins.
+        :raises LayoutError:
+            if the container height is too short to accommodate the margins.
+        """
         return Margins.effective('height', height, self.bottom, self.top)
 
 
 # TODO implement ConfigurableMixin for these parameters
 
-
-# TODO explain that this is about box alignment, not text alignment
-
 @dataclass(frozen=True)
 class SimpleBoxLayoutRule:
+    """
+    Class describing alignment, scaling and margin rules for a box
+    positioned inside another box.
+    """
+
     x_align: AxisAlignment
     """
     Horizontal alignment settings.
@@ -336,6 +393,20 @@ class SimpleBoxLayoutRule:
 
     def fit(self, container_box: BoxConstraints,
             inner_nat_width: int, inner_nat_height: int) -> Positioning:
+        """
+        Position and possibly scale a box within a container, according
+        to this layout rule.
+
+        :param container_box:
+            :class:`.BoxConstraints` describing the container.
+        :param inner_nat_width:
+            The inner box's natural width.
+        :param inner_nat_height:
+            The inner box's natural height.
+        :return:
+            A :class:`.Positioning` describing the scaling & position of the
+            lower left corner of the inner box.
+        """
 
         margins = self.margins
         scaling = self.inner_content_scaling
