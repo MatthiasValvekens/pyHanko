@@ -7,10 +7,9 @@ etc.) on top of already existing content in PDF files.
 The code in this module is also used by the :mod:`.sign` module to render
 signature appearances.
 """
-
+import enum
 import uuid
 from binascii import hexlify
-from fractions import Fraction
 from typing import Optional
 
 import qrcode
@@ -18,13 +17,14 @@ import tzlocal
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import rd
-from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
-from pyhanko.pdf_utils.text import TextBoxStyle, TextBox
-from pyhanko.pdf_utils.writer import init_xobject_dictionary
+from pyhanko.pdf_utils.text import TextBoxStyle, TextBox, DEFAULT_BOX_LAYOUT
+from pyhanko.pdf_utils.writer import (
+    init_xobject_dictionary, BasePdfFileWriter
+)
 from dataclasses import dataclass
 from datetime import datetime
 
-from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils import generic, layout
 from pyhanko.pdf_utils.generic import (
     pdf_name, pdf_string,
 )
@@ -34,8 +34,9 @@ from pyhanko.pdf_utils.qr import PdfStreamQRImage
 
 
 __all__ = [
-    "AnnotAppearances", "TextStampStyle", "QRStampStyle", "STAMP_ART_CONTENT",
+    "AnnotAppearances", "TextStampStyle", "QRStampStyle",  "QRPosition",
     "TextStamp", "QRStamp", "text_stamp_file", "qr_stamp_file",
+    "STAMP_ART_CONTENT",
 ]
 
 
@@ -99,6 +100,16 @@ class TextStampStyle(ConfigurableMixin):
     The text box style for the internal text box used.
     """
 
+    inner_content_layout: layout.SimpleBoxLayoutRule = None
+    """
+    Rule determining the position and alignment of the inner text box within
+    the stamp.
+    
+    .. warning::
+        This only affects the position of the box, not the alignment of the
+        text within.
+    """
+
     border_width: int = 3
     """
     Border width in user units (for the stamp, not the text box).
@@ -123,6 +134,19 @@ class TextStampStyle(ConfigurableMixin):
     """
     :class:`~.pdf_utils.content.PdfContent` instance that will be used to render
     the stamp's background.
+    """
+
+    background_layout: layout.SimpleBoxLayoutRule = layout.SimpleBoxLayoutRule(
+        x_align=layout.AxisAlignment.ALIGN_MID,
+        y_align=layout.AxisAlignment.ALIGN_MID,
+        margins=layout.Margins.uniform(5)
+    )
+    """
+    Layout rule to render the background inside the stamp's bounding box.
+    Only used if the background has a fully specified :attr:`PdfContent.box`.
+    
+    Otherwise, the renderer will position the cursor at
+    ``(left_margin, bottom_margin)`` and render the content as-is.
     """
 
     background_opacity: float = 0.6
@@ -172,6 +196,43 @@ class TextStampStyle(ConfigurableMixin):
             pass
 
 
+class QRPosition(enum.Enum):
+    """
+    QR positioning constants, with the corresponding default content layout
+    rule.
+    """
+
+    LEFT_OF_TEXT = layout.SimpleBoxLayoutRule(
+        x_align=layout.AxisAlignment.ALIGN_MIN,
+        y_align=layout.AxisAlignment.ALIGN_MID,
+    )
+    RIGHT_OF_TEXT = layout.SimpleBoxLayoutRule(
+        x_align=layout.AxisAlignment.ALIGN_MAX,
+        y_align=layout.AxisAlignment.ALIGN_MID,
+    )
+    ABOVE_TEXT = layout.SimpleBoxLayoutRule(
+        y_align=layout.AxisAlignment.ALIGN_MAX,
+        x_align=layout.AxisAlignment.ALIGN_MID,
+    )
+    BELOW_TEXT = layout.SimpleBoxLayoutRule(
+        y_align=layout.AxisAlignment.ALIGN_MIN,
+        x_align=layout.AxisAlignment.ALIGN_MID,
+    )
+
+    @property
+    def horizontal_flow(self):
+        return self in (QRPosition.LEFT_OF_TEXT, QRPosition.RIGHT_OF_TEXT)
+
+
+DEFAULT_QR_SCALE = 0.2
+"""
+If the layout & other bounding boxes don't impose another size requirement,
+render QR codes at ~20% of their natural size in QR canvas units. At scale 1,
+this produces codes of about 2cm x 2cm for a 25-module QR code, which is
+probably OK.
+"""
+
+
 @dataclass(frozen=True)
 class QRStampStyle(TextStampStyle):
     """
@@ -198,10 +259,18 @@ class QRStampStyle(TextStampStyle):
     This parameter will be replaced with the URL that the QR code points to.
     """
 
-    stamp_qrsize: float = 0.25
+    qr_inner_size: Optional[int] = None
     """
-    Indicates the proportion of the width of the stamp that should be taken up
-    by the QR code.
+    Size of the QR code in the inner layout. By default, this is in user units,
+    but if the stamp has a fully defined bounding box, it may be rescaled
+    depending on :attr:`inner_content_layout`.
+    
+    If unspecified, a reasonable default will be used.
+    """
+
+    qr_position: QRPosition = QRPosition.LEFT_OF_TEXT
+    """
+    Position of the QR code relative to the text box.
     """
 
 
@@ -211,99 +280,15 @@ class TextStamp(PdfContent):
     of :class:`.TextStampStyle`.
     """
 
-    def __init__(self, writer: IncrementalPdfFileWriter, style,
-                 text_params=None, box: BoxConstraints = None):
+    def __init__(self, writer: BasePdfFileWriter, style,
+                 text_params=None, box: layout.BoxConstraints = None):
         super().__init__(box=box, writer=writer)
         self.style = style
         self.text_params = text_params
         self._resources_ready = False
         self._stamp_ref = None
 
-        self.text_box = None
-        self.expected_text_width = None
-
-    def _init_text_box(self):
-        # if necessary, try to adjust the text box's bounding box
-        #  to the stamp's
-
-        box = self.box
-        expected_w = None
-        if box.width_defined:
-            expected_w = box.width - self.text_box_x()
-            self.expected_text_width = expected_w
-
-        expected_h = None
-        if box.height_defined:
-            expected_h = box.height - self.text_box_y()
-
-        box = None
-        if expected_h and expected_w:
-            # text boxes do not auto-scale their font size, so
-            # we have to take care of that
-            box = BoxConstraints(
-                aspect_ratio=Fraction(expected_w, expected_h)
-            )
-
-        self.text_box = TextBox(
-            self.style.text_box_style, writer=self.writer,
-            resources=self.resources, box=box
-        )
-
-    def extra_commands(self) -> list:
-        """
-        Render extra graphics commands to be used after painting the
-        inner text box, but before drawing the border.
-
-        :return:
-            A list of :class:`bytes` objects.
-        """
-        return []
-
-    def get_stamp_width(self) -> int:
-        """Compute the stamp's total width.
-
-        :return:
-            The width of the stamp in user units.
-        """
-
-        try:
-            return self.box.width
-        except BoxSpecificationError:
-            width = self.text_box_x() + self.text_box.box.width
-            self.box.width = width
-            return width
-
-    def get_stamp_height(self) -> int:
-        """Compute the stamp's total height.
-
-        :return:
-            The height of the stamp in user units.
-        """
-
-        try:
-            return self.box.height
-        except BoxSpecificationError:
-            height = self.box.height \
-                = self.text_box_y() + self.text_box.box.height
-            return height
-
-    def text_box_x(self) -> int:
-        """Text box x-coordinate.
-
-        :return:
-            The horizontal position of the internal text box's lower left
-            corner inside the stamp's bounding box.
-        """
-        return 0
-
-    def text_box_y(self):
-        """Text box y-coordinate.
-
-        :return:
-            The horizontal position of the internal text box's lower left
-            corner inside the stamp's bounding box.
-        """
-        return 0
+        self.text_box: Optional[TextBox] = None
 
     def get_default_text_params(self):
         """
@@ -320,82 +305,103 @@ class TextStamp(PdfContent):
             'ts': ts.strftime(self.style.timestamp_format),
         }
 
-    def render(self):
-        command_stream = [b'q']
-
-        # text rendering
-        self._init_text_box()
+    def _text_layout(self):
+        # Set the contents of the text box
+        self.text_box = tb = TextBox(
+            self.style.text_box_style, writer=self.writer,
+            resources=self.resources, box=None
+        )
         _text_params = self.get_default_text_params()
         if self.text_params is not None:
             _text_params.update(self.text_params)
         text = self.style.stamp_text % _text_params
-        self.text_box.content = text
+        tb.content = text
 
-        stamp_height = self.get_stamp_height()
-        stamp_width = self.get_stamp_width()
+        # Render the text box in its natural size, we'll deal with
+        # the minutiae later
+        return tb.render()
+
+    def _render_background(self):
 
         bg = self.style.background
-        if bg is not None:
-            # TODO this is one of the places where some more clever layout
-            #  engine would really help, since all of this is pretty ad hoc and
-            #  makes a number of non-obvious choices that would be better off
-            #  delegated to somewhere else.
-            bg.set_writer(self.writer)
+        bg.set_writer(self.writer)
 
-            # scale the background
-            bg_height = 0.9 * stamp_height
-            if bg.box.height_defined:
-                sf = bg_height / bg.box.height
-            else:
-                bg.box.height = bg_height
-                sf = 1
-            bg_y = 0.05 * stamp_height
-            bg_width = bg.box.width * sf
-            bg_x = 0
-            if bg_width <= stamp_width:
-                bg_x = (stamp_width - bg_width) // 2
-
-            # set opacity in graphics state
-            opacity = generic.FloatObject(self.style.background_opacity)
-            self.set_resource(
-                category=ResourceType.EXT_G_STATE,
-                name=pdf_name('/BackgroundGS'),
-                value=generic.DictionaryObject({
-                    pdf_name('/CA'): opacity, pdf_name('/ca'): opacity
-                })
+        bg_box = bg.box
+        if bg_box.width_defined and bg_box.height_defined:
+            # apply layout rule
+            positioning = self.style.background_layout.fit(
+                self.box, bg_box.width, bg_box.height
             )
-            command_stream.append(
-                b'q /BackgroundGS gs %g 0 0 %g %g %g cm %s Q' % (
-                    sf, sf, bg_x, bg_y, bg.render()
-                )
+        else:
+            # No idea about the background dimensions, so just use
+            # the left/bottom margins and hope for the best
+            positioning = layout.Positioning(
+                x_scale=1, y_scale=1,
+                x_pos=self.style.background_layout.left_margin,
+                y_pos=self.style.background_layout.top_margin
             )
-            self.import_resources(bg.resources)
 
-        tb = self.text_box
-        text_commands = tb.render()
-
-        text_scale = 1
-        if self.expected_text_width is not None and tb.box.width_defined:
-            text_scale = self.expected_text_width / tb.box.width
-
-        command_stream.append(
-            b'q %g 0 0 %g %g %g cm' % (
-                text_scale, text_scale,
-                self.text_box_x(), self.text_box_y()
-            )
+        # set opacity in graphics state
+        opacity = generic.FloatObject(self.style.background_opacity)
+        self.set_resource(
+            category=ResourceType.EXT_G_STATE,
+            name=pdf_name('/BackgroundGS'),
+            value=generic.DictionaryObject({
+                pdf_name('/CA'): opacity, pdf_name('/ca'): opacity
+            })
         )
-        command_stream.append(text_commands)
+
+        # Position & render the background
+        command = b'q /BackgroundGS gs %s %s Q' % (
+            positioning.as_cm(), bg.render()
+        )
+        # we do this after render(), just in case our background resource
+        # decides to pull in extra stuff during rendering
+        self.import_resources(bg.resources)
+        return command
+
+    def _inner_layout_natural_size(self):
+        # render text
+        text_commands = self._text_layout()
+
+        inn_box = self.text_box.box
+        return [text_commands], (inn_box.width, inn_box.height)
+
+    def _inner_content_layout_rule(self):
+        return self.style.inner_content_layout or DEFAULT_BOX_LAYOUT
+
+    def render(self):
+        command_stream = [b'q']
+
+        # compute the inner bounding box
+        inn_commands, (inn_width, inn_height) \
+            = self._inner_layout_natural_size()
+
+        inner_layout = self._inner_content_layout_rule()
+
+        bbox = self.box
+
+        # position the inner box
+        inn_position = inner_layout.fit(bbox, inn_width, inn_height)
+
+        # Now that the inner layout is done, the dimensions of our bounding
+        # box should all have been reified. Let's put in the background,
+        # if there is one
+        if self.style.background:
+            command_stream.append(self._render_background())
+
+        # put in the inner content
+        command_stream.append(b'q')
+        command_stream.append(inn_position.as_cm())
+        command_stream.extend(inn_commands)
         command_stream.append(b'Q')
 
-        # append additional drawing commands
-        command_stream.extend(self.extra_commands())
-
-        # draw border around stamp
-        command_stream.append(
-            b'%g w 0 0 %g %g re S' % (
-                self.style.border_width, stamp_width, stamp_height
+        # draw the border around the stamp
+        border_width = self.style.border_width
+        if border_width:
+            command_stream.append(
+                b'%g w 0 0 %g %g re S' % (border_width, bbox.width, bbox.height)
             )
-        )
         command_stream.append(b'Q')
         return b' '.join(command_stream)
 
@@ -465,63 +471,127 @@ class TextStamp(PdfContent):
 
 
 class QRStamp(TextStamp):
-    qr_default_width = 30
-    """
-    Default value for the QR code's width in user units.
-    This value is only used if the stamp's bounding box does not have a
-    defined width, in which case the :attr:`.QRStampStyle.stamp_qrsize`
-    attribute is unusable.
-    
-    You can safely override this attribute if you so desire.
-    """
 
-    def __init__(self, writer: IncrementalPdfFileWriter, url: str,
+    def __init__(self, writer: BasePdfFileWriter, url: str,
                  style: QRStampStyle, text_params=None,
-                 box: BoxConstraints = None):
+                 box: layout.BoxConstraints = None):
         super().__init__(writer, style, text_params=text_params, box=box)
         self.url = url
         self._qr_size = None
 
-    @property
-    def qr_size(self):
-        """
-        Compute the effective size of the QR code.
+    def _inner_content_layout_rule(self):
+        style = self.style
+        if style.inner_content_layout is not None:
+            return style.inner_content_layout
 
-        :return:
-            The size of the QR code in user units.
-        """
-        if self._qr_size is None:
-            style = self.style
-            if self.box.width_defined:
-                width = style.stamp_qrsize * self.box.width
-            else:
-                width = self.qr_default_width
+        # choose a reasonable default based on the QR code's relative position
+        return style.qr_position.value
 
-            if self.box.height_defined:
-                # in this case, the box might not be high enough to contain
-                # the full QR code
-                height = self.box.height
-                size = min(width,  height - 2 * style.innsep)
-            else:
-                size = width
-            self._qr_size = size
-        return self._qr_size
+    def _inner_layout_natural_size(self):
 
-    def extra_commands(self):
+        text_commands, (text_width, text_height) \
+            = super()._inner_layout_natural_size()
+
         qr_ref, natural_qr_size = self._qr_xobject()
         self.set_resource(
             category=ResourceType.XOBJECT, name=pdf_name('/QR'),
             value=qr_ref
         )
-        height = self.get_stamp_height()
-        qr_y_sep = (height - self.qr_size) // 2
-        qr_scale = self.qr_size / natural_qr_size
-        # paint the QR code, translated and with y axis inverted
-        draw_qr_command = b'q %g 0 0 -%g %g %g cm /QR Do Q' % (
-            rd(qr_scale), rd(qr_scale), rd(self.style.innsep),
-            rd(height - qr_y_sep),
+
+        style = self.style
+        stamp_box = self.box
+
+        # To size the QR code, we proceed as follows:
+        #  - If qr_inner_size is not None, use it
+        #  - If the stamp has a fully defined bbox already,
+        #    make sure it fits within the innseps, and it's not too much smaller
+        #    than the text box
+        #  - Else, scale down by DEFAULT_QR_SCALE and use that value
+        #
+        # Note: if qr_inner_size is defined AND the stamp bbox is available
+        # already, scaling might still take effect depending on the inner layout
+        # rule.
+        innsep = style.innsep
+        if style.qr_inner_size is not None:
+            qr_size = style.qr_inner_size
+        elif stamp_box.width_defined and stamp_box.height_defined:
+            # ensure that the QR code doesn't shrink too much if the text
+            # box is too tall.
+            min_dim = min(
+                max(stamp_box.height, text_height),
+                max(stamp_box.width, text_width)
+            )
+            qr_size = min_dim - 2 * innsep
+        else:
+            qr_size = int(round(DEFAULT_QR_SCALE * natural_qr_size))
+
+        qr_innunits_scale = qr_size / natural_qr_size
+        qr_padded = qr_size + 2 * innsep
+        # Next up: put the QR code and the text box together to get the
+        # inner layout bounding box
+        if style.qr_position.horizontal_flow:
+            inn_width = qr_padded + text_width
+            inn_height = max(qr_padded, text_height)
+        else:
+            inn_width = max(qr_padded, text_width)
+            inn_height = qr_padded + text_height
+        # grab the base layout rule from the QR position setting
+        default_layout: layout.SimpleBoxLayoutRule = style.qr_position.value
+
+        # Fill in the margins
+        qr_layout_rule = layout.SimpleBoxLayoutRule(
+            x_align=default_layout.x_align, y_align=default_layout.y_align,
+            margins=layout.Margins.uniform(innsep),
+            # There's no point in scaling here, the inner content canvas
+            # is always big enough
+            inner_content_scaling=layout.InnerScaling.NO_SCALING
         )
-        return [draw_qr_command]
+
+        inner_box = layout.BoxConstraints(inn_width, inn_height)
+        qr_inn_pos = qr_layout_rule.fit(inner_box, qr_size, qr_size)
+
+        # we still need to take the axis reversal into account
+        # (which also implies an adjustment in the y displacement)
+        draw_qr_command = b'q %g 0 0 %g %g %g cm /QR Do Q' % (
+            qr_inn_pos.x_scale * qr_innunits_scale,
+            -qr_inn_pos.y_scale * qr_innunits_scale,
+            qr_inn_pos.x_pos, qr_inn_pos.y_pos + qr_size,
+        )
+
+        # Time to put in the text box now
+        if style.qr_position == QRPosition.LEFT_OF_TEXT:
+            tb_margins = layout.Margins(
+                left=qr_padded, right=0, top=0, bottom=0
+            )
+        elif style.qr_position == QRPosition.RIGHT_OF_TEXT:
+            tb_margins = layout.Margins(
+                right=qr_padded, left=0, top=0, bottom=0
+            )
+        elif style.qr_position == QRPosition.BELOW_TEXT:
+            tb_margins = layout.Margins(
+                bottom=qr_padded, right=0, left=0, top=0
+            )
+        else:
+            tb_margins = layout.Margins(
+                top=qr_padded, right=0, left=0, bottom=0
+            )
+
+        tb_layout_rule = layout.SimpleBoxLayoutRule(
+            # flip around the alignment conventions of the default layout
+            # to position the text box on the other side
+            x_align=default_layout.x_align.flipped,
+            y_align=default_layout.y_align.flipped,
+            margins=tb_margins,
+            inner_content_scaling=layout.InnerScaling.NO_SCALING
+        )
+
+        # position the text box
+        text_inn_pos = tb_layout_rule.fit(inner_box, text_width, text_height)
+
+        commands = [draw_qr_command, b'q', text_inn_pos.as_cm()]
+        commands.extend(text_commands)
+        commands.append(b'Q')
+        return commands, (inn_width, inn_height)
 
     def _qr_xobject(self):
         qr = qrcode.QRCode()
@@ -537,22 +607,6 @@ class QRStamp(TextStamp):
         )
         qr_xobj.compress()
         return self.writer.add_object(qr_xobj), bbox_size
-
-    def text_box_x(self):
-        return 2 * self.style.innsep + self.qr_size
-
-    def get_stamp_height(self):
-        try:
-            return self.box.height
-        except BoxSpecificationError:
-            style = self.style
-            # if the box does not define a height
-            # height is determined by the height of the text,
-            # or the QR code, whichever is greater
-            text_height = self.text_box.box.height
-            height = max(text_height, self.qr_size + 2 * style.innsep)
-            self.box.height = height
-            return height
 
     def get_default_text_params(self):
         tp = super().get_default_text_params()
@@ -647,7 +701,7 @@ def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
 
 
 STAMP_ART_CONTENT = RawContent(
-    box=BoxConstraints(width=100, height=100),
+    box=layout.BoxConstraints(width=100, height=100),
     data=b'''
 q 1 0 0 -1 0 100 cm 
 0.603922 0.345098 0.54902 rg

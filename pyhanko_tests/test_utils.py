@@ -12,7 +12,6 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils import writer, generic, misc
-from fontTools import ttLib
 from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
 from pyhanko.pdf_utils.content import (
     ResourceType, PdfResources, ResourceManagementError
@@ -66,17 +65,21 @@ NOTO_SERIF_JP = 'pyhanko_tests/data/fonts/NotoSerifJP-Regular.otf'
 
 
 def test_embed_subset():
-    ffile = ttLib.TTFont(NOTO_SERIF_JP)
-    ga = GlyphAccumulator(ffile)
-    cid_hx, _ = ga.feed_string('版')
-    assert cid_hx == '66eb'
-    cid_hx, _ = ga.feed_string('テスト版')
-    assert cid_hx == '0637062a063966eb'
+    with open(NOTO_SERIF_JP, 'rb') as ffile:
+        ga = GlyphAccumulator(ffile, font_size=10)
+    res, _ = ga.shape('版')
+    assert b'[<66eb>] TJ' in res
+    res, _ = ga.shape('テスト版')
+    assert b'[<0637> 40 <062a063966eb>] TJ' in res
+
+    # check the 'ffi' ligature
+    res, _ = ga.shape('difficult')
+    assert b'[<0045004ae9e200440056004d0055>] TJ' in res
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     font_ref = ga.embed_subset(w)
     df = font_ref.get_object()['/DescendantFonts'][0].get_object()
     font_file = df['/FontDescriptor']['/FontFile3']
-    assert len(font_file.data) == 1919
+    assert len(font_file.data) == 3029
 
 
 def test_add_stream():
@@ -155,10 +158,14 @@ def test_add_stream_to_direct_arr():
 
 
 def test_write_embedded_string():
-    ffile = ttLib.TTFont(NOTO_SERIF_JP)
-    ga = GlyphAccumulator(ffile)
-    cid_hx, _ = ga.feed_string('テスト')
-    assert cid_hx == '0637062a0639'
+    with open(NOTO_SERIF_JP, 'rb') as ffile:
+        ga = GlyphAccumulator(ffile, font_size=10)
+    # shape the string, just to register the glyphs as used
+    ga.shape('テスト')
+    # ... but we're not going to use the result
+
+    # hardcoded CIDs
+    cid_hx = '0637062a0639'
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     font_ref = ga.embed_subset(w)
     stream = generic.StreamObject(
@@ -202,10 +209,14 @@ def test_mildly_malformed_xref_read():
 
 
 def test_write_embedded_string_objstream():
-    ffile = ttLib.TTFont(NOTO_SERIF_JP)
-    ga = GlyphAccumulator(ffile)
-    cid_hx, _ = ga.feed_string('テスト')
-    assert cid_hx == '0637062a0639'
+    with open(NOTO_SERIF_JP, 'rb') as ffile:
+        ga = GlyphAccumulator(ffile, font_size=10)
+    # shape the string, just to register the glyphs as used
+    ga.shape('テスト')
+    # ... but we're not going to use the result
+
+    # hardcoded CIDs
+    cid_hx = '0637062a0639'
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_XREF))
     obj_stream = w.prepare_object_stream()
     font_ref = ga.embed_subset(w, obj_stream=obj_stream)
