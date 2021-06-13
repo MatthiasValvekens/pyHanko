@@ -7,7 +7,8 @@ from fractions import Fraction
 from typing import Optional
 
 __all__ = [
-    'BoxSpecificationError', 'BoxConstraints', 'AxisAlignment',
+    'LayoutError', 'BoxSpecificationError', 'BoxConstraints',
+    'AxisAlignment', 'Margins', 'InnerScaling',
     'SimpleBoxLayoutRule', 'Positioning'
 ]
 
