@@ -1,7 +1,9 @@
-pyhanko.pdf\_utils.font module
-==============================
+pyhanko.pdf\_utils.font package
+===============================
 
-.. automodule:: pyhanko.pdf_utils.font
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 4
+
+   pyhanko.pdf_utils.font.api
+   pyhanko.pdf_utils.font.basic
+   pyhanko.pdf_utils.font.opentype

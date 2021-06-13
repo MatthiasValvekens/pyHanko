@@ -7,12 +7,12 @@ from io import BytesIO
 
 import pytz
 
-from pyhanko.pdf_utils.generic import Reference
+from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils import writer, generic, misc
-from pyhanko.pdf_utils.font import GlyphAccumulator, pdf_name
+from pyhanko.pdf_utils.font import GlyphAccumulator
 from pyhanko.pdf_utils.content import (
     ResourceType, PdfResources, ResourceManagementError
 )

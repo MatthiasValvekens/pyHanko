@@ -7,8 +7,8 @@ import pytz
 from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.content import RawContent
-from pyhanko.pdf_utils.font import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import (

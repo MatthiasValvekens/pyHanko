@@ -1,12 +1,7 @@
-"""Basic support for font handling & subsetting.
+"""Basic support for OpenType/TrueType font handling & subsetting.
 
 This module relies on `fontTools <https://pypi.org/project/fonttools/>`_ for
-OTF parsing and subsetting.
-
-.. warning ::
-    If/when support is added for more advanced typographical features, the
-    general :class:`FontEngine` interface might change.
-
+OTF parsing and subsetting, and on HarfBuzz (via ``uharfbuzz``) for shaping.
 """
 import logging
 from dataclasses import dataclass
@@ -16,6 +11,7 @@ from binascii import hexlify
 from pyhanko.pdf_utils import generic
 from fontTools import ttLib, subset
 
+from pyhanko.pdf_utils.font.api import ShapeResult, FontEngine
 from pyhanko.pdf_utils.misc import peek
 
 import uharfbuzz as hb
@@ -23,10 +19,7 @@ import uharfbuzz as hb
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 
-__all__ = [
-    'FontEngine', 'SimpleFontEngine', 'GlyphAccumulator',
-    'GlyphAccumulatorFactory', 'ShapeResult'
-]
+__all__ = ['GlyphAccumulator', 'GlyphAccumulatorFactory']
 
 # TODO: the holy grail would be to integrate PDF font resource management
 #  and rendering with a battle-tested text layout engine like Pango.
@@ -38,21 +31,6 @@ logger = logging.getLogger(__name__)
 pdf_name = generic.NameObject
 pdf_string = generic.pdf_string
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-
-
-@dataclass(frozen=True)
-class ShapeResult:
-    """Result of shaping a Unicode string."""
-    graphics_ops: bytes
-    """
-    PDF graphics operators to render the glyphs.
-    """
-
-    x_advance: float
-    """Total horizontal advance in em units."""
-
-    y_advance: float
-    """Total vertical advance in em units."""
 
 
 def generate_subset_prefix():
@@ -295,92 +273,6 @@ def _segment_cmap(mappings):
         yield from _emit()
 
 
-class FontEngine:
-    """General interface for text shaping and font metrics."""
-
-    @property
-    def uses_complex_positioning(self):
-        """
-        If ``True``, this font engine expects the line matrix to always be equal
-        to the text matrix when exiting and entering :meth:`shape`.
-        In other words, the current text position is where ``0 0 Td`` would
-        move to.
-
-        If ``False``, this method does not use any text positioning operators,
-        and therefore uses the PDF standard's 'natural' positioning rules
-        for text showing operators.
-
-        The default is ``True`` unless overridden.
-        """
-        return True
-
-    def shape(self, txt: str) -> ShapeResult:
-        """Render a string to a format suitable for inclusion in a content
-        stream and measure its total cursor advancement vector in em units.
-
-        :param txt:
-            String to shape.
-        :return:
-            A shaping result.
-        """
-        raise NotImplementedError
-
-    def as_resource(self) -> generic.DictionaryObject:
-        """Convert a :class:`.FontEngine` to a PDF object suitable for embedding
-        inside a resource dictionary.
-
-        :return:
-            A PDF dictionary.
-        """
-        raise NotImplementedError
-
-
-# FIXME replace with something that knows the metrics for the standard PDF fonts
-class SimpleFontEngine(FontEngine):
-    """
-    Simplistic font engine that only works with PDF standard fonts, and
-    does not care about font metrics. Best used with monospaced fonts such
-    as Courier.
-    """
-
-    @property
-    def uses_complex_positioning(self):
-        return False
-
-    @staticmethod
-    def default_engine():
-        """
-        :return:
-            A :class:`.FontEngine` instance representing the Courier
-            standard font.
-        """
-        return SimpleFontEngine('Courier', 0.6)
-
-    def __init__(self, name, avg_width):
-        self.avg_width = avg_width
-        self.name = name
-
-    def shape(self, txt) -> ShapeResult:
-        ops = f'({txt}) Tj'.encode('latin1')
-        total_len = len(txt) * self.avg_width
-
-        return ShapeResult(
-            graphics_ops=ops, x_advance=total_len,
-            y_advance=0
-        )
-
-    def as_resource(self):
-        # assume that self.font is the name of a PDF standard font
-        # TODO enforce that
-        font_dict = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/Font'),
-            pdf_name('/BaseFont'): pdf_name('/' + self.name),
-            pdf_name('/Subtype'): pdf_name('/Type1'),
-            pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
-        })
-        return font_dict
-
-
 def _check_ot_tag(tag):
     if tag is None:
         return
@@ -395,10 +287,10 @@ def _check_ot_tag(tag):
 
 class GlyphAccumulator(FontEngine):
     """
-    Utility to collect & measure glyphs from TrueType fonts.
+    Utility to collect & measure glyphs from OpenType/TrueType fonts.
 
     .. warning::
-        This utility class ignores all positioning & substition information
+        This utility class ignores all positioning & substitution information
         in the font file, other than glyph width/height.
         In particular, features such as kerning, ligatures, complex script
         support and regional substitution will not work out of the box.
@@ -413,6 +305,7 @@ class GlyphAccumulator(FontEngine):
         File-like object
     :param font_size:
         Font size in pt units.
+
         .. note::
             This is only relevant for some positioning intricacies (or hacks,
             depending on your perspective) that may not matter for your use
@@ -707,7 +600,7 @@ class CIDFont(generic.DictionaryObject):
                 nr = next(nr for nr in name_table.names if nr.nameID == 6)
                 if nr.encodingIsUnicodeCompatible():
                     ps_name = nr.string.decode('utf-16be')
-            except StopIteration:
+            except StopIteration:  # pragma: nocover
                 ps_name = None
 
         if ps_name is None:
@@ -753,7 +646,7 @@ class CIDFontType0(CIDFont):
         td = cff[0]
         try:
             registry, ordering, supplement = td.ROS
-        except (AttributeError, ValueError):
+        except (AttributeError, ValueError):  # pragma: nocover
             # XXX If these attributes aren't present, chances are that the
             # font won't work regardless.
             logger.warning("No ROS metadata. Is this really a CIDFont?")

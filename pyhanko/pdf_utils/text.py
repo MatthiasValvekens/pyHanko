@@ -4,8 +4,9 @@ from dataclasses import dataclass, field
 from typing import Union, Callable
 
 from pyhanko.pdf_utils.font import (
-    FontEngine, SimpleFontEngine, GlyphAccumulator, GlyphAccumulatorFactory
+    SimpleFontEngine, GlyphAccumulator, GlyphAccumulatorFactory
 )
+from pyhanko.pdf_utils.font.api import FontEngine
 from pyhanko.pdf_utils.generic import (
     pdf_name,
 )
