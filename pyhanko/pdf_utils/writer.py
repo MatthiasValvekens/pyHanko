@@ -12,7 +12,7 @@ from typing import List, Union, Optional, Tuple
 
 from asn1crypto import x509
 
-from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils import generic, content
 from pyhanko.pdf_utils.crypt import (
     SecurityHandler, StandardSecurityHandler,
     PubKeySecurityHandler,
@@ -797,6 +797,156 @@ class BasePdfFileWriter(PdfHandler):
             )
 
         return self.add_object(result)
+
+    # TODO these can be simplified considerably using the new update_container
+    def add_stream_to_page(self, page_ix, stream_ref, resources=None,
+                           prepend=False):
+        """Append an indirect stream object to a page in a PDF as a content
+        stream.
+
+        :param page_ix:
+            Index of the page to modify.
+            The first page has index `0`.
+        :param stream_ref:
+            :class:`~.generic.IndirectObject` reference to the stream
+            object to add.
+        :param resources:
+            Resource dictionary containing resources to add to the page's
+            existing resource dictionary.
+        :param prepend:
+            Prepend the content stream to the list of content streams, as
+            opposed to appending it to the end.
+            This has the effect of causing the stream to be rendered
+            underneath the already existing content on the page.
+        :return:
+            An :class:`~.generic.IndirectObject` reference to the page object
+            that was modified.
+        """
+
+        page_obj_ref, res_ref = self.find_page_for_modification(page_ix)
+
+        page_obj = page_obj_ref.get_object()
+
+        contents_ref = page_obj.raw_get('/Contents')
+
+        if isinstance(contents_ref, generic.IndirectObject):
+            contents = contents_ref.get_object()
+            if isinstance(contents, generic.ArrayObject):
+                # This is the easy case. It suffices to mark
+                # this array for an update, and append our stream to it.
+                self.mark_update(contents_ref)
+                if prepend:
+                    contents.insert(0, stream_ref)
+                else:
+                    contents.append(stream_ref)
+            elif isinstance(contents, generic.StreamObject):
+                # replace the old stream with an array containing
+                # a reference to the original stream, and our own stream.
+                new = [stream_ref, contents_ref] \
+                    if prepend else [contents_ref, stream_ref]
+                contents = generic.ArrayObject(new)
+                page_obj[pdf_name('/Contents')] = self.add_object(contents)
+                # mark the page to be updated as well
+                self.mark_update(page_obj_ref)
+            else:
+                raise ValueError('Unexpected type for page /Contents')
+        elif isinstance(contents_ref, generic.ArrayObject):
+            # make /Contents an indirect array, and append our stream
+            contents = contents_ref
+            if prepend:
+                contents.insert(0, stream_ref)
+            else:
+                contents.append(stream_ref)
+            page_obj[pdf_name('/Contents')] = self.add_object(contents)
+            self.mark_update(page_obj_ref)
+        else:
+            raise ValueError('Unexpected type for page /Contents')
+
+        if resources is None:
+            return
+
+        if isinstance(res_ref, generic.IndirectObject):
+            # we can get away with only updating this reference
+            orig_resource_dict = res_ref.get_object()
+            assert isinstance(orig_resource_dict, generic.DictionaryObject)
+            if self.merge_resources(orig_resource_dict, resources):
+                self.mark_update(res_ref)
+        else:
+            # don't bother trying to update the resource object, just
+            # clone it and add it to the current page object.
+            orig_resource_dict = generic.DictionaryObject(res_ref)
+            page_obj[pdf_name('/Resources')] = self.add_object(
+                orig_resource_dict
+            )
+            self.merge_resources(orig_resource_dict, resources)
+
+        return page_obj_ref
+
+    def add_content_to_page(self, page_ix, pdf_content: content.PdfContent,
+                            prepend=False):
+        """
+        Convenience wrapper around :meth:`add_stream_to_page` to turn a
+        :class:`~.content.PdfContent` instance into a page content stream.
+
+        :param page_ix:
+            Index of the page to modify.
+            The first page has index `0`.
+        :param pdf_content:
+            An instance of :class:`~.content.PdfContent`
+        :param prepend:
+            Prepend the content stream to the list of content streams, as
+            opposed to appending it to the end.
+            This has the effect of causing the stream to be rendered
+            underneath the already existing content on the page.
+        :return:
+            An :class:`~.generic.IndirectObject` reference to the page object
+            that was modified.
+        """
+        as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
+        return self.add_stream_to_page(
+            page_ix, self.add_object(as_stream),
+            resources=pdf_content.resources.as_pdf_object(), prepend=prepend
+        )
+
+    # TODO this doesn't really belong here
+    def merge_resources(self, orig_dict, new_dict) -> bool:
+        """
+        Update an existing resource dictionary object with data from another
+        one. Returns ``True`` if the original dict object was modified directly.
+
+        The caller is responsible for avoiding name conflicts with existing
+        resources.
+        """
+
+        update_needed = False
+        for key, value in new_dict.items():
+            try:
+                orig_value_ref = orig_dict.raw_get(key)
+            except KeyError:
+                update_needed = True
+                orig_dict[key] = value
+                continue
+
+            if isinstance(orig_value_ref, generic.IndirectObject):
+                orig_value = orig_value_ref.get_object()
+                self.mark_update(orig_value_ref)
+            else:
+                orig_value = orig_value_ref
+                update_needed = True
+
+            if isinstance(orig_value, generic.ArrayObject):
+                # the /ProcSet case
+                orig_value.extend(value)
+            elif isinstance(orig_value, generic.DictionaryObject):
+                for key_, value_ in value.items():
+                    if key_ in orig_value:
+                        raise ValueError(
+                            'Naming conflict in resource of type %s: '
+                            'key %s occurs in both.' % (key, key_)
+                        )
+                    orig_value[key_] = value_
+
+        return update_needed
 
 
 class PageObject(generic.DictionaryObject):
