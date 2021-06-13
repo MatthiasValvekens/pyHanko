@@ -13,6 +13,7 @@ CRYPTO_DATA_DIR = 'pyhanko_tests/data/crypto'
 PDF_DATA_DIR = 'pyhanko_tests/data/pdf'
 MINIMAL_PATH = PDF_DATA_DIR + '/minimal.pdf'
 MINIMAL = read_all(MINIMAL_PATH)
+EMPTY_A4 = read_all(PDF_DATA_DIR + '/empty-a4.pdf')
 MINIMAL_TWO_PAGES = read_all(PDF_DATA_DIR + '/minimal-two-pages.pdf')
 MINIMAL_XREF = read_all(PDF_DATA_DIR + '/minimal-xref.pdf')
 MINIMAL_ONE_FIELD = read_all(PDF_DATA_DIR + '/minimal-with-field.pdf')
