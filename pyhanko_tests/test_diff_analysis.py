@@ -255,7 +255,6 @@ def test_bogus_metadata_manipulation():
 
     def do_check():
         r = PdfFileReader(out)
-        print(r.get_object(generic.Reference(2, 0, r), revision=3).data)
         s = r.embedded_signatures[0]
         status = validate_pdf_signature(s)
         assert status.modification_level == ModificationLevel.OTHER

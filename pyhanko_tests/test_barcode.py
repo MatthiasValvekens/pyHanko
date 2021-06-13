@@ -7,7 +7,12 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils import barcodes, generic
 from pyhanko import stamp
+from pyhanko_tests.layout_test_utils import with_layout_comparison, \
+    compare_output
 from pyhanko_tests.samples import MINIMAL
+
+
+EXPECTED_OUTPUT_DIR = 'pyhanko_tests/data/pdf/layout-tests'
 
 
 @freeze_time('2020-11-01')
@@ -23,16 +28,7 @@ def test_qr_fixed_size():
     assert qr.text_box.box.width == 224
 
 
-def test_qr_natural_size():
-    writer = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    qrss = stamp.QRStampStyle()
-    qr = stamp.QRStamp(writer, 'https://example.com', qrss)
-    qr.as_form_xobject()
-    qr.apply(0, 10, 10)
-
-    assert qr.text_box_x() == qr.qr_default_width + 2 * qrss.innsep
-
-
+@with_layout_comparison
 def test_code128_render():
     writer = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     bb = barcodes.BarcodeBox("code128", "this is a test")
@@ -52,3 +48,5 @@ def test_code128_render():
 
     # TODO try to read back the code using some kind of barcode scanning
     #  library, perhaps.
+
+    compare_output(writer, f'{EXPECTED_OUTPUT_DIR}/code128-test.pdf')

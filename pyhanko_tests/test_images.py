@@ -47,7 +47,6 @@ def test_image_content_embed(infile):
     img_content = images.PdfImage(
         image=path, writer=w, opacity=0.6,
     )
-    img_content.box.height = 144
     w.add_content_to_page(0, img_content, prepend=True)
 
     w.write_in_place()

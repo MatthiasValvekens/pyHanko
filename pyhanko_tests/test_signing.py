@@ -29,7 +29,6 @@ from pyhanko.sign.ades.cades_asn1 import (
 )
 from pyhanko.pdf_utils import generic, embed
 from pyhanko.pdf_utils.generic import pdf_name
-from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.misc import PdfWriteError, PdfReadError
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import timestamps, fields, signers
@@ -552,23 +551,6 @@ def test_sign_field_infer():
             w, signers.PdfSignatureMetadata(), signer=FROM_CA,
             existing_fields_only=True
         )
-
-
-@freeze_time('2020-11-01')
-def test_sign_with_bitmap_bg():
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-
-    out = signers.PdfSigner(
-        signers.PdfSignatureMetadata(), signer=FROM_CA,
-        stamp_style=stamp.TextStampStyle(
-            background=PdfImage('pyhanko_tests/data/img/stamp-indexed.png'),
-        )
-    ).sign_pdf(w, existing_fields_only=True)
-
-    r = PdfFileReader(out)
-    s = r.embedded_signatures[0]
-    assert s.field_name == 'Sig1'
-    val_trusted(s)
 
 
 @freeze_time('2020-11-01')

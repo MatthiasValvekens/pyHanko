@@ -335,10 +335,10 @@ class TextStamp(PdfContent):
         else:
             # No idea about the background dimensions, so just use
             # the left/bottom margins and hope for the best
+            margins = self.style.background_layout.margins
             positioning = layout.Positioning(
                 x_scale=1, y_scale=1,
-                x_pos=self.style.background_layout.left_margin,
-                y_pos=self.style.background_layout.top_margin
+                x_pos=margins.left, y_pos=margins.bottom
             )
 
         # set opacity in graphics state

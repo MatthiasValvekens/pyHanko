@@ -67,14 +67,14 @@ NOTO_SERIF_JP = 'pyhanko_tests/data/fonts/NotoSerifJP-Regular.otf'
 def test_embed_subset():
     with open(NOTO_SERIF_JP, 'rb') as ffile:
         ga = GlyphAccumulator(ffile, font_size=10)
-    res, _ = ga.shape('版')
-    assert b'[<66eb>] TJ' in res
-    res, _ = ga.shape('テスト版')
-    assert b'[<0637> 40 <062a063966eb>] TJ' in res
+    res = ga.shape('版')
+    assert b'[<66eb>] TJ' in res.graphics_ops
+    res = ga.shape('テスト')
+    assert b'[<0637> 40 <062a0639>] TJ' in res.graphics_ops
 
     # check the 'ffi' ligature
-    res, _ = ga.shape('difficult')
-    assert b'[<0045004ae9e200440056004d0055>] TJ' in res
+    res = ga.shape('difficult')
+    assert b'[<0045004ae9e200440056004d0055>] TJ' in res.graphics_ops
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     font_ref = ga.embed_subset(w)
     df = font_ref.get_object()['/DescendantFonts'][0].get_object()

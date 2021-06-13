@@ -138,9 +138,7 @@ class PdfImage(PdfContent):
 
         if box is None:
             # assume square pixels
-            box = BoxConstraints(
-                aspect_ratio=Fraction(self.image.width, self.image.height)
-            )
+            box = BoxConstraints(self.image.width, self.image.height)
         super().__init__(resources, writer=writer, box=box)
         self._image_ref = None
 
