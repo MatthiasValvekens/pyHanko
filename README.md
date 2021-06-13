@@ -24,6 +24,11 @@ and can be installed using `pip`:
 
 This `pip` invocation includes the optional dependencies required for PKCS#11 and image support.
 
+Note: from version `0.7.0` onwards, support for TrueType and OpenType fonts will be made optional.
+This is because the reworked text processing code introduces a new binary dependency on HarfBuzz.
+The dependencies for working with OpenType fonts have been bundled under the `[opentype]` optional
+dependency group.
+
 
 ### Overview
 The code in this repository functions both as a library and as a command-line tool.

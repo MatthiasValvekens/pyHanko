@@ -21,8 +21,9 @@ setup(
     name='pyHanko',
     version=get_version(),
     packages=[
-        'pyhanko', 'pyhanko.pdf_utils', 'pyhanko.sign', 'pyhanko.sign.ades',
-        'pyhanko.pdf_utils.font'
+        'pyhanko',
+        'pyhanko.pdf_utils', 'pyhanko.pdf_utils.font',
+        'pyhanko.sign', 'pyhanko.sign.ades',
     ],
     url='https://github.com/MatthiasValvekens/pyHanko',
     license='MIT',
@@ -56,7 +57,6 @@ setup(
         'qrcode>=6.1',
         'tzlocal>=2.1',
         'pyhanko-certvalidator==0.15.1',
-        'fonttools>=4.13.0',
         'click>=7.1.2',
         'requests>=2.24.0',
         'pyyaml>=5.3.1',
@@ -67,6 +67,7 @@ setup(
     ],
     extras_require={
         'extra_pubkey_algs': ['oscrypto>=1.2.1'],
+        'opentype': ['fonttools>=4.13.0', 'uharfbuzz==0.16.1'],
         'image-support': [
             # Only tested systematically on 8.x,
             # but we allow 7.2.x to support system PIL on Ubuntu

@@ -9,14 +9,20 @@ from io import BytesIO
 from binascii import hexlify
 
 from pyhanko.pdf_utils import generic
-from fontTools import ttLib, subset
-
 from pyhanko.pdf_utils.font.api import ShapeResult, FontEngine
 from pyhanko.pdf_utils.misc import peek
-
-import uharfbuzz as hb
-
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
+
+try:
+    import uharfbuzz as hb
+    from fontTools import ttLib, subset
+except ImportError as import_err:  # pragma: nocover
+    raise ImportError(
+        "pyhanko.pdf_utils.font.opentype requires pyHanko to be installed with "
+        "the [opentype] option. You can install missing "
+        "dependencies by running \"pip install 'pyHanko[opentype]'\".",
+        import_err
+    )
 
 
 __all__ = ['GlyphAccumulator', 'GlyphAccumulatorFactory']
