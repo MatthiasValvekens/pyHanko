@@ -1,5 +1,5 @@
-from .api import *
-from .opentype import *
+from .api import ShapeResult, FontEngine
+from .opentype import GlyphAccumulator, GlyphAccumulatorFactory
 from .basic import SimpleFontEngine
 
 __all__ = [

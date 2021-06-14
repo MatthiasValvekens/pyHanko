@@ -17,7 +17,6 @@ The image data handling is done by
 """
 
 import uuid
-from fractions import Fraction
 
 from typing import Union
 
