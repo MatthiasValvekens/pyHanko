@@ -1,11 +1,13 @@
 import enum
 import logging
 from datetime import timedelta
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List, Iterable
 from dataclasses import dataclass
 
 import yaml
+from asn1crypto import x509
 
+from pyhanko.pdf_utils import config_utils
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.pdf_utils.config_utils import (
     check_config_keys, ConfigurationError
@@ -60,6 +62,7 @@ class CLIConfig:
     time_tolerance: timedelta
     retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
+    pcks11_setups: Dict[str, dict]
 
     # TODO graceful error handling for syntax & type issues?
 
@@ -117,6 +120,13 @@ class CLIConfig:
             raise ConfigurationError(e)
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
         return cls.from_config(style_config)
+
+    def get_pcks11_config(self, name):
+        try:
+            setup = self.pcks11_setups[name]
+        except KeyError:
+            raise ConfigurationError(f"There's no PKCS#11 setup named '{name}'")
+        return PKCS11SignatureConfig.from_config(setup)
 
 
 def init_validation_context_kwargs(*, trust, trust_replace, other_certs,
@@ -228,6 +238,88 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
     return log_config
 
 
+@dataclass(frozen=True)
+class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
+    """
+    Configuration for a PKCS#11 signature.
+
+    This class is used to load PKCS#11 setup information from YAML
+    configuration.
+    """
+
+    module_path: str
+    """Path to the PKCS#11 module shared object."""
+
+    token_label: str
+    """PKCS#11 token name"""
+
+    cert_label: str
+    """PKCS#11 label of the signer's certificate."""
+
+    other_certs: List[x509.Certificate] = None
+    """Other relevant certificates."""
+
+    key_label: Optional[str] = None
+    """
+    PKCS#11 label of the signer's private key, if different from
+    :attr:`cert_label`.
+    """
+
+    slot_no: Optional[int] = None
+    """
+    Slot number of the PKCS#11 slot to use.
+    """
+
+    user_pin: Optional[str] = None
+    """
+    The user's PIN. If unspecified, the user will be prompted for a PIN
+    if :attr:`prompt_pin` is ``True``.
+
+    .. warning::
+        Some PKCS#11 tokens do not allow the PIN code to be communicated in
+        this way, but manage their own authentication instead (the Belgian eID
+        middleware is one such example).
+        For such tokens, leave this setting set to ``None`` and additionally
+        set :attr:`prompt_pin` to ``False``.
+    """
+
+    prompt_pin: bool = True
+    """
+    Prompt for the user's PIN. Default is ``True``.
+
+    .. note::
+        If :attr:`user_pin` is not ``None``, this setting has no effect.
+    """
+
+    other_certs_to_pull: Optional[Iterable[str]] = ()
+    """
+    List labels of other certificates to pull from the PKCS#11 device.
+    Defaults to the empty tuple. If ``None``, pull *all* certificates.
+    """
+
+    bulk_fetch: bool = True
+    """
+    Boolean indicating the fetching strategy.
+    If ``True``, fetch all certs and filter the unneeded ones.
+    If ``False``, fetch the requested certs one by one.
+    Default value is ``True``, unless ``other_certs_to_pull`` has one or
+    fewer elements, in which case it is always treated as ``False``.
+    """
+
+    prefer_pss: bool = False
+    """
+    Prefer PSS to PKCS#1 v1.5 padding when creating RSA signatures.
+    """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
+        other_certs = config_dict.get('other_certs', ())
+        if isinstance(other_certs, str):
+            other_certs = (other_certs,)
+        config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
+
+
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
 DEFAULT_TIME_TOLERANCE = 10
 STAMP_STYLE_TYPES = {
@@ -261,6 +353,8 @@ def parse_cli_config(yaml_str):
     log_config_spec = config_dict.get('logging', {})
     log_config = parse_logging_config(log_config_spec)
 
+    pcks11_setups = config_dict.get('pkcs11-setups', {})
+
     # some misc settings
     default_vc = config_dict.get(
         'default-validation-context', DEFAULT_VALIDATION_CONTEXT
@@ -282,5 +376,5 @@ def parse_cli_config(yaml_str):
         validation_contexts=vcs, default_validation_context=default_vc,
         time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
-        log_config=log_config
+        log_config=log_config, pcks11_setups=pcks11_setups
     )

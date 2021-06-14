@@ -12,9 +12,11 @@ import logging
 from freezegun import freeze_time
 from pkcs11 import PKCS11Error
 
+from pyhanko.config import PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers, pkcs11
+from pyhanko.sign.pkcs11 import PKCS11SigningContext
 from pyhanko_tests.samples import MINIMAL
 from pyhanko_tests.test_signing import val_trusted, SIMPLE_ECC_V_CONTEXT
 
@@ -92,3 +94,21 @@ def test_simple_sign_ecdsa(bulk_fetch):
     assert emb.field_name == 'Sig1'
     val_trusted(emb, vc=SIMPLE_ECC_V_CONTEXT())
 
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+def test_simple_sign_from_config():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=pkcs11_test_module, token_label='testrsa',
+        cert_label='signer', user_pin='1234', other_certs_to_pull=None
+    )
+
+    with PKCS11SigningContext(config) as signer:
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)

@@ -10,6 +10,7 @@ import getpass
 import tzlocal
 from asn1crypto import pem, cms
 
+import pyhanko.config
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
@@ -892,66 +893,80 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     )
 
 
-def _sign_pkcs11(ctx, session, signer, infile, outfile, timestamp_url):
+def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
     with pyhanko_exception_manager():
-        with session:
-            if ctx.obj[Ctx.SIG_META] is None:
-                return detached_sig(
-                    signer, infile, outfile, timestamp_url=timestamp_url,
-                    use_pem=ctx.obj[Ctx.DETACH_PEM]
-                )
+        if ctx.obj[Ctx.SIG_META] is None:
+            return detached_sig(
+                signer, infile, outfile, timestamp_url=timestamp_url,
+                use_pem=ctx.obj[Ctx.DETACH_PEM]
+            )
 
-            if timestamp_url is not None:
-                timestamper = HTTPTimeStamper(timestamp_url)
-            else:
-                timestamper = None
+        if timestamp_url is not None:
+            timestamper = HTTPTimeStamper(timestamp_url)
+        else:
+            timestamper = None
 
-            with open(infile, 'rb') as inf:
-                generic_sign_pdf(
-                    writer=IncrementalPdfFileWriter(inf),
-                    outfile=outfile,
-                    signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
-                    timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
-                    new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-                    existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
-                    text_params=get_text_params(ctx)
-                )
-
-# TODO add options to specify extra certs to include
+        with open(infile, 'rb') as inf:
+            generic_sign_pdf(
+                writer=IncrementalPdfFileWriter(inf),
+                outfile=outfile,
+                signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
+                timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
+                new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+                existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
+                text_params=get_text_params(ctx)
+            )
 
 
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--lib', help='path to PKCS#11 module',
-              type=readable_file, required=True)
+              type=readable_file, required=False)
 @click.option('--token-label', help='PKCS#11 token label', type=str,
-              required=True)
-@click.option('--cert-label', help='certificate label', type=str, required=True)
+              required=False)
+@click.option('--cert-label', help='certificate label', type=str,
+              required=False)
 @click.option('--key-label', help='key label', type=str, required=False)
 @click.option('--slot-no', help='specify PKCS#11 slot to use',
               required=False, type=int, default=None)
 @click.option('--skip-user-pin', type=bool, show_default=True,
               default=False, required=False, is_flag=True,
               help='do not prompt for PIN (e.g. if the token has a PIN pad)')
+@click.option('--p11-setup', type=str, required=False,
+              help='name of preconfigured PKCS#11 profile (overrides all '
+                   'other options)')
 @click.pass_context
 def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
-                  cert_label, key_label, slot_no, skip_user_pin):
+                  cert_label, key_label, slot_no, skip_user_pin, p11_setup):
     from pyhanko.sign import pkcs11
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
-    if skip_user_pin:
-        user_pin = None
+    if p11_setup:
+        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        if cli_config is None:
+            raise click.ClickException(
+                "The --p11-setup option requires a configuration file"
+            )
+        try:
+            pkcs11_config = cli_config.get_pcks11_config(p11_setup)
+        except ConfigurationError as e:
+            msg = f"Error while reading PKCS#11 config {p11_setup}"
+            logger.error(msg, exc_info=e)
+            raise click.ClickException(msg)
     else:
-        user_pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
+        if not (lib and token_label and cert_label):
+            raise click.ClickException(
+                "The parameters --lib, --token-label and --cert-label "
+                "are required."
+            )
+        pkcs11_config = pyhanko.config.PKCS11SignatureConfig(
+            module_path=lib, cert_label=cert_label, key_label=key_label,
+            slot_no=slot_no, token_label=token_label,
+            prompt_pin=not skip_user_pin
+        )
 
-    session = pkcs11.open_pkcs11_session(
-        lib_location=lib, slot_no=slot_no, token_label=token_label,
-        user_pin=user_pin
-    )
-    signer = pkcs11.PKCS11Signer(
-        session, cert_label=cert_label, key_label=key_label,
-    )
-    _sign_pkcs11(ctx, session, signer, infile, outfile, timestamp_url)
+    with pkcs11.PKCS11SigningContext(pkcs11_config) as signer:
+        _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url)
 
 
 @click.argument('infile', type=readable_file)
@@ -970,7 +985,7 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     session = beid.open_beid_session(lib, slot_no=slot_no)
     with session:
         signer = beid.BEIDSigner(session, use_auth_cert=use_auth_cert)
-        _sign_pkcs11(ctx, session, signer, infile, outfile, timestamp_url)
+        _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url)
 
 
 def _pkcs11_cmd(name, hlp, fun):

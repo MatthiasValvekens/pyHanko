@@ -465,3 +465,23 @@ def test_read_retroactive_revinfo(config_string, result):
         assert 'retroactive_revinfo' not in vc_kwargs
     else:
         assert vc_kwargs['retroactive_revinfo']
+
+
+def test_read_pkcs11_config():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    setup = cli_config.get_pcks11_config('foo')
+    with pytest.raises(ConfigurationError):
+        cli_config.get_pcks11_config('bar')
+
+    assert setup.token_label == 'testrsa'
+    assert setup.module_path == '/path/to/libfoo.so'
+    assert len(setup.other_certs) == 2

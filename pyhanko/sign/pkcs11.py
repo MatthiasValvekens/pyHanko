@@ -3,10 +3,18 @@ This module provides PKCS#11 integration for pyHanko, by providing a wrapper
 for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
 seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
-
+import getpass
 import logging
 
 from asn1crypto.algos import RSASSAPSSParams
+
+from pyhanko.config import PKCS11SignatureConfig
+from typing import Set
+
+from asn1crypto import x509
+
+from pyhanko.sign.general import CertificateStore, SimpleCertificateStore
+from pyhanko.sign.signers import Signer
 
 try:
     from pkcs11 import (
@@ -19,14 +27,10 @@ except ImportError as e:  # pragma: nocover
         "dependencies by running \"pip install 'pyHanko[pkcs11]'\".", e
     )
 
-from typing import Set
 
-from asn1crypto import x509
-
-from pyhanko.sign.general import CertificateStore, SimpleCertificateStore
-from pyhanko.sign.signers import Signer
-
-__all__ = ['PKCS11Signer', 'open_pkcs11_session']
+__all__ = [
+    'PKCS11Signer', 'open_pkcs11_session', 'PKCS11SigningContext'
+]
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +126,7 @@ class PKCS11Signer(Signer):
         If ``True``, fetch all certs and filter the unneeded ones.
         If ``False``, fetch the requested certs one by one.
         Default value is ``True``, unless ``other_certs_to_pull`` has one or
-        fewer elements, in which case it is always ``False``.
+        fewer elements, in which case it is always treated as ``False``.
     """
 
     def __init__(self, pkcs11_session: Session,
@@ -287,3 +291,33 @@ class PKCS11Signer(Signer):
         self._key_handle = kh
 
         self._loaded = True
+
+
+class PKCS11SigningContext:
+    """Context manager for PKCS#11 configurations."""
+
+    def __init__(self, config: PKCS11SignatureConfig):
+        self.config = config
+        self._session = None
+
+    def __enter__(self):
+        config = self.config
+        pin = config.user_pin
+        if pin is None and config.prompt_pin:  # pragma: nocover
+            pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
+        pin = str(pin)
+
+        self._session = session = open_pkcs11_session(
+            config.module_path, slot_no=config.slot_no,
+            token_label=config.token_label,
+            user_pin=pin
+        )
+        return PKCS11Signer(
+            session, config.cert_label, ca_chain=config.other_certs,
+            key_label=config.key_label, prefer_pss=config.prefer_pss,
+            other_certs_to_pull=config.other_certs_to_pull,
+            bulk_fetch=config.bulk_fetch
+        )
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._session.close()
