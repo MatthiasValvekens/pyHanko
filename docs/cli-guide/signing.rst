@@ -213,17 +213,44 @@ certificates found in the PKCS#12 archive passed in.
     The default appearance of a (visible) signature in pyHanko.
 
 
-Signing a PDF file using a Belgian eID card
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Signing a PDF file using a PKCS#11 token
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 PyHanko also supports creating signatures using PKCS#11 devices.
-In this section, we explain how that works for Belgian eID cards, but the
-general workflow for PKCS#11 devices using the ``pkcs11`` subcommand
-is very similar (you only have to specify the key/certificate labels yourself).
+In order to do so, you'll need the following information:
+
+ - The path to the PKCS#11 module, which is typically a shared object library (``.so``, ``.dll``
+   or ``.dylib``, depending on your operating system)
+
+ - The label of the PKCS#11 token you're accessing.
+
+ - The PKCS#11 label(s) of the certificate and key you're using, stored in the token.
+   If the key and certificate labels are the same, you can omit the key label.
+
+Most of these settings can be stored in the configuration file as well, see
+:ref:`pkcs11-setup-conf`.
+
+With this information, producing a basic signature isn't very hard:
+
+.. code-block:: bash
+
+    pyhanko sign addsig pkcs11 --lib /path/to/module.so \
+        --token-label testrsa --cert-label signer document.pdf output.pdf
+
+Have a look at ``pyhanko sign addsig pkcs11 --help`` for a full list of options.
+
+
+Signing a PDF file using a Belgian eID card
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To sign a PDF file using your eID card, use the ``beid`` subcommand to
 ``addsig``, with the ``--lib`` parameter to tell pyHanko where to look for the
 eID PKCS#11 library.
+
+.. note::
+    Of course, you can also use the ``pkcs11`` subcommand, but ``beid`` provides an extra layer
+    of convenience.
+
 On Linux, it is named ``libbeidpkcs11.so`` and can usually be found under
 ``/usr/lib`` or ``/usr/local/lib``.
 On macOS, it is named ``libbeidpkcs11.dylib``, and can similarly be found under

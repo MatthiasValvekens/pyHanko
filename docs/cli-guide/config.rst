@@ -114,6 +114,56 @@ the ``default-validation-context`` top-level key, like so:
             trust-replace: false
 
 
+.. _pkcs11-setup-conf:
+
+Named PKCS#11 setups
+--------------------
+
+.. versionadded:: 0.7.0
+
+Since the CLI parameters for signing files with a PKCS#11 token can get quite verbose, you might
+want to put the parameters in the configuration file. You can declare named PKCS#11 setups under the
+``pkcs11-setups`` top-level key in pyHanko's configuration. Here's a minimal example:
+
+.. code-block:: yaml
+
+    pkcs11-setups:
+        test-setup:
+            module-path: /usr/lib/libsofthsm2.so
+            token-label: testrsa
+            cert-label: signer
+
+If you need to, you can also put the user PIN right in the configuration:
+
+.. code-block:: yaml
+
+    pkcs11-setups:
+        test-setup:
+            module-path: /usr/lib/libsofthsm2.so
+            token-label: testrsa
+            cert-label: signer
+            user-pin: 1234
+
+.. danger::
+    If you do this, you should obviously take care to keep your configuration file in a safe place.
+
+
+To use a named PKCS#11 configuration from the command line, invoke pyHanko like this:
+
+.. code-block:: bash
+
+    pyhanko sign addsig pkcs11 --p11-setup test-setup input.pdf output.pdf
+
+For a full overview of the parameters you can set on a PKCS#11 configuration, see the API reference
+documentation for :class:`~pyhanko.config.PKCS11SignatureConfig`.
+
+
+.. note::
+    Using the ``--p11-setup`` argument to ``pkcs11`` will cause pyHanko to ignore all other
+    parameters to the ``pkcs11`` subcommand. In other words, you have to put everything in the
+    configuration.
+
+
 .. _key-usage-conf:
 
 Key usage settings
