@@ -10,11 +10,11 @@ import getpass
 import tzlocal
 from asn1crypto import pem, cms
 
-import pyhanko.config
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
-    CLIConfig, LogConfig, StdLogOutput, parse_logging_config
+    CLIConfig, LogConfig, StdLogOutput, parse_logging_config,
+    PKCS11SignatureConfig
 )
 from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
@@ -959,7 +959,7 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
                 "The parameters --lib, --token-label and --cert-label "
                 "are required."
             )
-        pkcs11_config = pyhanko.config.PKCS11SignatureConfig(
+        pkcs11_config = PKCS11SignatureConfig(
             module_path=lib, cert_label=cert_label, key_label=key_label,
             slot_no=slot_no, token_label=token_label,
             prompt_pin=not skip_user_pin
