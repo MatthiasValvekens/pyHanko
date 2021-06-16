@@ -303,6 +303,18 @@ class BasePdfFileWriter(PdfHandler):
         else:
             self._info = info
 
+        self._font_resources = {}
+
+    def get_subset_collection(self, base_postscript_name: str):
+        from .font.api import FontSubsetCollection
+        try:
+            fsc = self._font_resources[base_postscript_name]
+        except KeyError:
+            fsc = FontSubsetCollection(base_postscript_name)
+            self._font_resources[base_postscript_name] = fsc
+
+        return fsc
+
     def ensure_output_version(self, version):
         if self.output_version < version:
             self.output_version = version
@@ -530,6 +542,11 @@ class BasePdfFileWriter(PdfHandler):
         self._write(stream)
 
     def _write(self, stream, skip_header=False):
+
+        # ensure that all font resources are flushed
+        for fsc in self._font_resources.values():
+            for engine in fsc.subsets.values():
+                engine.prepare_write()
 
         object_positions = {}
 

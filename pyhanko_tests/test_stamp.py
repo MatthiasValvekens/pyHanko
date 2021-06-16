@@ -1,11 +1,10 @@
-from io import BytesIO
 from pathlib import Path
 
 import pytest
 
 from pyhanko.pdf_utils import layout, writer, generic
 from pyhanko.pdf_utils.content import RawContent
-from pyhanko.pdf_utils.font import GlyphAccumulatorFactory, GlyphAccumulator
+from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.text import TextBoxStyle
 from .samples import *
@@ -94,14 +93,13 @@ def test_arabic_box():
 @pytest.mark.parametrize('fixed_size', [True, False])
 def test_four_qr_stamps(fixed_size):
     # Share a font subset, the text is the same everywhere
-    with open(NOTO_SANS, 'rb') as ns_in:
-        ga = GlyphAccumulator(BytesIO(ns_in.read()), font_size=10)
+    gaf = GlyphAccumulatorFactory(NOTO_SANS, font_size=10)
     w = empty_page()
     positions = ((10, 700), (10, 500), (10, 10), (260, 10))
     for qr_pos, (x, y) in zip(QRPosition, positions):
         style = QRStampStyle(
             stamp_text='Test stamp text\nAnother line of text',
-            text_box_style=TextBoxStyle(font=ga),
+            text_box_style=TextBoxStyle(font=gaf),
             qr_position=qr_pos, background=STAMP_ART_CONTENT,
             background_opacity=0.4
         )
@@ -122,17 +120,16 @@ def test_four_qr_stamps(fixed_size):
 
 @with_layout_comparison
 def test_japanese_vertical_text_stamp():
-    with open(NOTO_SERIF_JP, 'rb') as ns_in:
-        ga = GlyphAccumulator(
-            BytesIO(ns_in.read()), font_size=10, writing_direction='ttb'
-        )
+    gaf = GlyphAccumulatorFactory(
+        NOTO_SERIF_JP, font_size=10, writing_direction='ttb'
+    )
     w = empty_page()
     style = QRStampStyle(
         stamp_text=(
             'テスト\n縦書きテスト\n改行してみましょう（括弧）\nPDF\n'
             'ちょっと長めの文を書いてみた。'
         ),
-        text_box_style=TextBoxStyle(font=ga, vertical_text=True),
+        text_box_style=TextBoxStyle(font=gaf, vertical_text=True),
         qr_position=QRPosition.ABOVE_TEXT,
         background=STAMP_ART_CONTENT,
         background_opacity=0.4

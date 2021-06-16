@@ -1,8 +1,7 @@
-from .api import ShapeResult, FontEngine
-from .opentype import GlyphAccumulator, GlyphAccumulatorFactory
-from .basic import SimpleFontEngine
+from .api import ShapeResult, FontEngine, FontEngineFactory
+from .basic import SimpleFontEngine, SimpleFontEngineFactory
 
 __all__ = [
-    'ShapeResult', 'FontEngine',
-    'SimpleFontEngine', 'GlyphAccumulator', 'GlyphAccumulatorFactory',
+    'ShapeResult', 'FontEngine', 'SimpleFontEngine', 'SimpleFontEngineFactory',
+    'FontEngineFactory'
 ]

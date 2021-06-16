@@ -1,8 +1,41 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional, Dict
 
 from pyhanko.pdf_utils import generic
 
-__all__ = ['ShapeResult', 'FontEngine']
+__all__ = [
+    'ShapeResult', 'FontEngine', 'FontSubsetCollection', 'FontEngineFactory'
+]
+
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
+
+
+ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+
+def generate_subset_prefix():
+    import random
+    return ''.join(ALPHABET[random.randint(0, 25)] for _ in range(6))
+
+
+@dataclass(frozen=True)
+class FontSubsetCollection:
+
+    base_postscript_name: str
+    """
+    Base postscript name of the font.
+    """
+
+    subsets: Dict[Optional[str], 'FontEngine'] = field(default_factory=dict)
+    """
+    Dictionary mapping prefixes to subsets. ``None`` represents the full font.
+    """
+
+    def add_subset(self) -> str:
+        while True:
+            prefix = generate_subset_prefix()
+            if prefix not in self.subsets:
+                return prefix
 
 
 @dataclass(frozen=True)
@@ -22,6 +55,17 @@ class ShapeResult:
 
 class FontEngine:
     """General interface for text shaping and font metrics."""
+
+    def __init__(self, writer: BasePdfFileWriter, base_postscript_name: str,
+                 embedded_subset: bool, obj_stream=None):
+        fsc = writer.get_subset_collection(base_postscript_name)
+        if embedded_subset:
+            self.subset_prefix = prefix = fsc.add_subset()
+        else:
+            self.subset_prefix = prefix = None
+        fsc.subsets[prefix] = self
+        self.writer = writer
+        self.obj_stream = obj_stream
 
     @property
     def uses_complex_positioning(self):
@@ -50,11 +94,35 @@ class FontEngine:
         """
         raise NotImplementedError
 
-    def as_resource(self) -> generic.DictionaryObject:
+    def as_resource(self) -> generic.PdfObject:
         """Convert a :class:`.FontEngine` to a PDF object suitable for embedding
         inside a resource dictionary.
+
+        .. note::
+            If the PDF object is an indirect reference, the caller must not
+            attempt to dereference it. In other words, implementations can
+            use preallocated references to delay subsetting until the last
+            possible moment (this is even encouraged, see
+            :meth:`prepare_write`).
 
         :return:
             A PDF dictionary.
         """
+        raise NotImplementedError
+
+    def prepare_write(self):
+        """
+        Called by the writer that manages this font resource before the PDF
+        content is written to a stream.
+
+        Subsetting operations and the like should be carried out as part of
+        this method.
+        """
+        pass
+
+
+class FontEngineFactory:
+
+    def create_font_engine(self, writer: 'BasePdfFileWriter',
+                           obj_stream=None) -> FontEngine:
         raise NotImplementedError

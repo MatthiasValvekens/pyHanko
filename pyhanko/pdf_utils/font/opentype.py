@@ -9,7 +9,9 @@ from io import BytesIO
 from binascii import hexlify
 
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.font.api import ShapeResult, FontEngine
+from pyhanko.pdf_utils.font.api import (
+    ShapeResult, FontEngine, FontEngineFactory
+)
 from pyhanko.pdf_utils.misc import peek
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
@@ -36,12 +38,6 @@ logger = logging.getLogger(__name__)
 
 pdf_name = generic.NameObject
 pdf_string = generic.pdf_string
-ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-
-
-def generate_subset_prefix():
-    import random
-    return ''.join(ALPHABET[random.randint(0, 25)] for _ in range(6))
 
 
 def _format_simple_glyphline_from_buffer(buf, cid_width_callback):
@@ -291,22 +287,31 @@ def _check_ot_tag(tag):
     return tag
 
 
+def _read_ps_name(tt: ttLib.TTFont) -> str:
+    ps_name = None
+    try:
+        name_table = tt['name']
+        # extract PostScript name from the font's name table
+        nr = next(nr for nr in name_table.names if nr.nameID == 6)
+        if nr.encodingIsUnicodeCompatible():
+            ps_name = nr.string.decode('utf-16be')
+    except StopIteration:  # pragma: nocover
+        pass
+
+    if ps_name is None:
+        raise NotImplementedError(
+            "Could not deduce PostScript name for font; only "
+            "unicode-compatible encodings in the name table are supported"
+        )
+    return ps_name
+
+
 class GlyphAccumulator(FontEngine):
     """
     Utility to collect & measure glyphs from OpenType/TrueType fonts.
 
-    .. warning::
-        This utility class ignores all positioning & substitution information
-        in the font file, other than glyph width/height.
-        In particular, features such as kerning, ligatures, complex script
-        support and regional substitution will not work out of the box.
-
-    .. warning::
-        This functionality was only really tested with CID-keyed fonts
-        that have a CFF table. This is good enough to offer basic support
-        for CJK scripts, but as I am not an OTF expert, more testing is
-        necessary.
-
+    :param writer:
+        A PDF writer.
     :param font_handle:
         File-like object
     :param font_size:
@@ -330,11 +335,15 @@ class GlyphAccumulator(FontEngine):
     :param bcp47_lang_code:
         BCP 47 language code. Used to mark the text's language in the PDF
         content stream, if specified.
+    :param obj_stream:
+        Try to put font-related objects into a particular object stream, if
+        specified.
     """
 
-    def __init__(self, font_handle, font_size, features=None,
-                 ot_language_tag=None, ot_script_tag=None,
-                 writing_direction=None, bcp47_lang_code=None):
+    def __init__(self, writer: BasePdfFileWriter, font_handle, font_size,
+                 features=None, ot_language_tag=None, ot_script_tag=None,
+                 writing_direction=None, bcp47_lang_code=None, obj_stream=None):
+
         # harfbuzz expects bytes
         font_handle.seek(0)
         font_bytes = font_handle.read()
@@ -343,6 +352,11 @@ class GlyphAccumulator(FontEngine):
         self.font_size = font_size
         self.hb_font = hb.Font(face)
         self.tt = tt = ttLib.TTFont(font_handle)
+        base_ps_name = _read_ps_name(tt)
+        super().__init__(
+            writer, base_ps_name, embedded_subset=True, obj_stream=obj_stream
+        )
+        self._font_ref = writer.allocate_placeholder()
         try:
             cff = self.tt['CFF ']
             self.cff_charset = cff.cff[0].charset
@@ -350,19 +364,22 @@ class GlyphAccumulator(FontEngine):
             # CFF font programs are embedded differently
             #  (in a more Adobe-native way)
             self.is_cff_font = True
+            self.cidfont_obj = CIDFontType0(
+                tt, base_ps_name, self.subset_prefix
+            )
         except KeyError:
             self.cff_charset = None
             self.is_cff_font = False
+            self.cidfont_obj = CIDFontType2(
+                tt, base_ps_name, self.subset_prefix
+            )
 
         self.features = features
 
-        try:
-            self.units_per_em = tt['head'].unitsPerEm
-        except KeyError:
-            self.units_per_em = 1000
+        # the 'head' table is mandatory
+        self.units_per_em = tt['head'].unitsPerEm
 
         self._glyphs = {}
-        self._font_ref = None
         self._glyph_set = tt.getGlyphSet(preferCFF=True)
 
         self._cid_to_unicode = {}
@@ -376,6 +393,7 @@ class GlyphAccumulator(FontEngine):
             )
         self.writing_direction = writing_direction
         self.bcp47_lang_code = bcp47_lang_code
+        self.__subset_created = False
 
     @property
     def _reverse_cmap(self):
@@ -475,7 +493,7 @@ class GlyphAccumulator(FontEngine):
                             if codepoint in relevant_codepoints:
                                 self._cid_to_unicode[cid] = chr(codepoint)
 
-        # wrap the text rendering operations in a
+        # wrap the text rendering operations in a Span
         marked_content_buf = BytesIO()
         marked_content_buf.write(b'/Span ')
         mc_properties = self.marked_content_property_list(txt)
@@ -545,78 +563,50 @@ class GlyphAccumulator(FontEngine):
         subsetter.populate(gids=list(self._glyphs.keys()))
         subsetter.subset(self.tt)
 
-    def embed_subset(self, writer: BasePdfFileWriter, obj_stream=None):
+    def prepare_write(self):
         """
-        Embed a subset of this glyph accumulator's font into the provided PDF
-        writer. Said subset will include all glyphs necessary to render the
+        This implementation of ``prepare_write`` will embed a subset of this
+        glyph accumulator's font into the PDF writer it belongs to.
+        Said subset will include all glyphs necessary to render the
         strings provided to the accumulator via :meth:`feed_string`.
 
         .. danger::
             Due to the way ``fontTools`` handles subsetting, this is a
             destructive operation. The in-memory representation of the original
             font will be overwritten by the generated subset.
-
-        :param writer:
-            A PDF writer.
-        :param obj_stream:
-            If provided, write all relevant objects to the provided
-            `obj_stream`. If ``None`` (the default), they will simply be written
-            to the file as top-level objects.
-        :return:
-            A reference to the embedded ``/Font`` object.
         """
-        if self._font_ref is not None:
-            return self._font_ref
-        self._extract_subset()
-        if self.is_cff_font:
-            cidfont_obj = CIDFontType0(self.tt)
-        else:
-            cidfont_obj = CIDFontType2(self.tt)
-        # TODO keep track of used subset prefixes in the writer!
 
+        if not self.__subset_created:
+            self._extract_subset()
+            self.__subset_created = True
+        writer = self.writer
+        obj_stream = self.obj_stream
         by_cid = iter(sorted(self._glyphs.values(), key=lambda t: t[0]))
         type0 = _build_type0_font_from_cidfont(
-            writer=writer, cidfont_obj=cidfont_obj,
+            writer=writer, cidfont_obj=self.cidfont_obj,
             widths_by_cid_iter=by_cid, obj_stream=obj_stream,
             vertical=False
         )
         type0['/ToUnicode'] = writer.add_object(
-            self._format_tounicode_cmap(*cidfont_obj.ros)
+            self._format_tounicode_cmap(*self.cidfont_obj.ros)
         )
-        self._font_ref = ref = writer.add_object(type0, obj_stream=obj_stream)
-        return ref
+        # use our preallocated font ref
+        writer.add_object(type0, obj_stream, idnum=self._font_ref.idnum)
 
-    def as_resource(self):
-        if self._font_ref is not None:
-            return self._font_ref
-        else:
-            raise ValueError
+    def as_resource(self) -> generic.IndirectObject:
+        return self._font_ref
 
 
 class CIDFont(generic.DictionaryObject):
-    def __init__(self, tt: ttLib.TTFont, subtype, registry,
-                 ordering, supplement, ps_name=None):
+    def __init__(self, tt: ttLib.TTFont, subtype, registry, ordering,
+                 supplement, base_ps_name, subset_prefix):
 
-        self.subset_prefix = subset_prefix = generate_subset_prefix()
+        self._tt = tt
 
-        if ps_name is None:
-            try:
-                name_table = tt['name']
-                # extract PostScript name from the font's name table
-                nr = next(nr for nr in name_table.names if nr.nameID == 6)
-                if nr.encodingIsUnicodeCompatible():
-                    ps_name = nr.string.decode('utf-16be')
-            except StopIteration:  # pragma: nocover
-                ps_name = None
+        self.subset_prefix = subset_prefix
 
-        if ps_name is None:
-            raise NotImplementedError(
-                "Could not read PostScript name for font"
-            )
+        ps_name = '%s+%s' % (subset_prefix, base_ps_name)
 
-        ps_name = '%s+%s' % (subset_prefix, ps_name)
-
-        self.tt = tt
         self.name = ps_name
         self.ros = registry, ordering, supplement
 
@@ -643,9 +633,13 @@ class CIDFont(generic.DictionaryObject):
     def set_font_file(self, writer: BasePdfFileWriter):
         raise NotImplementedError
 
+    @property
+    def tt_font(self):
+        return self._tt
+
 
 class CIDFontType0(CIDFont):
-    def __init__(self, tt: ttLib.TTFont, ps_name=None):
+    def __init__(self, tt: ttLib.TTFont, base_ps_name, subset_prefix):
         # We assume that this font set (in the CFF sense) contains
         # only one font. This is fairly safe according to the fontTools docs.
         self.cff = cff = tt['CFF '].cff
@@ -661,14 +655,14 @@ class CIDFontType0(CIDFont):
             supplement = 0
         super().__init__(
             tt, '/CIDFontType0', registry, ordering, supplement,
-            ps_name=ps_name
+            base_ps_name, subset_prefix
         )
         td.rawDict['FullName'] = '%s+%s' % (self.subset_prefix, self.name)
 
     def set_font_file(self, writer: BasePdfFileWriter):
         stream_buf = BytesIO()
         # write the CFF table to the stream
-        self.cff.compile(stream_buf, self.tt)
+        self.cff.compile(stream_buf, self.tt_font)
         stream_buf.seek(0)
         font_stream = generic.StreamObject({
             # this is a Type0 CFF font program (see Table 126 in ISO 32000)
@@ -682,9 +676,10 @@ class CIDFontType0(CIDFont):
 
 class CIDFontType2(CIDFont):
 
-    def __init__(self, tt: ttLib.TTFont, ps_name=None):
+    def __init__(self, tt: ttLib.TTFont, base_ps_name, subset_prefix):
         super().__init__(
-            tt, '/CIDFontType0',
+            tt,
+            '/CIDFontType0',
             registry="Adobe",
             # i.e. "no defined character set, just do whatever"
             # This makes sense because there's no native notion of character
@@ -693,13 +688,13 @@ class CIDFontType2(CIDFont):
             # that CIDs correspond to GIDs in the font)
             ordering="Identity",
             supplement=0,
-            ps_name=ps_name
+            base_ps_name=base_ps_name, subset_prefix=subset_prefix
         )
         self['/CIDToGIDMap'] = pdf_name('/Identity')
 
     def set_font_file(self, writer: BasePdfFileWriter):
         stream_buf = BytesIO()
-        self.tt.save(stream_buf)
+        self.tt_font.save(stream_buf)
         stream_buf.seek(0)
 
         font_stream = generic.StreamObject({
@@ -719,7 +714,7 @@ class FontDescriptor(generic.DictionaryObject):
     """
 
     def __init__(self, cf: CIDFont):
-        tt = cf.tt
+        tt = cf.tt_font
 
         # Some metrics
         hhea = tt['hhea']
@@ -746,12 +741,9 @@ class FontDescriptor(generic.DictionaryObject):
             pdf_name('/CapHeight'): generic.NumberObject(os2.sCapHeight)
         })
 
-    def as_resource(self) -> generic.DictionaryObject:
-        pass
-
 
 @dataclass(frozen=True)
-class GlyphAccumulatorFactory:
+class GlyphAccumulatorFactory(FontEngineFactory):
     """
     Stateless callable helper class to instantiate :class:`.GlyphAccumulator`
     objects.
@@ -785,10 +777,13 @@ class GlyphAccumulatorFactory:
     Will be guessed by HarfBuzz if not specified.
     """
 
-    def __call__(self) -> GlyphAccumulator:
+    def create_font_engine(self, writer: 'BasePdfFileWriter',
+                           obj_stream=None) -> GlyphAccumulator:
         fh = open(self.font_file, 'rb')
         return GlyphAccumulator(
-            fh, font_size=self.font_size, ot_script_tag=self.ot_script_tag,
+            writer=writer, font_handle=fh,
+            font_size=self.font_size, ot_script_tag=self.ot_script_tag,
             ot_language_tag=self.ot_language_tag,
-            writing_direction=self.writing_direction
+            writing_direction=self.writing_direction,
+            obj_stream=obj_stream
         )

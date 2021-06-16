@@ -12,7 +12,6 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
 from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils import writer, generic, misc
-from pyhanko.pdf_utils.font import GlyphAccumulator
 from pyhanko.pdf_utils.content import (
     ResourceType, PdfResources, ResourceManagementError
 )
@@ -59,27 +58,6 @@ def test_create_fresh(zip1, zip2):
         r.find_page_for_modification(2)
     with pytest.raises(ValueError):
         r.find_page_for_modification(-3)
-
-
-NOTO_SERIF_JP = 'pyhanko_tests/data/fonts/NotoSerifJP-Regular.otf'
-
-
-def test_embed_subset():
-    with open(NOTO_SERIF_JP, 'rb') as ffile:
-        ga = GlyphAccumulator(ffile, font_size=10)
-    res = ga.shape('版')
-    assert b'[<66eb>] TJ' in res.graphics_ops
-    res = ga.shape('テスト')
-    assert b'[<0637> 40 <062a0639>] TJ' in res.graphics_ops
-
-    # check the 'ffi' ligature
-    res = ga.shape('difficult')
-    assert b'[<0045004ae9e200440056004d0055>] TJ' in res.graphics_ops
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    font_ref = ga.embed_subset(w)
-    df = font_ref.get_object()['/DescendantFonts'][0].get_object()
-    font_file = df['/FontDescriptor']['/FontFile3']
-    assert len(font_file.data) == 3029
 
 
 def test_add_stream():
@@ -157,38 +135,6 @@ def test_add_stream_to_direct_arr():
     assert '/F1' in page_obj['/Resources']['/Font']
 
 
-def test_write_embedded_string():
-    with open(NOTO_SERIF_JP, 'rb') as ffile:
-        ga = GlyphAccumulator(ffile, font_size=10)
-    # shape the string, just to register the glyphs as used
-    ga.shape('テスト')
-    # ... but we're not going to use the result
-
-    # hardcoded CIDs
-    cid_hx = '0637062a0639'
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    font_ref = ga.embed_subset(w)
-    stream = generic.StreamObject(
-        stream_data=f'BT /FEmb 18 Tf 0 100 Td <{cid_hx}> Tj ET'.encode('ascii')
-    )
-    stream_ref = w.add_object(stream)
-    w.add_stream_to_page(
-        0, stream_ref, resources=generic.DictionaryObject({
-            pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/FEmb'): font_ref
-            })
-        })
-    )
-    out = BytesIO()
-    w.write(out)
-    out.seek(0)
-    r = PdfFileReader(out)
-    page_obj = r.root['/Pages']['/Kids'][0].get_object()
-    conts = page_obj['/Contents']
-    assert len(conts) == 2
-    assert stream_ref.idnum in (c.idnum for c in conts)
-
-
 def test_read_rewrite():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = BytesIO()
@@ -206,46 +152,6 @@ def test_mildly_malformed_xref_read():
     # try something
     root = reader.root
     assert '/Pages' in root
-
-
-def test_write_embedded_string_objstream():
-    with open(NOTO_SERIF_JP, 'rb') as ffile:
-        ga = GlyphAccumulator(ffile, font_size=10)
-    # shape the string, just to register the glyphs as used
-    ga.shape('テスト')
-    # ... but we're not going to use the result
-
-    # hardcoded CIDs
-    cid_hx = '0637062a0639'
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_XREF))
-    obj_stream = w.prepare_object_stream()
-    font_ref = ga.embed_subset(w, obj_stream=obj_stream)
-    stream = generic.StreamObject(
-        stream_data=f'BT /FEmb 18 Tf 0 100 Td <{cid_hx}> Tj ET'.encode('ascii')
-    )
-    stream_ref = w.add_object(stream)
-    w.add_stream_to_page(
-        0, stream_ref, resources=generic.DictionaryObject({
-            pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/FEmb'): font_ref
-            })
-        })
-    )
-    out = BytesIO()
-    w.write(out)
-    out.seek(0)
-    r = PdfFileReader(out)
-    page_obj = r.root['/Pages']['/Kids'][0].get_object()
-    conts = page_obj['/Contents']
-    assert len(conts) == 2
-    assert stream_ref.idnum in (c.idnum for c in conts)
-    assert font_ref.idnum in r.xrefs.in_obj_stream
-    out.seek(0)
-
-    # attempt to grab the font from the object stream
-    font_ref.pdf = r
-    font = font_ref.get_object()
-    assert font['/Type'] == pdf_name('/Font')
 
 
 TEST_STRING = b'\x74\x77\x74\x84\x66'

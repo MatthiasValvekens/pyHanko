@@ -1,12 +1,8 @@
 """Utilities related to text rendering & layout."""
 
 from dataclasses import dataclass, field
-from typing import Union, Callable
 
-from pyhanko.pdf_utils.font import (
-    SimpleFontEngine, GlyphAccumulator, GlyphAccumulatorFactory
-)
-from pyhanko.pdf_utils.font.api import FontEngine
+from pyhanko.pdf_utils.font import SimpleFontEngineFactory, FontEngineFactory
 from pyhanko.pdf_utils.generic import (
     pdf_name,
 )
@@ -19,17 +15,11 @@ from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 class TextStyle(ConfigurableMixin):
     """Container for basic test styling settings."""
 
-    font: Union[FontEngine, Callable[[], FontEngine]] \
-        = field(default_factory=SimpleFontEngine.default_engine)
+    font: FontEngineFactory \
+        = field(default_factory=SimpleFontEngineFactory.default_factory)
     """
-    The :class:`.FontEngine` to be used for this text style.
+    The :class:`.FontEngineFactory` to be used for this text style.
     Defaults to Courier (as a non-embedded standard font).
-    
-    .. caution::
-        Not all :class:`.FontEngine` implementations are reusable and/or 
-        stateless! When reusability is a requirement, passing a no-argument 
-        callable that produces :class:`.FontEngine` objects of the appropriate 
-        type might help (see :class:`.GlyphAccumulatorFactory`).
     """
 
     font_size: int = 10
@@ -50,9 +40,11 @@ class TextStyle(ConfigurableMixin):
             if not isinstance(fc, str) or \
                     not (fc.endswith('.otf') or fc.endswith('.ttf')):
                 raise ConfigurationError(
-                    "'font' must be a path to an OpenType font file."
+                    "'font' must be a path to an OpenType or "
+                    "TrueType font file."
                 )
 
+            from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
             config_dict['font'] = GlyphAccumulatorFactory(fc)
         except KeyError:
             pass
@@ -98,19 +90,16 @@ class TextBox(PdfContent):
         Text boxes currently don't offer automatic word wrapping.
     """
 
-    def __init__(self, style: TextBoxStyle,
+    def __init__(self, style: TextBoxStyle, writer,
                  resources: PdfResources = None,
                  box: layout.BoxConstraints = None,
-                 writer=None, font_name='F1'):
+                 font_name='F1'):
         super().__init__(resources, writer=writer, box=box)
         self.style = style
         self._content = None
         self._content_lines = self._wrapped_lines = None
         self.font_name = font_name
-        font_engine = style.font
-        if callable(font_engine):
-            font_engine = font_engine()
-        self.font_engine = font_engine
+        self.font_engine = style.font.create_font_engine(writer)
         self._nat_text_height = self._nat_text_width = 0
 
     def put_string_line(self, txt):
@@ -203,10 +192,6 @@ class TextBox(PdfContent):
     def render(self):
 
         style = self.style
-
-        if isinstance(self.font_engine, GlyphAccumulator):
-            assert self.writer is not None
-            self.font_engine.embed_subset(self.writer)
 
         self.set_resource(
             category=ResourceType.FONT, name=pdf_name('/' + self.font_name),

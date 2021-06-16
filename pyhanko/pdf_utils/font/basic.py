@@ -1,5 +1,6 @@
 from pyhanko.pdf_utils import generic
-from .api import FontEngine, ShapeResult
+from .api import FontEngine, ShapeResult, FontEngineFactory
+from ..writer import BasePdfFileWriter
 
 pdf_name = generic.NameObject
 
@@ -15,18 +16,10 @@ class SimpleFontEngine(FontEngine):
     def uses_complex_positioning(self):
         return False
 
-    @staticmethod
-    def default_engine():
-        """
-        :return:
-            A :class:`.FontEngine` instance representing the Courier
-            standard font.
-        """
-        return SimpleFontEngine('Courier', 0.6)
-
-    def __init__(self, name, avg_width):
+    def __init__(self, writer, name, avg_width):
         self.avg_width = avg_width
         self.name = name
+        super().__init__(writer, name, embedded_subset=False)
 
     def shape(self, txt) -> ShapeResult:
         ops = f'({txt}) Tj'.encode('latin1')
@@ -38,8 +31,6 @@ class SimpleFontEngine(FontEngine):
         )
 
     def as_resource(self):
-        # assume that self.font is the name of a PDF standard font
-        # TODO enforce that
         font_dict = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/Font'),
             pdf_name('/BaseFont'): pdf_name('/' + self.name),
@@ -47,3 +38,21 @@ class SimpleFontEngine(FontEngine):
             pdf_name('/Encoding'): pdf_name('/WinAnsiEncoding')
         })
         return font_dict
+
+
+class SimpleFontEngineFactory(FontEngineFactory):
+    def __init__(self, name, avg_width):
+        self.avg_width = avg_width
+        self.name = name
+
+    def create_font_engine(self, writer: 'BasePdfFileWriter', obj_stream=None):
+        return SimpleFontEngine(writer, self.name, self.avg_width)
+
+    @staticmethod
+    def default_factory():
+        """
+        :return:
+            A :class:`.FontEngineFactory` instance representing the Courier
+            standard font.
+        """
+        return SimpleFontEngineFactory('Courier', 0.6)
