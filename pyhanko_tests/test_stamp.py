@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from pyhanko.pdf_utils import layout, writer, generic
-from pyhanko.pdf_utils.content import RawContent
+from pyhanko.pdf_utils.content import RawContent, ImportedPdfPage
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.text import TextBoxStyle
@@ -201,3 +201,24 @@ def test_stamp_with_undefined_bg_size():
     ts.apply(0, x=30, y=120)
 
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/undef-bg-size.pdf')
+
+
+@with_layout_comparison
+def test_stamp_with_scaled_pdf_bg():
+    w = empty_page()
+
+    text = '\n'.join(
+        'Test test test test on a PDF background!'
+        for _ in range(3)
+    )
+    style = TextStampStyle(
+        stamp_text=text,
+        background=ImportedPdfPage(
+            'pyhanko_tests/data/pdf/pdf-background-test.pdf'
+        ),
+    )
+
+    ts = TextStamp(w, style, box=layout.BoxConstraints(200, 50))
+    ts.apply(0, x=30, y=600)
+
+    compare_output(w, f'{EXPECTED_OUTPUT_DIR}/stamp-on-pdf-bg.pdf')

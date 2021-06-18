@@ -1,9 +1,13 @@
+import binascii
+import uuid
 from enum import Enum
 from .generic import (
     pdf_name, DictionaryObject, NameObject,
     PdfObject, StreamObject,
 )
 from .layout import BoxConstraints
+from .reader import PdfFileReader
+
 
 __all__ = [
     'ResourceType', 'ResourceManagementError',
@@ -248,3 +252,27 @@ class RawContent(PdfContent):
 
     def render(self) -> bytes:
         return self.data
+
+
+class ImportedPdfPage(PdfContent):
+    """Import a page from another PDF file (lazily)"""
+
+    def __init__(self, file_name, page_ix=0):
+        self.file_name = file_name
+        self.page_ix = page_ix
+        super().__init__()
+
+    def render(self) -> bytes:
+        from .writer import BasePdfFileWriter
+        w: BasePdfFileWriter = self.writer
+        with open(self.file_name, 'rb') as inf:
+            r = PdfFileReader(inf)
+            xobj = w.import_page_as_xobject(r, page_ix=self.page_ix)
+        resource_name = b'/Import' + binascii.hexlify(uuid.uuid4().bytes)
+        self.resources.xobject[resource_name.decode('ascii')] = xobj
+
+        # make sure to take the bounding box (i.e. the page's MediaBox)
+        # into account when doing layout computations
+        x1, y1, x2, y2 = xobj.get_object()['/BBox']
+        self.box = BoxConstraints(width=abs(x1 - x2), height=abs(y1 - y2))
+        return resource_name + b' Do'

@@ -6,6 +6,7 @@ from pyhanko import config, stamp
 from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL, \
     DEFAULT_TIME_TOLERANCE, init_validation_context_kwargs
 from pyhanko.pdf_utils.config_utils import ConfigurationError
+from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 from pyhanko_tests.samples import TESTING_CA_DIR
@@ -57,6 +58,7 @@ def test_read_qr_config():
             type: qr
         alternative2:
             type: qr
+            background: pyhanko_tests/data/pdf/pdf-background-test.pdf
         alternative3:
             type: text
     """
@@ -75,7 +77,7 @@ def test_read_qr_config():
 
     alternative2 = cli_config.get_stamp_style('alternative2')
     assert isinstance(alternative2, QRStampStyle)
-    assert alternative2.background is None
+    assert isinstance(alternative2.background, ImportedPdfPage)
     assert isinstance(alternative2.text_box_style.font, SimpleFontEngineFactory)
 
     alternative3 = cli_config.get_stamp_style('alternative3')
@@ -98,6 +100,17 @@ def test_read_bad_config():
     with pytest.raises(ConfigurationError):
         cli_config.get_stamp_style()
 
+
+def test_read_bad_background_config():
+    config_string = f"""
+    stamp-styles:
+        default:
+            type: text
+            background: 1234
+    """
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    with pytest.raises(ConfigurationError, match='must be a string'):
+        cli_config.get_stamp_style()
 
 @pytest.mark.parametrize("bad_type", ['5', '[1,2,3]'])
 def test_read_bad_config2(bad_type):

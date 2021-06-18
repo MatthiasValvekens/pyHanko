@@ -748,7 +748,7 @@ class BasePdfFileWriter(PdfHandler):
             return obj
 
     def import_page_as_xobject(self, other: PdfHandler, page_ix=0,
-                               content_stream=0, inherit_filters=True):
+                               inherit_filters=True):
         """
         Import a page content stream from some other
         :class:`~.rw_common.PdfHandler` into the current one as a form XObject.
@@ -757,9 +757,6 @@ class BasePdfFileWriter(PdfHandler):
             A :class:`~.rw_common.PdfHandler`
         :param page_ix:
             Index of the page to copy (default: 0)
-        :param content_stream:
-            Index of the page's content stream to copy, if multiple are present
-            (default: 0)
         :param inherit_filters:
             Inherit the content stream's filters, if present.
         :return:
@@ -793,7 +790,21 @@ class BasePdfFileWriter(PdfHandler):
         # if the page /Contents is an array, retrieve the content stream
         # with the appropriate index
         if isinstance(command_stream, generic.ArrayObject):
-            command_stream = command_stream[content_stream].get_object()
+            if len(command_stream) == 1 and inherit_filters:
+                command_stream = command_stream[0].get_object()
+            else:
+                # There are multiple streams, so inheriting filters is not
+                # a well-defined operations.
+                # Decode and concatenate, then put in a flate filter, and return
+                result = generic.StreamObject(
+                    stream_dict,
+                    stream_data=b''.join(
+                        partial_stream.get_object().data
+                        for partial_stream in command_stream
+                    ),
+                )
+                result.compress()
+                return self.add_object(result)
         assert isinstance(command_stream, generic.StreamObject)
         filters = None
         if inherit_filters:

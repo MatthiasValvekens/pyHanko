@@ -1,5 +1,6 @@
 import datetime
 from fractions import Fraction
+from itertools import product
 from typing import Tuple
 
 import pytest
@@ -201,10 +202,15 @@ def test_historical_read():
 
 # TODO actually attempt to render the XObjects
 
+page_import_test_files = (
+    VECTOR_IMAGE_PDF, VECTOR_IMAGE_PDF_DECOMP, VECTOR_IMAGE_VARIANT_PDF
+)
+
+
 @pytest.mark.parametrize('file_no, inherit_filters',
-                         [[0, True], [0, False], [1, True], [1, False]])
+                         list(product([0, 1, 2], [True, False])))
 def test_page_import(file_no, inherit_filters):
-    fbytes = (VECTOR_IMAGE_PDF, VECTOR_IMAGE_PDF_DECOMP)[file_no]
+    fbytes = page_import_test_files[file_no]
     image_input = PdfFileReader(BytesIO(fbytes))
     w = writer.PdfFileWriter()
     xobj_ref = w.import_page_as_xobject(

@@ -36,6 +36,7 @@ MINIMAL_PUBKEY_RC4 = read_all(PDF_DATA_DIR + '/minimal-pubkey-rc4.pdf')
 MINIMAL_PUBKEY_ONE_FIELD_RC4 = read_all(PDF_DATA_DIR + '/minimal-with-field-pubkey-rc4.pdf')
 
 VECTOR_IMAGE_PDF = read_all(PDF_DATA_DIR + '/scribble.pdf')
+VECTOR_IMAGE_VARIANT_PDF = read_all(PDF_DATA_DIR + '/scribble-in-arr.pdf')
 VECTOR_IMAGE_PDF_DECOMP = read_all(PDF_DATA_DIR + '/scribble-decomp.pdf')
 
 FILE_WITH_EMBEDDED_FONT = read_all(PDF_DATA_DIR + '/fontembed.pdf')

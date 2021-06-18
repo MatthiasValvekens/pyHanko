@@ -28,8 +28,8 @@ from pyhanko.pdf_utils import generic, layout
 from pyhanko.pdf_utils.generic import (
     pdf_name, pdf_string,
 )
-from pyhanko.pdf_utils.content import ResourceType, PdfContent, RawContent
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin
+from pyhanko.pdf_utils import content
+from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.qr import PdfStreamQRImage
 
 
@@ -86,6 +86,26 @@ class AnnotAppearances:
         return res
 
 
+def _get_background_content(bg_spec) -> content.PdfContent:
+    if not isinstance(bg_spec, str):
+        raise ConfigurationError(
+            "Background specification must be a string"
+        )
+    # 'special' value to use the stamp vector image baked into
+    # the module
+    if bg_spec == '__stamp__':
+        return STAMP_ART_CONTENT
+    elif bg_spec.endswith('.pdf'):
+        # import first page of PDF as background
+        return content.ImportedPdfPage(bg_spec)
+    else:
+        from pyhanko.pdf_utils.images import PdfImage
+        from PIL import Image
+        img = Image.open(bg_spec)
+        # Setting the writer can be delayed
+        return PdfImage(img, writer=None)
+
+
 @dataclass(frozen=True)
 class TextStampStyle(ConfigurableMixin):
     """
@@ -130,7 +150,7 @@ class TextStampStyle(ConfigurableMixin):
     Datetime format used to render the timestamp.
     """
 
-    background: PdfContent = None
+    background: content.PdfContent = None
     """
     :class:`~.pdf_utils.content.PdfContent` instance that will be used to render
     the stamp's background.
@@ -180,20 +200,13 @@ class TextStampStyle(ConfigurableMixin):
         except KeyError:
             pass
 
+        bg_spec = None
         try:
             bg_spec = config_dict['background']
-            # 'special' value to use the stamp vector image baked into
-            # the module
-            if bg_spec == '__stamp__':
-                config_dict['background'] = STAMP_ART_CONTENT
-            elif isinstance(bg_spec, str):
-                from pyhanko.pdf_utils.images import PdfImage
-                from PIL import Image
-                img = Image.open(bg_spec)
-                # Setting the writer can be delayed
-                config_dict['background'] = PdfImage(img, writer=None)
         except KeyError:
             pass
+        if bg_spec is not None:
+            config_dict['background'] = _get_background_content(bg_spec)
 
 
 class QRPosition(enum.Enum):
@@ -274,7 +287,7 @@ class QRStampStyle(TextStampStyle):
     """
 
 
-class TextStamp(PdfContent):
+class TextStamp(content.PdfContent):
     """
     Class that renders a text stamp as specified by an instance
     of :class:`.TextStampStyle`.
@@ -325,6 +338,7 @@ class TextStamp(PdfContent):
 
         bg = self.style.background
         bg.set_writer(self.writer)
+        bg_content = bg.render()  # render first, in case the BBox is lazy
 
         bg_box = bg.box
         if bg_box.width_defined and bg_box.height_defined:
@@ -344,7 +358,7 @@ class TextStamp(PdfContent):
         # set opacity in graphics state
         opacity = generic.FloatObject(self.style.background_opacity)
         self.set_resource(
-            category=ResourceType.EXT_G_STATE,
+            category=content.ResourceType.EXT_G_STATE,
             name=pdf_name('/BackgroundGS'),
             value=generic.DictionaryObject({
                 pdf_name('/CA'): opacity, pdf_name('/ca'): opacity
@@ -353,7 +367,7 @@ class TextStamp(PdfContent):
 
         # Position & render the background
         command = b'q /BackgroundGS gs %s %s Q' % (
-            positioning.as_cm(), bg.render()
+            positioning.as_cm(), bg_content
         )
         # we do this after render(), just in case our background resource
         # decides to pull in extra stuff during rendering
@@ -494,7 +508,7 @@ class QRStamp(TextStamp):
 
         qr_ref, natural_qr_size = self._qr_xobject()
         self.set_resource(
-            category=ResourceType.XOBJECT, name=pdf_name('/QR'),
+            category=content.ResourceType.XOBJECT, name=pdf_name('/QR'),
             value=qr_ref
         )
 
@@ -700,7 +714,7 @@ def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
     )
 
 
-STAMP_ART_CONTENT = RawContent(
+STAMP_ART_CONTENT = content.RawContent(
     box=layout.BoxConstraints(width=100, height=100),
     data=b'''
 q 1 0 0 -1 0 100 cm 
