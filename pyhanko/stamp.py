@@ -145,6 +145,27 @@ class BaseStampStyle(ConfigurableMixin):
     number between `0` and `1`.
     """
 
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        """
+        This implementation of :meth:`process_entries` processes the
+        :attr:`background` configuration value.
+        This can either be a path to an image file, in which case it will
+        be turned into an instance of :class:`~.pdf_utils.images.PdfImage`,
+        or the special value ``__stamp__``, which is an alias for
+        :const:`~pyhanko.stamp.STAMP_ART_CONTENT`.
+        """
+
+        super().process_entries(config_dict)
+        bg_spec = None
+        try:
+            bg_spec = config_dict['background']
+        except KeyError:
+            pass
+        if bg_spec is not None:
+            config_dict['background'] = _get_background_content(bg_spec)
+
     def create_stamp(self, writer: BasePdfFileWriter,
                      box: layout.BoxConstraints, text_params: dict) \
             -> 'BaseStamp':
@@ -234,18 +255,9 @@ class TextStampStyle(BaseStampStyle):
     @classmethod
     def process_entries(cls, config_dict):
         """
-        The implementation of :meth:`process_entries` calls
-        :meth:`.TextBoxStyle.from_config` to parse the ``text_box_style``
-        configuration entry, if present.
-
-        Then, it processes the background specified.
-        This can either be a path to an image file, in which case it will
-        be turned into an instance of :class:`~.pdf_utils.images.PdfImage`,
-        or the special value ``__stamp__``, which is an alias for
-        :const:`~pyhanko.stamp.STAMP_ART_CONTENT`.
-
-        See :meth:`.ConfigurableMixin.process_entries` for general
-        documentation about this method.
+        This implementation of :meth:`process_entries` invokes super(),
+        and then calls :meth:`.TextBoxStyle.from_config` to parse the
+        ``text_box_style`` configuration entry, if present.
         """
 
         super().process_entries(config_dict)
@@ -255,14 +267,6 @@ class TextStampStyle(BaseStampStyle):
                 = TextBoxStyle.from_config(tbs)
         except KeyError:
             pass
-
-        bg_spec = None
-        try:
-            bg_spec = config_dict['background']
-        except KeyError:
-            pass
-        if bg_spec is not None:
-            config_dict['background'] = _get_background_content(bg_spec)
 
     def create_stamp(self, writer: BasePdfFileWriter,
                      box: layout.BoxConstraints, text_params: dict) \

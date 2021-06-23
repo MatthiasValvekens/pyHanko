@@ -1983,7 +1983,7 @@ class PdfSigner(PdfTimeStamper):
 
     def __init__(self, signature_meta: PdfSignatureMetadata, signer: Signer,
                  *, timestamper: TimeStamper = None,
-                 stamp_style: Optional[TextStampStyle] = None,
+                 stamp_style: Optional[BaseStampStyle] = None,
                  new_field_spec: Optional[SigFieldSpec] = None):
         self.signature_meta = signature_meta
         if new_field_spec is not None and \
@@ -1995,9 +1995,10 @@ class PdfSigner(PdfTimeStamper):
 
         self.signer = signer
         stamp_style = stamp_style or DEFAULT_SIGNING_STAMP_STYLE
-        self.stamp_style: TextStampStyle = stamp_style
+        self.stamp_style: BaseStampStyle = stamp_style
         try:
-            self.signer_hash_algo = self.signer.get_signature_mechanism(None).hash_algo
+            self.signer_hash_algo = \
+                self.signer.get_signature_mechanism(None).hash_algo
         except ValueError:
             self.signer_hash_algo = None
 
