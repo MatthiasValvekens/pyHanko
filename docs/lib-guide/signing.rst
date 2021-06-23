@@ -152,6 +152,192 @@ documentation for |PdfSignatureMetadata| and |PdfSigner|.
     :doc:`sig-fields`.
 
 
+Signature appearance generation
+-------------------------------
+
+.. seealso::
+
+    :ref:`style-definitions` in the CLI documentation for the CLI equivalent, and
+    :doc:`sig-fields` for information on how to create signature fields in general.
+
+When creating visible signatures, you can control the visual appearance to a degree, using different
+stamp types. This can be done in one of several ways.
+
+
+Text-based stamps
+^^^^^^^^^^^^^^^^^
+
+PyHanko's standard stamp type is the *text stamp*. At its core, a text stamp appearance is simply
+some text in a box, possibly with interpolated parameters. Text stamps can use TrueType and OpenType
+fonts (or fall back to a generic monospaced font by default). Additionally, text stamps can also
+have backgrounds.
+
+Text stamp styles are (unsurprisingly) described by a :class:`~.pyhanko.stamp.TextStampStyle`
+object. Here's a code sample demonstrating basic usage, with some custom text using a TrueType font,
+and a bitmap background.
+
+.. code-block:: python
+
+    from pyhanko import stamp
+    from pyhanko.pdf_utils import text, images
+    from pyhanko.pdf_utils.font import opentype
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import signers
+
+
+    signer = signers.SimpleSigner.load(...)
+    with open('document.pdf', 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        fields.append_signature_field(
+            w, sig_field_spec=fields.SigFieldSpec(
+                'Signature', box=(200, 600, 400, 660)
+            )
+        )
+
+        meta = signers.PdfSignatureMetadata(field_name='Signature')
+        pdf_signer = signers.PdfSigner(
+            meta, signer=signer, stamp_style=stamp.TextStampStyle(
+                # the 'signer' and 'ts' parameters will be interpolated by pyHanko, if present
+                stamp_text='This is custom text!\nSigned by: %(signer)s\nTime: %(ts)s',
+                text_box_style=text.TextBoxStyle(
+                    font=opentype.GlyphAccumulatorFactory('path/to/NotoSans-Regular.ttf')
+                ),
+                background=images.PdfImage('stamp.png')
+            ),
+        )
+        with open('document-signed.pdf', 'wb') as outf:
+            pdf_signer.sign_pdf(w, output=outf)
+
+
+:numref:`text-stamp-basic` shows what the result might look like. Obviously, the final result will
+depend on the size of the bounding box, font properties, background size etc.
+
+.. _text-stamp-basic:
+.. figure:: images/text-stamp-basic.png
+    :alt: A text stamp in Noto Sans Regular with an image background.
+    :align: center
+
+    A text stamp in Noto Sans Regular with an image background.
+
+
+The layout of a text stamp can be tweaked to some degree, see
+:class:`~.pyhanko.stamp.TextStampStyle`.
+
+.. note::
+
+    You can define values for your own custom interpolation parameters using the
+    ``appearance_text_params`` argument to :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`.
+
+
+QR code stamps
+^^^^^^^^^^^^^^
+
+Besides text stamps, pyHanko also supports signature appearances with a QR code embedded in them.
+Here's a variation of the previous example that leaves out the background, but includes a QR code
+in the end result.
+
+.. code-block:: python
+
+    from pyhanko import stamp
+    from pyhanko.pdf_utils import text
+    from pyhanko.pdf_utils.font import opentype
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import signers
+
+
+    signer = signers.SimpleSigner.load(...)
+    with open('document.pdf', 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        fields.append_signature_field(
+            w, sig_field_spec=fields.SigFieldSpec(
+                'Signature', box=(200, 600, 400, 660)
+            )
+        )
+
+        meta = signers.PdfSignatureMetadata(field_name='Signature')
+        pdf_signer = signers.PdfSigner(
+            meta, signer=signer, stamp_style=stamp.QRStampStyle(
+                # Let's include the URL in the stamp text as well
+                stamp_text='Signed by: %(signer)s\nTime: %(ts)s\nURL: %(url)s',
+                text_box_style=text.TextBoxStyle(
+                    font=opentype.GlyphAccumulatorFactory('path/to/NotoSans-Regular.ttf')
+                ),
+            ),
+        )
+        with open('document-signed.pdf', 'wb') as outf:
+            # with QR stamps, the 'url' text parameter is special-cased and mandatory, even if it
+            # doesn't occur in the stamp text: this is because the value of the 'url' parameter is
+            # also used to render the QR code.
+            pdf_signer.sign_pdf(
+                w, output=outf,
+                appearance_text_params={'url': 'https://example.com'}
+            )
+
+
+:numref:`qr-stamp-basic` shows some possible output obtained with these settings.
+
+.. _qr-stamp-basic:
+.. figure:: images/qr-stamp-basic.png
+    :alt: A QR stamp in Noto Sans Regular, pointing to example.com.
+    :align: center
+
+    A QR stamp in Noto Sans Regular, pointing to `<https://example.com>`_
+
+
+Static content stamps
+---------------------
+
+PyHanko is mainly a signing library, and as such, its appearance generation code is fairly
+primitive. If you want to go beyond pyHanko's default signature appearances, you have the option
+to import an entire page from an external PDF file to use as the appearance, without anything else
+overlaid on top. Here's how that works.
+
+.. code-block:: python
+
+    from pyhanko import stamp
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import signers
+
+
+    signer = signers.SimpleSigner.load(...)
+    with open('document.pdf', 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        fields.append_signature_field(
+            w, sig_field_spec=fields.SigFieldSpec(
+                'Signature', box=(200, 600, 400, 660)
+            )
+        )
+
+        meta = signers.PdfSignatureMetadata(field_name='Signature')
+        pdf_signer = signers.PdfSigner(
+            meta, signer=signer,
+            stamp_style=stamp.StaticStampStyle.from_pdf_file('my-fancy-appearance.pdf')
+        )
+        with open('document-signed.pdf', 'wb') as outf:
+            pdf_signer.sign_pdf(w, output=outf)
+
+
+The result of this snippet with a file from pyHanko's test suite is shown in
+:numref:`static-stamp-basic`. Essentially, this way of working allows you to use whatever tools
+you like to generate the signature appearance, and use the result with pyHanko's signing tools.
+The bounding box of the content is derived from the imported page's ``MediaBox`` (i.e. the principal
+page bounding box), so take that into account when designing your own appearances.
+
+
+.. note::
+
+    The external PDF content is imported "natively": all vector operations will remain vector
+    operations, embedded fonts are copied over, etc. There is no rasterisation involved.
+
+
+.. _static-stamp-basic:
+.. figure:: images/static-stamp-basic.png
+    :alt: A stamp imported from a PDF.
+    :align: center
+
+    Example of a signature appearance using a stamp imported from an external PDF file.
+
+
 Timestamp handling
 ------------------
 

@@ -255,12 +255,17 @@ All parameters have sane defaults.
 * ``type``: This can be either ``text`` or ``qr``, for a simple text box
   or a stamp with a QR code, respectively. The default is ``text``.
   Note that QR stamps require the ``--stamp-url`` parameter on the command line.
-* ``background``: Here, you can either specify a path to a bitmap image, or the
-  special value ``__stamp__``, which will render a simplified version of the
-  pyHanko logo in the background of the stamp (using PDF graphics operators
-  directly). Any bitmap file format natively supported by
-  `Pillow <https://pillow.readthedocs.io>`_ should be OK.
-  If not specified, the stamp will not have a background.
+* ``background``: Here, you can specify any of the following:
+
+    * a path to a bitmap image;
+    * a path to a PDF file (the first page will be used as the stamp background);
+    * the special value ``__stamp__``, which will render a simplified version of the
+      pyHanko logo in the background of the stamp (using PDF graphics operators
+      directly).
+
+  When using bitmap images, any file format natively supported by
+  `Pillow <https://pillow.readthedocs.io>`_ should be OK. If not specified, the stamp will not have
+  a background.
 * ``stamp-text``: A template string that will be used to render the text inside
   the stamp's text box. Currently, the following variables can be used:
 
