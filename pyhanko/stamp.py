@@ -34,8 +34,11 @@ from pyhanko.pdf_utils.qr import PdfStreamQRImage
 
 
 __all__ = [
-    "AnnotAppearances", "TextStampStyle", "QRStampStyle",  "QRPosition",
-    "TextStamp", "QRStamp", "text_stamp_file", "qr_stamp_file",
+    "AnnotAppearances",
+    "BaseStampStyle", "TextStampStyle", "QRStampStyle", "StaticStampStyle",
+    "QRPosition",
+    "BaseStamp", "TextStamp", "QRStamp", "StaticContentStamp",
+    "text_stamp_file", "qr_stamp_file",
     "STAMP_ART_CONTENT",
 ]
 
@@ -107,7 +110,90 @@ def _get_background_content(bg_spec) -> content.PdfContent:
 
 
 @dataclass(frozen=True)
-class TextStampStyle(ConfigurableMixin):
+class BaseStampStyle(ConfigurableMixin):
+    """
+    Base class for stamps styles.
+    """
+
+    border_width: int = 3
+    """
+    Border width in user units (for the stamp, not the text box).
+    """
+
+    background: content.PdfContent = None
+    """
+    :class:`~.pdf_utils.content.PdfContent` instance that will be used to render
+    the stamp's background.
+    """
+
+    background_layout: layout.SimpleBoxLayoutRule = layout.SimpleBoxLayoutRule(
+        x_align=layout.AxisAlignment.ALIGN_MID,
+        y_align=layout.AxisAlignment.ALIGN_MID,
+        margins=layout.Margins.uniform(5)
+    )
+    """
+    Layout rule to render the background inside the stamp's bounding box.
+    Only used if the background has a fully specified :attr:`PdfContent.box`.
+
+    Otherwise, the renderer will position the cursor at
+    ``(left_margin, bottom_margin)`` and render the content as-is.
+    """
+
+    background_opacity: float = 0.6
+    """
+    Opacity value to render the background at. This should be a floating-point
+    number between `0` and `1`.
+    """
+
+    def create_stamp(self, writer: BasePdfFileWriter,
+                     box: layout.BoxConstraints, text_params: dict) \
+            -> 'BaseStamp':
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class StaticStampStyle(BaseStampStyle):
+    """
+    Stamp style that does not include any custom parts; it only renders
+    the background.
+    """
+
+    background_opacity: float = 1.0
+    """
+    Opacity value to render the background at. This should be a floating-point
+    number between `0` and `1`.
+    """
+
+    @classmethod
+    def from_pdf_file(cls, file_name, page_ix=0, **kwargs) \
+            -> 'StaticStampStyle':
+        """
+        Create a :class:`StaticStampStyle` from a page from an external PDF
+        document. This is a convenience wrapper around
+        :class:`~content.ImportedPdfContent`.
+
+        The remaining keyword arguments are passed to
+        :class:`StaticStampStyle`'s init method.
+
+        :param file_name:
+            File name of the external PDF document.
+        :param page_ix:
+            Page index to import. The default is ``0``, i.e. the first page.
+        """
+        return StaticStampStyle(
+            background=content.ImportedPdfPage(file_name, page_ix=page_ix),
+            **kwargs
+        )
+
+    def create_stamp(self, writer: BasePdfFileWriter,
+                     box: layout.BoxConstraints, text_params: dict) \
+            -> 'StaticContentStamp':
+
+        return StaticContentStamp(writer=writer, style=self, box=box)
+
+
+@dataclass(frozen=True)
+class TextStampStyle(BaseStampStyle):
     """
     Style for text-based stamps.
 
@@ -130,11 +216,6 @@ class TextStampStyle(ConfigurableMixin):
         text within.
     """
 
-    border_width: int = 3
-    """
-    Border width in user units (for the stamp, not the text box).
-    """
-
     stamp_text: str = '%(ts)s'
     """
     Text template for the stamp. The template can contain an interpolation
@@ -148,31 +229,6 @@ class TextStampStyle(ConfigurableMixin):
     timestamp_format: str = '%Y-%m-%d %H:%M:%S %Z'
     """
     Datetime format used to render the timestamp.
-    """
-
-    background: content.PdfContent = None
-    """
-    :class:`~.pdf_utils.content.PdfContent` instance that will be used to render
-    the stamp's background.
-    """
-
-    background_layout: layout.SimpleBoxLayoutRule = layout.SimpleBoxLayoutRule(
-        x_align=layout.AxisAlignment.ALIGN_MID,
-        y_align=layout.AxisAlignment.ALIGN_MID,
-        margins=layout.Margins.uniform(5)
-    )
-    """
-    Layout rule to render the background inside the stamp's bounding box.
-    Only used if the background has a fully specified :attr:`PdfContent.box`.
-    
-    Otherwise, the renderer will position the cursor at
-    ``(left_margin, bottom_margin)`` and render the content as-is.
-    """
-
-    background_opacity: float = 0.6
-    """
-    Opacity value to render the background at. This should be a floating-point
-    number between `0` and `1`.
     """
 
     @classmethod
@@ -207,6 +263,14 @@ class TextStampStyle(ConfigurableMixin):
             pass
         if bg_spec is not None:
             config_dict['background'] = _get_background_content(bg_spec)
+
+    def create_stamp(self, writer: BasePdfFileWriter,
+                     box: layout.BoxConstraints, text_params: dict) \
+            -> 'TextStamp':
+
+        return TextStamp(
+            writer=writer, style=self, box=box, text_params=text_params
+        )
 
 
 class QRPosition(enum.Enum):
@@ -286,53 +350,30 @@ class QRStampStyle(TextStampStyle):
     Position of the QR code relative to the text box.
     """
 
+    def create_stamp(self, writer: BasePdfFileWriter,
+                     box: layout.BoxConstraints, text_params: dict) \
+            -> 'QRStamp':
 
-class TextStamp(content.PdfContent):
-    """
-    Class that renders a text stamp as specified by an instance
-    of :class:`.TextStampStyle`.
-    """
+        # extract the URL parameter
+        try:
+            url = text_params.pop('url')
+        except KeyError:
+            raise layout.LayoutError(
+                "Using a QR stamp style requires a 'url' text parameter."
+            )
+        return QRStamp(
+            writer, style=self, url=url, text_params=text_params, box=box
+        )
+
+
+class BaseStamp(content.PdfContent):
 
     def __init__(self, writer: BasePdfFileWriter, style,
-                 text_params=None, box: layout.BoxConstraints = None):
+                 box: layout.BoxConstraints = None):
         super().__init__(box=box, writer=writer)
         self.style = style
-        self.text_params = text_params
         self._resources_ready = False
         self._stamp_ref = None
-
-        self.text_box: Optional[TextBox] = None
-
-    def get_default_text_params(self):
-        """
-        Compute values for the default string interpolation parameters
-        to be applied to the template string string specified in the he stamp
-        style. This method does not take into account the ``text_params``
-        init parameter yet.
-
-        :return:
-            A dictionary containing the parameters and their values.
-        """
-        ts = datetime.now(tz=tzlocal.get_localzone())
-        return {
-            'ts': ts.strftime(self.style.timestamp_format),
-        }
-
-    def _text_layout(self):
-        # Set the contents of the text box
-        self.text_box = tb = TextBox(
-            self.style.text_box_style, writer=self.writer,
-            resources=self.resources, box=None
-        )
-        _text_params = self.get_default_text_params()
-        if self.text_params is not None:
-            _text_params.update(self.text_params)
-        text = self.style.stamp_text % _text_params
-        tb.content = text
-
-        # Render the text box in its natural size, we'll deal with
-        # the minutiae later
-        return tb.render()
 
     def _render_background(self):
 
@@ -374,29 +415,13 @@ class TextStamp(content.PdfContent):
         self.import_resources(bg.resources)
         return command
 
-    def _inner_layout_natural_size(self):
-        # render text
-        text_commands = self._text_layout()
-
-        inn_box = self.text_box.box
-        return [text_commands], (inn_box.width, inn_box.height)
-
-    def _inner_content_layout_rule(self):
-        return self.style.inner_content_layout or DEFAULT_BOX_LAYOUT
+    def _render_inner_content(self):
+        raise NotImplementedError
 
     def render(self):
         command_stream = [b'q']
 
-        # compute the inner bounding box
-        inn_commands, (inn_width, inn_height) \
-            = self._inner_layout_natural_size()
-
-        inner_layout = self._inner_content_layout_rule()
-
-        bbox = self.box
-
-        # position the inner box
-        inn_position = inner_layout.fit(bbox, inn_width, inn_height)
+        inner_content = self._render_inner_content()
 
         # Now that the inner layout is done, the dimensions of our bounding
         # box should all have been reified. Let's put in the background,
@@ -405,12 +430,11 @@ class TextStamp(content.PdfContent):
             command_stream.append(self._render_background())
 
         # put in the inner content
-        command_stream.append(b'q')
-        command_stream.append(inn_position.as_cm())
-        command_stream.extend(inn_commands)
-        command_stream.append(b'Q')
+        if inner_content:
+            command_stream.extend(inner_content)
 
         # draw the border around the stamp
+        bbox = self.box
         border_width = self.style.border_width
         if border_width:
             command_stream.append(
@@ -438,7 +462,7 @@ class TextStamp(content.PdfContent):
     def apply(self, dest_page: int, x: int, y: int):
         """
         Apply a stamp to a particular page in the PDF writer attached to this
-        :class:`.TextStamp` instance.
+        :class:`.BaseStamp` instance.
 
         :param dest_page:
             Index of the page to which the stamp is to be applied
@@ -482,6 +506,96 @@ class TextStamp(content.PdfContent):
         #  appearances in some form
         stamp_ref = self.register()
         return AnnotAppearances(normal=stamp_ref)
+
+
+class StaticContentStamp(BaseStamp):
+    """Class representing stamps with static content."""
+
+    def __init__(self, writer: BasePdfFileWriter, style: StaticStampStyle,
+                 box: layout.BoxConstraints):
+        if not (box and box.height_defined and box.width_defined):
+            raise layout.LayoutError(
+                "StaticContentStamp requires a predetermined bounding box."
+            )
+        super().__init__(box=box, style=style, writer=writer)
+
+    def _render_inner_content(self):
+        return []
+
+
+class TextStamp(BaseStamp):
+    """
+    Class that renders a text stamp as specified by an instance
+    of :class:`.TextStampStyle`.
+    """
+
+    def __init__(self, writer: BasePdfFileWriter, style,
+                 text_params=None, box: layout.BoxConstraints = None):
+        super().__init__(box=box, style=style, writer=writer)
+        self.text_params = text_params
+
+        self.text_box: Optional[TextBox] = None
+
+    def get_default_text_params(self):
+        """
+        Compute values for the default string interpolation parameters
+        to be applied to the template string string specified in the he stamp
+        style. This method does not take into account the ``text_params``
+        init parameter yet.
+
+        :return:
+            A dictionary containing the parameters and their values.
+        """
+        ts = datetime.now(tz=tzlocal.get_localzone())
+        return {
+            'ts': ts.strftime(self.style.timestamp_format),
+        }
+
+    def _text_layout(self):
+        # Set the contents of the text box
+        self.text_box = tb = TextBox(
+            self.style.text_box_style, writer=self.writer,
+            resources=self.resources, box=None
+        )
+        _text_params = self.get_default_text_params()
+        if self.text_params is not None:
+            _text_params.update(self.text_params)
+        text = self.style.stamp_text % _text_params
+        tb.content = text
+
+        # Render the text box in its natural size, we'll deal with
+        # the minutiae later
+        return tb.render()
+
+    def _inner_layout_natural_size(self):
+        # render text
+        text_commands = self._text_layout()
+
+        inn_box = self.text_box.box
+        return [text_commands], (inn_box.width, inn_box.height)
+
+    def _inner_content_layout_rule(self):
+        return self.style.inner_content_layout or DEFAULT_BOX_LAYOUT
+
+    def _render_inner_content(self):
+        command_stream = [b'q']
+
+        # compute the inner bounding box
+        inn_commands, (inn_width, inn_height) \
+            = self._inner_layout_natural_size()
+
+        inner_layout = self._inner_content_layout_rule()
+
+        bbox = self.box
+
+        # position the inner box
+        inn_position = inner_layout.fit(bbox, inn_width, inn_height)
+
+        command_stream.append(inn_position.as_cm())
+        command_stream.extend(inn_commands)
+        command_stream.append(b'Q')
+
+        return command_stream
 
 
 class QRStamp(TextStamp):

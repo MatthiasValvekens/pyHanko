@@ -44,8 +44,7 @@ from pyhanko.sign.general import (
     _translate_pyca_cryptography_cert_to_asn1, get_pyca_cryptography_hash,
 )
 from pyhanko.stamp import (
-    TextStampStyle, TextStamp, STAMP_ART_CONTENT,
-    QRStampStyle, QRStamp,
+    TextStampStyle, STAMP_ART_CONTENT, BaseStampStyle,
 )
 
 __all__ = [
@@ -1464,7 +1463,7 @@ class SigAppearanceSetup:
     :class:`SigObjSetup`.
     """
 
-    style: TextStampStyle
+    style: BaseStampStyle
     """
     Stamp style to use to generate the appearance.
     """
@@ -1486,10 +1485,6 @@ class SigAppearanceSetup:
     """
 
     def _apply(self, sig_annot, writer):
-        style = self.style
-        name = self.name
-        timestamp = self.timestamp
-        extra_text_params = self.text_params or {}
         try:
             x1, y1, x2, y2 = sig_annot['/Rect']
         except KeyError:
@@ -1499,36 +1494,30 @@ class SigAppearanceSetup:
         if w and h:
             # the field is probably a visible one, so we change its appearance
             # stream to show some data about the signature
-            text_params = {
-                'signer': name,
-                'ts': timestamp.strftime(style.timestamp_format),
-                **extra_text_params
-            }
-            box = BoxConstraints(width=w, height=h)
-            if isinstance(style, QRStampStyle):
-                # extract the URL parameter
-                try:
-                    url = text_params.pop('url')
-                except KeyError:
-                    raise SigningError(
-                        "Signatures using a QR stamp style must pass "
-                        "a 'url' text parameter."
-                    )
-                stamp = QRStamp(
-                    writer, style=style, url=url,
-                    text_params=text_params, box=box
-                )
-            else:
-                stamp = TextStamp(
-                    writer, style=style, text_params=text_params,
-                    box=box
-                )
+            stamp = self._appearance_stamp(
+                writer, BoxConstraints(width=w, height=h)
+            )
             sig_annot['/AP'] = stamp.as_appearances().as_pdf_object()
             try:
                 # if there was an entry like this, it's meaningless now
                 del sig_annot[pdf_name('/AS')]
             except KeyError:
                 pass
+
+    def _appearance_stamp(self, writer, box):
+        style = self.style
+
+        name = self.name
+        timestamp = self.timestamp
+        extra_text_params = self.text_params or {}
+        text_params = {
+            'signer': name,
+            **extra_text_params
+        }
+        if isinstance(style, TextStampStyle):
+            text_params['ts'] = timestamp.strftime(style.timestamp_format)
+
+        return style.create_stamp(writer, box, text_params)
 
 
 @dataclass(frozen=True)

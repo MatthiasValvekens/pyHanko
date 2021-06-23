@@ -27,7 +27,7 @@ from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
 from pyhanko.sign.ades.cades_asn1 import (
     SignaturePolicyIdentifier, SignaturePolicyId
 )
-from pyhanko.pdf_utils import generic, embed
+from pyhanko.pdf_utils import generic, embed, layout
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.misc import PdfWriteError, PdfReadError
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
@@ -1781,7 +1781,7 @@ def test_qr_sign_enforce_url_param(params_value):
         stamp_style=style
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
-    with pytest.raises(SigningError):
+    with pytest.raises(layout.LayoutError):
         signer.sign_pdf(
             w, existing_fields_only=True, appearance_text_params=params_value
         )

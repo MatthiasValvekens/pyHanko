@@ -1,3 +1,4 @@
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,8 @@ from .layout_test_utils import with_layout_comparison, compare_output
 
 from pyhanko.stamp import (
     text_stamp_file, qr_stamp_file, TextStampStyle,
-    QRStampStyle, TextStamp, QRPosition, STAMP_ART_CONTENT, QRStamp
+    QRStampStyle, TextStamp, QRPosition, STAMP_ART_CONTENT, QRStamp,
+    StaticStampStyle
 )
 
 FONT_DIR = 'pyhanko_tests/data/fonts'
@@ -222,3 +224,38 @@ def test_stamp_with_scaled_pdf_bg():
     ts.apply(0, x=30, y=600)
 
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/stamp-on-pdf-bg.pdf')
+
+
+@with_layout_comparison
+def test_stamp_with_fixed_pdf_content():
+    w = empty_page()
+
+    style = StaticStampStyle.from_pdf_file(
+        'pyhanko_tests/data/pdf/pdf-background-test.pdf'
+    )
+
+    stamp = style.create_stamp(
+        w, box=layout.BoxConstraints(200, 50), text_params={}
+    )
+    stamp.apply(0, x=30, y=600)
+
+    compare_output(w, f'{EXPECTED_OUTPUT_DIR}/stamp-from-static-pdf.pdf')
+
+
+@pytest.mark.parametrize(
+    'box', [
+        None, layout.BoxConstraints(width=200),
+        layout.BoxConstraints(height=50),
+        layout.BoxConstraints(aspect_ratio=Fraction(4, 1)),
+        layout.BoxConstraints()
+    ]
+)
+def test_static_stamp_enforce_box_defined(box):
+    w = empty_page()
+
+    style = StaticStampStyle.from_pdf_file(
+        'pyhanko_tests/data/pdf/pdf-background-test.pdf'
+    )
+
+    with pytest.raises(layout.LayoutError, match="predetermined bounding box"):
+        style.create_stamp(w, box=box, text_params={})
