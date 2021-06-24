@@ -285,7 +285,7 @@ in the end result.
 
 
 Static content stamps
----------------------
+^^^^^^^^^^^^^^^^^^^^^
 
 PyHanko is mainly a signing library, and as such, its appearance generation code is fairly
 primitive. If you want to go beyond pyHanko's default signature appearances, you have the option
