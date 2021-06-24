@@ -118,7 +118,8 @@ def _derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
     password = (password + _encryption_padding)[:32]
     # 2. Initialize the MD5 hash function and pass the result of step 1 as
     # input to this function.
-    m = md5(password)
+    # NOTE: Suppress LGTM warning here, we have to do what the spec says
+    m = md5(password)  # lgtm
     # 3. Pass the value of the encryption dictionary's /O entry to the MD5 hash
     # function.
     m.update(owner_entry)
@@ -211,7 +212,8 @@ def _aes_cbc_encrypt(key, data, iv, use_padding=True):
 def _rc4_encrypt(key, data):
     cipher = Cipher(algorithms.ARC4(key), mode=None)
     encryptor = cipher.encryptor()
-    return encryptor.update(data) + encryptor.finalize()
+    # NOTE: Suppress LGTM warning here, we have to do what the spec says
+    return encryptor.update(data) + encryptor.finalize()  # lgtm
 
 
 def _r6_derive_file_key(pw_bytes: bytes, entry: _R6KeyEntry, e_entry: bytes,
@@ -237,7 +239,8 @@ def _bytes_mod_3(input_bytes: bytes):
 # Algorithm 2.B in ISO 32000-2 § 7.6.4.3.4
 def _r6_hash_algo(pw_bytes: bytes, current_salt: bytes,
                   u_entry: Optional[bytes] = None) -> bytes:
-    initial_hash = sha256(pw_bytes)
+    # NOTE: Suppress LGTM warning here, we have to do what the spec says
+    initial_hash = sha256(pw_bytes)  # lgtm
     assert len(current_salt) == 8
     initial_hash.update(current_salt)
     if u_entry:
@@ -294,7 +297,8 @@ def _compute_o_value_legacy_prep(password, rev, keylen):
     password = (password + _encryption_padding)[:32]
     # 2. Initialize the MD5 hash function and pass the result of step 1 as
     # input to this function.
-    m = md5(password)
+    # NOTE: Suppress LGTM warning here, we have to do what the spec says
+    m = md5(password)  # lgtm
     # 3. (Revision 3 or greater) Do the following 50 times: Take the output
     # from the previous MD5 hash and pass it as input into a new MD5 hash.
     md5_hash = m.digest()
