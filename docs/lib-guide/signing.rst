@@ -554,7 +554,7 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
     )
 
     # Phase 3: write & hash the document (with placeholder)
-    document_hash = cms_writer.send(
+    prep_digest = cms_writer.send(
         signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -566,8 +566,8 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
     signer: signers.SimpleSigner = FROM_CA
     # let's supply the CMS object as a raw bytestring
     cms_bytes = signer.sign(
-        data_digest=document_hash, digest_algorithm=md_algorithm,
-        timestamp=timestamp
+        data_digest=prep_digest.document_digest,
+        digest_algorithm=md_algorithm, timestamp=timestamp
     ).dump()
     output, sig_contents = cms_writer.send(cms_bytes)
 

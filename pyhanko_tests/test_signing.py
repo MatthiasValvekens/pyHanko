@@ -1911,7 +1911,7 @@ def test_direct_pdfcmsembedder_usage():
     )
 
     # Phase 3: write & hash the document (with placeholder)
-    document_hash = cms_writer.send(
+    prep_digest = cms_writer.send(
         signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -1923,8 +1923,8 @@ def test_direct_pdfcmsembedder_usage():
     signer: signers.SimpleSigner = FROM_CA
     # let's supply the CMS object as a raw bytestring
     cms_bytes = signer.sign(
-        data_digest=document_hash, digest_algorithm=md_algorithm,
-        timestamp=timestamp
+        data_digest=prep_digest.document_digest,
+        digest_algorithm=md_algorithm, timestamp=timestamp
     ).dump()
     output, sig_contents = cms_writer.send(cms_bytes)
 
@@ -2015,7 +2015,7 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
 
     cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
 
-    document_hash = cms_writer.send(
+    prep_digest = cms_writer.send(
         signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -2027,7 +2027,7 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
         })
     )
     cms_obj = signer.sign(
-        data_digest=document_hash, digest_algorithm=md_algorithm,
+        data_digest=prep_digest.document_digest, digest_algorithm=md_algorithm,
     )
     sd = cms_obj['content']
     si, = sd['signer_infos']
@@ -2180,7 +2180,7 @@ def _tamper_with_sig_obj(tamper_fun):
 
     tamper_fun(w, sig_obj)
 
-    document_hash = cms_writer.send(
+    prep_document_hash = cms_writer.send(
         signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -2192,7 +2192,8 @@ def _tamper_with_sig_obj(tamper_fun):
         })
     )
     cms_obj = signer.sign(
-        data_digest=document_hash, digest_algorithm=md_algorithm,
+        data_digest=prep_document_hash.document_digest,
+        digest_algorithm=md_algorithm,
     )
     return cms_writer.send(cms_obj)[0]
 
@@ -2795,7 +2796,7 @@ def test_sign_weak_sig_digest():
     external_md_algorithm = 'sha256'
     cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
 
-    document_hash = cms_writer.send(
+    prep_digest = cms_writer.send(
         signers.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
     )
     signer = signers.SimpleSigner(
@@ -2804,8 +2805,8 @@ def test_sign_weak_sig_digest():
         cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
     )
     cms_obj = signer.sign(
-        data_digest=document_hash, digest_algorithm=external_md_algorithm,
-        timestamp=timestamp
+        data_digest=prep_digest.document_digest,
+        digest_algorithm=external_md_algorithm, timestamp=timestamp
     )
     si_obj: cms.SignerInfo = cms_obj['content']['signer_infos'][0]
     bad_algo = SignedDigestAlgorithm({'algorithm': 'md5_rsa'})
