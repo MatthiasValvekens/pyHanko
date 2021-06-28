@@ -871,6 +871,39 @@ def test_pades_double_sign_delete_dss(requests_mock):
 
 
 @freeze_time('2020-11-01')
+def test_pades_double_sign_delete_vri(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    meta2 = signers.PdfSignatureMetadata(
+        field_name='Sig2', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA, timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(out)
+    del w.root['/DSS']['/VRI']
+    w.update_container(w.root['/DSS'])
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    assert '/VRI' not in r.root['/DSS']
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted(s, extd=True)
+
+    # however, the second signature is violated by the deletion of the /DSS key
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    val_trusted_but_modified(s)
+
+
+@freeze_time('2020-11-01')
 def test_pades_dss_object_clobber(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(

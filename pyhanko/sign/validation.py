@@ -2202,10 +2202,9 @@ class DocumentSecurityStore:
             A PDF object representing this DSS.
         """
         pdf_dict = self.backing_pdf_object
-        pdf_dict.update({
-            pdf_name('/VRI'): generic.DictionaryObject(self.vri_entries),
-            pdf_name('/Certs'): generic.ArrayObject(list(self.certs.values())),
-        })
+        pdf_dict['/Certs'] = generic.ArrayObject(list(self.certs.values()))
+        if self.vri_entries:
+            pdf_dict['/VRI'] = generic.DictionaryObject(self.vri_entries)
 
         if self.ocsps:
             pdf_dict[pdf_name('/OCSPs')] = generic.ArrayObject(self.ocsps)

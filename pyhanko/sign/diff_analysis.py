@@ -416,15 +416,20 @@ class DSSCompareRule(WhitelistRule):
 
         )
 
-        if old_vri is None:
-            old_vri = generic.DictionaryObject()
-
         nodict_err = "/VRI is not a dictionary"
-        if not isinstance(old_vri, generic.DictionaryObject):
-            raise misc.PdfReadError(nodict_err)  # pragma: nocover
-        if not isinstance(new_vri, generic.DictionaryObject):
-            raise SuspiciousModification(nodict_err)
+        if new_vri is not None:
+            if not isinstance(new_vri, generic.DictionaryObject):
+                raise SuspiciousModification(nodict_err)
+            if old_vri is None:
+                old_vri = generic.DictionaryObject()
+            elif not isinstance(old_vri, generic.DictionaryObject):
+                raise misc.PdfReadError(nodict_err)  # pragma: nocover
+            yield from DSSCompareRule._check_vri(old, new, old_vri, new_vri)
 
+        # The case where /VRI was deleted is checked by _compare_key_refs
+
+    @staticmethod
+    def _check_vri(old, new, old_vri, new_vri):
         new_vri_hashes = set(new_vri.keys())
         for key, old_vri_value in old_vri.items():
             try:
