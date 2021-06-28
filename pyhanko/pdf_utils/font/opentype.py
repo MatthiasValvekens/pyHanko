@@ -428,7 +428,7 @@ class GlyphAccumulator(FontEngine):
             result['/Lang'] = pdf_string(self.bcp47_lang_code)
         return result
 
-    def shape(self, txt: str) -> ShapeResult:
+    def shape(self, txt: str, with_actual_text: bool = True) -> ShapeResult:
         buf = hb.Buffer()
         buf.add_str(txt)
 
@@ -493,19 +493,23 @@ class GlyphAccumulator(FontEngine):
                             if codepoint in relevant_codepoints:
                                 self._cid_to_unicode[cid] = chr(codepoint)
 
-        # wrap the text rendering operations in a Span
-        marked_content_buf = BytesIO()
-        marked_content_buf.write(b'/Span ')
-        mc_properties = self.marked_content_property_list(txt)
-        mc_properties.write_to_stream(marked_content_buf)
-        marked_content_buf.write(b' BDC ')
-        marked_content_buf.write(text_ops)
-        marked_content_buf.write(b' EMC')
+        if with_actual_text:
+            # wrap the text rendering operations in a Span
+            marked_content_buf = BytesIO()
+            marked_content_buf.write(b'/Span ')
+            mc_properties = self.marked_content_property_list(txt)
+            mc_properties.write_to_stream(marked_content_buf)
+            marked_content_buf.write(b' BDC ')
+            marked_content_buf.write(text_ops)
+            marked_content_buf.write(b' EMC')
 
-        marked_content_buf.seek(0)
+            marked_content_buf.seek(0)
+            graphics_ops = marked_content_buf.read()
+        else:
+            graphics_ops = text_ops
 
         return ShapeResult(
-            graphics_ops=marked_content_buf.read(),
+            graphics_ops=graphics_ops,
             x_advance=total_x / self.units_per_em,
             y_advance=total_y / self.units_per_em
         )

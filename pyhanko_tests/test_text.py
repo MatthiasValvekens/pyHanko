@@ -52,6 +52,20 @@ def test_embed_subset():
     assert len(font_file.data) == 3029
 
 
+def test_actual_text_toggle():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with open(NOTO_SERIF_JP, 'rb') as ffile:
+        ga = GlyphAccumulator(w, ffile, font_size=10)
+
+    res = ga.shape('difficult')
+    assert b'[<0045004ae9e200440056004d0055>] TJ' in res.graphics_ops
+    assert b'ActualText' in res.graphics_ops
+
+    res = ga.shape('difficult', with_actual_text=False)
+    assert b'[<0045004ae9e200440056004d0055>] TJ' in res.graphics_ops
+    assert b'ActualText' not in res.graphics_ops
+
+
 def test_write_embedded_string():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with open(NOTO_SERIF_JP, 'rb') as ffile:
