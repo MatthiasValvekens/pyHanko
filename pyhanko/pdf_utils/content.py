@@ -11,7 +11,7 @@ from .reader import PdfFileReader
 
 __all__ = [
     'ResourceType', 'ResourceManagementError',
-    'PdfResources', 'PdfContent', 'RawContent'
+    'PdfResources', 'PdfContent', 'RawContent', 'ImportedPdfPage'
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
