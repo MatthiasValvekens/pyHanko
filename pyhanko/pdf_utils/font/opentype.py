@@ -524,7 +524,7 @@ class GlyphAccumulator(FontEngine):
             f'/Ordering ({ordering}) def\n'
             f'/Supplement {supplement}\n def'
             'end def\n'
-            f'/CMapName {registry}-{ordering}-{supplement:03} def\n'
+            f'/CMapName /{registry}-{ordering}-{supplement:03} def\n'
             '/CMapType 2 def\n'
             '1 begincodespacerange\n'
             '<0000> <FFFF>\n'
@@ -538,9 +538,10 @@ class GlyphAccumulator(FontEngine):
 
         footer = (
             '\nendcmap\n'
-            'CMapName currentdict /CMap\n'
-            'defineresource pop\n'
-            'end\nend'
+            'CMapName\n'
+            'currentdict\n'
+            '/CMap defineresource\n'
+            'pop\nend\nend'
         )
         stream = generic.StreamObject(
             stream_data=(header + body + footer).encode('ascii')
