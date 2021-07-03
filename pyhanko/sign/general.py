@@ -43,7 +43,8 @@ __all__ = [
     'SignatureValidationError',
     'load_certs_from_pemder', 'load_cert_from_pemder',
     'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
-    'DEFAULT_WEAK_HASH_ALGORITHMS'
+    'DEFAULT_WEAK_HASH_ALGORITHMS',
+    'optimal_pss_params', 'as_signing_certificate'
 ]
 
 logger = logging.getLogger(__name__)
@@ -423,6 +424,19 @@ def find_cms_attribute(attrs, name):
 #  See RFC 5035.
 
 def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
+    """
+    Format an ASN.1 ``SigningCertificate`` object, where the certificate
+    is identified by its SHA-1 digest.
+
+    .. note::
+        This use of SHA-1 is not cryptographic in nature.
+
+    :param cert:
+        An X.509 certificate.
+    :return:
+        A :class:`tsp.SigningCertificate` object referring to the original
+        certificate.
+    """
     # see RFC 2634, § 5.4.1
     return tsp.SigningCertificate({
         'certs': [
@@ -554,7 +568,19 @@ def _process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm,
     return pss_padding, md
 
 
-def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str):
+def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str) \
+        -> algos.RSASSAPSSParams:
+    """
+    Figure out the optimal RSASSA-PSS parameters for a given certificate.
+    The subject's public key must be an RSA key.
+
+    :param cert:
+        An RSA X.509 certificate.
+    :param digest_algorithm:
+        The digest algorithm to use.
+    :return:
+        RSASSA-PSS parameters.
+    """
 
     digest_algorithm = digest_algorithm.lower()
 

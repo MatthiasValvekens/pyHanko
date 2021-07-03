@@ -31,7 +31,8 @@ __all__ = [
     'SeedValueDictVersion', 'SeedLockDocument', 'SigCertKeyUsage',
     'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
     'SignatureFormField',
-    'enumerate_sig_fields', 'append_signature_field'
+    'enumerate_sig_fields', 'append_signature_field',
+    'ensure_sig_flags', 'prepare_sig_field'
 ]
 
 logger = logging.getLogger(__name__)
@@ -1242,7 +1243,15 @@ def _insert_or_get_field_at(writer: BasePdfFileWriter, fields, path,
     )
 
 
-def _ensure_sig_flags(writer, lock_sig_flags: bool = True):
+def ensure_sig_flags(writer: BasePdfFileWriter, lock_sig_flags: bool = True):
+    """
+    Ensure the SigFlags setting is present in the AcroForm dictionary.
+
+    :param writer:
+        A PDF writer.
+    :param lock_sig_flags:
+        Whether to flag the document as append-only.
+    """
     # make sure /SigFlags is present. If not, create it
     # 3 = use append-only mode
 
@@ -1257,12 +1266,15 @@ def _ensure_sig_flags(writer, lock_sig_flags: bool = True):
         form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(1))
 
 
-def _prepare_sig_field(sig_field_name, root,
-                       update_writer: BasePdfFileWriter,
-                       existing_fields_only=False, **kwargs):
+def prepare_sig_field(sig_field_name, root,
+                      update_writer: BasePdfFileWriter,
+                      existing_fields_only=False, **kwargs):
     """
     Returns a tuple of a boolean and a reference to a signature field.
     The boolean is ``True`` if the field was created, and ``False`` otherwise.
+
+    .. danger::
+        This function is internal API.
     """
     if sig_field_name is None:  # pragma: nocover
         raise ValueError
@@ -1435,13 +1447,13 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
     root = pdf_out.root
 
     page_ref = pdf_out.find_page_for_modification(sig_field_spec.on_page)[0]
-    field_created, sig_field_ref = _prepare_sig_field(
+    field_created, sig_field_ref = prepare_sig_field(
         sig_field_spec.sig_field_name, root, update_writer=pdf_out,
         existing_fields_only=False,
         box=sig_field_spec.box, include_on_page=page_ref,
         combine_annotation=sig_field_spec.combine_annotation
     )
-    _ensure_sig_flags(writer=pdf_out, lock_sig_flags=False)
+    ensure_sig_flags(writer=pdf_out, lock_sig_flags=False)
     if not field_created:
         raise PdfWriteError(
             'Signature field with name %s already exists.'

@@ -37,7 +37,7 @@ from pyhanko.sign.general import (
     load_cert_from_pemder, find_cms_attribute, WeakHashAlgorithmError,
     SimpleCertificateStore, load_certs_from_pemder
 )
-from pyhanko.sign.signers import PdfTimeStamper
+from pyhanko.sign.signers import PdfTimeStamper, cms_embedder
 from pyhanko.sign.validation import (
     validate_pdf_signature, read_certification_data, DocumentSecurityStore,
     EmbeddedPdfSignature, apply_adobe_revocation_info,
@@ -1885,7 +1885,7 @@ def test_direct_pdfcmsembedder_usage():
     w = IncrementalPdfFileWriter(input_buf)
 
     # Phase 1: coroutine sets up the form field
-    cms_writer = signers.PdfCMSEmbedder().write_cms(
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
         field_name='Signature', writer=w
     )
     sig_field_ref = next(cms_writer)
@@ -1901,9 +1901,9 @@ def test_direct_pdfcmsembedder_usage():
 
     md_algorithm = 'sha256'
     cms_writer.send(
-        signers.SigObjSetup(
+        cms_embedder.SigObjSetup(
             sig_placeholder=sig_obj,
-            mdp_setup=signers.SigMDPSetup(
+            mdp_setup=cms_embedder.SigMDPSetup(
                 md_algorithm=md_algorithm, certify=True,
                 docmdp_perms=fields.MDPPerm.NO_CHANGES
             )
@@ -1912,7 +1912,7 @@ def test_direct_pdfcmsembedder_usage():
 
     # Phase 3: write & hash the document (with placeholder)
     prep_digest = cms_writer.send(
-        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+        cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
     # Phase 4: construct CMS signature object, and pass it on to cms_writer
@@ -2007,16 +2007,16 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
     w = IncrementalPdfFileWriter(input_buf)
     md_algorithm = 'sha256'
 
-    cms_writer = signers.PdfCMSEmbedder().write_cms(
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
         field_name='Signature', writer=w
     )
     next(cms_writer)
     sig_obj = signers.SignatureObject(bytes_reserved=8192)
 
-    cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
 
     prep_digest = cms_writer.send(
-        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+        cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
     signer: signers.SimpleSigner = signers.SimpleSigner(
@@ -2170,18 +2170,18 @@ def _tamper_with_sig_obj(tamper_fun):
     w = IncrementalPdfFileWriter(input_buf)
     md_algorithm = 'sha256'
 
-    cms_writer = signers.PdfCMSEmbedder().write_cms(
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
         field_name='Signature', writer=w
     )
     next(cms_writer)
     sig_obj = signers.SignatureObject(bytes_reserved=8192)
 
-    cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
 
     tamper_fun(w, sig_obj)
 
     prep_document_hash = cms_writer.send(
-        signers.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+        cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
     signer: signers.SimpleSigner = signers.SimpleSigner(
@@ -2785,7 +2785,7 @@ def test_sign_weak_sig_digest():
     input_buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(input_buf)
 
-    cms_writer = signers.PdfCMSEmbedder().write_cms(
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
         field_name='Signature', writer=w
     )
     next(cms_writer)
@@ -2794,10 +2794,10 @@ def test_sign_weak_sig_digest():
     sig_obj = signers.SignatureObject(timestamp=timestamp, bytes_reserved=8192)
 
     external_md_algorithm = 'sha256'
-    cms_writer.send(signers.SigObjSetup(sig_placeholder=sig_obj))
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
 
     prep_digest = cms_writer.send(
-        signers.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
+        cms_embedder.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
     )
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
