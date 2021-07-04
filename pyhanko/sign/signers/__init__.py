@@ -1,3 +1,9 @@
+"""
+This package houses the part of pyHanko that produces digital signatures.
+It contains modules for creating ``SignedData`` CMS objects, embedding them
+in PDF files, and for handling PDF-specific document signing needs.
+"""
+
 from .pdf_cms import Signer, SimpleSigner
 from .pdf_byterange import (
     PdfByteRangeDigest, PdfSignedData, SignatureObject, DocumentTimestamp,

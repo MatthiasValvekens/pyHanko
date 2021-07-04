@@ -35,10 +35,10 @@ some minor implications for the API design (see
 :ref:`this subsection <extending-signer>` in particular).
 
 
-.. |PdfSignatureMetadata| replace:: :class:`~.pyhanko.sign.signers.PdfSignatureMetadata`
-.. |Signer| replace:: :class:`~.pyhanko.sign.signers.Signer`
-.. |PdfCMSEmbedder| replace:: :class:`~.pyhanko.sign.signers.PdfCMSEmbedder`
-.. |PdfSigner| replace:: :class:`~.pyhanko.sign.signers.PdfSigner`
+.. |PdfSignatureMetadata| replace:: :class:`~.pyhanko.sign.signers.pdf_signer.PdfSignatureMetadata`
+.. |Signer| replace:: :class:`~.pyhanko.sign.signers.pdf_cms.Signer`
+.. |PdfCMSEmbedder| replace:: :class:`~.pyhanko.sign.signers.cms_embedder.PdfCMSEmbedder`
+.. |PdfSigner| replace:: :class:`~.pyhanko.sign.signers.pdf_signer.PdfSigner`
 .. |TimeStamper| replace:: :class:`~.pyhanko.sign.timestamps.TimeStamper`
 
 
@@ -95,8 +95,8 @@ In simple cases, signing a document can therefore be as easy as this:
         # do stuff with 'out'
         # ...
 
-The :func:`~.pyhanko.sign.signers.sign_pdf` function is a thin convenience
-wrapper around |PdfSigner|'s :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`
+The :func:`~.pyhanko.sign.signers.functions.sign_pdf` function is a thin convenience
+wrapper around |PdfSigner|'s :meth:`~.pyhanko.sign.signers.pdf_signer.PdfSigner.sign_pdf`
 method, with essentially the same API.
 The following code is more or less equivalent.
 
@@ -129,7 +129,7 @@ In the above examples, ``out`` ends up containing a byte buffer
 (:class:`.io.BytesIO` object) with the signed output.
 You can control the output stream using the ``output`` or ``in_place``
 parameters; see the documentation for
-:meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`.
+:meth:`~.pyhanko.sign.signers.pdf_signer.PdfSigner.sign_pdf`.
 
 .. danger::
     Any :class:`~.pyhanko.pdf_utils.incremental_writer.IncrementalPdfFileWriter`
@@ -145,7 +145,7 @@ documentation for |PdfSignatureMetadata| and |PdfSigner|.
     of |PdfSignatureMetadata|, pyHanko will (by default) create an invisible
     signature field to contain the signature.
     This behaviour can be turned off using the ``existing_fields_only`` parameter
-    to :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`, or you can supply
+    to :meth:`~.pyhanko.sign.signers.pdf_signer.PdfSigner.sign_pdf`, or you can supply
     a custom field spec when initialising the |PdfSigner|.
 
     For more details on signature fields and how to create them, take a look at
@@ -492,6 +492,12 @@ construction of the CMS object itself.
 
 The low-level |PdfCMSEmbedder| API
 ----------------------------------
+.. versionadded:: 0.3.0
+
+.. versionchanged:: 0.7.0
+    Digest wrapped in
+    :class:`~pyhanko.sign.signers.pdf_byterange.PreparedByteRangeDigest`
+    in step 3; ``output`` returned in step 3 instead of step 4.
 
 If even extending |Signer| doesn't cover your use case (e.g. because you want
 to take the construction of the signature CMS object out of pyHanko's hands

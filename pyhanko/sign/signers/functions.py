@@ -1,3 +1,7 @@
+"""
+This module defines pyHanko's high-level API entry points.
+"""
+
 import tzlocal
 from datetime import datetime
 from typing import Optional
@@ -94,7 +98,8 @@ def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
     :param pdf_writer:
         The PDF writer to use.
     :param file_spec_string:
-        See :attr:`embed.FileSpec.file_spec_string`.
+        See :attr:`~pyhanko.pdf_utils.embed.FileSpec.file_spec_string` in
+        :class:`~pyhanko.pdf_utils.embed.FileSpec`.
     :param payload:
         Payload object.
     :param cms_obj:
@@ -102,12 +107,15 @@ def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
     :param extension:
         File extension to use for the CMS attachment.
     :param file_name:
-        See :attr:`embed.FileSpec.file_name`.
+        See :attr:`~pyhanko.pdf_utils.embed.FileSpec.file_name` in
+        :class:`~pyhanko.pdf_utils.embed.FileSpec`.
     :param file_spec_kwargs:
-        Extra arguments to pass to the :class:`embed.FileSpec` constructor
+        Extra arguments to pass to the
+        :class:`~pyhanko.pdf_utils.embed.FileSpec` constructor
         for the main attachment specification.
     :param cms_file_spec_kwargs:
-        Extra arguments to pass to the :class:`embed.FileSpec` constructor
+        Extra arguments to pass to the
+        :class:`~pyhanko.pdf_utils.embed.FileSpec` constructor
         for the CMS attachment specification.
     """
 

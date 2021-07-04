@@ -1,3 +1,8 @@
+"""
+This module describes and implements the low-level :class:`.PdfCMSEmbedder`
+protocol for embedding CMS payloads into PDF signature objects.
+"""
+
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -346,6 +351,13 @@ class PdfCMSEmbedder:
     def write_cms(self, field_name: str, writer: BasePdfFileWriter,
                   existing_fields_only=False):
         """
+        .. versionadded:: 0.3.0
+
+        .. versionchanged:: 0.7.0
+            Digest wrapped in
+            :class:`~pyhanko.sign.signers.pdf_byterange.PreparedByteRangeDigest`
+            in step 3; ``output`` returned in step 3 instead of step 4.
+
         This method returns a generator coroutine that controls the process
         of embedding CMS data into a PDF signature field.
         Can be used for both timestamps and regular signatures.
@@ -379,7 +391,6 @@ class PdfCMSEmbedder:
            containing the document digest and the relevant offsets, and
            ``output`` is the output stream to which the document to be
            signed was written.
-
 
            From this point onwards, **no objects may be changed or added** to
            the :class:`.IncrementalPdfFileWriter` currently in use.

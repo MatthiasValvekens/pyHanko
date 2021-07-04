@@ -1,3 +1,8 @@
+"""
+This module contains the low-level building blocks for dealing with bookkeeping
+around ``/ByteRange`` digests in PDF files.
+"""
+
 from dataclasses import dataclass
 from io import BytesIO
 import binascii
@@ -15,13 +20,19 @@ from . import constants
 from ..fields import SigSeedSubFilter
 
 __all__ = [
-    'SigByteRangeObject', 'DERPlaceholder', 'DocumentTimestamp',
-    'PdfByteRangeDigest', 'SignatureObject',
-    'PdfSignedData', 'PreparedByteRangeDigest',
+    # Serialisable object used to track placeholder locations,
+    # part of PdfCMSEmbedder / PdfSigner protocol
+    'PreparedByteRangeDigest',
+    # PDF-level signature containers
+    'PdfByteRangeDigest', 'PdfSignedData', 'SignatureObject',
+    'DocumentTimestamp',
 ]
 
 
 class SigByteRangeObject(generic.PdfObject):
+    """
+    Internal class to handle the ``/ByteRange`` arrays themselves.
+    """
 
     def __init__(self):
         self._filled = False
@@ -62,9 +73,11 @@ class SigByteRangeObject(generic.PdfObject):
 
 
 class DERPlaceholder(generic.PdfObject):
+    """
+    Internal class to handle placeholders for DER content.
+    """
 
     def __init__(self, bytes_reserved=None):
-        self._placeholder = True
         self.value = b'0' * (bytes_reserved or 16 * 1024)
         self._offsets = None
 
@@ -87,31 +100,89 @@ class DERPlaceholder(generic.PdfObject):
 
 @dataclass(frozen=True)
 class PreparedByteRangeDigest:
+    """
+    .. versionadded:: 0.7.0
+
+    Bookkeeping class that contains the digest of a document that is about to be
+    signed (or otherwise authenticated) based on said digest. It also keeps
+    track of the digest algorithm used, and the region in the output stream that
+    will contain the signature.
+
+    Instances of this class can easily be serialised, which allows for
+    interrupting the signing process partway through.
+    """
+
     document_digest: bytes
+    """
+    Digest of the document, computed over the appropriate ``/ByteRange``.
+    """
+
     md_algorithm: str
+    """
+    Name of the digest algorithm used.
+    """
+
     reserved_region_start: int
+    """
+    Start of the reserved region in the output stream that is not part of the
+    ``/ByteRange``.
+    """
+
     reserved_region_end: int
+    """
+    End of the reserved region in the output stream that is not part of the
+    ``/ByteRange``.
+    """
 
     def fill_with_cms(self, output: IO,
                       cms_data: Union[bytes, cms.ContentInfo]):
+        """
+        Write a DER-encoded CMS object to the reserved region indicated
+        by :attr:`reserved_region_start` and :attr:`reserved_region_end` in the
+        output stream.
+
+        :param output:
+            Output stream to use. Must be writable and seekable.
+        :param cms_data:
+            CMS object to write. Can be provided as an
+            :class:`asn1crypto.cms.ContentInfo` object, or as raw DER-encoded
+            bytes.
+        :return:
+            A :class:`bytes` object containing the contents that were written,
+            plus any additional padding.
+        """
         if isinstance(cms_data, bytes):
             der_bytes = cms_data
         else:
             der_bytes = cms_data.dump()
         return self.fill_reserved_region(output, der_bytes)
 
-    def fill_reserved_region(self, output: IO, der_bytes: bytes):
-        der_hex = binascii.hexlify(der_bytes).upper()
+    def fill_reserved_region(self, output: IO, content_bytes: bytes):
+        """
+        Write hex-encoded contents to the reserved region indicated
+        by :attr:`reserved_region_start` and :attr:`reserved_region_end` in the
+        output stream.
+
+        :param output:
+            Output stream to use. Must be writable and seekable.
+        :param content_bytes:
+            Content bytes. These will be padded, hexadecimally encoded and
+            written to the appropriate location in output stream.
+        :return:
+            A :class:`bytes` object containing the contents that were written,
+            plus any additional padding.
+        """
+        content_hex = binascii.hexlify(content_bytes).upper()
 
         start = self.reserved_region_start
         end = self.reserved_region_end
         # might as well compute this
         bytes_reserved = end - start - 2
-        length = len(der_hex)
+        length = len(content_hex)
         if length > bytes_reserved:
             raise SigningError(
-                f"Final DER payload larger than expected: "
-                f"allocated {bytes_reserved} bytes, but DER contents "
+                f"Final ByteRange payload larger than expected: "
+                f"allocated {bytes_reserved} bytes, but contents "
                 f"required {length} bytes."
             )  # pragma: nocover
 
@@ -123,14 +194,31 @@ class PreparedByteRangeDigest:
         # denominator in § 7.6.1?
         # Addition: the PDF 2.0 spec *does* spell out that this content
         # is not to be encrypted.
-        output.write(der_hex)
+        output.write(content_hex)
 
         output.seek(0)
-        padding = bytes(bytes_reserved // 2 - len(der_bytes))
-        return der_bytes + padding
+        padding = bytes(bytes_reserved // 2 - len(content_bytes))
+        return content_bytes + padding
 
 
 class PdfByteRangeDigest(generic.DictionaryObject):
+    """
+    General class to model a PDF Dictionary that has a ``/ByteRange`` entry
+    and a another data entry (named ``/Contents`` by default) that will contain
+    a value based on a digest computed over said ``/ByteRange``.
+    The ``/ByteRange`` will cover the entire file, except for the value of the
+    data entry itself.
+
+    .. danger::
+        This is internal API.
+
+    :param data_key:
+        Name of the data key, which is ``/Contents`` by default.
+    :param bytes_reserved:
+        Number of bytes to reserve for the contents placeholder.
+        If ``None``, a generous default is applied, but you should try to
+        estimate the size as accurately as possible.
+    """
 
     def __init__(self, data_key=pdf_name('/Contents'), *, bytes_reserved=None):
         super().__init__()
@@ -149,9 +237,11 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         Generator coroutine that handles the document hash computation and
         the actual filling of the placeholder data.
 
-        This is internal API; you should use use :class:`.PdfSigner`
-        wherever possible. If you *really* need fine-grained control,
-        use :class:`~pyhanko.sign.signers.cms_embedder.PdfCMSEmbedder` instead.
+        .. danger::
+            This is internal API; you should use use :class:`.PdfSigner`
+            wherever possible. If you *really* need fine-grained control,
+            use :class:`~pyhanko.sign.signers.cms_embedder.PdfCMSEmbedder`
+            instead.
         """
 
         if in_place:

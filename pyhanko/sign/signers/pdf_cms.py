@@ -1,4 +1,10 @@
+"""
+This module defines utility classes to format CMS objects for use in PDF
+signatures.
+"""
+
 import logging
+from dataclasses import dataclass
 from typing import Optional, Union, IO
 from datetime import datetime
 from cryptography.hazmat.primitives import serialization, hashes
@@ -21,7 +27,7 @@ from pyhanko.sign.general import (
 from pyhanko.pdf_utils import misc
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 
-__all__ = ['Signer', 'SimpleSigner']
+__all__ = ['Signer', 'SimpleSigner', 'PdfCMSSignedAttributes']
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +41,14 @@ class Signer:
 
     * :class:`.SimpleSigner` implements the easy case where all the key material
       can be loaded into memory.
-    * :class:`~.pkcs11.PKCS11Signer` implements a signer that is capable of
-      interfacing with a PKCS11 device (see also :class:`~.beid.BEIDSigner`).
+    * :class:`~pyhanko.sign.pkcs11.PKCS11Signer` implements a signer that is
+      capable of interfacing with a PKCS11 device
+      (see also :class:`~pyhanko.sign.beid.BEIDSigner`).
+
+    :param prefer_pss:
+        When signing using an RSA key, prefer PSS padding to legacy PKCS#1 v1.5
+        padding. Default is ``False``. This option has no effect on non-RSA
+        signatures.
     """
 
     signing_cert: x509.Certificate
@@ -759,3 +771,32 @@ class SimpleSigner(Signer):
             cert_registry=cert_reg, signature_mechanism=signature_mechanism,
             prefer_pss=prefer_pss
         )
+
+
+# TODO consider deprecating the current signed_attrs kwargs in favour of this
+#  dataclass
+
+@dataclass(frozen=True)
+class PdfCMSSignedAttributes:
+    """
+    .. versionadded:: 0.7.0
+
+    Serialisable container class describing input for various signed attributes
+    in a CMS object for a PDF signature.
+    """
+
+    signing_time: Optional[datetime] = None
+    """
+    Timestamp for the ``signingTime`` attribute. Will be ignored in a PAdES
+    context.
+    """
+
+    adobe_revinfo_attr: Optional[cms.CMSAttribute] = None
+    """
+    Adobe-style signed revocation info attribute.
+    """
+
+    cades_signed_attrs: Optional[CAdESSignedAttrSpec] = None
+    """
+    Optional settings for CAdES-style signed attributes.
+    """

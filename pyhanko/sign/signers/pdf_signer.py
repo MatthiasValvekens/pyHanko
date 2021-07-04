@@ -1,3 +1,7 @@
+"""
+This module implements support for PDF-specific signing functionality.
+"""
+
 import logging
 import uuid
 import tzlocal
@@ -29,7 +33,7 @@ from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 
 from . import constants
-from .pdf_cms import Signer
+from .pdf_cms import Signer, PdfCMSSignedAttributes
 from .cms_embedder import (
     PdfCMSEmbedder, SigObjSetup, SigMDPSetup, SigIOSetup, SigAppearanceSetup,
 )
@@ -40,7 +44,7 @@ from .pdf_byterange import (
 __all__ = [
     'PdfSignatureMetadata', 'PdfTimeStamper', 'PdfSigner',
     'PdfSigningSession', 'PdfTBSDocument', 'PdfPostSignatureDocument',
-    'PreSignValidationStatus', 'PdfCMSSignedAttributes', 'PostSignInstructions'
+    'PreSignValidationStatus', 'PostSignInstructions'
 ]
 
 
@@ -415,6 +419,9 @@ class PdfTimeStamper:
 
 class PdfSigner:
     """
+    .. versionchanged: 0.7.0
+        This class is no longer a subclass of :class:`.PdfTimeStamper`.
+
     Class to handle PDF signatures in general.
 
     :param signature_meta:
@@ -463,6 +470,17 @@ class PdfSigner:
 
     @property
     def default_md_for_signer(self) -> Optional[str]:
+        """
+        Name of the default message digest algorithm for this signer, if there
+        is one.
+        This method will try the :attr:`~.PdfSignatureMetadata.md_algorithm`
+        attribute on the signer's :attr:`signature_meta`, or try to retrieve
+        the digest algorithm associated with the underlying
+        :class:`~pyhanko.sign.signers.pdf_cms.Signer`.
+
+        :return:
+            The name of the message digest algorithm, or ``None``.
+        """
         return self.signature_meta.md_algorithm or self.signer_hash_algo
 
     def _enforce_certification_constraints(self, reader: PdfFileReader):
@@ -533,8 +551,28 @@ class PdfSigner:
         return md_algorithm
 
     def init_signing_session(self, pdf_out: BasePdfFileWriter,
-                             existing_fields_only=False) \
-            -> 'PdfSigningSession':
+                             existing_fields_only=False) -> 'PdfSigningSession':
+        """
+        Initialise a signing session with this :class:`.PdfSigner` for a
+        specified PDF file writer.
+
+        This step in the signing process handles all field-level operations
+        prior to signing: it creates the target form field if necessary, and
+        makes sure the seed value dictionary gets processed.
+
+        See also :meth:`digest_doc_for_signing` and :meth:`sign_pdf`.
+
+        :param pdf_out:
+            The writer containing the PDF file to be signed.
+        :param existing_fields_only:
+            If ``True``, never create a new empty signature field to contain
+            the signature.
+            If ``False``, a new field may be created if no field matching
+            :attr:`~.PdfSignatureMetadata.field_name` exists.
+        :return:
+            A :class:`.PdfSigningSession` object modelling the signing session
+            in its post-setup stage.
+        """
 
         # TODO document
         timestamper = self.default_timestamper
@@ -600,6 +638,50 @@ class PdfSigner:
                                in_place=False, output=None,
                                chunk_size=misc.DEFAULT_CHUNK_SIZE)\
             -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
+        """
+        Set up all stages of the signing process up to and including the point
+        where the signature placeholder is allocated, and the document's
+        ``/ByteRange`` digest is computed.
+
+        See :meth:`sign_pdf` for a less granular, more high-level approach.
+
+        .. note::
+            This method is useful in remote signing scenarios, where you might
+            want to free up resources while waiting for the remote signer to
+            respond. The :class:`.PreparedByteRangeDigest` object returned
+            allows you to keep track of the required state to fill the
+            signature container at some later point in time.
+
+        :param pdf_out:
+            A PDF file writer (usually an :class:`.IncrementalPdfFileWriter`)
+            containing the data to sign.
+        :param existing_fields_only:
+            If ``True``, never create a new empty signature field to contain
+            the signature.
+            If ``False``, a new field may be created if no field matching
+            :attr:`~.PdfSignatureMetadata.field_name` exists.
+        :param bytes_reserved:
+            Bytes to reserve for the CMS object in the PDF file.
+            If not specified, make an estimate based on a dummy signature.
+        :param appearance_text_params:
+            Dictionary with text parameters that will be passed to the
+            signature appearance constructor (if applicable).
+        :param output:
+            Write the output to the specified output stream.
+            If ``None``, write to a new :class:`.BytesIO` object.
+            Default is ``None``.
+        :param in_place:
+            Sign the original input stream in-place.
+            This parameter overrides ``output``.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``.
+        :return:
+            A tuple containing a :class:`.PreparedByteRangeDigest` object,
+            a :class:`.PdfTBSDocument` object and an output handle to which the
+            document in its current state has been written.
+        """
         signing_session = self.init_signing_session(
             pdf_out, existing_fields_only=existing_fields_only,
         )
@@ -687,15 +769,55 @@ class PdfSigner:
 
 @dataclass(frozen=True)
 class PreSignValidationStatus:
-    validation_paths: List[ValidationPath]
+    """
+    .. versionadded:: 0.7.0
+
+    Container for validation data collected prior to creating a signature, e.g.
+    for later inclusion in a document's DSS, or as a signed attribute on
+    the signature.
+    """
+
     signer_path: ValidationPath
+    """
+    Validation path for the signer's certificate.
+    """
+
+    validation_paths: List[ValidationPath]
+    """
+    List of other relevant validation paths.
+    """
+
     ts_validation_paths: Optional[List[ValidationPath]] = None
+    """
+    List of validation paths relevant for embedded timestamps.
+    """
+
     adobe_revinfo_attr: Optional[cms.CMSAttribute] = None
+    """
+    Preformatted revocation info attribute to include, if requested by the
+    settings.
+    """
+
     ocsps_to_embed: List[ocsp.OCSPResponse] = None
+    """
+    List of OCSP responses collected so far.
+    """
+
     crls_to_embed: List[crl.CertificateList] = None
+    """
+    List of CRLS collected so far.
+    """
 
 
 class PdfSigningSession:
+    """
+    .. versionadded:: 0.7.0
+
+    Class modelling a PDF signing session in its initial state.
+
+    The ``__init__`` method is internal API, get an instance using
+    :meth:`.PdfSigner.init_signing_session`.
+    """
 
     def __init__(self, pdf_signer: PdfSigner, cms_writer,
                  sig_field, md_algorithm: str, timestamper: TimeStamper,
@@ -712,8 +834,26 @@ class PdfSigningSession:
             system_time or datetime.now(tz=tzlocal.get_localzone())
         self.sv_spec = sv_spec
 
-    def perform_presign_validation(self, pdf_out: BasePdfFileWriter) \
+    def perform_presign_validation(self,
+                                   pdf_out: Optional[BasePdfFileWriter] = None)\
             -> Optional[PreSignValidationStatus]:
+        """
+        Perform certificate validation checks for the signer's certificate,
+        including any necessary revocation checks.
+
+        This function will also attempt to validate & collect revocation
+        information for the relevant TSA (by requesting a dummy timestamp).
+
+        :param pdf_out:
+            Current PDF writer. Technically optional; only used to look for
+            the end of the timestamp chain in the previous revision when
+            producing a PAdES-LTA signature in a document that is already
+            signed (to ensure that the timestamp chain is uninterrupted).
+        :return:
+            A :class:`PreSignValidationStatus` object, or ``None`` if there
+            is no validation context available.
+        """
+
         pdf_signer = self.pdf_signer
         validation_paths = []
         signature_meta = pdf_signer.signature_meta
@@ -1039,6 +1179,21 @@ class PdfSigningSession:
     def prepare_tbs_document(self, validation_info: PreSignValidationStatus,
                              bytes_reserved=None, appearance_text_params=None) \
             -> 'PdfTBSDocument':
+        """
+        Set up the signature appearance (if necessary) and signature dictionary
+        in the PDF file, to put the document in its final pre-signing state.
+
+        :param validation_info:
+            Validation information collected prior to signing.
+        :param bytes_reserved:
+            Bytes to reserve for the signature container. If ``None``,
+            an estimate will be computed.
+        :param appearance_text_params:
+            Optional text parameters for the signature appearance content.
+        :return:
+            A :class:`.PdfTBSDocument` describing the document in its final
+            pre-signing state.
+        """
 
         pdf_signer = self.pdf_signer
         signature_meta = self.pdf_signer.signature_meta
@@ -1126,21 +1281,52 @@ class PdfSigningSession:
 
 
 @dataclass(frozen=True)
-class PdfCMSSignedAttributes:
-    signing_time: Optional[datetime] = None
-    adobe_revinfo_attr: Optional[cms.CMSAttribute] = None
-    cades_signed_attrs: Optional[CAdESSignedAttrSpec] = None
-
-
-@dataclass(frozen=True)
 class PostSignInstructions:
+    """
+    .. versionadded:: 0.7.0
+
+    Container class housing instructions for incremental updates
+    to the document after the signature has been put in place.
+    Necessary for PAdES-LT and PAdES-LTA workflows.
+    """
+
     validation_info: PreSignValidationStatus
-    timestamp_md_algorithm: str
+    """
+    Validation information to embed in the DSS (if not already present).
+    """
+
     timestamper: Optional[TimeStamper] = None
+    """
+    Timestamper to use for produce document timestamps. If ``None``, no
+    timestamp will be added.
+    """
+
+    timestamp_md_algorithm: Optional[str] = None
+    """
+    Digest algorithm to use when producing timestamps.
+    Defaults to :const:`~pyhanko.sign.signers.constants.DEFAULT_MD`.
+    """
+
     timestamp_field_name: Optional[str] = None
+    """
+    Name of the timestamp field to use. If not specified, a field name will be
+    generated.
+    """
 
 
 class PdfTBSDocument:
+    """
+    .. versionadded:: 0.7.0
+
+    A PDF document in its final pre-signing state.
+
+    The ``__init__`` method is internal API, get an instance using
+    :meth:`.PdfSigningSession.prepare_tbs_document`. Alternatively, use
+    :meth:`resume_signing` or :meth:`finish_signing` to continue a previously
+    interrupted signing process without instantiating a new
+    :class:`.PdfTBSDocument` object.
+    """
+
     def __init__(self, cms_writer, signer: Signer,
                  md_algorithm: str, use_pades: bool,
                  timestamper: Optional[TimeStamper] = None,
@@ -1154,9 +1340,36 @@ class PdfTBSDocument:
         self.post_sign_instructions = post_sign_instructions
         self.validation_context = validation_context
 
-    def digest_tbs_document(self, *, output, in_place: bool,
+    def digest_tbs_document(self, *, output: Optional[IO] = None,
+                            in_place: bool = False,
                             chunk_size=misc.DEFAULT_CHUNK_SIZE) \
             -> Tuple[PreparedByteRangeDigest, IO]:
+        """
+        Write the document to an output stream and compute the digest, while
+        keeping track of the (future) location of the signature contents in the
+        output stream.
+
+        The digest can then be passed to the next part of the signing pipeline.
+
+        .. warning::
+            This method can only be called once.
+
+        :param output:
+            Write the output to the specified output stream.
+            If ``None``, write to a new :class:`.BytesIO` object.
+            Default is ``None``.
+        :param in_place:
+            Sign the original input stream in-place.
+            This parameter overrides ``output``.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``.
+        :return:
+            A tuple containing a :class:`.PreparedByteRangeDigest` and the
+            output stream to which the output was written.
+        """
+
         # pass in I/O parameters, get back a hash
         return self.cms_writer.send(SigIOSetup(
             md_algorithm=self.md_algorithm,
@@ -1166,6 +1379,23 @@ class PdfTBSDocument:
     def perform_signature(self, document_digest: bytes,
                           pdf_cms_signed_attrs: PdfCMSSignedAttributes) \
             -> 'PdfPostSignatureDocument':
+        """
+        Perform the relevant cryptographic signing operations on the document
+        digest, and write the resulting CMS object to the appropriate location
+        in the output stream.
+
+        .. warning::
+            This method can only be called once, and must be invoked after
+            :meth:`digest_tbs_document`.
+
+        :param document_digest:
+            Digest of the document, as computed over the relevant
+            ``/ByteRange``.
+        :param pdf_cms_signed_attrs:
+            Description of the signed attributes to include.
+        :return:
+            A :class:`.PdfPostSignatureDocument` object.
+        """
         # Tell the signer to construct a CMS object
         signature_cms = self.signer.sign(
             document_digest, self.md_algorithm,
@@ -1188,9 +1418,32 @@ class PdfTBSDocument:
                        post_sign_instr: Optional[PostSignInstructions] = None,
                        validation_context: Optional[ValidationContext] = None)\
             -> 'PdfPostSignatureDocument':
+        """
+        Resume signing after obtaining a CMS object from an external source.
 
-        # TODO document that this method expects an IO object that is
-        #  writable and seekable
+        This is a class method; it doesn't require a :class:`.PdfTBSDocument`
+        instance. Contrast with :meth:`perform_signature`.
+
+        :param output:
+            Output stream housing the document in its final pre-signing state.
+            This stream must at least be writable and seekable, and also
+            readable if post-signature processing is required.
+        :param prepared_digest:
+            The prepared digest returned by a prior call to
+            :meth:`digest_tbs_document`.
+        :param signature_cms:
+            CMS object to embed in the signature dictionary.
+        :param post_sign_instr:
+            Instructions for post-signing processing (DSS updates and document
+            timestamps).
+        :param validation_context:
+            Validation context to use in post-signing operations.
+            This is mainly intended for TSA certificate validation, but it can
+            also contain additional validation data to embed in the DSS.
+        :return:
+            A :class:`PdfPostSignatureDocument`.
+        """
+
         sig_contents = prepared_digest.fill_with_cms(
             output, signature_cms
         )
@@ -1206,22 +1459,48 @@ class PdfTBSDocument:
                        post_sign_instr: Optional[PostSignInstructions] = None,
                        validation_context: Optional[ValidationContext] = None,
                        chunk_size=misc.DEFAULT_CHUNK_SIZE):
+        """
+        Finish signing after obtaining a CMS object from an external source, and
+        perform any required post-signature processing.
+
+        This is a class method; it doesn't require a :class:`.PdfTBSDocument`
+        instance. Contrast with :meth:`perform_signature`.
+
+        :param output:
+            Output stream housing the document in its final pre-signing state.
+        :param prepared_digest:
+            The prepared digest returned by a prior call to
+            :meth:`digest_tbs_document`.
+        :param signature_cms:
+            CMS object to embed in the signature dictionary.
+        :param post_sign_instr:
+            Instructions for post-signing processing (DSS updates and document
+            timestamps).
+        :param validation_context:
+            Validation context to use in post-signing operations.
+            This is mainly intended for TSA certificate validation, but it can
+            also contain additional validation data to embed in the DSS.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``.
+        """
         # TODO at this point, the output stream no longer needs to be readable,
-        #  just seekable
+        #  just seekable, unless there's a timestamp requirement.
+        #  Might want to factor that out for speed at some point.
         rw_output = misc.prepare_rw_output_stream(output)
         post_sign = cls.resume_signing(
             rw_output, prepared_digest=prepared_digest,
             signature_cms=signature_cms, post_sign_instr=post_sign_instr,
-            validation_context=validation_context
+            validation_context=validation_context,
         )
         post_sign.post_signature_processing(rw_output, chunk_size=chunk_size)
-        # note: since `output` should never be None in this case,
-        # realistically this method will always return the original `output`
-        return _finalise_output(output, rw_output)
 
 
 class PdfPostSignatureDocument:
     """
+    .. versionadded:: 0.7.0
+
     Represents the final phase of the PDF signing process
     """
 
@@ -1271,7 +1550,8 @@ class PdfPostSignatureDocument:
                 timestamper, field_name=instr.timestamp_field_name
             )
             pdf_timestamper.timestamp_pdf(
-                w, instr.timestamp_md_algorithm, validation_context,
+                w, instr.timestamp_md_algorithm or constants.DEFAULT_MD,
+                validation_context,
                 validation_paths=validation_info.validation_paths,
                 in_place=True, timestamper=timestamper, chunk_size=chunk_size
             )

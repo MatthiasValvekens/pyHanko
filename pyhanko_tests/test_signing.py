@@ -3034,13 +3034,12 @@ def test_simple_interrupted_signature():
     new_output.write(buf)
     buf.release()
 
-    ret_output = PdfTBSDocument.finish_signing(
+    PdfTBSDocument.finish_signing(
         new_output, prep_digest, FROM_CA.sign(
             prep_digest.document_digest,
             digest_algorithm=md_algorithm,
         ),
     )
-    assert ret_output is new_output
 
     r = PdfFileReader(new_output)
     val_trusted(r.embedded_signatures[0])
@@ -3084,7 +3083,7 @@ def test_interrupted_pades_lta_signature(requests_mock):
     )
     # fresh VC
     validation_context = live_testing_vc(requests_mock)
-    ret_output = PdfTBSDocument.finish_signing(
+    PdfTBSDocument.finish_signing(
         new_output, prep_digest, FROM_CA.sign(
             prep_digest.document_digest,
             digest_algorithm=md_algorithm,
@@ -3093,7 +3092,6 @@ def test_interrupted_pades_lta_signature(requests_mock):
         ), post_sign_instr=new_psi,
         validation_context=validation_context
     )
-    assert ret_output is new_output
 
     r = PdfFileReader(new_output)
     # check cardinality of DSS content

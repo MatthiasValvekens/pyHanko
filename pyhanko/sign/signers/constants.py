@@ -1,3 +1,8 @@
+"""
+This module defines constants & defaults used by pyHanko when creating digital
+signatures.
+"""
+
 from pyhanko.sign.fields import SigSeedSubFilter
 
 __all__ = [
