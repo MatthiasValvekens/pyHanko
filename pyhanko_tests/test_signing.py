@@ -3081,16 +3081,17 @@ def test_interrupted_pades_lta_signature(requests_mock):
         timestamp_md_algorithm=psi.timestamp_md_algorithm,
         timestamper=DUMMY_HTTP_TS,
         timestamp_field_name=psi.timestamp_field_name,
-        # fresh VC
-        validation_context=live_testing_vc(requests_mock),
     )
+    # fresh VC
+    validation_context = live_testing_vc(requests_mock)
     ret_output = PdfTBSDocument.finish_signing(
         new_output, prep_digest, FROM_CA.sign(
             prep_digest.document_digest,
             digest_algorithm=md_algorithm,
             use_pades=True,
             timestamper=DUMMY_HTTP_TS
-        ), post_sign_instr=new_psi
+        ), post_sign_instr=new_psi,
+        validation_context=validation_context
     )
     assert ret_output is new_output
 

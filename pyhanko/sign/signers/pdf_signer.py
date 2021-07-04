@@ -319,9 +319,7 @@ class PdfTimeStamper:
                 paths=validation_paths, validation_context=validation_context
             )
 
-        output = _finalise_output(output, res_output)
-
-        return output
+        return _finalise_output(output, res_output)
 
     def update_archival_timestamp_chain(
             self, reader: PdfFileReader, validation_context, in_place=True,
@@ -1115,7 +1113,6 @@ class PdfSigningSession:
                 #  might be overly restrictive (esp. for things like EdDSA where
                 #  the MD is essentially fixed)
                 timestamp_md_algorithm=md_algorithm,
-                validation_context=validation_context,
                 timestamper=doc_timestamper,
                 timestamp_field_name=signature_meta.timestamp_field_name,
             )
@@ -1123,7 +1120,8 @@ class PdfSigningSession:
             cms_writer=self.cms_writer, signer=pdf_signer.signer,
             md_algorithm=md_algorithm, timestamper=self.timestamper,
             use_pades=self.use_pades,
-            post_sign_instructions=post_signing_instr
+            post_sign_instructions=post_signing_instr,
+            validation_context=validation_context
         )
 
 
@@ -1138,7 +1136,6 @@ class PdfCMSSignedAttributes:
 class PostSignInstructions:
     validation_info: PreSignValidationStatus
     timestamp_md_algorithm: str
-    validation_context: ValidationContext
     timestamper: Optional[TimeStamper] = None
     timestamp_field_name: Optional[str] = None
 
@@ -1147,13 +1144,15 @@ class PdfTBSDocument:
     def __init__(self, cms_writer, signer: Signer,
                  md_algorithm: str, use_pades: bool,
                  timestamper: Optional[TimeStamper] = None,
-                 post_sign_instructions: Optional[PostSignInstructions] = None):
+                 post_sign_instructions: Optional[PostSignInstructions] = None,
+                 validation_context: Optional[ValidationContext] = None):
         self.cms_writer = cms_writer
         self.signer = signer
         self.md_algorithm = md_algorithm
         self.timestamper = timestamper
         self.use_pades = use_pades
         self.post_sign_instructions = post_sign_instructions
+        self.validation_context = validation_context
 
     def digest_tbs_document(self, *, output, in_place: bool,
                             chunk_size=misc.DEFAULT_CHUNK_SIZE) \
@@ -1178,23 +1177,26 @@ class PdfTBSDocument:
         # ... and feed it to the CMS writer
         sig_contents = self.cms_writer.send(signature_cms)
         return PdfPostSignatureDocument(
-            sig_contents, post_sign_instr=self.post_sign_instructions
+            sig_contents, post_sign_instr=self.post_sign_instructions,
+            validation_context=self.validation_context
         )
 
     @classmethod
     def resume_signing(cls, output: IO,
                        prepared_digest: PreparedByteRangeDigest,
                        signature_cms: Union[bytes, cms.ContentInfo],
-                       post_sign_instr: Optional[PostSignInstructions] = None)\
+                       post_sign_instr: Optional[PostSignInstructions] = None,
+                       validation_context: Optional[ValidationContext] = None)\
             -> 'PdfPostSignatureDocument':
 
         # TODO document that this method expects an IO object that is
-        #  readable, writable and seekable
+        #  writable and seekable
         sig_contents = prepared_digest.fill_with_cms(
             output, signature_cms
         )
         return PdfPostSignatureDocument(
-            sig_contents, post_sign_instr=post_sign_instr
+            sig_contents, post_sign_instr=post_sign_instr,
+            validation_context=validation_context
         )
 
     @classmethod
@@ -1202,11 +1204,15 @@ class PdfTBSDocument:
                        prepared_digest: PreparedByteRangeDigest,
                        signature_cms: Union[bytes, cms.ContentInfo],
                        post_sign_instr: Optional[PostSignInstructions] = None,
+                       validation_context: Optional[ValidationContext] = None,
                        chunk_size=misc.DEFAULT_CHUNK_SIZE):
+        # TODO at this point, the output stream no longer needs to be readable,
+        #  just seekable
         rw_output = misc.prepare_rw_output_stream(output)
         post_sign = cls.resume_signing(
             rw_output, prepared_digest=prepared_digest,
-            signature_cms=signature_cms, post_sign_instr=post_sign_instr
+            signature_cms=signature_cms, post_sign_instr=post_sign_instr,
+            validation_context=validation_context
         )
         post_sign.post_signature_processing(rw_output, chunk_size=chunk_size)
         # note: since `output` should never be None in this case,
@@ -1220,9 +1226,11 @@ class PdfPostSignatureDocument:
     """
 
     def __init__(self, sig_contents: bytes,
-                 post_sign_instr: Optional[PostSignInstructions] = None):
+                 post_sign_instr: Optional[PostSignInstructions] = None,
+                 validation_context: Optional[ValidationContext] = None):
         self.sig_contents = sig_contents
         self.post_sign_instructions = post_sign_instr
+        self.validation_context = validation_context
 
     def post_signature_processing(self, output: IO,
                                   chunk_size=misc.DEFAULT_CHUNK_SIZE):
@@ -1240,7 +1248,7 @@ class PdfPostSignatureDocument:
         if instr is None:
             return
 
-        validation_context = instr.validation_context
+        validation_context = self.validation_context
         validation_info = instr.validation_info
 
         from pyhanko.sign import validation
