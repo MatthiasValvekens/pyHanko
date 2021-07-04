@@ -89,21 +89,19 @@ class DERPlaceholder(generic.PdfObject):
 class PreparedByteRangeDigest:
     document_digest: bytes
     md_algorithm: str
-    document_handle: IO
     reserved_region_start: int
     reserved_region_end: int
 
-    def fill_with_cms(self, cms_data: Union[bytes, cms.ContentInfo]):
+    def fill_with_cms(self, output: IO,
+                      cms_data: Union[bytes, cms.ContentInfo]):
         if isinstance(cms_data, bytes):
             der_bytes = cms_data
         else:
             der_bytes = cms_data.dump()
-        return self.fill_reserved_region(der_bytes)
+        return self.fill_reserved_region(output, der_bytes)
 
-    def fill_reserved_region(self, der_bytes: bytes):
+    def fill_reserved_region(self, output: IO, der_bytes: bytes):
         der_hex = binascii.hexlify(der_bytes).upper()
-
-        output = self.document_handle
 
         start = self.reserved_region_start
         end = self.reserved_region_end
@@ -129,7 +127,7 @@ class PreparedByteRangeDigest:
 
         output.seek(0)
         padding = bytes(bytes_reserved // 2 - len(der_bytes))
-        return output, der_bytes + padding
+        return der_bytes + padding
 
 
 class PdfByteRangeDigest(generic.DictionaryObject):
@@ -206,12 +204,12 @@ class PdfByteRangeDigest(generic.DictionaryObject):
 
         digest_value = md.finalize()
         prepared_br_digest = PreparedByteRangeDigest(
-            document_digest=digest_value, document_handle=output,
+            document_digest=digest_value,
             md_algorithm=md_algorithm,
             reserved_region_start=sig_start, reserved_region_end=sig_end
         )
-        cms_data = yield prepared_br_digest
-        yield prepared_br_digest.fill_with_cms(cms_data)
+        cms_data = yield prepared_br_digest, output
+        yield prepared_br_digest.fill_with_cms(output, cms_data)
 
 
 class PdfSignedData(PdfByteRangeDigest):

@@ -17,6 +17,7 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
 
 import pyhanko.pdf_utils.content
+from pyhanko.sign.signers.pdf_signer import PdfTBSDocument, PostSignInstructions
 from pyhanko_certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
@@ -1200,6 +1201,7 @@ def test_ocsp_embed():
 
 PADES = fields.SigSeedSubFilter.PADES
 
+
 def test_pades_flag():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -1911,7 +1913,7 @@ def test_direct_pdfcmsembedder_usage():
     )
 
     # Phase 3: write & hash the document (with placeholder)
-    prep_digest = cms_writer.send(
+    prep_digest, output = cms_writer.send(
         cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -1926,7 +1928,7 @@ def test_direct_pdfcmsembedder_usage():
         data_digest=prep_digest.document_digest,
         digest_algorithm=md_algorithm, timestamp=timestamp
     ).dump()
-    output, sig_contents = cms_writer.send(cms_bytes)
+    sig_contents = cms_writer.send(cms_bytes)
 
     # we requested in-place output
     assert output is input_buf
@@ -2015,7 +2017,7 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
 
     cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
 
-    prep_digest = cms_writer.send(
+    prep_digest, output = cms_writer.send(
         cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -2051,7 +2053,8 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
     if resign:
         si['signature'] = \
             signer.sign_raw(si['signed_attrs'].untag().dump(), md_algorithm)
-    return cms_writer.send(cms_obj)[0]
+    cms_writer.send(cms_obj)
+    return output
 
 
 @pytest.mark.parametrize('replacement_value', [
@@ -2180,7 +2183,7 @@ def _tamper_with_sig_obj(tamper_fun):
 
     tamper_fun(w, sig_obj)
 
-    prep_document_hash = cms_writer.send(
+    prep_document_hash, output = cms_writer.send(
         cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
 
@@ -2195,7 +2198,8 @@ def _tamper_with_sig_obj(tamper_fun):
         data_digest=prep_document_hash.document_digest,
         digest_algorithm=md_algorithm,
     )
-    return cms_writer.send(cms_obj)[0]
+    cms_writer.send(cms_obj)
+    return output
 
 
 @freeze_time('2020-11-01')
@@ -2796,7 +2800,7 @@ def test_sign_weak_sig_digest():
     external_md_algorithm = 'sha256'
     cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
 
-    prep_digest = cms_writer.send(
+    prep_digest, output = cms_writer.send(
         cms_embedder.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
     )
     signer = signers.SimpleSigner(
@@ -2816,7 +2820,7 @@ def test_sign_weak_sig_digest():
     cms_prot['signature_algorithm'] = bad_algo
     # recompute the signature
     si_obj['signature'] = signer.sign_raw(attrs.untag().dump(), 'md5')
-    output, sig_contents = cms_writer.send(cms_obj)
+    sig_contents = cms_writer.send(cms_obj)
 
     # we requested in-place output
     assert output is input_buf
@@ -3010,3 +3014,103 @@ def test_embed_signed_attachment():
     stream = spec_obj['/EF']['/F']
     assert stream.data == signature.dump()
     assert stream.container_ref == rel_file_ref
+
+
+@freeze_time('2020-11-01')
+def test_simple_interrupted_signature():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA
+    )
+    prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+    md_algorithm = tbs_document.md_algorithm
+    assert tbs_document.post_sign_instructions is None
+
+    # copy the output to a new buffer, just to make a point
+    new_output = BytesIO()
+    assert isinstance(output, BytesIO)
+    buf = output.getbuffer()
+    new_output.write(buf)
+    buf.release()
+
+    ret_output = PdfTBSDocument.finish_signing(
+        new_output, prep_digest, FROM_CA.sign(
+            prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+        ),
+    )
+    assert ret_output is new_output
+
+    r = PdfFileReader(new_output)
+    val_trusted(r.embedded_signatures[0])
+
+
+@freeze_time('2020-11-01')
+def test_interrupted_pades_lta_signature(requests_mock):
+    vc = live_testing_vc(requests_mock)
+    requests_mock.post(
+        DUMMY_HTTP_TS.url, content=ts_response_callback,
+        headers={'Content-Type': 'application/timestamp-reply'}
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(
+            field_name='SigNew', embed_validation_info=True, use_pades_lta=True,
+            subfilter=PADES, validation_context=vc
+        ),
+        signer=FROM_CA, timestamper=DUMMY_HTTP_TS
+    )
+    prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+    md_algorithm = tbs_document.md_algorithm
+    psi = tbs_document.post_sign_instructions
+    assert psi is not None
+
+    # copy the output to a new buffer, just because
+    new_output = BytesIO()
+    assert isinstance(output, BytesIO)
+    buf = output.getbuffer()
+    new_output.write(buf)
+    buf.release()
+
+    # let's pretend that we no longer have access to the non-serialisable
+    # parts of tbs_document and psi (e.g. because this part happens on a
+    # different machine)
+    new_psi = PostSignInstructions(
+        validation_info=psi.validation_info,
+        timestamp_md_algorithm=psi.timestamp_md_algorithm,
+        timestamper=DUMMY_HTTP_TS,
+        timestamp_field_name=psi.timestamp_field_name,
+        # fresh VC
+        validation_context=live_testing_vc(requests_mock),
+    )
+    ret_output = PdfTBSDocument.finish_signing(
+        new_output, prep_digest, FROM_CA.sign(
+            prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+            use_pades=True,
+            timestamper=DUMMY_HTTP_TS
+        ), post_sign_instr=new_psi
+    )
+    assert ret_output is new_output
+
+    r = PdfFileReader(new_output)
+    # check cardinality of DSS content
+    dss = DocumentSecurityStore.read_dss(handler=r)
+    assert dss is not None
+    assert len(dss.certs) == 5
+    assert len(dss.ocsps) == 1
+    assert len(dss.crls) == 1
+
+    emb_sig = r.embedded_signatures[0]
+    # perform LTA validation
+    status = validate_pdf_ltv_signature(
+        emb_sig, RevocationInfoValidationType.PADES_LTA,
+        {'trust_roots': TRUST_ROOTS}
+    )
+    assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert len(r.embedded_signatures) == 2
+    assert len(r.embedded_regular_signatures) == 1
+    assert len(r.embedded_timestamp_signatures) == 1
+    assert emb_sig is r.embedded_regular_signatures[0]

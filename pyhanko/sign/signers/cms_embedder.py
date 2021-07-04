@@ -372,9 +372,13 @@ class PdfCMSEmbedder:
         3. Next, the caller should send a :class:`.SigIOSetup` object,
            describing how the resulting document should be hashed and written
            to the output. The coroutine will write the entire document with a
-           placeholder region reserved for the signature, compute the document's
-           hash and yield it to the caller, packaged in a
-           :class:`.PreparedByteRangeDigest` object.
+           placeholder region reserved for the signature and compute the
+           document's hash and yield it to the caller.
+           It will then yield a ``prepared_digest, output`` tuple, where
+           ``prepared_digest`` is a :class:`.PreparedByteRangeDigest` object
+           containing the document digest and the relevant offsets, and
+           ``output`` is the output stream to which the document to be
+           signed was written.
 
 
            From this point onwards, **no objects may be changed or added** to
@@ -382,10 +386,8 @@ class PdfCMSEmbedder:
         4. Finally, the caller should pass in a CMS object to place inside
            the signature dictionary. The CMS object can be supplied as a raw
            :class:`bytes` object, or an :mod:`asn1crypto`-style object.
-           The coroutine's final yield is a tuple ``output, sig_contents``,
-           where ``output`` is the output stream used, and ``sig_contents`` is
-           the value of the signature dictionary's ``/Contents`` entry, given as
-           a hexadecimal string.
+           The coroutine's final yield is the value of the signature
+           dictionary's ``/Contents`` entry, given as a hexadecimal string.
 
         .. caution::
             It is the caller's own responsibility to ensure that enough room
@@ -402,7 +404,7 @@ class PdfCMSEmbedder:
             If ``True``, never create a new empty signature field to contain
             the signature.
             If ``False``, a new field may be created if no field matching
-            :attr:`~.PdfSignatureMetadata.field_name` exists.
+            ``field_name`` exists.
         :return:
             A generator coroutine implementing the protocol described above.
         """

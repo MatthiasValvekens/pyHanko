@@ -4,9 +4,9 @@ import tzlocal
 from datetime import datetime
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Set, Optional, List
+from typing import Set, Optional, List, Union, IO, Tuple
 
-from asn1crypto import cms
+from asn1crypto import cms, ocsp, crl
 from cryptography.hazmat.primitives import hashes
 
 from pyhanko.sign.fields import (
@@ -299,11 +299,12 @@ class PdfTimeStamper:
             md_algorithm=md_algorithm,
             in_place=in_place, output=output, chunk_size=chunk_size
         )
-        prep_digest: PreparedByteRangeDigest = cms_writer.send(sig_io)
+        prep_digest: PreparedByteRangeDigest
+        prep_digest, res_output = cms_writer.send(sig_io)
         timestamp_cms = timestamper.timestamp(
             prep_digest.document_digest, md_algorithm
         )
-        res_output, sig_contents = prep_digest.fill_with_cms(timestamp_cms)
+        sig_contents = cms_writer.send(timestamp_cms)
 
         # update the DSS
         if validation_context is not None:
@@ -595,6 +596,29 @@ class PdfSigner:
 
         return session
 
+    def digest_doc_for_signing(self, pdf_out: BasePdfFileWriter,
+                               existing_fields_only=False, bytes_reserved=None,
+                               *, appearance_text_params=None,
+                               in_place=False, output=None,
+                               chunk_size=misc.DEFAULT_CHUNK_SIZE)\
+            -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
+        signing_session = self.init_signing_session(
+            pdf_out, existing_fields_only=existing_fields_only,
+        )
+        validation_info = signing_session.perform_presign_validation(pdf_out)
+        tbs_document = signing_session.prepare_tbs_document(
+            validation_info=validation_info,
+            bytes_reserved=bytes_reserved,
+            appearance_text_params=appearance_text_params
+        )
+        prepared_br_digest, res_output = tbs_document.digest_tbs_document(
+            in_place=in_place, chunk_size=chunk_size, output=output
+        )
+        return (
+            prepared_br_digest, tbs_document,
+            _finalise_output(output, res_output)
+        )
+
     def sign_pdf(self, pdf_out: BasePdfFileWriter,
                  existing_fields_only=False, bytes_reserved=None, *,
                  appearance_text_params=None, in_place=False,
@@ -630,7 +654,6 @@ class PdfSigner:
         :return:
             The output stream containing the signed data.
         """
-
         signing_session = self.init_signing_session(
             pdf_out, existing_fields_only=existing_fields_only,
         )
@@ -640,12 +663,12 @@ class PdfSigner:
             bytes_reserved=bytes_reserved,
             appearance_text_params=appearance_text_params
         )
-        prepared_br_digest = tbs_document.digest_tbs_document(
+        prepared_br_digest, res_output = tbs_document.digest_tbs_document(
             in_place=in_place, chunk_size=chunk_size, output=output
         )
 
-        post_signing_doc = tbs_document.embed_cms(
-            prepared_br_digest.document_digest,
+        post_signing_doc = tbs_document.perform_signature(
+            document_digest=prepared_br_digest.document_digest,
             pdf_cms_signed_attrs=PdfCMSSignedAttributes(
                 signing_time=signing_session.system_time,
                 adobe_revinfo_attr=(
@@ -656,22 +679,22 @@ class PdfSigner:
             )
         )
 
-        res_output = post_signing_doc.post_signature_processing(
-            chunk_size=chunk_size
+        post_signing_doc.post_signature_processing(
+            res_output, chunk_size=chunk_size
         )
         # we put the finalisation step after the DSS manipulations, since
         # otherwise we'd also run into issues with non-seekable output buffers
-        output = _finalise_output(output, res_output)
-        return output
+        return _finalise_output(output, res_output)
 
 
 @dataclass(frozen=True)
 class PreSignValidationStatus:
-    validation_context: ValidationContext
     validation_paths: List[ValidationPath]
     signer_path: ValidationPath
     ts_validation_paths: Optional[List[ValidationPath]] = None
     adobe_revinfo_attr: Optional[cms.CMSAttribute] = None
+    ocsps_to_embed: List[ocsp.OCSPResponse] = None
+    crls_to_embed: List[crl.CertificateList] = None
 
 
 class PdfSigningSession:
@@ -755,10 +778,11 @@ class PdfSigningSession:
             # PAdES prescribes another mechanism for embedding revocation info
             revinfo = None
         return PreSignValidationStatus(
-            validation_context=validation_context,
             validation_paths=validation_paths,
             signer_path=signer_path, ts_validation_paths=ts_validation_paths,
-            adobe_revinfo_attr=revinfo
+            adobe_revinfo_attr=revinfo,
+            ocsps_to_embed=validation_context.ocsps,
+            crls_to_embed=validation_context.crls
         )
 
     def _perform_presign_signer_validation(self, validation_context, key_usage):
@@ -1121,8 +1145,8 @@ class PostSignInstructions:
 
 class PdfTBSDocument:
     def __init__(self, cms_writer, signer: Signer,
-                 md_algorithm: str, timestamper: TimeStamper,
-                 use_pades: bool,
+                 md_algorithm: str, use_pades: bool,
+                 timestamper: Optional[TimeStamper] = None,
                  post_sign_instructions: Optional[PostSignInstructions] = None):
         self.cms_writer = cms_writer
         self.signer = signer
@@ -1133,15 +1157,15 @@ class PdfTBSDocument:
 
     def digest_tbs_document(self, *, output, in_place: bool,
                             chunk_size=misc.DEFAULT_CHUNK_SIZE) \
-            -> PreparedByteRangeDigest:
+            -> Tuple[PreparedByteRangeDigest, IO]:
         # pass in I/O parameters, get back a hash
         return self.cms_writer.send(SigIOSetup(
             md_algorithm=self.md_algorithm,
             in_place=in_place, chunk_size=chunk_size, output=output
         ))
 
-    def embed_cms(self, document_digest: bytes,
-                  pdf_cms_signed_attrs: PdfCMSSignedAttributes) \
+    def perform_signature(self, document_digest: bytes,
+                          pdf_cms_signed_attrs: PdfCMSSignedAttributes) \
             -> 'PdfPostSignatureDocument':
         # Tell the signer to construct a CMS object
         signature_cms = self.signer.sign(
@@ -1152,11 +1176,42 @@ class PdfTBSDocument:
             cades_signed_attr_meta=pdf_cms_signed_attrs.cades_signed_attrs
         )
         # ... and feed it to the CMS writer
-        output, sig_contents = self.cms_writer.send(signature_cms)
+        sig_contents = self.cms_writer.send(signature_cms)
         return PdfPostSignatureDocument(
-            output, sig_contents,
-            post_sign_instructions=self.post_sign_instructions
+            sig_contents, post_sign_instr=self.post_sign_instructions
         )
+
+    @classmethod
+    def resume_signing(cls, output: IO,
+                       prepared_digest: PreparedByteRangeDigest,
+                       signature_cms: Union[bytes, cms.ContentInfo],
+                       post_sign_instr: Optional[PostSignInstructions] = None)\
+            -> 'PdfPostSignatureDocument':
+
+        # TODO document that this method expects an IO object that is
+        #  readable, writable and seekable
+        sig_contents = prepared_digest.fill_with_cms(
+            output, signature_cms
+        )
+        return PdfPostSignatureDocument(
+            sig_contents, post_sign_instr=post_sign_instr
+        )
+
+    @classmethod
+    def finish_signing(cls, output: IO,
+                       prepared_digest: PreparedByteRangeDigest,
+                       signature_cms: Union[bytes, cms.ContentInfo],
+                       post_sign_instr: Optional[PostSignInstructions] = None,
+                       chunk_size=misc.DEFAULT_CHUNK_SIZE):
+        rw_output = misc.prepare_rw_output_stream(output)
+        post_sign = cls.resume_signing(
+            rw_output, prepared_digest=prepared_digest,
+            signature_cms=signature_cms, post_sign_instr=post_sign_instr
+        )
+        post_sign.post_signature_processing(rw_output, chunk_size=chunk_size)
+        # note: since `output` should never be None in this case,
+        # realistically this method will always return the original `output`
+        return _finalise_output(output, rw_output)
 
 
 class PdfPostSignatureDocument:
@@ -1164,33 +1219,41 @@ class PdfPostSignatureDocument:
     Represents the final phase of the PDF signing process
     """
 
-    def __init__(self, output, sig_contents: bytes,
-                 post_sign_instructions: Optional[PostSignInstructions] = None):
-        self.output = output
+    def __init__(self, sig_contents: bytes,
+                 post_sign_instr: Optional[PostSignInstructions] = None):
         self.sig_contents = sig_contents
-        self.post_sign_instructions = post_sign_instructions
+        self.post_sign_instructions = post_sign_instr
 
-    def post_signature_processing(self, chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    def post_signature_processing(self, output: IO,
+                                  chunk_size=misc.DEFAULT_CHUNK_SIZE):
         """
         Handle DSS updates and LTA timestamps, if applicable.
 
+        :param output:
+            I/O buffer containing the signed document. Must support
+            reading, writing and seeking.
         :param chunk_size:
             Chunk size to use for I/O operations that do not support the buffer
             protocol.
         """
         instr = self.post_sign_instructions
-        output = self.output
         if instr is None:
-            return output
+            return
 
         validation_context = instr.validation_context
         validation_info = instr.validation_info
 
         from pyhanko.sign import validation
+        # If we're resuming a signing operation, the (new) validation context
+        # might not have all relevant OCSP responses / CRLs available.
+        # Hence why we also pass in the data from the pre-signing check.
+        # The DSS handling code will deal with deduplication.
         validation.DocumentSecurityStore.add_dss(
             output_stream=output, sig_contents=self.sig_contents,
             paths=validation_info.validation_paths,
-            validation_context=validation_context
+            validation_context=validation_context,
+            ocsps=validation_info.ocsps_to_embed,
+            crls=validation_info.crls_to_embed
         )
         timestamper = instr.timestamper
         if timestamper is not None:
@@ -1204,4 +1267,3 @@ class PdfPostSignatureDocument:
                 validation_paths=validation_info.validation_paths,
                 in_place=True, timestamper=timestamper, chunk_size=chunk_size
             )
-        return output
