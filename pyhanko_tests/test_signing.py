@@ -3047,53 +3047,104 @@ def test_simple_interrupted_signature():
 
 @freeze_time('2020-11-01')
 def test_interrupted_pades_lta_signature(requests_mock):
-    vc = live_testing_vc(requests_mock)
+    # simulate a PAdES-LTA workflow with remote signing
+    # (our hypothetical remote signer just signs digests, not full CMS objects)
     requests_mock.post(
         DUMMY_HTTP_TS.url, content=ts_response_callback,
         headers={'Content-Type': 'application/timestamp-reply'}
     )
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    pdf_signer = signers.PdfSigner(
-        signers.PdfSignatureMetadata(
-            field_name='SigNew', embed_validation_info=True, use_pades_lta=True,
-            subfilter=PADES, validation_context=vc
-        ),
-        signer=FROM_CA, timestamper=DUMMY_HTTP_TS
-    )
-    prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
-    md_algorithm = tbs_document.md_algorithm
-    psi = tbs_document.post_sign_instructions
-    assert psi is not None
 
-    # copy the output to a new buffer, just because
-    new_output = BytesIO()
-    assert isinstance(output, BytesIO)
-    buf = output.getbuffer()
-    new_output.write(buf)
-    buf.release()
+    def instantiate_external_signer(sig_value: bytes):
+        return signers.ExternalSigner(
+            signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
+            signature_value=sig_value,
+            cert_registry=SimpleCertificateStore.from_certs(
+                [ROOT_CERT, INTERM_CERT]
+            )
+        )
 
-    # let's pretend that we no longer have access to the non-serialisable
-    # parts of tbs_document and psi (e.g. because this part happens on a
-    # different machine)
-    new_psi = PostSignInstructions(
-        validation_info=psi.validation_info,
-        timestamp_md_algorithm=psi.timestamp_md_algorithm,
-        timestamper=DUMMY_HTTP_TS,
-        timestamp_field_name=psi.timestamp_field_name,
-    )
-    # fresh VC
-    validation_context = live_testing_vc(requests_mock)
-    PdfTBSDocument.finish_signing(
-        new_output, prep_digest, FROM_CA.sign(
-            prep_digest.document_digest,
-            digest_algorithm=md_algorithm,
-            use_pades=True,
+    def prep_doc():
+        # 2048-bit RSA sig is 256 bytes long -> placeholder
+        ext_signer = instantiate_external_signer(sig_value=bytes(256))
+        vc = live_testing_vc(requests_mock)
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+        pdf_signer = signers.PdfSigner(
+            signers.PdfSignatureMetadata(
+                field_name='SigNew', embed_validation_info=True,
+                use_pades_lta=True, subfilter=PADES, validation_context=vc,
+                md_algorithm='sha256'
+            ),
+            signer=ext_signer,
             timestamper=DUMMY_HTTP_TS
-        ), post_sign_instr=new_psi,
-        validation_context=validation_context
-    )
+        )
+        prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+        signed_attrs = ext_signer.signed_attrs(
+            prep_digest.document_digest, 'sha256', use_pades=True
+        )
+        psi = tbs_document.post_sign_instructions
+        return prep_digest, signed_attrs, psi, output
 
-    r = PdfFileReader(new_output)
+    def sim_sign_remote(data_tbs: bytes):
+        # pretend that everything below happens on a remote server
+        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+        priv_key = serialization.load_der_private_key(
+            TESTING_CA.key_set.get_private_key(KeyLabel('signer1')).dump(),
+            password=None
+        )
+        padding = PKCS1v15()
+        hash_algo = hashes.SHA256()
+        return priv_key.sign(data_tbs, padding, hash_algo)
+
+    def proceed_with_signing(prep_digest, signed_attrs, sig_value, psi,
+                             output_handle):
+        # use ExternalSigner to format the CMS given the signed value
+        # we obtained from the remote signing service
+        ext_signer = instantiate_external_signer(sig_value)
+        sig_cms = ext_signer.sign_prescribed_attributes(
+            'sha256', signed_attrs=signed_attrs,
+            timestamper=DUMMY_HTTP_TS
+        )
+
+        # fresh VC
+        validation_context = live_testing_vc(requests_mock)
+        PdfTBSDocument.finish_signing(
+            output_handle, prepared_digest=prep_digest,
+            signature_cms=sig_cms,
+            post_sign_instr=psi,
+            validation_context=validation_context
+        )
+
+    def full_procedure():
+        # prepare document and signed attributes to sign
+        prep_digest, signed_attrs, psi, output = prep_doc()
+
+        # copy the output to a new buffer, just to drive home the point that
+        # we no longer care about the original output stream
+        new_output = BytesIO()
+        assert isinstance(output, BytesIO)
+        buf = output.getbuffer()
+        new_output.write(buf)
+        buf.release()
+
+        # contact our 'remote' signing service
+        sig_value = sim_sign_remote(signed_attrs.dump())
+        # let's pretend that we no longer have access to the non-serialisable
+        # parts of tbs_document and psi (e.g. because this part happens on a
+        # different machine)
+        new_psi = PostSignInstructions(
+            validation_info=psi.validation_info,
+            timestamp_md_algorithm=psi.timestamp_md_algorithm,
+            timestamper=DUMMY_HTTP_TS,
+            timestamp_field_name=psi.timestamp_field_name,
+        )
+        # finish signing
+        proceed_with_signing(
+            prep_digest, signed_attrs, sig_value, new_psi, new_output
+        )
+        return new_output
+
+    r = PdfFileReader(full_procedure())
     # check cardinality of DSS content
     dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None

@@ -515,6 +515,7 @@ control over what data ends up in the signature object's ``/Contents`` entry.
     Some advanced features aren't available this deep in the API (mainly seed
     value checking). Additionally, |PdfCMSEmbedder| doesn't really do any
     input validation; you're on your own in that regard.
+    See also :ref:`interrupted-signing` for a more middle-of-the-road solution.
 
 
 Here is an example demonstrating its use, sourced more or less directly from
@@ -578,6 +579,99 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
     ).dump()
     output, sig_contents = cms_writer.send(cms_bytes)
 
+
+.. _interrupted-signing:
+
+Interrupted signing
+-------------------
+
+.. versionadded:: 0.7.0
+
+There are use cases where trying to run the entire signing process in one go isn't feasible.
+Think of a remote signing scenario with pyHanko running on a server, and calling an external signing
+service to perform the cryptographic operations, or a case where pyHanko needs to wait for
+interactive user input to proceed with signing.
+
+In cases like this, there are several points where you can interrupt the signing process partway
+through, save the state, and pick up where you left off some time later |---| this conserves
+valuable resources in some scenarios.
+We refer to :mod:`pyhanko.sign.signers.pdf_signer` for a full overview of what's possible; below, we
+describe the most common use case: a scenario where pyHanko prepares a document for signing,
+computes the digest, sends it off to somewhere else for signing, and finishes the signing process
+once the response comes in (potentially in an entirely different thread).
+
+In the example scenario, we use :class:`~pyhanko.sign.signers.pdf_cms.ExternalSigner` to format the
+signed attributes and the final CMS object, but the same principle applies (mutatis mutandis) to
+remote signers that supply wholesale CMS objects.
+
+
+.. code-block:: python
+
+    from pyhanko.sign import signers, fields, timestamps
+    from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
+    from pyhanko_certvalidator import ValidationContext
+    from pyhanko.pdf_utils.writer import BasePdfFileWriter
+
+    # Skeleton code for an interrupted PAdES signature
+
+
+    def prep_document(w: BasePdfFileWriter):
+        vc = ValidationContext(...)
+        pdf_signer = signers.PdfSigner(
+            signers.PdfSignatureMetadata(
+                field_name='SigNew', embed_validation_info=True, use_pades_lta=True,
+                subfilter=fields.SigSeedSubFilter.PADES,
+                validation_context=vc,
+                md_algorithm='sha256'
+            ),
+            # note: this signer will not perform any cryptographic operations,
+            # it's just there to handle certificates and provide size estimates
+            # The signature
+            signer=signers.ExternalSigner(
+                signing_cert=..., ...,
+                # placeholder value, appropriate for a 2048-bit RSA key
+                # (for example's sake)
+                signature_value=bytes(256),
+            ),
+            timestamper=timestamps.HTTPTimeStamper('http://tsa.example.com')
+        )
+        prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+        md_algorithm = tbs_document.md_algorithm
+        psi = tbs_document.post_sign_instructions
+
+        signed_attrs = ext_signer.signed_attrs(
+            prep_digest.document_digest, 'sha256', use_pades=True
+        )
+        psi = tbs_document.post_sign_instructions
+        return prep_digest, signed_attrs, psi, output
+
+    # After prep_document finishes, you can serialise the contents
+    # of prep_digest, signed_attrs and psi somewhere.
+    # The output stream can also be stored in a temporary file, for example.
+    # You could now call the remote signing service, and once the response
+    # comes back, proceed with finish_signing() after deserialising
+    # all the intermediate outputs from the previous step.
+
+    def finish_signing(sig_value: bytes, prep_digest, signed_attrs,
+                       psi, output_handle):
+        # Here, assume sig_value is the signed digest of the signed_attrs
+        # bytes, obtained from some remote signing service
+
+        # use ExternalSigner to format the CMS given the signed value
+        # we obtained from the remote signing service
+        ext_signer = instantiate_external_signer(sig_value)
+        sig_cms = ext_signer.sign_prescribed_attributes(
+            'sha256', signed_attrs=signed_attrs,
+            timestamper=DUMMY_HTTP_TS
+        )
+
+        validation_context = ValidationContext(...)
+        PdfTBSDocument.finish_signing(
+            output_handle, prepared_digest=prep_digest,
+            signature_cms=sig_cms,
+            post_sign_instr=psi,
+            validation_context=validation_context
+        )
 
 .. rubric:: Footnotes
 

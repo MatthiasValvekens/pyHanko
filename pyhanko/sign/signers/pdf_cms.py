@@ -27,7 +27,10 @@ from pyhanko.sign.general import (
 from pyhanko.pdf_utils import misc
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 
-__all__ = ['Signer', 'SimpleSigner', 'PdfCMSSignedAttributes']
+__all__ = [
+    'Signer', 'SimpleSigner', 'ExternalSigner',
+    'PdfCMSSignedAttributes'
+]
 
 logger = logging.getLogger(__name__)
 
@@ -441,7 +444,6 @@ class Signer:
         else:
             content_type = encap_content_info.get('content_type', 'data')
 
-        digest_algorithm = digest_algorithm.lower()
         # the piece of data we'll actually sign is a DER-encoded version of the
         # signed attributes of our message
         signed_attrs = self.signed_attrs(
@@ -450,7 +452,62 @@ class Signer:
             timestamper=timestamper, cades_meta=cades_signed_attr_meta,
             dry_run=dry_run, content_type=content_type
         )
+        cms_version = 'v1' if content_type == 'data' else 'v3'
+        return self.sign_prescribed_attributes(
+            digest_algorithm, signed_attrs,
+            cms_version=cms_version, dry_run=dry_run, timestamper=timestamper,
+            encap_content_info=encap_content_info
+        )
 
+    def sign_prescribed_attributes(self, digest_algorithm: str,
+                                   signed_attrs: cms.CMSAttributes,
+                                   cms_version='v1',
+                                   dry_run=False, timestamper=None,
+                                   encap_content_info=None) -> cms.ContentInfo:
+        """
+        .. versionadded: 0.7.0
+
+        Start the CMS signing process with the prescribed set of signed
+        attributes.
+
+        :param digest_algorithm:
+            Digest algorithm to use. This should be the same digest method
+            as the one used to hash the (external) content.
+        :param signed_attrs:
+            CMS attributes to sign.
+        :param dry_run:
+            If ``True``, the actual signing step will be replaced with
+            a placeholder.
+
+            In a PDF signing context, this is necessary to estimate the size
+            of the signature container before computing the actual digest of
+            the document.
+        :param timestamper:
+            :class:`~.timestamps.TimeStamper` used to obtain a trusted timestamp
+            token that can be embedded into the signature container.
+
+            .. note::
+                If ``dry_run`` is true, the timestamper's
+                :meth:`~.timestamps.TimeStamper.dummy_response` method will be
+                called to obtain a placeholder token.
+                Note that with a standard :class:`~.timestamps.HTTPTimeStamper`,
+                this might still hit the timestamping server (in order to
+                produce a realistic size estimate), but the dummy response will
+                be cached.
+        :param cms_version:
+            CMS version to use.
+        :param encap_content_info:
+            Data to encapsulate in the CMS object.
+
+            .. danger::
+                This parameter is internal API, and must not be used to produce
+                PDF signatures.
+        :return:
+            An :class:`~.asn1crypto.cms.ContentInfo` object.
+        """
+
+        encap_content_info = encap_content_info or {'content_type': 'data'}
+        digest_algorithm = digest_algorithm.lower()
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
         )
@@ -487,7 +544,7 @@ class Signer:
         certs.add(self.signing_cert)
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
-            'version': 'v1' if content_type == 'data' else 'v3',
+            'version': cms_version,
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': encap_content_info,
             'certificates': certs,
@@ -771,6 +828,33 @@ class SimpleSigner(Signer):
             cert_registry=cert_reg, signature_mechanism=signature_mechanism,
             prefer_pss=prefer_pss
         )
+
+
+class ExternalSigner(Signer):
+    """
+    Class to help formatting CMS objects for use with remote signing.
+    It embeds a fixed signature value into the CMS, set at initialisation.
+
+    Intended for use with :ref:`interrupted-signing`.
+    """
+
+    def __init__(self, signing_cert: x509.Certificate,
+                 cert_registry: CertificateStore,
+                 signature_value: bytes,
+                 signature_mechanism: SignedDigestAlgorithm = None,
+                 prefer_pss=False):
+        self.signing_cert = signing_cert
+        self.cert_registry = cert_registry
+        self.signature_mechanism = signature_mechanism
+        self._signature_value = signature_value
+        super().__init__(prefer_pss=prefer_pss)
+
+    def sign_raw(self, data: bytes, digest_algorithm: str, dry_run=False) \
+            -> bytes:
+        """
+        Return a fixed signature value.
+        """
+        return self._signature_value
 
 
 # TODO consider deprecating the current signed_attrs kwargs in favour of this

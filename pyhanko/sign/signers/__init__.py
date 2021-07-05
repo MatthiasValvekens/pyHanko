@@ -4,7 +4,7 @@ It contains modules for creating ``SignedData`` CMS objects, embedding them
 in PDF files, and for handling PDF-specific document signing needs.
 """
 
-from .pdf_cms import Signer, SimpleSigner
+from .pdf_cms import Signer, SimpleSigner, ExternalSigner
 from .pdf_byterange import (
     PdfByteRangeDigest, PdfSignedData, SignatureObject, DocumentTimestamp,
 )
@@ -21,7 +21,7 @@ from .constants import (
 
 
 __all__ = [
-    'PdfSignatureMetadata', 'Signer', 'SimpleSigner',
+    'PdfSignatureMetadata', 'Signer', 'SimpleSigner', 'ExternalSigner',
     'PdfSigner', 'PdfTimeStamper',
     'PdfByteRangeDigest', 'PdfSignedData',
     'SignatureObject', 'DocumentTimestamp',
