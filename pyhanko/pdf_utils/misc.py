@@ -11,7 +11,8 @@ from enum import Enum
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError',
-    'get_and_apply', 'get_courier', 'DEFAULT_CHUNK_SIZE'
+    'get_and_apply', 'get_courier', 'DEFAULT_CHUNK_SIZE',
+    'OrderedEnum',
 ]
 
 from io import BytesIO

@@ -8,8 +8,6 @@ This guide offers a high-level overview of pyHanko as a Python library.
 For the API reference docs generated from the source, see the
 :ref:`API reference <api-reference>`.
 
-*(Under construction)*
-
 
 The pyHanko library roughly consists of the following components.
 

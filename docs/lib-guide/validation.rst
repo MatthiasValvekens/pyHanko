@@ -179,11 +179,12 @@ and its tests, and/or play around a little.
     Even outside the LTV context, pyHanko always distinguishes between
     validation of the signing time and validation of the signature itself.
     In fact, :func:`~.pyhanko.sign.validation.validate_pdf_signature` reports both
-    (see the docs for :attr:`~.pyhanko.sign.validation.PdfSignatureStatus.timestamp_validity`).
+    (see the docs for
+    :attr:`~.pyhanko.sign.validation.StandardCMSSignatureStatus.timestamp_validity`).
 
     However, since the LTV adjudication process is entirely moot without a trusted record
     of the signing time, :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
-    will raise a :class:`~.pyhanko.sign.validation.SignatureValidationError`
+    will raise a :class:`~.pyhanko.sign.general.SignatureValidationError`
     if the timestamp token (or timestamp chain) fails to validate.
     Otherwise, :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
     returns a |PdfSignatureStatus| as usual.
@@ -198,7 +199,7 @@ Incremental update analysis
     maintainable rule-based validation system. See
     :mod:`pyhanko.sign.diff_analysis`.
 
-As explained in `the CLI documentation <validation-general-incremental-updates>`_,
+As explained in :ref:`the CLI documentation <validation-general-incremental-updates>`,
 the PDF standard has provisions that allow files to be updated by appending
 so-called "incremental updates". This also works for signed documents, since
 appending data does not destroy the cryptographic integrity of the signed data.
@@ -292,7 +293,7 @@ This is sometimes a very reasonable thing to do, e.g. in the following cases:
   change at all.
 
 In these cases, you might want to rely on the
-:attr:`~.pyhanko.sign.validation.PdfSignatureStatus.coverage` property
+:attr:`~.pyhanko.sign.validation.ModificationInfo.coverage` property
 of |PdfSignatureStatus| instead. This property describes the degree to which
 a given signature covers a file, and is much cheaper/easier to compute.
 
@@ -328,7 +329,7 @@ The |PdfSignatureStatus| objects returned by
 granular account of the validity of the signature.
 
 You can print a human-readable validity report by calling
-:meth:`~.pyhanko.sign.validation.PdfSignatureStatus.pretty_print_details`, and
+:meth:`~.pyhanko.sign.validation.StandardCMSSignatureStatus.pretty_print_details`, and
 if all you're interested in is a yes/no judgment, use the the
 :attr:`~.pyhanko.sign.validation.PdfSignatureStatus.bottom_line` property.
 

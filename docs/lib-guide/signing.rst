@@ -141,7 +141,7 @@ documentation for |PdfSignatureMetadata| and |PdfSigner|.
 
 .. warning::
     If there is no signature field with the name specified in the
-    :attr:`~.pyhanko.sign.signers.PdfSignatureMetadata.field_name` parameter
+    :attr:`~.pyhanko.sign.signers.pdf_signer.PdfSignatureMetadata.field_name` parameter
     of |PdfSignatureMetadata|, pyHanko will (by default) create an invisible
     signature field to contain the signature.
     This behaviour can be turned off using the ``existing_fields_only`` parameter
@@ -226,7 +226,8 @@ The layout of a text stamp can be tweaked to some degree, see
 .. note::
 
     You can define values for your own custom interpolation parameters using the
-    ``appearance_text_params`` argument to :meth:`~.pyhanko.sign.signers.PdfSigner.sign_pdf`.
+    ``appearance_text_params`` argument to
+    :meth:`~.pyhanko.sign.signers.pdf_signer.PdfSigner.sign_pdf`.
 
 
 QR code stamps
@@ -352,8 +353,8 @@ signatures in two different ways.
 From a PDF syntax point of view, standalone document timestamps are formally
 very similar to PDF signatures.
 PyHanko implements these using the
-:meth:`~.pyhanko.sign.signers.PdfTimeStamper.timestamp_pdf` method of
-:class:`~.pyhanko.sign.signers.PdfTimeStamper`
+:meth:`~.pyhanko.sign.signers.pdf_signer.PdfTimeStamper.timestamp_pdf` method of
+:class:`~.pyhanko.sign.signers.pdf_signer.PdfTimeStamper`
 (which is actually a superclass of |PdfSigner|).
 
 Timestamp tokens (TST) embedded into PDF signatures are arguably the more common
@@ -472,13 +473,13 @@ Extending |Signer|
 
 Providing detailed guidance on how to implement your own |Signer| subclass
 is beyond the scope of this guide |---| the implementations
-of :class:`~.pyhanko.sign.signers.SimpleSigner` and
+of :class:`~.pyhanko.sign.signers.pdf_cms.SimpleSigner` and
 :class:`~.pyhanko.sign.pkcs11.PKCS11Signer` should help.
 This subsection merely highlights some of the issues you should keep in mind.
 
 First, if all you want to do is implement a signing device or technique that's
 not supported by pyHanko, it should be sufficient to implement
-:meth:`~.pyhanko.sign.signers.Signer.sign_raw`.
+:meth:`~.pyhanko.sign.signers.pdf_cms.Signer.sign_raw`.
 This method computes the raw cryptographic signature of some data (typically
 a document hash) with the appropriate key material.
 It also takes a ``dry_run`` flag, signifying that the returned object should
@@ -486,7 +487,7 @@ merely have the correct size, but the content doesn't matter\ [#signerdryrun]_.
 
 If your requirements necessitate further modifications to the structure of the
 CMS object, you'll most likely have to override
-:meth:`~.pyhanko.sign.signers.Signer.sign`, which is responsible for the
+:meth:`~.pyhanko.sign.signers.pdf_cms.Signer.sign`, which is responsible for the
 construction of the CMS object itself.
 
 

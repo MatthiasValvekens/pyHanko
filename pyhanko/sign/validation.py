@@ -43,7 +43,8 @@ from .general import (
 from .timestamps import TimestampSignatureStatus
 
 __all__ = [
-    'SignatureCoverageLevel', 'PdfSignatureStatus',
+    'SignatureCoverageLevel', 'PdfSignatureStatus', 'DocumentTimestampStatus',
+    'StandardCMSSignatureStatus', 'ModificationInfo',
     'EmbeddedPdfSignature', 'DocMDPInfo',
     'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
     'apply_adobe_revocation_info', 'get_timestamp_chain',
@@ -280,7 +281,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
         This option is considered internal API, the semantics of which may
         change without notice in the future.
     :return:
-        A :class:`SignatureStatus` object (or an instance of a proper subclass)
+        A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
     status_kwargs = _validate_cms_signature(
         signed_data, status_cls, raw_digest, validation_context,
@@ -555,9 +556,9 @@ class ModificationInfo:
 
     * If ``None``, no difference analysis was run.
     * If the difference analysis was successful, this attribute will contain
-      a :class:`DiffResult` object.
+      a :class:`.DiffResult` object.
     * If the difference analysis failed due to unforeseen or suspicious
-      modifications, the :class:`SuspiciousModification` exception thrown
+      modifications, the :class:`.SuspiciousModification` exception thrown
       by the difference policy will be stored in this attribute.
     """
 
@@ -593,8 +594,9 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
 
     docmdp_ok: Optional[bool] = None
     """
-    Indicates whether the signature's :attr:`modification_level` is in line with
-    the document signature policy in force.
+    Indicates whether the signature's
+    :attr:`~.ModificationInfo.modification_level` is in line with the document
+    signature policy in force.
     
     If ``None``, compliance could not be determined.
     """
@@ -901,7 +903,8 @@ class EmbeddedPdfSignature:
         :param diff_policy:
             Policy to evaluate potential incremental updates that were appended
             to the signed revision of the document.
-            Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+            Defaults to
+            :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
         :param skip_diff:
             If ``True``, skip the difference analysis step entirely.
         """
@@ -920,7 +923,7 @@ class EmbeddedPdfSignature:
     def summarise_integrity_info(self) -> dict:
         """
         Compile the integrity information for this signature into a dictionary
-        that can later be passed to :class:`PdfSignatureStatus` as kwargs.
+        that can later be passed to :class:`.PdfSignatureStatus` as kwargs.
 
         This method is only available after calling
         :meth:`.EmbeddedPdfSignature.compute_integrity_info`.
@@ -1374,7 +1377,8 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     :param diff_policy:
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
-        Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+        Defaults to
+        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param key_usage_settings:
         A :class:`.KeyUsageConstraints` object specifying which key usage
         extensions must or must not be present in the signer's certificate.
@@ -1442,7 +1446,8 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
     :param diff_policy:
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
-        Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+        Defaults to
+        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1636,8 +1641,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :param validation_type:
         Validation profile to use.
     :param validation_context_kwargs:
-        Keyword args to instantiate :class:`.pyhanko_certvalidator.ValidationContext`
-        objects needed over the course of the validation.
+        Keyword args to instantiate
+        :class:`.pyhanko_certvalidator.ValidationContext` objects needed over
+        the course of the validation.
     :param bootstrap_validation_context:
         Validation context used to validate the current timestamp.
     :param force_revinfo:
@@ -1646,7 +1652,8 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :param diff_policy:
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
-        Defaults to :attr:`.DEFAULT_DIFF_POLICY`.
+        Defaults to
+        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param key_usage_settings:
         A :class:`.KeyUsageConstraints` object specifying which key usage
         extensions must or must not be present in the signer's certificate.
