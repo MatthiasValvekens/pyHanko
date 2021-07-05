@@ -602,8 +602,7 @@ once the response comes in (potentially in an entirely different thread).
 
 In the example scenario, we use :class:`~pyhanko.sign.signers.pdf_cms.ExternalSigner` to format the
 signed attributes and the final CMS object, but the same principle applies (mutatis mutandis) to
-remote signers that supply wholesale CMS objects.
-
+remote signers that supply complete CMS objects.
 
 .. code-block:: python
 
@@ -672,6 +671,18 @@ remote signers that supply wholesale CMS objects.
             post_sign_instr=psi,
             validation_context=validation_context
         )
+
+
+The above example below also showcases how to apply proper post-signature processing in an
+interrupted PAdES signature. This is only necessary for PAdES-LT and PAdES-LTA signatures.
+In other scenarios, you can replace the ``finish_signing`` routine with the following one-liner:
+
+.. code-block:: python
+
+    prep_digest.fill_with_cms(output_handle, sig_cms)
+
+In particular, you don't have to bother with
+:class:`~pyhanko.sign.signers.pdf_signer.PostSignInstructions` at all.
 
 .. rubric:: Footnotes
 
