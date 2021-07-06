@@ -354,8 +354,7 @@ From a PDF syntax point of view, standalone document timestamps are formally
 very similar to PDF signatures.
 PyHanko implements these using the
 :meth:`~.pyhanko.sign.signers.pdf_signer.PdfTimeStamper.timestamp_pdf` method of
-:class:`~.pyhanko.sign.signers.pdf_signer.PdfTimeStamper`
-(which is actually a superclass of |PdfSigner|).
+:class:`~.pyhanko.sign.signers.pdf_signer.PdfTimeStamper`.
 
 Timestamp tokens (TST) embedded into PDF signatures are arguably the more common
 occurrence. These function as countersignatures to the signer's signature,
