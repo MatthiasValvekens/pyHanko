@@ -1467,6 +1467,9 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
                 name = field.raw_get('/T')
             except KeyError:
                 continue
+            if not isinstance(name, (generic.TextStringObject,
+                                     generic.ByteStringObject)):
+                raise exc("Names must be strings")
             if name in names_seen:
                 raise exc("Duplicate field name")
             elif '.' in name:

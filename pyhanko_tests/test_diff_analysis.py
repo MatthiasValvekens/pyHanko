@@ -1294,3 +1294,58 @@ def test_is_field_visible():
             }),
         ]}
     )
+
+
+@freeze_time('2020-11-01')
+def test_form_field_ap_null():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+
+    # sign field 1
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    # sign field 2
+    meta = signers.PdfSignatureMetadata(field_name='Sig2')
+    signers.sign_pdf(w, meta, signer=FROM_CA, in_place=True)
+    w = IncrementalPdfFileWriter(out)
+    # mess with appearance of field 2
+    tf = w.root['/AcroForm']['/Fields'][1].get_object()
+    tf['/AP'] = generic.NullObject()
+    w.update_container(tf)
+    w.write_in_place()
+
+    # validate sig 1
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted_but_modified(s)
+    dr = status.diff_result
+    assert '/AP should point to a dictionary' in str(dr)
+
+
+@pytest.mark.parametrize('new_name, err', [
+    (generic.NullObject(), 'must be strings'),
+    (generic.pdf_string('Sig1'), 'Duplicate'),
+    (generic.pdf_string('Sig2.'), 'must not contain periods')
+])
+@freeze_time('2020-11-01')
+def test_form_field_manipulate_names(new_name, err):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+
+    # sign field 1
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    # mess with name of field 2
+    tf = w.root['/AcroForm']['/Fields'][1].get_object()
+    tf['/T'] = new_name
+    w.update_container(tf)
+    w.write_in_place()
+
+    # validate sig 1
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted_but_modified(s)
+    dr = status.diff_result
+    assert err in str(dr)
