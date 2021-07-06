@@ -563,9 +563,12 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
     )
 
     # Phase 3: write & hash the document (with placeholder)
-    prep_digest = cms_writer.send(
+    prep_digest, output = cms_writer.send(
         cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
     )
+    # The `output` variable is a handle to the stream that contains
+    # the document to be signed, with a placeholder allocated to hold
+    # the actual signature contents.
 
     # Phase 4: construct the CMS object, and pass it on to cms_writer
 
@@ -578,7 +581,11 @@ the test suite. For details, take a look at the API docs for |PdfCMSEmbedder|.
         data_digest=prep_digest.document_digest,
         digest_algorithm=md_algorithm, timestamp=timestamp
     ).dump()
-    output, sig_contents = cms_writer.send(cms_bytes)
+    sig_contents = cms_writer.send(cms_bytes)
+
+    # The (signed) output document is in `output` now.
+    # `sig_contents` holds the content of the signature container
+    # in the PDF file, including any padding.
 
 
 .. _interrupted-signing:
