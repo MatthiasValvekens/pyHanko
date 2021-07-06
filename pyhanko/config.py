@@ -14,7 +14,6 @@ from pyhanko.pdf_utils.config_utils import (
 )
 from pyhanko.pdf_utils.misc import get_and_apply
 
-# TODO add stamp styles etc.
 from pyhanko.sign import load_certs_from_pemder
 from pyhanko.sign.general import KeyUsageConstraints
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE

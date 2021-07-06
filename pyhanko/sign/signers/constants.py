@@ -4,13 +4,14 @@ signatures.
 """
 
 from pyhanko.sign.fields import SigSeedSubFilter
+from pyhanko.stamp import TextStampStyle, STAMP_ART_CONTENT
+
 
 __all__ = [
     'DEFAULT_MD', 'DEFAULT_SIG_SUBFILTER', 'DEFAULT_SIGNER_KEY_USAGE',
     'SIG_DETAILS_DEFAULT_TEMPLATE', 'DEFAULT_SIGNING_STAMP_STYLE'
 ]
 
-from pyhanko.stamp import TextStampStyle, STAMP_ART_CONTENT
 
 DEFAULT_SIG_SUBFILTER = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 """

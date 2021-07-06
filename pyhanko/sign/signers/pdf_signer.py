@@ -903,7 +903,6 @@ class PdfSigningSession:
                 timestamper.validation_paths(validation_context)
             )
             validation_paths.extend(ts_validation_paths)
-            ts_validation_paths = ts_validation_paths
 
         # do we need adobe-style revocation info?
         if signature_meta.embed_validation_info and not self.use_pades:
