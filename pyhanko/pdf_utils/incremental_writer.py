@@ -70,6 +70,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         version_str = pdf_name('/%d.%d' % version)
         root[pdf_name('/Version')] = version_str
         self.update_root()
+        self.output_version = version
 
     @classmethod
     def _handle_id(cls, prev):
