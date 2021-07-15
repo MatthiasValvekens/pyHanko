@@ -1213,6 +1213,25 @@ def test_pades_flag():
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     assert field_name == 'Sig1'
     assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
+    # the original file is a PDF 1.7 file
+    assert '/ESIC' in r.root['/Extensions']
+    assert r.input_version == (1, 7)
+
+
+def test_pades_pdf2():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    w.ensure_output_version(version=(2, 0))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
+    assert field_name == 'Sig1'
+    assert sig_obj.get_object()['/SubFilter'] == '/ETSI.CAdES.detached'
+    assert '/Extensions' not in r.root
+    assert r.input_version == (2, 0)
 
 
 @freeze_time('2020-11-01')

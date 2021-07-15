@@ -209,6 +209,17 @@ def _finalise_output(orig_output, returned_output):
     return returned_output
 
 
+def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
+    """
+    Helper function to ensure that the output PDF is at least PDF 1.7, and that
+    the relevant ESIC extension for PAdES is enabled if the version lower than
+    2.0.
+    """
+    pdf_writer.ensure_output_version(version=(1, 7))
+    if pdf_writer.output_version < (2, 0):
+        pdf_writer.register_extension(constants.ESIC_EXTENSION_1)
+
+
 class PdfTimeStamper:
     """
     Class to encapsulate the process of appending document timestamps to
@@ -277,6 +288,8 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
+
+        _ensure_esic_ext(pdf_out)
 
         timestamper = timestamper or self.default_timestamper
         field_name = self.field_name
@@ -577,9 +590,10 @@ class PdfSigner:
         # TODO document
         timestamper = self.default_timestamper
 
-        # TODO if PAdES is requested, set the ESIC extension to the proper value
-
         signature_meta: PdfSignatureMetadata = self.signature_meta
+
+        if signature_meta.subfilter == SigSeedSubFilter.PADES:
+            _ensure_esic_ext(pdf_out)
 
         cms_writer = PdfCMSEmbedder(
             new_field_spec=self.new_field_spec
