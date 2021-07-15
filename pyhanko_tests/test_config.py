@@ -1,10 +1,12 @@
 from datetime import timedelta
 
 import pytest
+import yaml
 
 from pyhanko import config, stamp
 from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL, \
     DEFAULT_TIME_TOLERANCE, init_validation_context_kwargs
+from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
@@ -499,3 +501,80 @@ def test_read_pkcs11_config():
     assert setup.token_label == 'testrsa'
     assert setup.module_path == '/path/to/libfoo.so'
     assert len(setup.other_certs) == 2
+
+
+@pytest.mark.parametrize('cfg_str,expected_result', [
+    (
+        "x-align: left", layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MIN,
+            y_align=layout.AxisAlignment.ALIGN_MID,
+        )
+    ),
+    (
+        "y-align: bottom", layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MIN,
+        )
+    ),
+    (
+        f"""
+        y-align: bottom
+        x-align: mid
+        margins:
+            left: 10
+            right: 10
+        """,
+        layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MIN,
+            margins=layout.Margins(left=10, right=10)
+        )
+    ),
+    (
+        f"""
+        y-align: bottom
+        x-align: mid
+        margins: [10, 10, 0, 0]
+        """,
+        layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MIN,
+            margins=layout.Margins(left=10, right=10)
+        )
+    ),
+    (
+        f"""
+        y-align: bottom
+        x-align: mid
+        inner-content-scaling: none
+        """,
+        layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MIN,
+            inner_content_scaling=layout.InnerScaling.NO_SCALING
+        )
+    ),
+    (
+        "inner-content-scaling: stretch-to-fit",
+        layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MID,
+            inner_content_scaling=layout.InnerScaling.STRETCH_TO_FIT
+        )
+    ),
+])
+def test_read_simple_layout_config(cfg_str, expected_result):
+    config_dict = yaml.safe_load(cfg_str)
+    result = layout.SimpleBoxLayoutRule.from_config(config_dict)
+    assert result == expected_result
+
+
+@pytest.mark.parametrize('cfg_str,error', [
+    ("x-align: bottom", "is not a valid horizontal"),
+    ("y-align: right", "is not a valid vertical"),
+    ("inner-content-scaling: foobar", "is not a valid inner scaling"),
+])
+def test_read_simple_layout_config_failures(cfg_str, error):
+    config_dict = yaml.safe_load(cfg_str)
+    with pytest.raises(ConfigurationError, match=error):
+        layout.SimpleBoxLayoutRule.from_config(config_dict)

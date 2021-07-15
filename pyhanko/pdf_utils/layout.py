@@ -12,7 +12,7 @@ __all__ = [
     'SimpleBoxLayoutRule', 'Positioning'
 ]
 
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin
+from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +180,31 @@ class InnerScaling(enum.Enum):
     aspect ratio.
     """
 
+    @classmethod
+    def from_config(cls, config_str: str) -> 'InnerScaling':
+        """
+        Convert from a configuration string.
+
+        :param config_str:
+            A string: 'none', 'stretch-fill', 'stretch-to-fit', 'shrink-to-fit'
+        :return:
+            An :class:`.InnerScaling` value.
+        :raise ConfigurationError: on unexpected string inputs.
+        """
+        try:
+            return {
+                'none': InnerScaling.NO_SCALING,
+                'stretch-fill': InnerScaling.STRETCH_FILL,
+                'stretch-to-fit': InnerScaling.STRETCH_TO_FIT,
+                'shrink-to-fit': InnerScaling.SHRINK_TO_FIT
+            }[config_str.lower()]
+        except KeyError:
+            raise ConfigurationError(
+                f"'{config_str}' is not a valid inner scaling setting; valid "
+                f"values are 'none', 'stretch-fill', 'stretch-to-fit', "
+                f"'shrink-to-fit'."
+            )
+
 
 class AxisAlignment(enum.Enum):
     """Class representing one-dimensional alignment along an axis."""
@@ -198,6 +223,52 @@ class AxisAlignment(enum.Enum):
     """
     Align maximally towards the positive end of the axis.
     """
+
+    @classmethod
+    def from_x_align(cls, align_str: str) -> 'AxisAlignment':
+        """
+        Convert from a horizontal alignment config string.
+
+        :param align_str:
+            A string: 'left', 'mid' or 'right'.
+        :return:
+            An :class:`.AxisAlignment` value.
+        :raise ConfigurationError: on unexpected string inputs.
+        """
+        try:
+            return {
+                'left': AxisAlignment.ALIGN_MIN,
+                'mid': AxisAlignment.ALIGN_MID,
+                'right': AxisAlignment.ALIGN_MAX
+            }[align_str.lower()]
+        except KeyError:
+            raise ConfigurationError(
+                f"'{align_str}' is not a valid horizontal alignment; valid "
+                f"values are 'left', 'mid', 'right'."
+            )
+
+    @classmethod
+    def from_y_align(cls, align_str: str) -> 'AxisAlignment':
+        """
+        Convert from a vertical alignment config string.
+
+        :param align_str:
+            A string: 'bottom', 'mid' or 'top'.
+        :return:
+            An :class:`.AxisAlignment` value.
+        :raise ConfigurationError: on unexpected string inputs.
+        """
+        try:
+            return {
+                'bottom': AxisAlignment.ALIGN_MIN,
+                'mid': AxisAlignment.ALIGN_MID,
+                'top': AxisAlignment.ALIGN_MAX
+            }[align_str.lower()]
+        except KeyError:
+            raise ConfigurationError(
+                f"'{align_str}' is not a valid vertical alignment; valid "
+                f"values are 'bottom', 'mid', 'top'."
+            )
 
     @property
     def flipped(self):
@@ -354,11 +425,18 @@ class Margins(ConfigurableMixin):
         """
         return Margins.effective('height', height, self.bottom, self.top)
 
+    @classmethod
+    def from_config(cls, config_dict):
+        # convenience
+        if isinstance(config_dict, list):
+            config_dict = dict(
+                zip(("left", "right", "top", "bottom"), config_dict)
+            )
+        return super().from_config(config_dict)
 
-# TODO implement ConfigurableMixin for these parameters
 
 @dataclass(frozen=True)
-class SimpleBoxLayoutRule:
+class SimpleBoxLayoutRule(ConfigurableMixin):
     """
     Class describing alignment, scaling and margin rules for a box
     positioned inside another box.
@@ -383,6 +461,28 @@ class SimpleBoxLayoutRule:
     """
     Inner content scaling rule.
     """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        # in config processing, we default to MID for everything
+        x_align = config_dict.get('x_align', AxisAlignment.ALIGN_MID)
+        if isinstance(x_align, str):
+            x_align = AxisAlignment.from_x_align(x_align)
+        config_dict['x_align'] = x_align
+
+        y_align = config_dict.get('y_align', AxisAlignment.ALIGN_MID)
+        if isinstance(y_align, str):
+            y_align = AxisAlignment.from_y_align(y_align)
+        config_dict['y_align'] = y_align
+
+        margins = config_dict.get('margins', None)
+        if isinstance(margins, (dict, list)):
+            config_dict['margins'] = Margins.from_config(margins)
+
+        scaling = config_dict.get('inner_content_scaling', None)
+        if scaling is not None:
+            config_dict['inner_content_scaling'] \
+                = InnerScaling.from_config(scaling)
 
     def substitute_margins(self, new_margins: Margins) -> 'SimpleBoxLayoutRule':
         return SimpleBoxLayoutRule(
