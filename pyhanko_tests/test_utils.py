@@ -1557,3 +1557,90 @@ def test_ensure_version_update_twice_smaller():
     w.write_in_place()
     r = PdfFileReader(out)
     assert r.input_version == (2, 0)
+
+
+TEST_EXT2 = writer.DeveloperExtension(
+    prefix_name=generic.NameObject('/TEST'),
+    base_version=generic.NameObject('/1.7'),
+    extension_level=2
+)
+
+
+@pytest.mark.parametrize(
+    'expected_lvl,new_ext', [
+        (2, TEST_EXT2),
+        (3, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, compare_by_level=True
+        )),
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, compare_by_level=True
+        )),
+        (3, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, subsumes=(2,)
+        )),
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, subsumed_by=(2,)
+        )),
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1001,
+            subsumed_by=(2,), subsumes=(1000, 1)
+        )),
+    ]
+)
+def test_extension_registration(expected_lvl, new_ext):
+    w = writer.PdfFileWriter()
+    w.register_extension(TEST_EXT2)
+    assert w.root['/Extensions']['/TEST']['/ExtensionLevel'] == 2
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    w.register_extension(new_ext)
+
+    assert w.root['/Extensions']['/TEST']['/ExtensionLevel'] == expected_lvl
+
+
+@pytest.mark.parametrize(
+    'new_ext', [
+        writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3,
+        ),
+        writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, compare_by_level=False
+        ),
+        writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, subsumed_by=(5,)
+        ),
+        writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1001,
+            subsumed_by=(2000,), subsumes=(1000, 1)
+        ),
+    ]
+)
+def test_extension_registration_unclear(new_ext):
+    w = writer.PdfFileWriter()
+    w.register_extension(TEST_EXT2)
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    with pytest.raises(misc.PdfWriteError, match="Could not register ext"):
+        w.register_extension(new_ext)

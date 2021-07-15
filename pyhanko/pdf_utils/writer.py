@@ -7,8 +7,9 @@ for the original license.
 
 import os
 import struct
+from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Iterable
 
 from asn1crypto import x509
 
@@ -29,7 +30,7 @@ from pyhanko import __version__
 __all__ = [
     'ObjectStream', 'BasePdfFileWriter',
     'PageObject', 'PdfFileWriter', 'init_xobject_dictionary',
-    'copy_into_new_writer'
+    'copy_into_new_writer', 'DeveloperExtension'
 ]
 
 VENDOR = 'pyHanko ' + __version__
@@ -111,6 +112,85 @@ class ObjectStream:
         if self.compress:
             stream_object.compress()
         return stream_object
+
+
+@dataclass(frozen=True)
+class DeveloperExtension:
+    """
+    PDF developer extension designation.
+    """
+
+    prefix_name: generic.NameObject
+    """
+    Registered developer prefix.
+    """
+
+    base_version: generic.NameObject
+    """
+    Base version on to which the extension applies.
+    """
+
+    extension_level: int
+    """
+    Extension level.
+    """
+
+    compare_by_level: bool = False
+    """
+    Compare developer extensions by level number.
+    If this value is ``True`` and a copy of this extension already exists in the
+    target file with a higher level number, do not override it.
+    If one exists with a lower level number, override it.
+    
+    If this value is ``False``, the decision is based on :attr:`subsumed_by`
+    and :attr:`subsumes`.
+    
+    .. warning::
+        It is generally not safe to assume that extension levels are used as a
+        versioning system (i.e. that higher extension levels supersede lower
+        ones), hence why the default is ``False``.
+    """
+
+    subsumed_by: Iterable[int] = ()
+    """
+    List of extension levels that would subsume this one. If one of these is
+    present in the extensions dictionary, attempting to register this extension
+    will not override it.
+    
+    Default value: empty.
+    
+    .. warning::
+        This parameter is ignored if :class:`compare_by_level` is ``True``.
+    """
+
+    subsumes: Iterable[int] = ()
+    """
+    List of extensions explicitly subsumed by this one. If one of these is
+    present in the extensions dictionary, attempting to register this extension
+    will override it.
+    
+    Default value: empty.
+    
+    .. warning::
+        This parameter is ignored if :class:`compare_by_level` is ``True``.
+    """
+
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Format the data in this object into a PDF dictionary for registration
+        into the `/Extensions` dictionary.
+
+        :return:
+            A :class:`.generic.DictionaryObject`.
+        """
+
+        return generic.DictionaryObject({
+            pdf_name('/Type'): pdf_name('/DeveloperExtensions'),
+            pdf_name('/BaseVersion'): self.base_version,
+            pdf_name('/ExtensionLevel'): generic.NumberObject(
+                self.extension_level
+            ),
+        })
 
 
 def _contiguous_xref_chunks(position_dict):
@@ -380,6 +460,39 @@ class BasePdfFileWriter(PdfHandler):
         Equivalent to calling :meth:`mark_update` with :attr:`root_ref`.
         """
         pass
+
+    def register_extension(self, ext: DeveloperExtension):
+        try:
+            extensions = self.root['/Extensions']
+        except KeyError:
+            self.root['/Extensions'] = extensions = generic.DictionaryObject()
+
+        try:
+            # check if the extension is already registered,
+            # and if so, at which level.
+            lvl = extensions[ext.prefix_name]['/ExtensionLevel']
+
+            if lvl == ext.extension_level:
+                old_ext_applies = True
+            elif ext.compare_by_level:
+                old_ext_applies = lvl >= ext.extension_level
+            else:
+                old_ext_applies = lvl in ext.subsumed_by
+                if not old_ext_applies and lvl not in ext.subsumes:
+                    raise PdfWriteError(
+                        f"Could not register extension with prefix "
+                        f"{ext.prefix_name} and level {ext.extension_level}; "
+                        f"file contains extension with same prefix and "
+                        f"extension level {lvl}. If this extension level is "
+                        f"safe to override, mark it as subsumed."
+                    )
+            if old_ext_applies:
+                return  # nothing to do
+        except KeyError:
+            pass
+
+        extensions[ext.prefix_name] = ext.as_pdf_object()
+        self.update_container(extensions)
 
     def get_object(self, ido):
         if ido.pdf not in self._resolves_objs_from:
