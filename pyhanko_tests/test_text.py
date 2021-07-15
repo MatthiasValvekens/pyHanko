@@ -47,9 +47,14 @@ def test_embed_subset():
 
     w.write_in_place()
     font_ref = ga.as_resource()
-    df = font_ref.get_object()['/DescendantFonts'][0].get_object()
+    font = font_ref.get_object()
+    df = font['/DescendantFonts'][0].get_object()
     font_file = df['/FontDescriptor']['/FontFile3']
-    assert len(font_file.data) == 3029
+    # assert no ToUnicode assignment for 'f'
+    assert b'\n<0066>' not in font['/ToUnicode'].data
+    # assert a ToUnicode assignment for the 'ffi' ligature
+    assert b'\n<e9e2> <006600660069>' in font['/ToUnicode'].data
+    assert len(font_file.data) < 4000
 
 
 def test_actual_text_toggle():

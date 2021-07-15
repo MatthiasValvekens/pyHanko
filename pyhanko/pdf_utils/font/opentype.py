@@ -514,17 +514,19 @@ class GlyphAccumulator(FontEngine):
             y_advance=total_y / self.units_per_em
         )
 
-    def _format_tounicode_cmap(self, registry, ordering, supplement):
+    def _format_tounicode_cmap(self):
+        # ToUnicode is always Adobe-UCS2-0 in our case,
+        # since we use the fixed-with 2-byte UCS2 encoding for the BMP
         header = (
             '/CIDInit /ProcSet findresource begin\n'
             '12 dict begin\n'
             'begincmap\n'
-            '/CIDSystemInfo 3 dict dup begin\n'
-            f'/Registry ({registry}) def\n'
-            f'/Ordering ({ordering}) def\n'
-            f'/Supplement {supplement}\n def'
-            'end def\n'
-            f'/CMapName /{registry}-{ordering}-{supplement:03} def\n'
+            '/CIDSystemInfo <<\n'
+            f'/Registry (Adobe) def\n'
+            f'/Ordering (UCS2) def\n'
+            f'/Supplement 0\n def'
+            '>> def\n'
+            f'/CMapName /Adobe-Identity-UCS2 def\n'
             '/CMapType 2 def\n'
             '1 begincodespacerange\n'
             '<0000> <FFFF>\n'
@@ -549,7 +551,7 @@ class GlyphAccumulator(FontEngine):
         return stream
 
     def _extract_subset(self, options=None):
-        options = options or subset.Options()
+        options = options or subset.Options(layout_closure=False)
         if not self.is_cff_font:
             # Have to retain GIDs in the Type2 (non-CFF) case, since we don't
             # have a predefined character set available (i.e. the ROS ordering
@@ -593,7 +595,7 @@ class GlyphAccumulator(FontEngine):
             vertical=False
         )
         type0['/ToUnicode'] = writer.add_object(
-            self._format_tounicode_cmap(*self.cidfont_obj.ros)
+            self._format_tounicode_cmap()
         )
         # use our preallocated font ref
         writer.add_object(type0, obj_stream, idnum=self._font_ref.idnum)
