@@ -10,6 +10,7 @@ import getpass
 import tzlocal
 from asn1crypto import pem, cms
 
+from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
@@ -83,6 +84,9 @@ def pyhanko_exception_manager():
     except SigningError as e:
         exception = e
         msg = "Error raised while producing signed file."
+    except LayoutError as e:
+        exception = e
+        msg = "Error raised while producing signature layout."
     except Exception as e:
         exception = e
         msg = "Generic processing error."
