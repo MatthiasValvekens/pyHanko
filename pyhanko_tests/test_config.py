@@ -53,6 +53,13 @@ def test_read_qr_config():
                 font: {NOTO_SERIF_JP}
             type: qr
             background: __stamp__
+            qr-position: right
+            inner-content-layout:
+                y-align: bottom
+                x-align: mid
+                margins:
+                    left: 10
+                    right: 10
         alternative1:
             text-box-style:
                 font: {NOTO_SERIF_JP}
@@ -63,6 +70,9 @@ def test_read_qr_config():
             background: pyhanko_tests/data/pdf/pdf-background-test.pdf
         alternative3:
             type: text
+        wrong-position:
+            type: qr
+            qr-position: bleh
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     default_qr_style = cli_config.get_stamp_style()
@@ -70,12 +80,21 @@ def test_read_qr_config():
     assert default_qr_style.background is stamp.STAMP_ART_CONTENT
     assert isinstance(default_qr_style.text_box_style.font,
                       GlyphAccumulatorFactory)
+    assert default_qr_style.qr_position == stamp.QRPosition.RIGHT_OF_TEXT
+
+    expected_layout = layout.SimpleBoxLayoutRule(
+        x_align=layout.AxisAlignment.ALIGN_MID,
+        y_align=layout.AxisAlignment.ALIGN_MIN,
+        margins=layout.Margins(left=10, right=10)
+    )
+    assert default_qr_style.inner_content_layout == expected_layout
 
     alternative1 = cli_config.get_stamp_style('alternative1')
     assert isinstance(alternative1, QRStampStyle)
     assert isinstance(alternative1.background, PdfImage)
     assert isinstance(alternative1.text_box_style.font,
                       GlyphAccumulatorFactory)
+    assert alternative1.qr_position == stamp.QRPosition.LEFT_OF_TEXT
 
     alternative2 = cli_config.get_stamp_style('alternative2')
     assert isinstance(alternative2, QRStampStyle)
@@ -86,6 +105,9 @@ def test_read_qr_config():
     assert isinstance(alternative3, TextStampStyle)
     assert alternative3.background is None
     assert isinstance(alternative3.text_box_style.font, SimpleFontEngineFactory)
+
+    with pytest.raises(ConfigurationError, match='not a valid QR position'):
+        cli_config.get_stamp_style('wrong-position')
 
     with pytest.raises(ConfigurationError):
         cli_config.get_stamp_style('theresnosuchstyle')

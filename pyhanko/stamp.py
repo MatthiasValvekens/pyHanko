@@ -112,7 +112,7 @@ def _get_background_content(bg_spec) -> content.PdfContent:
 @dataclass(frozen=True)
 class BaseStampStyle(ConfigurableMixin):
     """
-    Base class for stamps styles.
+    Base class for stamp styles.
     """
 
     border_width: int = 3
@@ -144,7 +144,6 @@ class BaseStampStyle(ConfigurableMixin):
     Opacity value to render the background at. This should be a floating-point
     number between `0` and `1`.
     """
-
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -258,6 +257,7 @@ class TextStampStyle(BaseStampStyle):
         This implementation of :meth:`process_entries` invokes super(),
         and then calls :meth:`.TextBoxStyle.from_config` to parse the
         ``text_box_style`` configuration entry, if present.
+        The ``inner_content_layout`` entry is similarly processed.
         """
 
         super().process_entries(config_dict)
@@ -265,6 +265,13 @@ class TextStampStyle(BaseStampStyle):
             tbs = config_dict['text_box_style']
             config_dict['text_box_style'] \
                 = TextBoxStyle.from_config(tbs)
+        except KeyError:
+            pass
+
+        try:
+            icl = config_dict['inner_content_layout']
+            config_dict['inner_content_layout'] = \
+                layout.SimpleBoxLayoutRule.from_config(icl)
         except KeyError:
             pass
 
@@ -303,6 +310,30 @@ class QRPosition(enum.Enum):
     @property
     def horizontal_flow(self):
         return self in (QRPosition.LEFT_OF_TEXT, QRPosition.RIGHT_OF_TEXT)
+
+    @classmethod
+    def from_config(cls, config_str) -> 'QRPosition':
+        """
+        Convert from a configuration string.
+
+        :param config_str:
+            A string: 'left', 'right', 'top', 'bottom'
+        :return:
+            An :class:`.QRPosition` value.
+        :raise ConfigurationError: on unexpected string inputs.
+        """
+        try:
+            return {
+                'left': QRPosition.LEFT_OF_TEXT,
+                'right': QRPosition.RIGHT_OF_TEXT,
+                'top': QRPosition.ABOVE_TEXT,
+                'bottom': QRPosition.BELOW_TEXT
+            }[config_str.lower()]
+        except KeyError:
+            raise ConfigurationError(
+                f"'{config_str}' is not a valid QR position setting; valid "
+                f"values are 'left', 'right', 'top', 'bottom'"
+            )
 
 
 DEFAULT_QR_SCALE = 0.2
@@ -353,6 +384,16 @@ class QRStampStyle(TextStampStyle):
     """
     Position of the QR code relative to the text box.
     """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
+
+        try:
+            qr_pos = config_dict['qr_position']
+            config_dict['qr_position'] = QRPosition.from_config(qr_pos)
+        except KeyError:
+            pass
 
     def create_stamp(self, writer: BasePdfFileWriter,
                      box: layout.BoxConstraints, text_params: dict) \
