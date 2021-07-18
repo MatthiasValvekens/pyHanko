@@ -375,7 +375,7 @@ to include a trusted timestamp in the signature.
 
 .. code-block:: python
 
-    from pyhanko.sign import signers
+    from pyhanko.sign import signers, timestamps
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 
