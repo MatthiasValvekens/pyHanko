@@ -267,6 +267,11 @@ class PdfTimeStamper:
         :param bytes_reserved:
             Bytes to reserve for the CMS object in the PDF file.
             If not specified, make an estimate based on a dummy signature.
+
+            .. warning::
+                Since the CMS object is written to the output file as a
+                hexadecimal string, you should request **twice** the (estimated)
+                number of bytes in the DER-encoded version of the CMS object.
         :param validation_paths:
             If the validation path(s) for the TSA's certificate are already
             known, you can pass them using this parameter to avoid having to
@@ -677,6 +682,11 @@ class PdfSigner:
         :param bytes_reserved:
             Bytes to reserve for the CMS object in the PDF file.
             If not specified, make an estimate based on a dummy signature.
+            
+            .. warning::
+                Since the CMS object is written to the output file as a
+                hexadecimal string, you should request **twice** the (estimated)
+                number of bytes in the DER-encoded version of the CMS object.
         :param appearance_text_params:
             Dictionary with text parameters that will be passed to the
             signature appearance constructor (if applicable).
@@ -1233,6 +1243,9 @@ class PdfSigningSession:
                 ),
                 cades_signed_attr_meta=signature_meta.cades_signed_attr_spec
             )
+            # Note: multiply by 2 to account for the fact that this byte dump
+            # will be embedded into the resulting PDF as a hexadecimal
+            # string
             test_len = len(test_signature_cms.dump()) * 2
             # External actors such as timestamping servers can't be relied on to
             # always return exactly the same response, so we build in a 50%
