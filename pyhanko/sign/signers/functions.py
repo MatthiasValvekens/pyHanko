@@ -95,6 +95,8 @@ def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
     This can be used to bundle (non-PDF) detached signatures with PDF
     attachments, for example.
 
+    .. versionadded:: 0.7.0
+
     :param pdf_writer:
         The PDF writer to use.
     :param file_spec_string:

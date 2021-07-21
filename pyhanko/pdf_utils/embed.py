@@ -1,3 +1,9 @@
+"""
+Utility classes for handling embedded files in PDFs.
+
+.. versionadded:: 0.7.0
+"""
+
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
@@ -144,6 +150,10 @@ class EmbeddedFileObject(generic.StreamObject):
 
 @dataclass(frozen=True)
 class RelatedFileSpec:
+    """
+    Dataclass modelling a RelatedFile construct in PDF.
+    """
+
     name: str
     """
     Name of the related file.
@@ -170,6 +180,10 @@ class RelatedFileSpec:
 
 @dataclass(frozen=True)
 class FileSpec:
+    """
+    Dataclass modelling an embedded file description in a PDF.
+    """
+
     # TODO collection item dictionaries
 
     # TODO thumbnail support
@@ -218,6 +232,10 @@ class FileSpec:
     """
 
     def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Represent the file spec as a PDF dictionary.
+        """
+
         result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/Filespec'),
             pdf_name('/F'): pdf_string(self.file_spec_string),
@@ -361,7 +379,7 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
         viewers as well.
 
     :param plaintext_payload:
-        The plaintext payload.
+        The plaintext payload (a binary representation of a PDF document).
     :param security_handler:
         The security handler to use on the wrapper document.
         If ``None``, a security handler will be constructed based on the
