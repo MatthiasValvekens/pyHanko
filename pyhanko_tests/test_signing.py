@@ -6,7 +6,7 @@ import itertools
 from io import BytesIO
 
 import pytz
-from asn1crypto import ocsp, tsp, core
+from asn1crypto import ocsp, tsp
 from asn1crypto.algos import (
     SignedDigestAlgorithm, RSASSAPSSParams,
     MaskGenAlgorithm, DigestAlgorithm, DigestInfo,
@@ -2880,8 +2880,6 @@ def test_generic_data_sign(input_data, detached):
     # re-parse just to make sure we're starting fresh
     signature = cms.ContentInfo.load(signature.dump())
 
-    if isinstance(input_data, core.Sequence):
-        detached = False
     raw_digest = hashlib.sha256(b'Hello world!').digest() if detached else None
     content = signature['content']
     assert content['version'].native == 'v1'
@@ -2910,7 +2908,8 @@ def test_generic_data_sign(input_data, detached):
     assert status.intact
 
 
-def test_cms_v3_sign():
+@pytest.mark.parametrize('detached', [True, False])
+def test_cms_v3_sign(detached):
     inner_obj = FROM_CA.sign_general_data(
         b'Hello world!', 'sha256', detached=False
     )
@@ -2920,7 +2919,8 @@ def test_cms_v3_sign():
             'content_type': 'signed_data',
             'content': inner_obj['content'].untag()
         }),
-        'sha256'
+        'sha256',
+        detached=detached
     )
 
     # re-parse just to make sure we're starting fresh
@@ -2929,14 +2929,19 @@ def test_cms_v3_sign():
     content = signature['content']
     assert content['version'].native == 'v3'
     assert isinstance(content, cms.SignedData)
-    status = validate_cms_signature(content, raw_digest=None)
-    assert status.valid
-    assert status.intact
-
     eci = content['encap_content_info']
     assert eci['content_type'].native == 'signed_data'
-    inner_eci = eci['content'].parsed['encap_content_info']
-    assert inner_eci['content'].native == b'Hello world!'
+    if detached:
+        raw_digest = hashlib.sha256(
+            inner_obj['content'].untag().dump()
+        ).digest()
+    else:
+        raw_digest = None
+        inner_eci = eci['content'].parsed['encap_content_info']
+        assert inner_eci['content'].native == b'Hello world!'
+    status = validate_cms_signature(content, raw_digest=raw_digest)
+    assert status.valid
+    assert status.intact
 
 
 def test_detached_cms_with_self_reported_timestamp():

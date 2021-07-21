@@ -203,12 +203,10 @@ def _validate_cms_signature(signed_data: cms.SignedData,
         signer_info['signature_algorithm']
     mechanism = signature_algorithm['algorithm'].native
     md_algorithm = signer_info['digest_algorithm']['algorithm'].native
-    expected_content_type = 'data'
+    eci = signed_data['encap_content_info']
+    expected_content_type = eci['content_type'].native
     if raw_digest is None:
         # this means that there should be encapsulated data
-        eci = signed_data['encap_content_info']
-        expected_content_type = eci['content_type'].native
-
         raw = bytes(eci['content'])
         md_spec = get_pyca_cryptography_hash(md_algorithm)
         md = hashes.Hash(md_spec)
@@ -256,7 +254,10 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            key_usage_settings: KeyUsageConstraints = None,
                            encap_data_invalid=False):
     """
-    Validate a detached CMS signature (i.e. a ``SignedData`` object).
+    Validate a CMS signature (i.e. a ``SignedData`` object).
+
+    .. versionchanged:: 0.7.0
+        Now handles both detached and enveloping signatures.
 
     :param signed_data:
         The :class:`.asn1crypto.cms.SignedData` object to validate.
@@ -454,7 +455,9 @@ class StandardCMSSignatureStatus(SignatureStatus):
         ]
 
 
-def validate_detached_cms(input_data: Union[bytes, IO],
+def validate_detached_cms(input_data: Union[bytes, IO,
+                                            cms.ContentInfo,
+                                            cms.EncapsulatedContentInfo],
                           signed_data: cms.SignedData,
                           signer_validation_context: ValidationContext = None,
                           ts_validation_context: ValidationContext = None,
@@ -462,11 +465,17 @@ def validate_detached_cms(input_data: Union[bytes, IO],
                           chunk_size=DEFAULT_CHUNK_SIZE,
                           max_read=None) -> StandardCMSSignatureStatus:
     """
+    .. versionadded: 0.7.0
+
     Validate a detached CMS signature.
 
     :param input_data:
-        The input data to sign. This can be either a :class:`bytes` object
-        or a file-type object.
+        The input data to sign. This can be either a :class:`bytes` object,
+        a file-like object or a :class:`cms.ContentInfo` /
+        :class:`cms.EncapsulatedContentInfo` object.
+
+        If a CMS content info object is passed in, the `content` field
+        will be extracted.
     :param signed_data:
         The :class:`cms.SignedData` object containing the signature to verify.
     :param signer_validation_context:
@@ -492,6 +501,8 @@ def validate_detached_cms(input_data: Union[bytes, IO],
     h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
     if isinstance(input_data, bytes):
         h.update(input_data)
+    elif isinstance(input_data, (cms.ContentInfo, cms.EncapsulatedContentInfo)):
+        h.update(bytes(input_data['content']))
     else:
         temp_buf = bytearray(chunk_size)
         misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)

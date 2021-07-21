@@ -452,6 +452,9 @@ class Signer:
             timestamper=timestamper, cades_meta=cades_signed_attr_meta,
             dry_run=dry_run, content_type=content_type
         )
+        if isinstance(content_type, core.ObjectIdentifier):
+            content_type = content_type.native
+
         cms_version = 'v1' if content_type == 'data' else 'v3'
         return self.sign_prescribed_attributes(
             digest_algorithm, signed_attrs,
@@ -570,6 +573,8 @@ class Signer:
         Produce a CMS signature for an arbitrary data stream
         (not necessarily PDF data).
 
+        .. versionadded:: 0.7.0
+
         :param input_data:
             The input data to sign. This can be either a :class:`bytes` object
             a file-type object, a :class:`cms.ContentInfo` object or
@@ -593,11 +598,6 @@ class Signer:
             the encapsulated content is not embedded in the signature object
             itself). This is the default. If ``False``, the content to be
             signed will be embedded as encapsulated content.
-
-            .. note::
-                If ``input_data`` is of type :class:`cms.ContentInfo` or
-                :class:`cms.EncapsulatedContentInfo`, the implied value of this
-                parameter is ``False``.
 
         :param timestamp:
             Signing time to embed into the signed attributes
@@ -626,9 +626,15 @@ class Signer:
         """
         h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
         encap_content_info = None
-        if isinstance(input_data, core.Sequence):
-            encap_content_info = input_data
-            h.update(bytes(encap_content_info['content']))
+        if isinstance(input_data,
+                      (cms.ContentInfo, cms.EncapsulatedContentInfo)):
+            h.update(bytes(input_data['content']))
+            if detached:
+                encap_content_info = {
+                    'content_type': input_data['content_type']
+                }
+            else:
+                encap_content_info = input_data
         elif isinstance(input_data, bytes):
             h.update(input_data)
             if not detached:
