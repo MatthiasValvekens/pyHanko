@@ -628,7 +628,7 @@ def load_certs_from_pemder(cert_files):
                 else:  # pragma: nocover
                     logger.debug(
                         f'Skipping PEM block of type {type_name} in '
-                        f'{ca_chain_file}.'
+                        f'CA chain file.'
                     )
         else:
             # no need to unarmor, just try to load it immediately
