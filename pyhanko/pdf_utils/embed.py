@@ -105,11 +105,7 @@ class EmbeddedFileObject(generic.StreamObject):
         )
         self['/Type'] = generic.pdf_name('/EmbeddedFile')
         if mime_type is not None:
-            # FIXME fix the name encoder to handle this situation properly
-            #  (another holdover from PyPDF2)
-            self['/Subtype'] = generic.pdf_name(
-                '/' + mime_type.replace('/', '#2f')
-            )
+            self['/Subtype'] = generic.pdf_name('/' + mime_type)
         self.ef_stream_ref = pdf_writer.add_object(self)
         self.params = params
 

@@ -1644,3 +1644,62 @@ def test_extension_registration_unclear(new_ext):
     w = writer.copy_into_new_writer(PdfFileReader(out))
     with pytest.raises(misc.PdfWriteError, match="Could not register ext"):
         w.register_extension(new_ext)
+
+
+@pytest.mark.parametrize(
+    'name_bytes,expected', [
+        # examples from the spec
+        (b'/Name1', pdf_name('/Name1')),
+        (b'/A;Name_With-Various***Characters',
+         pdf_name('/A;Name_With-Various***Characters')),
+        (b'/1.2', pdf_name('/1.2')),
+        (b'/$$', pdf_name('/$$')),
+        (b'/@pattern', pdf_name('/@pattern')),
+        (b'/.notdef', pdf_name('/.notdef')),
+        (b'/Lime#20Green', pdf_name('/Lime Green')),
+        (b'/paired#28#29parentheses', pdf_name('/paired()parentheses')),
+        (b'/The_Key_of_F#23_Minor', pdf_name('/The_Key_of_F#_Minor')),
+        # check hex digit handling
+        (b'/application#2Fpdf', pdf_name('/application/pdf')),
+        (b'/application#2fpdf', pdf_name('/application/pdf'))
+    ]
+)
+def test_name_decode(name_bytes, expected):
+    result = generic.NameObject.read_from_stream(BytesIO(name_bytes))
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    # examples from the spec
+    'name_bytes,expected_error', [
+        (b'Foo', 'Name object should start with /'),
+        (b'/Foo#', 'Unterminated escape'),
+        (b'/Foo#1', 'Unterminated escape'),
+        (b'/Foo#z1', 'hexadecimal digit'),
+        (b'/Foo\x7fbar', 'must be escaped'),
+        (b'/Foo\xefbar', 'must be escaped'),
+    ]
+)
+def test_name_decode_failure(name_bytes, expected_error):
+    with pytest.raises(misc.PdfReadError, match=expected_error):
+        generic.NameObject.read_from_stream(BytesIO(name_bytes))
+
+
+@pytest.mark.parametrize(
+    'name_str,expected_bytes', [
+        ('/Foo', b'/Foo'),
+        ('/application/pdf', b'/application#2Fpdf'),
+        ('/Lime Green', b'/Lime#20Green'),
+        ('/The_Key_of_F#_Minor', b'/The_Key_of_F#23_Minor'),
+    ]
+)
+def test_name_encode(name_str, expected_bytes):
+    out = BytesIO()
+    pdf_name(name_str).write_to_stream(out)
+    assert out.getvalue() == expected_bytes
+
+
+def test_name_encode_fail():
+    msg = "Could not serialise name object"
+    with pytest.raises(misc.PdfWriteError, match=msg):
+        pdf_name("NoSlashHere").write_to_stream(BytesIO())

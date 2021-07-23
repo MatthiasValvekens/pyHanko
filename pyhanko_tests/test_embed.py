@@ -60,9 +60,7 @@ def test_simple_embed(incremental):
     stream = spec_obj['/EF']['/F']
     assert stream.data == VECTOR_IMAGE_PDF
 
-    # FIXME This assertion will have to be corrected once I deal with the name
-    #  parser's problems
-    assert stream['/Subtype'] == '/application#2fpdf'
+    assert stream['/Subtype'] == '/application/pdf'
 
     assert stream['/Params']['/CheckSum'] \
            == binascii.unhexlify('caaf24354fd2e68c08826d65b309b404')

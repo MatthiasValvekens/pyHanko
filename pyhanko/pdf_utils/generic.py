@@ -9,13 +9,17 @@ import os
 import re
 import binascii
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from typing import Iterator, Tuple, Optional, Union, Callable, Any
 from dataclasses import dataclass, field
 
 from .misc import (
-    read_non_whitespace, skip_over_comment, read_until_regex
+    read_non_whitespace, skip_over_comment, read_until_regex,
+    is_regular_character
 )
-from .misc import PdfStreamError, PdfReadError, IndirectObjectExpected
+from .misc import (
+    PdfStreamError, PdfReadError, IndirectObjectExpected, PdfWriteError
+)
 import logging
 from . import filters
 import decimal
@@ -163,13 +167,9 @@ def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
     tok = stream.read(1)
     stream.seek(-1, os.SEEK_CUR)  # reset to start
     idx = OBJECT_PREFIXES.find(tok)
-    handler = container_ref.get_pdf_handler()
-    strict = handler is None or handler.strict
     if idx == 0:
         # name object
-        result = NameObject.read_from_stream(
-            stream, strict=strict
-        )
+        result = NameObject.read_from_stream(stream)
     elif idx == 1:
         # hexadecimal string OR dictionary
         peek = stream.read(2)
@@ -804,6 +804,62 @@ class TextStringObject(str, PdfObject):
             stream.write(b")")
 
 
+def _as_hex_digit(ascii_char):
+    if 0x30 <= ascii_char <= 0x39:
+        return ascii_char - 0x30
+    elif 0x41 <= ascii_char <= 0x46:
+        return ascii_char - 0x37
+    elif 0x61 <= ascii_char <= 0x66:
+        return ascii_char - 0x57
+    else:
+        raise PdfReadError(
+            "Numeric escape in PDF name must use hexadecimal digits"
+        )
+
+
+def _decode_name(name_bytes: bytes) -> 'NameObject':
+    """
+    Decode the bytes that make up a name object (minus the initial /), expanding
+    all escapes along the way.
+    """
+    result = BytesIO()
+    result.write(b'/')
+    name_iter = iter(name_bytes)
+    try:
+        while True:
+            cur_byte = next(name_iter)
+            if cur_byte == 0x23:  # '#' is the 2-digit escape prefix
+                # escape sequence: grab next two bytes
+                try:
+                    digit1 = next(name_iter)
+                    digit2 = next(name_iter)
+                except StopIteration:
+                    raise PdfReadError(
+                        f"Unterminated escape in PDF name /{repr(name_bytes)}"
+                    )
+
+                cur_byte = _as_hex_digit(digit1) * 16 + _as_hex_digit(digit2)
+            elif not (0x21 <= cur_byte <= 0x7e) or \
+                    not is_regular_character(cur_byte):
+                raise PdfReadError(
+                    f"Byte (0x{hex(cur_byte)}) must be escaped in a PDF name"
+                )
+            result.write(
+                bytes((cur_byte,))
+            )
+    except StopIteration:
+        pass
+    # NOTE: we assume UTF-8, but the PDF spec actually doesn't prescribe
+    #  a character encoding for names, they're just byte sequences.
+    #  This doesn't matter in 99.99% of cases (since names are not supposed
+    #  to contain renderable text, and are typically 7-bit ASCII anyhow),
+    #  but it's not 100% correct. I don't see a way to fix this without causing
+    #  massive non-obvious API breakage (since NameObject inherits from 'str' as
+    #  in PyPDF2), i.e. the correctness benefit is vastly outweighed by the
+    #  risks (for now)
+    return NameObject(result.getvalue().decode('utf8'))
+
+
 class NameObject(str, PdfObject):
     """
     PDF name object. These are valid Python strings, but names and strings
@@ -814,25 +870,31 @@ class NameObject(str, PdfObject):
     DELIMITER_PATTERN = re.compile(r"\s+|[\(\)<>\[\]{}/%]".encode('ascii'))
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
-        stream.write(encode_pdfdocencoding(self))
+        byte_iter = iter(self.encode('utf8'))
+        if not next(byte_iter) == 0x2f:
+            raise PdfWriteError(
+                f"Could not serialise name object {repr(self)}, "
+                f"must start with /"
+            )
+        stream.write(b'/')
+        for cur_byte in byte_iter:
+            if cur_byte == 0x23 or not (0x21 <= cur_byte <= 0x7e) or \
+                    not is_regular_character(cur_byte):
+                stream.write('#{:X}'.format(cur_byte).encode('ascii'))
+            else:
+                # no convenient syntax for writing a single byte...
+                as_bytes = bytes((cur_byte,))
+                stream.write(as_bytes)
 
     @staticmethod
-    def read_from_stream(stream, strict=True):
-        name = stream.read(1)
-        if name != b'/':
-            raise PdfReadError("name read error")
-        name += read_until_regex(stream, NameObject.DELIMITER_PATTERN,
-                                 ignore_eof=True)
-        try:
-            return NameObject(name.decode('utf-8'))
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            # Name objects should represent irregular characters
-            # with a '#' followed by the symbol's hex number
-            if not strict:
-                logger.warning("Illegal character in Name Object")
-                return NameObject(name)
-            else:
-                raise PdfReadError("Illegal character in Name Object")
+    def read_from_stream(stream):
+        name_start = stream.read(1)
+        if name_start != b'/':
+            raise PdfReadError("Name object should start with /")
+        name_bytes = read_until_regex(
+            stream, NameObject.DELIMITER_PATTERN, ignore_eof=True
+        )
+        return _decode_name(name_bytes)
 
 
 def _normalise_key(key):

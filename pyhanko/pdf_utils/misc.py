@@ -11,8 +11,11 @@ from enum import Enum
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError',
-    'get_and_apply', 'get_courier', 'DEFAULT_CHUNK_SIZE',
-    'OrderedEnum',
+    'IndirectObjectExpected',
+    'get_and_apply', 'get_courier', 'OrderedEnum',
+    'DEFAULT_CHUNK_SIZE', 'is_regular_character',
+    'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
+    'skip_over_comment'
 ]
 
 from io import BytesIO
@@ -66,6 +69,11 @@ def read_until_whitespace(stream, maxchars=None):
 
 
 PDF_WHITESPACE = b' \n\r\t\x00'
+PDF_DELIMITERS = b'()<>[]{}/%'
+
+
+def is_regular_character(byte_value: int):
+    return byte_value not in PDF_WHITESPACE and byte_value not in PDF_DELIMITERS
 
 
 def read_non_whitespace(stream, seek_back=False, allow_eof=False):
