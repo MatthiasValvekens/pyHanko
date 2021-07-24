@@ -1562,7 +1562,16 @@ def test_ensure_version_update_twice_smaller():
 TEST_EXT2 = writer.DeveloperExtension(
     prefix_name=generic.NameObject('/TEST'),
     base_version=generic.NameObject('/1.7'),
-    extension_level=2
+    extension_level=2, url='https://example.com',
+    extension_revision='No-frills test extension'
+)
+
+TEST_EXT_MULTI = writer.DeveloperExtension(
+    prefix_name=generic.NameObject('/MULT'),
+    base_version=generic.NameObject('/1.7'),
+    extension_level=2, url='https://example.com',
+    extension_revision='Test extension intended to be used as multivalue',
+    multivalued=writer.DevExtensionMultivalued.ALWAYS
 )
 
 
@@ -1597,7 +1606,7 @@ TEST_EXT2 = writer.DeveloperExtension(
         )),
     ]
 )
-def test_extension_registration(expected_lvl, new_ext):
+def test_single_extension_registration(expected_lvl, new_ext):
     w = writer.PdfFileWriter()
     w.register_extension(TEST_EXT2)
     assert w.root['/Extensions']['/TEST']['/ExtensionLevel'] == 2
@@ -1611,27 +1620,144 @@ def test_extension_registration(expected_lvl, new_ext):
 
 
 @pytest.mark.parametrize(
+    'expected_len,new_ext', [
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3,
+        )),
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, compare_by_level=False
+        )),
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, subsumed_by=(5,)
+        )),
+        (2, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1001,
+            subsumed_by=(2000,), subsumes=(1000, 1)
+        )),
+        (1, writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/TEST'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, compare_by_level=True,
+            multivalued=writer.DevExtensionMultivalued.ALWAYS
+        )),
+    ]
+)
+def test_extension_registration_create_array(expected_len, new_ext):
+    w = writer.PdfFileWriter()
+    w.register_extension(TEST_EXT2)
+    out = BytesIO()
+    w.write(out)
+
+    w.register_extension(new_ext)
+
+    ext_val = w.root['/Extensions']['/TEST']
+    assert isinstance(ext_val, generic.ArrayObject)
+    assert len(ext_val) == expected_len
+
+
+@pytest.mark.parametrize(
+    'expected_lvls,new_ext', [
+        ((2,), TEST_EXT_MULTI),
+        ((3,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, compare_by_level=True
+        )),
+        ((2,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, compare_by_level=True
+        )),
+        ((3,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, subsumes=(2,)
+        )),
+        ((2,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, subsumed_by=(2,)
+        )),
+        ((2,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1001,
+            subsumed_by=(2,), subsumes=(1000, 1)
+        )),
+        ((2, 3,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3
+        )),
+        ((2, 3,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=3, compare_by_level=False
+        )),
+        ((2, 1,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1, subsumed_by=(5,)
+        )),
+        ((2, 1001,), writer.DeveloperExtension(
+            prefix_name=generic.NameObject('/MULT'),
+            base_version=generic.NameObject('/1.7'),
+            extension_level=1001,
+            subsumed_by=(2000,), subsumes=(1000, 1)
+        )),
+    ]
+)
+def test_multi_extension_registration(expected_lvls, new_ext):
+    w = writer.PdfFileWriter()
+    w.register_extension(TEST_EXT_MULTI)
+    ext_val = w.root['/Extensions']['/MULT']
+    assert isinstance(ext_val, generic.ArrayObject)
+    assert len(ext_val) == 1
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    w.register_extension(new_ext)
+
+    ext_val = w.root['/Extensions']['/MULT']
+    actual_lvls = set(ext_dict['/ExtensionLevel'] for ext_dict in ext_val)
+    assert actual_lvls == set(expected_lvls)
+
+
+@pytest.mark.parametrize(
     'new_ext', [
         writer.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3,
+            multivalued=writer.DevExtensionMultivalued.NEVER
         ),
         writer.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=False
+            extension_level=3, compare_by_level=False,
+            multivalued=writer.DevExtensionMultivalued.NEVER
         ),
         writer.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
-            extension_level=1, subsumed_by=(5,)
+            extension_level=1, subsumed_by=(5,),
+            multivalued=writer.DevExtensionMultivalued.NEVER
         ),
         writer.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
-            subsumed_by=(2000,), subsumes=(1000, 1)
+            subsumed_by=(2000,), subsumes=(1000, 1),
+            multivalued=writer.DevExtensionMultivalued.NEVER
         ),
     ]
 )
@@ -1644,6 +1770,62 @@ def test_extension_registration_unclear(new_ext):
     w = writer.copy_into_new_writer(PdfFileReader(out))
     with pytest.raises(misc.PdfWriteError, match="Could not register ext"):
         w.register_extension(new_ext)
+
+
+def test_extension_registration_type_err():
+    w = writer.PdfFileWriter()
+    w.root['/Extensions'] = generic.DictionaryObject({
+        TEST_EXT2.prefix_name: generic.NullObject()
+    })
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    with pytest.raises(misc.PdfReadError, match="type.*NullObject"):
+        w.register_extension(TEST_EXT2)
+
+
+def test_extension_registration_type_err_arr():
+    w = writer.PdfFileWriter()
+    w.root['/Extensions'] = generic.DictionaryObject({
+        TEST_EXT2.prefix_name: generic.ArrayObject([generic.NullObject()])
+    })
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    with pytest.raises(misc.PdfReadError, match="type.*NullObject"):
+        w.register_extension(TEST_EXT2)
+
+
+def test_extension_registration_no_level():
+    w = writer.PdfFileWriter()
+    ext_dict = TEST_EXT2.as_pdf_object()
+    del ext_dict['/ExtensionLevel']
+    w.root['/Extensions'] = generic.DictionaryObject({
+        TEST_EXT2.prefix_name: ext_dict
+    })
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    with pytest.raises(misc.PdfReadError, match="Could not read developer ext"):
+        w.register_extension(TEST_EXT2)
+
+
+def test_extension_registration_bad_level():
+    w = writer.PdfFileWriter()
+    ext_dict = TEST_EXT2.as_pdf_object()
+    ext_dict['/ExtensionLevel'] = generic.NullObject()
+    w.root['/Extensions'] = generic.DictionaryObject({
+        TEST_EXT2.prefix_name: ext_dict
+    })
+    out = BytesIO()
+    w.write(out)
+
+    w = writer.copy_into_new_writer(PdfFileReader(out))
+    with pytest.raises(misc.PdfReadError, match="Could not read developer ext"):
+        w.register_extension(TEST_EXT2)
 
 
 @pytest.mark.parametrize(

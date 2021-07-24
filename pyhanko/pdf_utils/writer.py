@@ -7,6 +7,7 @@ for the original license.
 
 import os
 import struct
+import enum
 from dataclasses import dataclass
 from io import BytesIO
 from typing import List, Union, Optional, Tuple, Iterable
@@ -30,7 +31,7 @@ from pyhanko import __version__
 __all__ = [
     'ObjectStream', 'BasePdfFileWriter',
     'PageObject', 'PdfFileWriter', 'init_xobject_dictionary',
-    'copy_into_new_writer', 'DeveloperExtension'
+    'copy_into_new_writer', 'DeveloperExtension', 'DevExtensionMultivalued'
 ]
 
 VENDOR = 'pyHanko ' + __version__
@@ -114,6 +115,30 @@ class ObjectStream:
         return stream_object
 
 
+class DevExtensionMultivalued(enum.Enum):
+    """
+    Setting indicating how an extension is expected to behave well w.r.t.
+    the new mechanism for multivalued extensions in ISO 32000-2:2020.
+    """
+
+    ALWAYS = enum.auto()
+    """
+    Always serialise this extension as a multivalued extension.
+    """
+
+    NEVER = enum.auto()
+    """
+    Never serialise this extension as a multivalued extension.
+    """
+
+    MAYBE = enum.auto()
+    """
+    Make this extension single-valued whenever possible, but allow multiple
+    values as well, e.g. when a different but non-comparable extension with
+    the same prefix is already present in the file.
+    """
+
+
 @dataclass(frozen=True)
 class DeveloperExtension:
     """
@@ -133,6 +158,16 @@ class DeveloperExtension:
     extension_level: int
     """
     Extension level.
+    """
+
+    url: Optional[str] = None
+    """
+    Optional URL linking to the extension's documentation.
+    """
+
+    extension_revision: Optional[str] = None
+    """
+    Optional extra revision information. Not comparable.
     """
 
     compare_by_level: bool = False
@@ -175,6 +210,12 @@ class DeveloperExtension:
         This parameter is ignored if :class:`compare_by_level` is ``True``.
     """
 
+    multivalued: DevExtensionMultivalued = DevExtensionMultivalued.MAYBE
+    """
+    Setting indicating whether this extension is expected to behave well w.r.t.
+    the new mechanism for multivalued extensions in ISO 32000-2:2020.
+    """
+
     def as_pdf_object(self) -> generic.DictionaryObject:
         """
         Format the data in this object into a PDF dictionary for registration
@@ -184,13 +225,20 @@ class DeveloperExtension:
             A :class:`.generic.DictionaryObject`.
         """
 
-        return generic.DictionaryObject({
+        result = generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/DeveloperExtensions'),
             pdf_name('/BaseVersion'): self.base_version,
             pdf_name('/ExtensionLevel'): generic.NumberObject(
                 self.extension_level
             ),
         })
+        if self.url is not None:
+            result['/URL'] = generic.TextStringObject(self.url)
+        if self.extension_revision is not None:
+            result['/ExtensionRevision'] = generic.TextStringObject(
+                self.extension_revision
+            )
+        return result
 
 
 def _contiguous_xref_chunks(position_dict):
@@ -467,31 +515,97 @@ class BasePdfFileWriter(PdfHandler):
         except KeyError:
             self.root['/Extensions'] = extensions = generic.DictionaryObject()
 
-        try:
-            # check if the extension is already registered,
-            # and if so, at which level.
-            lvl = extensions[ext.prefix_name]['/ExtensionLevel']
+        # check if the extension is already registered,
+        cur_ext_value = extensions.get(ext.prefix_name, None)
+        extension_dicts = ()
+        old_ext_multivalued = False
+        if isinstance(cur_ext_value, generic.DictionaryObject):
+            extension_dicts = cur_ext_value,
+        elif isinstance(cur_ext_value, generic.ArrayObject):
+            extension_dicts = tuple(cur_ext_value)
+            old_ext_multivalued = True
+        elif cur_ext_value is not None:
+            cls_name = type(cur_ext_value).__name__
+            raise PdfReadError(
+                f"PDF extension value is of type {cls_name}, "
+                f"expected (direct) PDF dictionary or array."
+            )
 
+        # investigate the relationship between the new extension's extension
+        # level and that of any existing extension dictionaries with the same
+        # prefix
+        for ix, ext_dict in enumerate(extension_dicts):
+            if not isinstance(ext_dict, generic.DictionaryObject):
+                cls_name = type(ext_dict).__name__
+                raise PdfReadError(
+                    f"PDF extension array entry is of type "
+                    f"{cls_name}, expected (direct) PDF dictionary"
+                )
+            try:
+                lvl = int(ext_dict.raw_get('/ExtensionLevel'))
+            except (TypeError, ValueError, KeyError):
+                raise PdfReadError(
+                    "Could not read developer extension level"
+                )
+            # TODO is this still appropriate with the new ExtensionRevision
+            #  values?
             if lvl == ext.extension_level:
                 old_ext_applies = True
+                replace_old = False
             elif ext.compare_by_level:
                 old_ext_applies = lvl >= ext.extension_level
+                replace_old = not old_ext_applies
             else:
+                # this covers the case where there's no obvious comparison
                 old_ext_applies = lvl in ext.subsumed_by
-                if not old_ext_applies and lvl not in ext.subsumes:
-                    raise PdfWriteError(
-                        f"Could not register extension with prefix "
-                        f"{ext.prefix_name} and level {ext.extension_level}; "
-                        f"file contains extension with same prefix and "
-                        f"extension level {lvl}. If this extension level is "
-                        f"safe to override, mark it as subsumed."
-                    )
+                replace_old = lvl in ext.subsumes
             if old_ext_applies:
-                return  # nothing to do
-        except KeyError:
-            pass
-
-        extensions[ext.prefix_name] = ext.as_pdf_object()
+                return  # nothing to do, old extension doesn't need replacing
+            elif replace_old:
+                # New extension takes priority,
+                # replace the old extension
+                if old_ext_multivalued:
+                    # it was an array, so replace the value at the proper
+                    # index
+                    cur_ext_value[ix] = ext.as_pdf_object()
+                elif ext.multivalued == DevExtensionMultivalued.ALWAYS:
+                    # extension was previously not multivalued, but we now
+                    # make it so
+                    extensions[ext.prefix_name] = generic.ArrayObject(
+                        [ext.as_pdf_object()]
+                    )
+                else:
+                    extensions[ext.prefix_name] = ext.as_pdf_object()
+                self.update_container(extensions)
+                return  # we're done here
+            elif ext.multivalued == DevExtensionMultivalued.NEVER:
+                # there is a matching extension in the file, but we can't
+                # replace it -> error
+                raise PdfWriteError(
+                    f"Could not register extension with prefix "
+                    f"{ext.prefix_name} and level {ext.extension_level}; "
+                    f"file contains extension with same prefix and "
+                    f"extension level {lvl}. If this extension level is "
+                    f"safe to override, mark it as subsumed."
+                )
+        # if we got here, we're going to add the new extension without
+        # replacing any existing ones
+        ext_dict = ext.as_pdf_object()
+        if cur_ext_value is None:
+            # nothing there yet, just write the extension
+            if ext.multivalued == DevExtensionMultivalued.ALWAYS:
+                extensions[ext.prefix_name] = generic.ArrayObject([ext_dict])
+            else:
+                extensions[ext.prefix_name] = ext_dict
+        else:
+            if old_ext_multivalued:
+                # there was already an array, so just tack on our new value
+                cur_ext_value.append(ext_dict)
+            else:
+                # turn the extension dict into an array
+                extensions[ext.prefix_name] = generic.ArrayObject(
+                    [cur_ext_value, ext_dict]
+                )
         self.update_container(extensions)
 
     def get_object(self, ido):

@@ -5,7 +5,7 @@ signatures.
 from pyhanko.pdf_utils import generic
 from pyhanko.sign.fields import SigSeedSubFilter
 from pyhanko.stamp import TextStampStyle, STAMP_ART_CONTENT
-from pyhanko.pdf_utils.writer import DeveloperExtension
+from pyhanko.pdf_utils.writer import DeveloperExtension, DevExtensionMultivalued
 
 
 __all__ = [
@@ -53,7 +53,8 @@ Default stamp style used for visible signatures.
 ESIC_EXTENSION_1 = DeveloperExtension(
     prefix_name=generic.pdf_name('/ESIC'),
     base_version=generic.pdf_name('/1.7'),
-    extension_level=1
+    extension_level=1, compare_by_level=True,
+    multivalued=DevExtensionMultivalued.NEVER
 )
 """
 ESIC extension for PDF 1.7. Used to declare usage of PAdES structures.
