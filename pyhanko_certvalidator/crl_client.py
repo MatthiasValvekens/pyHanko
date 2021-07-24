@@ -50,7 +50,11 @@ def fetch(cert, use_deltas=True, user_agent=None, timeout=10):
 
     for distribution_point in sources:
         url = distribution_point.url
-        output.append(_grab_crl(user_agent, url, timeout))
+        # Only fetch CRLs over http
+        #  (or https, but that doesn't really happen all that often)
+        # In particular, don't attempt to grab CRLs over LDAP
+        if url.startswith('http'):
+            output.append(_grab_crl(user_agent, url, timeout))
 
     return output
 
