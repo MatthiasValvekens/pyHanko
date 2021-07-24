@@ -75,6 +75,7 @@ from . import generic, misc
 
 __all__ = [
     'SecurityHandler', 'StandardSecurityHandler', 'PubKeySecurityHandler',
+    'AuthResult', 'AuthStatus',
     'SecurityHandlerVersion', 'StandardSecuritySettingsRevision',
     'PubKeyAdbeSubFilter', 'CryptFilterConfiguration', 'CryptFilter',
     'StandardCryptFilter', 'PubKeyCryptFilter', 'IdentityCryptFilter',
