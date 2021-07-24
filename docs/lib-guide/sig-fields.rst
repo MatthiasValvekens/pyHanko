@@ -141,6 +141,13 @@ In this case, they also introduce a validation burden.
        If this is not an option for whatever reason, then you'll have to make
        sure that the entity validating the signatures is aware of the
        restrictions the author intended through out-of-band means.
+    4. Consider whether using signatures with explicitly identified signature
+       policies would be more appropriate (see e.g. :rfc:`5126`, § 5.8).
+       Processing signature policies requires more specialised validation tools,
+       but they are standardised much more rigorously than seed values in PDF.
+       In particular, it is the superior choice when working with signatures in
+       an AdES context. However, pyHanko's support for these workflows is currently
+       limited\ [#policysupport]_.
 
 
 Seed values for a new signature field are configured through the
@@ -236,10 +243,7 @@ these modifications affecting the validity of the signature.
   control.
 
 When creating a signature field, the document author can suggest policies that
-the signer should apply in the signature object. While the signer *should*
-follow these restrictions, this doesn't always happen\ [#mdpreject]_, so
-they shouldn't be relied upon if the signing of the document is out of your
-control.
+the signer should apply in the signature object.
 
 .. warning::
     There are a number of caveats that apply to MDP settings in general; see
@@ -248,7 +252,9 @@ control.
 Traditionally, the DocMDP settings are exclusive to certification signatures
 (i.e. the first, specially marked signature included by the document author),
 but in PDF 2.0 it is possible for approval (counter)signatures to set the DocMDP
-level to a stricter value than the one already in force.
+level to a stricter value than the one already in force |---| although this
+uses a setting in the field's locking dictionary rather than an explicit DocMDP
+dictionary on the signature itself.
 
 In pyHanko, these settings are controlled by the
 :attr:`~.pyhanko.sign.fields.SigFieldSpec.field_mdp_spec` and
@@ -297,7 +303,13 @@ is an instance of :class:`~.pyhanko.sign.fields.FieldMDPSpec`.
 
 
 .. rubric:: Footnotes
-.. [#mdpreject]
-    Right now, pyHanko doesn't yet reject such signatures, but it may in the
-    future.
+.. [#policysupport]
+    Currently, pyHanko doesn't yet support automatic enforcement of signature policies
+    (to the extent that they can be machine-verified in the first place, obviously).
+    This goes for both the signer and the validator.
+    However, you can still *declare* signature policies by extending your favourite
+    :class:`~.pyhanko.sign.signers.pdf_cms.Signer` subclass and adding the relevant
+    signed attributes.
+    Validators that do not support signature policy processing will typically ignore
+    the policy setting altogether.
 
