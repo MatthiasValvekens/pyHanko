@@ -2,6 +2,9 @@
 Utility functions for PDF library.
 Taken from PyPDF2 with modifications and additions, see
 :ref:`here <pypdf2-license>` for the original license of the PyPDF2 project.
+
+Generally, all of these constitute internal API, except for the exception
+classes.
 """
 
 
@@ -15,7 +18,7 @@ __all__ = [
     'get_and_apply', 'get_courier', 'OrderedEnum',
     'DEFAULT_CHUNK_SIZE', 'is_regular_character',
     'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
-    'skip_over_comment'
+    'skip_over_comment', 'instance_test', 'peek'
 ]
 
 from io import BytesIO
