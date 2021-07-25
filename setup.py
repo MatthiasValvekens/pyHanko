@@ -56,7 +56,7 @@ setup(
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
-        'pyhanko-certvalidator==0.15.1',
+        'pyhanko-certvalidator~=0.15.3',
         'click>=7.1.2',
         'requests>=2.24.0',
         'pyyaml>=5.3.1',
@@ -79,8 +79,8 @@ setup(
     tests_require=[
         'pytest>=6.1.1',
         'requests-mock>=1.8.0',
-        'freezegun',
-        'certomancer==0.5.0'
+        'freezegun>=1.1.0',
+        'certomancer~=0.5.0'
     ],
     keywords="signature pdf pades digital-signature pkcs11"
 )
