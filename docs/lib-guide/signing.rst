@@ -490,6 +490,8 @@ CMS object, you'll most likely have to override
 construction of the CMS object itself.
 
 
+.. _pdf-cms-embedder-protocol:
+
 The low-level |PdfCMSEmbedder| API
 ----------------------------------
 .. versionadded:: 0.3.0
@@ -691,6 +693,8 @@ In other scenarios, you can replace the ``finish_signing`` routine with the foll
 In particular, you don't have to bother with
 :class:`~pyhanko.sign.signers.pdf_signer.PostSignInstructions` at all.
 
+
+.. _generic-signing:
 
 Generic data signing
 --------------------

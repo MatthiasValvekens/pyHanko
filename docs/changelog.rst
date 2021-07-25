@@ -2,6 +2,183 @@
 Release history
 ***************
 
+.. _release-0.7.0:
+
+0.7.0
+=====
+
+*Release date:* 2021-07-25
+
+Dependency changes
+------------------
+
+.. warning::
+    If you used OTF/TTF fonts with pyHanko prior to the ``0.7.0`` release, you'll need HarfBuzz
+    going forward. Install pyHanko with the ``[opentype]`` optional dependency group to grab
+    everything you need.
+
+* Update ``pyhanko-certvalidator`` to ``0.15.3``
+* TrueType/OpenType support moved to new optional dependency group labelled ``[opentype]``.
+
+  * Dependency on ``fontTools`` moved from core dependencies to ``[opentype]`` group.
+  * We now use HarfBuzz (``uharfbuzz==0.16.1``) for text shaping with OTF/TTF fonts.
+
+
+API-breaking changes
+--------------------
+
+.. warning::
+    If you use any of pyHanko's lower-level APIs, review this section carefully before updating.
+
+Signing code refactor
+^^^^^^^^^^^^^^^^^^^^^
+
+This release includes a refactor of the ``pyhanko.sign.signers`` module into a
+:ref:`package <signers-package-docs>` with several submodules. The original API exposed by this
+module is reexported in full at the package level, so existing code using pyHanko's publicly
+documented signing APIs *should* continue to work **without modification**.
+
+There is one notable exception: as part of this refactor, the low-level
+:class:`~pyhanko.sign.signers.cms_embedder.PdfCMSEmbedder` protocol was tweaked slightly, to support
+the new interrupted signing workflow (see below). The required changes to existing code should be
+minimal; have a look at :ref:`the relevant section <pdf-cms-embedder-protocol>` in the library
+documentation for a concrete description of the changes, and an updated usage example.
+
+In addition, if you extended the :class:`~pyhanko.sign.signers.pdf_signer.PdfSigner`
+class, then you'll have to adapt to the new internal signing workflow as well. This may be
+tricky due to the fact that the separation of concerns between different steps in the signing
+process is now enforced more strictly.
+I'm not aware of use cases requiring :class:`~pyhanko.sign.signers.pdf_signer.PdfSigner`
+to be extended, but if you're having trouble migrating your custom subclass to the new API
+structure, feel free to open `an issue <https://github.com/MatthiasValvekens/pyHanko/issues>`_.
+Merely having subclassed :class:`~pyhanko.sign.signers.pdf_cms.Signer` shouldn't require
+you to change anything.
+
+
+Fonts
+^^^^^
+
+The low-level font loading API has been refactored to make font resource handling less painful,
+to provide smoother HarfBuzz integration and to expose more OpenType tweaks in the API.
+
+To this end, the old ``pyhanko.pdf_utils.font`` module was turned into a package containing three
+modules: :mod:`~pyhanko.pdf_utils.font.api`, :mod:`~pyhanko.pdf_utils.font.basic` and
+:mod:`~pyhanko.pdf_utils.font.opentype`. The :mod:`~pyhanko.pdf_utils.font.api`
+module contains the definitions for the general ``FontEngine`` and ``FontEngineFactory`` classes,
+together with some other general plumbing logic.
+The :mod:`~pyhanko.pdf_utils.font.basic` module provides a minimalist implementation with a
+(non-embedded) monospaced font.
+If you need TrueType/OpenType support, you'll need the :mod:`~pyhanko.pdf_utils.font.opentype`
+module together with the optional dependencies in the ``[opentype]`` dependency group (currently
+``fontTools`` and ``uharfbuzz``, see above).
+Take a look at the section for ``pyhanko.pdf_utils.font`` in
+:ref:`the API reference documentation <font-api-docs>` for further details.
+
+For the time being, there are no plans to support embedding **Type1** fonts, or to offer support for
+**Type3** fonts at all.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * The ``content_stream`` parameter was removed from
+   :meth:`~pyhanko.pdf_utils.writer.BasePdfFileWriter.import_page_as_xobject`.
+   Content streams are now merged automatically, since treating a page content stream array
+   non-atomically is a bad idea.
+ * :class:`~pyhanko.sign.signers.pdf_signer.PdfSigner` is no longer a subclass of
+   :class:`~pyhanko.sign.signers.pdf_signer.PdfTimeStamper`.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * :ref:`Interrupted signing <interrupted-signing>` workflow: segmented signing workflow that can be
+   interrupted partway through and resumed later (possibly in a different process or on a different
+   machine). Useful for dealing with signing processes that rely on user interaction and/or remote
+   signing services.
+ * :ref:`Generic data signing <generic-signing>` support: construct CMS ``signedData`` objects for
+   arbitrary data (not necessarily for use in PDF signature fields).
+ * Experimental API for signing individual embedded files (nonstandard).
+ * PKCS#11 settings can now be set in the configuration file.
+
+
+Validation
+^^^^^^^^^^
+
+ * Add support for validating CMS ``signedData`` structures against arbitrary payloads
+   (see also: :ref:`generic-signing`)
+ * Streamline CMS timestamp validation.
+ * Support reporting on (CAdES) content timestamps in addition to signature timestamps.
+ * Allow signer certificates to be identified by the ``subjectKeyIdentifier`` extension.
+
+Encryption
+^^^^^^^^^^
+
+ * Support granular crypt filters for embedded files
+ * Add convenient API to encrypt and wrap a PDF document as a binary blob. The resulting file
+   will open as usual in a viewer that supports PDF collections; a fallback page with alternative
+   instructions is shown otherwise.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Complete overhaul of appearance generation & layout system. Most of these changes are internal,
+   except for some font loading mechanics (see above). All use of OpenType / TrueType fonts now
+   requires the ``[opentype]`` optional dependency group. New features:
+
+     * Use HarfBuzz for shaping (incl. complex scripts)
+     * Support TrueType fonts and OpenType fonts without a CFF table.
+     * Support vertical writing (among other OpenType features).
+     * Use ActualText marked content in addition to ToUnicode.
+     * Introduce simple box layout & alignment rules, and apply them uniformly across all layout
+       decisions where possible. See :mod:`pyhanko.stamp` and :mod:`pyhanko.pdf_utils.layout` for
+       API documentation.
+
+ * Refactored stamp style dataclass hierarchy. This should not affect existing code.
+ * Allow externally generated PDF content to be used as a stamp appearance.
+ * Utility API for embedding files into PDF documents.
+ * Added support for PDF developer extension declarations.
+
+
+Bugs fixed
+----------
+
+Signing
+^^^^^^^
+
+ * Declare ESIC extension when producing a PAdES signature on a PDF 1.x file.
+
+Validation
+^^^^^^^^^^
+
+ * Fix handling of orphaned objects in diff analysis.
+ * Tighten up tolerances for (visible) signature field creation.
+ * Fix typo in ``BaseFieldModificationRule``
+ * Deal with some VRI-related corner cases in the DSS diffing logic.
+
+Encryption
+^^^^^^^^^^
+
+ * Improve identity crypt filter behaviour when applied to text strings.
+ * Correct handling of non-default public-key crypt filters.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Promote stream manipulation methods to base writer.
+ * Correct some edge cases w.r.t. PDF content import
+ * Use floats for MediaBox.
+ * Handle escapes in PDF name objects.
+ * Correct ToUnicode CMap formatting.
+ * Do not close over GSUB when computing font subsets.
+ * Fix ``output_version`` handling oversight.
+ * Misc. export list & type annotation corrections.
+
+
+.. _release-0.6.1:
+
 0.6.1
 =====
 
@@ -23,6 +200,7 @@ Bugs fixed
  - Add ``/Q`` and ``/DA`` keys to the whitelist for incremental update analysis
    on form fields.
 
+.. _release-0.6.0:
 
 0.6.0
 =====
@@ -133,6 +311,8 @@ Bugs fixed
  * Corrected the export lists of various modules.
 
 
+.. _release-0.5.1:
+
 0.5.1
 =====
 
@@ -143,6 +323,7 @@ Bugs fixed
 
   * Fixed a packaging blunder that caused an import error on fresh installs.
 
+.. _release-0.5.0:
 
 0.5.0
 =====
@@ -236,6 +417,7 @@ Bugs fixed
  * Due to a typo, the ``/Annots`` array of a page would not get updated correctly if it was an
    indirect object. This has been corrected.
 
+.. _release-0.4.0:
 
 0.4.0
 =====
@@ -306,6 +488,7 @@ Bugs fixed
 * Fix a few logging calls.
 * Fix some minor issues with signing API input validation logic.
 
+.. _release-0.3.0:
 
 0.3.0
 =====
@@ -353,6 +536,7 @@ Bugs fixed
 * Fix revision handling in `trailer.flatten()`
 
 
+.. _release-0.2.0:
 
 0.2.0
 =====
@@ -408,6 +592,7 @@ Bugs fixed
   the same settings as their predecessor in the file. This was a problem when
   updating files generated by other PDF processing software.
 
+.. _release-0.1.0:
 
 0.1.0
 =====

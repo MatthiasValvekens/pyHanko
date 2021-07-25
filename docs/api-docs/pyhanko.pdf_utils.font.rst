@@ -1,3 +1,5 @@
+.. _font-api-docs:
+
 pyhanko.pdf\_utils.font package
 ===============================
 

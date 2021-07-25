@@ -1,3 +1,5 @@
+.. _signers-package-docs:
+
 pyhanko.sign.signers package
 ============================
 

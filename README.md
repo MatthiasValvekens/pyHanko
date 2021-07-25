@@ -19,15 +19,11 @@ PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
 and can be installed using `pip`:
 
 ```bash
-   pip install 'pyHanko[pkcs11,image-support]'
+   pip install 'pyHanko[pkcs11,image-support,opentype]'
 ```
 
-This `pip` invocation includes the optional dependencies required for PKCS#11 and image support.
-
-Note: from version `0.7.0` onwards, support for TrueType and OpenType fonts will be made optional.
-This is because the reworked text processing code introduces a new binary dependency on HarfBuzz.
-The dependencies for working with OpenType fonts have been bundled under the `[opentype]` optional
-dependency group.
+This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
+OpenType/TrueType support.
 
 
 ### Overview
@@ -38,7 +34,7 @@ Note that not all of these are necessarily exposed through the CLI.
  - Stamping
     - Simple text-based stamps
     - QR stamps
-    - Font can be monospaced, or embedded from an OTF font (experimental)
+    - Font can be monospaced, or embedded from a TTF/OTF font (requires `[opentype]` optional deps)
  - Document preparation 
     - Add empty signature fields to existing PDFs
     - Add seed values to signature fields, with or without constraints
@@ -54,13 +50,15 @@ Note that not all of these are necessarily exposed through the CLI.
       - RSA padding modes: PKCS#1 v1.5 and RSASSA-PSS
       - ECDSA curves: anything supported by the `cryptography` library, 
         see [here](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/#elliptic-curves).
-    - PKCS11 support
+    - PKCS#11 support
         - Available both from the library and through the CLI
         - Extra convenience wrapper for Belgian eID cards
+    - "Interrupted signing" mode for ease of integration with remote and/or interactive signing
+      processes.
  - Signature validation
     - Cryptographic integrity check
     - Authentication through X.509 chain of trust validation
-    - LTV validation
+    - LTV validation/sanity check
     - Difference analysis on files with multiple signatures and/or incremental 
       updates made after signing (experimental)
     - Signature seed value constraint validation
