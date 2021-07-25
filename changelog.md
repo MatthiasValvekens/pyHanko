@@ -1,5 +1,11 @@
 # changelog
 
+## 0.15.3
+
+ - Short-circuit anyPolicy when reporting policies
+ - Export PKIXValidationParams
+ - Limit CRL client to HTTP-based URLs
+
 ## 0.15.2
 
  - Properly handle missing Content-Type header in server response when fetching CA certificates
