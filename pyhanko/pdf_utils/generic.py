@@ -1430,7 +1430,6 @@ def proxy_encrypted_obj(encrypted_obj, handler):
         return encrypted_obj
 
 
-# TODO support 2.0-style encryption
 class DecryptedObjectProxy(PdfObject):
 
     def __init__(self, raw_object: PdfObject, handler):
