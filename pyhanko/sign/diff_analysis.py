@@ -1151,7 +1151,9 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             )
 
 
-ACROFORM_EXEMPT_STRICT_COMPARISON = {'/Fields', '/DR', '/DA', '/Q'}
+ACROFORM_EXEMPT_STRICT_COMPARISON = {
+    '/Fields', '/DR', '/DA', '/Q', '/NeedAppearances'
+}
 
 
 class FormUpdatingRule:
@@ -1269,7 +1271,7 @@ class CatalogModificationRule(QualifiedWhitelistRule):
     :param ignored_keys:
         Values in the document catalog that may change between revisions.
         The default ones are ``/AcroForm``, ``/DSS``, ``/Extensions``,
-        ``/Metadata`` and ``/MarkInfo``.
+        ``/Metadata``, ``/MarkInfo`` and ``/Version``.
 
         Checking for ``/AcroForm``, ``/DSS`` and ``/Metadata`` is delegated to
         :class:`.FormUpdatingRule`, :class:`.DSSCompareRule` and
