@@ -1885,3 +1885,10 @@ def test_name_encode_fail():
     msg = "Could not serialise name object"
     with pytest.raises(misc.PdfWriteError, match=msg):
         pdf_name("NoSlashHere").write_to_stream(BytesIO())
+
+
+def test_xref_access_no_decrypt():
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    # attempt to access xref stream, turn off transparent decryption
+    obj = r.get_object(ref=generic.Reference(7, 0), transparent_decrypt=False)
+    assert not isinstance(obj, generic.DecryptedObjectProxy)
