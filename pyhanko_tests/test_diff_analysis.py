@@ -10,6 +10,7 @@ from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import (
     PdfFileReader, HistoricalResolver,
@@ -1349,3 +1350,40 @@ def test_form_field_manipulate_names(new_name, err):
     status = val_trusted_but_modified(s)
     dr = status.diff_result
     assert err in str(dr)
+
+
+@freeze_time('2020-11-01')
+def test_signed_file_diff_proxied_objs():
+    # Mess with the file a little to have more indirection
+    #  (and more opportunities for triggering former bugs with proxied objects)
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_TAGGED))
+    )
+    w.encrypt("secret")
+    field_arr = w.root['/AcroForm']['/Fields']
+    w.root['/AcroForm']['/Fields'] = w.add_object(field_arr)
+    out = BytesIO()
+    w.write(out)
+
+    w = IncrementalPdfFileWriter(out)
+    w.encrypt("secret")
+    signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES, certify=True,
+            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+        ),
+        signer=FROM_CA, in_place=True
+    )
+    w = IncrementalPdfFileWriter(out)
+    w.encrypt("secret")
+    signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='SigNew', subfilter=PADES
+        ),
+        signer=FROM_CA, in_place=True
+    )
+
+    r = PdfFileReader(out)
+    r.decrypt("secret")
+    result = validate_pdf_signature(r.embedded_signatures[0])
+    assert result.docmdp_ok

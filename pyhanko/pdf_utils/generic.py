@@ -1516,6 +1516,14 @@ class DecryptedObjectProxy(PdfObject):
     def container_ref(self):
         return self.raw_object.container_ref
 
+    def __eq__(self, other):
+        # NOTE: this will fail if the dictionary contains "un-decryptable"
+        #  descendants! The diff_analysis module is aware of this restriction,
+        #  but you probably shouldn't use this __eq__ method to compare
+        #  arbitrary objects in a PDF file.
+        return isinstance(other, DecryptedObjectProxy) \
+               and other.decrypted == self.decrypted
+
 
 ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
 

@@ -97,6 +97,7 @@ class XRefCache:
         self._generations = {}
         self._previous_expected_free = {}
         self.xref_container_info = []
+        self.xref_stream_refs = set()
 
         # Objects that were declared as 'xxxxxxx 00000 f' in the
         # initial revision. This sometimes happens when PDF writers clean up
@@ -754,11 +755,16 @@ class PdfFileReader(PdfHandler):
         :raises PdfReadError:
             Raised if there is an issue reading the object from the file.
         """
+        # Ensure that when an Xref stream is queried by ID, we
+        # don't try to decrypt it.
+        if ref in self.xrefs.xref_stream_refs:
+            never_decrypt = True
         if revision is None:
             obj = self.cache_get_indirect_object(ref.generation, ref.idnum)
             if obj is None:
-                obj = self._read_object(ref, self.xrefs[ref],
-                                        never_decrypt=never_decrypt)
+                obj = self._read_object(
+                    ref, self.xrefs[ref], never_decrypt=never_decrypt
+                )
                 # cache before (potential) decrypting
                 self.cache_indirect_object(ref.generation, ref.idnum, obj)
         else:
@@ -836,6 +842,7 @@ class PdfFileReader(PdfHandler):
         assert xrefstream["/Type"] == "/XRef"
         xref_cache = self.xrefs
         xref_cache.xref_container_info.append((xrefstream_ref, stream.tell()))
+        xref_cache.xref_stream_refs.add(xrefstream_ref)
         xref_cache.read_xref_stream(xrefstream)
 
         self.trailer.add_trailer_revision(xrefstream)
@@ -1196,6 +1203,15 @@ class HistoricalResolver(PdfHandler):
 
     Instances of this class cache the result of :meth:`get_object` calls.
 
+    .. danger::
+        This class is documented, but is nevertheless considered internal API,
+        and easy to misuse.
+
+        In particular, the `container_ref` attribute must *not* be relied upon
+        for objects retrieved from a :class:`.HistoricalResolver`.
+        Internally, it is only used to make lazy decryption work in historical
+        revisions.
+
     .. note::
         Be aware that instances of this class transparently rewrite the PDF
         handler associated with any reference objects returned from the reader,
@@ -1223,44 +1239,89 @@ class HistoricalResolver(PdfHandler):
     def get_object(self, ref: generic.Reference):
         cache = self.cache
         try:
-            return cache[ref]
+            obj = cache[ref]
         except KeyError:
-            # TODO deal with container_ref
-
             # if the object wasn't modified after this revision
             # we can grab it from the "normal" shared cache.
             reader = self.reader
             revision = self.revision
             if reader.xrefs.get_last_change(ref) <= revision:
-                obj = reader.get_object(ref)
+                obj = reader.get_object(ref, transparent_decrypt=False)
             else:
-                obj = reader.get_object(ref, revision)
+                obj = reader.get_object(
+                    ref, revision, transparent_decrypt=False
+                )
 
             # replace all PDF handler references in the object with references
             # to this one, so that indirect references will resolve within
             # this historical revision
             cache[ref] = obj = self._subsume_object(obj)
-            return obj
+        if isinstance(obj, generic.DecryptedObjectProxy):
+            return obj.decrypted
+        return obj
 
     def _subsume_object(self, obj):
+        # Dealing with encrypted objects is tricky:
+        # - We can't lazily subsume
+        # - We can (and must!) lazily decrypt: forcing decryption
+        #   is effectively impossible since we don't know where we are in
+        #   the file's object graph, which makes it impossible to avoid
+        #   trying to decrypt special objects that are never to be encrypted
+        #   in the first place.
+        # The logical consequence of that is that we have to subsume the
+        #  underlying raw object, and take care to set the container_ref
+        #  on all proxyable object types as we pass through them.
+        # If we don't do that, then the lazy decryption of our subsumed
+        # DecryptedObjectProxies will fail downstream.
+
+        # IMPORTANT NOTE: At the same time, we do NOT mess with container_ref
+        # for non-proxiable types (i.e. primitives), since we do not clone
+        # such objects when subsuming them, so we cannot safely override
+        # the container_ref value.
+
+        # first, recreate the container_ref
+        container_ref = obj.get_container_ref()
+        container_ref = generic.Reference(
+            idnum=container_ref.idnum,
+            generation=container_ref.generation,
+            pdf=self
+        )
+
+        if isinstance(obj, generic.DecryptedObjectProxy):
+            raw_obj_replacement = self._subsume_object(obj.raw_object)
+            # NOTE: we _can't_ decrypt the object here, that breaks
+            #  in cases where there are descendants that are exempt from
+            #  encryption (the Encrypt dictionary itself, signature contents,
+            #  etc.).
+            result = generic.DecryptedObjectProxy(
+                raw_object=raw_obj_replacement,
+                handler=obj.handler
+            )
+            raw_obj_replacement.container_ref = container_ref
+            return result
         if isinstance(obj, generic.IndirectObject):
+            # no container_ref necessary
             return generic.IndirectObject(
                 idnum=obj.idnum, generation=obj.generation, pdf=self
             )
         elif isinstance(obj, generic.StreamObject):
-            return generic.StreamObject({
+            result = generic.StreamObject({
                 k: self._subsume_object(v) for k, v in obj.items()
             }, encoded_data=obj.encoded_data)
         elif isinstance(obj, generic.DictionaryObject):
-            return generic.DictionaryObject({
+            result = generic.DictionaryObject({
                 k: self._subsume_object(v) for k, v in obj.items()
             })
         elif isinstance(obj, generic.ArrayObject):
-            return generic.ArrayObject(
+            result = generic.ArrayObject(
                 self._subsume_object(v) for v in obj
             )
         else:
+            # in this case, we _never_ set the container_ref, and just
+            # reuse the object from the "parent" reader.
             return obj
+        result.container_ref = container_ref
+        return result
 
     @property
     def root_ref(self) -> generic.Reference:
@@ -1350,10 +1411,12 @@ class HistoricalResolver(PdfHandler):
             for v in obj:
                 self._collect_indirect_references(v, seen, since_revision)
 
-    def _get_usages_of_ref(self, ref: generic.Reference) \
-            -> Optional[Set[RawPdfPath]]:
+    def _get_usages_of_ref(self, ref: generic.Reference) -> Set[RawPdfPath]:
         cache = self._indirect_object_access_cache or {}
-        return cache.get(ref, None)
+        try:
+            return cache[ref]
+        except KeyError:
+            return set()
 
     def _load_reverse_xref_cache(self):
         if self._indirect_object_access_cache is not None:
