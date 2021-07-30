@@ -550,8 +550,7 @@ class BasePdfFileWriter(PdfHandler):
             # TODO is this still appropriate with the new ExtensionRevision
             #  values?
             if lvl == ext.extension_level:
-                old_ext_applies = True
-                replace_old = False
+                return  # nothing to do
             elif ext.compare_by_level:
                 old_ext_applies = lvl >= ext.extension_level
                 replace_old = not old_ext_applies
