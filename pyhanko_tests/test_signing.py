@@ -370,6 +370,8 @@ def test_sign_with_ecdsa_trust():
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
+    si = s.signer_info
+    assert si['signature_algorithm']['algorithm'].native == 'sha256_ecdsa'
     val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
 
 
@@ -391,6 +393,8 @@ def test_sign_with_explicit_ecdsa():
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
+    si = s.signer_info
+    assert si['signature_algorithm']['algorithm'].native == 'ecdsa'
     assert s.field_name == 'Sig1'
     val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
 

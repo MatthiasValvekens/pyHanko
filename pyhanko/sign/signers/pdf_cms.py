@@ -74,9 +74,6 @@ class Signer:
     def __init__(self, prefer_pss=False):
         self.prefer_pss = prefer_pss
 
-    # TODO I guess that in theory, passing digest_algorithm should never
-    #  be necessary. Should review the ASN.1 syntax for certificates once more.
-
     def get_signature_mechanism(self, digest_algorithm):
         """
         Get the signature mechanism for this signer to use.
@@ -87,8 +84,7 @@ class Signer:
         :param digest_algorithm:
             Digest algorithm to use as part of the signature mechanism.
             Only used if a signature mechanism object has to be put together
-            on-the-fly, and the digest algorithm could not be inferred from
-            the signer's certificate.
+            on-the-fly.
         :return:
             A :class:`.SignedDigestAlgorithm` object.
         """
@@ -105,15 +101,25 @@ class Signer:
         algo = self.signing_cert.public_key.algorithm
         params = None
         if algo == 'ec':
-            mech = 'ecdsa'
+            # with ECDSA, RFC 5753 requires us to encode the digest
+            # algorithm together with the signing algorithm.
+            # The correspondence with the digestAlgorithm field in CMS is
+            # verified separately.
+            if digest_algorithm is None:
+                raise ValueError(
+                    "Digest algorithm required for ECDSA"
+                )
+            mech = digest_algorithm + '_ecdsa'
         elif algo == 'rsa':
             if self.prefer_pss:
                 mech = 'rsassa_pss'
                 if digest_algorithm is None:
-                    raise ValueError("Digest algorithm required")
-                params = optimal_pss_params(
-                    self.signing_cert, digest_algorithm
-                )
+                    raise ValueError(
+                        "Digest algorithm required for RSASSA-PSS"
+                    )
+                params = optimal_pss_params(self.signing_cert, digest_algorithm)
+            elif digest_algorithm is not None:
+                mech = digest_algorithm + '_rsa'
             else:
                 mech = 'rsassa_pkcs1v15'
         else:  # pragma: nocover
