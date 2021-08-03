@@ -608,30 +608,33 @@ class PdfFileReader(PdfHandler):
         self.security_handler: Optional[SecurityHandler] = None
         self.strict = strict
         self.resolved_objects = {}
-        self.input_version = None
+        self._header_version = None
+        self._input_version = None
         self.xrefs = XRefCache(self)
         self._historical_resolver_cache = {}
         self.stream = stream
         self.read()
-        # override version if necessary
-        try:
-            # grab version info *without* triggering crypto
-            root_ref = self.trailer.raw_get('/Root')
-            root = self.get_object(root_ref, never_decrypt=True)
-            version = root.raw_get('/Version')
-            # not sure if anyone would be crazy enough to make this an indirect
-            # reference, but in theory it's possible
-            if isinstance(version, generic.IndirectObject):
-                version = self.get_object(version.reference, never_decrypt=True)
-            self.input_version = parse_catalog_version(version)
-        except KeyError:
-            pass
-
         encrypt_dict = self._get_encryption_params()
         if encrypt_dict is not None:
             self.security_handler = SecurityHandler.build(encrypt_dict)
 
         self._embedded_signatures = None
+
+    @property
+    def input_version(self):
+        input_version = self._input_version
+        if input_version is not None:
+            return input_version
+        header_version = self._header_version
+
+        try:
+            version = self.root['/Version']
+            input_version = parse_catalog_version(version)
+        except KeyError:
+            input_version = header_version
+
+        self._input_version = input_version
+        return input_version
 
     def _get_object_from_stream(self, idnum, stmnum, idx):
         # indirect reference to object in object stream
@@ -784,10 +787,9 @@ class PdfFileReader(PdfHandler):
         elif isinstance(marker, tuple):
             # object in object stream
             (obj_stream_num, obj_stream_ix) = marker
-            obj = self._get_object_from_stream(
+            retval = self._get_object_from_stream(
                 ref.idnum, obj_stream_num, obj_stream_ix
             )
-            return obj
         else:
             obj_start = marker
             # standard indirect object
@@ -815,13 +817,13 @@ class PdfFileReader(PdfHandler):
             else:
                 generic.read_non_whitespace(self.stream, seek_back=True)
 
-            # override encryption is used for the /Encrypt dictionary
-            if not never_decrypt and self.encrypted:
-                sh: SecurityHandler = self.security_handler
-                # make sure the object that lands in the cache is always
-                # a proxy object
-                retval = generic.proxy_encrypted_obj(retval, sh)
-            return retval
+        # override encryption is used for the /Encrypt dictionary
+        if not never_decrypt and self.encrypted:
+            sh: SecurityHandler = self.security_handler
+            # make sure the object that lands in the cache is always
+            # a proxy object
+            retval = generic.proxy_encrypted_obj(retval, sh)
+        return retval
 
     def cache_get_indirect_object(self, generation, idnum):
         out = self.resolved_objects.get((generation, idnum))
@@ -940,7 +942,7 @@ class PdfFileReader(PdfHandler):
             pass
         if input_version is None:
             raise ValueError('Illegal PDF header')
-        self.input_version = input_version
+        self._header_version = input_version
 
         # start at the end:
         stream.seek(-1, os.SEEK_END)
