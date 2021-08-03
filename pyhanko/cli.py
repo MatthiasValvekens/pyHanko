@@ -818,7 +818,7 @@ def generic_sign_pdf(*, writer, outfile, signature_meta, signer, timestamper,
 # TODO allow reading the passphrase from a specific file descriptor
 #  (for advanced scripting setups)
 @click.option('--passfile', help='file containing the passphrase '
-              'for the private key', required=False, type=click.File('rb'),
+              'for the private key', required=False, type=click.File('r'),
               show_default='stdin')
 @click.pass_context
 def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
@@ -829,7 +829,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
     if passfile is None:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
     else:
-        passphrase = passfile.read()
+        passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
     
     signer = signers.SimpleSigner.load(
@@ -861,7 +861,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
                    'May be passed multiple times.')
 @click.option('--passfile', help='file containing the passphrase '
                                  'for the PKCS#12 file.', required=False,
-              type=click.File('rb'),
+              type=click.File('r'),
               show_default='stdin')
 @click.pass_context
 def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
@@ -876,7 +876,7 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
         passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ')\
                         .encode('utf-8')
     else:
-        passphrase = passfile.read()
+        passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
 
     signer = signers.SimpleSigner.load_pkcs12(
@@ -1258,7 +1258,7 @@ def _decrypt_pubkey(sedk: crypt.SimpleEnvelopeKeyDecrypter, infile, outfile,
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
 @click.argument('pfx', type=readable_file)
-@click.option('--passfile', required=False, type=click.File('rb'),
+@click.option('--passfile', required=False, type=click.File('r'),
               help='file containing the passphrase for the PKCS#12 file',
               show_default='stdin')
 @decrypt_force_flag
@@ -1266,7 +1266,7 @@ def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
     if passfile is None:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
     else:
-        passphrase = passfile.read()
+        passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
     sedk = crypt.SimpleEnvelopeKeyDecrypter.load_pkcs12(
         pfx, passphrase=passphrase
