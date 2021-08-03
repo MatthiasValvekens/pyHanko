@@ -516,7 +516,10 @@ class BasePdfFileWriter(PdfHandler):
             self.root['/Extensions'] = extensions = generic.DictionaryObject()
 
         # check if the extension is already registered,
-        cur_ext_value = extensions.get(ext.prefix_name, None)
+        try:
+            cur_ext_value = extensions[ext.prefix_name]
+        except KeyError:
+            cur_ext_value = None
         extension_dicts = ()
         old_ext_multivalued = False
         if isinstance(cur_ext_value, generic.DictionaryObject):
