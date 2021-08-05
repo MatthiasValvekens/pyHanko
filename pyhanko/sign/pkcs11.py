@@ -13,7 +13,9 @@ from typing import Set
 
 from asn1crypto import x509
 
-from pyhanko.sign.general import CertificateStore, SimpleCertificateStore
+from pyhanko.sign.general import (
+    CertificateStore, SimpleCertificateStore, SigningError
+)
 from pyhanko.sign.signers import Signer
 
 try:
@@ -111,7 +113,16 @@ class PKCS11Signer(Signer):
     :param pkcs11_session:
         The PKCS11 session object to use.
     :param cert_label:
-        The label of the certificate that will be used for signing.
+        The label of the certificate that will be used for signing, to
+        be pulled from the PKCS#11 token.
+    :param signing_cert:
+        The signer's certificate. If the signer's certificate is provided,
+        the ``cert_label`` parameter will not be used to retrieve the
+        signer's certificate.
+
+        .. note::
+            When using this parameter instead of ``cert_label``, ``key_label``
+            becomes mandatory.
     :param ca_chain:
         Set of other relevant certificates
         (as :class:`.asn1crypto.x509.Certificate` objects).
@@ -130,38 +141,50 @@ class PKCS11Signer(Signer):
     """
 
     def __init__(self, pkcs11_session: Session,
-                 cert_label: str,
+                 cert_label: str = None, signing_cert: x509.Certificate = None,
                  ca_chain=None, key_label=None, prefer_pss=False,
                  other_certs_to_pull=(), bulk_fetch=True):
         """
         Initialise a PKCS11 signer.
         """
+        if cert_label is None:
+            if signing_cert is None:
+                raise SigningError(
+                    "Either 'cert_label' or 'signing_cert' must be provided."
+                )
+            if key_label is None:
+                raise SigningError(
+                    "If 'cert_label' is None, then 'key_label' is mandatory."
+                )
         self.cert_label = cert_label
+        self._signing_cert = signing_cert
         self.key_label = key_label or cert_label
         self.pkcs11_session = pkcs11_session
+        cs = SimpleCertificateStore()
+        self._cert_registry: CertificateStore = cs
         if ca_chain is not None:
-            cs = SimpleCertificateStore()
             cs.register_multiple(ca_chain)
-            self._cert_registry: CertificateStore = cs
+            self._other_certs_loaded = True
         else:
-            self._cert_registry = None
+            self._other_certs_loaded = False
+        if signing_cert is not None:
+            cs.register(signing_cert)
         self.other_certs = other_certs_to_pull
         if other_certs_to_pull is not None and len(other_certs_to_pull) <= 1:
             self.bulk_fetch = False
         else:
             self.bulk_fetch = bulk_fetch
-        self._signing_cert = self._key_handle = None
+        self._key_handle = None
         self._loaded = False
         super().__init__(prefer_pss=prefer_pss)
 
     def _init_cert_registry(self):
         # it's conceivable that one might want to load this separately from
         # the key data, so we allow for that.
-        if self._cert_registry is None:
+        if not self._other_certs_loaded:
             certs = self._load_other_certs()
-            cs = SimpleCertificateStore()
-            cs.register_multiple(certs)
-            self._cert_registry = cs
+            self._cert_registry.register_multiple(certs)
+            self._other_certs_loaded = True
         return self._cert_registry
 
     cert_registry = property(_init_cert_registry)
@@ -271,7 +294,10 @@ class PKCS11Signer(Signer):
             return
 
         self._init_cert_registry()
-        self._signing_cert = _pull_cert(self.pkcs11_session, self.cert_label)
+        if self._signing_cert is None:
+            self._signing_cert = _pull_cert(
+                self.pkcs11_session, self.cert_label
+            )
 
         q = self.pkcs11_session.get_objects({
             Attribute.LABEL: self.key_label,
