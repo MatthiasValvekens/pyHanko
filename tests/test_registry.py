@@ -12,7 +12,7 @@ tests_root = os.path.dirname(__file__)
 fixtures_dir = os.path.join(tests_root, 'fixtures')
 
 
-class RegistryTests(unittest.TestCase):
+class RegistryTests(unittest.IsolatedAsyncioTestCase):
 
     @unittest.skip("Unstable platform-dependent test")
     def test_build_paths(self):

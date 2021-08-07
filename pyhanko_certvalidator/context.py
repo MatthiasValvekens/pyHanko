@@ -1,19 +1,15 @@
-# coding: utf-8
-from __future__ import unicode_literals, division, absolute_import, print_function
-
-import socket
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import binascii
 
 from asn1crypto import crl, ocsp
 from asn1crypto.util import timezone
-from requests import RequestException
 
-from . import ocsp_client, crl_client
 from ._errors import pretty_message
 from ._types import type_name, byte_cls, str_cls
-from .errors import SoftFailError
+from .errors import SoftFailError, OCSPFetchError, CRLFetchError
+from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .name_trees import default_permitted_subtrees, PKIXSubtrees, \
     default_excluded_subtrees
 from .path import ValidationPath
@@ -43,16 +39,6 @@ class ValidationContext:
     # the validated issuer of the CRL.
     _crl_issuer_map = None
 
-    # A dict with keys being an asn1crypto.x509.Certificate.issuer_serial byte
-    # string of the certificate the CRLs are for. Each value is a list
-    # asn1crypto.crl.CertificateList objects.
-    _fetched_crls = None
-
-    # A dict with keys being an asn1crypto.x509.Certificate.issuer_serial byte
-    # string of the certificate the responses are for. Each value is a list
-    # asn1crypto.ocsp.OCSPResponse objects.
-    _fetched_ocsps = None
-
     # If CRLs or OCSP responses can be fetched from the network
     _allow_fetching = False
 
@@ -68,12 +54,6 @@ class ValidationContext:
     # or OCSP response that was fetched. Only certificates not already part of
     # the .certificate_registry are added to this dict.
     _revocation_certs = None
-
-    # A dict of keyword params to pass to certificates.crl_client.fetch()
-    _crl_fetch_params = None
-
-    # A dict of keyword params to pass to certificates.ocsp_client.fetch()
-    _ocsp_fetch_params = None
 
     # Any exceptions that were ignored while the revocation_mode is "soft-fail"
     _soft_fail_exceptions = None
@@ -97,12 +77,15 @@ class ValidationContext:
     # or "require"
     _revocation_mode = None
 
+    _fetchers: Fetchers = None
+
     def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None,
                  whitelisted_certs=None, moment=None, allow_fetching=False, crls=None,
-                 crl_fetch_params=None, ocsps=None, ocsp_fetch_params=None,
-                 revocation_mode="soft-fail", weak_hash_algos=None,
+                 ocsps=None, revocation_mode="soft-fail", weak_hash_algos=None,
                  time_tolerance=timedelta(seconds=1),
-                 retroactive_revinfo=False):
+                 retroactive_revinfo=False,
+                 fetcher_backend: FetcherBackend = None,
+                 fetchers: Fetchers = None):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -144,20 +127,10 @@ class ValidationContext:
             None or a list/tuple of asn1crypto.crl.CertificateList objects of
             pre-fetched/cached CRLs to be utilized during validation of paths
 
-        :param crl_fetch_params:
-            None or a dict of keyword args to pass to
-            pyhanko_certvalidator.crl_client.fetch() when fetching CRLs or associated
-            certificates. Only applicable when allow_fetching=True.
-
         :param ocsps:
             None or a list/tuple of asn1crypto.ocsp.OCSPResponse objects of
             pre-fetched/cached OCSP responses to be utilized during validation
             of paths
-
-        :param ocsp_fetch_params:
-            None or a dict of keyword args to pass to
-            pyhanko_certvalidator.ocsp_client.fetch() when fetching OSCP responses.
-            Only applicable when allow_fetching=True.
 
         :param allow_fetching:
             A bool - if HTTP requests should be made to fetch CRLs and OCSP
@@ -258,22 +231,6 @@ class ValidationContext:
                 '''
             ))
 
-        if crl_fetch_params is not None and not isinstance(crl_fetch_params, dict):
-            raise TypeError(pretty_message(
-                '''
-                crl_fetch_params must be a dict, not %s
-                ''',
-                type_name(crl_fetch_params)
-            ))
-
-        if ocsp_fetch_params is not None and not isinstance(ocsp_fetch_params, dict):
-            raise TypeError(pretty_message(
-                '''
-                ocsp_fetch_params must be a dict, not %s
-                ''',
-                type_name(ocsp_fetch_params)
-            ))
-
         if moment is None:
             moment = datetime.now(timezone.utc)
         else:
@@ -293,7 +250,7 @@ class ValidationContext:
                     '''
                 ))
 
-        if revocation_mode not in set(['soft-fail', 'hard-fail', 'require']):
+        if revocation_mode not in ('soft-fail', 'hard-fail', 'require'):
             raise ValueError(pretty_message(
                 '''
                 revocation_mode must be one of "soft-fail", "hard-fail",
@@ -331,12 +288,27 @@ class ValidationContext:
                     type_name(weak_hash_algos)
                 ))
         else:
-            weak_hash_algos = set(['md2', 'md5', 'sha1'])
+            weak_hash_algos = {'md2', 'md5', 'sha1'}
+
+        cert_fetcher = None
+        if allow_fetching:
+            # externally managed fetchers
+            if fetchers is not None:
+                self._fetchers = fetchers
+            else:
+                # fetcher managed by this validation context,
+                # but backend possibly managed externally
+                if fetcher_backend is None:
+                    # in this case, we load the default requests-based
+                    # backend, since the caller doesn't do any resource
+                    # management
+                    fetcher_backend = default_fetcher_backend()
+                self._fetchers = fetchers = fetcher_backend.get_fetchers()
+            cert_fetcher = fetchers.cert_fetcher
 
         self.certificate_registry = CertificateRegistry(
-            trust_roots,
-            extra_trust_roots,
-            other_certs
+            trust_roots, extra_trust_roots, other_certs,
+            cert_fetcher=cert_fetcher
         )
 
         self.moment = moment
@@ -344,8 +316,6 @@ class ValidationContext:
         self._validate_map = {}
         self._crl_issuer_map = {}
 
-        self._fetched_crls = {}
-        self._fetched_ocsps = {}
         self._revocation_certs = {}
 
         self._crls = []
@@ -358,9 +328,6 @@ class ValidationContext:
             for ocsp_response in ocsps:
                 self._extract_ocsp_certs(ocsp_response)
 
-        self._crl_fetch_params = crl_fetch_params or {}
-        self._ocsp_fetch_params = ocsp_fetch_params or {}
-
         self._allow_fetching = bool(allow_fetching)
         self._skip_revocation_checks = False
         self._revocation_mode = revocation_mode
@@ -372,6 +339,10 @@ class ValidationContext:
         self.retroactive_revinfo = retroactive_revinfo
 
     @property
+    def fetching_allowed(self) -> bool:
+        return self._allow_fetching
+
+    @property
     def crls(self):
         """
         A list of all cached asn1crypto.crl.CertificateList objects
@@ -379,11 +350,7 @@ class ValidationContext:
 
         if not self._allow_fetching:
             return self._crls
-
-        output = []
-        for issuer_serial in self._fetched_crls:
-            output.extend(self._fetched_crls[issuer_serial])
-        return output
+        return list(self._fetchers.crl_fetcher.fetched_crls())
 
     @property
     def ocsps(self):
@@ -394,10 +361,7 @@ class ValidationContext:
         if not self._allow_fetching:
             return self._ocsps
 
-        output = []
-        for issuer_serial in self._fetched_ocsps:
-            output.extend(self._fetched_ocsps[issuer_serial])
-        return output
+        return list(self._fetchers.ocsp_fetcher.fetched_responses())
 
     @property
     def new_revocation_certs(self):
@@ -438,13 +402,38 @@ class ValidationContext:
 
         return cert.sha1 in self._whitelisted_certs
 
-    def retrieve_crls(self, cert):
+    async def async_retrieve_crls(self, cert):
         """
         :param cert:
             An asn1crypto.x509.Certificate object
 
-        :param path:
-            A pyhanko_certvalidator.path.ValidationPath object for the cert
+        :return:
+            A list of asn1crypto.crl.CertificateList objects
+        """
+        if not self._allow_fetching:
+            return self._crls
+
+        fetchers = self._fetchers
+        try:
+            crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
+        except KeyError:
+            try:
+                crls = await fetchers.crl_fetcher.fetch(cert)
+            except CRLFetchError as e:
+                if self._revocation_mode == "soft-fail":
+                    self._soft_fail_exceptions.append(e)
+                    raise SoftFailError()
+                else:
+                    raise
+        return crls
+
+    def retrieve_crls(self, cert):
+        """
+        .. warning::
+            This method is deprecated. Use :meth:`async_retrieve_crls` instead.
+
+        :param cert:
+            An asn1crypto.x509.Certificate object
 
         :return:
             A list of asn1crypto.crl.CertificateList objects
@@ -452,37 +441,10 @@ class ValidationContext:
 
         if not self._allow_fetching:
             return self._crls
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.async_retrieve_crls(cert))
 
-        if cert.issuer_serial not in self._fetched_crls:
-            try:
-                crls = crl_client.fetch(
-                    cert,
-                    **self._crl_fetch_params
-                )
-                self._fetched_crls[cert.issuer_serial] = crls
-                for crl_ in crls:
-                    try:
-                        certs = crl_client.fetch_certs(
-                            crl_,
-                            user_agent=self._crl_fetch_params.get('user_agent'),
-                            timeout=self._crl_fetch_params.get('timeout')
-                        )
-                        for cert_ in certs:
-                            if self.certificate_registry.add_other_cert(cert_):
-                                self._revocation_certs[cert_.issuer_serial] = cert_
-                    except (RequestException, socket.error):
-                        pass
-            except (RequestException, socket.error) as e:
-                self._fetched_crls[cert.issuer_serial] = []
-                if self._revocation_mode == "soft-fail":
-                    self._soft_fail_exceptions.append(e)
-                    raise SoftFailError()
-                else:
-                    raise
-
-        return self._fetched_crls[cert.issuer_serial]
-
-    def retrieve_ocsps(self, cert, issuer):
+    async def async_retrieve_ocsps(self, cert, issuer):
         """
         :param cert:
             An asn1crypto.x509.Certificate object
@@ -497,29 +459,44 @@ class ValidationContext:
         if not self._allow_fetching:
             return self._ocsps
 
-        if cert.issuer_serial not in self._fetched_ocsps:
+        fetchers = self._fetchers
+        ocsps = fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
+        if not ocsps:
             try:
-                ocsp_response = ocsp_client.fetch(
-                    cert,
-                    issuer,
-                    **self._ocsp_fetch_params
-                )
-
-                self._fetched_ocsps[cert.issuer_serial] = [ocsp_response]
-
-                # Responses can contain certificates that are useful in validating the
-                # response itself. We can use these since they will be validated using
-                # the local trust roots.
+                ocsp_response = await fetchers.ocsp_fetcher.fetch(cert, issuer)
+                # Responses can contain certificates that are useful in
+                # validating the response itself. We can use these since they
+                # will be validated using the local trust roots.
                 self._extract_ocsp_certs(ocsp_response)
-            except (RequestException, socket.error) as e:
-                self._fetched_ocsps[cert.issuer_serial] = []
+                ocsps = [ocsp_response]
+            except OCSPFetchError as e:
                 if self._revocation_mode == "soft-fail":
                     self._soft_fail_exceptions.append(e)
                     raise SoftFailError()
                 else:
                     raise
 
-        return self._fetched_ocsps[cert.issuer_serial]
+        return ocsps
+
+    def retrieve_ocsps(self, cert, issuer):
+        """
+        .. warning::
+            This method is deprecated. Use :meth:`async_retrieve_ocsps` instead.
+
+        :param cert:
+            An asn1crypto.x509.Certificate object
+
+        :param issuer:
+            An asn1crypto.x509.Certificate object of cert's issuer
+
+        :return:
+            A list of asn1crypto.ocsp.OCSPResponse objects
+        """
+
+        if not self._allow_fetching:
+            return self._ocsps
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.async_retrieve_ocsps(cert, issuer))
 
     def _extract_ocsp_certs(self, ocsp_response):
         """

@@ -128,6 +128,9 @@ setup(
         'cryptography>=3.3.1',
         'uritools>=3.0.1'
     ],
+    extras_require={
+        'async_http': ['aiohttp~=3.7.4'],
+    },
     packages=[PYTHON_PACKAGE_NAME],
     package_data=package_data,
 

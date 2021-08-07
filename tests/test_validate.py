@@ -5,21 +5,25 @@ from datetime import datetime
 import base64
 import unittest
 import os
+from typing import Iterable
 
 from asn1crypto import crl, ocsp, pem, x509
 from asn1crypto.util import timezone
-from pyhanko_certvalidator import crl_client, ocsp_client
 from datetime import timezone
+from pyhanko_certvalidator.fetchers import (
+    CertificateFetcher, CRLFetcher, OCSPFetcher, Fetchers, FetcherBackend,
+    requests_fetchers
+)
 from pyhanko_certvalidator.context import ValidationContext, \
     PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
-from pyhanko_certvalidator.validate import validate_path
-from pyhanko_certvalidator.errors import PathValidationError, RevokedError
+from pyhanko_certvalidator.validate import validate_path, async_validate_path
+from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
+    OCSPFetchError, CRLFetchError, CertificateFetchError
 
 from ._unittest_compat import patch
 from .unittest_data import data_decorator, data
-
-from urllib.error import URLError
+from pyhanko_certvalidator.fetchers import aiohttp_fetchers
 
 patch()
 
@@ -54,8 +58,54 @@ def nist_test_policy(no):
     return '2.16.840.1.101.3.2.1.48.' + str(int(no))
 
 
+class MockOCSPFetcher(OCSPFetcher):
+
+    def fetched_responses(self) -> Iterable[ocsp.OCSPResponse]:
+        return ()
+
+    def fetched_responses_for_cert(self, cert: x509.Certificate) \
+            -> Iterable[ocsp.OCSPResponse]:
+        return ()
+
+    async def fetch(self, cert: x509.Certificate, issuer: x509.Certificate):
+        raise OCSPFetchError("No connection")
+
+
+class MockCRLFetcher(CRLFetcher):
+
+    def fetched_crls_for_cert(self, cert: x509.Certificate) \
+            -> Iterable[crl.CertificateList]:
+        return ()
+
+    def fetched_crls(self) -> Iterable[crl.CertificateList]:
+        return ()
+
+    async def fetch(self, cert: x509.Certificate, *, use_deltas=None):
+        raise CRLFetchError("No connection")
+
+
+class MockCertFetcher(CertificateFetcher):
+
+    def fetched_certs(self) -> Iterable[x509.Certificate]:
+        return ()
+
+    async def fetch_cert_issuers(self, cert):
+        raise CertificateFetchError("No connection")
+
+    async def fetch_crl_issuers(self, certificate_list):
+        raise CertificateFetchError("No connection")
+
+
+class MockFetcherBackend(FetcherBackend):
+    def get_fetchers(self) -> Fetchers:
+        return Fetchers(
+            ocsp_fetcher=MockOCSPFetcher(), crl_fetcher=MockCRLFetcher(),
+            cert_fetcher=MockCertFetcher()
+        )
+
+
 @data_decorator
-class ValidateTests(unittest.TestCase):
+class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
     def _load_nist_cert(self, filename):
         return self._load_cert_object('nist_pkits', 'certs', filename)
@@ -83,34 +133,19 @@ class ValidateTests(unittest.TestCase):
             self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
         ]
 
-        try:
-            # Mock the crl and ocsp clients to fail
-            orig_crl_fetch = crl_client.fetch
-            orig_ocsp_fetch = ocsp_client.fetch
+        context = ValidationContext(
+            trust_roots=ca_certs,
+            other_certs=other_certs,
+            allow_fetching=True,
+            weak_hash_algos={'md2', 'md5'},
+            fetcher_backend=MockFetcherBackend()
+        )
+        paths = context.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
 
-            def crl_fetch(cert, use_deltas=True, user_agent=None, timeout=10):
-                raise URLError('Connection timed out')
-            crl_client.fetch = crl_fetch
-
-            def ocsp_fetch(cert, issuer, hash_algo='sha1', nonce=True, user_agent=None, timeout=10):
-                raise URLError('Connection timed out')
-            ocsp_client.fetch = ocsp_fetch
-
-            context = ValidationContext(
-                trust_roots=ca_certs,
-                other_certs=other_certs,
-                allow_fetching=True,
-                weak_hash_algos={'md2', 'md5'}
-            )
-            paths = context.certificate_registry.build_paths(cert)
-            self.assertEqual(1, len(paths))
-            path = paths[0]
-            self.assertEqual(3, len(path))
-
-            validate_path(context, path)
-        finally:
-            crl_client.fetch = orig_crl_fetch
-            ocsp_client.fetch = orig_ocsp_fetch
+        validate_path(context, path)
 
     def test_revocation_mode_hard(self):
         cert = self._load_cert_object('global-root-ca-revoked.chain-demos.digicert.com.crt')
@@ -123,10 +158,11 @@ class ValidateTests(unittest.TestCase):
             trust_roots=ca_certs,
             other_certs=other_certs,
             allow_fetching=True,
-            crl_fetch_params={'timeout': 30},
-            ocsp_fetch_params={'timeout': 30},
             revocation_mode='hard-fail',
-            weak_hash_algos={'md2', 'md5'}
+            weak_hash_algos={'md2', 'md5'},
+            fetcher_backend=requests_fetchers.RequestsFetcherBackend(
+                per_request_timeout=30
+            )
         )
         paths = context.certificate_registry.build_paths(cert)
         self.assertEqual(1, len(paths))
@@ -139,6 +175,65 @@ class ValidateTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RevokedError, expected):
             validate_path(context, path)
+
+    async def test_revocation_mode_hard_async(self):
+        cert = self._load_cert_object(
+            'global-root-ca-revoked.chain-demos.digicert.com.crt'
+        )
+        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+        other_certs = [
+            self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
+        ]
+        fb = aiohttp_fetchers.AIOHttpFetcherBackend(per_request_timeout=30)
+        async with fb as fetchers:
+            context = ValidationContext(
+                trust_roots=ca_certs,
+                other_certs=other_certs,
+                allow_fetching=True,
+                revocation_mode='hard-fail',
+                weak_hash_algos={'md2', 'md5'},
+                fetchers=fetchers
+            )
+            paths = await context.certificate_registry.async_build_paths(cert)
+            self.assertEqual(1, len(paths))
+            path = paths[0]
+            self.assertEqual(3, len(path))
+
+            expected = (
+                '(CRL|OCSP response) indicates the end-entity certificate was '
+                'revoked at 23:32:01 on 2020-01-14, due to an unspecified '
+                'reason'
+            )
+            with self.assertRaisesRegex(RevokedError, expected):
+                await async_validate_path(context, path)
+
+    async def test_revocation_mode_hard_autofetch(self):
+        cert = self._load_cert_object(
+            'global-root-ca-revoked.chain-demos.digicert.com.crt'
+        )
+        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+
+        fb = aiohttp_fetchers.AIOHttpFetcherBackend(per_request_timeout=30)
+        async with fb as fetchers:
+            context = ValidationContext(
+                trust_roots=ca_certs,
+                allow_fetching=True,
+                revocation_mode='hard-fail',
+                weak_hash_algos={'md2', 'md5'},
+                fetchers=fetchers
+            )
+            paths = await context.certificate_registry.async_build_paths(cert)
+            self.assertEqual(1, len(paths))
+            path = paths[0]
+            self.assertEqual(3, len(path))
+
+            expected = (
+                '(CRL|OCSP response) indicates the end-entity certificate was '
+                'revoked at 23:32:01 on 2020-01-14, due to an unspecified '
+                'reason'
+            )
+            with self.assertRaisesRegex(RevokedError, expected):
+                await async_validate_path(context, path)
 
     def test_rsassa_pss(self):
         cert = self._load_cert_object('testing-ca-pss', 'signer1.cert.pem')

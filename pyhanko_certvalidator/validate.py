@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Optional
@@ -18,15 +19,20 @@ from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
 from ._types import str_cls, type_name
 from .context import ValidationContext, PKIXValidationParams
+from .registry import CertificateRegistry
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
     process_general_subtrees
 from .errors import (
     CRLNoMatchesError,
     CRLValidationError,
     CRLValidationIndeterminateError,
+    CRLFetchError,
+    CertificateFetchError,
     InvalidCertificateError,
+    OCSPValidationError,
     OCSPNoMatchesError,
     OCSPValidationIndeterminateError,
+    OCSPFetchError,
     PathValidationError,
     RevokedError,
     SoftFailError,
@@ -43,6 +49,46 @@ register_eddsa_oids()
 
 def validate_path(validation_context, path,
                   parameters: PKIXValidationParams = None):
+    """
+    Validates the path using the algorithm from
+    https://tools.ietf.org/html/rfc5280#section-6.1.
+
+    Critical extensions on the end-entity certificate are not validated
+    and are left up to the consuming application to process and/or fail on.
+
+
+    .. warning::
+        Deprecated in favour of :func:`.async_validate_path`.
+
+    :param validation_context:
+        A pyhanko_certvalidator.context.ValidationContext object to use for
+        configuring validation behavior
+
+    :param path:
+        A pyhanko_certvalidator.path.ValidationPath object of the path to validate
+
+    :param parameters:
+        Additional input parameters to the PKIX validation algorithm.
+        These are not used when validating CRLs and OCSP responses.
+
+    :raises:
+        pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
+        pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
+
+    :return:
+        The final certificate in the path - an instance of
+        asn1crypto.x509.Certificate
+    """
+
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(
+        async_validate_path(validation_context, path, parameters=parameters)
+    )
+    return result
+
+
+async def async_validate_path(validation_context, path,
+                              parameters: PKIXValidationParams = None):
     """
     Validates the path using the algorithm from
     https://tools.ietf.org/html/rfc5280#section-6.1.
@@ -70,7 +116,7 @@ def validate_path(validation_context, path,
         asn1crypto.x509.Certificate
     """
 
-    return _validate_path(validation_context, path, parameters=parameters)
+    return await _validate_path(validation_context, path, parameters=parameters)
 
 
 def validate_tls_hostname(validation_context, cert, hostname):
@@ -460,8 +506,9 @@ SUPPORTED_EXTENSIONS = frozenset([
 ])
 
 
-def _validate_path(validation_context, path, end_entity_name_override=None,
-                   parameters: PKIXValidationParams = None):
+async def _validate_path(validation_context, path,
+                         end_entity_name_override=None,
+                         parameters: PKIXValidationParams = None):
     """
     Internal copy of validate_path() that allows overriding the name of the
     end-entity certificate as used in exception messages. This functionality is
@@ -533,7 +580,9 @@ def _validate_path(validation_context, path, end_entity_name_override=None,
 
     state = _PathValidationState(
         # Step 1 a
-        valid_policy_tree=PolicyTreeRoot('any_policy', set(), {'any_policy'}),
+        valid_policy_tree=PolicyTreeRoot.init_policy_tree(
+            'any_policy', set(), {'any_policy'}
+        ),
         # Steps 1 b-c
         permitted_subtrees=PermittedSubtrees(
             parameters.initial_permitted_subtrees
@@ -592,7 +641,7 @@ def _validate_path(validation_context, path, end_entity_name_override=None,
 
         # Step 2 a 3 - CRL/OCSP
         if not validation_context._skip_revocation_checks:
-            _check_revocation(
+            await _check_revocation(
                 cert=cert, validation_context=validation_context,
                 path=path,
                 end_entity_name_override=end_entity_name_override,
@@ -762,8 +811,8 @@ def _finish_policy_processing(state, cert, acceptable_policies, path_length,
     return qualified_policies
 
 
-def _check_revocation(cert, validation_context, path, end_entity_name_override,
-                      describe_current_cert):
+async def _check_revocation(cert, validation_context, path,
+                            end_entity_name_override, describe_current_cert):
     status_good = False
     revocation_check_failed = False
     matched = False
@@ -774,7 +823,7 @@ def _check_revocation(cert, validation_context, path, end_entity_name_override,
     )
     if cert.ocsp_urls or validation_context.revocation_mode == 'require':
         try:
-            verify_ocsp_response(
+            await verify_ocsp_response(
                 cert,
                 path,
                 validation_context,
@@ -783,19 +832,22 @@ def _check_revocation(cert, validation_context, path, end_entity_name_override,
             )
             status_good = True
             matched = True
-        except (OCSPValidationIndeterminateError) as e:
+        except OCSPValidationIndeterminateError as e:
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
             matched = True
-        except (SoftFailError):
+        except SoftFailError:
             soft_fail = True
-        except (OCSPNoMatchesError):
+        except OCSPNoMatchesError:
             pass
+        except OCSPFetchError as e:
+            failures.append(e)
+            revocation_check_failed = True
     if not status_good and (
             cert.crl_distribution_points or validation_context.revocation_mode == 'require'):
         try:
             cert_description = describe_current_cert(definite=True)
-            verify_crl(
+            await verify_crl(
                 cert,
                 path,
                 validation_context,
@@ -805,14 +857,17 @@ def _check_revocation(cert, validation_context, path, end_entity_name_override,
             revocation_check_failed = False
             status_good = True
             matched = True
-        except (CRLValidationIndeterminateError) as e:
+        except CRLValidationIndeterminateError as e:
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
             matched = True
-        except (SoftFailError):
+        except SoftFailError:
             soft_fail = True
-        except (CRLNoMatchesError):
+        except CRLNoMatchesError:
             pass
+        except CRLFetchError as e:
+            failures.append(e)
+            revocation_check_failed = True
     # The certificate has CRL/OCSP entries but we couldn't query any of
     # them. This should fail the validation if hard-fail is turned on.
     expected_revinfo_not_found = not matched and (
@@ -1113,7 +1168,64 @@ def _self_signed(cert: x509.Certificate):
         return False
 
 
-def verify_ocsp_response(cert, path, validation_context, cert_description=None, end_entity_name_override=None):
+async def _ocsp_responder_issuer(responder_cert: x509.Certificate,
+                                 issuer: x509.Certificate,
+                                 validation_context: ValidationContext,
+                                 ee_path: ValidationPath,
+                                 end_entity_name_override, cert_description):
+    certificate_registry = validation_context.certificate_registry
+    signing_cert_paths = await certificate_registry.async_build_paths(
+        responder_cert
+    )
+    for signing_cert_path in signing_cert_paths:
+        changed_revocation_flags = False
+        original_revocation_mode = validation_context.revocation_mode
+        try:
+            # Store the original revocation check value
+            skip_ocsp = responder_cert.ocsp_no_check_value is not None
+            skip_ocsp = skip_ocsp or signing_cert_path == ee_path
+            if skip_ocsp and validation_context._skip_revocation_checks is False:
+                changed_revocation_flags = True
+                new_revocation_mode = "soft-fail" if original_revocation_mode == "soft-fail" else "hard-fail"
+
+                validation_context._skip_revocation_checks = True
+                validation_context._revocation_mode = new_revocation_mode
+
+            if end_entity_name_override is None and responder_cert.sha256 != issuer.sha256:
+                end_entity_name_override = cert_description + ' OCSP responder'
+            await _validate_path(
+                validation_context,
+                signing_cert_path,
+                end_entity_name_override=end_entity_name_override
+            )
+            return signing_cert_path.find_issuer(responder_cert)
+        except PathValidationError:
+            continue
+
+        finally:
+            if changed_revocation_flags:
+                validation_context._skip_revocation_checks = False
+                validation_context._revocation_mode = original_revocation_mode
+
+    raise OCSPValidationError(
+        pretty_message(
+            '''
+            Unable to verify OCSP response since response signing
+            certificate could not be validated
+            '''
+        ),
+    )
+
+
+def _ocsp_allowed(responder_cert: x509.Certificate):
+    extended_key_usage = responder_cert.extended_key_usage_value
+    return (
+        extended_key_usage is not None
+        and 'ocsp_signing' in extended_key_usage.native
+    )
+
+
+async def verify_ocsp_response(cert, path, validation_context, cert_description=None, end_entity_name_override=None):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
     been revoked. Fulfills the requirements of
@@ -1188,7 +1300,9 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
     failures = []
     mismatch_failures = 0
 
-    ocsp_responses = validation_context.retrieve_ocsps(cert, issuer)
+    ocsp_responses = await validation_context.async_retrieve_ocsps(
+        cert, issuer
+    )
 
     for ocsp_response in ocsp_responses:
 
@@ -1295,70 +1409,36 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
             ))
             continue
 
-        # The responder cert has to have a valid path back to one of the trust roots
-        if not certificate_registry.is_ca(signing_cert):
-            signing_cert_paths = certificate_registry.build_paths(signing_cert)
-            for signing_cert_path in signing_cert_paths:
-                try:
-                    # Store the original revocation check value
-                    changed_revocation_flags = False
-                    skip_ocsp = signing_cert.ocsp_no_check_value is not None
-                    skip_ocsp = skip_ocsp or signing_cert_path == path
-                    if skip_ocsp and validation_context._skip_revocation_checks is False:
-                        changed_revocation_flags = True
-
-                        original_revocation_mode = validation_context.revocation_mode
-                        new_revocation_mode = "soft-fail" if original_revocation_mode == "soft-fail" else "hard-fail"
-
-                        validation_context._skip_revocation_checks = True
-                        validation_context._revocation_mode = new_revocation_mode
-
-                    if end_entity_name_override is None and signing_cert.sha256 != issuer.sha256:
-                        end_entity_name_override = cert_description + ' OCSP responder'
-                    _validate_path(
-                        validation_context,
-                        signing_cert_path,
-                        end_entity_name_override=end_entity_name_override
-                    )
-                    signing_cert_issuer = signing_cert_path.find_issuer(signing_cert)
-                    break
-
-                except (PathValidationError):
-                    continue
-
-                finally:
-                    if changed_revocation_flags:
-                        validation_context._skip_revocation_checks = False
-                        validation_context._revocation_mode = original_revocation_mode
-
-            else:
-                failures.append((
-                    pretty_message(
-                        '''
-                        Unable to verify OCSP response since response signing
-                        certificate could not be validated
-                        '''
-                    ),
-                    ocsp_response
-                ))
-                continue
-
-        # If the cert signing the OCSP response is not the issuer, it must be issued
-        # by the cert issuer and be valid for OCSP responses
+        # If the cert signing the OCSP response is not the issuer, it must be
+        # issued by the cert issuer and be valid for OCSP responses
         if issuer.issuer_serial != signing_cert.issuer_serial:
-            if signing_cert_issuer.issuer_serial != issuer.issuer_serial:
-                failures.append((
-                    pretty_message(
-                        '''
-                        Unable to verify OCSP response since response was
-                        signed by an unauthorized certificate
-                        '''
-                    ),
-                    ocsp_response
-                ))
-                continue
-            extended_key_usage = signing_cert.extended_key_usage_value
-            if 'ocsp_signing' not in extended_key_usage.native:
+            # The responder cert has to have a valid path back to one of the
+            # trust roots
+            # FIXME actually no, this only needs to path back up to the issuer
+            #  but correctly manipulating the validation context to handle
+            #  that is a little tricky. Also, caching ensures that the
+            #  difference is probably negligible. Fix postponed for now.
+            if not certificate_registry.is_ca(signing_cert):
+                try:
+                    ocsp_resp_issuer = await _ocsp_responder_issuer(
+                        responder_cert=signing_cert, issuer=issuer,
+                        validation_context=validation_context, ee_path=path,
+                        end_entity_name_override=end_entity_name_override,
+                        cert_description=cert_description
+                    )
+                    authorized = \
+                        ocsp_resp_issuer.issuer_serial == issuer.issuer_serial
+                except OCSPValidationError as e:
+                    failures.append((e.args[0], ocsp_response))
+                    continue
+            else:
+                # This would mean: responder cert is a trust root, but it's
+                # not the issuer of the certificate that we're querying...
+                # That's profoundly bizarre, and it also violates
+                # the letter of the OCSP spec, so dismiss as unauthorized
+                authorized = True
+            authorized &= _ocsp_allowed(signing_cert)
+            if not authorized:
                 failures.append((
                     pretty_message(
                         '''
@@ -1439,7 +1519,159 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
     )
 
 
-def verify_crl(cert, path, validation_context, use_deltas=True, cert_description=None, end_entity_name_override=None):
+async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
+                                      certificate_list: crl.CertificateList,
+                                      *, cert_issuer: x509.Certificate,
+                                      cert_registry: CertificateRegistry):
+    # first, look in the cache for certs issued by the issuer named
+    # in the issuing distribution point
+    candidates = cert_registry.retrieve_by_name(
+        crl_issuer_name, cert_issuer
+    )
+    issuing_authority = certificate_list.issuer
+    if not candidates and crl_issuer_name != certificate_list.issuer:
+        # next, look for certs issued by the issuer named as the issuing
+        # authority of the CRL
+        candidates = cert_registry.retrieve_by_name(
+            issuing_authority, cert_issuer
+        )
+    if not candidates and cert_registry.fetcher is not None:
+        candidates = []
+        valid_names = {crl_issuer_name, issuing_authority}
+        # Try to download certificates from URLs in the AIA extension,
+        # if there is one
+        async for cert in \
+                cert_registry.fetcher.fetch_crl_issuers(certificate_list):
+            # filter by name
+            if cert.subject in valid_names:
+                candidates.insert(0, cert)
+    return candidates
+
+
+async def _find_crl_issuer(crl_issuer_name: x509.Name,
+                           certificate_list: crl.CertificateList,
+                           *, cert: x509.Certificate,
+                           cert_issuer: x509.Certificate,
+                           cert_path: ValidationPath,
+                           validation_context: ValidationContext,
+                           is_indirect: bool,
+                           end_entity_name_override,
+                           cert_description):
+
+    candidates_skipped = 0
+    signatures_failed = 0
+    unauthorized_certs = 0
+
+    candidate_crl_issuers = await _find_candidate_crl_issuers(
+        crl_issuer_name, certificate_list, cert_issuer=cert_issuer,
+        cert_registry=validation_context.certificate_registry
+    )
+
+    crl_issuer = None
+    for candidate_crl_issuer in candidate_crl_issuers:
+        direct_issuer = candidate_crl_issuer.subject == cert_issuer.subject
+
+        # In some cases an indirect CRL issuer is a certificate issued
+        # by the certificate issuer. However, we need to ensure that
+        # the candidate CRL issuer is not the certificate being checked,
+        # otherwise we may be checking an incorrect CRL and produce
+        # incorrect results.
+        indirect_issuer = (
+            candidate_crl_issuer.issuer == cert_issuer.subject
+            and candidate_crl_issuer.sha256 != cert.sha256
+        )
+
+        if not direct_issuer and not indirect_issuer and not is_indirect:
+            candidates_skipped += 1
+            continue
+
+        # Step f
+        candidate_crl_issuer_path = None
+
+        if validation_context:
+            candidate_crl_issuer_path = \
+                validation_context.check_validation(candidate_crl_issuer)
+
+        if candidate_crl_issuer_path is None:
+            candidate_crl_issuer_path = cert_path.copy()\
+                .truncate_to_issuer(candidate_crl_issuer)
+            candidate_crl_issuer_path.append(candidate_crl_issuer)
+            try:
+                # Pre-emptively mark a path as validated to prevent recursion
+                if validation_context:
+                    validation_context.record_validation(
+                        candidate_crl_issuer, candidate_crl_issuer_path
+                    )
+
+                temp_override = end_entity_name_override
+                if temp_override is None and candidate_crl_issuer.sha256 != cert_issuer.sha256:
+                    temp_override = cert_description + ' CRL issuer'
+                await _validate_path(
+                    validation_context,
+                    candidate_crl_issuer_path,
+                    end_entity_name_override=temp_override
+                )
+
+            except PathValidationError as e:
+                # If the validation did not work out, clear it
+                if validation_context:
+                    validation_context.clear_validation(candidate_crl_issuer)
+
+                # We let a revoked error fall through since step k will catch
+                # it with a correct error message
+                if isinstance(e, RevokedError):
+                    raise
+                raise CRLValidationError(
+                    'CRL issuer certificate path could not be validated')
+
+        key_usage_value = candidate_crl_issuer.key_usage_value
+        if key_usage_value and 'crl_sign' not in key_usage_value.native:
+            unauthorized_certs += 1
+            continue
+
+        try:
+            # Step g
+            _verify_signature(certificate_list, candidate_crl_issuer)
+
+            crl_issuer = candidate_crl_issuer
+            break
+
+        except CRLValidationError:
+            signatures_failed += 1
+            continue
+
+    if crl_issuer is not None:
+        validation_context.record_crl_issuer(certificate_list, crl_issuer)
+        return crl_issuer
+    elif candidates_skipped == len(candidate_crl_issuers):
+        raise CRLNoMatchesError()
+    else:
+        if signatures_failed == len(candidate_crl_issuers):
+            raise CRLValidationError(
+                'CRL signature could not be verified'
+            )
+        elif unauthorized_certs == len(candidate_crl_issuers):
+            raise CRLValidationError(
+                'The CRL issuer is not authorized to sign CRLs',
+            )
+        else:
+            raise CRLValidationError(
+                'Unable to locate CRL issuer certificate',
+            )
+
+
+KNOWN_CRL_EXTENSIONS = {'issuer_alt_name', 'crl_number', 'delta_crl_indicator',
+                        'issuing_distribution_point',
+                        'authority_key_identifier', 'freshest_crl',
+                        'authority_information_access'}
+
+VALID_REVOCATION_REASONS = {'key_compromise', 'ca_compromise',
+                            'affiliation_changed', 'superseded',
+                            'cessation_of_operation', 'certificate_hold',
+                            'privilege_withdrawn', 'aa_compromise'}
+
+
+async def verify_crl(cert, path, validation_context, use_deltas=True, cert_description=None, end_entity_name_override=None):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
     certificate has not been revoked. Uses the algorithm from
@@ -1451,9 +1683,6 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
 
     :param path:
         A pyhanko_certvalidator.path.ValidationPath object of the cert's validation path
-
-    :param certificate_lists:
-        A list of asn1crypto.crl.CertificateList objects
 
     :param validation_context:
         A pyhanko_certvalidator.context.ValidationContext object to use for caching
@@ -1516,7 +1745,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
     moment = validation_context.moment
     certificate_registry = validation_context.certificate_registry
 
-    certificate_lists = validation_context.retrieve_crls(cert)
+    certificate_lists = await validation_context.async_retrieve_crls(cert)
 
     cert_issuer = path.find_issuer(cert)
 
@@ -1560,27 +1789,6 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
                     distribution_point_map[dp_name_hash] = []
                 distribution_point_map[dp_name_hash].append(distribution_point)
 
-    valid_reasons = set([
-        'key_compromise',
-        'ca_compromise',
-        'affiliation_changed',
-        'superseded',
-        'cessation_of_operation',
-        'certificate_hold',
-        'privilege_withdrawn',
-        'aa_compromise',
-    ])
-
-    known_extensions = set([
-        'issuer_alt_name',
-        'crl_number',
-        'delta_crl_indicator',
-        'issuing_distribution_point',
-        'authority_key_identifier',
-        'freshest_crl',
-        'authority_information_access',
-    ])
-
     checked_reasons = set()
 
     failures = []
@@ -1588,14 +1796,10 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
 
     while len(crls_to_process) > 0:
         certificate_list = crls_to_process.pop(0)
-        crl_idp = certificate_list.issuing_distribution_point_value
+        crl_idp: crl.IssuingDistributionPoint \
+            = certificate_list.issuing_distribution_point_value
         delta_certificate_list = None
-        delta_crl_idp = None
 
-        interim_reasons = set()
-
-        crl_issuer = None
-        crl_issuer_name = None
         is_indirect = False
 
         if crl_idp and crl_idp['indirect_crl'].native:
@@ -1623,105 +1827,27 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         else:
             crl_issuer_name = certificate_list.issuer
 
+        # check if we already know the issuer of this CRL
+        crl_issuer = validation_context.check_crl_issuer(certificate_list)
+        # if not, attempt to determine it
         if not crl_issuer:
-            crl_issuer = validation_context.check_crl_issuer(certificate_list)
-
-        if not crl_issuer:
-            candidate_crl_issuers = certificate_registry.retrieve_by_name(crl_issuer_name, cert_issuer)
-            candidates_skipped = 0
-            signatures_failed = 0
-            unauthorized_certs = 0
-
-            if not candidate_crl_issuers and crl_issuer_name != certificate_list.issuer:
-                candidate_crl_issuers = certificate_registry.retrieve_by_name(certificate_list.issuer, cert_issuer)
-
-            for candidate_crl_issuer in candidate_crl_issuers:
-                direct_issuer = candidate_crl_issuer.subject == cert_issuer.subject
-
-                # In some cases an indirect CRL issuer is a certificate issued
-                # by the certificate issuer. However, we need to ensure that
-                # the candidate CRL issuer is not the certificate being checked,
-                # otherwise we may be checking an incorrect CRL and produce
-                # incorrect results.
-                indirect_issuer = candidate_crl_issuer.issuer == cert_issuer.subject
-                indirect_issuer = indirect_issuer and candidate_crl_issuer.sha256 != cert.sha256
-
-                if not direct_issuer and not indirect_issuer and not is_indirect:
-                    candidates_skipped += 1
-                    continue
-
-                # Step f
-                candidate_crl_issuer_path = None
-
-                if validation_context:
-                    candidate_crl_issuer_path = validation_context.check_validation(candidate_crl_issuer)
-
-                if candidate_crl_issuer_path is None:
-                    candidate_crl_issuer_path = path.copy().truncate_to_issuer(candidate_crl_issuer)
-                    candidate_crl_issuer_path.append(candidate_crl_issuer)
-                    try:
-                        # Pre-emptively mark a path as validated to prevent recursion
-                        if validation_context:
-                            validation_context.record_validation(candidate_crl_issuer, candidate_crl_issuer_path)
-
-                        temp_override = end_entity_name_override
-                        if temp_override is None and candidate_crl_issuer.sha256 != cert_issuer.sha256:
-                            temp_override = cert_description + ' CRL issuer'
-                        _validate_path(
-                            validation_context,
-                            candidate_crl_issuer_path,
-                            end_entity_name_override=temp_override
-                        )
-
-                    except (PathValidationError) as e:
-                        # If the validation did not work out, clear it
-                        if validation_context:
-                            validation_context.clear_validation(candidate_crl_issuer)
-
-                        # We let a revoked error fall through since step k will catch
-                        # it with a correct error message
-                        if isinstance(e, RevokedError):
-                            raise
-                        raise CRLValidationError('CRL issuer certificate path could not be validated')
-
-                key_usage_value = candidate_crl_issuer.key_usage_value
-                if key_usage_value and 'crl_sign' not in key_usage_value.native:
-                    unauthorized_certs += 1
-                    continue
-
-                try:
-                    # Step g
-                    _verify_signature(certificate_list, candidate_crl_issuer)
-
-                    crl_issuer = candidate_crl_issuer
-                    break
-
-                except (CRLValidationError):
-                    signatures_failed += 1
-                    continue
-
-            if crl_issuer is None:
-                if candidates_skipped == len(candidate_crl_issuers):
-                    issuer_failures += 1
-                else:
-                    if signatures_failed == len(candidate_crl_issuers):
-                        failures.append((
-                            'CRL signature could not be verified',
-                            certificate_list
-                        ))
-                    elif unauthorized_certs == len(candidate_crl_issuers):
-                        failures.append((
-                            'The CRL issuer is not authorized to sign CRLs',
-                            certificate_list
-                        ))
-                    else:
-                        failures.append((
-                            'Unable to locate CRL issuer certificate',
-                            certificate_list
-                        ))
+            try:
+                crl_issuer = await _find_crl_issuer(
+                    crl_issuer_name, certificate_list,
+                    cert=cert, cert_issuer=cert_issuer,
+                    cert_path=path,
+                    validation_context=validation_context,
+                    is_indirect=is_indirect,
+                    end_entity_name_override=end_entity_name_override,
+                    cert_description=cert_description
+                )
+            except CRLNoMatchesError:
+                # this no-match issue will be dealt with at a higher level later
+                issuer_failures += 1
                 continue
-            else:
-                validation_context.record_crl_issuer(certificate_list, crl_issuer)
+            except (CertificateFetchError, CRLValidationError) as e:
+                failures.append((e.args[0], certificate_list))
+                continue
 
         # Step b 1
         has_dp_crl_issuer = False
@@ -1894,7 +2020,8 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
                 if (crl_idp is None and delta_crl_idp is not None) or (crl_idp is not None and delta_crl_idp is None):
                     continue
 
-                if crl_idp and crl_idp.native != delta_crl_idp.native:
+                if crl_idp is not None \
+                        and crl_idp.native != delta_crl_idp.native:
                     continue
 
                 # Step c 3
@@ -1915,7 +2042,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
             reason_keys = idp_reasons
 
         if reason_keys is None:
-            interim_reasons = valid_reasons.copy()
+            interim_reasons = VALID_REVOCATION_REASONS.copy()
         else:
             interim_reasons = reason_keys
 
@@ -1923,7 +2050,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         # We don't skip a CRL if it only contains reasons already checked since
         # a certificate issuer can self-issue a new cert that is used for CRLs
 
-        if certificate_list.critical_extensions - known_extensions:
+        if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
             failures.append((
                 'One or more unrecognized critical extensions are present in '
                 'the CRL',
@@ -1931,7 +2058,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
             ))
             continue
 
-        if use_deltas and delta_certificate_list and delta_certificate_list.critical_extensions - known_extensions:
+        if use_deltas and delta_certificate_list and delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
             failures.append((
                 'One or more unrecognized critical extensions are present in '
                 'the delta CRL',
@@ -1943,7 +2070,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         if use_deltas and delta_certificate_list:
             try:
                 _verify_signature(delta_certificate_list, crl_issuer)
-            except (CRLValidationError):
+            except CRLValidationError:
                 failures.append((
                     'Delta CRL signature could not be verified',
                     certificate_list,
@@ -1976,7 +2103,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         if use_deltas and delta_certificate_list:
             try:
                 revoked_date, revoked_reason = _find_cert_in_list(cert, cert_issuer, delta_certificate_list, crl_issuer)
-            except (NotImplementedError):
+            except NotImplementedError:
                 failures.append((
                     'One or more critical extensions are present in the CRL '
                     'entry for the certificate',
@@ -1988,7 +2115,7 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
         if revoked_reason is None:
             try:
                 revoked_date, revoked_reason = _find_cert_in_list(cert, cert_issuer, certificate_list, crl_issuer)
-            except (NotImplementedError):
+            except NotImplementedError:
                 failures.append((
                     'One or more critical extensions are present in the CRL '
                     'entry for the certificate',
@@ -2020,9 +2147,9 @@ def verify_crl(cert, path, validation_context, use_deltas=True, cert_description
 
     # CRLs should not include this value, but at least one of the examples
     # from the NIST test suite does
-    checked_reasons -= set(['unused'])
+    checked_reasons -= {'unused'}
 
-    if checked_reasons != valid_reasons:
+    if checked_reasons != VALID_REVOCATION_REASONS:
         if total_crls == issuer_failures:
             raise CRLNoMatchesError(pretty_message(
                 '''
@@ -2082,6 +2209,12 @@ def _verify_signature(certificate_list, crl_issuer):
         raise CRLValidationError('Unable to verify the signature of the CertificateList')
 
 
+KNOWN_CRL_ENTRY_EXTENSIONS = {
+    'crl_reason', 'hold_instruction_code', 'invalidity_date',
+    'certificate_issuer'
+}
+
+
 def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
     """
     Looks for a cert in the list of revoked certificates
@@ -2109,17 +2242,10 @@ def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
     cert_serial = cert.serial_number
     issuer_name = issuer.subject
 
-    known_extensions = set([
-        'crl_reason',
-        'hold_instruction_code',
-        'invalidity_date',
-        'certificate_issuer'
-    ])
-
     last_issuer_name = crl_issuer.subject
     for revoked_cert in revoked_certificates:
         # If any unknown critical extensions, the entry can not be used
-        if revoked_cert.critical_extensions - known_extensions:
+        if revoked_cert.critical_extensions - KNOWN_CRL_ENTRY_EXTENSIONS:
             raise NotImplementedError()
 
         if revoked_cert.issuer_name and revoked_cert.issuer_name != last_issuer_name:
@@ -2135,12 +2261,12 @@ def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
         else:
             crl_reason = revoked_cert.crl_reason_value
 
-        return (revoked_cert['revocation_date'], crl_reason)
+        return revoked_cert['revocation_date'], crl_reason
 
-    return (None, None)
+    return None, None
 
 
-class PolicyTreeRoot():
+class PolicyTreeRoot:
     """
     A generic policy tree node, used for the root node in the tree
     """
@@ -2152,7 +2278,8 @@ class PolicyTreeRoot():
     # A list of PolicyTreeNode objects
     children = None
 
-    def __init__(self, valid_policy, qualifier_set, expected_policy_set):
+    @classmethod
+    def init_policy_tree(cls, valid_policy, qualifier_set, expected_policy_set):
         """
         Accepts values for a PolicyTreeNode that will be created at depth 0
 
@@ -2165,9 +2292,12 @@ class PolicyTreeRoot():
         :param expected_policy_set:
             A set of unicode strings containing policy names or OIDs
         """
+        root = PolicyTreeRoot()
+        root.add_child(valid_policy, qualifier_set, expected_policy_set)
+        return root
 
+    def __init__(self):
         self.children = []
-        self.add_child(valid_policy, qualifier_set, expected_policy_set)
 
     def add_child(self, valid_policy, qualifier_set, expected_policy_set):
         """
@@ -2271,11 +2401,11 @@ class PolicyTreeNode(PolicyTreeRoot):
         :param expected_policy_set:
             A set of unicode strings containing policy names or OIDs
         """
+        super().__init__()
 
         self.valid_policy = valid_policy
         self.qualifier_set = qualifier_set
         self.expected_policy_set = expected_policy_set
-        self.children = []
 
     def path_to_root(self):
         node = self

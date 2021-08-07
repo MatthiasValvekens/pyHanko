@@ -20,7 +20,7 @@ tests_root = os.path.dirname(__file__)
 fixtures_dir = os.path.join(tests_root, 'fixtures')
 
 
-class CertificateValidatorTests(unittest.TestCase):
+class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
 
     def _load_nist_cert(self, filename):
         return self._load_cert_object('nist_pkits', 'certs', filename)

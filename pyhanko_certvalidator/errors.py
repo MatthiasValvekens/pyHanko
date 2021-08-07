@@ -12,6 +12,10 @@ class PathBuildingError(PathError):
     pass
 
 
+class CertificateFetchError(PathBuildingError):
+    pass
+
+
 class DuplicateCertificateError(PathError):
 
     pass
@@ -24,6 +28,10 @@ class CRLValidationError(Exception):
 
 class CRLNoMatchesError(CRLValidationError):
 
+    pass
+
+
+class CRLFetchError(CRLValidationError):
     pass
 
 
@@ -49,6 +57,10 @@ class OCSPValidationIndeterminateError(OCSPValidationError):
     @property
     def failures(self):
         return self.args[1]
+
+
+class OCSPFetchError(OCSPValidationError):
+    pass
 
 
 class SoftFailError(Exception):

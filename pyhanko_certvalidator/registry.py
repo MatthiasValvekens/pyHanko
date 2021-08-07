@@ -4,12 +4,14 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 import abc
 from collections import defaultdict
 from typing import List
+import asyncio
 
 from asn1crypto import pem, x509
 from oscrypto import trust_list
 
 from ._errors import pretty_message
 from ._types import byte_cls, type_name
+from .fetchers import CertificateFetcher
 from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
 
@@ -172,7 +174,8 @@ class CertificateRegistry(SimpleCertificateStore):
     # Each value is a bool - if the certificate is a CA cert.
     _ca_lookup = None
 
-    def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None):
+    def __init__(self, trust_roots=None, extra_trust_roots=None,
+                 other_certs=None, *, cert_fetcher: CertificateFetcher = None):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -243,6 +246,8 @@ class CertificateRegistry(SimpleCertificateStore):
 
         for other_cert in other_certs:
             self.register(other_cert)
+
+        self.fetcher = cert_fetcher
 
     def _validate_unarmor(self, certs, var_name):
         """
@@ -368,17 +373,38 @@ class CertificateRegistry(SimpleCertificateStore):
         Builds a list of ValidationPath objects from a certificate in the
         operating system trust store to the end-entity certificate
 
+        .. warning::
+            Deprecated in favour of :meth:`async_build_paths`.
+
         :param end_entity_cert:
             A byte string of a DER or PEM-encoded X.509 certificate, or an
             instance of asn1crypto.x509.Certificate
 
         :return:
-            A list of pyhanko_certvalidator.path.ValidationPath objects that represent
-            the possible paths from the end-entity certificate to one of the CA
-            certs.
+            A list of pyhanko_certvalidator.path.ValidationPath objects that
+            represent the possible paths from the end-entity certificate to one
+            of the CA certs.
+        """
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self.async_build_paths(end_entity_cert))
+
+    async def async_build_paths(self, end_entity_cert):
+        """
+        Builds a list of ValidationPath objects from a certificate in the
+        operating system trust store to the end-entity certificate
+
+        :param end_entity_cert:
+            A byte string of a DER or PEM-encoded X.509 certificate, or an
+            instance of asn1crypto.x509.Certificate
+
+        :return:
+            A list of pyhanko_certvalidator.path.ValidationPath objects that
+            represent the possible paths from the end-entity certificate to one
+            of the CA certs.
         """
 
-        if not isinstance(end_entity_cert, byte_cls) and not isinstance(end_entity_cert, x509.Certificate):
+        if not isinstance(end_entity_cert, byte_cls) and \
+                not isinstance(end_entity_cert, x509.Certificate):
             raise TypeError(pretty_message(
                 '''
                 end_entity_cert must be a byte string or an instance of
@@ -396,7 +422,7 @@ class CertificateRegistry(SimpleCertificateStore):
         paths = []
         failed_paths = []
 
-        self._walk_issuers(path, paths, failed_paths)
+        await self._walk_issuers(path, paths, failed_paths)
 
         if len(paths) == 0:
             cert_name = end_entity_cert.subject.human_friendly
@@ -412,7 +438,7 @@ class CertificateRegistry(SimpleCertificateStore):
 
         return paths
 
-    def _walk_issuers(self, path, paths, failed_paths):
+    async def _walk_issuers(self, path, paths, failed_paths):
         """
         Recursively looks through the list of known certificates for the issuer
         of the certificate specified, stopping once the certificate in question
@@ -439,11 +465,25 @@ class CertificateRegistry(SimpleCertificateStore):
         new_branches = 0
         for issuer in self._possible_issuers(path.first):
             try:
-                self._walk_issuers(path.copy().prepend(issuer), paths, failed_paths)
+                await self._walk_issuers(
+                    path.copy().prepend(issuer), paths, failed_paths
+                )
                 new_branches += 1
-            except (DuplicateCertificateError):
+            except DuplicateCertificateError:
                 pass
 
+        if not new_branches and self.fetcher is not None:
+            # attempt to download certs if there's nothing in the context
+            async for issuer in self.fetcher.fetch_cert_issuers(path.first):
+                # register the cert for future reference
+                self.add_other_cert(issuer)
+                try:
+                    await self._walk_issuers(
+                        path.copy().prepend(issuer), paths, failed_paths
+                    )
+                    new_branches += 1
+                except DuplicateCertificateError:
+                    pass
         if not new_branches:
             failed_paths.append(path)
 
