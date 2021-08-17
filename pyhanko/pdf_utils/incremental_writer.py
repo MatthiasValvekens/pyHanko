@@ -28,13 +28,20 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
     modified directly (e.g. when it contains digital signatures).
     It has the additional advantage of providing an automatic audit trail of
     sorts.
+
+    :param input_stream:
+        Input stream to read current revision from.
+    :param prev:
+        Explicitly pass in a PDF reader. This parameter is internal API.
     """
 
     IO_CHUNK_SIZE = 4096
 
-    def __init__(self, input_stream):
+    def __init__(self, input_stream, prev: PdfFileReader = None):
         self.input_stream = input_stream
-        self.prev = prev = PdfFileReader(input_stream)
+        if prev is None:
+            prev = PdfFileReader(input_stream)
+        self.prev = prev
         self.trailer = trailer = prev.trailer
         root_ref = trailer.raw_get('/Root')
         try:
@@ -53,6 +60,17 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.ensure_output_version(self.__class__.output_version)
 
         self.security_handler = prev.security_handler
+
+    @classmethod
+    def from_reader(cls, reader: PdfFileReader) -> 'IncrementalPdfFileWriter':
+        """
+        Instantiate an incremental writer from a PDF file reader.
+
+        :param reader:
+            A :class:`.PdfFileReader` object with a PDF to extend.
+        """
+
+        return IncrementalPdfFileWriter(reader.stream, prev=reader)
 
     def ensure_output_version(self, version):
         # check header
