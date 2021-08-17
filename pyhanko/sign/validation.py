@@ -56,6 +56,8 @@ __all__ = [
     'ValidationInfoReadingError', 'SigSeedValueValidationError'
 ]
 
+from ..pdf_utils.writer import BasePdfFileWriter
+
 logger = logging.getLogger(__name__)
 
 
@@ -2089,7 +2091,8 @@ class DocumentSecurityStore:
     Representation of a DSS in Python.
     """
 
-    def __init__(self, writer, certs=None, ocsps=None, crls=None,
+    def __init__(self, writer: BasePdfFileWriter,
+                 certs=None, ocsps=None, crls=None,
                  vri_entries=None, backing_pdf_object=None):
         self.vri_entries = vri_entries if vri_entries is not None else {}
         self.certs = certs if certs is not None else {}
@@ -2113,6 +2116,17 @@ class DocumentSecurityStore:
             crl_bytes = crl_ref.get_object().data
             crls_seen[crl_bytes] = crl_ref
         self._crls_seen = crls_seen
+        self._modified = False
+
+    @property
+    def modified(self):
+        return self._modified
+
+    def _mark_modified(self):
+        if not self._modified:
+            self._modified = True
+            if self.backing_pdf_object is not None:
+                self.writer.update_container(self.backing_pdf_object)
 
     def _cms_objects_to_streams(self, objs, seen, dest):
         for obj in objs:
@@ -2123,6 +2137,7 @@ class DocumentSecurityStore:
                 ref = self.writer.add_object(
                     generic.StreamObject(stream_data=obj_bytes)
                 )
+                self._mark_modified()
                 seen[obj_bytes] = ref
                 dest.append(ref)
                 yield ref
@@ -2146,6 +2161,7 @@ class DocumentSecurityStore:
         ref = self.writer.add_object(
             generic.StreamObject(stream_data=cert.dump())
         )
+        self._mark_modified()
         self.certs[cert.issuer_serial] = ref
         return ref
 
@@ -2210,6 +2226,7 @@ class DocumentSecurityStore:
             self.vri_entries[identifier] = self.writer.add_object(
                 vri.as_pdf_object()
             )
+            self._mark_modified()
 
     def as_pdf_object(self):
         """
@@ -2286,11 +2303,9 @@ class DocumentSecurityStore:
             DSS.
         """
         try:
-            dss_ref = handler.root.raw_get(pdf_name('/DSS'))
+            dss_dict = handler.root['/DSS']
         except KeyError as e:
             raise NoDSSFoundError() from e
-
-        dss_dict = dss_ref.get_object()
 
         cert_refs = {}
         cert_ref_list = get_and_apply(dss_dict, '/Certs', list, default=())
@@ -2320,9 +2335,8 @@ class DocumentSecurityStore:
             vri_entries = None
 
         # if the handler is a writer, the DSS will support updates
-        if isinstance(handler, IncrementalPdfFileWriter):
+        if isinstance(handler, BasePdfFileWriter):
             writer = handler
-            writer.mark_update(dss_ref)
         else:
             writer = None
 
@@ -2336,19 +2350,20 @@ class DocumentSecurityStore:
         return dss
 
     @classmethod
-    def add_dss(cls, output_stream, sig_contents, *, certs=None,
-                ocsps=None, crls=None, paths=None, validation_context=None):
+    def supply_dss_in_writer(cls, pdf_out: BasePdfFileWriter,
+                             sig_contents, *, certs=None,
+                             ocsps=None, crls=None, paths=None,
+                             validation_context=None) \
+            -> 'DocumentSecurityStore':
         """
         Add or update a DSS, and optionally associate the new information with a
         VRI entry tied to a signature object.
 
-        The result is applied to the output stream as an incremental update.
-
         You can either specify the CMS objects to include directly, or
         pass them in as output from `pyhanko_certvalidator`.
 
-        :param output_stream:
-            Output stream to write to.
+        :param pdf_out:
+            PDF writer to write to.
         :param sig_contents:
             Contents of the new signature (used to compute the VRI hash), as
             as a hexadecimal string, including any padding.
@@ -2365,20 +2380,20 @@ class DocumentSecurityStore:
             to the DSS.
         :param validation_context:
             Validation context from which to draw OCSP responses and CRLs.
+        :return:
+            a :class:`DocumentSecurityStore` object containing both the new
+            and existing contents of the DSS (if any).
         """
-        writer = IncrementalPdfFileWriter(output_stream)
-
         try:
-            dss = cls.read_dss(writer)
+            dss = cls.read_dss(pdf_out)
             created = False
         except ValidationInfoReadingError:
             created = True
-            dss = cls(writer=writer)
+            dss = cls(writer=pdf_out)
 
         if sig_contents is not None:
-            identifier = DocumentSecurityStore.sig_content_identifier(
-                sig_contents
-            )
+            identifier = \
+                DocumentSecurityStore.sig_content_identifier(sig_contents)
         else:
             identifier = None
 
@@ -2406,7 +2421,45 @@ class DocumentSecurityStore:
         # if we're adding a fresh DSS, we need to register it.
 
         if created:
-            dss_ref = writer.add_object(dss_dict)
-            writer.root[pdf_name('/DSS')] = dss_ref
-            writer.update_root()
-        writer.write_in_place()
+            dss_ref = pdf_out.add_object(dss_dict)
+            pdf_out.root[pdf_name('/DSS')] = dss_ref
+            pdf_out.update_root()
+        return dss
+
+    @classmethod
+    def add_dss(cls, output_stream, sig_contents, *, certs=None,
+                ocsps=None, crls=None, paths=None, validation_context=None,
+                force_write=False):
+        """
+        Wrapper around :meth:`supply_dss_in_writer`.
+
+        The result is applied to the output stream as an incremental update.
+
+        :param output_stream:
+            Output stream to write to.
+        :param sig_contents:
+            Contents of the new signature (used to compute the VRI hash), as
+            as a hexadecimal string, including any padding.
+            If ``None``, the information will not be added to any VRI
+            dictionary.
+        :param certs:
+            Certificates to include in the VRI entry.
+        :param ocsps:
+            OCSP responses to include in the VRI entry.
+        :param crls:
+            CRLs to include in the VRI entry.
+        :param paths:
+            Validation paths that have been established, and need to be added
+            to the DSS.
+        :param force_write:
+            Force a write even if the DSS doesn't have any new content.
+        :param validation_context:
+            Validation context from which to draw OCSP responses and CRLs.
+        """
+        pdf_out = IncrementalPdfFileWriter(output_stream)
+        dss = cls.supply_dss_in_writer(
+            pdf_out, sig_contents, certs=certs, ocsps=ocsps,
+            crls=crls, paths=paths, validation_context=validation_context
+        )
+        if force_write or dss.modified:
+            pdf_out.write_in_place()
