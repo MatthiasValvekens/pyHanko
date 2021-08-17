@@ -7,7 +7,6 @@ import uuid
 import tzlocal
 from datetime import datetime
 from dataclasses import dataclass, field
-from io import BytesIO
 from typing import Set, Optional, List, Union, IO, Tuple
 
 from asn1crypto import cms, ocsp, crl
@@ -194,21 +193,6 @@ class PdfSignatureMetadata:
     """
 
 
-def _finalise_output(orig_output, returned_output):
-    # The internal API transparently replaces non-readable/seekable
-    # buffers with BytesIO for signing operations, but we don't want to
-    # expose that to the public API user.
-
-    if orig_output is not None and orig_output is not returned_output:
-        # original output is a write-only buffer
-        assert isinstance(returned_output, BytesIO)
-        raw_buf = returned_output.getbuffer()
-        orig_output.write(raw_buf)
-        raw_buf.release()
-        return orig_output
-    return returned_output
-
-
 def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
     """
     Helper function to ensure that the output PDF is at least PDF 1.7, and that
@@ -341,7 +325,7 @@ class PdfTimeStamper:
                 paths=validation_paths, validation_context=validation_context
             )
 
-        return _finalise_output(output, res_output)
+        return misc.finalise_output(output, res_output)
 
     def update_archival_timestamp_chain(
             self, reader: PdfFileReader, validation_context, in_place=True,
@@ -720,7 +704,7 @@ class PdfSigner:
         )
         return (
             prepared_br_digest, tbs_document,
-            _finalise_output(output, res_output)
+            misc.finalise_output(output, res_output)
         )
 
     def sign_pdf(self, pdf_out: BasePdfFileWriter,
@@ -788,7 +772,7 @@ class PdfSigner:
         )
         # we put the finalisation step after the DSS manipulations, since
         # otherwise we'd also run into issues with non-seekable output buffers
-        return _finalise_output(output, res_output)
+        return misc.finalise_output(output, res_output)
 
 
 @dataclass(frozen=True)

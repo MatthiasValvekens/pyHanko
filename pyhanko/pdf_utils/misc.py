@@ -16,9 +16,13 @@ __all__ = [
     'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError',
     'IndirectObjectExpected',
     'get_and_apply', 'get_courier', 'OrderedEnum',
-    'DEFAULT_CHUNK_SIZE', 'is_regular_character',
+    'is_regular_character',
     'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
-    'skip_over_comment', 'instance_test', 'peek'
+    'skip_over_whitespace', 'skip_over_comment', 'instance_test', 'peek',
+    'assert_writable_and_random_access', 'prepare_rw_output_stream',
+    'finalise_output',
+    'DEFAULT_CHUNK_SIZE', 'chunked_write', 'chunked_digest', 'chunk_stream',
+    'ConsList', 'Singleton', 'rd'
 ]
 
 from io import BytesIO
@@ -374,6 +378,26 @@ class ConsList:
         return f"ConsList({list(reversed(list(self)))})"
 
 
+def assert_writable_and_random_access(output):
+    """
+    Raise an error if the buffer in question is not writable, and return
+    a boolean to indicate whether it supports random-access reading.
+
+    :param output:
+    :return:
+    """
+    # Rationale for the explicit writability check:
+    #  If the output buffer is not readable or not seekable, it's
+    #  about to be replaced with a BytesIO instance, and in that
+    #  case, the write error would only happen *after* the signing/updating
+    #  operations are done. We want to avoid that scenario.
+    if not output.writable():
+        raise IOError(
+            "Output buffer is not writable"
+        )  # pragma: nocover
+    return output.seekable() and output.readable()
+
+
 def prepare_rw_output_stream(output):
     """
     Prepare an output stream that supports both reading and writing.
@@ -397,16 +421,26 @@ def prepare_rw_output_stream(output):
     if output is None:
         output = BytesIO()
     else:
-        # Rationale for the explicit writability check:
-        #  If the output buffer is not readable or not seekable, it's
-        #  about to be replaced with a BytesIO instance, and in that
-        #  case, the write error would only happen *after* the signing
-        #  operations are done. We want to avoid that scenario.
-        if not output.writable():
-            raise IOError(
-                "Output buffer is not writable"
-            )  # pragma: nocover
-        if not output.seekable() or not output.readable():
+        if not assert_writable_and_random_access(output):
             output = BytesIO()
 
     return output
+
+
+def finalise_output(orig_output, returned_output):
+    """
+    Several internal APIs transparently replaces non-readable/seekable
+    buffers with BytesIO for signing operations, but we don't want to
+    expose that to the public API user.
+    This internal API function handles the unwrapping.
+    """
+
+    if orig_output is not None and orig_output is not returned_output:
+        # original output is a write-only buffer
+        assert isinstance(returned_output, BytesIO)
+        raw_buf = returned_output.getbuffer()
+        orig_output.write(raw_buf)
+        raw_buf.release()
+        return orig_output
+    return returned_output
+
