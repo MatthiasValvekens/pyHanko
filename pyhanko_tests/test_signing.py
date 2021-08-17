@@ -1,4 +1,5 @@
 import hashlib
+import os
 from datetime import datetime
 
 import pytest
@@ -2502,6 +2503,41 @@ def test_indir_ref_in_sigref_dict(requests_mock):
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     val_trusted(emb, extd=True)
+
+
+@pytest.mark.parametrize('in_place', [True, False])
+@freeze_time('2020-11-01')
+def test_no_revinfo_to_be_added(requests_mock, in_place):
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+
+    vc = live_testing_vc(requests_mock)
+    signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', embed_validation_info=True,
+            validation_context=vc, subfilter=fields.SigSeedSubFilter.PADES
+        ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True,
+    )
+
+    orig_file_length = buf.seek(0, os.SEEK_END)
+    r = PdfFileReader(buf)
+    emb_sig = r.embedded_signatures[0]
+    orig_dss = DocumentSecurityStore.read_dss(r)
+    assert len(orig_dss.ocsps) == 1
+    assert len(orig_dss.crls) == 1
+    # test with same vc, this shouldn't change anything
+    # Turn off VRI updates, since those always trigger a write.
+    output = add_validation_info(
+        emb_sig, vc, in_place=in_place, add_vri_entry=False
+    )
+    if in_place:
+        assert output is r.stream
+
+    new_file_length = output.seek(0, os.SEEK_END)
+    assert orig_file_length == new_file_length
+    new_dss = DocumentSecurityStore.read_dss(PdfFileReader(output))
+    assert len(new_dss.ocsps) == 1
+    assert len(new_dss.crls) == 1
 
 
 @pytest.mark.parametrize('with_vri', [True, False])

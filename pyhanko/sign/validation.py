@@ -2022,7 +2022,7 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
 def add_validation_info(embedded_sig: EmbeddedPdfSignature,
                         validation_context: ValidationContext,
                         skip_timestamp=False, add_vri_entry=True,
-                        in_place=False, output=None,
+                        in_place=False, output=None, force_write=False,
                         chunk_size=DEFAULT_CHUNK_SIZE):
     """
     Add validation info (CRLs, OCSP responses, extra certificates) for a
@@ -2050,40 +2050,54 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
     :param chunk_size:
         Chunk size parameter to use when copying output to a new stream
         (irrelevant if ``in_place`` is ``True``).
+    :param force_write:
+        Force a new revision to be written, even if not necessary (i.e.
+        when all data in the validation context is already present in the DSS).
     :return:
         The (file-like) output object to which the result was written.
     """
 
     reader: PdfFileReader = embedded_sig.reader
+    # Take care of this first, so we get any errors re: stream properties
+    # out of the way before doing the (potentially) expensive validation
+    # operations
     if in_place:
-        output = reader.stream
-    # Take care of this first, so we get any errors re: stream properties out
-    # of the way before doing the (potentially) expensive validation operations
-    output = misc.prepare_rw_output_stream(output)
-
-    # if the output is not the same as the input reader's stream, copy the
-    # original file contents to the output before calling add_dss
-    if not in_place:
-        temp_buffer = bytearray(chunk_size)
-        reader.stream.seek(0)
-        misc.chunked_write(temp_buffer, reader.stream, output)
+        working_output = output = reader.stream
+        # Note: random-access I/O is checked at this point.
+        # At the time of writing, this means that all this assertion does is
+        # raise an error if the output is not writable.
+        # We put it in for forwards compatibility & consistency with future
+        # changes to I/O internals.
+        misc.assert_writable_and_random_access(output)
+    else:
+        working_output = misc.prepare_rw_output_stream(output)
 
     paths = collect_validation_info(
         embedded_sig, validation_context, skip_timestamp=skip_timestamp
     )
 
-    # TODO Since add_dss has to re-parse the xref table, this is suboptimal
-    #  in terms of efficiency, but we can iterate on that later
     if add_vri_entry:
         sig_contents = embedded_sig.pkcs7_content.hex().encode('ascii')
     else:
         sig_contents = None
 
-    DocumentSecurityStore.add_dss(
-        output, sig_contents, validation_context=validation_context,
+    pdf_out = IncrementalPdfFileWriter.from_reader(reader)
+    pdf_out.IO_CHUNK_SIZE = chunk_size
+    resulting_dss = DocumentSecurityStore.supply_dss_in_writer(
+        pdf_out, sig_contents, validation_context=validation_context,
         paths=paths
     )
-    return output
+    if force_write or resulting_dss.modified:
+        if in_place:
+            pdf_out.write_in_place()
+        else:
+            pdf_out.write(working_output)
+    elif not in_place:
+        # not in place, but we don't have anything to add -> copy the input
+        # buffer
+        reader.stream.seek(0)
+        misc.chunked_write(bytearray(chunk_size), reader.stream, working_output)
+    return misc.finalise_output(output, working_output)
 
 
 class DocumentSecurityStore:
@@ -2221,6 +2235,8 @@ class DocumentSecurityStore:
         #  we should take that into account
         cert_refs.update(set(self._embed_certs_from_ocsp(ocsps)))
 
+        # TODO do a better job of determining whether the VRI dictionary even
+        #  needs updating.
         if identifier is not None:
             vri = VRI(certs=cert_refs, ocsps=ocsp_refs, crls=crl_refs)
             self.vri_entries[identifier] = self.writer.add_object(
