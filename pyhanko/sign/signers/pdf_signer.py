@@ -378,11 +378,15 @@ class PdfSignatureMetadata:
 
     dss_settings: DSSContentSettings = DSSContentSettings()
     """
+    .. versionadded:: 0.8.0
+
     DSS output settings. See :class:`.DSSContentSettings`.
     """
 
     tight_size_estimates: bool = False
     """
+    .. versionadded:: 0.8.0
+
     When estimating the size of a signature container,
     do not add safety margins.
     
@@ -1579,11 +1583,15 @@ class PostSignInstructions:
 
     dss_settings: DSSContentSettings = DSSContentSettings()
     """
+    .. versionadded:: 0.8.0
+
     Settings to fine-tune DSS generation.
     """
 
     tight_size_estimates: bool = False
     """
+    .. versionadded:: 0.8.0
+
     When estimating the size of a document timestamp container,
     do not add safety margins.
 
