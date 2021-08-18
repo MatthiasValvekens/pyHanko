@@ -18,7 +18,7 @@ from asn1crypto.algos import SignedDigestAlgorithm
 from pyhanko.sign.general import (
     CertificateStore, SimpleCertificateStore,
     SigningError, optimal_pss_params, simple_cms_attribute,
-    get_pyca_cryptography_hash, as_signing_certificate,
+    get_pyca_cryptography_hash, as_signing_certificate_v2,
     load_private_key_from_pemder, load_cert_from_pemder,
     load_certs_from_pemder, _process_pss_params,
     _translate_pyca_cryptography_cert_to_asn1,
@@ -253,8 +253,8 @@ class Signer:
             simple_cms_attribute('message_digest', data_digest),
             # required by PAdES
             simple_cms_attribute(
-                'signing_certificate',
-                as_signing_certificate(self.signing_cert)
+                'signing_certificate_v2',
+                as_signing_certificate_v2(self.signing_cert)
             )
         ]
 

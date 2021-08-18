@@ -40,7 +40,8 @@ from pyhanko.sign import timestamps, fields, signers
 from pyhanko.sign.general import (
     SigningError, SignatureValidationError, validate_sig_integrity,
     load_cert_from_pemder, find_cms_attribute, WeakHashAlgorithmError,
-    SimpleCertificateStore, load_certs_from_pemder
+    SimpleCertificateStore, load_certs_from_pemder, as_signing_certificate,
+    as_signing_certificate_v2
 )
 from pyhanko.sign.signers import PdfTimeStamper, cms_embedder
 from pyhanko.sign.validation import (
@@ -3631,3 +3632,89 @@ def test_sign_tight_container_with_lta(requests_mock):
 
     _check(r.embedded_regular_signatures[0])
     _check(r.embedded_timestamp_signatures[0])
+
+
+@pytest.mark.parametrize("with_issser", [False, True])
+def test_old_style_signing_cert_attr_ok(with_issser):
+    if with_issser:
+        fname = 'pades-with-old-style-signing-cert-attr-issser.pdf'
+    else:
+        # this file has an old-style signing cert attr without issuerSerial
+        fname = 'pades-with-old-style-signing-cert-attr.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as f:
+        r = PdfFileReader(f)
+        s = r.embedded_signatures[0]
+        assert s.field_name == 'Sig1'
+        val_trusted(s)
+
+
+@pytest.mark.parametrize("with_issser", [False, True])
+def test_old_style_signing_cert_attr_mismatch(with_issser):
+
+    if with_issser:
+        # this file has an old-style signing cert attr with issuerSerial
+        fname = 'pades-with-old-style-signing-cert-attr-issser.pdf'
+    else:
+        fname = 'pades-with-old-style-signing-cert-attr.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as f:
+        r = PdfFileReader(f)
+        s = r.embedded_signatures[0]
+        signer_info = s.signer_info
+        digest = s.compute_digest()
+    # signer1-long has the same key as signer1
+    alt_cert = TESTING_CA.get_cert(CertLabel('signer1-long'))
+    signer_info['sid'] = {
+        'issuer_and_serial_number': cms.IssuerAndSerialNumber({
+            'issuer': alt_cert.issuer,
+            'serial_number': alt_cert.serial_number
+        })
+    }
+    with pytest.raises(SignatureValidationError,
+                       match="Signing certificate attribute does not match "):
+        validate_sig_integrity(
+            signer_info, alt_cert, expected_content_type='data',
+            actual_digest=digest
+        )
+
+
+def test_old_style_signing_cert_attr_get():
+    cert = TESTING_CA.get_cert(CertLabel('signer1'))
+    v2 = as_signing_certificate_v2(cert, 'sha1')['certs'][0]
+    v1 = as_signing_certificate(cert)['certs'][0]
+    assert v1['issuer_serial'].dump() == v2['issuer_serial'].dump()
+    assert v1['cert_hash'].dump() == v2['cert_hash'].dump()
+
+
+def test_signing_cert_attr_malformed_issuer():
+    from asn1crypto import x509
+    cert = TESTING_CA.get_cert(CertLabel('signer1'))
+    bogus_attr = as_signing_certificate_v2(cert)
+    bogus_attr['certs'][0]['issuer_serial']['issuer'][0] = x509.GeneralName(
+        {'dns_name': 'www.example.com'}
+    )
+    output = _tamper_with_signed_attrs(
+        'signing_certificate_v2', resign=True,
+        replace_with=bogus_attr
+    )
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+    with pytest.raises(SignatureValidationError,
+                       match="Signing certificate attribute does not match "):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )
+
+
+def test_signing_cert_attr_duplicated():
+    output = _tamper_with_signed_attrs(
+        'signing_certificate_v2', resign=True, duplicate=True
+    )
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+    with pytest.raises(SignatureValidationError,
+                       match="Wrong cardinality for signing cert"):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )

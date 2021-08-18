@@ -38,7 +38,7 @@ from .general import (
     UnacceptableSignerError, KeyUsageConstraints,
     SignatureValidationError,
     validate_sig_integrity, DEFAULT_WEAK_HASH_ALGORITHMS,
-    get_pyca_cryptography_hash, extract_message_digest,
+    get_pyca_cryptography_hash, extract_message_digest, match_issuer_serial
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -84,9 +84,7 @@ class SigSeedValueValidationError(SignatureValidationError):
 
 def _get_signer_predicate(sid: cms.SignerIdentifier):
     if sid.name == 'issuer_and_serial_number':
-        issuer = sid.chosen['issuer']
-        serial_number = sid.chosen['serial_number'].native
-        return lambda c: c.issuer == issuer and c.serial_number == serial_number
+        return lambda c: match_issuer_serial(sid.chosen, c)
     elif sid.name == 'subject_key_identifier':
         # subject key identifier (not all certs have this, but that shouldn't
         # be an issue in this case)

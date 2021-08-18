@@ -8,7 +8,7 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Set, Optional, Tuple, Iterable
+from typing import ClassVar, Set, Optional, Tuple, Iterable, Union
 
 import hashlib
 
@@ -35,7 +35,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 
 __all__ = [
-    'SignatureStatus', 'simple_cms_attribute', 'find_cms_attribute',
+    'SignatureStatus', 'simple_cms_attribute',
+    'find_cms_attribute', 'find_unique_cms_attribute',
     'extract_message_digest', 'validate_sig_integrity',
     'CertificateStore', 'SimpleCertificateStore',
     'KeyUsageConstraints',
@@ -44,7 +45,8 @@ __all__ = [
     'load_certs_from_pemder', 'load_cert_from_pemder',
     'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
     'DEFAULT_WEAK_HASH_ALGORITHMS',
-    'optimal_pss_params', 'as_signing_certificate'
+    'optimal_pss_params', 'as_signing_certificate',
+    'as_signing_certificate_v2', 'match_issuer_serial'
 ]
 
 logger = logging.getLogger(__name__)
@@ -419,17 +421,35 @@ def find_cms_attribute(attrs, name):
     raise KeyError(f'Unable to locate attribute {name}.')
 
 
-# TODO perhaps phasing this out in favour of ESS SigningCertificate V2
-#  (which allows better hash algorithms) would be preferable.
-#  See RFC 5035.
+def find_unique_cms_attribute(attrs, name):
+    """
+    Find and return a unique CMS attribute value of a given type.
+
+    :param attrs:
+        The :class:`.cms.CMSAttributes` object.
+    :param name:
+        The attribute type as a string (as defined in ``asn1crypto``).
+    :return:
+        The value associated with the requested type, if present.
+    :raise KeyError:
+        Raised when no such type entry could be found in the
+        :class:`.cms.CMSAttributes` object.
+    :raise ValueError:
+        Raised when the attribute's cardinality is not 1.
+    """
+    values = find_cms_attribute(attrs, name)
+    if len(values) != 1:
+        raise ValueError(
+            f"Expected single-valued {name} attribute, but found "
+            f"{len(values)} values"
+        )
+    return values[0]
+
 
 def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
     """
     Format an ASN.1 ``SigningCertificate`` object, where the certificate
     is identified by its SHA-1 digest.
-
-    .. note::
-        This use of SHA-1 is not cryptographic in nature.
 
     :param cert:
         An X.509 certificate.
@@ -440,9 +460,139 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
     # see RFC 2634, § 5.4.1
     return tsp.SigningCertificate({
         'certs': [
-            tsp.ESSCertID({'cert_hash': hashlib.sha1(cert.dump()).digest()})
+            tsp.ESSCertID({
+                'cert_hash': hashlib.sha1(cert.dump()).digest(),
+                'issuer_serial': {
+                    'issuer': [
+                        x509.GeneralName({'directory_name': cert.issuer})
+                    ],
+                    'serial_number': cert['tbs_certificate']['serial_number']
+                }
+            })
         ]
     })
+
+
+def as_signing_certificate_v2(cert: x509.Certificate, hash_algo='sha256') \
+        -> tsp.SigningCertificateV2:
+    """
+    Format an ASN.1 ``SigningCertificateV2`` value, where the certificate
+    is identified by the hash algorithm specified.
+
+    :param cert:
+        An X.509 certificate.
+    :param hash_algo:
+        Hash algorithm to use to digest the certificate.
+        Default is SHA-256.
+    :return:
+        A :class:`tsp.SigningCertificateV2` object referring to the original
+        certificate.
+    """
+
+    # see RFC 5035
+    hash_spec = get_pyca_cryptography_hash(hash_algo)
+    md = hashes.Hash(hash_spec)
+    md.update(cert.dump())
+    digest_value = md.finalize()
+    return tsp.SigningCertificateV2({
+        'certs': [
+            tsp.ESSCertIDv2({
+                'hash_algorithm': {'algorithm': hash_algo},
+                'cert_hash': digest_value,
+                'issuer_serial': {
+                    'issuer': [
+                        x509.GeneralName({'directory_name': cert.issuer})
+                    ],
+                    'serial_number': cert['tbs_certificate']['serial_number']
+                }
+            })
+        ]
+    })
+
+
+def check_ess_certid(cert: x509.Certificate,
+                     certid: Union[tsp.ESSCertID, tsp.ESSCertIDv2]):
+    if isinstance(certid, tsp.ESSCertID):
+        hash_algo = 'sha1'
+    else:
+        hash_algo = certid['hash_algorithm']['algorithm'].native
+
+    hash_spec = get_pyca_cryptography_hash(hash_algo)
+    md = hashes.Hash(hash_spec)
+    md.update(cert.dump())
+    digest_value = md.finalize()
+    expected_digest_value = certid['cert_hash'].native
+    if digest_value != expected_digest_value:
+        return False
+    expected_issuer_serial: tsp.IssuerSerial = certid['issuer_serial']
+    return (
+        not expected_issuer_serial or
+        match_issuer_serial(expected_issuer_serial, cert)
+    )
+
+
+def match_issuer_serial(expected_issuer_serial:
+                        Union[cms.IssuerAndSerialNumber, tsp.IssuerSerial],
+                        cert: x509.Certificate) -> bool:
+    """
+    Match the issuer and serial number of an X.509 certificate against some
+    expected identifier.
+    
+    :param expected_issuer_serial: 
+        A certificate identifier, either :class:`cms.IssuerAndSerialNumber`
+        or :class:`tsp.IssuerSerial`.
+    :param cert: 
+        An :class:`x509.Certificate`.
+    :return:
+        ``True`` if there's a match, ``False`` otherwise.
+    """
+    # don't decode
+    # (well, the decoded version is probably cached somewhere anyhow, but
+    # decoding serial numbers as integers isn't terribly good practice)
+    serial_asn1 = cert['tbs_certificate']['serial_number']
+    expected_issuer = expected_issuer_serial['issuer']
+
+    # This case is for IssuerSerial in an ESSCertId.
+    # Since this function applies to regular certs (i.e. not attribute certs)
+    # we need to check that the expected issuer value only contains one
+    # name of type directoryName.
+    if isinstance(expected_issuer, x509.GeneralNames):
+        if len(expected_issuer) != 1 or \
+                expected_issuer[0].name != 'directory_name':
+            return False
+        expected_issuer = expected_issuer[0].chosen
+    return (
+        expected_issuer == cert.issuer
+        and expected_issuer_serial['serial_number'] == serial_asn1
+    )
+
+
+def _check_signing_certificate(cert: x509.Certificate,
+                               signed_attrs: cms.CMSAttributes):
+    # TODO check certificate policies, enforce restrictions on chain of trust
+    # TODO document and/or mark as internal API explicitly
+    def _grab(attr_name):
+        try:
+            return find_unique_cms_attribute(signed_attrs, attr_name)
+        except KeyError:
+            return None
+        except ValueError as e:
+            raise SignatureValidationError(
+                "Wrong cardinality for signing certificate attribute"
+            ) from e
+
+    attr = _grab('signing_certificate_v2')
+    if attr is None:
+        attr = _grab('signing_certificate')
+
+    if attr is None:
+        # if neither attr is present -> no constraints
+        return True
+
+    # we only care about the first value, the others limit the set of applicable
+    # CA certs
+    certid = attr['certs'][0]
+    return check_ess_certid(cert, certid)
 
 
 class CertificateStore:
@@ -839,6 +989,14 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         except ValueError:
             raise SignatureValidationError(
                 'Multiple CMS protection attributes present'
+            )
+
+        # check the signing-certificate or signing-certificate-v2 attr
+        if not _check_signing_certificate(cert, signed_attrs):
+            raise SignatureValidationError(
+                f"Signing certificate attribute does not match selected "
+                f"signer's certificate for subject"
+                f"\"{cert.subject.human_friendly}\"."
             )
 
         try:

@@ -327,8 +327,8 @@ class DummyTimeStamper(TimeStamper):
                 'signing_time', cms.Time({'utc_time': core.UTCTime(dt)})
             ),
             simple_cms_attribute(
-                'signing_certificate',
-                general.as_signing_certificate(self.tsa_cert)
+                'signing_certificate_v2',
+                general.as_signing_certificate_v2(self.tsa_cert)
             ),
             simple_cms_attribute('message_digest', message_digest_value),
         ])
