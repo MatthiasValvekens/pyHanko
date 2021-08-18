@@ -41,6 +41,7 @@ __all__ = [
     'CertificateStore', 'SimpleCertificateStore',
     'KeyUsageConstraints',
     'SigningError', 'UnacceptableSignerError', 'WeakHashAlgorithmError',
+    'NonexistentAttributeError', 'MultivaluedAttributeError',
     'SignatureValidationError',
     'load_certs_from_pemder', 'load_cert_from_pemder',
     'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
@@ -401,6 +402,14 @@ def simple_cms_attribute(attr_type, value):
     })
 
 
+class NonexistentAttributeError(KeyError):
+    pass
+
+
+class MultivaluedAttributeError(ValueError):
+    pass
+
+
 def find_cms_attribute(attrs, name):
     """
     Find and return CMS attribute values of a given type.
@@ -411,14 +420,14 @@ def find_cms_attribute(attrs, name):
         The attribute type as a string (as defined in ``asn1crypto``).
     :return:
         The values associated with the requested type, if present.
-    :raise KeyError:
+    :raise NonexistentAttributeError:
         Raised when no such type entry could be found in the
         :class:`.cms.CMSAttributes` object.
     """
     for attr in attrs:
         if attr['type'].native == name:
             return attr['values']
-    raise KeyError(f'Unable to locate attribute {name}.')
+    raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
 
 
 def find_unique_cms_attribute(attrs, name):
@@ -431,15 +440,15 @@ def find_unique_cms_attribute(attrs, name):
         The attribute type as a string (as defined in ``asn1crypto``).
     :return:
         The value associated with the requested type, if present.
-    :raise KeyError:
+    :raise NonexistentAttributeError:
         Raised when no such type entry could be found in the
         :class:`.cms.CMSAttributes` object.
-    :raise ValueError:
+    :raise MultivaluedAttributeError:
         Raised when the attribute's cardinality is not 1.
     """
     values = find_cms_attribute(attrs, name)
     if len(values) != 1:
-        raise ValueError(
+        raise MultivaluedAttributeError(
             f"Expected single-valued {name} attribute, but found "
             f"{len(values)} values"
         )
@@ -574,9 +583,9 @@ def _check_signing_certificate(cert: x509.Certificate,
     def _grab(attr_name):
         try:
             return find_unique_cms_attribute(signed_attrs, attr_name)
-        except KeyError:
+        except NonexistentAttributeError:
             return None
-        except ValueError as e:
+        except MultivaluedAttributeError as e:
             raise SignatureValidationError(
                 "Wrong cardinality for signing certificate attribute"
             ) from e
@@ -894,11 +903,11 @@ def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
 
 def extract_message_digest(signer_info: cms.SignerInfo):
     try:
-        embedded_digest, = find_cms_attribute(
+        embedded_digest = find_unique_cms_attribute(
             signer_info['signed_attrs'], 'message_digest'
         )
         return embedded_digest.native
-    except (KeyError, ValueError):
+    except (NonexistentAttributeError, MultivaluedAttributeError):
         raise SignatureValidationError(
             'Message digest not found in signature, or multiple message '
             'digest attributes present.'
@@ -960,9 +969,16 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         prehashed = False
         # check the CMSAlgorithmProtection attr, if present
         try:
-            cms_algid_protection, = find_cms_attribute(
+            cms_algid_protection = find_unique_cms_attribute(
                 signed_attrs, 'cms_algorithm_protection'
             )
+        except NonexistentAttributeError:
+            cms_algid_protection = None
+        except MultivaluedAttributeError:
+            raise SignatureValidationError(
+                'Multiple CMS protection attributes present'
+            )
+        if cms_algid_protection is not None:
             signed_digest_algorithm = \
                 cms_algid_protection['digest_algorithm'].native
             if signed_digest_algorithm != digest_algorithm_obj.native:
@@ -982,14 +998,6 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
                     "Signature mechanism does not match CMS algorithm "
                     "protection attribute."
                 )
-        except KeyError:
-            pass
-        except SignatureValidationError:
-            raise
-        except ValueError:
-            raise SignatureValidationError(
-                'Multiple CMS protection attributes present'
-            )
 
         # check the signing-certificate or signing-certificate-v2 attr
         if not _check_signing_certificate(cert, signed_attrs):
@@ -1000,19 +1008,19 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
             )
 
         try:
-            content_type, = find_cms_attribute(signed_attrs, 'content_type')
-            content_type = content_type.native
-            if content_type != expected_content_type:
-                raise SignatureValidationError(
-                    f'Content type {content_type} did not match expected value '
-                    f'{expected_content_type}'
-                )
-        except SignatureValidationError:
-            raise
-        except (KeyError, ValueError):
+            content_type = find_unique_cms_attribute(
+                signed_attrs, 'content_type'
+            )
+        except (NonexistentAttributeError, MultivaluedAttributeError):
             raise SignatureValidationError(
                 'Content type not found in signature, or multiple content-type '
                 'attributes present.'
+            )
+        content_type = content_type.native
+        if content_type != expected_content_type:
+            raise SignatureValidationError(
+                f'Content type {content_type} did not match expected value '
+                f'{expected_content_type}'
             )
 
         embedded_digest = extract_message_digest(signer_info)

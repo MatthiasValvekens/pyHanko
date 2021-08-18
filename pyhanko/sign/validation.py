@@ -34,11 +34,12 @@ from .fields import (
     SigSeedValFlags, SigSeedSubFilter
 )
 from .general import (
-    SignatureStatus, find_cms_attribute,
+    SignatureStatus, find_unique_cms_attribute,
     UnacceptableSignerError, KeyUsageConstraints,
     SignatureValidationError,
     validate_sig_integrity, DEFAULT_WEAK_HASH_ALGORITHMS,
-    get_pyca_cryptography_hash, extract_message_digest, match_issuer_serial
+    get_pyca_cryptography_hash, extract_message_digest, match_issuer_serial,
+    MultivaluedAttributeError, NonexistentAttributeError
 )
 from .timestamps import TimestampSignatureStatus
 
@@ -135,9 +136,9 @@ def _extract_self_reported_ts(signer_info: cms.SignerInfo) \
         -> Optional[datetime]:
     try:
         sa = signer_info['signed_attrs']
-        st = find_cms_attribute(sa, 'signing_time')[0]
+        st = find_unique_cms_attribute(sa, 'signing_time')
         return st.native
-    except KeyError:
+    except (NonexistentAttributeError, MultivaluedAttributeError):
         pass
 
 
@@ -145,13 +146,13 @@ def _extract_tst_data(signer_info, signed=False) -> Optional[cms.SignedData]:
     try:
         if signed:
             sa = signer_info['signed_attrs']
-            tst = find_cms_attribute(sa, 'content_time_stamp')[0]
+            tst = find_unique_cms_attribute(sa, 'content_time_stamp')
         else:
             ua = signer_info['unsigned_attrs']
-            tst = find_cms_attribute(ua, 'signature_time_stamp_token')[0]
+            tst = find_unique_cms_attribute(ua, 'signature_time_stamp_token')
         tst_signed_data = tst['content']
         return tst_signed_data
-    except KeyError:
+    except (NonexistentAttributeError, MultivaluedAttributeError):
         pass
 
 
@@ -1843,12 +1844,12 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
 
 def retrieve_adobe_revocation_info(signer_info: cms.SignerInfo):
     try:
-        revinfo: asn1_pdf.RevocationInfoArchival = find_cms_attribute(
+        revinfo: asn1_pdf.RevocationInfoArchival = find_unique_cms_attribute(
             signer_info['signed_attrs'], "adobe_revocation_info_archival"
-        )[0]
-    except KeyError as e:
+        )
+    except (NonexistentAttributeError, MultivaluedAttributeError) as e:
         raise ValidationInfoReadingError(
-            "No revocation info archival attribute found"
+            "No revocation info archival attribute found, or multiple present"
         ) from e
 
     ocsps = list(revinfo['ocsp'] or ())

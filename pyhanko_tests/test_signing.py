@@ -49,7 +49,8 @@ from pyhanko.sign.validation import (
     EmbeddedPdfSignature, apply_adobe_revocation_info,
     validate_pdf_ltv_signature, RevocationInfoValidationType,
     validate_detached_cms, SignatureCoverageLevel,
-    validate_pdf_timestamp, add_validation_info, validate_cms_signature
+    validate_pdf_timestamp, add_validation_info, validate_cms_signature,
+    ValidationInfoReadingError
 )
 from pyhanko.sign.diff_analysis import (
     ModificationLevel, DiffResult,
@@ -1373,7 +1374,8 @@ def test_pades_revinfo_live(requests_mock):
         assert status.modification_level == ModificationLevel.LTA_UPDATES
 
         rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationInfoReadingError,
+                           match='No revocation info'):
             validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
 
     # test post-expiration, but before timestamp expires
@@ -1506,7 +1508,6 @@ def test_adobe_revinfo_live_nofullchain():
         ), signer=FROM_CA, timestamper=DUMMY_TS
     )
     r = PdfFileReader(out)
-    field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
     rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
     # same as for the pades test above
     with pytest.raises(SignatureValidationError):
