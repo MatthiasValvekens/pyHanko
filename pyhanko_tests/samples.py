@@ -114,5 +114,6 @@ def _configure_certomancer():
 
 CERTOMANCER = _configure_certomancer()
 TESTING_CA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca'))
+UNRELATED_TSA = CERTOMANCER.get_pki_arch(ArchLabel('unrelated-tsa'))
 TESTING_CA_ECDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ecdsa'))
 TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'

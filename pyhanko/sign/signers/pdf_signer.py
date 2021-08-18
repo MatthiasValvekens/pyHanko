@@ -1,7 +1,7 @@
 """
 This module implements support for PDF-specific signing functionality.
 """
-
+import enum
 import logging
 import uuid
 import tzlocal
@@ -41,13 +41,197 @@ from .pdf_byterange import (
 )
 
 __all__ = [
-    'PdfSignatureMetadata', 'PdfTimeStamper', 'PdfSigner',
-    'PdfSigningSession', 'PdfTBSDocument', 'PdfPostSignatureDocument',
+    'PdfSignatureMetadata', 'DSSContentSettings',
+    'TimestampDSSContentSettings', 'GeneralDSSContentSettings',
+    'SigDSSPlacementPreference', 'PdfTimeStamper',
+    'PdfSigner', 'PdfSigningSession', 'PdfTBSDocument',
+    'PdfPostSignatureDocument',
     'PreSignValidationStatus', 'PostSignInstructions'
 ]
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class GeneralDSSContentSettings:
+    """
+    .. versionadded:: 0.8.0
+
+    Settings that govern DSS creation and updating in general.
+    """
+
+    include_vri: bool = True
+    """
+    Flag to control whether to create and update entries in the VRI dictionary.
+    The default is to always update the VRI dictionary.
+    
+    .. note::
+        The VRI dictionary is a relic of the past that is effectively
+        deprecated in the current PAdES standards, and most modern validators
+        don't rely on it being there.
+        
+        That said, there's no real harm in creating these entries, other than
+        that it occasionally forces DSS updates where none would otherwise
+        be necessary, and that it prevents the DSS from being updated prior
+        to signing (as opposed to after signing).
+    """
+
+    skip_if_unneeded: bool = True
+    """
+    Do not perform a write if updating the DSS would not add any new
+    information.
+    
+    .. note::
+        This setting is only used if the DSS update would happen in its own
+        revision.
+    """
+
+
+class SigDSSPlacementPreference(enum.Enum):
+    """
+    .. versionadded:: 0.8.0
+
+    Preference for where to perform a DSS update with validation information
+    for a specific signature.
+    """
+
+    TOGETHER_WITH_SIGNATURE = enum.auto()
+    """
+    Update the DSS in the revision that contains the signature.
+    Doing so can be useful to create a PAdES-B-LT signature in a single
+    revision.
+    Such signatures can be processed by a validator that isn't capable of
+    incremental update analysis.
+    
+    .. warning::
+        This setting can only be used if :attr:`include_vri` is ``False``.
+    """
+
+    SEPARATE_REVISION = enum.auto()
+    """
+    Always perform the DSS update in a separate revision, after the signature,
+    but before any timestamps are added.
+    
+    .. note::
+        This is the old default behaviour.
+    """
+
+    TOGETHER_WITH_NEXT_TS = enum.auto()
+    """
+    If the signing workflow includes a document timestamp after the signature,
+    update the DSS in the same revision as the timestamp.
+    In the absence of document timestamps, this is equivalent to
+    :attr:`SEPARATE_REVISION`.
+
+    .. warning::
+        This option controls the addition of validation info for the signature
+        and its associated signature timestamp, not the validation info for the
+        document timestamp itself.
+        See :attr:`.DSSContentSettings.next_ts_settings`.
+
+        In most practical situations, the distinction is only relevant in
+        interrupted signing workflows (see :ref:`interrupted-signing`),
+        where the lifecycle of the validation context is out of pyHanko's hands.
+    """
+
+
+@dataclass(frozen=True)
+class TimestampDSSContentSettings(GeneralDSSContentSettings):
+    """
+    .. versionadded:: 0.8.0
+
+    Settings for a DSS update with validation information for a document
+    timestamp.
+
+    .. note::
+        In most workflows, adding a document timestamp doesn't trigger any DSS
+        updates beyond VRI additions, because the same TSA is used for signature
+        timestamps and for document timestamps.
+    """
+
+    update_before_ts: bool = False
+    """
+    Perform DSS update before creating the timestamp, instead of after.
+
+    .. warning::
+        This setting can only be used if :attr:`include_vri` is ``False``.
+    """
+
+    def assert_viable(self):
+        """
+        Check settings for consistency, and raise :class:`.SigningError`
+        otherwise.
+        """
+        if self.include_vri and self.update_before_ts:
+            raise SigningError(
+                "If VRI entries are to be included, DSS updates can only be "
+                "performed after the timestamp in question was created."
+            )
+
+
+@dataclass(frozen=True)
+class DSSContentSettings(GeneralDSSContentSettings):
+    """
+    .. versionadded:: 0.8.0
+
+    Settings for a DSS update with validation information for a signature.
+    """
+
+    placement: SigDSSPlacementPreference = \
+        SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS
+    """
+    Preference for where to perform a DSS update with validation information
+    for a specific signature. See :class:`.SigDSSPlacementPreference`.
+    
+    The default is :attr:`.SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS`.
+    """
+
+    next_ts_settings: Optional[TimestampDSSContentSettings] = None
+    """
+    Explicit settings for DSS updates pertaining to a document timestamp
+    added as part of the same signing workflow, if applicable.
+    
+    If ``None``, a default will be generated based on the values of this
+    settings object.
+    
+    .. note::
+        When consuming :class:`.DSSContentSettings` objects, you should
+        call :meth:`get_settings_for_ts` instead of relying on the value of
+        this field.
+    """
+
+    def get_settings_for_ts(self) -> TimestampDSSContentSettings:
+        """
+        Retrieve DSS update settings for document timestamps that are
+        part of our signing workflow, if there are any.
+        """
+        ts_settings = self.next_ts_settings
+        if ts_settings is not None:
+            return ts_settings
+        update_before_ts = (
+            self.placement == SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
+        )
+        return TimestampDSSContentSettings(
+            include_vri=self.include_vri,
+            skip_if_unneeded=self.skip_if_unneeded,
+            update_before_ts=update_before_ts
+        )
+
+    def assert_viable(self):
+        """
+        Check settings for consistency, and raise :class:`.SigningError`
+        otherwise.
+        """
+        pre_sign = (
+            self.placement == SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
+        )
+        if self.include_vri and pre_sign:
+            raise SigningError(
+                "If VRI entries are to be included, DSS updates can only be "
+                "performed after the signature in question was created."
+            )
+        self.get_settings_for_ts().assert_viable()
 
 
 @dataclass(frozen=True)
@@ -192,6 +376,8 @@ class PdfSignatureMetadata:
     Specification for CAdES-specific attributes.
     """
 
+    dss_settings: DSSContentSettings = DSSContentSettings()
+
 
 def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
     """
@@ -236,6 +422,8 @@ class PdfTimeStamper:
                       bytes_reserved=None, validation_paths=None,
                       timestamper: Optional[TimeStamper] = None, *,
                       in_place=False, output=None,
+                      dss_settings: TimestampDSSContentSettings \
+                          = TimestampDSSContentSettings(),
                       chunk_size=misc.DEFAULT_CHUNK_SIZE):
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
@@ -279,8 +467,23 @@ class PdfTimeStamper:
         """
 
         _ensure_esic_ext(pdf_out)
-
+        from pyhanko.sign import validation
         timestamper = timestamper or self.default_timestamper
+        if validation_context is not None:
+            ts_validation_paths \
+                = timestamper.validation_paths(validation_context)
+            if validation_paths is None:
+                validation_paths = list(ts_validation_paths)
+            else:
+                validation_paths.extend(ts_validation_paths)
+            dss_settings.assert_viable()
+            if dss_settings.update_before_ts:
+                # NOTE: we have to disable VRI in this scenario
+                validation.DocumentSecurityStore.supply_dss_in_writer(
+                    pdf_out, sig_contents=None, paths=validation_paths,
+                    validation_context=validation_context
+                )
+
         field_name = self.field_name
         if bytes_reserved is None:
             test_signature_cms = timestamper.dummy_response(md_algorithm)
@@ -312,17 +515,14 @@ class PdfTimeStamper:
         )
         sig_contents = cms_writer.send(timestamp_cms)
 
-        # update the DSS
-        if validation_context is not None:
-            from pyhanko.sign import validation
-            if validation_paths is None:
-                validation_paths = list(
-                    timestamper.validation_paths(validation_context)
-                )
-
+        # update the DSS if necessary
+        if validation_context is not None and not dss_settings.update_before_ts:
+            if not dss_settings.include_vri:
+                sig_contents = None
             validation.DocumentSecurityStore.add_dss(
                 output_stream=res_output, sig_contents=sig_contents,
-                paths=validation_paths, validation_context=validation_context
+                paths=validation_paths, validation_context=validation_context,
+                force_write=not dss_settings.skip_if_unneeded
             )
 
         return misc.finalise_output(output, res_output)
@@ -357,6 +557,8 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
+        # TODO expose DSS fine-tuning here as well
+
         # In principle, we only have to validate that the last timestamp token
         # in the current chain is valid.
         # TODO: add an option to validate the entire timestamp chain
@@ -404,18 +606,18 @@ class PdfTimeStamper:
                 bytearray(chunk_size), reader.stream, output
             )
 
+        pdf_out = IncrementalPdfFileWriter(output)
         if last_timestamp is not None:
             # update the DSS
-            DocumentSecurityStore.add_dss(
-                output, last_timestamp.pkcs7_content,
+            DocumentSecurityStore.supply_dss_in_writer(
+                pdf_out, last_timestamp.pkcs7_content,
                 paths=(tst_status.validation_path,),
                 validation_context=validation_context
             )
 
         # append a new timestamp
         return self.timestamp_pdf(
-            IncrementalPdfFileWriter(output), md_algorithm,
-            validation_context, in_place=True
+            pdf_out, md_algorithm, validation_context, in_place=True
         )
 
 
@@ -576,7 +778,6 @@ class PdfSigner:
             in its post-setup stage.
         """
 
-        # TODO document
         timestamper = self.default_timestamper
 
         signature_meta: PdfSignatureMetadata = self.signature_meta
@@ -629,8 +830,8 @@ class PdfSigner:
                 subfilter = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
         session = PdfSigningSession(
-            self, cms_writer, sig_field, md_algorithm, timestamper, subfilter,
-            sv_spec=sv_spec
+            self, pdf_out, cms_writer, sig_field, md_algorithm, timestamper,
+            subfilter, sv_spec=sv_spec
         )
 
         return session
@@ -827,11 +1028,13 @@ class PdfSigningSession:
     :meth:`.PdfSigner.init_signing_session`.
     """
 
-    def __init__(self, pdf_signer: PdfSigner, cms_writer,
-                 sig_field, md_algorithm: str, timestamper: TimeStamper,
+    def __init__(self, pdf_signer: PdfSigner, pdf_out: BasePdfFileWriter,
+                 cms_writer, sig_field, md_algorithm: str,
+                 timestamper: TimeStamper,
                  subfilter: SigSeedSubFilter, system_time: datetime = None,
                  sv_spec: Optional[SigSeedValueSpec] = None):
         self.pdf_signer = pdf_signer
+        self.pdf_out = pdf_out
         self.sig_field = sig_field
         self.cms_writer = cms_writer
         self.md_algorithm = md_algorithm
@@ -1211,6 +1414,25 @@ class PdfSigningSession:
                 validation_info.signer_path
             )
 
+        # take care of DSS updates, if they have to happen now
+        dss_settings = signature_meta.dss_settings
+        if self.use_pades and validation_info is not None:
+            # Check consistency of settings
+            dss_settings.assert_viable()
+            if dss_settings.placement \
+                    == SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE:
+                from pyhanko.sign import validation
+                pdf_out = self.pdf_out
+                # source info directly from the validation_info object
+                # for consistency
+                # NOTE: we have to disable VRI in this scenario
+                validation.DocumentSecurityStore.supply_dss_in_writer(
+                    pdf_out, sig_contents=None,
+                    paths=validation_info.validation_paths,
+                    ocsps=validation_info.ocsps_to_embed,
+                    crls=validation_info.crls_to_embed
+                )
+
         signer = pdf_signer.signer
         md_algorithm = self.md_algorithm
         if bytes_reserved is None:
@@ -1280,6 +1502,7 @@ class PdfSigningSession:
                 timestamp_md_algorithm=md_algorithm,
                 timestamper=doc_timestamper,
                 timestamp_field_name=signature_meta.timestamp_field_name,
+                dss_settings=signature_meta.dss_settings
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer, signer=pdf_signer.signer,
@@ -1321,6 +1544,11 @@ class PostSignInstructions:
     """
     Name of the timestamp field to use. If not specified, a field name will be
     generated.
+    """
+
+    dss_settings: DSSContentSettings = DSSContentSettings()
+    """
+    Settings to fine-tune DSS generation.
     """
 
 
@@ -1539,29 +1767,53 @@ class PdfPostSignatureDocument:
 
         validation_context = self.validation_context
         validation_info = instr.validation_info
+        dss_settings = instr.dss_settings
 
         from pyhanko.sign import validation
         # If we're resuming a signing operation, the (new) validation context
         # might not have all relevant OCSP responses / CRLs available.
         # Hence why we also pass in the data from the pre-signing check.
         # The DSS handling code will deal with deduplication.
-        validation.DocumentSecurityStore.add_dss(
-            output_stream=output, sig_contents=self.sig_contents,
+        dss_op_kwargs = dict(
             paths=validation_info.validation_paths,
             validation_context=validation_context,
             ocsps=validation_info.ocsps_to_embed,
             crls=validation_info.crls_to_embed
         )
+        if dss_settings.include_vri:
+            dss_op_kwargs['sig_contents'] = self.sig_contents
+        else:
+            dss_op_kwargs['sig_contents'] = None
+
         timestamper = instr.timestamper
+        # Separate DSS revision if no TS that would otherwise be bundled with it
+        # or explicitly requested as separate
+        dss_placement = dss_settings.placement
+        separate_dss_revision = False
+        if dss_placement == SigDSSPlacementPreference.SEPARATE_REVISION:
+            separate_dss_revision = True
+        elif dss_placement == SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS:
+            separate_dss_revision = timestamper is None
+        if separate_dss_revision:
+            if not dss_settings.skip_if_unneeded:
+                dss_op_kwargs['force_write'] = True
+            validation.DocumentSecurityStore.add_dss(
+                output_stream=output, **dss_op_kwargs
+            )
         if timestamper is not None:
             # append a document timestamp after the DSS update
             w = IncrementalPdfFileWriter(output)
             pdf_timestamper = PdfTimeStamper(
                 timestamper, field_name=instr.timestamp_field_name
             )
+            if dss_placement == SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS:
+                validation.DocumentSecurityStore.supply_dss_in_writer(
+                    w, **dss_op_kwargs
+                )
             pdf_timestamper.timestamp_pdf(
                 w, instr.timestamp_md_algorithm or constants.DEFAULT_MD,
                 validation_context,
                 validation_paths=validation_info.validation_paths,
-                in_place=True, timestamper=timestamper, chunk_size=chunk_size
+                in_place=True, timestamper=timestamper, chunk_size=chunk_size,
+                dss_settings=dss_settings.get_settings_for_ts()
             )

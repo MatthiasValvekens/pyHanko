@@ -48,6 +48,13 @@ keysets:
       signer2:
         path: signer2.key.pem
         password: secret
+  unrelated-tsa:
+    path-prefix: keys-rsa
+    keys:
+      root:
+        path: indep_tsa_root.key.pem
+      tsa:
+        path: indep_tsa.key.pem
 
 pki-architectures:
   testing-ca:
@@ -236,3 +243,61 @@ pki-architectures:
         tsa2:
           signing-key: tsa2
           signing-cert: tsa2
+  unrelated-tsa:
+    keyset: unrelated-tsa
+    entity-defaults:
+      country-name: BE
+      organization-name: Example Inc
+      organizational-unit-name: Independent TSA
+    entities:
+      root:
+        common-name: Root CA
+      tsa:
+        common-name: Unrelated Test TSA
+    certs:
+      root:
+        subject: root
+        subject-key: root
+        issuer: root
+        authority-key: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        extensions:
+          - id: basic_constraints
+            critical: true
+            value:
+              ca: true
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, key_cert_sign, crl_sign]
+      tsa:
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+          - id: extended_key_usage
+            critical: true
+            value: [time_stamping]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params: {crl-repo-names: [root]}
+    services:
+      crl-repo:
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P90D"
+      time-stamping:
+        tsa:
+          signing-key: tsa
+          signing-cert: tsa

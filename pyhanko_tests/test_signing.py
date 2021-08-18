@@ -18,7 +18,10 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
 
 import pyhanko.pdf_utils.content
-from pyhanko.sign.signers.pdf_signer import PdfTBSDocument, PostSignInstructions
+from pyhanko.sign.signers.pdf_signer import (
+    PdfTBSDocument, PostSignInstructions, DSSContentSettings,
+    TimestampDSSContentSettings, SigDSSPlacementPreference
+)
 from pyhanko_certvalidator.errors import PathValidationError
 
 import pyhanko.sign.fields
@@ -120,7 +123,11 @@ DUMMY_TS2 = timestamps.DummyTimeStamper(
 )
 
 DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
-    'http://pyhanko.test/testing-ca/tsa/tsa', https=False
+    'http://pyhanko.tests/testing-ca/tsa/tsa', https=False
+)
+
+DUMMY_HTTP_TS_VARIANT = timestamps.HTTPTimeStamper(
+    'http://pyhanko.tests/unrelated-tsa/tsa/tsa', https=False
 )
 
 # with the testing CA setup update, this OCSP response is totally
@@ -151,12 +158,18 @@ def dummy_ocsp_vc():
     return vc
 
 
-def live_testing_vc(requests_mock):
+def live_testing_vc(requests_mock, with_extra_tsa=False):
+    if with_extra_tsa:
+        trust_roots = TRUST_ROOTS + [UNRELATED_TSA.get_cert(CertLabel('root'))]
+    else:
+        trust_roots = TRUST_ROOTS
     vc = ValidationContext(
-        trust_roots=TRUST_ROOTS, allow_fetching=True,
+        trust_roots=trust_roots, allow_fetching=True,
         other_certs=[]
     )
     Illusionist(TESTING_CA).register(requests_mock)
+    if with_extra_tsa:
+        Illusionist(UNRELATED_TSA).register(requests_mock)
     return vc
 
 
@@ -3110,7 +3123,8 @@ def test_simple_interrupted_signature():
 
 
 @freeze_time('2020-11-01')
-def test_interrupted_pades_lta_signature(requests_mock):
+@pytest.mark.parametrize('different_tsa', [True, False])
+def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
     # simulate a PAdES-LTA workflow with remote signing
     # (our hypothetical remote signer just signs digests, not full CMS objects)
     requests_mock.post(
@@ -3136,7 +3150,8 @@ def test_interrupted_pades_lta_signature(requests_mock):
             signers.PdfSignatureMetadata(
                 field_name='SigNew', embed_validation_info=True,
                 use_pades_lta=True, subfilter=PADES, validation_context=vc,
-                md_algorithm='sha256'
+                md_algorithm='sha256',
+                dss_settings=DSSContentSettings(include_vri=False)
             ),
             signer=ext_signer,
             timestamper=DUMMY_HTTP_TS
@@ -3171,7 +3186,9 @@ def test_interrupted_pades_lta_signature(requests_mock):
         )
 
         # fresh VC
-        validation_context = live_testing_vc(requests_mock)
+        validation_context = live_testing_vc(
+            requests_mock, with_extra_tsa=different_tsa
+        )
         PdfTBSDocument.finish_signing(
             output_handle, prepared_digest=prep_digest,
             signature_cms=sig_cms,
@@ -3196,11 +3213,18 @@ def test_interrupted_pades_lta_signature(requests_mock):
         # let's pretend that we no longer have access to the non-serialisable
         # parts of tbs_document and psi (e.g. because this part happens on a
         # different machine)
+        if different_tsa:
+            # use another TSA for the document timestamp
+            docts_tsa = DUMMY_HTTP_TS_VARIANT
+        else:
+            docts_tsa = DUMMY_HTTP_TS
+
         new_psi = PostSignInstructions(
             validation_info=psi.validation_info,
             timestamp_md_algorithm=psi.timestamp_md_algorithm,
-            timestamper=DUMMY_HTTP_TS,
+            timestamper=docts_tsa,
             timestamp_field_name=psi.timestamp_field_name,
+            dss_settings=psi.dss_settings
         )
         # finish signing
         proceed_with_signing(
@@ -3212,15 +3236,25 @@ def test_interrupted_pades_lta_signature(requests_mock):
     # check cardinality of DSS content
     dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
-    assert len(dss.certs) == 5
-    assert len(dss.ocsps) == 1
-    assert len(dss.crls) == 1
+    if different_tsa:
+        assert len(dss.certs) == 7
+        assert len(dss.ocsps) == 1
+        assert len(dss.crls) == 2
+        trust_roots = TRUST_ROOTS + [UNRELATED_TSA.get_cert(CertLabel('root'))]
+        # extra update was needed to append revinfo for second TSA
+        assert r.xrefs.total_revisions == 4
+    else:
+        assert len(dss.certs) == 5
+        assert len(dss.ocsps) == 1
+        assert len(dss.crls) == 1
+        assert r.xrefs.total_revisions == 3
+        trust_roots = TRUST_ROOTS
 
     emb_sig = r.embedded_signatures[0]
     # perform LTA validation
     status = validate_pdf_ltv_signature(
         emb_sig, RevocationInfoValidationType.PADES_LTA,
-        {'trust_roots': TRUST_ROOTS}
+        {'trust_roots': trust_roots}
     )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
@@ -3228,3 +3262,304 @@ def test_interrupted_pades_lta_signature(requests_mock):
     assert len(r.embedded_regular_signatures) == 1
     assert len(r.embedded_timestamp_signatures) == 1
     assert emb_sig is r.embedded_regular_signatures[0]
+
+
+def test_dss_setting_validation():
+    bad_ts_sett = TimestampDSSContentSettings(
+        include_vri=True, update_before_ts=True
+    )
+    with pytest.raises(SigningError):
+        bad_ts_sett.assert_viable()
+
+    with pytest.raises(SigningError):
+        DSSContentSettings(
+            include_vri=True,
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
+        ).assert_viable()
+
+    DSSContentSettings(
+        include_vri=True,
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS
+    ).assert_viable()
+    DSSContentSettings(
+        include_vri=False,
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+    ).assert_viable()
+    with pytest.raises(SigningError):
+        DSSContentSettings(
+            include_vri=False,
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+            next_ts_settings=bad_ts_sett
+        ).assert_viable()
+
+
+@freeze_time('2020-11-01')
+def test_pades_one_revision(requests_mock):
+
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            dss_settings=DSSContentSettings(
+                include_vri=False,
+                placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+            ),
+            validation_context=live_testing_vc(requests_mock),
+            embed_validation_info=True,
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    assert r.total_revisions == 1
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LT,
+        validation_context_kwargs={
+            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('dss_settings', [
+    DSSContentSettings(
+        placement=SigDSSPlacementPreference.SEPARATE_REVISION,
+    ),
+    DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+    ),
+    DSSContentSettings(),
+])
+def test_pades_two_revisions(requests_mock, dss_settings):
+
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            dss_settings=dss_settings,
+            validation_context=live_testing_vc(requests_mock),
+            embed_validation_info=True,
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    assert r.total_revisions == 2
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LT,
+        validation_context_kwargs={
+            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('dss_settings', [
+    DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+        next_ts_settings=TimestampDSSContentSettings(
+            update_before_ts=True, include_vri=False
+        )
+    ),
+    DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+        include_vri=False,
+        next_ts_settings=TimestampDSSContentSettings(
+            update_before_ts=True, include_vri=False
+        )
+    ),
+    DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+        include_vri=False,
+    ),
+    DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+        include_vri=False
+    ),
+])
+def test_pades_lta_two_revisions(requests_mock, dss_settings):
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            dss_settings=dss_settings,
+            validation_context=live_testing_vc(requests_mock),
+            embed_validation_info=True,
+            use_pades_lta=True
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    assert r.total_revisions == 2
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LTA,
+        validation_context_kwargs={
+            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
+
+
+@freeze_time('2020-11-01')
+def test_pades_lta_noskip(requests_mock):
+    dss_settings = DSSContentSettings(
+        placement=SigDSSPlacementPreference.SEPARATE_REVISION,
+        include_vri=False, skip_if_unneeded=False
+    )
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            dss_settings=dss_settings,
+            validation_context=live_testing_vc(requests_mock),
+            embed_validation_info=True,
+            use_pades_lta=True
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    assert r.total_revisions == 4
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LTA,
+        validation_context_kwargs={
+            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
+
+
+@freeze_time('2020-11-01')
+def test_pades_post_ts_autosuppress(requests_mock):
+    # test if the post-timestamp DSS update is automatically suppressed
+    # if we sign with the exact same TSA for both the sig & the document TS
+    # (keeping the VC constant as well)
+    dss_settings = DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+        include_vri=False
+    )
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            dss_settings=dss_settings,
+            validation_context=live_testing_vc(requests_mock),
+            embed_validation_info=True,
+            use_pades_lta=True
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    assert r.total_revisions == 2
+    # assert that the DSS was updated in the timestamped revision
+    dss_ref = r.root.get_value_as_reference('/DSS')
+    changed_in = r.xrefs.get_last_change(dss_ref)
+    assert changed_in == 1
+
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LTA,
+        validation_context_kwargs={
+            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
+
+
+@freeze_time('2020-11-01')
+def test_pades_max_autosuppress(requests_mock):
+    # test if all timestamp-related DSS updates are suppressed
+    # if we sign with the exact same TSA for both the sig & the document TS
+    # (keeping the VC constant as well) and all relevant DSS updates were
+    # performed pre-signing
+    dss_settings = DSSContentSettings(
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+        include_vri=False
+    )
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            dss_settings=dss_settings,
+            validation_context=live_testing_vc(requests_mock),
+            embed_validation_info=True,
+            use_pades_lta=True
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    assert r.total_revisions == 2
+    # assert that the DSS was not updated in the timestamped revision
+    dss_ref = r.root.get_value_as_reference('/DSS')
+    changed_in = r.xrefs.get_last_change(dss_ref)
+    assert changed_in == 0
+
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LTA,
+        validation_context_kwargs={
+            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
+
+
+@freeze_time('2020-11-01')
+def test_pades_independent_tsa(requests_mock):
+    # test signing/validation behaviour with an independent TSA
+
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            validation_context=live_testing_vc(
+                requests_mock, with_extra_tsa=True
+            ),
+            embed_validation_info=True
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_HTTP_TS_VARIANT,
+    )
+    r = PdfFileReader(out)
+
+    # DSS cardinalities
+    dss_dict = r.root['/DSS']
+    assert len(dss_dict['/CRLs']) == 2
+    assert len(dss_dict['/OCSPs']) == 1
+    assert len(dss_dict['/Certs']) == 6
+
+    assert r.xrefs.total_revisions == 2
+
+    trust_roots = TRUST_ROOTS + [UNRELATED_TSA.get_cert(CertLabel('root'))]
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LT,
+        validation_context_kwargs={
+            'trust_roots': trust_roots,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail'
+        }
+    )
