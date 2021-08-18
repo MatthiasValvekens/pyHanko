@@ -377,6 +377,9 @@ class PdfSignatureMetadata:
     """
 
     dss_settings: DSSContentSettings = DSSContentSettings()
+    """
+    DSS output settings. See :class:`.DSSContentSettings`.
+    """
 
 
 def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
@@ -422,8 +425,8 @@ class PdfTimeStamper:
                       bytes_reserved=None, validation_paths=None,
                       timestamper: Optional[TimeStamper] = None, *,
                       in_place=False, output=None,
-                      dss_settings: TimestampDSSContentSettings \
-                          = TimestampDSSContentSettings(),
+                      dss_settings: TimestampDSSContentSettings =
+                      TimestampDSSContentSettings(),
                       chunk_size=misc.DEFAULT_CHUNK_SIZE):
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
@@ -462,6 +465,8 @@ class PdfTimeStamper:
             Size of the internal buffer (in bytes) used to feed data to the
             message digest function if the input stream does not support
             ``memoryview``.
+        :param dss_settings:
+            DSS output settings. See :class:`.TimestampDSSContentSettings`.
         :return:
             The output stream containing the signed output.
         """
