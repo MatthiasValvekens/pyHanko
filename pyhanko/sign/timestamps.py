@@ -156,6 +156,10 @@ class TimeStamper:
         :return:
             A generator producing validation paths.
         """
+        # if no dummy responses are available, fetch some
+        if not self._dummy_response_cache:
+            from pyhanko.sign import DEFAULT_MD
+            self.dummy_response(DEFAULT_MD)
         for cert in self._certs.values():
             validator = CertificateValidator(
                 cert,
