@@ -3605,3 +3605,29 @@ def test_sign_tight_container_with_ts():
         'content': emb.signed_data
     })
     assert len(ci.dump()) == len(contents_str)
+
+
+@freeze_time('2020-11-01')
+def test_sign_tight_container_with_lta(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', tight_size_estimates=True,
+        subfilter=PADES, use_pades_lta=True, embed_validation_info=True,
+        validation_context=live_testing_vc(requests_mock)
+    )
+    out = signers.sign_pdf(
+        w, meta, signer=FROM_CA, timestamper=DUMMY_TS,
+    )
+
+    r = PdfFileReader(out)
+
+    def _check(emb):
+        contents_str = emb.pkcs7_content
+        ci = cms.ContentInfo({
+            'content_type': 'signed_data',
+            'content': emb.signed_data
+        })
+        assert len(ci.dump()) == len(contents_str)
+
+    _check(r.embedded_regular_signatures[0])
+    _check(r.embedded_timestamp_signatures[0])
