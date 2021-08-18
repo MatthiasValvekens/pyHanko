@@ -3563,3 +3563,45 @@ def test_pades_independent_tsa(requests_mock):
             'revocation_mode': 'soft-fail'
         }
     )
+
+
+@freeze_time('2020-11-01')
+def test_sign_tight_container():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', tight_size_estimates=True
+    )
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
+
+    contents_str = emb.pkcs7_content
+    ci = cms.ContentInfo({
+        'content_type': 'signed_data',
+        'content': emb.signed_data
+    })
+    assert len(ci.dump()) == len(contents_str)
+
+
+@freeze_time('2020-11-01')
+def test_sign_tight_container_with_ts():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', tight_size_estimates=True
+    )
+    out = signers.sign_pdf(w, meta, signer=SELF_SIGN, timestamper=DUMMY_TS)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
+
+    contents_str = emb.pkcs7_content
+    ci = cms.ContentInfo({
+        'content_type': 'signed_data',
+        'content': emb.signed_data
+    })
+    assert len(ci.dump()) == len(contents_str)

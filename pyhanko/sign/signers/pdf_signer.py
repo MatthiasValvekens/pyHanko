@@ -381,6 +381,17 @@ class PdfSignatureMetadata:
     DSS output settings. See :class:`.DSSContentSettings`.
     """
 
+    tight_size_estimates: bool = False
+    """
+    When estimating the size of a signature container,
+    do not add safety margins.
+    
+    .. note::
+        This should be OK if the entire signature object is produced by pyHanko.
+        However, if it includes unsigned attributes such as document timestamps,
+        the size of the signature is not entirely predictable.
+    """
+
 
 def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
     """
@@ -427,7 +438,8 @@ class PdfTimeStamper:
                       in_place=False, output=None,
                       dss_settings: TimestampDSSContentSettings =
                       TimestampDSSContentSettings(),
-                      chunk_size=misc.DEFAULT_CHUNK_SIZE):
+                      chunk_size=misc.DEFAULT_CHUNK_SIZE,
+                      tight_size_estimates: bool = False):
         """Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
@@ -467,6 +479,13 @@ class PdfTimeStamper:
             ``memoryview``.
         :param dss_settings:
             DSS output settings. See :class:`.TimestampDSSContentSettings`.
+        :param tight_size_estimates:
+            When estimating the size of a document timestamp container,
+            do not add safety margins.
+
+            .. note::
+                External TSAs cannot be relied upon to always produce the
+                exact same output length, which makes this option risky to use.
         :return:
             The output stream containing the signed output.
         """
@@ -493,8 +512,11 @@ class PdfTimeStamper:
         if bytes_reserved is None:
             test_signature_cms = timestamper.dummy_response(md_algorithm)
             test_len = len(test_signature_cms.dump()) * 2
-            # see sign_pdf comments
-            bytes_reserved = test_len + 2 * (test_len // 4)
+            if tight_size_estimates:
+                bytes_reserved = test_len
+            else:
+                # see sign_pdf comments
+                bytes_reserved = test_len + 2 * (test_len // 4)
 
         timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
 
@@ -1458,10 +1480,13 @@ class PdfSigningSession:
             # will be embedded into the resulting PDF as a hexadecimal
             # string
             test_len = len(test_signature_cms.dump()) * 2
-            # External actors such as timestamping servers can't be relied on to
-            # always return exactly the same response, so we build in a 50%
-            # error margin (+ ensure that bytes_reserved is even)
-            bytes_reserved = test_len + 2 * (test_len // 4)
+            if signature_meta.tight_size_estimates:
+                bytes_reserved = test_len
+            else:
+                # External actors such as timestamping servers can't be relied
+                # on to always return exactly the same response, so we build in
+                # a 50% error margin (+ ensure that bytes_reserved is even)
+                bytes_reserved = test_len + 2 * (test_len // 4)
 
         sig_mdp_setup = self._apply_locking_rules()
 
@@ -1507,7 +1532,8 @@ class PdfSigningSession:
                 timestamp_md_algorithm=md_algorithm,
                 timestamper=doc_timestamper,
                 timestamp_field_name=signature_meta.timestamp_field_name,
-                dss_settings=signature_meta.dss_settings
+                dss_settings=signature_meta.dss_settings,
+                tight_size_estimates=signature_meta.tight_size_estimates
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer, signer=pdf_signer.signer,
@@ -1554,6 +1580,16 @@ class PostSignInstructions:
     dss_settings: DSSContentSettings = DSSContentSettings()
     """
     Settings to fine-tune DSS generation.
+    """
+
+    tight_size_estimates: bool = False
+    """
+    When estimating the size of a document timestamp container,
+    do not add safety margins.
+
+    .. note::
+        External TSAs cannot be relied upon to always produce the
+        exact same output length, which makes this option risky to use.
     """
 
 
@@ -1820,5 +1856,6 @@ class PdfPostSignatureDocument:
                 validation_context,
                 validation_paths=validation_info.validation_paths,
                 in_place=True, timestamper=timestamper, chunk_size=chunk_size,
-                dss_settings=dss_settings.get_settings_for_ts()
+                dss_settings=dss_settings.get_settings_for_ts(),
+                tight_size_estimates=instr.tight_size_estimates
             )
