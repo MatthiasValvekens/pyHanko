@@ -35,6 +35,9 @@ from .path import ValidationPath, QualifiedPolicy
 
 
 # make sure EdDSA OIDs are known to asn1crypto
+from .registry import CertificateStore, LayeredCertificateStore, \
+    SimpleCertificateStore
+
 register_eddsa_oids()
 
 
@@ -1264,13 +1267,20 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
             continue
 
         # To verify the response as legitimate, the responder cert must be located
+        cert_store: CertificateStore = certificate_registry
+        # prioritise the certificates included with the response, if there
+        # are any
+        if response['certs']:
+            cert_store = LayeredCertificateStore([
+                SimpleCertificateStore.from_certs(response['certs']),
+                certificate_registry
+            ])
         if tbs_response['responder_id'].name == 'by_key':
             key_identifier = tbs_response['responder_id'].native
-            signing_cert = certificate_registry.retrieve_by_key_identifier(key_identifier)
+            signing_cert = cert_store.retrieve_by_key_identifier(key_identifier)
         else:
-            candidate_signing_certs = certificate_registry.retrieve_by_name(
-                tbs_response['responder_id'].chosen,
-                None
+            candidate_signing_certs = cert_store.retrieve_by_name(
+                tbs_response['responder_id'].chosen
             )
             signing_cert = candidate_signing_certs[0] if candidate_signing_certs else None
         if not signing_cert:

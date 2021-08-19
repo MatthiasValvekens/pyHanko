@@ -1,6 +1,9 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+from collections import defaultdict
+from typing import List
+
 from asn1crypto import pem, x509
 from oscrypto import trust_list
 
@@ -10,18 +13,113 @@ from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
 
 
-class CertificateRegistry():
+class CertificateStore:
+    def retrieve_by_key_identifier(self, key_identifier: bytes):
+        """
+        Retrieves a cert via its key identifier
+
+        :param key_identifier:
+            A byte string of the key identifier
+
+        :return:
+            None or an asn1crypto.x509.Certificate object
+        """
+        candidates = self.retrieve_many_by_key_identifier(key_identifier)
+        if not candidates:
+            return None
+        else:
+            return candidates[0]
+
+    def retrieve_many_by_key_identifier(self, key_identifier: bytes):
+        """
+        Retrieves possibly multiple certs via the corresponding key identifiers
+
+        :param key_identifier:
+            A byte string of the key identifier
+
+        :return:
+            A list of asn1crypto.x509.Certificate objects
+        """
+        raise NotImplementedError
+
+    def retrieve_by_name(self, name: x509.Name):
+        """
+        Retrieves a list certs via their subject name
+
+        :param name:
+            An asn1crypto.x509.Name object
+
+        :return:
+            A list of asn1crypto.x509.Certificate objects
+        """
+        raise NotImplementedError
+
+    def retrieve_by_issuer_serial(self, issuer_serial):
+        """
+        Retrieve a certificate by its ``issuer_serial`` value.
+
+        :param issuer_serial:
+            The ``issuer_serial`` value of the certificate.
+        :return:
+            The certificate corresponding to the ``issuer_serial`` key
+            passed in.
+        :return:
+            None or an asn1crypto.x509.Certificate object
+        """
+        raise NotImplementedError
+
+
+class SimpleCertificateStore(CertificateStore):
+    """
+    Simple trustless certificate store.
+    """
+
+    @classmethod
+    def from_certs(cls, certs):
+        result = cls()
+        for cert in certs:
+            result.register(cert)
+        return result
+
+    def __init__(self):
+        self.certs = {}
+        self._subject_map = defaultdict(list)
+        self._key_identifier_map = defaultdict(list)
+
+    def register(self, cert: x509.Certificate) -> bool:
+        if cert.issuer_serial in self.certs:
+            return False
+        self.certs[cert.issuer_serial] = cert
+        self._subject_map[cert.subject.hashable].append(cert)
+        if cert.key_identifier:
+            self._key_identifier_map[cert.key_identifier].append(cert)
+        else:
+            self._key_identifier_map[cert.public_key.sha1].append(cert)
+        return True
+
+    def __getitem__(self, item):
+        return self.certs[item]
+
+    def __iter__(self):
+        return iter(self.certs.values())
+
+    def retrieve_many_by_key_identifier(self, key_identifier: bytes):
+        return self._key_identifier_map[key_identifier]
+
+    def retrieve_by_name(self, name: x509.Name):
+        return self._subject_map[name.hashable]
+
+    def retrieve_by_issuer_serial(self, issuer_serial):
+        try:
+            return self[issuer_serial]
+        except KeyError:
+            return None
+
+
+class CertificateRegistry(SimpleCertificateStore):
     """
     Contains certificate lists used to build validation paths
     """
-
-    # A dict with keys being asn1crypto.x509.Certificate.Name.hashable byte
-    # string. Each value is a list of asn1crypto.x509.Certificate objects.
-    _subject_map = None
-
-    # A dict with keys being asn1crypto.x509.Certificate.key_identifier byte
-    # string. Each value is an asn1crypto.x509.Certificate object.
-    _key_identifier_map = None
 
     # A dict with keys being asn1crypto.x509.Certificate.signature byte string.
     # Each value is a bool - if the certificate is a CA cert.
@@ -75,6 +173,9 @@ class CertificateRegistry():
                 ''',
                 type_name(other_certs)
             ))
+        super().__init__()
+
+        self._ca_lookup = set()
 
         if other_certs is None:
             other_certs = []
@@ -89,26 +190,12 @@ class CertificateRegistry():
         if extra_trust_roots is not None:
             trust_roots.extend(self._validate_unarmor(extra_trust_roots, 'extra_trust_roots'))
 
-        self._subject_map = {}
-        self._key_identifier_map = {}
-        self._ca_lookup = {}
-
         for trust_root in trust_roots:
-            hashable = trust_root.subject.hashable
-            if hashable not in self._subject_map:
-                self._subject_map[hashable] = []
-            self._subject_map[hashable].append(trust_root)
-            if trust_root.key_identifier:
-                self._key_identifier_map[trust_root.key_identifier] = trust_root
-            self._ca_lookup[trust_root.signature] = True
+            self.register(trust_root)
+            self._ca_lookup.add(trust_root.signature)
 
         for other_cert in other_certs:
-            hashable = other_cert.subject.hashable
-            if hashable not in self._subject_map:
-                self._subject_map[hashable] = []
-            self._subject_map[hashable].append(other_cert)
-            if other_cert.key_identifier:
-                self._key_identifier_map[other_cert.key_identifier] = other_cert
+            self.register(other_cert)
 
     def _validate_unarmor(self, certs, var_name):
         """
@@ -155,7 +242,7 @@ class CertificateRegistry():
             A boolean - if the certificate is in the CA list
         """
 
-        return self._ca_lookup.get(cert.signature, False)
+        return cert.signature in self._ca_lookup
 
     def add_other_cert(self, cert):
         """
@@ -184,45 +271,7 @@ class CertificateRegistry():
                 _, _, cert = pem.unarmor(cert)
             cert = x509.Certificate.load(cert)
 
-        hashable = cert.subject.hashable
-        if hashable not in self._subject_map:
-            self._subject_map[hashable] = []
-
-        # Don't add the cert if we already have it
-        else:
-            serial_number = cert.serial_number
-            for existing_cert in self._subject_map[hashable]:
-                if existing_cert.serial_number == serial_number:
-                    return False
-
-        self._subject_map[hashable].append(cert)
-        if cert.key_identifier:
-            self._key_identifier_map[cert.key_identifier] = cert
-        else:
-            self._key_identifier_map[cert.public_key.sha1] = cert
-
-        return True
-
-    def retrieve_by_key_identifier(self, key_identifier):
-        """
-        Retrieves a cert via its key identifier
-
-        :param key_identifier:
-            A byte string of the key identifier
-
-        :return:
-            None or an asn1crypto.x509.Certificate object
-        """
-
-        if not isinstance(key_identifier, byte_cls):
-            raise TypeError(pretty_message(
-                '''
-                key_identifier must be a byte string, not %s
-                ''',
-                type_name(key_identifier)
-            ))
-
-        return self._key_identifier_map.get(key_identifier)
+        return self.register(cert)
 
     def retrieve_by_name(self, name, first_certificate=None):
         """
@@ -256,15 +305,9 @@ class CertificateRegistry():
                 type_name(first_certificate)
             ))
 
-        hashable = name.hashable
-
-        if hashable not in self._subject_map:
-            return []
-
-        certs = self._subject_map[hashable]
-        first = None
         output = []
-        for cert in certs:
+        first = None
+        for cert in super().retrieve_by_name(name):
             if first_certificate and first_certificate.sha256 == cert.sha256:
                 first = cert
             else:
@@ -366,9 +409,6 @@ class CertificateRegistry():
         """
 
         issuer_hashable = cert.issuer.hashable
-        if issuer_hashable not in self._subject_map:
-            return
-
         for issuer in self._subject_map[issuer_hashable]:
             # Info from the authority key identifier extension can be used to
             # eliminate possible options when multiple keys with the same
@@ -381,3 +421,32 @@ class CertificateRegistry():
                     continue
 
             yield issuer
+
+
+class LayeredCertificateStore(CertificateStore):
+    """
+    Trustless certificate store that looks up certificates in other stores
+    in a specific order.
+    """
+
+    def __init__(self, stores: List[CertificateStore]):
+        self._stores = stores
+
+    def retrieve_many_by_key_identifier(self, key_identifier: bytes):
+        def _gen():
+            for store in self._stores:
+                yield from store.retrieve_many_by_key_identifier(key_identifier)
+        return list(_gen())
+
+    def retrieve_by_name(self, name: x509.Name):
+        def _gen():
+            for store in self._stores:
+                yield from store.retrieve_by_name(name)
+        return list(_gen())
+
+    def retrieve_by_issuer_serial(self, issuer_serial):
+        for store in self._stores:
+            result = store.retrieve_by_issuer_serial(issuer_serial)
+            if result is not None:
+                return result
+        return None

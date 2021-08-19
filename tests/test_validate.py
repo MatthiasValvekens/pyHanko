@@ -9,6 +9,7 @@ import os
 from asn1crypto import crl, ocsp, pem, x509
 from asn1crypto.util import timezone
 from pyhanko_certvalidator import crl_client, ocsp_client
+from datetime import timezone
 from pyhanko_certvalidator.context import ValidationContext, \
     PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
@@ -228,6 +229,36 @@ class ValidateTests(unittest.TestCase):
         path = paths[0]
         self.assertEqual(3, len(path))
         validate_path(context, path)
+
+    def test_multitasking_ocsp(self):
+        # regression test for case where the same responder ID (name + key ID)
+        # is used in OCSP responses for different issuers in the same chain of
+        # trust
+
+        ors_dir = os.path.join(fixtures_dir, 'multitasking-ocsp')
+        with open(os.path.join(ors_dir, 'ocsp-resp-alice.der'), 'rb') as ocspin:
+            ocsp_resp_alice = ocsp.OCSPResponse.load(ocspin.read())
+        with open(os.path.join(ors_dir, 'ocsp-resp-interm.der'), 'rb') as ocspin:
+            ocsp_resp_interm = ocsp.OCSPResponse.load(ocspin.read())
+        vc = ValidationContext(
+            trust_roots=[
+                self._load_cert_object('multitasking-ocsp', 'root.cert.pem'),
+            ],
+            other_certs=[
+                self._load_cert_object('multitasking-ocsp', 'interm.cert.pem')
+            ],
+            revocation_mode='hard-fail',
+            allow_fetching=False,
+            ocsps=[ocsp_resp_interm, ocsp_resp_alice],
+            moment=datetime(2021, 8, 19, 12, 20, 44, tzinfo=timezone.utc)
+        )
+
+        cert = self._load_cert_object('multitasking-ocsp', 'alice.cert.pem')
+        paths = vc.certificate_registry.build_paths(cert)
+        self.assertEqual(1, len(paths))
+        path = paths[0]
+        self.assertEqual(3, len(path))
+        validate_path(vc, path)
 
     @data('ocsp_info', True)
     def openssl_ocsp(self, ca_file, other_files, cert_file, ocsp_files, path_len, moment, excp_class, excp_msg):
