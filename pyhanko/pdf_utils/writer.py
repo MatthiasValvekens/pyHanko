@@ -463,6 +463,24 @@ class BasePdfFileWriter(PdfHandler):
             self._info = info
         return info
 
+    def set_custom_trailer_entry(self, key: generic.NameObject,
+                                 value: generic.PdfObject):
+        """
+        Set a custom, unmanaged entry in the document trailer or cross-reference
+        stream dictionary.
+
+        .. warning::
+            Calling this method to set an entry that is managed by pyHanko
+            internally (info dictionary, document catalog, etc.) has undefined
+            results.
+
+        :param key:
+            Dictionary key to use in the trailer.
+        :param value:
+            Value to set
+        """
+        raise NotImplementedError
+
     @property
     def document_id(self) -> Tuple[bytes, bytes]:
         id_arr = self._document_id
@@ -1258,6 +1276,7 @@ class PdfFileWriter(BasePdfFileWriter):
             pdf_name('/Producer'): pdf_string(VENDOR)
         })
 
+        self._custom_trailer_entries = {}
         super().__init__(root, info, id_obj, stream_xrefs=stream_xrefs)
 
         if init_page_tree:
@@ -1336,6 +1355,29 @@ class PdfFileWriter(BasePdfFileWriter):
         self.output_version = (2, 0)
         sh = PubKeySecurityHandler.build_from_certs(recipients)
         self._assign_security_handler(sh)
+
+    def set_custom_trailer_entry(self, key: generic.NameObject,
+                                 value: generic.PdfObject):
+        """
+        Set a custom, unmanaged entry in the document trailer or cross-reference
+        stream dictionary.
+
+        .. warning::
+            Calling this method to set an entry that is managed by pyHanko
+            internally (info dictionary, document catalog, etc.) has undefined
+            results.
+
+        :param key:
+            Dictionary key to use in the trailer.
+        :param value:
+            Value to set
+        """
+        self._custom_trailer_entries[key] = value
+
+    def _populate_trailer(self, trailer):
+        # allow the base implementation to override internally managed entries
+        trailer.update(self._custom_trailer_entries)
+        super()._populate_trailer(trailer)
 
 
 def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:

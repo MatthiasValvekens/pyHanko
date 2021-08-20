@@ -373,6 +373,23 @@ def test_trailer_update():
     assert r.trailer['/Info']['/CreationDate'] == dt
 
 
+@pytest.mark.parametrize('incremental', [True, False])
+def test_generic_trailer_write(incremental):
+    if incremental:
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    else:
+        w = writer.copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+    w.add_object(generic.NullObject())
+    w.set_custom_trailer_entry(
+        pdf_name('/TEST.Test'), generic.TextStringObject('bleh')
+    )
+    assert '/TEST.Test' in w.trailer_view
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.trailer['/TEST.Test'] == 'bleh'
+
+
 def fmt_dummy_xrefs(xrefs, sep=b'\r\n'):
     dummy_hdr = b'%PDF-1.7\n%owqi'
 

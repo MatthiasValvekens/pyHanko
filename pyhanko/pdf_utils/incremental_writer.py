@@ -182,6 +182,24 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 'before calling write().'
             )
 
+    def set_custom_trailer_entry(self, key: generic.NameObject,
+                                 value: generic.PdfObject):
+        """
+        Set a custom, unmanaged entry in the document trailer or cross-reference
+        stream dictionary.
+
+        .. warning::
+            Calling this method to set an entry that is managed by pyHanko
+            internally (info dictionary, document catalog, etc.) has undefined
+            results.
+
+        :param key:
+            Dictionary key to use in the trailer.
+        :param value:
+            Value to set
+        """
+        self.trailer[key] = value
+
     def write(self, stream):
 
         if not self.objects:
