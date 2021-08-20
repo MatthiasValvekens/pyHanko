@@ -584,7 +584,9 @@ class TrailerDictionary(generic.PdfObject):
         return self.flatten().items()
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
-        return self.flatten().write_to_stream(stream, handler, container_ref)
+        raise NotImplementedError(
+            "TrailerDictionary object cannot be written directly"
+        )
 
 
 class PdfFileReader(PdfHandler):
