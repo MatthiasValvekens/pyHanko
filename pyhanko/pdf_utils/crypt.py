@@ -494,6 +494,9 @@ class SecurityHandler:
 
             Nonetheless, the value of this flag is required in key derivation
             computations, so the security handler needs to know about it.
+    :param compat_entries:
+        Write deprecated but technically unnecessary configuration settings for
+        compatibility with certain implementations.
     """
 
     __registered_subclasses: Dict[str, Type['SecurityHandler']] = dict()
@@ -501,7 +504,7 @@ class SecurityHandler:
 
     def __init__(self, version: SecurityHandlerVersion, legacy_keylen,
                  crypt_filter_config: 'CryptFilterConfiguration',
-                 encrypt_metadata=True):
+                 encrypt_metadata=True, compat_entries=True):
         self.version = version
         if crypt_filter_config is None:
             raise misc.PdfError("No crypt filter configuration")
@@ -510,6 +513,7 @@ class SecurityHandler:
         self.keylen = version.check_key_length(legacy_keylen)
         self.crypt_filter_config = crypt_filter_config
         self.encrypt_metadata = encrypt_metadata
+        self._compat_entries = compat_entries
 
     def __init_subclass__(cls, **kwargs):
         # ensure that _known_crypt_filters is initialised to a fresh object
@@ -1788,7 +1792,8 @@ class StandardSecurityHandler(SecurityHandler):
                  legacy_keylen,  # in bytes, not bits
                  perm_flags: int, odata, udata, oeseed=None,
                  ueseed=None, encrypted_perms=None, encrypt_metadata=True,
-                 crypt_filter_config: CryptFilterConfiguration = None):
+                 crypt_filter_config: CryptFilterConfiguration = None,
+                 compat_entries=True):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
                 crypt_filter_config = _std_rc4_config(5)
@@ -1801,7 +1806,7 @@ class StandardSecurityHandler(SecurityHandler):
                 crypt_filter_config = _std_aes_config(32)
         super().__init__(
             version, legacy_keylen, crypt_filter_config,
-            encrypt_metadata=encrypt_metadata
+            encrypt_metadata=encrypt_metadata, compat_entries=compat_entries
         )
         self.revision = revision
         self.perms = _as_signed(perm_flags)
@@ -1878,7 +1883,9 @@ class StandardSecurityHandler(SecurityHandler):
         result['/P'] = generic.NumberObject(_as_signed(self.perms))
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
-        result['/Length'] = generic.NumberObject(self.keylen * 8)
+        if self._compat_entries or \
+                self.version == SecurityHandlerVersion.RC4_LONGER_KEYS:
+            result['/Length'] = generic.NumberObject(self.keylen * 8)
         result['/V'] = self.version.as_pdf_object()
         result['/R'] = self.revision.as_pdf_object()
         if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
@@ -2496,7 +2503,8 @@ class PubKeySecurityHandler(SecurityHandler):
                  pubkey_handler_subfilter: PubKeyAdbeSubFilter,
                  legacy_keylen, encrypt_metadata=True,
                  crypt_filter_config: 'CryptFilterConfiguration' = None,
-                 recipient_objs: list = None):
+                 recipient_objs: list = None,
+                 compat_entries=True):
 
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
@@ -2528,7 +2536,7 @@ class PubKeySecurityHandler(SecurityHandler):
                 )
         super().__init__(
             version, legacy_keylen, crypt_filter_config,
-            encrypt_metadata=encrypt_metadata,
+            encrypt_metadata=encrypt_metadata, compat_entries=compat_entries
         )
         self.subfilter = pubkey_handler_subfilter
         self.encrypt_metadata = encrypt_metadata
@@ -2627,7 +2635,9 @@ class PubKeySecurityHandler(SecurityHandler):
         result['/Filter'] = generic.NameObject(self.get_name())
         result['/SubFilter'] = self.subfilter.value
         result['/V'] = self.version.as_pdf_object()
-        result['/Length'] = generic.NumberObject(self.keylen * 8)
+        if self._compat_entries or \
+                self.version == SecurityHandlerVersion.RC4_LONGER_KEYS:
+            result['/Length'] = generic.NumberObject(self.keylen * 8)
         if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
             result['/EncryptMetadata'] \
                 = generic.BooleanObject(self.encrypt_metadata)
