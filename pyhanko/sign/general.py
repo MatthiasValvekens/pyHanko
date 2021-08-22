@@ -8,7 +8,7 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Set, Optional, Tuple, Iterable, Union
+from typing import ClassVar, Set, Optional, Tuple, Union
 
 import hashlib
 
@@ -26,10 +26,14 @@ from pyhanko.pdf_utils.config_utils import ConfigurableMixin, \
     process_bit_string_flags, process_oids
 from pyhanko_certvalidator.path import ValidationPath
 
-from pyhanko_certvalidator import (
-    CertificateValidator, InvalidCertificateError, PathBuildingError,
+from pyhanko_certvalidator import CertificateValidator
+from pyhanko_certvalidator.registry import (
+    CertificateStore, SimpleCertificateStore
 )
-from pyhanko_certvalidator.errors import RevokedError, PathValidationError
+from pyhanko_certvalidator.errors import (
+    RevokedError, PathValidationError, InvalidCertificateError,
+    PathBuildingError
+)
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
@@ -602,77 +606,6 @@ def _check_signing_certificate(cert: x509.Certificate,
     # CA certs
     certid = attr['certs'][0]
     return check_ess_certid(cert, certid)
-
-
-class CertificateStore:
-    """
-    Bare-bones interface for modelling a collection of certificates.
-    """
-
-    def register(self, cert: x509.Certificate):
-        """
-        Add a certificate to the collection.
-
-        :param cert:
-            The certificate to add.
-        """
-        raise NotImplementedError
-
-    def __iter__(self):
-        """
-        Iterate over all certificates in the collection.
-        """
-        raise NotImplementedError
-
-    def __getitem__(self, item) -> x509.Certificate:
-        """
-        Retrieve a certificate by its ``issuer_serial`` value.
-
-        :param item:
-            The ``issuer_serial`` value of the certificate.
-        :return:
-            The certificate corresponding to the ``issuer_serial`` key
-            passed in.
-        :raises KeyError:
-            Raised if no certificate was found.
-        """
-        raise NotImplementedError
-
-    def register_multiple(self, certs):
-        """
-        Register multiple certificates.
-
-        :param certs:
-            Certificates to register.
-        """
-
-        for cert in certs:
-            self.register(cert)
-
-
-class SimpleCertificateStore(CertificateStore):
-    """
-    Unopinionated replacement for pyhanko_certvalidator's CertificateRegistry in cases
-    where we explicitly don't care about whether the certs are trusted or not.
-    """
-
-    @classmethod
-    def from_certs(cls, certs: Iterable[x509.Certificate]):
-        s = SimpleCertificateStore()
-        s.certs = {cert.issuer_serial: cert for cert in certs}
-        return s
-
-    def __init__(self):
-        self.certs = {}
-
-    def register(self, cert: x509.Certificate):
-        self.certs[cert.issuer_serial] = cert
-
-    def __getitem__(self, item):
-        return self.certs[item]
-
-    def __iter__(self):
-        return iter(self.certs.values())
 
 
 class SigningError(ValueError):
