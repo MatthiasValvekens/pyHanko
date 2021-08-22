@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals, division, absolute_import, print_function
 
+import abc
 from collections import defaultdict
 from typing import List
 
@@ -13,7 +14,11 @@ from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
 
 
-class CertificateStore:
+class CertificateCollection(abc.ABC):
+    """
+    Abstract base class for read-only access to a collection of certificates.
+    """
+
     def retrieve_by_key_identifier(self, key_identifier: bytes):
         """
         Retrieves a cert via its key identifier
@@ -69,6 +74,36 @@ class CertificateStore:
         raise NotImplementedError
 
 
+class CertificateStore(CertificateCollection, abc.ABC):
+    def register(self, cert: x509.Certificate) -> bool:
+        """
+        Register a single certificate.
+
+        :param cert:
+            Certificate to add.
+        :return:
+            ``True`` if the certificate was added, ``False`` if it already
+            existed in this store.
+        """
+        raise NotImplementedError
+
+    def register_multiple(self, certs):
+        """
+        Register multiple certificates.
+
+        :param certs:
+            Certificates to register.
+        :return:
+            ``True`` if at least one certificate was added, ``False``
+            if all certificates already existed in this store.
+        """
+
+        added = False
+        for cert in certs:
+            added |= self.register(cert)
+        return added
+
+
 class SimpleCertificateStore(CertificateStore):
     """
     Simple trustless certificate store.
@@ -87,6 +122,15 @@ class SimpleCertificateStore(CertificateStore):
         self._key_identifier_map = defaultdict(list)
 
     def register(self, cert: x509.Certificate) -> bool:
+        """
+        Register a single certificate.
+
+        :param cert:
+            Certificate to add.
+        :return:
+            ``True`` if the certificate was added, ``False`` if it already
+            existed in this store.
+        """
         if cert.issuer_serial in self.certs:
             return False
         self.certs[cert.issuer_serial] = cert
@@ -423,7 +467,7 @@ class CertificateRegistry(SimpleCertificateStore):
             yield issuer
 
 
-class LayeredCertificateStore(CertificateStore):
+class LayeredCertificateStore(CertificateCollection):
     """
     Trustless certificate store that looks up certificates in other stores
     in a specific order.

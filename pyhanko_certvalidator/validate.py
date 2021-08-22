@@ -33,11 +33,11 @@ from .errors import (
 )
 from .path import ValidationPath, QualifiedPolicy
 
-
-# make sure EdDSA OIDs are known to asn1crypto
-from .registry import CertificateStore, LayeredCertificateStore, \
+from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore
 
+
+# make sure EdDSA OIDs are known to asn1crypto
 register_eddsa_oids()
 
 
@@ -1267,7 +1267,7 @@ def verify_ocsp_response(cert, path, validation_context, cert_description=None, 
             continue
 
         # To verify the response as legitimate, the responder cert must be located
-        cert_store: CertificateStore = certificate_registry
+        cert_store: CertificateCollection = certificate_registry
         # prioritise the certificates included with the response, if there
         # are any
         if response['certs']:
