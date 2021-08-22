@@ -61,7 +61,7 @@ class CLIConfig:
     time_tolerance: timedelta
     retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
-    pcks11_setups: Dict[str, dict]
+    pkcs11_setups: Dict[str, dict]
 
     # TODO graceful error handling for syntax & type issues?
 
@@ -120,9 +120,9 @@ class CLIConfig:
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
         return cls.from_config(style_config)
 
-    def get_pcks11_config(self, name):
+    def get_pkcs11_config(self, name):
         try:
-            setup = self.pcks11_setups[name]
+            setup = self.pkcs11_setups[name]
         except KeyError:
             raise ConfigurationError(f"There's no PKCS#11 setup named '{name}'")
         return PKCS11SignatureConfig.from_config(setup)
@@ -352,7 +352,7 @@ def parse_cli_config(yaml_str):
     log_config_spec = config_dict.get('logging', {})
     log_config = parse_logging_config(log_config_spec)
 
-    pcks11_setups = config_dict.get('pkcs11-setups', {})
+    pkcs11_setups = config_dict.get('pkcs11-setups', {})
 
     # some misc settings
     default_vc = config_dict.get(
@@ -375,5 +375,5 @@ def parse_cli_config(yaml_str):
         validation_contexts=vcs, default_validation_context=default_vc,
         time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
-        log_config=log_config, pcks11_setups=pcks11_setups
+        log_config=log_config, pkcs11_setups=pkcs11_setups
     )

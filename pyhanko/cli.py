@@ -956,7 +956,7 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
                 "The --p11-setup option requires a configuration file"
             )
         try:
-            pkcs11_config = cli_config.get_pcks11_config(p11_setup)
+            pkcs11_config = cli_config.get_pkcs11_config(p11_setup)
         except ConfigurationError as e:
             msg = f"Error while reading PKCS#11 config {p11_setup}"
             logger.error(msg, exc_info=e)

@@ -519,9 +519,9 @@ def test_read_pkcs11_config():
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
-    setup = cli_config.get_pcks11_config('foo')
+    setup = cli_config.get_pkcs11_config('foo')
     with pytest.raises(ConfigurationError):
-        cli_config.get_pcks11_config('bar')
+        cli_config.get_pkcs11_config('bar')
 
     assert setup.token_label == 'testrsa'
     assert setup.module_path == '/path/to/libfoo.so'
