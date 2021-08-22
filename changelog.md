@@ -1,5 +1,11 @@
 # changelog
 
+## 0.16.0
+
+ - Refactor CertificateRegistry
+ - Change OCSP responder cert selection procedure to give priority to certificates embedded into
+   the response data (if there are any).
+
 ## 0.15.3
 
  - Short-circuit anyPolicy when reporting policies
