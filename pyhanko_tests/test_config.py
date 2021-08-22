@@ -1,4 +1,6 @@
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import Optional, Iterable, Union
 
 import pytest
 import yaml
@@ -7,7 +9,7 @@ from pyhanko import config, stamp
 from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL, \
     DEFAULT_TIME_TOLERANCE, init_validation_context_kwargs
 from pyhanko.pdf_utils import layout
-from pyhanko.pdf_utils.config_utils import ConfigurationError
+from pyhanko.pdf_utils.config_utils import ConfigurationError, ConfigurableMixin
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
@@ -135,6 +137,7 @@ def test_read_bad_background_config():
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     with pytest.raises(ConfigurationError, match='must be a string'):
         cli_config.get_stamp_style()
+
 
 @pytest.mark.parametrize("bad_type", ['5', '[1,2,3]'])
 def test_read_bad_config2(bad_type):
@@ -600,3 +603,105 @@ def test_read_simple_layout_config_failures(cfg_str, error):
     config_dict = yaml.safe_load(cfg_str)
     with pytest.raises(ConfigurationError, match=error):
         layout.SimpleBoxLayoutRule.from_config(config_dict)
+
+
+@dataclass(frozen=True)
+class DemoConfigurableA(ConfigurableMixin):
+    field1: int
+    field2: Iterable[int]
+    field3: Optional[int] = None
+    field4: Optional[Iterable[int]] = None
+    field5: Union[str, int] = 'abc'
+    field6: Union[str, int, None] = None
+
+
+@dataclass(frozen=True)
+class DemoConfigurableB(ConfigurableMixin):
+    some_field: Optional[DemoConfigurableA] = None
+
+
+@pytest.mark.parametrize('cfg_str, expected_field_val', [
+    (
+        """
+        some_field:
+            field1: 1
+            field2: [1,2]
+        """,
+        DemoConfigurableA(field1=1, field2=[1, 2])
+    ),
+    (
+        """
+        some_field:
+            field1: 1
+            field2: [1,2]
+            field3: 5
+        """,
+        DemoConfigurableA(field1=1, field2=[1, 2], field3=5)
+    ),
+    (
+        """
+        some_field:
+            field1: 1
+            field2: [1,2]
+            field3: 5
+            field4: [6,7,8]
+        """,
+        DemoConfigurableA(field1=1, field2=[1, 2], field3=5, field4=[6, 7, 8])
+    ),
+    (
+        """
+        some_field:
+            field1: 1
+            field2: [1,2]
+            field5: xyz
+        """,
+        DemoConfigurableA(field1=1, field2=[1, 2], field5='xyz')
+    ),
+    (
+        """
+        some_field:
+            field1: 1
+            field2: [1,2]
+            field5: 8
+            field6: xyz
+        """,
+        DemoConfigurableA(field1=1, field2=[1, 2], field5=8, field6='xyz')
+    ),
+    ("{}", None)
+])
+def test_configurable_recurse(cfg_str, expected_field_val):
+    config_dict = yaml.safe_load(cfg_str)
+    b = DemoConfigurableB.from_config(config_dict)
+    assert b.some_field == expected_field_val
+
+
+@pytest.mark.parametrize("cfg_str", [
+    """
+    field2: [1,2]
+    field3: 5
+    """,
+    """
+    field1: 1
+    field3: 5
+    """,
+    """
+    field3: 5
+    """,
+    "{}"
+])
+def test_enforce_required(cfg_str):
+    config_dict = yaml.safe_load(cfg_str)
+    with pytest.raises(ConfigurationError, match="Missing required key"):
+        DemoConfigurableA.from_config(config_dict)
+
+
+def test_enforce_required_recursive():
+    config_dict = yaml.safe_load(
+        """
+        some_field:
+            field2: [1,2]
+        """
+    )
+    with pytest.raises(ConfigurationError,
+                       match="Error while processing configurable field"):
+        DemoConfigurableB.from_config(config_dict)

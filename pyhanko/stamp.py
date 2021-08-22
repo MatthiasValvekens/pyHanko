@@ -251,30 +251,6 @@ class TextStampStyle(BaseStampStyle):
     Datetime format used to render the timestamp.
     """
 
-    @classmethod
-    def process_entries(cls, config_dict):
-        """
-        This implementation of :meth:`process_entries` invokes super(),
-        and then calls :meth:`.TextBoxStyle.from_config` to parse the
-        ``text_box_style`` configuration entry, if present.
-        The ``inner_content_layout`` entry is similarly processed.
-        """
-
-        super().process_entries(config_dict)
-        try:
-            tbs = config_dict['text_box_style']
-            config_dict['text_box_style'] \
-                = TextBoxStyle.from_config(tbs)
-        except KeyError:
-            pass
-
-        try:
-            icl = config_dict['inner_content_layout']
-            config_dict['inner_content_layout'] = \
-                layout.SimpleBoxLayoutRule.from_config(icl)
-        except KeyError:
-            pass
-
     def create_stamp(self, writer: BasePdfFileWriter,
                      box: layout.BoxConstraints, text_params: dict) \
             -> 'TextStamp':

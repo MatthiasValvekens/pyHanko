@@ -475,10 +475,6 @@ class SimpleBoxLayoutRule(ConfigurableMixin):
             y_align = AxisAlignment.from_y_align(y_align)
         config_dict['y_align'] = y_align
 
-        margins = config_dict.get('margins', None)
-        if isinstance(margins, (dict, list)):
-            config_dict['margins'] = Margins.from_config(margins)
-
         scaling = config_dict.get('inner_content_scaling', None)
         if scaling is not None:
             config_dict['inner_content_scaling'] \

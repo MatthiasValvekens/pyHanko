@@ -9,15 +9,56 @@ user-provided configuration (e.g. from a Yaml file).
 
 import dataclasses
 import re
+from typing import Type, Optional, Union
+from asn1crypto.core import ObjectIdentifier, BitString
 
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
     'OID_REGEX', 'process_oid', 'process_oids', 'process_bit_string_flags'
 ]
 
-from typing import Type
+_noneType = type(None)
 
-from asn1crypto.core import ObjectIdentifier, BitString
+
+def _unwrap_type_annot(thing) -> Optional[type]:
+    if isinstance(thing, type):
+        the_type = thing
+    else:
+        try:
+            from typing import get_args, get_origin
+        except ImportError:  # pragma: nocover
+            # backwards compatibility with Python 3.7
+            def get_args(tp):
+                try:
+                    return tp.__args__
+                except AttributeError:
+                    return ()
+
+            def get_origin(tp):
+                try:
+                    return tp.__origin__
+                except AttributeError:
+                    return None
+
+        # is it an optional? (i.e. Union[X, None])
+        # if so, retrieve the wrapped type
+        if get_origin(thing) is not Union:
+            return None
+        try:
+            type1, type2 = get_args(thing)
+            if type2 is not _noneType:
+                return None
+        except (ValueError, TypeError):
+            return None
+        the_type = type1
+    return the_type if isinstance(the_type, type) else None
+
+
+def _has_default(f: dataclasses.Field):
+    return (
+        f.default_factory is not dataclasses.MISSING
+        or f.default is not dataclasses.MISSING
+    )
 
 
 class ConfigurationError(ValueError):
@@ -48,6 +89,29 @@ class ConfigurableMixin:
         pass
 
     @classmethod
+    def _process_configurable_fields(cls, config_dict):
+        # automatically parse values for configurable fields
+        for f in dataclasses.fields(cls):
+            field_type = _unwrap_type_annot(f.type)
+            if field_type is None or \
+                    not issubclass(field_type, ConfigurableMixin):
+                continue
+            # if the field has a value in the config dict, attempt to parse it
+            try:
+                field_config_dict = config_dict[f.name]
+            except KeyError:
+                continue
+            try:
+                field_value = field_type.from_config(field_config_dict)
+            except ConfigurationError as e:
+                raise ConfigurationError(
+                    f"Error while processing configurable field '{f.name}': "
+                    f"{repr(e)}"
+                ) from e
+            config_dict[f.name] = field_value
+
+
+    @classmethod
     def from_config(cls, config_dict):
         """
         Attempt to instantiate an object of the class on which it is called,
@@ -76,7 +140,16 @@ class ConfigurableMixin:
         config_dict = {
             key.replace('-', '_'): v for key, v in config_dict.items()
         }
+
+        cls._process_configurable_fields(config_dict)
+
         cls.process_entries(config_dict)
+
+        enforce_required_keys(
+            cls.__name__, {
+                f.name for f in dataclasses.fields(cls) if not _has_default(f)
+            }, config_dict
+        )
         try:
             # noinspection PyArgumentList
             return cls(**config_dict)
@@ -87,21 +160,38 @@ class ConfigurableMixin:
 def check_config_keys(config_name, expected_keys, config_dict):
     # wrapper function to provide user-friendly errors
     #  (mainly intended for the CLI)
+    # This does not check whether all required keys are present, that happens
+    # later
     # TODO What about type checking?
     if not isinstance(config_dict, dict):  # pragma: nocover
         raise ConfigurationError(
             f"{config_name} requires a dictionary to initialise."
         )
-    # standardise on dashes for the yaml interface
-    provided_keys = {key.replace('_', '-') for key in config_dict.keys()}
-    expected_keys = {key.replace('_', '-') for key in expected_keys}
-    if not (provided_keys <= expected_keys):
-        unexpected_keys = provided_keys - expected_keys
+    unexpected_keys = _check_subset(config_dict.keys(), expected_keys)
+    if unexpected_keys:
         # this is easier to present to the user than a TypeError
         raise ConfigurationError(
             f"Unexpected {'key' if len(unexpected_keys) == 1 else 'keys'} "
             f"in configuration for {config_name}: "
-            f"{','.join(key.replace('_', '-') for key in unexpected_keys)}."
+            f"{', '.join(unexpected_keys)}."
+        )
+
+
+def _check_subset(expected_sub, expected_sup):
+    # standardise on dashes for the yaml interface
+    expected_sub = {key.replace('_', '-') for key in expected_sub}
+    expected_sup = {key.replace('_', '-') for key in expected_sup}
+    return expected_sub - expected_sup
+
+
+def enforce_required_keys(config_name, required_keys, config_dict):
+    missing_keys = _check_subset(required_keys, config_dict.keys())
+    if missing_keys:
+        # this is easier to present to the user than a TypeError
+        raise ConfigurationError(
+            f"Missing required {'key' if len(missing_keys) == 1 else 'keys'} "
+            f"in configuration for {config_name}: "
+            f"{', '.join(missing_keys)}."
         )
 
 
