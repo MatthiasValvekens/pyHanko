@@ -618,7 +618,10 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
               show_default=True)
 @click.option('--timestamp-url', help='URL for timestamp server',
               required=False, type=str, default=None)
-@click.option('--use-pades', help='sign PAdES-style [level B/B-T/B-LT]',
+@click.option('--use-pades', help='sign PAdES-style [level B/B-T/B-LT/B-LTA]',
+              required=False, default=False, is_flag=True, type=bool,
+              show_default=True)
+@click.option('--use-pades-lta', help='produce PAdES-B-LTA signature',
               required=False, default=False, is_flag=True, type=bool,
               show_default=True)
 @click.option('--prefer-pss', is_flag=True, default=False, type=bool,
@@ -652,7 +655,7 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
               type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, use_pades, with_validation_info,
+           timestamp_url, use_pades, use_pades_lta, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
            style_name, stamp_url, prefer_pss, retroactive_revinfo,
            detach, detach_pem):
@@ -665,7 +668,7 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         ctx.obj[Ctx.SIG_META] = None
         return  # everything else doesn't apply
 
-    if use_pades:
+    if use_pades or use_pades_lta:
         subfilter = fields.SigSeedSubFilter.PADES
     else:
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
@@ -689,7 +692,8 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         field_name=field_name, location=location, reason=reason, name=name,
         certify=certify, subfilter=subfilter,
         embed_validation_info=with_validation_info,
-        validation_context=vc, signer_key_usage=key_usage
+        validation_context=vc, signer_key_usage=key_usage,
+        use_pades_lta=use_pades_lta
     )
     ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
     ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)
