@@ -292,7 +292,7 @@ class SignatureStatus:
 
     pkcs7_signature_mechanism: str
     """
-    PKCS7 signature mechanism used.
+    CMS signature mechanism used.
     """
 
     # TODO: also here some ambiguity analysis is in order

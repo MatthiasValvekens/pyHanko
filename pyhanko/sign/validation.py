@@ -8,7 +8,8 @@ from enum import Enum, unique
 from typing import TypeVar, Type, Optional, Union, Iterator, IO
 
 from asn1crypto import (
-    cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509,
+    cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509, keys,
+    core
 )
 from asn1crypto.x509 import Certificate
 from cryptography.hazmat.primitives import hashes
@@ -420,8 +421,21 @@ class StandardCMSSignatureStatus(SignatureStatus):
 
         validity_info = (
             "The signature is cryptographically "
-            f"{'' if self.intact and self.valid else 'un'}sound."
+            f"{'' if self.intact and self.valid else 'un'}sound.\n\n"
+            f"The digest algorithm used was '{self.md_algorithm}'.\n"
+            f"The signature mechanism used was "
+            f"'{self.pkcs7_signature_mechanism}'."
         )
+        if 'ecdsa' in self.pkcs7_signature_mechanism:
+            ec_params: keys.ECDomainParameters = \
+                cert.public_key['algorithm']['parameters']
+            if ec_params.name == 'named':
+                curve_oid: core.ObjectIdentifier = ec_params.chosen
+                validity_info += (
+                    f"\nThe elliptic curve used for the signer's ECDSA "
+                    f"public key was '{curve_oid.native}' "
+                    f"(OID: {curve_oid.dotted})."
+                )
 
         timing_infos = []
         reported_ts = self.signer_reported_dt
