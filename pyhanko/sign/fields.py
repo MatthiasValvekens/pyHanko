@@ -1190,6 +1190,20 @@ class SigFieldSpec:
     annotation dictionary; ``True`` by default.
     """
 
+    empty_field_appearance: bool = False
+    """
+    Generate a neutral appearance stream for empty, visible signature fields.
+    If ``False``, an empty appearance stream will be put in.
+    
+    .. note::
+        We use an empty appearance stream to satisfy the appearance requirements
+        for widget annotations in ISO 32000-2. However, even when a nontrivial
+        appearance stream is present on an empty signature field, many viewers 
+        will not use it to render the appearance of the empty field on-screen.
+
+        Instead, these viewers typically substitute their own native widget.
+    """
+
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
         if self.field_mdp_spec is None:
             return
@@ -1472,20 +1486,26 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
         llx, lly, urx, ury = sig_field_spec.box
         w = abs(urx - llx)
         h = abs(ury - lly)
-        # TODO: allow appearance customisation through sig_field_spec
         if w and h:
             sig_field[pdf_name('/AP')] = ap_dict = generic.DictionaryObject()
-            # draw a simple rectangle
-            appearance_cmds = [
-                b'q',
-                b'q 0.95 0.95 0.95 rg 0 0 %g %g re f Q' % (w, h),  # background
-                b'0.5 w 0 0 %g %g re S' % (w, h),  # border
-                b'Q'
-            ]
-            ap_stream = RawContent(
-                b' '.join(appearance_cmds),
-                box=BoxConstraints(width=w, height=h)
-            ).as_form_xobject()
+            if sig_field_spec.empty_field_appearance:
+                # draw a simple rectangle
+                appearance_cmds = [
+                    b'q',
+                    # background
+                    b'q 0.95 0.95 0.95 rg 0 0 %g %g re f Q' % (w, h),
+                    # border
+                    b'0.5 w 0 0 %g %g re S' % (w, h),
+                    b'Q'
+                ]
+                ap_stream = RawContent(
+                    b' '.join(appearance_cmds),
+                    box=BoxConstraints(width=w, height=h)
+                ).as_form_xobject()
+            else:
+                ap_stream = RawContent(
+                    b'', box=BoxConstraints(width=w, height=h)
+                ).as_form_xobject()
             ap_dict[pdf_name('/N')] = pdf_out.add_object(ap_stream)
 
     lock = sig_field_spec.format_lock_dictionary()

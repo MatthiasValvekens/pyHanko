@@ -682,6 +682,43 @@ def test_append_sigfield_second_page():
     assert pg2['/Annots'][0]['/T'] == 'Sig1'
 
 
+def test_append_sigfield_ap():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    spec = fields.SigFieldSpec(
+        sig_field_name='Sig1', empty_field_appearance=True,
+        box=(20, 20, 80, 40)
+    )
+    fields.append_signature_field(w, sig_field_spec=spec)
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+
+    pg1 = r.root['/Pages']['/Kids'][0]
+    assert '/Annots' in pg1
+    assert len(pg1['/Annots']) == 1
+    annot = pg1['/Annots'][0]
+    assert '/AP' in annot
+    assert len(annot['/AP']['/N'].data) > 10
+
+
+def test_append_sigfield_trivial_ap():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    spec = fields.SigFieldSpec(sig_field_name='Sig1', box=(20, 20, 80, 40))
+    fields.append_signature_field(w, sig_field_spec=spec)
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+
+    pg1 = r.root['/Pages']['/Kids'][0]
+    assert '/Annots' in pg1
+    assert len(pg1['/Annots']) == 1
+    annot = pg1['/Annots'][0]
+    assert '/AP' in annot
+    assert annot['/AP']['/N'].data == b''
+
+
 @pytest.mark.parametrize('include_docmdp', [True, False])
 @freeze_time('2020-11-01')
 def test_add_sigfield_with_lock(include_docmdp):
