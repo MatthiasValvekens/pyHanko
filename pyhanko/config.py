@@ -14,7 +14,7 @@ from pyhanko.pdf_utils.config_utils import (
 )
 from pyhanko.pdf_utils.misc import get_and_apply
 
-from pyhanko.sign import load_certs_from_pemder
+from pyhanko.sign import load_certs_from_pemder, SimpleSigner
 from pyhanko.sign.general import KeyUsageConstraints
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.stamp import QRStampStyle, TextStampStyle
@@ -61,6 +61,8 @@ class CLIConfig:
     time_tolerance: timedelta
     retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
+    pemder_setups: Dict[str, dict]
+    pkcs12_setups: Dict[str, dict]
     pkcs11_setups: Dict[str, dict]
 
     # TODO graceful error handling for syntax & type issues?
@@ -126,6 +128,20 @@ class CLIConfig:
         except KeyError:
             raise ConfigurationError(f"There's no PKCS#11 setup named '{name}'")
         return PKCS11SignatureConfig.from_config(setup)
+
+    def get_pkcs12_config(self, name):
+        try:
+            setup = self.pkcs12_setups[name]
+        except KeyError:
+            raise ConfigurationError(f"There's no PKCS#12 setup named '{name}'")
+        return PKCS12SignatureConfig.from_config(setup)
+
+    def get_pemder_config(self, name):
+        try:
+            setup = self.pemder_setups[name]
+        except KeyError:
+            raise ConfigurationError(f"There's no PEM/DER setup named '{name}'")
+        return PemDerSignatureConfig.from_config(setup)
 
 
 def init_validation_context_kwargs(*, trust, trust_replace, other_certs,
@@ -235,6 +251,123 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
         log_config[module] = LogConfig(level=level_spec, output=output_spec)
 
     return log_config
+
+
+@dataclass(frozen=True)
+class PKCS12SignatureConfig(config_utils.ConfigurableMixin):
+    """
+    Configuration for a signature using key material on disk, contained
+    in a PKCS#12 bundle.
+    """
+
+    pfx_file: str
+    """Path to the PKCS#12 file."""
+
+    other_certs: List[x509.Certificate] = None
+    """Other relevant certificates."""
+
+    pfx_passphrase: bytes = None
+    """PKCS#12 passphrase (if relevant)."""
+
+    prompt_passphrase: bool = True
+    """
+    Prompt for the PKCS#12 passphrase. Default is ``True``.
+
+    .. note::
+        If :attr:`key_passphrase` is not ``None``, this setting has no effect.
+    """
+
+    prefer_pss: bool = False
+    """
+    Prefer PSS to PKCS#1 v1.5 padding when creating RSA signatures.
+    """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
+
+        other_certs = config_dict.get('other_certs', ())
+        if isinstance(other_certs, str):
+            other_certs = (other_certs,)
+        config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
+
+        try:
+            passphrase = config_dict['pfx_passphrase']
+            if passphrase is not None:
+                config_dict['pfx_passphrase'] = passphrase.encode('utf8')
+        except KeyError:
+            pass
+
+    def instantiate(self, provided_pfx_passphrase: Optional[bytes] = None) \
+            -> SimpleSigner:
+        passphrase = self.pfx_passphrase or provided_pfx_passphrase
+        result = SimpleSigner.load_pkcs12(
+            pfx_file=self.pfx_file, passphrase=passphrase,
+            other_certs=self.other_certs, prefer_pss=self.prefer_pss
+        )
+        if result is None:
+            raise ConfigurationError("Error while loading key material")
+        return result
+
+
+@dataclass(frozen=True)
+class PemDerSignatureConfig(config_utils.ConfigurableMixin):
+    """
+    Configuration for a signature using PEM or DER-encoded key material on disk.
+    """
+
+    key_file: str
+    """Signer's private key."""
+
+    cert_file: str
+    """Signer's certificate."""
+
+    other_certs: List[x509.Certificate] = None
+    """Other relevant certificates."""
+
+    key_passphrase: bytes = None
+    """Signer's key passphrase (if relevant)."""
+
+    prompt_passphrase: bool = True
+    """
+    Prompt for the key passphrase. Default is ``True``.
+
+    .. note::
+        If :attr:`key_passphrase` is not ``None``, this setting has no effect.
+    """
+
+    prefer_pss: bool = False
+    """
+    Prefer PSS to PKCS#1 v1.5 padding when creating RSA signatures.
+    """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        super().process_entries(config_dict)
+
+        other_certs = config_dict.get('other_certs', ())
+        if isinstance(other_certs, str):
+            other_certs = (other_certs,)
+        config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
+
+        try:
+            passphrase = config_dict['key_passphrase']
+            if passphrase is not None:
+                config_dict['key_passphrase'] = passphrase.encode('utf8')
+        except KeyError:
+            pass
+
+    def instantiate(self, provided_key_passphrase: Optional[bytes] = None) \
+            -> SimpleSigner:
+        key_passphrase = self.key_passphrase or provided_key_passphrase
+        result = SimpleSigner.load(
+            key_file=self.key_file, cert_file=self.cert_file,
+            other_certs=self.other_certs, prefer_pss=self.prefer_pss,
+            key_passphrase=key_passphrase,
+        )
+        if result is None:
+            raise ConfigurationError("Error while loading key material")
+        return result
 
 
 @dataclass(frozen=True)
@@ -353,6 +486,8 @@ def parse_cli_config(yaml_str):
     log_config = parse_logging_config(log_config_spec)
 
     pkcs11_setups = config_dict.get('pkcs11-setups', {})
+    pkcs12_setups = config_dict.get('pkcs12-setups', {})
+    pemder_setups = config_dict.get('pemder-setups', {})
 
     # some misc settings
     default_vc = config_dict.get(
@@ -375,5 +510,6 @@ def parse_cli_config(yaml_str):
         validation_contexts=vcs, default_validation_context=default_vc,
         time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
-        log_config=log_config, pkcs11_setups=pkcs11_setups
+        log_config=log_config, pkcs11_setups=pkcs11_setups,
+        pkcs12_setups=pkcs12_setups, pemder_setups=pemder_setups
     )

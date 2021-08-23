@@ -736,7 +736,8 @@ class SimpleSigner(Signer):
             return None
 
     @classmethod
-    def load_pkcs12(cls, pfx_file, ca_chain_files=None, passphrase=None,
+    def load_pkcs12(cls, pfx_file, ca_chain_files=None,
+                    other_certs=None, passphrase=None,
                     signature_mechanism=None, prefer_pss=False):
         """
         Load certificates and key material from a PCKS#12 archive
@@ -747,6 +748,9 @@ class SimpleSigner(Signer):
         :param ca_chain_files:
             Path to (PEM/DER) files containing other relevant certificates
             not included in the PKCS#12 file.
+        :param other_certs:
+            Other relevant certificates, specified as a list of
+            :class:`.asn1crypto.x509.Certificate` objects.
         :param passphrase:
             Passphrase to decrypt the PKCS#12 archive, if required.
         :param signature_mechanism:
@@ -771,18 +775,26 @@ class SimpleSigner(Signer):
             if ca_chain_files else set()
         if ca_chain is None:  # pragma: nocover
             return None
-
-        (private_key, cert, other_certs) = pkcs12.load_key_and_certificates(
-            pfx_bytes, passphrase
-        )
+        try:
+            (private_key, cert, other_certs_pkcs12) \
+                = pkcs12.load_key_and_certificates(pfx_bytes, passphrase)
+        except (IOError, ValueError, TypeError) as e:
+            logger.error(
+                'Could not load key material from PKCS#12 file', exc_info=e
+            )
+            return None
         kinfo = _translate_pyca_cryptography_key_to_asn1(private_key)
         cert = _translate_pyca_cryptography_cert_to_asn1(cert)
-        other_certs = set(
-            map(_translate_pyca_cryptography_cert_to_asn1, other_certs)
-        )
+        other_certs_pkcs12 = set(map(
+            _translate_pyca_cryptography_cert_to_asn1,
+            other_certs_pkcs12
+        ))
 
         cs = SimpleCertificateStore()
-        cs.register_multiple(ca_chain | set(other_certs))
+        certs_to_register = ca_chain | other_certs_pkcs12
+        if other_certs is not None:
+            certs_to_register |= set(other_certs)
+        cs.register_multiple(certs_to_register)
         return SimpleSigner(
             signing_key=kinfo, signing_cert=cert,
             cert_registry=cs, signature_mechanism=signature_mechanism,
@@ -822,7 +834,7 @@ class SimpleSigner(Signer):
                 key_file, passphrase=key_passphrase
             )
             signing_cert = load_cert_from_pemder(cert_file)
-        except (IOError, ValueError, TypeError) as e:  # pragma: nocover
+        except (IOError, ValueError, TypeError) as e:
             logger.error('Could not load cryptographic material', exc_info=e)
             return None
 

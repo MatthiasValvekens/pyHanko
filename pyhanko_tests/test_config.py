@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional, Iterable, Union
@@ -13,7 +14,7 @@ from pyhanko.pdf_utils.config_utils import ConfigurationError, ConfigurableMixin
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
-from pyhanko_tests.samples import TESTING_CA_DIR
+from pyhanko_tests.samples import TESTING_CA_DIR, CRYPTO_DATA_DIR
 
 
 @pytest.mark.parametrize('trust_replace', [True, False])
@@ -526,6 +527,119 @@ def test_read_pkcs11_config():
     assert setup.token_label == 'testrsa'
     assert setup.module_path == '/path/to/libfoo.so'
     assert len(setup.other_certs) == 2
+
+
+def _signer_sanity_check(signer):
+    digest = hashlib.sha256(b'Hello world!').digest()
+    sig = signer.sign(digest, digest_algorithm='sha256')
+    from pyhanko.sign.general import validate_sig_integrity
+    intact, valid = validate_sig_integrity(
+        sig['content']['signer_infos'][0], cert=signer.signing_cert,
+        expected_content_type='data', actual_digest=digest
+    )
+    assert intact and valid
+
+
+def test_read_pkcs12_config():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs12-setups:
+            foo:
+                pfx-file: '{TESTING_CA_DIR}/interm/signer1.pfx'
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    setup = cli_config.get_pkcs12_config('foo')
+    with pytest.raises(ConfigurationError):
+        cli_config.get_pkcs12_config('bar')
+
+    assert len(setup.other_certs) == 2
+
+    signer = setup.instantiate()
+    _signer_sanity_check(signer)
+
+
+def test_read_pkcs12_config_null_pw():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs12-setups:
+            foo:
+                pfx-file: '{TESTING_CA_DIR}/interm/signer1.pfx'
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+                pfx-passphrase: null
+        """
+    )
+    setup = cli_config.get_pkcs12_config('foo')
+    assert len(setup.other_certs) == 2
+
+    signer = setup.instantiate()
+    _signer_sanity_check(signer)
+
+
+def test_read_pemder_config():
+    cli_config = config.parse_cli_config(
+        f"""
+        pemder-setups:
+            foo:
+                key-file: '{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem'
+                cert-file: '{TESTING_CA_DIR}/interm/signer1.cert.pem'
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+                key-passphrase: secret
+        """
+    )
+    setup = cli_config.get_pemder_config('foo')
+    with pytest.raises(ConfigurationError):
+        cli_config.get_pemder_config('bar')
+
+    assert len(setup.other_certs) == 2
+
+    signer = setup.instantiate()
+    _signer_sanity_check(signer)
+
+
+def test_read_pemder_config_wrong_passphrase():
+    cli_config = config.parse_cli_config(
+        f"""
+        pemder-setups:
+            foo:
+                key-file: '{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem'
+                cert-file: '{TESTING_CA_DIR}/interm/signer1.cert.pem'
+                key-passphrase: "this passphrase is wrong"
+        """
+    )
+    setup = cli_config.get_pemder_config('foo')
+    with pytest.raises(ConfigurationError):
+        setup.instantiate()
+
+
+def test_read_pemder_config_missing_passphrase():
+    cli_config = config.parse_cli_config(
+        f"""
+        pemder-setups:
+            foo:
+                key-file: '{CRYPTO_DATA_DIR}/keys-rsa/signer.key.pem'
+                cert-file: '{TESTING_CA_DIR}/interm/signer1.cert.pem'
+        """
+    )
+    setup = cli_config.get_pemder_config('foo')
+    with pytest.raises(ConfigurationError):
+        setup.instantiate()
+    setup.instantiate(provided_key_passphrase=b'secret')
+
+
+def test_read_pkcs12_config_wrong_passphrase():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs12-setups:
+            foo:
+                pfx-file: '{TESTING_CA_DIR}/interm/signer1.pfx'
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+                pfx-passphrase: "this passphrase is wrong"
+        """
+    )
+    setup = cli_config.get_pkcs12_config('foo')
+    with pytest.raises(ConfigurationError):
+        setup.instantiate()
 
 
 @pytest.mark.parametrize('cfg_str,expected_result', [

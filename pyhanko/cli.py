@@ -15,7 +15,7 @@ from pyhanko_certvalidator import ValidationContext
 from pyhanko.config import (
     init_validation_context_kwargs, parse_cli_config,
     CLIConfig, LogConfig, StdLogOutput, parse_logging_config,
-    PKCS11SignatureConfig
+    PKCS11SignatureConfig, PKCS12SignatureConfig, PemDerSignatureConfig
 )
 from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
@@ -808,39 +808,75 @@ def generic_sign_pdf(*, writer, outfile, signature_meta, signer, timestamper,
     outfile.close()
 
 
+def grab_certs(files):
+    if files is None:
+        return None
+    try:
+        return list(load_certs_from_pemder(files))
+    except (IOError, ValueError) as e:  # pragma: nocover
+        logger.error(f'Could not load certificates from {files}', exc_info=e)
+        return None
+
+
 @addsig.command(name='pemder', help='read key material from PEM/DER files')
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--key', help='file containing the private key (PEM/DER)', 
-              type=readable_file, required=True)
+              type=readable_file, required=False)
 @click.option('--cert', help='file containing the signer\'s certificate '
-              '(PEM/DER)', type=readable_file, required=True)
+              '(PEM/DER)', type=readable_file, required=False)
 @click.option('--chain', type=readable_file, multiple=True,
               help='file(s) containing the chain of trust for the '
                    'signer\'s certificate (PEM/DER). May be '
                    'passed multiple times.')
+@click.option('--pemder-setup', type=str, required=False,
+              help='name of preconfigured PEM/DER profile (overrides all '
+                   'other options)')
 # TODO allow reading the passphrase from a specific file descriptor
 #  (for advanced scripting setups)
 @click.option('--passfile', help='file containing the passphrase '
               'for the private key', required=False, type=click.File('r'),
               show_default='stdin')
 @click.pass_context
-def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
+def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup, passfile):
     signature_meta = ctx.obj[Ctx.SIG_META]
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
-    if passfile is None:
-        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+    if pemder_setup:
+        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        if cli_config is None:
+            raise click.ClickException(
+                "The --p12-setup option requires a configuration file"
+            )
+        try:
+            pemder_config = cli_config.get_pemder_config(pemder_setup)
+        except ConfigurationError as e:
+            msg = f"Error while reading PEM/DER setup {pemder_setup}"
+            logger.error(msg, exc_info=e)
+            raise click.ClickException(msg)
+    elif not (key and cert):
+        raise click.ClickException(
+            "Either both the --key and --cert options, or the --pemder-setup "
+            "option must be provided."
+        )
     else:
+        pemder_config = PemDerSignatureConfig(
+            key_file=key, cert_file=cert, other_certs=grab_certs(chain),
+            prefer_pss=ctx.obj[Ctx.PREFER_PSS]
+        )
+
+    if pemder_config.key_passphrase is not None:
+        passphrase = pemder_config.key_passphrase
+    elif passfile is not None:
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
-    
-    signer = signers.SimpleSigner.load(
-        cert_file=cert, key_file=key, key_passphrase=passphrase,
-        ca_chain_files=chain, prefer_pss=ctx.obj[Ctx.PREFER_PSS]
-    )
+    elif pemder_config.prompt_passphrase:
+        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+    else:
+        passphrase = None
 
+    signer = pemder_config.instantiate(provided_key_passphrase=passphrase)
     if ctx.obj[Ctx.SIG_META] is None:
         detached_sig(
             signer, infile, outfile, timestamp_url=timestamp_url,
@@ -858,7 +894,10 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
 @addsig.command(name='pkcs12', help='read key material from a PKCS#12 file')
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
-@click.argument('pfx', type=readable_file)
+@click.argument('pfx', type=readable_file, required=False)
+@click.option('--p12-setup', type=str, required=False,
+              help='name of preconfigured PKCS#12 profile (overrides all '
+                   'other options)')
 @click.option('--chain', type=readable_file, multiple=True,
               help='PEM/DER file(s) containing extra certificates to embed '
                    '(e.g. chain of trust not embedded in the PKCS#12 file)'
@@ -868,7 +907,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, passfile):
               type=click.File('r'),
               show_default='stdin')
 @click.pass_context
-def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
+def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile, p12_setup):
     # TODO add sanity check in case the user gets the arg order wrong
     #  (now it fails with a gnarly DER decoding error, which is not very
     #  user-friendly)
@@ -876,17 +915,41 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile):
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
-    if passfile is None:
+    if p12_setup:
+        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        if cli_config is None:
+            raise click.ClickException(
+                "The --p12-setup option requires a configuration file"
+            )
+        try:
+            pkcs12_config = cli_config.get_pkcs12_config(p12_setup)
+        except ConfigurationError as e:
+            msg = f"Error while reading PKCS#12 config {p12_setup}"
+            logger.error(msg, exc_info=e)
+            raise click.ClickException(msg)
+    elif not pfx:
+        raise click.ClickException(
+            "Either the PFX argument or the --p12-setup option "
+            "must be provided."
+        )
+    else:
+        pkcs12_config = PKCS12SignatureConfig(
+            pfx_file=pfx, other_certs=grab_certs(chain),
+            prefer_pss=ctx.obj[Ctx.PREFER_PSS]
+        )
+
+    if pkcs12_config.pfx_passphrase is not None:
+        passphrase = pkcs12_config.pfx_passphrase
+    elif passfile is not None:
+        passphrase = passfile.readline().strip().encode('utf-8')
+        passfile.close()
+    elif pkcs12_config.prompt_passphrase:
         passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ')\
                         .encode('utf-8')
     else:
-        passphrase = passfile.readline().strip().encode('utf-8')
-        passfile.close()
+        passphrase = None
 
-    signer = signers.SimpleSigner.load_pkcs12(
-        pfx_file=pfx, passphrase=passphrase, ca_chain_files=chain,
-        prefer_pss=ctx.obj[Ctx.PREFER_PSS]
-    )
+    signer = pkcs12_config.instantiate(provided_pfx_passphrase=passphrase)
     if ctx.obj[Ctx.SIG_META] is None:
         detached_sig(
             signer, infile, outfile, timestamp_url=timestamp_url,
