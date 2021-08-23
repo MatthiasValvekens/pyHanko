@@ -2,6 +2,91 @@
 Release history
 ***************
 
+
+.. _release-0.8.0:
+
+0.8.0
+=====
+
+*Release date:* 2021-08-23
+
+Dependency changes
+------------------
+
+ * Update ``pyhanko-certvalidator`` to ``0.16.0``.
+
+API-breaking changes
+--------------------
+
+Some fields and method names in the config API misspelled `pkcs11` as `pcks11`. This has been
+corrected in this release. This is unlikely to cause issues for library users (since the config API
+is primarily used by the CLI code), but it's a breaking change all the same.
+If you do have code that relies on the config API, simply substituting `s/pcks/pkcs/g` should fix
+things.
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Make certificate fetching in the PKCS#11 signer more flexible.
+
+   * Allow passing in the signer's certificate from outside the token.
+   * Improve certificate registry initialisation.
+
+ * Give more control over updating the DSS in complex signature workflows.
+   By default, pyHanko now tries to update the DSS in the revision that adds a document timestamp,
+   after the signature (if applicable). In the absence of a timestamp, the old behaviour persists.
+
+ * Added a flag to (attempt to) produce CMS signature containers without any padding.
+ * Use `signing-certificate-v2` instead of `signing-certificate` when producing signatures.
+ * Default to empty appearance streams for empty signature fields.
+ * Much like the `pkcs11-setups` config entry, there are now `pemder-setups` and `pkcs12-setups`
+   at the top level of pyHanko's config file. You can use those to store arguments for the
+   `pemder` and `pkcs12` subcommands of pyHanko's `addsig` command, together with passphrases
+   for non-interactive use. See :ref:`ondisk-setup-conf`.
+
+Validation
+^^^^^^^^^^
+
+ * Enforce the end-entity cert constraint imposed by the `signing-certificate` or
+   `signing-certificate-v2` attribute (if present).
+ * Improve issuer-serial matching logic.
+ * Improve CMS attribute lookup routines.
+
+
+Encryption
+^^^^^^^^^^
+
+ * Add a flag to suppress creating "legacy compatibility" entries in the encryption dictionary
+   if they aren't actually required or meaningful (for now, this only applies to ``/Length``).
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Lazily load the version entry in the catalog.
+ * Minor internal I/O handling improvements.
+ * Allow constructing an :class:`~pyhanko.pdf_utils.incremental_writer.IncrementalPdfFileWriter`
+   from a :class:`~pyhanko.pdf_utils.reader.PdfFileReader` object.
+ * Expose common API to modify (most) trailer entries.
+ * Automatically recurse into all configurable fields when processing configuration data.
+ * Replace some certificate storage/indexing classes by references to their corresponding classes
+   in `pyhanko-certvalidator`.
+
+Bugs fixed
+----------
+
+ * Add ``/NeedAppearances`` in the AcroForm dictionary to the whitelist for incremental update
+   analysis.
+ * Fixed several bugs related to difference analysis on encrypted files.
+ * Improve behaviour of dev extensions in difference analysis.
+ * Fix encoding issues with ``SignedDigestAlgorithm``, in particular ensuring that the signature
+   mechanism encodes the relevant digest when using ECDSA.
+ * Process passfile contents more robustly in the CLI.
+ * Correct timestamp revinfo fetching (by ensuring that a dummy response is present)
+
+
 .. _release-0.7.0:
 
 0.7.0
