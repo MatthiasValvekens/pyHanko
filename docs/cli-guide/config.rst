@@ -331,18 +331,7 @@ All parameters have sane defaults.
 
 * ``text-box-style``: With this parameter, you can fine-tune the text box's
   style parameters. The most important one is ``font``, which allows you to
-  specify an OTF font that will be used to render the text\ [#fontdisclaimer]_.
+  specify an OTF font that will be used to render the text.
   If not specified, pyHanko will use a standard monospaced Courier font.
   See :class:`~pyhanko.pdf_utils.text.TextBoxStyle` in the API reference for
   other customisable parameters.
-
-.. rubric:: Footnotes
-.. [#fontdisclaimer]
-    Custom font use is somewhat experimental, so please file an issue if you
-    encounter problems. An appropriate subset of the font will always be
-    embedded into the output file by pyHanko.
-    The text rendering is currently fairly basic: pyHanko only takes character
-    width into account, but ignores things like kerning pairs and ligatures.
-    In particular, rendering of complex scripts (Myanmar, Indic scripts, ...)
-    is not supported (but may be in the future).
-    CJK fonts should work fine, though.
