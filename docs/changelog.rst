@@ -18,10 +18,10 @@ Dependency changes
 API-breaking changes
 --------------------
 
-Some fields and method names in the config API misspelled `pkcs11` as `pcks11`. This has been
+Some fields and method names in the config API misspelled ``pkcs11` as ``pcks11``. This has been
 corrected in this release. This is unlikely to cause issues for library users (since the config API
 is primarily used by the CLI code), but it's a breaking change all the same.
-If you do have code that relies on the config API, simply substituting `s/pcks/pkcs/g` should fix
+If you do have code that relies on the config API, simply substituting ``s/pcks/pkcs/g`` should fix
 things.
 
 New features and enhancements
@@ -40,18 +40,18 @@ Signing
    after the signature (if applicable). In the absence of a timestamp, the old behaviour persists.
 
  * Added a flag to (attempt to) produce CMS signature containers without any padding.
- * Use `signing-certificate-v2` instead of `signing-certificate` when producing signatures.
+ * Use ``signing-certificate-v2`` instead of ``signing-certificate`` when producing signatures.
  * Default to empty appearance streams for empty signature fields.
- * Much like the `pkcs11-setups` config entry, there are now `pemder-setups` and `pkcs12-setups`
-   at the top level of pyHanko's config file. You can use those to store arguments for the
-   `pemder` and `pkcs12` subcommands of pyHanko's `addsig` command, together with passphrases
-   for non-interactive use. See :ref:`ondisk-setup-conf`.
+ * Much like the ``pkcs11-setups`` config entry, there are now ``pemder-setups`` and
+   ``pkcs12-setups`` at the top level of pyHanko's config file. You can use those to store arguments
+   for the ``pemder`` and ``pkcs12`` subcommands of pyHanko's ``addsig`` command, together with
+   passphrases for non-interactive use. See :ref:`ondisk-setup-conf`.
 
 Validation
 ^^^^^^^^^^
 
- * Enforce the end-entity cert constraint imposed by the `signing-certificate` or
-   `signing-certificate-v2` attribute (if present).
+ * Enforce the end-entity cert constraint imposed by the ``signing-certificate`` or
+   ``signing-certificate-v2`` attribute (if present).
  * Improve issuer-serial matching logic.
  * Improve CMS attribute lookup routines.
 
@@ -72,7 +72,7 @@ Miscellaneous
  * Expose common API to modify (most) trailer entries.
  * Automatically recurse into all configurable fields when processing configuration data.
  * Replace some certificate storage/indexing classes by references to their corresponding classes
-   in `pyhanko-certvalidator`.
+   in ``pyhanko-certvalidator``.
 
 Bugs fixed
 ----------

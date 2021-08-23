@@ -173,7 +173,7 @@ Named setups for on-disk key material
 
 Starting from version 0.8.0, you can also put parameters for on-disk key material into the
 configuration file in much the same way as for PKCS#11 tokens (see :ref:`pkcs11-setup-conf` above).
-This is done using the `pkcs12-setups` and `pemder-setups` top-level keys, depending on whether
+This is done using the ``pkcs12-setups`` and ``pemder-setups`` top-level keys, depending on whether
 the key material is made available as a PKCS#12 file, or as individual PEM/DER-encoded files.
 
 Here are some examples.
