@@ -164,6 +164,62 @@ documentation for :class:`~pyhanko.config.PKCS11SignatureConfig`.
     configuration.
 
 
+.. _ondisk-setup-conf:
+
+Named setups for on-disk key material
+-------------------------------------
+
+.. versionadded:: 0.8.0
+
+Starting from version 0.8.0, you can also put parameters for on-disk key material into the
+configuration file in much the same way as for PKCS#11 tokens (see :ref:`pkcs11-setup-conf` above).
+This is done using the `pkcs12-setups` and `pemder-setups` top-level keys, depending on whether
+the key material is made available as a PKCS#12 file, or as individual PEM/DER-encoded files.
+
+Here are some examples.
+
+.. code-block:: yaml
+
+    pkcs12-setups:
+        foo:
+            pfx-file: path/to/signer.pfx
+            other-certs: path/to/more/certs.chain.pem
+    pemder-setups:
+        bar:
+            key-file: path/to/signer.key.pem
+            cert-file: path/to/signer.cert.pem
+            other-certs: path/to/more/certs.chain.pem
+
+For non-interactive use, you can also put the passphrase into the configuration file (again, take
+care to set up your file access permissions correctly).
+
+.. code-block:: yaml
+
+    pkcs12-setups:
+        foo:
+            pfx-file: path/to/signer.pfx
+            other-certs: path/to/more/certs.chain.pem
+            pfx-passphrase: secret
+    pemder-setups:
+        bar:
+            key-file: path/to/signer.key.pem
+            cert-file: path/to/signer.cert.pem
+            other-certs: path/to/more/certs.chain.pem
+            key-passphrase: secret
+
+
+On the command line, you can use these named setups like this:
+
+.. code-block:: bash
+
+    pyhanko sign addsig pkcs12 --p12-setup foo input.pdf output.pdf
+    pyhanko sign addsig pemder --pemder-setup bar input.pdf output.pdf
+
+For a full overview of the parameters you can set in these configuration dictionaries,
+see the API reference documentation for :class:`~pyhanko.config.PKCS12SignatureConfig` and
+:class:`~pyhanko.config.PemDerSignatureConfig`.
+
+
 .. _key-usage-conf:
 
 Key usage settings
