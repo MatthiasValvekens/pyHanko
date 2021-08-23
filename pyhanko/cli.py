@@ -847,7 +847,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup, passfile
         cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
         if cli_config is None:
             raise click.ClickException(
-                "The --p12-setup option requires a configuration file"
+                "The --pemder-setup option requires a configuration file"
             )
         try:
             pemder_config = cli_config.get_pemder_config(pemder_setup)
