@@ -117,7 +117,7 @@ the ``default-validation-context`` top-level key, like so:
 .. _pkcs11-setup-conf:
 
 Named PKCS#11 setups
---------------------
+^^^^^^^^^^^^^^^^^^^^
 
 .. versionadded:: 0.7.0
 
@@ -167,7 +167,7 @@ documentation for :class:`~pyhanko.config.PKCS11SignatureConfig`.
 .. _ondisk-setup-conf:
 
 Named setups for on-disk key material
--------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. versionadded:: 0.8.0
 
