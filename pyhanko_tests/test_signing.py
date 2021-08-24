@@ -1,68 +1,81 @@
 import hashlib
+import itertools
 import os
 from datetime import datetime
-
-import pytest
-import itertools
 from io import BytesIO
 
+import pytest
 import pytz
-from asn1crypto import ocsp, tsp
-from asn1crypto.algos import (
-    SignedDigestAlgorithm, RSASSAPSSParams,
-    MaskGenAlgorithm, DigestAlgorithm, DigestInfo,
-)
 import tzlocal
-from asn1crypto import cms
+from asn1crypto import cms, ocsp, tsp
+from asn1crypto.algos import (
+    DigestAlgorithm,
+    DigestInfo,
+    MaskGenAlgorithm,
+    RSASSAPSSParams,
+    SignedDigestAlgorithm,
+)
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
-
-import pyhanko.pdf_utils.content
-from pyhanko.sign.signers.pdf_signer import (
-    PdfTBSDocument, PostSignInstructions, DSSContentSettings,
-    TimestampDSSContentSettings, SigDSSPlacementPreference
-)
+from freezegun import freeze_time
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError
 
+import pyhanko.pdf_utils.content
 import pyhanko.sign.fields
-from pyhanko_certvalidator import ValidationContext, CertificateValidator
-
 from pyhanko import stamp
-from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
-from pyhanko.sign.ades.cades_asn1 import (
-    SignaturePolicyIdentifier, SignaturePolicyId
-)
-from pyhanko.pdf_utils import generic, embed, layout
+from pyhanko.pdf_utils import embed, generic, layout
 from pyhanko.pdf_utils.generic import pdf_name
-from pyhanko.pdf_utils.misc import PdfWriteError, PdfReadError
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import PdfReadError, PdfWriteError
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
-from pyhanko.sign import timestamps, fields, signers
+from pyhanko.sign import fields, signers, timestamps
+from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
+from pyhanko.sign.ades.cades_asn1 import SignaturePolicyId, SignaturePolicyIdentifier
+from pyhanko.sign.diff_analysis import (
+    NO_CHANGES_DIFF_POLICY,
+    DiffResult,
+    ModificationLevel,
+)
 from pyhanko.sign.general import (
-    SigningError, SignatureValidationError, validate_sig_integrity,
-    load_cert_from_pemder, find_cms_attribute, WeakHashAlgorithmError,
-    SimpleCertificateStore, load_certs_from_pemder, as_signing_certificate,
-    as_signing_certificate_v2
+    SignatureValidationError,
+    SigningError,
+    SimpleCertificateStore,
+    WeakHashAlgorithmError,
+    as_signing_certificate,
+    as_signing_certificate_v2,
+    find_cms_attribute,
+    load_cert_from_pemder,
+    load_certs_from_pemder,
+    validate_sig_integrity,
 )
 from pyhanko.sign.signers import PdfTimeStamper, cms_embedder
+from pyhanko.sign.signers.pdf_signer import (
+    DSSContentSettings,
+    PdfTBSDocument,
+    PostSignInstructions,
+    SigDSSPlacementPreference,
+    TimestampDSSContentSettings,
+)
 from pyhanko.sign.validation import (
-    validate_pdf_signature, read_certification_data, DocumentSecurityStore,
-    EmbeddedPdfSignature, apply_adobe_revocation_info,
-    validate_pdf_ltv_signature, RevocationInfoValidationType,
-    validate_detached_cms, SignatureCoverageLevel,
-    validate_pdf_timestamp, add_validation_info, validate_cms_signature,
-    ValidationInfoReadingError
+    DocumentSecurityStore,
+    EmbeddedPdfSignature,
+    RevocationInfoValidationType,
+    SignatureCoverageLevel,
+    ValidationInfoReadingError,
+    add_validation_info,
+    apply_adobe_revocation_info,
+    read_certification_data,
+    validate_cms_signature,
+    validate_detached_cms,
+    validate_pdf_ltv_signature,
+    validate_pdf_signature,
+    validate_pdf_timestamp,
 )
-from pyhanko.sign.diff_analysis import (
-    ModificationLevel, DiffResult,
-    NO_CHANGES_DIFF_POLICY,
-)
-from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.stamp import QRStampStyle
+
 from .samples import *
-
-from freezegun import freeze_time
-
 
 SELF_SIGN = signers.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',
@@ -3204,7 +3217,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
 
     def sim_sign_remote(data_tbs: bytes):
         # pretend that everything below happens on a remote server
-        from cryptography.hazmat.primitives import serialization, hashes
+        from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
         priv_key = serialization.load_der_private_key(
             TESTING_CA.key_set.get_private_key(KeyLabel('signer1')).dump(),

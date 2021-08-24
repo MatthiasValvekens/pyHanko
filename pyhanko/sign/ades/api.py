@@ -1,14 +1,15 @@
 import enum
 from dataclasses import dataclass
-
 from typing import Optional
 
-from .cades_asn1 import (
-    CommitmentTypeIndication, SignaturePolicyIdentifier,
-    CommitmentTypeIdentifier
-)
 from pyhanko.sign.general import simple_cms_attribute
 from pyhanko.sign.timestamps import TimeStamper
+
+from .cades_asn1 import (
+    CommitmentTypeIdentifier,
+    CommitmentTypeIndication,
+    SignaturePolicyIdentifier,
+)
 
 __all__ = ['GenericCommitment', 'CAdESSignedAttrSpec']
 

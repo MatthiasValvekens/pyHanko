@@ -6,8 +6,9 @@ This module defines a very thin convenience wrapper around
 read the appropriate certificates on the device.
 """
 
-from . import pkcs11 as sign_pkcs11
 from pkcs11 import Session
+
+from . import pkcs11 as sign_pkcs11
 
 __all__ = ['open_beid_session', 'BEIDSigner']
 

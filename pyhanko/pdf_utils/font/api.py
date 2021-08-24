@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from pyhanko.pdf_utils import generic
 
@@ -8,7 +8,6 @@ __all__ = [
 ]
 
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
-
 
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 

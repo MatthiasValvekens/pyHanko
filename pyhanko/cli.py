@@ -1,40 +1,43 @@
+import getpass
+import logging
 import sys
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum, auto
 
 import click
-import logging
-import getpass
-
 import tzlocal
-from asn1crypto import pem, cms
-
-from pyhanko.pdf_utils.layout import LayoutError
+from asn1crypto import cms, pem
 from pyhanko_certvalidator import ValidationContext
-from pyhanko.config import (
-    init_validation_context_kwargs, parse_cli_config,
-    CLIConfig, LogConfig, StdLogOutput, parse_logging_config,
-    PKCS11SignatureConfig, PKCS12SignatureConfig, PemDerSignatureConfig
-)
-from pyhanko.pdf_utils import misc
-from pyhanko.pdf_utils.config_utils import ConfigurationError
 
-from pyhanko.sign import signers, validation, fields
+from pyhanko import __version__
+from pyhanko.config import (
+    CLIConfig,
+    LogConfig,
+    PemDerSignatureConfig,
+    PKCS11SignatureConfig,
+    PKCS12SignatureConfig,
+    StdLogOutput,
+    init_validation_context_kwargs,
+    parse_cli_config,
+    parse_logging_config,
+)
+from pyhanko.pdf_utils import crypt, misc
+from pyhanko.pdf_utils.config_utils import ConfigurationError
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.layout import LayoutError
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.writer import copy_into_new_writer
+from pyhanko.sign import fields, signers, validation
 from pyhanko.sign.general import (
-    SigningError, SignatureValidationError, load_certs_from_pemder
+    SignatureValidationError,
+    SigningError,
+    load_certs_from_pemder,
 )
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
 from pyhanko.sign.timestamps import HTTPTimeStamper
-from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.pdf_utils.writer import copy_into_new_writer
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils import crypt
-from pyhanko.sign.validation import (
-    RevocationInfoValidationType
-)
-from pyhanko.stamp import QRStampStyle, text_stamp_file, qr_stamp_file
-from pyhanko import __version__
+from pyhanko.sign.validation import RevocationInfoValidationType
+from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
 __all__ = ['cli']
 

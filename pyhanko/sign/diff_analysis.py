@@ -53,24 +53,30 @@ putting together custom diff rules.
 
 """
 
-import re
 import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import unique
 from io import BytesIO
 from typing import (
-    Iterable, Optional, Set, Tuple, Generator, TypeVar, Dict,
-    List, Callable, Union, Iterator
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
 )
 
-from pyhanko.pdf_utils.generic import Reference, PdfObject
-from pyhanko.pdf_utils.misc import OrderedEnum
-from pyhanko.pdf_utils.reader import (
-    HistoricalResolver, PdfFileReader,
-    RawPdfPath,
-)
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.generic import PdfObject, Reference
+from pyhanko.pdf_utils.misc import OrderedEnum
+from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader, RawPdfPath
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
 __all__ = [
@@ -1361,8 +1367,8 @@ class MetadataUpdateRule(WhitelistRule):
                 "/Metadata should be a reference to a stream object"
             )
 
-        from xml.sax.handler import ContentHandler
         from xml.sax import make_parser
+        from xml.sax.handler import ContentHandler
 
         parser = make_parser()
         parser.setContentHandler(ContentHandler())

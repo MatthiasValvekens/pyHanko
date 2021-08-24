@@ -1,29 +1,40 @@
 import datetime
 from fractions import Fraction
+from io import BytesIO
 from itertools import product
 from typing import Tuple
 
 import pytest
-from io import BytesIO
-
 import pytz
 
-from pyhanko.pdf_utils.generic import Reference, pdf_name
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.layout import BoxSpecificationError, BoxConstraints
-from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
-from pyhanko.pdf_utils import writer, generic, misc
+from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.content import (
-    ResourceType, PdfResources, ResourceManagementError
+    PdfResources,
+    ResourceManagementError,
+    ResourceType,
 )
 from pyhanko.pdf_utils.crypt import (
+    DEFAULT_CRYPT_FILTER,
+    STD_CF,
+    AuthStatus,
+    CryptFilterConfiguration,
+    IdentityCryptFilter,
+    PubKeyAdbeSubFilter,
+    PubKeyAESCryptFilter,
+    PubKeyRC4CryptFilter,
+    PubKeySecurityHandler,
+    SecurityHandler,
+    SecurityHandlerVersion,
+    StandardAESCryptFilter,
+    StandardRC4CryptFilter,
     StandardSecurityHandler,
-    StandardSecuritySettingsRevision, IdentityCryptFilter, AuthStatus,
-    PubKeySecurityHandler, SecurityHandlerVersion, CryptFilterConfiguration,
-    StandardRC4CryptFilter, StandardAESCryptFilter, STD_CF,
-    PubKeyRC4CryptFilter, PubKeyAESCryptFilter, PubKeyAdbeSubFilter,
-    DEFAULT_CRYPT_FILTER, build_crypt_filter, SecurityHandler,
+    StandardSecuritySettingsRevision,
+    build_crypt_filter,
 )
+from pyhanko.pdf_utils.generic import Reference, pdf_name
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
+from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import load_cert_from_pemder
 

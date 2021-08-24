@@ -2,13 +2,11 @@
 
 from dataclasses import dataclass, field
 
-from pyhanko.pdf_utils.font import SimpleFontEngineFactory, FontEngineFactory
-from pyhanko.pdf_utils.generic import (
-    pdf_name,
-)
-from pyhanko.pdf_utils.content import ResourceType, PdfResources, PdfContent
 from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
+from pyhanko.pdf_utils.content import PdfContent, PdfResources, ResourceType
+from pyhanko.pdf_utils.font import FontEngineFactory, SimpleFontEngineFactory
+from pyhanko.pdf_utils.generic import pdf_name
 
 
 @dataclass(frozen=True)

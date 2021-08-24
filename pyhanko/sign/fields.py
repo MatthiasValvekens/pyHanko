@@ -4,25 +4,25 @@ Utilities to deal with signature form fields and their properties in PDF files.
 
 import logging
 from dataclasses import dataclass
-from enum import Flag, Enum, unique
-from typing import List, Optional, Union, Set
+from enum import Enum, Flag, unique
+from typing import List, Optional, Set, Union
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
-
-from pyhanko.pdf_utils.content import RawContent
-from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko_certvalidator import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
+from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError, get_and_apply
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import (
-    UnacceptableSignerError, SigningError,
     KeyUsageConstraints,
+    SigningError,
+    UnacceptableSignerError,
 )
 
 __all__ = [

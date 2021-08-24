@@ -1,20 +1,24 @@
 import hashlib
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional, Iterable, Union
+from typing import Iterable, Optional, Union
 
 import pytest
 import yaml
 
 from pyhanko import config, stamp
-from pyhanko.config import StdLogOutput, DEFAULT_ROOT_LOGGER_LEVEL, \
-    DEFAULT_TIME_TOLERANCE, init_validation_context_kwargs
+from pyhanko.config import (
+    DEFAULT_ROOT_LOGGER_LEVEL,
+    DEFAULT_TIME_TOLERANCE,
+    StdLogOutput,
+    init_validation_context_kwargs,
+)
 from pyhanko.pdf_utils import layout
-from pyhanko.pdf_utils.config_utils import ConfigurationError, ConfigurableMixin
+from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
-from pyhanko_tests.samples import TESTING_CA_DIR, CRYPTO_DATA_DIR
+from pyhanko_tests.samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
 
 
 @pytest.mark.parametrize('trust_replace', [True, False])
@@ -45,9 +49,9 @@ def test_read_vc_kwargs(trust_replace):
 
 
 def test_read_qr_config():
-    from pyhanko_tests.test_text import NOTO_SERIF_JP
     from pyhanko.pdf_utils.font import SimpleFontEngineFactory
     from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
+    from pyhanko_tests.test_text import NOTO_SERIF_JP
 
     config_string = f"""
     stamp-styles:

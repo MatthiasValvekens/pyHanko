@@ -4,12 +4,11 @@ Tests for PKCS#11 functionality.
 NOTE: these are not run in CI, due to lack of testing setup.
 """
 
+import logging
 import os
 from io import BytesIO
 
 import pytest
-import logging
-
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pkcs11 import PKCS11Error
@@ -17,11 +16,11 @@ from pkcs11 import PKCS11Error
 from pyhanko.config import PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import signers, pkcs11
+from pyhanko.sign import pkcs11, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.pkcs11 import PKCS11SigningContext
 from pyhanko_tests.samples import MINIMAL, TESTING_CA
-from pyhanko_tests.test_signing import val_trusted, SIMPLE_ECC_V_CONTEXT
+from pyhanko_tests.test_signing import SIMPLE_ECC_V_CONTEXT, val_trusted
 
 logger = logging.getLogger(__name__)
 

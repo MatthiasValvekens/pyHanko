@@ -1,4 +1,5 @@
-from asn1crypto import core, cms, algos
+from asn1crypto import algos, cms, core
+
 from .asn1_util import register_cms_attribute
 
 """

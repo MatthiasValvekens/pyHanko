@@ -6,37 +6,35 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 `asn1crypto <https://github.com/wbond/asn1crypto>`_.
 """
 
+import hashlib
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Set, Optional, Tuple, Union
+from typing import ClassVar, Optional, Set, Tuple, Union
 
-import hashlib
-
-from asn1crypto import x509, cms, tsp, algos, pem, keys
+from asn1crypto import algos, cms, keys, pem, tsp, x509
 
 # noinspection PyProtectedMember
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ec import (
-    EllipticCurvePublicKey, ECDSA
-)
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
-
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin, \
-    process_bit_string_flags, process_oids
-from pyhanko_certvalidator.path import ValidationPath
-
 from pyhanko_certvalidator import CertificateValidator
-from pyhanko_certvalidator.registry import (
-    CertificateStore, SimpleCertificateStore
-)
 from pyhanko_certvalidator.errors import (
-    RevokedError, PathValidationError, InvalidCertificateError,
-    PathBuildingError
+    InvalidCertificateError,
+    PathBuildingError,
+    PathValidationError,
+    RevokedError,
 )
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import padding
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.registry import CertificateStore, SimpleCertificateStore
 
+from pyhanko.pdf_utils.config_utils import (
+    ConfigurableMixin,
+    process_bit_string_flags,
+    process_oids,
+)
 
 __all__ = [
     'SignatureStatus', 'simple_cms_attribute',

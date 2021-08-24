@@ -1,8 +1,8 @@
 import pytest
-from asn1crypto.x509 import KeyUsage, ExtKeyUsageSyntax
+from asn1crypto.x509 import ExtKeyUsageSyntax, KeyUsage
+from pyhanko_certvalidator import InvalidCertificateError
 
 from pyhanko.sign.general import KeyUsageConstraints
-from pyhanko_certvalidator import InvalidCertificateError
 
 
 @pytest.mark.parametrize('cfg, cert_ku', [

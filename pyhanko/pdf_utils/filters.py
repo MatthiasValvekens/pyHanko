@@ -9,12 +9,11 @@ In particular ``/Crypt`` and ``/LZWDecode`` are missing.
 """
 import binascii
 import re
+import struct
+import zlib
+from io import BytesIO
 
 from .misc import PdfReadError, PdfStreamError, Singleton
-from io import BytesIO
-import struct
-
-import zlib
 
 __all__ = [
     'Decoder', 'ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode',

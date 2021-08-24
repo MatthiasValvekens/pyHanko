@@ -5,17 +5,20 @@ protocol for embedding CMS payloads into PDF signature objects.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import IO, Optional
 
-from pyhanko.pdf_utils.writer import BasePdfFileWriter
-from typing import Optional, IO
-from pyhanko.sign.fields import (
-    MDPPerm, SigFieldSpec, enumerate_sig_fields,
-    prepare_sig_field, ensure_sig_flags,
-    FieldMDPSpec,
-)
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.layout import BoxConstraints
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
+from pyhanko.sign.fields import (
+    FieldMDPSpec,
+    MDPPerm,
+    SigFieldSpec,
+    ensure_sig_flags,
+    enumerate_sig_fields,
+    prepare_sig_field,
+)
 from pyhanko.sign.general import SigningError
 from pyhanko.stamp import BaseStampStyle, TextStampStyle
 

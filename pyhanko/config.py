@@ -1,20 +1,17 @@
 import enum
 import logging
-from datetime import timedelta
-from typing import Dict, Optional, Union, List, Iterable
 from dataclasses import dataclass
+from datetime import timedelta
+from typing import Dict, Iterable, List, Optional, Union
 
 import yaml
 from asn1crypto import x509
+from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.pdf_utils import config_utils
-from pyhanko_certvalidator import ValidationContext
-from pyhanko.pdf_utils.config_utils import (
-    check_config_keys, ConfigurationError
-)
+from pyhanko.pdf_utils.config_utils import ConfigurationError, check_config_keys
 from pyhanko.pdf_utils.misc import get_and_apply
-
-from pyhanko.sign import load_certs_from_pemder, SimpleSigner
+from pyhanko.sign import SimpleSigner, load_certs_from_pemder
 from pyhanko.sign.general import KeyUsageConstraints
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.stamp import QRStampStyle, TextStampStyle

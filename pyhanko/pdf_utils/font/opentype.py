@@ -4,20 +4,18 @@ This module relies on `fontTools <https://pypi.org/project/fonttools/>`_ for
 OTF parsing and subsetting, and on HarfBuzz (via ``uharfbuzz``) for shaping.
 """
 import logging
+from binascii import hexlify
 from dataclasses import dataclass
 from io import BytesIO
-from binascii import hexlify
 
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.font.api import (
-    ShapeResult, FontEngine, FontEngineFactory
-)
+from pyhanko.pdf_utils.font.api import FontEngine, FontEngineFactory, ShapeResult
 from pyhanko.pdf_utils.misc import peek
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 try:
     import uharfbuzz as hb
-    from fontTools import ttLib, subset
+    from fontTools import subset, ttLib
 except ImportError as import_err:  # pragma: nocover
     raise ImportError(
         "pyhanko.pdf_utils.font.opentype requires pyHanko to be installed with "

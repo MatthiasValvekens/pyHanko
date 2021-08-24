@@ -1,4 +1,4 @@
-from .api import ShapeResult, FontEngine, FontEngineFactory
+from .api import FontEngine, FontEngineFactory, ShapeResult
 from .basic import SimpleFontEngine, SimpleFontEngineFactory
 
 __all__ = [

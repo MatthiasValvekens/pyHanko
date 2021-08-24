@@ -5,23 +5,18 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
 import getpass
 import logging
-
-from asn1crypto.algos import RSASSAPSSParams
-
-from pyhanko.config import PKCS11SignatureConfig
 from typing import Set
 
 from asn1crypto import x509
+from asn1crypto.algos import RSASSAPSSParams
 
-from pyhanko.sign.general import (
-    CertificateStore, SimpleCertificateStore, SigningError
-)
+from pyhanko.config import PKCS11SignatureConfig
+from pyhanko.sign.general import CertificateStore, SigningError, SimpleCertificateStore
 from pyhanko.sign.signers import Signer
 
 try:
-    from pkcs11 import (
-        Session, ObjectClass, Attribute, lib as pkcs11_lib, PKCS11Error
-    )
+    from pkcs11 import Attribute, ObjectClass, PKCS11Error, Session
+    from pkcs11 import lib as pkcs11_lib
 except ImportError as e:  # pragma: nocover
     raise ImportError(
         "pyhanko.sign.pkcs11 requires pyHanko to be installed with "
@@ -201,7 +196,7 @@ class PKCS11Signer(Signer):
             return b'0' * 512
 
         self._load_objects()
-        from pkcs11 import Mechanism, SignMixin, MGF
+        from pkcs11 import MGF, Mechanism, SignMixin
 
         kh: SignMixin = self._key_handle
         kwargs = {}

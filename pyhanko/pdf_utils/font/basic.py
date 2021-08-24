@@ -1,6 +1,7 @@
 from pyhanko.pdf_utils import generic
-from .api import FontEngine, ShapeResult, FontEngineFactory
+
 from ..writer import BasePdfFileWriter
+from .api import FontEngine, FontEngineFactory, ShapeResult
 
 pdf_name = generic.NameObject
 
