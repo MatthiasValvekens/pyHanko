@@ -7,24 +7,26 @@ The tools in this module allow pyHanko to obtain such tokens from
 authorities.
 """
 
-import struct
 import os
+import struct
 from dataclasses import dataclass
 from datetime import datetime
 
 import requests
 import tzlocal
-from asn1crypto import tsp, algos, cms, x509, keys, core
-from cryptography.hazmat.primitives import serialization, hashes
+from asn1crypto import algos, cms, core, keys, tsp, x509
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-
 from pyhanko_certvalidator import CertificateValidator
 
 from . import general
 from .general import (
-    SignatureStatus, simple_cms_attribute, CertificateStore,
-    SimpleCertificateStore, get_pyca_cryptography_hash,
+    CertificateStore,
+    SignatureStatus,
+    SimpleCertificateStore,
+    get_pyca_cryptography_hash,
+    simple_cms_attribute,
 )
 
 __all__ = [

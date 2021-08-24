@@ -1,8 +1,8 @@
 from io import BytesIO
 
 import pytest
-from pyhanko_certvalidator import CertificateValidator
 from freezegun.api import freeze_time
+from pyhanko_certvalidator import CertificateValidator
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
@@ -11,15 +11,24 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.general import SigningError, UnacceptableSignerError
 from pyhanko.sign.validation import (
-    validate_pdf_signature,
-    EmbeddedPdfSignature, validate_pdf_ltv_signature,
+    EmbeddedPdfSignature,
     RevocationInfoValidationType,
+    validate_pdf_ltv_signature,
+    validate_pdf_signature,
 )
 from pyhanko_tests.samples import MINIMAL
 from pyhanko_tests.test_signing import (
-    FROM_CA, INTERM_CERT, DUMMY_TS,
-    SELF_SIGN, live_testing_vc, ROOT_CERT, dummy_ocsp_vc, PADES, TRUST_ROOTS,
-    DUMMY_HTTP_TS, ts_response_callback,
+    DUMMY_HTTP_TS,
+    DUMMY_TS,
+    FROM_CA,
+    INTERM_CERT,
+    PADES,
+    ROOT_CERT,
+    SELF_SIGN,
+    TRUST_ROOTS,
+    dummy_ocsp_vc,
+    live_testing_vc,
+    ts_response_callback,
 )
 
 

@@ -3,21 +3,23 @@ This module contains the low-level building blocks for dealing with bookkeeping
 around ``/ByteRange`` digests in PDF files.
 """
 
-from dataclasses import dataclass
-from io import BytesIO
 import binascii
-from cryptography.hazmat.primitives import hashes
+from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
+from typing import IO, Optional, Union
+
 from asn1crypto import cms
-from typing import Optional, Union, IO
-from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils import misc
-from pyhanko.pdf_utils.generic import pdf_name, pdf_date, pdf_string
-from pyhanko.pdf_utils.writer import BasePdfFileWriter
+from cryptography.hazmat.primitives import hashes
+
+from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.generic import pdf_date, pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
-from . import constants
+
 from ..fields import SigSeedSubFilter
+from . import constants
 
 __all__ = [
     # Serialisable object used to track placeholder locations,

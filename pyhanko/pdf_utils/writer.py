@@ -5,28 +5,25 @@ Contains code from the PyPDF2 project; see :ref:`here <pypdf2-license>`
 for the original license.
 """
 
+import enum
 import os
 import struct
-import enum
 from dataclasses import dataclass
 from io import BytesIO
-from typing import List, Union, Optional, Tuple, Iterable
+from typing import Iterable, List, Optional, Tuple, Union
 
 from asn1crypto import x509
 
-from pyhanko.pdf_utils import generic, content
+from pyhanko import __version__
+from pyhanko.pdf_utils import content, generic
 from pyhanko.pdf_utils.crypt import (
-    SecurityHandler, StandardSecurityHandler,
     PubKeySecurityHandler,
+    SecurityHandler,
+    StandardSecurityHandler,
 )
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
-from pyhanko.pdf_utils.misc import (
-    peek, PdfReadError, instance_test,
-    PdfWriteError,
-)
+from pyhanko.pdf_utils.misc import PdfReadError, PdfWriteError, instance_test, peek
 from pyhanko.pdf_utils.rw_common import PdfHandler
-from pyhanko import __version__
-
 
 __all__ = [
     'ObjectStream', 'BasePdfFileWriter',

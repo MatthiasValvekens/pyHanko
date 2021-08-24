@@ -2,10 +2,10 @@
 This module defines pyHanko's high-level API entry points.
 """
 
-import tzlocal
 from datetime import datetime
 from typing import Optional
 
+import tzlocal
 from asn1crypto import cms
 
 from pyhanko.pdf_utils import embed
@@ -16,7 +16,6 @@ from pyhanko.sign.timestamps import TimeStamper
 
 from .pdf_cms import Signer
 from .pdf_signer import PdfSignatureMetadata, PdfSigner
-
 
 __all__ = ['sign_pdf', 'embed_payload_with_cms']
 

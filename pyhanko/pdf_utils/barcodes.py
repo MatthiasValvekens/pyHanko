@@ -10,8 +10,8 @@ except ImportError as e:  # pragma: nocover
     )
 
 from pyhanko.pdf_utils.content import PdfContent
-from pyhanko.pdf_utils.misc import rd
 from pyhanko.pdf_utils.layout import BoxConstraints
+from pyhanko.pdf_utils.misc import rd
 
 __all__ = ['BarcodeBox', 'PdfStreamBarcodeWriter']
 

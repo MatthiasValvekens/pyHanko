@@ -3,15 +3,13 @@ Utility for writing incremental updates to existing PDF files.
 """
 
 import os
-from typing import Union, Optional
+from typing import Optional, Union
 
 from . import generic, misc
 from .crypt import EnvelopeKeyDecrypter
-
-from .reader import PdfFileReader, parse_catalog_version
 from .generic import pdf_name
+from .reader import PdfFileReader, parse_catalog_version
 from .writer import BasePdfFileWriter
-
 
 __all__ = ['IncrementalPdfFileWriter']
 

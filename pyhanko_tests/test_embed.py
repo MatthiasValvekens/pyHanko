@@ -6,10 +6,10 @@ import pytest
 import tzlocal
 from freezegun import freeze_time
 
+from pyhanko.pdf_utils import crypt, embed, generic, misc, writer
 from pyhanko.pdf_utils.crypt import AuthStatus
-from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils import writer, embed, generic, misc, crypt
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_tests.samples import *
 
 

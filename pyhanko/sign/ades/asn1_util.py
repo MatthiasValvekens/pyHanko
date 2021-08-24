@@ -1,6 +1,6 @@
 from typing import Type
 
-from asn1crypto import core, cms
+from asn1crypto import cms, core
 
 __all__ = ['as_set_of', 'register_cms_attribute']
 

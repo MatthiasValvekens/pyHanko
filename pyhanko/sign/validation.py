@@ -1,46 +1,59 @@
 import hashlib
-import os
 import logging
+import os
 from collections import namedtuple
-from dataclasses import dataclass, field as data_field
+from dataclasses import dataclass
+from dataclasses import field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import TypeVar, Type, Optional, Union, Iterator, IO
+from typing import IO, Iterator, Optional, Type, TypeVar, Union
 
-from asn1crypto import (
-    cms, tsp, ocsp as asn1_ocsp, pdf as asn1_pdf, crl as asn1_crl, x509, keys,
-    core
-)
+from asn1crypto import cms, core
+from asn1crypto import crl as asn1_crl
+from asn1crypto import keys
+from asn1crypto import ocsp as asn1_ocsp
+from asn1crypto import pdf as asn1_pdf
+from asn1crypto import tsp, x509
 from asn1crypto.x509 import Certificate
 from cryptography.hazmat.primitives import hashes
-
-from pyhanko_certvalidator import ValidationContext, CertificateValidator
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import OrderedEnum, get_and_apply, \
-    DEFAULT_CHUNK_SIZE
-from pyhanko.pdf_utils.reader import (
-    PdfFileReader, XRefCache, process_data_at_eof,
-)
+from pyhanko.pdf_utils.misc import DEFAULT_CHUNK_SIZE, OrderedEnum, get_and_apply
+from pyhanko.pdf_utils.reader import PdfFileReader, XRefCache, process_data_at_eof
 from pyhanko.pdf_utils.rw_common import PdfHandler
+
 from .diff_analysis import (
-    SuspiciousModification, ModificationLevel, DEFAULT_DIFF_POLICY, DiffPolicy,
+    DEFAULT_DIFF_POLICY,
+    DiffPolicy,
     DiffResult,
+    ModificationLevel,
+    SuspiciousModification,
 )
 from .fields import (
-    MDPPerm, FieldMDPSpec, SeedLockDocument, SigSeedValueSpec,
-    SigSeedValFlags, SigSeedSubFilter
+    FieldMDPSpec,
+    MDPPerm,
+    SeedLockDocument,
+    SigSeedSubFilter,
+    SigSeedValFlags,
+    SigSeedValueSpec,
 )
 from .general import (
-    SignatureStatus, find_unique_cms_attribute,
-    UnacceptableSignerError, KeyUsageConstraints,
+    DEFAULT_WEAK_HASH_ALGORITHMS,
+    KeyUsageConstraints,
+    MultivaluedAttributeError,
+    NonexistentAttributeError,
+    SignatureStatus,
     SignatureValidationError,
-    validate_sig_integrity, DEFAULT_WEAK_HASH_ALGORITHMS,
-    get_pyca_cryptography_hash, extract_message_digest, match_issuer_serial,
-    MultivaluedAttributeError, NonexistentAttributeError
+    UnacceptableSignerError,
+    extract_message_digest,
+    find_unique_cms_attribute,
+    get_pyca_cryptography_hash,
+    match_issuer_serial,
+    validate_sig_integrity,
 )
 from .timestamps import TimestampSignatureStatus
 

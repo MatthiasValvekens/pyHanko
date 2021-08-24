@@ -2,7 +2,7 @@ from io import BytesIO
 
 import pytest
 
-from pyhanko.pdf_utils import text, generic
+from pyhanko.pdf_utils import generic, text
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulator
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter

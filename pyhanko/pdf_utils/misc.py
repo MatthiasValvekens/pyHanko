@@ -26,9 +26,7 @@ __all__ = [
 ]
 
 from io import BytesIO
-
-from typing import Callable, TypeVar, Generator, Iterable
-
+from typing import Callable, Generator, Iterable, TypeVar
 
 DEFAULT_CHUNK_SIZE = 4096
 """
@@ -184,7 +182,7 @@ def get_courier():
         A resource dictionary representing the standard Courier font
         (or one of its metric equivalents).
     """
-    from .generic import pdf_name, DictionaryObject
+    from .generic import DictionaryObject, pdf_name
     return DictionaryObject({
         pdf_name('/Type'): pdf_name('/Font'),
         pdf_name('/Subtype'): pdf_name('/Type1'),

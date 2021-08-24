@@ -7,29 +7,37 @@ import pytz
 from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.content import RawContent
+from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko.pdf_utils.reader import (
-    PdfFileReader, HistoricalResolver,
-    RawPdfPath,
-)
-from pyhanko.sign import signers, fields
+from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader, RawPdfPath
+from pyhanko.pdf_utils.writer import copy_into_new_writer
+from pyhanko.sign import fields, signers
 from pyhanko.sign.diff_analysis import (
-    ModificationLevel, is_annot_visible, is_field_visible,
-    NO_CHANGES_DIFF_POLICY, SuspiciousModification, QualifiedWhitelistRule,
-    ReferenceUpdate, StandardDiffPolicy, DEFAULT_DIFF_POLICY, XrefStreamRule,
+    DEFAULT_DIFF_POLICY,
+    NO_CHANGES_DIFF_POLICY,
+    ModificationLevel,
+    QualifiedWhitelistRule,
+    ReferenceUpdate,
+    StandardDiffPolicy,
+    SuspiciousModification,
+    XrefStreamRule,
+    is_annot_visible,
+    is_field_visible,
 )
 from pyhanko.sign.general import SigningError
-from pyhanko.sign.validation import validate_pdf_signature, \
-    SignatureCoverageLevel
+from pyhanko.sign.validation import SignatureCoverageLevel, validate_pdf_signature
 from pyhanko_tests.samples import *
 from pyhanko_tests.test_signing import (
-    FROM_CA, val_trusted, val_untrusted,
-    val_trusted_but_modified, live_testing_vc, PADES, DUMMY_TS,
+    DUMMY_TS,
+    FROM_CA,
+    PADES,
     SIMPLE_V_CONTEXT,
+    live_testing_vc,
+    val_trusted,
+    val_trusted_but_modified,
+    val_untrusted,
 )
 
 

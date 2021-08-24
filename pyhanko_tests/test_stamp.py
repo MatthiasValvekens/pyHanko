@@ -3,20 +3,25 @@ from pathlib import Path
 
 import pytest
 
-from pyhanko.pdf_utils import layout, writer, generic
-from pyhanko.pdf_utils.content import RawContent, ImportedPdfPage
+from pyhanko.pdf_utils import generic, layout, writer
+from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.pdf_utils.text import TextBoxStyle
-from .samples import *
-
-from .layout_test_utils import with_layout_comparison, compare_output
-
 from pyhanko.stamp import (
-    text_stamp_file, qr_stamp_file, TextStampStyle,
-    QRStampStyle, TextStamp, QRPosition, STAMP_ART_CONTENT, QRStamp,
-    StaticStampStyle
+    STAMP_ART_CONTENT,
+    QRPosition,
+    QRStamp,
+    QRStampStyle,
+    StaticStampStyle,
+    TextStamp,
+    TextStampStyle,
+    qr_stamp_file,
+    text_stamp_file,
 )
+
+from .layout_test_utils import compare_output, with_layout_comparison
+from .samples import *
 
 FONT_DIR = 'pyhanko_tests/data/fonts'
 NOTO_SERIF_JP = f'{FONT_DIR}/NotoSerifJP-Regular.otf'

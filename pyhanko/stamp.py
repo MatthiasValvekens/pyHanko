@@ -10,28 +10,21 @@ signature appearances.
 import enum
 import uuid
 from binascii import hexlify
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 import qrcode
 import tzlocal
 
+from pyhanko.pdf_utils import content, generic, layout
+from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
+from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.misc import rd
-from pyhanko.pdf_utils.text import TextBoxStyle, TextBox, DEFAULT_BOX_LAYOUT
-from pyhanko.pdf_utils.writer import (
-    init_xobject_dictionary, BasePdfFileWriter
-)
-from dataclasses import dataclass
-from datetime import datetime
-
-from pyhanko.pdf_utils import generic, layout
-from pyhanko.pdf_utils.generic import (
-    pdf_name, pdf_string,
-)
-from pyhanko.pdf_utils import content
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.qr import PdfStreamQRImage
-
+from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle
+from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 
 __all__ = [
     "AnnotAppearances",
@@ -102,8 +95,9 @@ def _get_background_content(bg_spec) -> content.PdfContent:
         # import first page of PDF as background
         return content.ImportedPdfPage(bg_spec)
     else:
-        from pyhanko.pdf_utils.images import PdfImage
         from PIL import Image
+
+        from pyhanko.pdf_utils.images import PdfImage
         img = Image.open(bg_spec)
         # Setting the writer can be delayed
         return PdfImage(img, writer=None)

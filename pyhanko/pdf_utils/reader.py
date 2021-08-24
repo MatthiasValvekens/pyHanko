@@ -10,23 +10,23 @@ This comes at a cost, and future iterations of this module may offer more
 flexibility in terms of the level of detail with which file size is scrutinised.
 """
 
-import struct
+import logging
 import os
 import re
+import struct
 from collections import defaultdict
 from io import BytesIO
 from itertools import chain
-from typing import Set, List, Optional, Union, Tuple
+from typing import List, Optional, Set, Tuple, Union
 
 from . import generic, misc
-from .misc import PdfReadError
 from .crypt import (
-    SecurityHandler, StandardSecurityHandler,
-    EnvelopeKeyDecrypter, PubKeySecurityHandler,
+    EnvelopeKeyDecrypter,
+    PubKeySecurityHandler,
+    SecurityHandler,
+    StandardSecurityHandler,
 )
-
-import logging
-
+from .misc import PdfReadError
 from .rw_common import PdfHandler
 
 logger = logging.getLogger(__name__)

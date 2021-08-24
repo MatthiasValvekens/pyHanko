@@ -7,11 +7,11 @@ Utility classes for handling embedded files in PDFs.
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 
 from asn1crypto import x509
 
-from . import generic, writer, misc, crypt
+from . import crypt, generic, misc, writer
 from .generic import pdf_name, pdf_string
 
 __all__ = [

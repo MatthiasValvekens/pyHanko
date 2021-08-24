@@ -9,8 +9,9 @@ user-provided configuration (e.g. from a Yaml file).
 
 import dataclasses
 import re
-from typing import Type, Optional, Union
-from asn1crypto.core import ObjectIdentifier, BitString
+from typing import Optional, Type, Union
+
+from asn1crypto.core import BitString, ObjectIdentifier
 
 __all__ = [
     'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',

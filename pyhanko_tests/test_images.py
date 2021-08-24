@@ -1,13 +1,14 @@
+import os
 from io import BytesIO
 
 import pytest
-import os
 from PIL import Image
-from .samples import *
-from pyhanko.pdf_utils import images
-from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils import generic
+
+from pyhanko.pdf_utils import generic, images
 from pyhanko.pdf_utils.generic import pdf_name
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+from .samples import *
 
 IMG_DIR = 'pyhanko_tests/data/img'
 

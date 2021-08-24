@@ -4,41 +4,46 @@ This module implements support for PDF-specific signing functionality.
 import enum
 import logging
 import uuid
-import tzlocal
-from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Set, Optional, List, Union, IO, Tuple
+from datetime import datetime
+from typing import IO, List, Optional, Set, Tuple, Union
 
-from asn1crypto import cms, ocsp, crl
+import tzlocal
+from asn1crypto import cms, crl, ocsp
 from cryptography.hazmat.primitives import hashes
-
-from pyhanko.sign.fields import (
-    SigSeedSubFilter, MDPPerm, SigFieldSpec, FieldMDPSpec, SigSeedValueSpec,
-    SeedLockDocument, SigSeedValFlags
-)
-from pyhanko_certvalidator import ValidationContext, CertificateValidator
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.errors import PathValidationError, PathBuildingError
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
-from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.stamp import BaseStampStyle
-
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
+from pyhanko.sign.ades.api import CAdESSignedAttrSpec
+from pyhanko.sign.fields import (
+    FieldMDPSpec,
+    MDPPerm,
+    SeedLockDocument,
+    SigFieldSpec,
+    SigSeedSubFilter,
+    SigSeedValFlags,
+    SigSeedValueSpec,
+)
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.timestamps import TimeStamper
-from pyhanko.sign.ades.api import CAdESSignedAttrSpec
+from pyhanko.stamp import BaseStampStyle
 
 from . import constants
-from .pdf_cms import Signer, PdfCMSSignedAttributes
 from .cms_embedder import (
-    PdfCMSEmbedder, SigObjSetup, SigMDPSetup, SigIOSetup, SigAppearanceSetup,
+    PdfCMSEmbedder,
+    SigAppearanceSetup,
+    SigIOSetup,
+    SigMDPSetup,
+    SigObjSetup,
 )
-from .pdf_byterange import (
-    DocumentTimestamp, PreparedByteRangeDigest, SignatureObject
-)
+from .pdf_byterange import DocumentTimestamp, PreparedByteRangeDigest, SignatureObject
+from .pdf_cms import PdfCMSSignedAttributes, Signer
 
 __all__ = [
     'PdfSignatureMetadata', 'DSSContentSettings',
@@ -595,8 +600,9 @@ class PdfTimeStamper:
         # TODO: add an option to validate the entire timestamp chain
         #  plus all signatures
         from pyhanko.sign.validation import (
-            _establish_timestamp_trust, DocumentSecurityStore,
-            get_timestamp_chain
+            DocumentSecurityStore,
+            _establish_timestamp_trust,
+            get_timestamp_chain,
         )
 
         timestamps = get_timestamp_chain(reader)
@@ -1184,6 +1190,7 @@ class PdfSigningSession:
     def _perform_prev_ts_validation(self, validation_context, prev_reader):
         signer = self.pdf_signer.signer
         from pyhanko.sign.validation import get_timestamp_chain
+
         # try to grab the most recent document timestamp
         last_ts = None
         try:
@@ -1819,6 +1826,7 @@ class PdfPostSignatureDocument:
         dss_settings = instr.dss_settings
 
         from pyhanko.sign import validation
+
         # If we're resuming a signing operation, the (new) validation context
         # might not have all relevant OCSP responses / CRLs available.
         # Hence why we also pass in the data from the pre-signing check.

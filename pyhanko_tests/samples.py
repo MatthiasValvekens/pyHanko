@@ -1,5 +1,5 @@
 import yaml
-from certomancer.registry import CertomancerConfig, ArchLabel
+from certomancer.registry import ArchLabel, CertomancerConfig
 
 from pyhanko.pdf_utils.crypt import SimpleEnvelopeKeyDecrypter
 
@@ -45,7 +45,7 @@ FILE_WITH_EMBEDDED_FONT = read_all(PDF_DATA_DIR + '/fontembed.pdf')
 def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # based on the minimal pdf file of
     # https://brendanzagaeski.appspot.com/0004.html
-    from pyhanko.pdf_utils import writer, generic
+    from pyhanko.pdf_utils import generic, writer
     from pyhanko.pdf_utils.generic import pdf_name
     from pyhanko.pdf_utils.misc import get_courier
 

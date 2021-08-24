@@ -17,13 +17,12 @@ The image data handling is done by
 """
 
 import uuid
-
 from typing import Union
 
-from .layout import BoxConstraints
-from .generic import pdf_name
-from .content import ResourceType, PdfResources, PdfContent
 from . import generic
+from .content import PdfContent, PdfResources, ResourceType
+from .generic import pdf_name
+from .layout import BoxConstraints
 from .writer import BasePdfFileWriter
 
 try:

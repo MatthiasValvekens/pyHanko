@@ -1,10 +1,9 @@
 import logging
 import os
+import subprocess
 import tempfile
 
 import pytest
-import subprocess
-
 
 __all__ = ['with_layout_comparison', 'compare_output']
 

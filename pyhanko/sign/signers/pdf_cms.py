@@ -5,27 +5,36 @@ signatures.
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, Union, IO
 from datetime import datetime
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric.ec import \
-    EllipticCurvePrivateKey, ECDSA
+from typing import IO, Optional, Union
+
+from asn1crypto import algos, cms, core, keys
+from asn1crypto import pdf as asn1_pdf
+from asn1crypto import x509
+from asn1crypto.algos import SignedDigestAlgorithm
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
-from asn1crypto import x509, cms, core, keys, algos, pdf as asn1_pdf
-from asn1crypto.algos import SignedDigestAlgorithm
-from pyhanko.sign.general import (
-    CertificateStore, SimpleCertificateStore,
-    SigningError, optimal_pss_params, simple_cms_attribute,
-    get_pyca_cryptography_hash, as_signing_certificate_v2,
-    load_private_key_from_pemder, load_cert_from_pemder,
-    load_certs_from_pemder, _process_pss_params,
-    _translate_pyca_cryptography_cert_to_asn1,
-    _translate_pyca_cryptography_key_to_asn1
-)
+
 from pyhanko.pdf_utils import misc
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
+from pyhanko.sign.general import (
+    CertificateStore,
+    SigningError,
+    SimpleCertificateStore,
+    _process_pss_params,
+    _translate_pyca_cryptography_cert_to_asn1,
+    _translate_pyca_cryptography_key_to_asn1,
+    as_signing_certificate_v2,
+    get_pyca_cryptography_hash,
+    load_cert_from_pemder,
+    load_certs_from_pemder,
+    load_private_key_from_pemder,
+    optimal_pss_params,
+    simple_cms_attribute,
+)
 
 __all__ = [
     'Signer', 'SimpleSigner', 'ExternalSigner',

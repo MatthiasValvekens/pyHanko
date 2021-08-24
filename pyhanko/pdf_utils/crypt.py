@@ -53,23 +53,22 @@ uses of crypt filters:
 As long as you don't require access to encoded object data and/or raw encrypted
 object data, this distiction should be irrelevant to you as an API user.
 """
-import logging
 import abc
-import struct
-import secrets
 import enum
+import logging
+import secrets
+import struct
 from dataclasses import dataclass
-from hashlib import md5, sha256, sha384, sha512, sha1
-from typing import Dict, Type, Optional, Tuple, Union, List, Set, Callable
+from hashlib import md5, sha1, sha256, sha384, sha512
+from typing import Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
-from asn1crypto import x509, cms, algos
-from asn1crypto.keys import PublicKeyAlgorithm, PrivateKeyInfo
+from asn1crypto import algos, cms, x509
+from asn1crypto.keys import PrivateKeyInfo, PublicKeyAlgorithm
 from cryptography.hazmat.primitives import padding, serialization
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey, \
-    RSAPrivateKey
-from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.serialization import pkcs12
 
 from . import generic, misc
 
@@ -2247,8 +2246,8 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
             )
 
             from ..sign.general import (
+                _translate_pyca_cryptography_cert_to_asn1,
                 _translate_pyca_cryptography_key_to_asn1,
-                _translate_pyca_cryptography_cert_to_asn1
             )
             cert = _translate_pyca_cryptography_cert_to_asn1(cert)
             private_key = _translate_pyca_cryptography_key_to_asn1(private_key)
@@ -2339,6 +2338,7 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
     try:
         # noinspection PyUnresolvedReferences
         from oscrypto import symmetric
+
         # The spec mandates that we support these, but pyca/cryptography
         # doesn't offer implementations.
         # (DES and 3DES have fortunately gone out of style, but some libraries

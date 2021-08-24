@@ -4,21 +4,24 @@ It contains modules for creating ``SignedData`` CMS objects, embedding them
 in PDF files, and for handling PDF-specific document signing needs.
 """
 
-from .pdf_cms import Signer, SimpleSigner, ExternalSigner
-from .pdf_byterange import (
-    PdfByteRangeDigest, PdfSignedData, SignatureObject, DocumentTimestamp,
-)
-from .pdf_signer import PdfSignatureMetadata, PdfTimeStamper, PdfSigner
-from .functions import sign_pdf, embed_payload_with_cms
-
 # reexport this for backwards compatibility
 from pyhanko.sign.general import load_certs_from_pemder
 
 from .constants import (
-    DEFAULT_MD, DEFAULT_SIGNING_STAMP_STYLE, DEFAULT_SIG_SUBFILTER,
-    DEFAULT_SIGNER_KEY_USAGE
+    DEFAULT_MD,
+    DEFAULT_SIG_SUBFILTER,
+    DEFAULT_SIGNER_KEY_USAGE,
+    DEFAULT_SIGNING_STAMP_STYLE,
 )
-
+from .functions import embed_payload_with_cms, sign_pdf
+from .pdf_byterange import (
+    DocumentTimestamp,
+    PdfByteRangeDigest,
+    PdfSignedData,
+    SignatureObject,
+)
+from .pdf_cms import ExternalSigner, Signer, SimpleSigner
+from .pdf_signer import PdfSignatureMetadata, PdfSigner, PdfTimeStamper
 
 __all__ = [
     'PdfSignatureMetadata', 'Signer', 'SimpleSigner', 'ExternalSigner',

@@ -5,25 +5,28 @@ The internals were imported from PyPDF2, with modifications.
 See :ref:`here <pypdf2-license>` for the original license
 of the PyPDF2 project.
 """
+import binascii
+import codecs
+import decimal
+import logging
 import os
 import re
-import binascii
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import Iterator, Tuple, Optional, Union, Callable, Any
-from dataclasses import dataclass, field
+from typing import Any, Callable, Iterator, Optional, Tuple, Union
 
-from .misc import (
-    read_non_whitespace, skip_over_comment, read_until_regex,
-    is_regular_character
-)
-from .misc import (
-    PdfStreamError, PdfReadError, IndirectObjectExpected, PdfWriteError
-)
-import logging
 from . import filters
-import decimal
-import codecs
+from .misc import (
+    IndirectObjectExpected,
+    PdfReadError,
+    PdfStreamError,
+    PdfWriteError,
+    is_regular_character,
+    read_non_whitespace,
+    read_until_regex,
+    skip_over_comment,
+)
 
 __all__ = [
     'Dereferenceable', 'Reference', 'TrailerReference',
