@@ -457,9 +457,12 @@ STAMP_STYLE_TYPES = {
 }
 
 
-def parse_cli_config(yaml_str):
+def parse_cli_config(yaml_str) -> CLIConfig:
     config_dict = yaml.safe_load(yaml_str) or {}
+    return CLIConfig(**process_config_dict(config_dict))
 
+
+def process_config_dict(config_dict: dict) -> dict:
     # validation context config
     vcs = {DEFAULT_VALIDATION_CONTEXT: {}}
     try:
@@ -503,7 +506,7 @@ def parse_cli_config(yaml_str):
 
     time_tolerance = timedelta(seconds=time_tolerance_seconds)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
-    return CLIConfig(
+    return dict(
         validation_contexts=vcs, default_validation_context=default_vc,
         time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
