@@ -1,7 +1,11 @@
 """
-This module has parts of the flow to put a signature on a pdf.
-Only first and last step are pdf specific. The middle steps can be used to
-sign a hash and return a valid CMS. This is the use case for Docusign.
+This module hopes to make ExternalSigner more user friendly.
+Hiding away and providing defaults for configuration.
+Also it is made to work well together with an external service that implements
+the CSC specification. (version 1.0.4)
+
+Only first and last steps are pdf specific. The middle steps can be used to
+sign a hash and return a valid CMS. This is the case for integrating with DocuSign.
 
 The 2 points marked with ! are CSC calls and are considered external to this module.
 
@@ -46,11 +50,6 @@ class TPrepDocumentConfig(TypedDict, total=False):
 class CscSigner(signers.ExternalSigner):
     """
     See https://cloudsignatureconsortium.org/resources/download-api-specifications/
-
-    note: this signer will not perform any cryptographic operations,
-    it's just there to handle certificates and provide size estimates
-    The signature placeholder value, appropriate for a 2048-bit RSA key
-    (for example's sake)
     """
 
     def __init__(
@@ -125,8 +124,8 @@ class CscSigner(signers.ExternalSigner):
     def generate_cms(self, digest: TDigest, sig_value: bytes = None):
         """
         Generate cms from signed payload. The sig_value should be the PKCS1
-        signature returned by CSC signatures/signHash endpoint. The CSC spec does
-        not state that signatures are PKCS1 but the example response suggests that it is.
+        signature returned by CSC signatures/signHash endpoint. (The CSC spec does
+        not state that signatures are PKCS1 but the example response suggests that it is.)
         """
         if sig_value:
             self._signature_value = sig_value
