@@ -166,6 +166,15 @@ def test_mildly_malformed_xref_read():
     assert '/Pages' in root
 
 
+def test_whitespace_variants():
+    snippet_to_replace = b' /Pages 2 0 R'
+    assert snippet_to_replace in MINIMAL
+    for whitespace in [b' ', b'\n', b'\r', b'\t', b'\f']:
+        new_snippet = snippet_to_replace.replace(b' ', whitespace)
+        r = PdfFileReader(BytesIO(MINIMAL.replace(snippet_to_replace, new_snippet)))
+        pages = r.root['/Pages']['/Count'] == 1
+
+
 TEST_STRING = b'\x74\x77\x74\x84\x66'
 
 
