@@ -73,7 +73,7 @@ def read_until_whitespace(stream, maxchars=None):
     return b''.join(_build())
 
 
-PDF_WHITESPACE = b' \n\r\t\x00'
+PDF_WHITESPACE = b' \n\r\t\f\x00'
 PDF_DELIMITERS = b'()<>[]{}/%'
 
 
