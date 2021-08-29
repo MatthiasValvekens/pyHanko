@@ -1039,7 +1039,10 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
             prompt_pin=not skip_user_pin
         )
 
-    with pkcs11.PKCS11SigningContext(pkcs11_config) as signer:
+    pin = pkcs11_config.user_pin
+    if pin is None and pkcs11_config.prompt_pin:  # pragma: nocover
+        pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
+    with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
         _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url)
 
 

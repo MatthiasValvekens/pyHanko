@@ -5,7 +5,7 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
 import getpass
 import logging
-from typing import Set
+from typing import Optional, Set
 
 from asn1crypto import x509
 from asn1crypto.algos import RSASSAPSSParams
@@ -317,16 +317,16 @@ class PKCS11Signer(Signer):
 class PKCS11SigningContext:
     """Context manager for PKCS#11 configurations."""
 
-    def __init__(self, config: PKCS11SignatureConfig):
+    def __init__(self, config: PKCS11SignatureConfig,
+                 user_pin: Optional[str] = None):
         self.config = config
         self._session = None
+        self._user_pin = user_pin
 
     def __enter__(self):
         config = self.config
-        pin = config.user_pin
-        if pin is None and config.prompt_pin:  # pragma: nocover
-            pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
-        pin = str(pin)
+        pin = self._user_pin or config.user_pin
+        pin = str(pin) if pin is not None else None
 
         self._session = session = open_pkcs11_session(
             config.module_path, slot_no=config.slot_no,
