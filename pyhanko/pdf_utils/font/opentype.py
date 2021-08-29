@@ -178,7 +178,7 @@ def _build_type0_font_from_cidfont(writer, cidfont_obj: 'CIDFont',
     encoding = 'Identity-V' if vertical else 'Identity-H'
 
     cidfont_obj.embed(writer, obj_stream=obj_stream)
-    cidfont_ref = writer.add_object(cidfont_obj)
+    cidfont_ref = writer.add_object(cidfont_obj, obj_stream=obj_stream)
     type0 = generic.DictionaryObject({
         pdf_name('/Type'): pdf_name('/Font'),
         pdf_name('/Subtype'): pdf_name('/Type0'),
@@ -391,7 +391,7 @@ class GlyphAccumulator(FontEngine):
             )
         self.writing_direction = writing_direction
         self.bcp47_lang_code = bcp47_lang_code
-        self.__subset_created = False
+        self._subset_created = self._write_prepared = False
 
     @property
     def _reverse_cmap(self):
@@ -546,6 +546,7 @@ class GlyphAccumulator(FontEngine):
         stream = generic.StreamObject(
             stream_data=(header + body + footer).encode('ascii')
         )
+        stream.compress()
         return stream
 
     def _extract_subset(self, options=None):
@@ -581,9 +582,11 @@ class GlyphAccumulator(FontEngine):
             font will be overwritten by the generated subset.
         """
 
-        if not self.__subset_created:
+        if self._write_prepared:
+            return
+        if not self._subset_created:
             self._extract_subset()
-            self.__subset_created = True
+            self._subset_created = True
         writer = self.writer
         obj_stream = self.obj_stream
         by_cid = iter(sorted(self._glyphs.values(), key=lambda t: t[0]))
@@ -597,6 +600,7 @@ class GlyphAccumulator(FontEngine):
         )
         # use our preallocated font ref
         writer.add_object(type0, obj_stream, idnum=self._font_ref.idnum)
+        self._write_prepared = True
 
     def as_resource(self) -> generic.IndirectObject:
         return self._font_ref
@@ -782,9 +786,18 @@ class GlyphAccumulatorFactory(FontEngineFactory):
     Will be guessed by HarfBuzz if not specified.
     """
 
+    create_objstream_if_needed: bool = True
+    """
+    Create an object stream to hold this glyph accumulator's assets if no
+    object stream is passed in, and the writer supports object streams.
+    """
+
     def create_font_engine(self, writer: 'BasePdfFileWriter',
                            obj_stream=None) -> GlyphAccumulator:
         fh = open(self.font_file, 'rb')
+        if obj_stream is None and writer.stream_xrefs and \
+                self.create_objstream_if_needed:
+            obj_stream = writer.prepare_object_stream()
         return GlyphAccumulator(
             writer=writer, font_handle=fh,
             font_size=self.font_size, ot_script_tag=self.ot_script_tag,

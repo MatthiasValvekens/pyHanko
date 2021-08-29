@@ -57,12 +57,11 @@ def test_simple_qr_noto_stamp(tmp_path):
         QRStampStyle(stamp_text="Hi, it's\n%(ts)s",
                      text_box_style=TextBoxStyle(font=ga_factory)),
         dest_page=0, x=70, y=50, url='https://example.com',
-
     )
 
 
-def empty_page():
-    w = writer.PdfFileWriter(stream_xrefs=False)
+def empty_page(stream_xrefs=False):
+    w = writer.PdfFileWriter(stream_xrefs=stream_xrefs)
     page = writer.PageObject(
         contents=w.add_object(generic.StreamObject(stream_data=b'')),
         media_box=generic.ArrayObject([0, 0, 595, 842])
@@ -71,9 +70,8 @@ def empty_page():
     return w
 
 
-@with_layout_comparison
-def test_arabic_box():
-    w = empty_page()
+def _arabic_text_page(stream_xrefs):
+    w = empty_page(stream_xrefs=stream_xrefs)
     style = TextStampStyle(
         stamp_text='اَلْفُصْحَىٰ',
         text_box_style=TextBoxStyle(
@@ -90,10 +88,24 @@ def test_arabic_box():
         writer=w, style=style, box=layout.BoxConstraints(width=300, height=200)
     )
     ts.apply(0, x=10, y=60)
+    return w
 
+
+def test_arabic_box():
+    w = _arabic_text_page(stream_xrefs=False)
     compare_output(
         writer=w, expected_output_path=f'{EXPECTED_OUTPUT_DIR}/arabic-box.pdf'
     )
+
+
+def test_fonts_with_obj_streams():
+    # this should automatically put some stuff in object streams
+    w = _arabic_text_page(stream_xrefs=True)
+    compare_output(
+        writer=w, expected_output_path=f'{EXPECTED_OUTPUT_DIR}/arabic-box.pdf'
+    )
+    assert w.objs_in_streams
+
 
 
 @with_layout_comparison
