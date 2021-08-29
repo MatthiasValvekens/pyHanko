@@ -61,6 +61,7 @@ class CLIConfig:
     pemder_setups: Dict[str, dict]
     pkcs12_setups: Dict[str, dict]
     pkcs11_setups: Dict[str, dict]
+    beid_module_path: Optional[str]
 
     # TODO graceful error handling for syntax & type issues?
 
@@ -485,9 +486,11 @@ def process_config_dict(config_dict: dict) -> dict:
     log_config_spec = config_dict.get('logging', {})
     log_config = parse_logging_config(log_config_spec)
 
+    # TODO type check!
     pkcs11_setups = config_dict.get('pkcs11-setups', {})
     pkcs12_setups = config_dict.get('pkcs12-setups', {})
     pemder_setups = config_dict.get('pemder-setups', {})
+    beid_module_path = config_dict.get('beid-module-path', None)
 
     # some misc settings
     default_vc = config_dict.get(
@@ -511,5 +514,6 @@ def process_config_dict(config_dict: dict) -> dict:
         time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
         log_config=log_config, pkcs11_setups=pkcs11_setups,
-        pkcs12_setups=pkcs12_setups, pemder_setups=pemder_setups
+        pkcs12_setups=pkcs12_setups, pemder_setups=pemder_setups,
+        beid_module_path=beid_module_path
     )

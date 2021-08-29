@@ -1049,7 +1049,7 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.option('--lib', help='path to libbeidpkcs11 library file',
-              type=readable_file, required=True)
+              type=readable_file, required=False)
 @click.option('--use-auth-cert', type=bool, show_default=True,
               default=False, required=False, is_flag=True,
               help='use Authentication cert instead')
@@ -1058,6 +1058,15 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
 @click.pass_context
 def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     from pyhanko.sign import beid
+    if not lib:
+        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        if cli_config is None or cli_config.beid_module_path is None:
+            raise click.ClickException(
+                "The --lib option is mandatory unless beid-module-path is "
+                "provided in the configuration file."
+            )
+        lib = cli_config.beid_module_path
+
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
     session = beid.open_beid_session(lib, slot_no=slot_no)
     with session:
