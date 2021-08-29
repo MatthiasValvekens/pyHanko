@@ -53,15 +53,17 @@ class ObjectStream:
         legacy XRef table cannot contain object streams either.
         See § 7.5.7 in ISO 32000-1 for further details.
 
-    .. warning::
-        The usefulness of object streams is somewhat stymied by the fact that
-        PDF stream objects cannot be embedded into object streams for
-        syntactical reasons.
+    .. danger::
+        Use :meth:`.BasePdfFileWriter.prepare_object_stream` to create instances
+        of object streams. The `__init__` function is internal API.
+
     """
 
-    def __init__(self, compress=True):
+    def __init__(self, writer: 'BasePdfFileWriter', compress=True):
         self._obj_refs = {}
         self.compress = compress
+        self.writer = writer
+        self._ref = None
 
     def add_object(self, idnum: int, obj: generic.PdfObject):
         """
@@ -84,6 +86,23 @@ class ObjectStream:
                 'object streams.'
             )  # pragma: nocover
         self._obj_refs[idnum] = obj
+
+    def register_and_emit(self):
+        """
+        Internal method to flush an object stream as part of the file
+        writing process.
+        """
+        stream_ref = self._ref
+        objects = self._obj_refs
+        if objects and stream_ref is None:
+            # first, register the object stream object
+            #  (will get written later)
+            stream_ref = self._ref \
+                = self.writer.add_object(self.as_pdf_object())
+        # loop over all objects in the stream, and prepare
+        # the data to put in the XRef table
+        for ix, (idnum, obj) in enumerate(objects.items()):
+            yield idnum, (stream_ref.idnum, ix)
 
     def as_pdf_object(self) -> generic.StreamObject:
         """
@@ -723,7 +742,7 @@ class BasePdfFileWriter(PdfHandler):
             raise PdfWriteError(
                 'Object streams require Xref streams to be enabled.'
             )
-        stream = ObjectStream(compress=compress)
+        stream = ObjectStream(self, compress=compress)
         self.object_streams.append(stream)
         return stream
 
@@ -737,13 +756,8 @@ class BasePdfFileWriter(PdfHandler):
     def _write_objects(self, stream, object_position_dict):
         # deal with objects in object streams first
         for obj_stream in self.object_streams:
-            # first, register the object stream object
-            #  (will get written later)
-            stream_ref = self.add_object(obj_stream.as_pdf_object())
-            # loop over all objects in the stream, and prepare
-            # the data to put in the XRef table
-            for ix, (idnum, obj) in enumerate(obj_stream._obj_refs.items()):
-                object_position_dict[(0, idnum)] = (stream_ref.idnum, ix)
+            for idnum, pos_record in obj_stream.register_and_emit():
+                object_position_dict[(0, idnum)] = pos_record
 
         for ix in sorted(self.objects.keys()):
             generation, idnum = ix

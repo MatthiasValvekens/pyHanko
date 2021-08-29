@@ -1,4 +1,6 @@
+import os
 from fractions import Fraction
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -106,6 +108,17 @@ def test_fonts_with_obj_streams():
     )
     assert w.objs_in_streams
 
+@pytest.mark.parametrize('stream_xrefs', [True, False])
+@with_layout_comparison
+def test_font_rewrite_idempotent(stream_xrefs):
+    # There was a bug in the font embedding logic that would cause multiple
+    # writes of the same file to fail.
+    w = _arabic_text_page(stream_xrefs)
+    out1 = BytesIO()
+    w.write(out1)
+    out2 = BytesIO()
+    w.write(out2)
+    assert abs(out1.seek(0, os.SEEK_END) - out2.seek(0, os.SEEK_END)) < 100
 
 
 @with_layout_comparison
