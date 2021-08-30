@@ -380,11 +380,11 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     module_path: str
     """Path to the PKCS#11 module shared object."""
 
-    token_label: str
-    """PKCS#11 token name"""
-
     cert_label: str
     """PKCS#11 label of the signer's certificate."""
+
+    token_label: Optional[str] = None
+    """PKCS#11 token name"""
 
     other_certs: List[x509.Certificate] = None
     """Other relevant certificates."""
@@ -448,6 +448,12 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
         if isinstance(other_certs, str):
             other_certs = (other_certs,)
         config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
+
+        if 'token_label' not in config_dict and 'slot_no' not in config_dict:
+            raise ConfigurationError(
+                "Either 'slot_no' or 'token_label' must be provided in "
+                "PKCS#11 setup"
+            )
 
 
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'

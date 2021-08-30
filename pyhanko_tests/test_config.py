@@ -533,6 +533,38 @@ def test_read_pkcs11_config():
     assert len(setup.other_certs) == 2
 
 
+def test_read_pkcs11_config_slot_no():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    setup = cli_config.get_pkcs11_config('foo')
+
+    assert setup.module_path == '/path/to/libfoo.so'
+    assert setup.slot_no == 0
+    assert len(setup.other_certs) == 2
+
+
+def test_read_pkcs11_config_missing_slot():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    with pytest.raises(ConfigurationError, match='Either'):
+        cli_config.get_pkcs11_config('foo')
+
+
 def _signer_sanity_check(signer):
     digest = hashlib.sha256(b'Hello world!').digest()
     sig = signer.sign(digest, digest_algorithm='sha256')
