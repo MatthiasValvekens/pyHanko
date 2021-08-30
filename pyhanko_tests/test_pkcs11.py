@@ -3,7 +3,7 @@ Tests for PKCS#11 functionality.
 
 NOTE: these are not run in CI, due to lack of testing setup.
 """
-
+import binascii
 import logging
 import os
 from io import BytesIO
@@ -11,7 +11,7 @@ from io import BytesIO
 import pytest
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
-from pkcs11 import PKCS11Error
+from pkcs11 import NoSuchKey, PKCS11Error
 
 from pyhanko.config import PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -73,7 +73,23 @@ def test_wrong_key_label(bulk_fetch):
             sess, 'signer', other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, key_label='NoSuchKeyExists'
         )
-        with pytest.raises(PKCS11Error, match='.*private key handle.*'):
+        with pytest.raises(NoSuchKey):
+            signers.sign_pdf(w, meta, signer=signer)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_wrong_cert(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess() as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, key_label='signer', other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch, cert_id=binascii.unhexlify(b'deadbeef')
+        )
+        with pytest.raises(PKCS11Error, match='Could not find.*with ID'):
             signers.sign_pdf(w, meta, signer=signer)
 
 
@@ -149,12 +165,13 @@ def test_signer_pulled_others_provided(bulk_fetch):
     # this will fail if the intermediate cert is not present
     val_trusted(emb)
 
+
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @freeze_time('2020-11-01')
 def test_unclear_key_label():
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     with _simple_sess() as sess:
-        with pytest.raises(SigningError, match='\'key_label\'.*mandatory'):
+        with pytest.raises(SigningError, match='\'key_label\'.*must be prov'):
             pkcs11.PKCS11Signer(
                 sess, signing_cert=signer_cert,
                 other_certs_to_pull=default_other_certs,
@@ -165,7 +182,7 @@ def test_unclear_key_label():
 @freeze_time('2020-11-01')
 def test_unclear_signer_cert():
     with _simple_sess() as sess:
-        with pytest.raises(SigningError, match='Either.*must be provided'):
+        with pytest.raises(SigningError, match='Please specify'):
             pkcs11.PKCS11Signer(
                 sess, other_certs_to_pull=default_other_certs,
             )

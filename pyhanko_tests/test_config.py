@@ -5,6 +5,7 @@ from typing import Iterable, Optional, Union
 
 import pytest
 import yaml
+from asn1crypto import x509
 
 from pyhanko import config, stamp
 from pyhanko.config import (
@@ -558,12 +559,71 @@ def test_read_pkcs11_config_missing_slot():
             foo:
                 module-path: /path/to/libfoo.so
                 cert-label: signer
-                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
     with pytest.raises(ConfigurationError, match='Either'):
         cli_config.get_pkcs11_config('foo')
 
+
+def test_read_pkcs11_config_ids():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                cert-id: 5
+                key-id: "74657374"
+        """
+    )
+    setup = cli_config.get_pkcs11_config('foo')
+    assert setup.cert_id == b'\x05'
+    assert setup.key_id == b'test'
+
+
+def test_read_pkcs11_config_external_cert():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                key-id: 10
+                signing-certificate: '{TESTING_CA_DIR}/interm/signer1.cert.pem'
+        """
+    )
+    setup = cli_config.get_pkcs11_config('foo')
+    assert setup.cert_id is None
+    assert setup.cert_label is None
+    assert isinstance(setup.signing_certificate, x509.Certificate)
+
+
+def test_read_pkcs11_config_no_key_spec():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                cert-id: "deadbeef"
+        """
+    )
+    with pytest.raises(ConfigurationError, match="Either 'key_id'"):
+        cli_config.get_pkcs11_config('foo')
+
+
+def test_read_pkcs11_config_no_cert_spec():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                slot-no: 0
+                key-label: signer
+        """
+    )
+    with pytest.raises(ConfigurationError, match="Either 'cert_id'"):
+        cli_config.get_pkcs11_config('foo')
 
 def _signer_sanity_check(signer):
     digest = hashlib.sha256(b'Hello world!').digest()

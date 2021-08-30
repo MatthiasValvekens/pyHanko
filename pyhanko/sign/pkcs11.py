@@ -3,6 +3,7 @@ This module provides PKCS#11 integration for pyHanko, by providing a wrapper
 for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
 seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
+import binascii
 import logging
 from typing import Optional, Set
 
@@ -81,21 +82,38 @@ def open_pkcs11_session(lib_location, slot_no=None, token_label=None,
     return token.open(**kwargs)
 
 
-def _pull_cert(pkcs11_session: Session, label: str):
-    q = pkcs11_session.get_objects({
-        Attribute.LABEL: label,
+def _pull_cert(pkcs11_session: Session, label: Optional[str] = None,
+               cert_id: Optional[bytes] = None):
+
+    query_params = {
         Attribute.CLASS: ObjectClass.CERTIFICATE
-    })
+    }
+    if label is not None:
+        query_params[Attribute.LABEL] = label
+    if cert_id is not None:
+        query_params[Attribute.ID] = cert_id
+    q = pkcs11_session.get_objects(query_params)
 
     # need to run through the full iterator to make sure the operation
     # terminates
-    try:
-        cert_obj, = list(q)
-    except ValueError:
-        raise PKCS11Error(
-            f"Could not find (unique) cert with label '{label}'."
-        )
-    return x509.Certificate.load(cert_obj[Attribute.VALUE])
+    results = list(q)
+    if len(results) == 1:
+        cert_obj = results[0]
+        return x509.Certificate.load(cert_obj[Attribute.VALUE])
+    else:
+        info_strs = []
+        if label is not None:
+            info_strs.append(f"label '{label}'")
+        if cert_id is not None:
+            info_strs.append(
+                f"ID '{binascii.hexlify(cert_id).decode('ascii')}'"
+            )
+        qualifier = f" with {', '.join(info_strs)}" if info_strs else ""
+        if not results:
+            err = f"Could not find cert{qualifier}."
+        else:
+            err = f"Found more than one cert{qualifier}."
+        raise PKCS11Error(err)
 
 
 # TODO: perhaps attempt automatic key discovery if the labels aren't provided?
@@ -135,24 +153,34 @@ class PKCS11Signer(Signer):
     """
 
     def __init__(self, pkcs11_session: Session,
-                 cert_label: str = None, signing_cert: x509.Certificate = None,
-                 ca_chain=None, key_label=None, prefer_pss=False,
-                 other_certs_to_pull=(), bulk_fetch=True):
+                 cert_label: Optional[str] = None,
+                 signing_cert: x509.Certificate = None,
+                 ca_chain=None, key_label: Optional[str] = None,
+                 prefer_pss=False,
+                 other_certs_to_pull=(), bulk_fetch=True,
+                 key_id: Optional[bytes] = None,
+                 cert_id: Optional[bytes] = None):
         """
         Initialise a PKCS11 signer.
         """
-        if cert_label is None:
-            if signing_cert is None:
-                raise SigningError(
-                    "Either 'cert_label' or 'signing_cert' must be provided."
-                )
-            if key_label is None:
-                raise SigningError(
-                    "If 'cert_label' is None, then 'key_label' is mandatory."
-                )
+        if signing_cert is None and cert_id is None and cert_label is None:
+            raise SigningError(
+                "Please specify a signer's certificate through the "
+                "'cert_id', 'signing_cert' and/or 'cert_label' options"
+            )
+
         self.cert_label = cert_label
+        self.key_id = key_id
+        self.cert_id = cert_id
         self._signing_cert = signing_cert
-        self.key_label = key_label or cert_label
+        if key_id is None and key_label is None:
+            if cert_label is None:
+                raise SigningError(
+                    "If 'cert_label' is None, then 'key_label' or 'key_id' "
+                    "must be provided."
+                )
+            key_label = cert_label
+        self.key_label = key_label
         self.pkcs11_session = pkcs11_session
         cs = SimpleCertificateStore()
         self._cert_registry: CertificateStore = cs
@@ -290,24 +318,13 @@ class PKCS11Signer(Signer):
         self._init_cert_registry()
         if self._signing_cert is None:
             self._signing_cert = _pull_cert(
-                self.pkcs11_session, self.cert_label
+                self.pkcs11_session, label=self.cert_label,
+                cert_id=self.cert_id
             )
 
-        q = self.pkcs11_session.get_objects({
-            Attribute.LABEL: self.key_label,
-            Attribute.CLASS: ObjectClass.PRIVATE_KEY
-        })
-        try:
-            kh, = list(q)
-        except ValueError as e:
-            raise PKCS11Error(
-                "Could not determine private key handle."
-            ) from e
-        if not kh[Attribute.SIGN]:
-            logger.warning(
-                f"The PKCS#11 device reports that the key with label "
-                f"{self.key_label} cannot be used for signing!"
-            )
+        kh = self.pkcs11_session.get_key(
+            ObjectClass.PRIVATE_KEY, label=self.key_label, id=self.key_id
+        )
         self._key_handle = kh
 
         self._loaded = True
@@ -336,7 +353,9 @@ class PKCS11SigningContext:
             session, config.cert_label, ca_chain=config.other_certs,
             key_label=config.key_label, prefer_pss=config.prefer_pss,
             other_certs_to_pull=config.other_certs_to_pull,
-            bulk_fetch=config.bulk_fetch
+            bulk_fetch=config.bulk_fetch,
+            key_id=config.key_id, cert_id=config.cert_id,
+            signing_cert=config.signing_certificate
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):

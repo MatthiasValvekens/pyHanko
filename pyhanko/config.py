@@ -1,3 +1,4 @@
+import binascii
 import enum
 import logging
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from pyhanko.pdf_utils import config_utils
 from pyhanko.pdf_utils.config_utils import ConfigurationError, check_config_keys
 from pyhanko.pdf_utils.misc import get_and_apply
 from pyhanko.sign import SimpleSigner, load_certs_from_pemder
-from pyhanko.sign.general import KeyUsageConstraints
+from pyhanko.sign.general import KeyUsageConstraints, load_cert_from_pemder
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 
@@ -380,8 +381,23 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     module_path: str
     """Path to the PKCS#11 module shared object."""
 
-    cert_label: str
+    cert_label: Optional[str] = None
     """PKCS#11 label of the signer's certificate."""
+
+    cert_id: Optional[bytes] = None
+    """PKCS#11 ID of the signer's certificate."""
+
+    signing_certificate: Optional[x509.Certificate] = None
+    """
+    The signer's certificate. If present, :attr:`cert_id` and
+    :attr:`cert_label` will not be used to obtain the signer's certificate
+    from the PKCS#11 token.
+
+    .. note::
+        This can be useful in case the signer's certificate is not available on
+        the token, or if you would like to present a different certificate than
+        the one provided on the token.
+    """
 
     token_label: Optional[str] = None
     """PKCS#11 token name"""
@@ -391,8 +407,13 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
 
     key_label: Optional[str] = None
     """
-    PKCS#11 label of the signer's private key, if different from
-    :attr:`cert_label`.
+    PKCS#11 label of the signer's private key. Defaults to :attr:`cert_label`
+    if the latter is specified and :attr:`key_id` is not.
+    """
+
+    key_id: Optional[bytes] = None
+    """
+    PKCS#11 key ID.
     """
 
     slot_no: Optional[int] = None
@@ -454,6 +475,37 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
                 "Either 'slot_no' or 'token_label' must be provided in "
                 "PKCS#11 setup"
             )
+
+        cert_file = config_dict.get('signing_certificate', None)
+        if cert_file is not None:
+            config_dict['signing_certificate'] \
+                = load_cert_from_pemder(cert_file)
+
+        if 'key_id' in config_dict:
+            config_dict['key_id'] \
+                = _process_pkcs11_id_value(config_dict['key_id'])
+        elif 'key_label' not in config_dict and 'cert_label' not in config_dict:
+            raise ConfigurationError(
+                "Either 'key_id', 'key_label' or 'cert_label' must be provided "
+                "in PKCS#11 setup"
+            )
+
+        if 'cert_id' in config_dict:
+            config_dict['cert_id'] \
+                = _process_pkcs11_id_value(config_dict['cert_id'])
+        elif 'cert_label' not in config_dict \
+                and 'signing_certificate' not in config_dict:
+            raise ConfigurationError(
+                "Either 'cert_id', 'cert_label' or 'signing_certificate' "
+                "must be provided in PKCS#11 setup"
+            )
+
+
+def _process_pkcs11_id_value(x: Union[str, int]):
+    if isinstance(x, int):
+        return bytes([x])
+    else:
+        return binascii.unhexlify(x)
 
 
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
