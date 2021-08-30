@@ -127,20 +127,26 @@ class PKCS11Signer(Signer):
     :param cert_label:
         The label of the certificate that will be used for signing, to
         be pulled from the PKCS#11 token.
+    :param cert_id:
+        ID of the certificate object that will be used for signing, to
+        be pulled from the PKCS#11 token.
     :param signing_cert:
-        The signer's certificate. If the signer's certificate is provided,
-        the ``cert_label`` parameter will not be used to retrieve the
-        signer's certificate.
-
-        .. note::
-            When using this parameter instead of ``cert_label``, ``key_label``
-            becomes mandatory.
+        The signer's certificate. If the signer's certificate is provided via
+        this parameter, the ``cert_label`` and ``cert_id`` parameters will not
+        be used to retrieve the signer's certificate.
     :param ca_chain:
         Set of other relevant certificates
         (as :class:`.asn1crypto.x509.Certificate` objects).
     :param key_label:
         The label of the key that will be used for signing.
-        Defaults to the value of ``cert_label`` if left unspecified.
+        Defaults to the value of ``cert_label`` if left unspecified and
+        ``key_id`` is also unspecified.
+
+        .. note::
+            At least one of ``key_id``, ``key_label`` and ``cert_label`` must
+            be supplied.
+    :param key_id:
+        ID of the private key object (optional).
     :param other_certs_to_pull:
         List labels of other certificates to pull from the PKCS#11 device.
         Defaults to the empty tuple. If ``None``, pull *all* certificates.
