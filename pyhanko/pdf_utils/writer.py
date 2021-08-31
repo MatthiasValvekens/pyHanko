@@ -1420,7 +1420,8 @@ def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
         New :class:`.PdfFileWriter` containing all objects from the input
         handler.
     """
-    w = PdfFileWriter(init_page_tree=False)
+    # TODO try to be more clever with object streams
+    w = PdfFileWriter(init_page_tree=False, stream_xrefs=False)
     input_root_ref = input_handler.root_ref
     output_root_ref = w.root_ref
     # call _import_object in such a way that we translate the input handler's
