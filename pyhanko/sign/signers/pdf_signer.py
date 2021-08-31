@@ -257,8 +257,8 @@ class PdfSignatureMetadata:
     It should be supported by `pyca/cryptography`.
 
     If ``None``, this will ordinarily default to the value of
-    :const:`constants.DEFAULT_MD`, unless a seed value dictionary and/or a prior
-    certification signature happen to be available.
+    :const:`constants.DEFAULT_MD`, unless a seed value dictionary happens
+    to be available.
     """
 
     location: str = None
@@ -726,7 +726,8 @@ class PdfSigner:
 
     def _enforce_certification_constraints(self, reader: PdfFileReader):
         # TODO we really should take into account the /DocMDP constraints
-        #  of _all_ previous signatures
+        #  of _all_ previous signatures, i.e. also approval signatures with
+        #  locking instructions etc.
 
         from pyhanko.sign.validation import read_certification_data
         cd = read_certification_data(reader)
@@ -739,7 +740,6 @@ class PdfSigner:
             )
         if cd.permission == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
-        return cd.digest_method
 
     def _retrieve_seed_value_spec(self, sig_field) \
             -> Optional[SigSeedValueSpec]:
@@ -751,8 +751,7 @@ class PdfSigner:
             return None
         return SigSeedValueSpec.from_pdf_object(sv_dict)
 
-    def _select_md_algorithm(self, sv_spec: Optional[SigSeedValueSpec],
-                             author_sig_md_algorithm: Optional[str]) -> str:
+    def _select_md_algorithm(self, sv_spec: Optional[SigSeedValueSpec]) -> str:
 
         signature_meta = self.signature_meta
 
@@ -761,8 +760,6 @@ class PdfSigner:
         #      (it has been cleared by the SV dictionary checker already)
         #  (2) Use the first algorithm specified in the seed value dictionary,
         #      if a suggestion is present
-        #  (3) If there is a certification signature, use the digest method
-        #      specified there.
         #  (4) fall back to DEFAULT_MD
         if sv_spec is not None and sv_spec.digest_methods:
             sv_md_algorithm = sv_spec.digest_methods[0]
@@ -773,8 +770,6 @@ class PdfSigner:
             md_algorithm = self.default_md_for_signer
         elif sv_md_algorithm is not None:
             md_algorithm = sv_md_algorithm
-        elif author_sig_md_algorithm is not None:
-            md_algorithm = author_sig_md_algorithm
         else:
             md_algorithm = constants.DEFAULT_MD
 
@@ -837,17 +832,11 @@ class PdfSigner:
         # Fetch seed values (if present) to prepare for signing
         sv_spec = self._retrieve_seed_value_spec(sig_field)
 
-        # look up the certification signature's MD (if present), as a fallback
-        # if the settings don't specify one
-        author_sig_md_algorithm = None
+        # Check DocMDP settings to see if we're allowed to add a signature
         if isinstance(pdf_out, IncrementalPdfFileWriter):
-            author_sig_md_algorithm = self._enforce_certification_constraints(
-                pdf_out.prev
-            )
+            self._enforce_certification_constraints(pdf_out.prev)
 
-        md_algorithm = self._select_md_algorithm(
-            sv_spec, author_sig_md_algorithm
-        )
+        md_algorithm = self._select_md_algorithm(sv_spec)
         ts_required = sv_spec is not None and sv_spec.timestamp_required
         if ts_required and timestamper is None:
             timestamper = sv_spec.build_timestamper()

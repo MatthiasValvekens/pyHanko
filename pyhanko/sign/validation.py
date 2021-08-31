@@ -1906,7 +1906,7 @@ def apply_adobe_revocation_info(signer_info: cms.SignerInfo,
 
 
 DocMDPInfo = namedtuple(
-    'DocMDPInfo', ['permission', 'digest_method', 'author_sig']
+    'DocMDPInfo', ['permission', 'author_sig']
 )
 """
 Encodes certification information for a signed document, consisting of a 
@@ -1929,14 +1929,7 @@ def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
         return
 
     perm = _extract_docmdp_for_sig(certification_sig)
-    ref = _extract_reference_dict(certification_sig, '/DocMDP')
-    md = None
-    if ref is not None:
-        md = misc.get_and_apply(
-            ref, '/DigestMethod', lambda x: x[1:].lower()
-        )
-
-    return DocMDPInfo(perm, md, certification_sig)
+    return DocMDPInfo(perm, certification_sig)
 
 
 @dataclass

@@ -1221,32 +1221,6 @@ def test_approval_sig():
     val_trusted(s)
 
 
-def test_approval_sig_md_match_author_sig():
-
-    # since this test didn't detect a regression because I made
-    # sha256 the default MD (instead of sha512), I made the test use
-    # SHA1, since that's definitely NEVER going to be a default.
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', certify=True,
-            md_algorithm='sha1'
-        ), signer=FROM_CA
-    )
-    out.seek(0)
-    w = IncrementalPdfFileWriter(out)
-
-    out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA
-    )
-    out.seek(0)
-    r = PdfFileReader(out)
-    sigs = fields.enumerate_sig_fields(r)
-    next(sigs)
-    field_name, sig_obj, sig_field = next(sigs)
-    assert EmbeddedPdfSignature(r, sig_field, field_name).md_algorithm == 'sha1'
-
-
 @freeze_time('2020-11-01')
 def test_ocsp_embed():
 
