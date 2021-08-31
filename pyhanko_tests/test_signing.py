@@ -165,9 +165,11 @@ DUMMY_POLICY_ID = SignaturePolicyId({
 # TODO rewrite tests using new in-place signing mechanism
 
 def dummy_ocsp_vc():
+    cr = FROM_CA.cert_registry
+    assert isinstance(cr, SimpleCertificateStore)
     vc = ValidationContext(
         trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP],
-        other_certs=list(FROM_CA.cert_registry), allow_fetching=False,
+        other_certs=list(), allow_fetching=False,
         weak_hash_algos=set()
     )
     return vc
