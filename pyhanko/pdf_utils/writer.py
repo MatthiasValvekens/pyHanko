@@ -264,6 +264,10 @@ def _contiguous_xref_chunks(position_dict):
     previous_idnum = None
     current_chunk = []
 
+    if not position_dict.keys():
+        # return immediately, there are no objects
+        return
+
     # iterate over keys in object ID order
     key_iter = sorted(position_dict.keys(), key=lambda t: t[1])
     (_, first_idnum), key_iter = peek(key_iter)
@@ -304,7 +308,12 @@ def _write_xref_table(stream, position_dict):
             entry = "%010d %05d n \n" % (position, generation)
             stream.write(entry.encode('ascii'))
 
-    first_idnum, subsection = next(subsections)
+    try:
+        first_idnum, subsection = next(subsections)
+    except StopIteration:
+        # no updates, just write '0 0' and be done with it
+        stream.write(b'0 0\n')
+        return xref_location
     # TODO support deleting objects
     # case distinction: in contrast with the above we have to ensure that
     # everything is written in one chunk when *not* doing incremental updates.

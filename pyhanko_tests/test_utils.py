@@ -1951,3 +1951,22 @@ def test_xref_access_no_decrypt():
     # attempt to access xref stream, turn off transparent decryption
     obj = r.get_object(ref=generic.Reference(7, 0), transparent_decrypt=False)
     assert not isinstance(obj, generic.DecryptedObjectProxy)
+
+
+def test_xref_null_update():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    w.write_in_place()
+    r = PdfFileReader(buf)
+    assert r.xrefs.total_revisions == 2
+    assert r.xrefs.explicit_refs_in_revision(1) == set()
+
+
+def test_xref_stream_null_update():
+    buf = BytesIO(MINIMAL_XREF)
+    w = IncrementalPdfFileWriter(buf)
+    w.write_in_place()
+    r = PdfFileReader(buf)
+    assert r.xrefs.total_revisions == 2
+    # The xref stream itself got added
+    assert len(r.xrefs.explicit_refs_in_revision(1)) == 1
