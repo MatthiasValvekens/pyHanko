@@ -12,6 +12,7 @@ import pytest
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pkcs11 import NoSuchKey, PKCS11Error
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.config import PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -53,6 +54,63 @@ def test_simple_sign(bulk_fetch, pss):
             sess, 'signer', other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, prefer_pss=pss
         )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_sign_external_certs(bulk_fetch):
+    # Test to see if unnecessary fetches for intermediate certs are skipped
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess() as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, 'signer',
+            ca_chain=(TESTING_CA.get_cert(CertLabel('interm')),),
+            bulk_fetch=bulk_fetch
+        )
+        orig_fetcher = pkcs11._pull_cert
+        try:
+            def _trap_pull(session, *, label=None, cert_id=None):
+                if label != 'signer':
+                    raise RuntimeError
+                return orig_fetcher(session, label=label, cert_id=cert_id)
+
+            pkcs11._pull_cert = _trap_pull
+            assert isinstance(signer.cert_registry, SimpleCertificateStore)
+            assert len(list(signer.cert_registry)) == 1
+            out = signers.sign_pdf(w, meta, signer=signer)
+        finally:
+            pkcs11._pull_cert = orig_fetcher
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_sign_multiple_cert_sources(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess() as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, 'signer', other_certs_to_pull=('root',),
+            ca_chain=(TESTING_CA.get_cert(CertLabel('interm')),),
+            bulk_fetch=bulk_fetch
+        )
+        assert isinstance(signer.cert_registry, SimpleCertificateStore)
+        assert len(list(signer.cert_registry)) == 2
         out = signers.sign_pdf(w, meta, signer=signer)
 
     r = PdfFileReader(out)

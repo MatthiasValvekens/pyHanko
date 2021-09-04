@@ -552,6 +552,20 @@ def test_read_pkcs11_config_slot_no():
     assert len(setup.other_certs) == 2
 
 
+def test_read_pkcs11_nothing_to_pull():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                cert-label: signer
+        """
+    )
+    setup = cli_config.get_pkcs11_config('foo')
+    assert len(setup.other_certs) == 0
+
+
 def test_read_pkcs11_config_missing_slot():
     cli_config = config.parse_cli_config(
         f"""

@@ -192,12 +192,10 @@ class PKCS11Signer(Signer):
         self._cert_registry: CertificateStore = cs
         if ca_chain is not None:
             cs.register_multiple(ca_chain)
-            self._other_certs_loaded = True
-        else:
-            self._other_certs_loaded = False
         if signing_cert is not None:
             cs.register(signing_cert)
         self.other_certs = other_certs_to_pull
+        self._other_certs_loaded = False
         if other_certs_to_pull is not None and len(other_certs_to_pull) <= 1:
             self.bulk_fetch = False
         else:
@@ -303,6 +301,11 @@ class PKCS11Signer(Signer):
     def __pull(self):
 
         other_certs = self.other_certs
+        if other_certs is not None and len(other_certs) == 0:
+            # if there's nothing to fetch, bail.
+            # Recall: None -> fetch everything, so we check the length
+            # explicitly
+            return
         if other_certs is None or self.bulk_fetch:
             # first, query all certs
             q = self.pkcs11_session.get_objects({
