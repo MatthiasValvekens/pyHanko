@@ -103,6 +103,9 @@ class CertificateStore(CertificateCollection, abc.ABC):
             added |= self.register(cert)
         return added
 
+    def __iter__(self):
+        raise NotImplementedError
+
 
 class SimpleCertificateStore(CertificateStore):
     """
