@@ -13,6 +13,7 @@ from asn1crypto import pdf as asn1_pdf
 from asn1crypto import x509
 from asn1crypto.algos import SignedDigestAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric.dsa import DSAPrivateKey
 from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -119,6 +120,15 @@ class Signer:
                     "Digest algorithm required for ECDSA"
                 )
             mech = digest_algorithm + '_ecdsa'
+        elif algo == 'dsa':
+            if digest_algorithm is None:
+                raise ValueError("Digest algorithm required for DSA")
+            # Note: DSA isn't specified with sha384 and sha512, but we
+            # don't check that here; let's allow the error to percolate
+            # further down for now.
+            # TODO (but maybe it's worth revisiting the issue of checking
+            #  signature <> hash algorithm combinations in greater generality)
+            mech = digest_algorithm + '_dsa'
         elif algo == 'rsa':
             if self.prefer_pss:
                 mech = 'rsassa_pss'
@@ -730,6 +740,10 @@ class SimpleSigner(Signer):
             hash_algo = get_pyca_cryptography_hash(digest_algorithm)
             assert isinstance(priv_key, EllipticCurvePrivateKey)
             return priv_key.sign(data, signature_algorithm=ECDSA(hash_algo))
+        elif mechanism == 'dsa':
+            hash_algo = get_pyca_cryptography_hash(digest_algorithm)
+            assert isinstance(priv_key, DSAPrivateKey)
+            return priv_key.sign(data, hash_algo)
         else:  # pragma: nocover
             raise SigningError(
                 f"The signature mechanism {mechanism} "

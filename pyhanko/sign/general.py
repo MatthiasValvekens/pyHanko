@@ -17,6 +17,7 @@ from asn1crypto import algos, cms, keys, pem, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
@@ -823,6 +824,9 @@ def _validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
             prehashed=prehashed
         )
         pub_key.verify(signature, signed_data, pss_padding, hash_algo)
+    elif sig_algo == 'dsa':
+        assert isinstance(pub_key, DSAPublicKey)
+        pub_key.verify(signature, signed_data, verify_md)
     elif sig_algo == 'ecdsa':
         assert isinstance(pub_key, EllipticCurvePublicKey)
         pub_key.verify(signature, signed_data, ECDSA(verify_md))

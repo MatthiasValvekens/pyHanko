@@ -86,8 +86,10 @@ SELF_SIGN = signers.SimpleSigner.load(
 
 ROOT_CERT = TESTING_CA.get_cert(CertLabel('root'))
 ECC_ROOT_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('root'))
+DSA_ROOT_CERT = TESTING_CA_DSA.get_cert(CertLabel('root'))
 INTERM_CERT = TESTING_CA.get_cert(CertLabel('interm'))
 ECC_INTERM_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('interm'))
+DSA_INTERM_CERT = TESTING_CA_DSA.get_cert(CertLabel('interm'))
 OCSP_CERT = TESTING_CA.get_cert(CertLabel('interm-ocsp'))
 REVOKED_CERT = TESTING_CA.get_cert(CertLabel('signer2'))
 TSA_CERT = TESTING_CA.get_cert(CertLabel('tsa'))
@@ -107,6 +109,13 @@ FROM_ECC_CA = signers.SimpleSigner(
     )
 )
 
+FROM_DSA_CA = signers.SimpleSigner(
+    signing_cert=TESTING_CA_DSA.get_cert(CertLabel('signer1')),
+    signing_key=TESTING_CA_DSA.key_set.get_private_key(KeyLabel('signer1')),
+    cert_registry=SimpleCertificateStore.from_certs(
+        [DSA_ROOT_CERT, DSA_INTERM_CERT]
+    )
+)
 
 REVOKED_SIGNER = signers.SimpleSigner(
     signing_cert=TESTING_CA.get_cert(CertLabel('signer2')),
@@ -123,6 +132,7 @@ FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
 NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
 SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
+SIMPLE_DSA_V_CONTEXT = lambda: ValidationContext(trust_roots=[DSA_ROOT_CERT])
 
 OCSP_KEY = TESTING_CA.key_set.get_private_key('interm-ocsp')
 DUMMY_TS = timestamps.DummyTimeStamper(
@@ -407,7 +417,21 @@ def test_sign_with_ecdsa_trust():
 
 
 @freeze_time('2020-11-01')
-def test_sign_with_explicit_ecdsa():
+def test_sign_with_dsa_trust():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_DSA_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    si = s.signer_info
+    assert si['signature_algorithm']['algorithm'].native == 'sha256_dsa'
+    val_trusted(s, vc=SIMPLE_DSA_V_CONTEXT())
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_explicit_ecdsa_implied_hash():
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA_ECDSA.get_cert(CertLabel('signer1')),
         signing_key=TESTING_CA_ECDSA.key_set.get_private_key(
@@ -415,6 +439,7 @@ def test_sign_with_explicit_ecdsa():
         cert_registry=SimpleCertificateStore.from_certs(
             [ECC_ROOT_CERT, ECC_INTERM_CERT]
         ),
+        # this is not allowed, but the validator should accept it anyway
         signature_mechanism=SignedDigestAlgorithm({'algorithm': 'ecdsa'})
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -428,6 +453,30 @@ def test_sign_with_explicit_ecdsa():
     assert si['signature_algorithm']['algorithm'].native == 'ecdsa'
     assert s.field_name == 'Sig1'
     val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_explicit_dsa_implied_hash():
+    signer = signers.SimpleSigner(
+        signing_cert=TESTING_CA_DSA.get_cert(CertLabel('signer1')),
+        signing_key=TESTING_CA_DSA.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [DSA_ROOT_CERT, DSA_INTERM_CERT]
+        ),
+        # this is not allowed, but the validator should accept it anyway
+        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'dsa'})
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=signer
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    si = s.signer_info
+    assert si['signature_algorithm']['algorithm'].native == 'dsa'
+    assert s.field_name == 'Sig1'
+    val_trusted(s, vc=SIMPLE_DSA_V_CONTEXT())
 
 
 def test_sign_with_new_field_spec():
