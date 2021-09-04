@@ -308,13 +308,21 @@ class PKCS11Signer(Signer):
             q = self.pkcs11_session.get_objects({
                 Attribute.CLASS: ObjectClass.CERTIFICATE
             })
+            logger.info("Pulling all certificates from PKCS#11 token...")
             for cert_obj in q:
                 label = cert_obj[Attribute.LABEL]
                 if other_certs is None or label in other_certs:
+                    logger.info(
+                        f"Found certificate with label '{label}' on token."
+                    )
                     yield x509.Certificate.load(cert_obj[Attribute.VALUE])
         else:
             # fetch certs one by one
             for label in other_certs:
+                logger.info(
+                    f"Pulling certificate with label '{label}' from "
+                    f"PKCS#11 token..."
+                )
                 yield _pull_cert(self.pkcs11_session, label)
 
     def _load_objects(self):
