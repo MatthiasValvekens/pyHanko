@@ -238,6 +238,7 @@ class PKCS11Signer(Signer):
         if signature_algo == 'rsassa_pkcs1v15':
             kwargs['mechanism'] = {
                 'sha1': Mechanism.SHA1_RSA_PKCS,
+                'sha224': Mechanism.SHA224_RSA_PKCS,
                 'sha256': Mechanism.SHA256_RSA_PKCS,
                 'sha384': Mechanism.SHA384_RSA_PKCS,
                 'sha512': Mechanism.SHA512_RSA_PKCS,
@@ -247,6 +248,12 @@ class PKCS11Signer(Signer):
                 'sha1': Mechanism.DSA_SHA1,
                 'sha224': Mechanism.DSA_SHA224,
                 'sha256': Mechanism.DSA_SHA256,
+                # These can't be used in CMS IIRC (since the key sizes required
+                # to meaningfully use them are ridiculous),
+                # but they're in the PKCS#11 spec, so let's add them for
+                # completeness
+                'sha384': Mechanism.DSA_SHA384,
+                'sha512': Mechanism.DSA_SHA512,
             }[digest_algorithm]
             from pkcs11.util.dsa import encode_dsa_signature
             transform = encode_dsa_signature
@@ -255,6 +262,7 @@ class PKCS11Signer(Signer):
             #  apparently (only raw ECDSA)
             kwargs['mechanism'] = {
                 'sha1': Mechanism.ECDSA_SHA1,
+                'sha224': Mechanism.ECDSA_SHA224,
                 'sha256': Mechanism.ECDSA_SHA256,
                 'sha384': Mechanism.ECDSA_SHA384,
                 'sha512': Mechanism.ECDSA_SHA512,
@@ -269,6 +277,7 @@ class PKCS11Signer(Signer):
             # unpack PSS parameters into PKCS#11 language
             kwargs['mechanism'] = {
                 'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
+                'sha224': Mechanism.SHA224_RSA_PKCS_PSS,
                 'sha256': Mechanism.SHA256_RSA_PKCS_PSS,
                 'sha384': Mechanism.SHA384_RSA_PKCS_PSS,
                 'sha512': Mechanism.SHA512_RSA_PKCS_PSS,
@@ -276,6 +285,7 @@ class PKCS11Signer(Signer):
 
             pss_digest_param = {
                 'sha1': Mechanism.SHA_1,
+                'sha224': Mechanism.SHA224,
                 'sha256': Mechanism.SHA256,
                 'sha384': Mechanism.SHA384,
                 'sha512': Mechanism.SHA512,
@@ -283,6 +293,7 @@ class PKCS11Signer(Signer):
 
             pss_mgf_param = {
                 'sha1': MGF.SHA1,
+                'sha224': MGF.SHA224,
                 'sha256': MGF.SHA256,
                 'sha384': MGF.SHA384,
                 'sha512': MGF.SHA512
