@@ -242,6 +242,14 @@ class PKCS11Signer(Signer):
                 'sha384': Mechanism.SHA384_RSA_PKCS,
                 'sha512': Mechanism.SHA512_RSA_PKCS,
             }[digest_algorithm]
+        elif signature_algo == 'dsa':
+            kwargs['mechanism'] = {
+                'sha1': Mechanism.DSA_SHA1,
+                'sha224': Mechanism.DSA_SHA224,
+                'sha256': Mechanism.DSA_SHA256,
+            }[digest_algorithm]
+            from pkcs11.util.dsa import encode_dsa_signature
+            transform = encode_dsa_signature
         elif signature_algo == 'ecdsa':
             # TODO test these, SoftHSM does not support these mechanisms
             #  apparently (only raw ECDSA)

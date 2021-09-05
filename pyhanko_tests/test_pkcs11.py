@@ -21,7 +21,11 @@ from pyhanko.sign import pkcs11, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.pkcs11 import PKCS11SigningContext
 from pyhanko_tests.samples import MINIMAL, TESTING_CA
-from pyhanko_tests.test_signing import SIMPLE_ECC_V_CONTEXT, val_trusted
+from pyhanko_tests.test_signing import (
+    SIMPLE_DSA_V_CONTEXT,
+    SIMPLE_ECC_V_CONTEXT,
+    val_trusted,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -246,13 +250,37 @@ def test_unclear_signer_cert():
             )
 
 
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_simple_sign_dsa(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='sha256'
+    )
+    with _simple_sess(token='testdsa') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, 'signer', other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
+
+
 @pytest.mark.xfail  # fails due to lack of (proper) support in SoftHSMv2
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ecdsa(bulk_fetch):
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    meta = signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='sha1')
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='sha256'
+    )
     with _simple_sess(token='testecdsa') as sess:
         signer = pkcs11.PKCS11Signer(
             sess, 'signer', other_certs_to_pull=default_other_certs,

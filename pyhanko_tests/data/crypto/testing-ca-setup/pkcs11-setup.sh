@@ -13,6 +13,10 @@ TOKEN_NAME=testrsa
 KEYDIR="$CRYPTO_BASEDIR/keys-rsa"
 #CA_BASEDIR="pyhanko_tests/data/crypto/testing-ca-ecdsa"
 #TOKEN_NAME=testecdsa
+#KEYDIR="$CRYPTO_BASEDIR/keys-ecdsa"
+#CA_BASEDIR="pyhanko_tests/data/crypto/testing-ca-dsa"
+#TOKEN_NAME=testdsa
+#KEYDIR="$CRYPTO_BASEDIR/keys-dsa"
 SLOT_IX=0
 
 if [[ -z "$1" ]] ; then
@@ -69,6 +73,9 @@ transcode_cert () {
 import_key () {
     $TOOL -l --pin "$USER_PIN" --write-object "$TEMPDIR/$1.key.der" \
         --type privkey --label $1 --id $2
+    # equivalent softhsm2-util command (needed for DSA, which isn't supported in pkcs11-tool)
+    #  (note: softhsm2-util expects PEM-armored pkcs8!)
+    # softhsm2-util --token "$TOKEN_NAME" --import "$TEMPDIR/$1.key.der" --label $1 --id $2 --pin "$USER_PIN"
 }
 
 import_cert () {
