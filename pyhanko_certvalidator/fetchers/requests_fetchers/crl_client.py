@@ -15,33 +15,38 @@ logger = logging.getLogger(__name__)
 
 class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._by_cert = {}
+
     async def fetch(self, cert: x509.Certificate, *, use_deltas=True):
-        # Cache the futures so we don't end up queuing tons of requests
-        # in concurrent execution scenarios.
-        tag = cert.issuer_serial
+        try:
+            return self._by_cert[cert.issuer_serial]
+        except KeyError:
+            pass
 
-        async def task():
-            results = []
-            async for fetched_crl in self._fetch(cert, use_deltas=use_deltas):
-                results.append(fetched_crl)
-            return results
-
-        return await self._perform_fetch(tag, task)
+        results = []
+        async for fetched_crl in self._fetch(cert, use_deltas=use_deltas):
+            results.append(fetched_crl)
+        self._by_cert[cert.issuer_serial] = results
+        return results
 
     async def _fetch_single(self, url):
-        logger.info(f"Requesting CRL from {url}...")
-        try:
-            response = await self._get(
-                url, acceptable_content_types=('application/pkix-crl',)
-            )
-            data = response.content
-            if pem.detect(data):
-                _, _, data = pem.unarmor(data)
-            return crl.CertificateList.load(data)
-        except (ValueError, requests.RequestException) as e:
-            raise errors.CRLFetchError(
-                f"Failure to fetch CRL from URL {url}"
-            ) from e
+        async def task():
+            logger.info(f"Requesting CRL from {url}...")
+            try:
+                response = await self._get(
+                    url, acceptable_content_types=('application/pkix-crl',)
+                )
+                data = response.content
+                if pem.detect(data):
+                    _, _, data = pem.unarmor(data)
+                return crl.CertificateList.load(data)
+            except (ValueError, requests.RequestException) as e:
+                raise errors.CRLFetchError(
+                    f"Failure to fetch CRL from URL {url}"
+                ) from e
+        return await self._perform_fetch(url, task)
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
 
@@ -52,8 +57,6 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
 
         if not sources:
             return
-
-        logger.info(f"Retrieving CRLs for {cert.subject.human_friendly}...")
 
         def _fetch_jobs():
             for distribution_point in sources:
@@ -68,7 +71,10 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
             yield result
 
     def fetched_crls(self) -> Iterable[crl.CertificateList]:
-        return {crl_ for crls in self.get_results() for crl_ in crls}
+        return {crl_ for crl_ in self.get_results()}
 
     def fetched_crls_for_cert(self, cert) -> Iterable[crl.CertificateList]:
-        return self.get_results_for_tag(cert.issuer_serial)
+        try:
+            return self._by_cert[cert.issuer_serial]
+        except KeyError:
+            return []

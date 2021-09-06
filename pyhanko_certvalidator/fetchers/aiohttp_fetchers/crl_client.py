@@ -17,20 +17,19 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
     def __init__(self, session: Union[aiohttp.ClientSession, LazySession],
                  user_agent=None, per_request_timeout=10):
         super().__init__(session, user_agent, per_request_timeout)
+        self._by_cert = {}
 
     async def fetch(self, cert: x509.Certificate, *, use_deltas=True):
-        # FIXME this is not an efficient way of caching CRLs
-        # Better alternative: cache by URL for fetch tasks, store cert -> CRL
-        #  associations elsewhere
-        tag = cert.issuer_serial
+        try:
+            return self._by_cert[cert.issuer_serial]
+        except KeyError:
+            pass
 
-        async def task():
-            results = []
-            async for fetched_crl in self._fetch(cert, use_deltas=use_deltas):
-                results.append(fetched_crl)
-            return results
-
-        return await self._post_fetch_task(tag, task)
+        results = []
+        async for fetched_crl in self._fetch(cert, use_deltas=use_deltas):
+            results.append(fetched_crl)
+        self._by_cert[cert.issuer_serial] = results
+        return results
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
 
@@ -51,8 +50,6 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
 
         logger.info(f"Retrieving CRLs for {cert.subject.human_friendly}...")
 
-        session = await self.get_session()
-
         def _fetch_jobs():
             for distribution_point in sources:
                 url = distribution_point.url
@@ -60,22 +57,31 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
                 #  (or https, but that doesn't really happen all that often)
                 # In particular, don't attempt to grab CRLs over LDAP
                 if url.startswith('http'):
-                    yield _grab_crl(
-                        url, user_agent=self.user_agent,
-                        session=session,
-                        timeout=self.per_request_timeout
-                    )
+                    yield self._single_fetch(url)
 
         # when the issue with .crl_distribution_points is fixed,
         # we should handle at_least_one_success and last_e on a per-DP basis
         async for result in crl_job_results_as_completed(_fetch_jobs()):
             yield result
 
+    async def _single_fetch(self, url):
+
+        async def task():
+            return await _grab_crl(
+                url, user_agent=self.user_agent,
+                session=await self.get_session(),
+                timeout=self.per_request_timeout
+            )
+        return await self._post_fetch_task(url, task)
+
     def fetched_crls(self) -> Iterable[crl.CertificateList]:
-        return {crl_ for crls in self.get_results() for crl_ in crls}
+        return {crl_ for crl_ in self.get_results()}
 
     def fetched_crls_for_cert(self, cert) -> Iterable[crl.CertificateList]:
-        return self.get_results_for_tag(cert.issuer_serial)
+        try:
+            return self._by_cert[cert.issuer_serial]
+        except KeyError:
+            return []
 
 
 async def _grab_crl(url, *, user_agent, session: aiohttp.ClientSession,

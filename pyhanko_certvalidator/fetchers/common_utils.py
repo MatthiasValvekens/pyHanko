@@ -3,6 +3,7 @@ Internal backend-agnostic utilities to help process fetched certificates, CRLs
 and OCSP responses.
 """
 import asyncio
+import logging
 import os
 from .. import errors
 from asn1crypto import x509, pem, cms, ocsp, algos, core
@@ -15,6 +16,10 @@ __all__ = [
     'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
     'ACCEPTABLE_CERT_PEM_ALIASES'
 ]
+
+
+logger = logging.getLogger(__name__)
+
 
 ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = (
     'application/pkix-cert', 'application/pkcs7-mime',
@@ -123,16 +128,26 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
     # We use events instead of locks because we don't care about fairness,
     # and events are easier to reason about.
     try:
-        return results[tag]
+        result = results[tag]
+        logger.debug(
+            f"Result for fetch job with tag {repr(tag)} was available in cache."
+        )
+        return result
     except KeyError:
         pass
     try:
         wait_event: asyncio.Event = running_jobs[tag]
+        logger.debug(
+            f"Waiting for fetch job with tag {repr(tag)} to return..."
+        )
         # there's a fetch job running, wait for it to finish and then
         # return the result
         await wait_event.wait()
         return results[tag]
     except KeyError:
+        logger.debug(
+            f"Waiting for fetch job with tag {repr(tag)} to return..."
+        )
         # no fetch job running, run the task and store the result
         running_jobs[tag] = wait_event = asyncio.Event()
         results[tag] = result = await async_fun()
