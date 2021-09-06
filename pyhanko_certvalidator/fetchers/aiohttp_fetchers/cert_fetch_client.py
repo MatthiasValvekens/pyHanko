@@ -2,6 +2,7 @@ import asyncio
 from typing import Union, Iterable
 
 import aiohttp
+import logging
 from asn1crypto import x509
 
 from ...errors import CertificateFetchError
@@ -11,6 +12,9 @@ from ..common_utils import (
     unpack_cert_content, ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
     ACCEPTABLE_CERT_PEM_ALIASES
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
@@ -36,6 +40,7 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
 
         async def task():
             try:
+                logger.info(f"Fetching certificates from {url}...")
                 return await _grab_certs(
                     url, permit_pem=self.permit_pem,
                     timeout=self.per_request_timeout,
@@ -67,6 +72,9 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
                     fetch_jobs.append(
                         self.fetch_certs(url, url_origin_type='certificate')
                     )
+        logger.info(
+            f"Retrieving issuer certs for {cert.subject.human_friendly}..."
+        )
         for fetch_job in asyncio.as_completed(fetch_jobs):
             certs_fetched = await fetch_job
             for cert in certs_fetched:

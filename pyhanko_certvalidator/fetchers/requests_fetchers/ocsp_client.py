@@ -1,5 +1,6 @@
 from typing import Iterable
 
+import logging
 import requests
 from asn1crypto import ocsp, x509
 
@@ -9,6 +10,8 @@ from .util import RequestsFetcherMixin
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
@@ -30,6 +33,7 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
 
     async def _fetch_single(self, ocsp_url, ocsp_request):
         try:
+            logger.info(f"Requesting OCSP response from {ocsp_url}...")
             response = await self._post(
                 url=ocsp_url, data=ocsp_request.dump(),
                 content_type='application/ocsp-request',
@@ -53,6 +57,9 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
 
+        logger.info(
+            f"Fetching OCSP status for {cert.subject.human_friendly}..."
+        )
         ocsp_response = await ocsp_job_get_earliest(
             self._fetch_single(ocsp_url, ocsp_request)
             for ocsp_url in ocsp_urls

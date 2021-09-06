@@ -1,5 +1,6 @@
 from typing import Iterable
 
+import logging
 import requests
 from asn1crypto import crl, x509, pem
 
@@ -7,6 +8,9 @@ from ... import errors
 from .util import RequestsFetcherMixin
 from ..api import CRLFetcher
 from ..common_utils import crl_job_results_as_completed
+
+
+logger = logging.getLogger(__name__)
 
 
 class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
@@ -25,6 +29,7 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
         return await self._perform_fetch(tag, task)
 
     async def _fetch_single(self, url):
+        logger.info(f"Requesting CRL from {url}...")
         try:
             response = await self._get(
                 url, acceptable_content_types=('application/pkix-crl',)
@@ -44,6 +49,11 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
         sources = cert.crl_distribution_points
         if use_deltas:
             sources.extend(cert.delta_crl_distribution_points)
+
+        if not sources:
+            return
+
+        logger.info(f"Retrieving CRLs for {cert.subject.human_friendly}...")
 
         def _fetch_jobs():
             for distribution_point in sources:

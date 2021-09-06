@@ -1,5 +1,6 @@
 from typing import Union, Iterable
 
+import logging
 import aiohttp
 from asn1crypto import crl, x509, pem
 
@@ -7,6 +8,8 @@ from ... import errors
 from .util import AIOHttpMixin, LazySession
 from ..api import CRLFetcher
 from ..common_utils import crl_job_results_as_completed
+
+logger = logging.getLogger(__name__)
 
 
 class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
@@ -16,8 +19,9 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         super().__init__(session, user_agent, per_request_timeout)
 
     async def fetch(self, cert: x509.Certificate, *, use_deltas=True):
-        # Cache the futures so we don't end up queuing tons of requests
-        # in concurrent execution scenarios.
+        # FIXME this is not an efficient way of caching CRLs
+        # Better alternative: cache by URL for fetch tasks, store cert -> CRL
+        #  associations elsewhere
         tag = cert.issuer_serial
 
         async def task():
@@ -41,6 +45,11 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         sources = cert.crl_distribution_points
         if use_deltas:
             sources.extend(cert.delta_crl_distribution_points)
+
+        if not sources:
+            return
+
+        logger.info(f"Retrieving CRLs for {cert.subject.human_friendly}...")
 
         session = await self.get_session()
 
@@ -90,6 +99,7 @@ async def _grab_crl(url, *, user_agent, session: aiohttp.ClientSession,
         An asn1crypto.crl.CertificateList object
     """
     try:
+        logger.info(f"Requesting CRL from {url}...")
         headers = {
             'Accept': 'application/pkix-crl',
             'User-Agent': user_agent

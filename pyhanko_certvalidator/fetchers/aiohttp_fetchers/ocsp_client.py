@@ -1,6 +1,6 @@
-import asyncio
 from typing import Union, Iterable
 
+import logging
 import aiohttp
 
 from asn1crypto import ocsp, x509
@@ -11,6 +11,8 @@ from .util import AIOHttpMixin, LazySession
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
@@ -45,6 +47,9 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         ocsp_urls = cert.ocsp_urls
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
+        logger.info(
+            f"Fetching OCSP status for {cert.subject.human_friendly}..."
+        )
         session = await self.get_session()
         fetch_jobs = (
             _grab_ocsp(
@@ -69,6 +74,7 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
 async def _grab_ocsp(ocsp_request: ocsp.OCSPRequest, ocsp_url: str,
                      *, user_agent, session: aiohttp.ClientSession, timeout):
     try:
+        logger.info(f"Requesting OCSP response from {ocsp_url}...")
         headers = {
             'Accept': 'application/ocsp-response',
             'Content-Type': 'application/ocsp-request',

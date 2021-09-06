@@ -1,4 +1,5 @@
 from typing import Iterable
+import logging
 import requests
 
 from asn1crypto import x509
@@ -10,6 +11,8 @@ from ..common_utils import (
     unpack_cert_content, ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
     ACCEPTABLE_CERT_PEM_ALIASES
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
@@ -40,6 +43,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
 
         async def task():
             try:
+                logger.info(f"Fetching certificates from {url}...")
                 results = await self._grab_certs(
                     url, url_origin_type=url_origin_type,
                     permit_pem=self.permit_pem,
