@@ -377,11 +377,11 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
     try:
         status = status_callback()
         if executive_summary and not pretty_print:
-            return 'VALID' if status.bottom_line else 'INVALID'
+            return ('VALID' if status.bottom_line else 'INVALID', status.bottom_line)
         elif pretty_print:
-            return status.pretty_print_details()
+            return (status.pretty_print_details(), status.bottom_line)
         else:
-            return status.summary()
+            return (status.summary(), status.bottom_line)
     except validation.ValidationInfoReadingError as e:
         msg = (
             'An error occurred while parsing the revocation information '
@@ -389,16 +389,16 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
         )
         logger.error(msg)
         if pretty_print:
-            return msg
+            return (msg, False)
         else:
-            return 'REVINFO_FAILURE'
+            return ('REVINFO_FAILURE', False)
     except SignatureValidationError as e:
         msg = 'An error occurred while validating this signature: ' + str(e)
         logger.error(msg, exc_info=e)
         if pretty_print:
-            return msg
+            return (msg, False)
         else:
-            return 'INVALID'
+            return ('INVALID', False)
 
 
 # TODO add an option to do LTV, but guess the profile
@@ -447,6 +447,11 @@ def validate_signatures(ctx, infile, executive_summary,
                         soft_revocation_check, no_revocation_check, password,
                         retroactive_revinfo, detached):
 
+    def exit_if_invalid(signature_ok):
+        if not signature_ok:
+            # Exit code 65 is EX_DATAERR - the input data was incorrect in some way.
+            sys.exit(65)
+
     if no_revocation_check:
         soft_revocation_check = True
 
@@ -471,7 +476,7 @@ def validate_signatures(ctx, infile, executive_summary,
     )
     with pyhanko_exception_manager():
         if detached is not None:
-            status_str = _signature_status_str(
+            (status_str, signature_ok) = _signature_status_str(
                 status_callback=lambda: _validate_detached(
                     infile, detached, ValidationContext(**vc_kwargs),
                     key_usage_settings
@@ -479,6 +484,7 @@ def validate_signatures(ctx, infile, executive_summary,
                 pretty_print=pretty_print, executive_summary=executive_summary
             )
             print(status_str)
+            exit_if_invalid(signature_ok)
             return
 
         r = PdfFileReader(infile)
@@ -497,7 +503,7 @@ def validate_signatures(ctx, infile, executive_summary,
 
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
-            status_str = _signature_status_str(
+            (status_str, signature_ok) = _signature_status_str(
                 status_callback=lambda: _signature_status(
                     ltv_profile=ltv_profile, force_revinfo=force_revinfo,
                     vc_kwargs=vc_kwargs, key_usage_settings=key_usage_settings,
@@ -516,6 +522,8 @@ def validate_signatures(ctx, infile, executive_summary,
                 print('\n\n' + status_str)
             else:
                 print('%s:%s:%s' % (name, fingerprint, status_str))
+
+            exit_if_invalid(signature_ok)
 
 
 @signing.command(name='list', help='list signature fields')
