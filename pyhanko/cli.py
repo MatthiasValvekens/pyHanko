@@ -447,11 +447,6 @@ def validate_signatures(ctx, infile, executive_summary,
                         soft_revocation_check, no_revocation_check, password,
                         retroactive_revinfo, detached):
 
-    def exit_if_invalid(signature_ok):
-        if not signature_ok:
-            # Exit code 65 is EX_DATAERR - the input data was incorrect in some way.
-            sys.exit(65)
-
     if no_revocation_check:
         soft_revocation_check = True
 
@@ -483,8 +478,10 @@ def validate_signatures(ctx, infile, executive_summary,
                 ),
                 pretty_print=pretty_print, executive_summary=executive_summary
             )
-            print(status_str)
-            exit_if_invalid(signature_ok)
+            if signature_ok:
+                print(status_str)
+            else:
+                raise click.ClickException(status_str)
             return
 
         r = PdfFileReader(infile)
@@ -501,6 +498,7 @@ def validate_signatures(ctx, infile, executive_summary,
                 "validating (for now)"
             )
 
+        all_signatures_ok = True
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
             (status_str, signature_ok) = _signature_status_str(
@@ -522,8 +520,10 @@ def validate_signatures(ctx, infile, executive_summary,
                 print('\n\n' + status_str)
             else:
                 print('%s:%s:%s' % (name, fingerprint, status_str))
+            all_signatures_ok = all_signatures_ok and signature_ok
 
-            exit_if_invalid(signature_ok)
+        if not all_signatures_ok:
+            raise click.ClickException("Validation failed")
 
 
 @signing.command(name='list', help='list signature fields')
