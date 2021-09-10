@@ -520,7 +520,7 @@ def validate_signatures(ctx, infile, executive_summary,
                 print('\n\n' + status_str)
             else:
                 print('%s:%s:%s' % (name, fingerprint, status_str))
-            all_signatures_ok = all_signatures_ok and signature_ok
+            all_signatures_ok &= signature_ok
 
         if not all_signatures_ok:
             raise click.ClickException("Validation failed")
