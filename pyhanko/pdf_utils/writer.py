@@ -22,7 +22,12 @@ from pyhanko.pdf_utils.crypt import (
     StandardSecurityHandler,
 )
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
-from pyhanko.pdf_utils.misc import PdfReadError, PdfWriteError, instance_test, peek
+from pyhanko.pdf_utils.misc import (
+    PdfReadError,
+    PdfWriteError,
+    instance_test,
+    peek,
+)
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 __all__ = [

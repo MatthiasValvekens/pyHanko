@@ -22,8 +22,16 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import DEFAULT_CHUNK_SIZE, OrderedEnum, get_and_apply
-from pyhanko.pdf_utils.reader import PdfFileReader, XRefCache, process_data_at_eof
+from pyhanko.pdf_utils.misc import (
+    DEFAULT_CHUNK_SIZE,
+    OrderedEnum,
+    get_and_apply,
+)
+from pyhanko.pdf_utils.reader import (
+    PdfFileReader,
+    XRefCache,
+    process_data_at_eof,
+)
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 from .diff_analysis import (

@@ -2,7 +2,13 @@ import binascii
 import uuid
 from enum import Enum
 
-from .generic import DictionaryObject, NameObject, PdfObject, StreamObject, pdf_name
+from .generic import (
+    DictionaryObject,
+    NameObject,
+    PdfObject,
+    StreamObject,
+    pdf_name,
+)
 from .layout import BoxConstraints
 from .reader import PdfFileReader
 

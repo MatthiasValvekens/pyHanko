@@ -32,7 +32,10 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
-from pyhanko.sign.ades.cades_asn1 import SignaturePolicyId, SignaturePolicyIdentifier
+from pyhanko.sign.ades.cades_asn1 import (
+    SignaturePolicyId,
+    SignaturePolicyIdentifier,
+)
 from pyhanko.sign.diff_analysis import (
     NO_CHANGES_DIFF_POLICY,
     DiffResult,

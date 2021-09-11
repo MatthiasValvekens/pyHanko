@@ -11,7 +11,11 @@ from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader, RawPdfPath
+from pyhanko.pdf_utils.reader import (
+    HistoricalResolver,
+    PdfFileReader,
+    RawPdfPath,
+)
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers
 from pyhanko.sign.diff_analysis import (
@@ -27,7 +31,10 @@ from pyhanko.sign.diff_analysis import (
     is_field_visible,
 )
 from pyhanko.sign.general import SigningError
-from pyhanko.sign.validation import SignatureCoverageLevel, validate_pdf_signature
+from pyhanko.sign.validation import (
+    SignatureCoverageLevel,
+    validate_pdf_signature,
+)
 from pyhanko_tests.samples import *
 from pyhanko_tests.test_signing import (
     DUMMY_TS,

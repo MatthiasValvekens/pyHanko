@@ -76,7 +76,11 @@ from typing import (
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import PdfObject, Reference
 from pyhanko.pdf_utils.misc import OrderedEnum
-from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader, RawPdfPath
+from pyhanko.pdf_utils.reader import (
+    HistoricalResolver,
+    PdfFileReader,
+    RawPdfPath,
+)
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
 __all__ = [

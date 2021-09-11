@@ -11,4 +11,4 @@ jobs:
       - run: pip install isort
       - run: pip install -r requirements.txt
       - name: Check import order
-        run: isort --profile black --check .
+        run: isort --profile black --line-length 80 --check .

@@ -11,7 +11,11 @@ from asn1crypto import x509
 from asn1crypto.algos import RSASSAPSSParams
 
 from pyhanko.config import PKCS11SignatureConfig
-from pyhanko.sign.general import CertificateStore, SigningError, SimpleCertificateStore
+from pyhanko.sign.general import (
+    CertificateStore,
+    SigningError,
+    SimpleCertificateStore,
+)
 from pyhanko.sign.signers import Signer
 
 try:

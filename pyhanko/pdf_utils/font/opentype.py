@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from io import BytesIO
 
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.font.api import FontEngine, FontEngineFactory, ShapeResult
+from pyhanko.pdf_utils.font.api import (
+    FontEngine,
+    FontEngineFactory,
+    ShapeResult,
+)
 from pyhanko.pdf_utils.misc import peek
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 

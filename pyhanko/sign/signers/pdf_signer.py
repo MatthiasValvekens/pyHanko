@@ -42,7 +42,11 @@ from .cms_embedder import (
     SigMDPSetup,
     SigObjSetup,
 )
-from .pdf_byterange import DocumentTimestamp, PreparedByteRangeDigest, SignatureObject
+from .pdf_byterange import (
+    DocumentTimestamp,
+    PreparedByteRangeDigest,
+    SignatureObject,
+)
 from .pdf_cms import PdfCMSSignedAttributes, Signer
 
 __all__ = [

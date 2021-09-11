@@ -18,7 +18,10 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
-from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePublicKey
+from cryptography.hazmat.primitives.asymmetric.ec import (
+    ECDSA,
+    EllipticCurvePublicKey,
+)
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
 from pyhanko_certvalidator import CertificateValidator
@@ -29,7 +32,10 @@ from pyhanko_certvalidator.errors import (
     RevokedError,
 )
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.registry import CertificateStore, SimpleCertificateStore
+from pyhanko_certvalidator.registry import (
+    CertificateStore,
+    SimpleCertificateStore,
+)
 
 from pyhanko.pdf_utils.config_utils import (
     ConfigurableMixin,

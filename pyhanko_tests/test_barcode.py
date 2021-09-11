@@ -7,7 +7,10 @@ from pyhanko.pdf_utils import barcodes, generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko_tests.layout_test_utils import compare_output, with_layout_comparison
+from pyhanko_tests.layout_test_utils import (
+    compare_output,
+    with_layout_comparison,
+)
 from pyhanko_tests.samples import MINIMAL
 
 EXPECTED_OUTPUT_DIR = 'pyhanko_tests/data/pdf/layout-tests'
