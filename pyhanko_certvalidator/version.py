@@ -3,4 +3,4 @@ from __future__ import unicode_literals, division, absolute_import, print_functi
 
 
 __version__ = '0.17.0-dev1'
-__version_info__ = (0, 16, 0, 'dev1')
+__version_info__ = (0, 17, 0, 'dev1')
