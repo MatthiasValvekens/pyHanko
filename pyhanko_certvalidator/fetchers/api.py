@@ -58,6 +58,15 @@ class CRLFetcher(abc.ABC):
 
     def fetched_crls_for_cert(self, cert: x509.Certificate) \
             -> Iterable[crl.CertificateList]:
+        """
+        Return all relevant fetched CRLs for the given certificate
+        :param cert:
+            A certificate.
+        :return:
+            An iterable of CRLs
+        :raise KeyError:
+            if no fetch operations have been performed for this certificate
+        """
         raise NotImplementedError
 
 

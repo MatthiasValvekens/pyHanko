@@ -78,10 +78,7 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         return {crl_ for crl_ in self.get_results()}
 
     def fetched_crls_for_cert(self, cert) -> Iterable[crl.CertificateList]:
-        try:
-            return self._by_cert[cert.issuer_serial]
-        except KeyError:
-            return []
+        return self._by_cert[cert.issuer_serial]
 
 
 async def _grab_crl(url, *, user_agent, session: aiohttp.ClientSession,
