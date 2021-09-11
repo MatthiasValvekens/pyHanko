@@ -429,8 +429,8 @@ class ValidationContext:
 
     def retrieve_crls(self, cert):
         """
-        .. warning::
-            This method is deprecated. Use :meth:`async_retrieve_crls` instead.
+        .. deprecated:: 0.17.0
+            Use :meth:`async_retrieve_crls` instead.
 
         :param cert:
             An asn1crypto.x509.Certificate object
@@ -480,8 +480,8 @@ class ValidationContext:
 
     def retrieve_ocsps(self, cert, issuer):
         """
-        .. warning::
-            This method is deprecated. Use :meth:`async_retrieve_ocsps` instead.
+        .. deprecated:: 0.17.0
+            Use :meth:`async_retrieve_ocsps` instead.
 
         :param cert:
             An asn1crypto.x509.Certificate object

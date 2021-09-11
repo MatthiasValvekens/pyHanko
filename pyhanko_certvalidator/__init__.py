@@ -162,8 +162,8 @@ class CertificateValidator():
         Validates the certificate path and that the certificate is valid for
         the key usage and extended key usage purposes specified.
 
-        .. warning::
-            Deprecated in favour of :meth:`async_validate_usage`.
+        .. deprecated:: 0.17.0
+            Use :meth:`async_validate_usage` instead.
 
         :param key_usage:
             A set of unicode strings of the required key usage purposes. Valid
@@ -289,8 +289,8 @@ class CertificateValidator():
         the hostname provided and that the certificate is valid for the purpose
         of a TLS connection.
 
-        .. warning::
-            Deprecated in favour of :meth:`async_validate_tls`.
+        .. deprecated:: 0.17.0
+            Use :meth:`async_validate_tls` instead.
 
         :param hostname:
             A unicode string of the TLS server hostname

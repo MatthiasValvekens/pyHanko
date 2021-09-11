@@ -57,8 +57,8 @@ def validate_path(validation_context, path,
     and are left up to the consuming application to process and/or fail on.
 
 
-    .. warning::
-        Deprecated in favour of :func:`.async_validate_path`.
+    .. deprecated:: 0.17.0
+        Use :func:`.async_validate_path` instead.
 
     :param validation_context:
         A pyhanko_certvalidator.context.ValidationContext object to use for
