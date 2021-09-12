@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import itertools
 import os
@@ -959,7 +960,8 @@ def test_http_timestamp(requests_mock):
     from pyhanko.sign.timestamps import TimestampRequestError
     with pytest.raises(TimestampRequestError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(), signer=FROM_CA, timestamper=DUMMY_HTTP_TS,
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+            timestamper=DUMMY_HTTP_TS,
             existing_fields_only=True,
         )
 
@@ -3203,6 +3205,8 @@ def test_simple_interrupted_signature():
     val_trusted(r.embedded_signatures[0])
 
 
+# FIXME update interrupted signing docs!
+
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('different_tsa', [True, False])
 def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
@@ -3222,7 +3226,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
             )
         )
 
-    def prep_doc():
+    async def prep_doc():
         # 2048-bit RSA sig is 256 bytes long -> placeholder
         ext_signer = instantiate_external_signer(sig_value=bytes(256))
         vc = live_testing_vc(requests_mock)
@@ -3237,15 +3241,23 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
             signer=ext_signer,
             timestamper=DUMMY_HTTP_TS
         )
-        prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
-        signed_attrs = ext_signer.signed_attrs(
+        # This function may perform async network I/O
+        prep_digest, tbs_document, output = \
+            await pdf_signer.async_digest_doc_for_signing(w)
+        psi = tbs_document.post_sign_instructions
+
+        # prepare signed attributes
+        # Note: signed attribute construction may involve
+        # expensive I/O (e.g. when content timestamp tokens
+        # need to be obtained). Hence why the API is asynchronous.
+        signed_attrs = await ext_signer.signed_attrs(
             prep_digest.document_digest, 'sha256', use_pades=True
         )
-        psi = tbs_document.post_sign_instructions
         return prep_digest, signed_attrs, psi, output
 
-    def sim_sign_remote(data_tbs: bytes):
+    async def sim_sign_remote(data_tbs: bytes):
         # pretend that everything below happens on a remote server
+        # (we declare the function as async to add to the illusion)
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
         priv_key = serialization.load_der_private_key(
@@ -3256,12 +3268,16 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         hash_algo = hashes.SHA256()
         return priv_key.sign(data_tbs, padding, hash_algo)
 
-    def proceed_with_signing(prep_digest, signed_attrs, sig_value, psi,
-                             output_handle):
+    async def proceed_with_signing(prep_digest, signed_attrs, sig_value, psi,
+                                   output_handle):
         # use ExternalSigner to format the CMS given the signed value
         # we obtained from the remote signing service
         ext_signer = instantiate_external_signer(sig_value)
-        sig_cms = ext_signer.sign_prescribed_attributes(
+
+        # again, even though we already produced the signature, we need to
+        # perform an async call here, because setting up the unsigned attributes
+        # potentially requires async I/O in the general case
+        sig_cms = await ext_signer.async_sign_prescribed_attributes(
             'sha256', signed_attrs=signed_attrs,
             timestamper=DUMMY_HTTP_TS
         )
@@ -3270,16 +3286,16 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         validation_context = live_testing_vc(
             requests_mock, with_extra_tsa=different_tsa
         )
-        PdfTBSDocument.finish_signing(
+        await PdfTBSDocument.async_finish_signing(
             output_handle, prepared_digest=prep_digest,
             signature_cms=sig_cms,
             post_sign_instr=psi,
             validation_context=validation_context
         )
 
-    def full_procedure():
+    async def full_procedure():
         # prepare document and signed attributes to sign
-        prep_digest, signed_attrs, psi, output = prep_doc()
+        prep_digest, signed_attrs, psi, output = await prep_doc()
 
         # copy the output to a new buffer, just to drive home the point that
         # we no longer care about the original output stream
@@ -3290,7 +3306,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         buf.release()
 
         # contact our 'remote' signing service
-        sig_value = sim_sign_remote(signed_attrs.dump())
+        sig_value = await sim_sign_remote(signed_attrs.dump())
         # let's pretend that we no longer have access to the non-serialisable
         # parts of tbs_document and psi (e.g. because this part happens on a
         # different machine)
@@ -3308,12 +3324,13 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
             dss_settings=psi.dss_settings
         )
         # finish signing
-        proceed_with_signing(
+        await proceed_with_signing(
             prep_digest, signed_attrs, sig_value, new_psi, new_output
         )
         return new_output
 
-    r = PdfFileReader(full_procedure())
+    loop = asyncio.get_event_loop()
+    r = PdfFileReader(loop.run_until_complete(full_procedure()))
     # check cardinality of DSS content
     dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None

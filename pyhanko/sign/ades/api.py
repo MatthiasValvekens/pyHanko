@@ -2,9 +2,9 @@ import enum
 from dataclasses import dataclass
 from typing import Optional
 
-from pyhanko.sign.general import simple_cms_attribute
 from pyhanko.sign.timestamps import TimeStamper
 
+from ..attributes import CMSAttributeProvider, TSTProvider
 from .cades_asn1 import (
     CommitmentTypeIdentifier,
     CommitmentTypeIndication,
@@ -67,18 +67,37 @@ class CAdESSignedAttrSpec:
         provisions of the signature policy are adhered to.
     """
 
-    def extra_signed_attributes(self, message_digest, md_algorithm,
-                                timestamper: TimeStamper = None, dry_run=False):
-        if self.timestamp_content and timestamper is not None:
-            if dry_run:
-                ts_token = timestamper.dummy_response(md_algorithm)
-            else:
-                ts_token = timestamper.timestamp(message_digest, md_algorithm)
-            yield simple_cms_attribute('content_time_stamp', ts_token)
-        if self.signature_policy_identifier is not None:
-            yield simple_cms_attribute(
-                'signature_policy_identifier', self.signature_policy_identifier
-            )
-        if self.commitment_type is not None:
-            yield simple_cms_attribute('commitment_type', self.commitment_type)
+    def prepare_providers(self, message_digest, md_algorithm,
+                          timestamper: Optional[TimeStamper] = None):
 
+        if self.timestamp_content and timestamper is not None:
+            yield TSTProvider(
+                digest_algorithm=md_algorithm,
+                data_to_ts=message_digest,
+                timestamper=timestamper, attr_type='content_time_stamp'
+            )
+        if self.signature_policy_identifier is not None:
+            yield SigPolicyIDProvider(self.signature_policy_identifier)
+        if self.commitment_type is not None:
+            yield CommitmentTypeProvider(self.commitment_type)
+
+
+class CommitmentTypeProvider(CMSAttributeProvider):
+    attribute_type = 'commitment_type'
+
+    def __init__(self, commitment_type: CommitmentTypeIndication):
+        self.commitment_type = commitment_type
+
+    async def build_attr_value(self, dry_run=False) -> CommitmentTypeIndication:
+        return self.commitment_type
+
+
+class SigPolicyIDProvider(CMSAttributeProvider):
+    attribute_type = 'signature_policy_identifier'
+
+    def __init__(self, policy_id: SignaturePolicyIdentifier):
+        self.policy_id = policy_id
+
+    async def build_attr_value(self, dry_run=False) \
+            -> SignaturePolicyIdentifier:
+        return self.policy_id
