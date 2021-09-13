@@ -644,6 +644,10 @@ class PdfTimeStamper:
             output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
             default_md_algorithm=constants.DEFAULT_MD):
         """
+
+        .. deprecated:: 0.9.0
+            Use :meth:`async_update_archival_timestamp_chain` instead.
+
         Validate the last timestamp in the timestamp chain on a PDF file, and
         write an updated version to an output stream.
 
@@ -669,6 +673,45 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
+        loop = asyncio.get_event_loop()
+        coro = self.async_update_archival_timestamp_chain(
+            reader=reader, validation_context=validation_context,
+            in_place=in_place, output=output, chunk_size=chunk_size,
+            default_md_algorithm=default_md_algorithm
+        )
+        return loop.run_until_complete(coro)
+
+    async def async_update_archival_timestamp_chain(
+            self, reader: PdfFileReader, validation_context, in_place=True,
+            output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
+            default_md_algorithm=constants.DEFAULT_MD):
+        """
+        Validate the last timestamp in the timestamp chain on a PDF file, and
+        write an updated version to an output stream.
+
+        :param reader:
+            A :class:`PdfReader` encapsulating the input file.
+        :param validation_context:
+            :class:`.pyhanko_certvalidator.ValidationContext` object to validate
+            the last timestamp.
+        :param output:
+            Write the output to the specified output stream.
+            If ``None``, write to a new :class:`.BytesIO` object.
+            Default is ``None``.
+        :param in_place:
+            Sign the original input stream in-place.
+            This parameter overrides ``output``.
+        :param chunk_size:
+            Size of the internal buffer (in bytes) used to feed data to the
+            message digest function if the input stream does not support
+            ``memoryview``.
+        :param default_md_algorithm:
+            Message digest to use if there are no preceding timestamps in the
+            file.
+        :return:
+            The output stream containing the signed output.
+        """
+
         # TODO expose DSS fine-tuning here as well
 
         # In principle, we only have to validate that the last timestamp token
@@ -703,7 +746,7 @@ class PdfTimeStamper:
             expected_imprint = last_timestamp.external_digest
 
             # run validation logic
-            tst_status = _establish_timestamp_trust(
+            tst_status = await _establish_timestamp_trust(
                 tst_token, validation_context, expected_imprint
             )
 
@@ -729,7 +772,7 @@ class PdfTimeStamper:
             )
 
         # append a new timestamp
-        return self.timestamp_pdf(
+        return await self.async_timestamp_pdf(
             pdf_out, md_algorithm, validation_context, in_place=True
         )
 

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 import os
@@ -71,9 +72,12 @@ __all__ = [
     'EmbeddedPdfSignature', 'DocMDPInfo',
     'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
     'apply_adobe_revocation_info', 'get_timestamp_chain',
-    'read_certification_data', 'validate_pdf_ltv_signature',
-    'validate_pdf_signature', 'validate_cms_signature',
-    'validate_detached_cms', 'validate_pdf_timestamp',
+    'read_certification_data',
+    'validate_pdf_ltv_signature', 'async_validate_pdf_ltv_signature',
+    'validate_pdf_signature', 'async_validate_pdf_signature',
+    'validate_cms_signature', 'async_validate_cms_signature',
+    'validate_detached_cms', 'async_validate_detached_cms',
+    'validate_pdf_timestamp', 'async_validate_pdf_timestamp',
     'collect_validation_info',
     'add_validation_info',
     'ValidationInfoReadingError', 'SigSeedValueValidationError'
@@ -204,13 +208,15 @@ def _extract_signer_info_and_certs(signed_data: cms.SignedData):
     return signer_info, cert, other_certs
 
 
-def _validate_cms_signature(signed_data: cms.SignedData,
-                            status_cls: Type[StatusType] = SignatureStatus,
-                            raw_digest: bytes = None,
-                            validation_context: ValidationContext = None,
-                            status_kwargs: dict = None,
-                            key_usage_settings: KeyUsageConstraints = None,
-                            encap_data_invalid=False):
+async def _validate_cms_signature(signed_data: cms.SignedData,
+                                  status_cls:
+                                  Type[StatusType] = SignatureStatus,
+                                  raw_digest: bytes = None,
+                                  validation_context: ValidationContext = None,
+                                  status_kwargs: dict = None,
+                                  key_usage_settings:
+                                  KeyUsageConstraints = None,
+                                  encap_data_invalid=False):
     """
     Validate CMS and PKCS#7 signatures.
     """
@@ -255,7 +261,7 @@ def _validate_cms_signature(signed_data: cms.SignedData,
             cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
-        trusted, revoked, path = status_cls.validate_cert_usage(
+        trusted, revoked, path = await status_cls.validate_cert_usage(
             validator, key_usage_settings=key_usage_settings
         )
 
@@ -277,10 +283,13 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            key_usage_settings: KeyUsageConstraints = None,
                            encap_data_invalid=False):
     """
-    Validate a CMS signature (i.e. a ``SignedData`` object).
+    .. deprecated:: 0.9.0
+        Use :func:`async_validate_cms_signature` instead.
 
     .. versionchanged:: 0.7.0
         Now handles both detached and enveloping signatures.
+
+    Validate a CMS signature (i.e. a ``SignedData`` object).
 
     :param signed_data:
         The :class:`.asn1crypto.cms.SignedData` object to validate.
@@ -307,15 +316,61 @@ def validate_cms_signature(signed_data: cms.SignedData,
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
-    status_kwargs = _validate_cms_signature(
+    loop = asyncio.get_event_loop()
+    coro = async_validate_cms_signature(
+        signed_data=signed_data, status_cls=status_cls, raw_digest=raw_digest,
+        validation_context=validation_context, status_kwargs=status_kwargs,
+        key_usage_settings=key_usage_settings,
+        encap_data_invalid=encap_data_invalid
+    )
+    return loop.run_until_complete(coro)
+
+
+async def async_validate_cms_signature(
+                           signed_data: cms.SignedData,
+                           status_cls: Type[StatusType] = SignatureStatus,
+                           raw_digest: bytes = None,
+                           validation_context: ValidationContext = None,
+                           status_kwargs: dict = None,
+                           key_usage_settings: KeyUsageConstraints = None,
+                           encap_data_invalid=False):
+    """
+    Validate a CMS signature (i.e. a ``SignedData`` object).
+
+    :param signed_data:
+        The :class:`.asn1crypto.cms.SignedData` object to validate.
+    :param status_cls:
+        Status class to use for the validation result.
+    :param raw_digest:
+        Raw digest, computed from context.
+    :param validation_context:
+        Validation context to validate the signer's certificate.
+    :param status_kwargs:
+        Other keyword arguments to pass to the ``status_class`` when reporting
+        validation results.
+    :param key_usage_settings:
+        A :class:`.KeyUsageConstraints` object specifying which key usage
+        extensions must or must not be present in the signer's certificate.
+    :param encap_data_invalid:
+        If ``True``, the encapsulated data inside the CMS is invalid,
+        but the remaining validation logic still has to be run (e.g. a
+        timestamp token, which requires validation of the embedded message
+        imprint).
+
+        This option is considered internal API, the semantics of which may
+        change without notice in the future.
+    :return:
+        A :class:`.SignatureStatus` object (or an instance of a proper subclass)
+    """
+    status_kwargs = await _validate_cms_signature(
         signed_data, status_cls, raw_digest, validation_context,
         status_kwargs, key_usage_settings, encap_data_invalid
     )
     return status_cls(**status_kwargs)
 
 
-def collect_timing_info(signer_info: cms.SignerInfo,
-                        ts_validation_context: ValidationContext):
+async def collect_timing_info(signer_info: cms.SignerInfo,
+                              ts_validation_context: ValidationContext):
 
     status_kwargs = {}
 
@@ -326,7 +381,7 @@ def collect_timing_info(signer_info: cms.SignerInfo,
 
     tst_signed_data = _extract_tst_data(signer_info, signed=False)
     if tst_signed_data is not None:
-        tst_validity_kwargs = _validate_timestamp(
+        tst_validity_kwargs = await _validate_timestamp(
             tst_signed_data, ts_validation_context,
             _compute_tst_digest(signer_info),
         )
@@ -335,7 +390,7 @@ def collect_timing_info(signer_info: cms.SignerInfo,
 
     content_tst_signed_data = _extract_tst_data(signer_info, signed=True)
     if content_tst_signed_data is not None:
-        content_tst_validity_kwargs = _validate_timestamp(
+        content_tst_validity_kwargs = await _validate_timestamp(
             content_tst_signed_data, ts_validation_context,
             expected_tst_imprint=extract_message_digest(signer_info)
         )
@@ -501,7 +556,62 @@ def validate_detached_cms(input_data: Union[bytes, IO,
                           chunk_size=DEFAULT_CHUNK_SIZE,
                           max_read=None) -> StandardCMSSignatureStatus:
     """
+    .. deprecated:: 0.9.0
+        Use :func:`async_validate_detached_cms` instead.
+
     .. versionadded: 0.7.0
+
+    Validate a detached CMS signature.
+
+    :param input_data:
+        The input data to sign. This can be either a :class:`bytes` object,
+        a file-like object or a :class:`cms.ContentInfo` /
+        :class:`cms.EncapsulatedContentInfo` object.
+
+        If a CMS content info object is passed in, the `content` field
+        will be extracted.
+    :param signed_data:
+        The :class:`cms.SignedData` object containing the signature to verify.
+    :param signer_validation_context:
+        Validation context to use to verify the signer certificate's trust.
+    :param ts_validation_context:
+        Validation context to use to verify the TSA certificate's trust, if
+        a timestamp token is present.
+        By default, the same validation context as that of the signer is used.
+    :param key_usage_settings:
+        Key usage parameters for the signer.
+    :param chunk_size:
+        Chunk size to use when consuming input data.
+    :param max_read:
+        Maximal number of bytes to read from the input stream.
+    :return:
+        A description of the signature's status.
+    """
+    loop = asyncio.get_event_loop()
+    coro = async_validate_detached_cms(
+        input_data=input_data,
+        signed_data=signed_data,
+        signer_validation_context=signer_validation_context,
+        ts_validation_context=ts_validation_context,
+        key_usage_settings=key_usage_settings,
+        chunk_size=chunk_size,
+        max_read=max_read
+    )
+    return loop.run_until_complete(coro)
+
+
+async def async_validate_detached_cms(
+        input_data: Union[bytes, IO,
+                          cms.ContentInfo, cms.EncapsulatedContentInfo],
+        signed_data: cms.SignedData,
+        signer_validation_context: ValidationContext = None,
+        ts_validation_context: ValidationContext = None,
+        key_usage_settings: KeyUsageConstraints = None,
+        chunk_size=DEFAULT_CHUNK_SIZE,
+        max_read=None
+    ) -> StandardCMSSignatureStatus:
+    """
+    .. versionadded: 0.9.0
 
     Validate a detached CMS signature.
 
@@ -544,11 +654,13 @@ def validate_detached_cms(input_data: Union[bytes, IO,
         misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)
     digest_bytes = h.finalize()
 
-    return validate_cms_signature(
+    status_kwargs = \
+        await collect_timing_info(signer_info, ts_validation_context)
+    return await async_validate_cms_signature(
         signed_data, status_cls=StandardCMSSignatureStatus,
         raw_digest=digest_bytes,
         validation_context=signer_validation_context,
-        status_kwargs=collect_timing_info(signer_info, ts_validation_context),
+        status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings
     )
 
@@ -1412,6 +1524,52 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            key_usage_settings: KeyUsageConstraints = None,
                            skip_diff: bool = False) -> PdfSignatureStatus:
     """
+    .. deprecated:: 0.9.0
+        Use :func:`async_validate_pdf_signature` instead.
+
+    Validate a PDF signature.
+
+    :param embedded_sig:
+        Embedded signature to evaluate.
+    :param signer_validation_context:
+        Validation context to use to validate the signature's chain of trust.
+    :param ts_validation_context:
+        Validation context to use to validate the timestamp's chain of trust
+        (defaults to ``signer_validation_context``).
+    :param diff_policy:
+        Policy to evaluate potential incremental updates that were appended
+        to the signed revision of the document.
+        Defaults to
+        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
+    :param key_usage_settings:
+        A :class:`.KeyUsageConstraints` object specifying which key usage
+        extensions must or must not be present in the signer's certificate.
+    :param skip_diff:
+        If ``True``, skip the difference analysis step entirely.
+    :return:
+        The status of the PDF signature in question.
+    """
+    loop = asyncio.get_event_loop()
+    coro = async_validate_pdf_signature(
+        embedded_sig=embedded_sig,
+        signer_validation_context=signer_validation_context,
+        ts_validation_context=ts_validation_context,
+        diff_policy=diff_policy, key_usage_settings=key_usage_settings,
+        skip_diff=skip_diff
+    )
+    return loop.run_until_complete(coro)
+
+
+async def async_validate_pdf_signature(
+                           embedded_sig: EmbeddedPdfSignature,
+                           signer_validation_context: ValidationContext = None,
+                           ts_validation_context: ValidationContext = None,
+                           diff_policy: DiffPolicy = None,
+                           key_usage_settings: KeyUsageConstraints = None,
+                           skip_diff: bool = False) -> PdfSignatureStatus:
+    """
+    .. versionadded:: 0.9.0
+
     Validate a PDF signature.
 
     :param embedded_sig:
@@ -1455,16 +1613,17 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     )
     status_kwargs = embedded_sig.summarise_integrity_info()
 
-    status_kwargs.update(
-        collect_timing_info(embedded_sig.signer_info, ts_validation_context)
+    ts_status_kwargs = await collect_timing_info(
+        embedded_sig.signer_info, ts_validation_context
     )
+    status_kwargs.update(ts_status_kwargs)
     if 'signer_reported_dt' not in status_kwargs:
         # maybe the PDF signature dictionary declares /M
         signer_reported_dt = embedded_sig.self_reported_timestamp
         if signer_reported_dt is not None:
             status_kwargs['signer_reported_dt'] = signer_reported_dt
 
-    status_kwargs = _validate_cms_signature(
+    status_kwargs = await _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.external_digest,
         validation_context=signer_validation_context,
@@ -1484,6 +1643,42 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
                            diff_policy: DiffPolicy = None,
                            skip_diff: bool = False) -> DocumentTimestampStatus:
     """
+    .. deprecated:: 0.9.0
+        Use :func:`async_validate_pdf_timestamp` instead.
+
+    Validate a PDF document timestamp.
+
+    :param embedded_sig:
+        Embedded signature to evaluate.
+    :param validation_context:
+        Validation context to use to validate the timestamp's chain of trust.
+    :param diff_policy:
+        Policy to evaluate potential incremental updates that were appended
+        to the signed revision of the document.
+        Defaults to
+        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
+    :param skip_diff:
+        If ``True``, skip the difference analysis step entirely.
+    :return:
+        The status of the PDF timestamp in question.
+    """
+    loop = asyncio.get_event_loop()
+    coro = async_validate_pdf_timestamp(
+        embedded_sig=embedded_sig,
+        validation_context=validation_context,
+        diff_policy=diff_policy, skip_diff=skip_diff
+    )
+    return loop.run_until_complete(coro)
+
+
+async def async_validate_pdf_timestamp(
+                           embedded_sig: EmbeddedPdfSignature,
+                           validation_context: ValidationContext = None,
+                           diff_policy: DiffPolicy = None,
+                           skip_diff: bool = False) -> DocumentTimestampStatus:
+    """
+    .. versionadded:: 0.9.0
+
     Validate a PDF document timestamp.
 
     :param embedded_sig:
@@ -1517,7 +1712,7 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
         diff_policy=diff_policy, skip_diff=skip_diff
     )
 
-    status_kwargs = _validate_timestamp(
+    status_kwargs = await _validate_timestamp(
         embedded_sig.signed_data, validation_context,
         embedded_sig.external_digest
     )
@@ -1570,8 +1765,8 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
         validation_context_kwargs['revocation_mode'] = 'hard-fail'
 
 
-def _validate_timestamp(tst_signed_data, validation_context,
-                        expected_tst_imprint):
+async def _validate_timestamp(tst_signed_data, validation_context,
+                              expected_tst_imprint):
 
     assert expected_tst_imprint is not None
     tst_info = tst_signed_data['encap_content_info']['content'].parsed
@@ -1588,7 +1783,7 @@ def _validate_timestamp(tst_signed_data, validation_context,
     else:
         encap_data_invalid = False
     timestamp = tst_info['gen_time'].native
-    return _validate_cms_signature(
+    return await _validate_cms_signature(
         tst_signed_data, status_cls=TimestampSignatureStatus,
         validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
@@ -1596,9 +1791,9 @@ def _validate_timestamp(tst_signed_data, validation_context,
     )
 
 
-def _establish_timestamp_trust(tst_signed_data, bootstrap_validation_context,
-                               expected_tst_imprint):
-    timestamp_status_kwargs = _validate_timestamp(
+async def _establish_timestamp_trust(
+        tst_signed_data, bootstrap_validation_context, expected_tst_imprint):
+    timestamp_status_kwargs = await _validate_timestamp(
         tst_signed_data, bootstrap_validation_context, expected_tst_imprint
     )
     timestamp_status = TimestampSignatureStatus(**timestamp_status_kwargs)
@@ -1633,7 +1828,7 @@ def get_timestamp_chain(reader: PdfFileReader) \
     )
 
 
-def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
+async def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
                                    validation_context_kwargs, until_revision):
     timestamps = get_timestamp_chain(reader)
     validation_context_kwargs = dict(validation_context_kwargs)
@@ -1646,7 +1841,7 @@ def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
             break
 
         emb_timestamp.compute_digest()
-        ts_status = _establish_timestamp_trust(
+        ts_status = await _establish_timestamp_trust(
             emb_timestamp.signed_data, current_vc, emb_timestamp.external_digest
         )
         # set up the validation kwargs for the next iteration
@@ -1681,6 +1876,9 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                key_usage_settings: KeyUsageConstraints = None,
                                skip_diff: bool = False) -> PdfSignatureStatus:
     """
+    .. deprecated:: 0.9.0
+        Use :func:`async_validate_pdf_ltv_signature` instead.
+
     Validate a PDF LTV signature according to a particular profile.
 
     :param embedded_sig:
@@ -1709,6 +1907,61 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :return:
         The status of the signature.
     """
+    loop = asyncio.get_event_loop()
+    coro = async_validate_pdf_ltv_signature(
+        embedded_sig=embedded_sig,
+        validation_type=validation_type,
+        validation_context_kwargs=validation_context_kwargs,
+        bootstrap_validation_context=bootstrap_validation_context,
+        force_revinfo=force_revinfo,
+        diff_policy=diff_policy,
+        key_usage_settings=key_usage_settings,
+        skip_diff=skip_diff
+    )
+    return loop.run_until_complete(coro)
+
+
+async def async_validate_pdf_ltv_signature(
+                               embedded_sig: EmbeddedPdfSignature,
+                               validation_type: RevocationInfoValidationType,
+                               validation_context_kwargs=None,
+                               bootstrap_validation_context=None,
+                               force_revinfo=False,
+                               diff_policy: DiffPolicy = None,
+                               key_usage_settings: KeyUsageConstraints = None,
+                               skip_diff: bool = False) -> PdfSignatureStatus:
+    """
+    .. versionadded:: 0.9.0
+
+    Validate a PDF LTV signature according to a particular profile.
+
+    :param embedded_sig:
+        Embedded signature to evaluate.
+    :param validation_type:
+        Validation profile to use.
+    :param validation_context_kwargs:
+        Keyword args to instantiate
+        :class:`.pyhanko_certvalidator.ValidationContext` objects needed over
+        the course of the validation.
+    :param bootstrap_validation_context:
+        Validation context used to validate the current timestamp.
+    :param force_revinfo:
+        Require all certificates encountered to have some form of live
+        revocation checking provisions.
+    :param diff_policy:
+        Policy to evaluate potential incremental updates that were appended
+        to the signed revision of the document.
+        Defaults to
+        :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
+    :param key_usage_settings:
+        A :class:`.KeyUsageConstraints` object specifying which key usage
+        extensions must or must not be present in the signer's certificate.
+    :param skip_diff:
+        If ``True``, skip the difference analysis step entirely.
+    :return:
+        The status of the signature.
+    """
+
     # create a fresh copy of the validation_kwargs
     validation_context_kwargs: dict = dict(validation_context_kwargs or {})
 
@@ -1758,7 +2011,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     latest_dts = None
     if validation_type != RevocationInfoValidationType.ADOBE_STYLE:
         latest_dts, earliest_good_timestamp_st, ts_chain_length, current_vc = \
-            _establish_timestamp_trust_lta(
+            await _establish_timestamp_trust_lta(
                 reader, current_vc, validation_context_kwargs,
                 until_revision=embedded_sig.signed_revision
             )
@@ -1782,7 +2035,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     # a PAdES validation profile)
     tst_signed_data = embedded_sig.attached_timestamp_data
     if tst_signed_data is not None:
-        earliest_good_timestamp_st = _establish_timestamp_trust(
+        earliest_good_timestamp_st = await _establish_timestamp_trust(
             tst_signed_data, current_vc, embedded_sig.tst_signature_digest
         )
     elif validation_type == RevocationInfoValidationType.PADES_LTA \
@@ -1845,12 +2098,13 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
             # this should be conceptually equivalent to the above
             # so we run the same check here
             ts_to_validate = latest_dts.signed_data
-        timestamp_status: TimestampSignatureStatus = validate_cms_signature(
+        ts_status_coro = async_validate_cms_signature(
             ts_to_validate, status_cls=TimestampSignatureStatus,
             validation_context=stored_vc, status_kwargs={
                 'timestamp': earliest_good_timestamp_st.timestamp
             }
         )
+        timestamp_status: TimestampSignatureStatus = await ts_status_coro
     else:
         # In the LTA case, we don't have to do any further checks, since the
         # _establish_timestamp_trust_lta handled that for us.
@@ -1865,7 +2119,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         'signer_reported_dt': earliest_good_timestamp_st.timestamp,
         'timestamp_validity': timestamp_status
     })
-    status_kwargs = _validate_cms_signature(
+    status_kwargs = await _validate_cms_signature(
         embedded_sig.signed_data, status_cls=PdfSignatureStatus,
         raw_digest=embedded_sig.external_digest,
         validation_context=stored_vc, status_kwargs=status_kwargs,

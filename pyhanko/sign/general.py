@@ -349,8 +349,8 @@ class SignatureStatus:
             return 'INVALID'
 
     @classmethod
-    def validate_cert_usage(cls, validator: CertificateValidator,
-                            key_usage_settings: KeyUsageConstraints = None):
+    async def validate_cert_usage(cls, validator: CertificateValidator,
+                                  key_usage_settings: KeyUsageConstraints = None):
         key_usage_settings = key_usage_settings or KeyUsageConstraints()
         key_usage_settings = KeyUsageConstraints(
             key_usage=(
@@ -370,7 +370,7 @@ class SignatureStatus:
         try:
             # validate usage without going through pyhanko_certvalidator
             key_usage_settings.validate(cert)
-            path = validator.validate_usage(key_usage=set())
+            path = await validator.async_validate_usage(key_usage=set())
             trusted = True
         except InvalidCertificateError as e:
             # TODO accumulate these somewhere
