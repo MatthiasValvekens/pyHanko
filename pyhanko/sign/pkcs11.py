@@ -323,13 +323,13 @@ class PKCS11Signer(Signer):
 
     def __pull(self):
 
-        other_certs = self.other_certs
-        if other_certs is not None and len(other_certs) == 0:
+        other_cert_labels = self.other_certs
+        if other_cert_labels is not None and len(other_cert_labels) == 0:
             # if there's nothing to fetch, bail.
             # Recall: None -> fetch everything, so we check the length
             # explicitly
             return
-        if other_certs is None or self.bulk_fetch:
+        if other_cert_labels is None or self.bulk_fetch:
             # first, query all certs
             q = self.pkcs11_session.get_objects({
                 Attribute.CLASS: ObjectClass.CERTIFICATE
@@ -337,24 +337,24 @@ class PKCS11Signer(Signer):
             logger.debug("Pulling all certificates from PKCS#11 token...")
             for cert_obj in q:
                 label = cert_obj[Attribute.LABEL]
-                if other_certs is None or label in other_certs:
-                    # LGTM believes that I'm logging sensitive info here, but I
-                    # politely disagree: this is just the PKCS#11 label of the
+                if other_cert_labels is None or label in other_cert_labels:
+                    # LGTM believes that we're logging sensitive info here, but
+                    # I politely disagree: this is just the PKCS#11 label of the
                     # certificate
-                    logger.debug(
-                        f"Found certificate with label '{label}' on token."
-                    )  # lgtm[py/clear-text-logging-sensitive-data]
+                    msg = f"Found certificate with label '{label}' on token."
+                    logger.debug(msg)  # lgtm
                     yield x509.Certificate.load(cert_obj[Attribute.VALUE])
         else:
             # fetch certs one by one
-            for label in other_certs:
-                # LGTM believes that I'm logging sensitive info here, but I
-                # politely disagree: this is just the PKCS#11 label of the
+            for label in other_cert_labels:
+                # LGTM believes that we're logging sensitive info here, but
+                # I politely disagree: this is just the PKCS#11 label of the
                 # certificate
-                logger.debug(
+                msg = (
                     f"Pulling certificate with label '{label}' from "
                     f"PKCS#11 token..."
-                )  # lgtm[py/clear-text-logging-sensitive-data]
+                )
+                logger.debug(msg)  # lgtm
                 yield _pull_cert(self.pkcs11_session, label)
 
     def _load_objects(self):
