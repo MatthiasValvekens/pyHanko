@@ -45,20 +45,12 @@ from pyhanko.sign.timestamps import TimeStamper
 from . import constants
 
 __all__ = [
-    'BaseSigner', 'Signer', 'SimpleSigner', 'ExternalSigner',
-    'PdfCMSSignedAttributes', 'format_signed_attributes',
-    'async_format_signed_attributes',
-    'select_suitable_signing_md',
-    'asyncify_signer'
+    'Signer', 'SimpleSigner', 'ExternalSigner', 'PdfCMSSignedAttributes',
+    'format_attributes', 'format_signed_attributes',
+    'asyncify_signer', 'select_suitable_signing_md'
 ]
 
 logger = logging.getLogger(__name__)
-
-# FIXME possible simplifications
-#  - Give up on backwards compat for timestampers altogether
-#  - Give up on backwards compat for the Signer's internal methods
-#    (like unsigned_attrs and signed_attrs), and implement a shim or a decorator
-#    to turn legacy signers into async ones.
 
 
 @dataclass(frozen=True)
@@ -152,11 +144,22 @@ def _prepare_encap_content(input_data: Union[IO, bytes,
     return encap_content_info, digest_bytes
 
 
-# FIXME document these functions properly
+async def format_attributes(attr_provs: List[CMSAttributeProvider],
+                            other_attrs: Iterable[cms.CMSAttributes] = (),
+                            dry_run: bool = False) -> cms.CMSAttributes:
+    """
+    Format CMS attributes obtained from attribute providers.
 
-async def async_format_attributes(attr_provs: List[CMSAttributeProvider],
-                                  other_attrs: Iterable[cms.CMSAttributes] = (),
-                                  dry_run: bool = False) -> cms.CMSAttributes:
+    :param attr_provs:
+        List of attribute providers.
+    :param other_attrs:
+        Other (predetermined) attributes to include.
+    :param dry_run:
+        Whether to invoke the attribute providers in dry-run mode or not.
+    :return:
+        A :class:`cms.CMSAttributes` value.
+    """
+
     attrs = list(other_attrs)
     jobs = [prov.get_attribute(dry_run=dry_run) for prov in attr_provs]
     for attr_coro in asyncio.as_completed(jobs):
@@ -167,25 +170,29 @@ async def async_format_attributes(attr_provs: List[CMSAttributeProvider],
     return cms.CMSAttributes(attrs)
 
 
-async def async_format_signed_attributes(
-                             data_digest: bytes,
-                             attr_provs: List[CMSAttributeProvider],
-                             content_type='data',
-                             dry_run=False) -> cms.CMSAttributes:
+async def format_signed_attributes(data_digest: bytes,
+                                   attr_provs: List[CMSAttributeProvider],
+                                   content_type='data',
+                                   dry_run=False) -> cms.CMSAttributes:
     """
-    Asynchronously build signed attributes from a list of attribute providers.
+    Format signed attributes for a CMS ``SignerInfo`` value.
 
     :param data_digest:
+        The byte string to put in the ``messageDigest`` attribute.
     :param attr_provs:
+        List of attribute providers to source attributes from.
     :param content_type:
+        The content type of the data being signed (default is ``data``).
     :param dry_run:
+        Whether to invoke the attribute providers in dry-run mode or not.
     :return:
+        A :class:`cms.CMSAttributes` value representing the signed attributes.
     """
     attrs = [
         simple_cms_attribute('content_type', content_type),
         simple_cms_attribute('message_digest', data_digest),
     ]
-    return await async_format_attributes(
+    return await format_attributes(
         attr_provs, dry_run=dry_run, other_attrs=attrs
     )
 
@@ -312,7 +319,6 @@ class Signer:
             pass
         return result
 
-    # FIXME remove? Would be a breaking change
     @staticmethod
     def format_revinfo(ocsp_responses: list = None, crls: list = None):
         """
@@ -524,7 +530,7 @@ class Signer:
             digest_algorithm=digest_algorithm, signature=signature,
             timestamper=timestamper
         )
-        return await async_format_attributes(list(provs), dry_run=dry_run)
+        return await format_attributes(list(provs), dry_run=dry_run)
 
     async def signed_attrs(self, data_digest: bytes,
                            digest_algorithm: str,
@@ -581,7 +587,7 @@ class Signer:
             timestamper=timestamper
         )
 
-        return await async_format_signed_attributes(
+        return await format_signed_attributes(
             data_digest, attr_provs=list(provs),
             content_type=content_type, dry_run=dry_run
         )
@@ -1216,9 +1222,6 @@ class SimpleSigner(Signer):
             prefer_pss=prefer_pss
         )
 
-
-# FIXME think about how we're dealing with the interrupted signing use case
-#  in an asyncio context  (these tests fail now)
 
 class ExternalSigner(Signer):
     """
