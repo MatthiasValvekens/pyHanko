@@ -887,6 +887,8 @@ class ExternalSigner(Signer):
         """
         Return a fixed signature value.
         """
+        if dry_run == False and not any(self._signature_value):  # all bytes are zeroes
+            raise SigningError("Fake signature value is used when signing for real.")
         return self._signature_value
 
 

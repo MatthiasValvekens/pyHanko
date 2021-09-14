@@ -18,33 +18,32 @@ The 2 points marked with ! are CSC calls and are considered external to this mod
 """
 from base64 import b64decode
 from io import BytesIO
-from typing import Any, TypedDict
+from dataclasses import dataclass
 
-from pyhanko.sign import signers, timestamps, fields
-from pyhanko.sign.general import SimpleCertificateStore
+from pyhanko.sign import signers, timestamps, pdf_signer
+from pyhanko.sign.general import SimpleCertificateStore, SigningError
 from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko_certvalidator import ValidationContext
 from asn1crypto import x509
 
 
-SigSeedSubFilter = fields.SigSeedSubFilter
-
-
-def as_any(_) -> Any:
-    return _
-
-
-class TDigest(TypedDict):
+@dataclass
+class TDigest:
     data_digest: bytes
     digest_algorithm: str
 
 
-class TPrepDocumentConfig(TypedDict, total=False):
-    embed_validation_info: bool
-    subfilter: SigSeedSubFilter
-    validation_context: ValidationContext
-    md_algorithm: str
+@dataclass
+class TPreparedPdf:
+    prep_digest: pdf_signer.PreparedByteRangeDigest
+    post_sign_instructions: pdf_signer.PostSignInstructions
+    output: BytesIO
+
+
+@dataclass
+class TPrepDocumentResponse:
+    pdf: TPreparedPdf
+    digest: TDigest
 
 
 class CscSigner(signers.ExternalSigner):
@@ -56,7 +55,7 @@ class CscSigner(signers.ExternalSigner):
         self,
         csc_credentials_info_response: dict,
         tsa_url: str,
-        signature_value=bytes(32),
+        signature_value=bytes(512),
         use_pades=False,
     ):
         """
@@ -71,27 +70,25 @@ class CscSigner(signers.ExternalSigner):
         cert_registry = SimpleCertificateStore()
         cert_registry.register_multiple(set(certs))
         super().__init__(
+            # According to CSC spec the first certificate should be the signing cert.
+            # Quote: "One or more Base64-encoded X.509v3 certificates from the
+            # certificate chain. If the certificates parameter is “chain”, the
+            # entire certificate chain SHALL be returned with the end entity 
+            # certificate at the beginning of the array."
             signing_cert=certs[0],
             cert_registry=cert_registry,
             signature_mechanism=None,
             signature_value=signature_value,
         )
 
-    def prep_document(self, pdf: bytes, config: TPrepDocumentConfig):
+    def prep_document(self, pdf: bytes, signature_meta: signers.PdfSignatureMetadata):
         """
         This method is pdf specific.
         It returns a pdf document that is ready to have a CMS attached.
         Also it computes the pdf specific hash of the prepared document.
         """
         pdf_signer = signers.PdfSigner(
-            signers.PdfSignatureMetadata(
-                field_name='SigNew',
-                embed_validation_info=config.get("embed_validation_info", False),
-                use_pades_lta=self.use_pades,
-                subfilter=config.get("subfilter", SigSeedSubFilter.ADOBE_PKCS7_DETACHED),
-                validation_context=config.get("validation_context", as_any(None)),
-                md_algorithm=config.get('md_algorithm', 'sha256'),
-            ),
+            signature_meta,
             signer=self,
             timestamper=self.timestamper,
         )
@@ -99,27 +96,25 @@ class CscSigner(signers.ExternalSigner):
         pdf_out = IncrementalPdfFileWriter(input_buf)
         prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(pdf_out)
 
-        return {
-            "digest": {
-                "data_digest": prep_digest.document_digest,
-                "digest_algorithm": prep_digest.md_algorithm,
-            },
-            "pdf": {
-                "prep_digest": prep_digest,
-                "post_sign_instructions": tbs_document.post_sign_instructions,
-                "output": output,
-            },
-        }
+        return TPrepDocumentResponse(
+            digest=TDigest(
+                data_digest=prep_digest.document_digest,
+                digest_algorithm=prep_digest.md_algorithm,
+            ),
+            pdf=TPreparedPdf(
+                prep_digest=prep_digest,
+                post_sign_instructions=tbs_document.post_sign_instructions,
+                output=output,
+            ),
+        )
 
-    def generate_signed_attrs(self, digest: TDigest):
+    def signed_attrs(self, digest: TDigest, **kwargs):
         """
         Get payload to be signed. This method is not merged with "prep_document" to:
         - allow hash signing without having the document;
         - be pdf agnostic.
         """
-        return self.signed_attrs(
-            digest["data_digest"], digest['digest_algorithm'], use_pades=self.use_pades
-        )
+        return super().signed_attrs(digest.data_digest, digest.digest_algorithm, **kwargs)
 
     def generate_cms(self, digest: TDigest, sig_value: bytes = None):
         """
@@ -129,27 +124,25 @@ class CscSigner(signers.ExternalSigner):
         """
         if sig_value:
             self._signature_value = sig_value
-        if not any(self._signature_value):  # all bytes are zeroes
-            raise Exception("Fake signature value is used.")
-        signed_attrs = self.generate_signed_attrs(digest)
+        signed_attrs = self.signed_attrs(digest)
         sig_cms = self.sign_prescribed_attributes(
-            digest["digest_algorithm"],
+            digest.digest_algorithm,
             signed_attrs=signed_attrs,
             timestamper=self.timestamper,
         )
         return sig_cms
 
-
-def finish_signing(pdf: dict, sig_cms: bytes):
-    """
-    Attaches given signature to given prepared pdf.
-    See prep_document method of CscSigner to understand what is expected input.
-    """
-    PdfTBSDocument.finish_signing(
-        pdf["output"],
-        prepared_digest=pdf["prep_digest"],
-        signature_cms=sig_cms,
-        post_sign_instr=pdf["post_sign_instructions"],
-        validation_context=None,
-    )
-    return pdf["output"]
+    @staticmethod
+    def finish_signing(pdf: TPreparedPdf, sig_cms: bytes) -> BytesIO:
+        """
+        Attaches given signature to given prepared pdf.
+        See prep_document method of CscSigner to understand what is expected input.
+        """
+        PdfTBSDocument.finish_signing(
+            pdf.output,
+            prepared_digest=pdf.prep_digest,
+            signature_cms=sig_cms,
+            post_sign_instr=pdf.post_sign_instructions,
+            validation_context=None,
+        )
+        return pdf.output
