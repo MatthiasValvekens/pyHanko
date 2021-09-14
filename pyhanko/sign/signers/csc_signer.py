@@ -24,7 +24,7 @@ from pyhanko.sign import signers, timestamps, pdf_signer
 from pyhanko.sign.general import SimpleCertificateStore, SigningError
 from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from asn1crypto import x509
+from asn1crypto import x509, core
 
 
 @dataclass
@@ -44,6 +44,55 @@ class TPreparedPdf:
 class TPrepDocumentResponse:
     pdf: TPreparedPdf
     digest: TDigest
+
+    class Asn1(core.Sequence):
+        _fields = [
+            ("data_digest", core.OctetString),
+            ("digest_algorithm", core.OctetString),
+            ("prep_digest", core.OctetString),
+            ("post_sign_instructions", core.OctetString),
+            ("output", core.OctetString),
+        ]
+
+    def serialize_prepared_pdf(self):
+        digest = self.prep_digest.document_digest
+        output = self.output.read()
+        self.output.seek(0)
+        assert self.post_sign_instructions is None
+        return self.Asn1({
+            "data_digest": digest.data_digest,
+            "digest_algorithm": bytes(digest.digest_algorithm, 'utf8'),
+            "prep_digest": (
+                self.prep_digest.reserved_region_start.to_bytes(8, 'big', signed=True),
+                self.prep_digest.reserved_region_end.to_bytes(8, 'big', signed=True),
+                self.prep_digest.document_digest,
+            ),
+            "post_sign_instructions": b"",  # TODO serialize
+            "output": output,
+        })
+
+    @classmethod
+    def deserialize_prepared_pdf(cls, prepared_pdf_serialized):
+        raw_values = cls.Asn1.load(prepared_pdf_serialized).native
+        pdf = TPreparedPdf(
+            prep_digest=PreparedByteRangeDigest(
+                document_digest=raw_values["prep_digest"][16:],
+                md_algorithm=raw_values["digest_algorithm"].decode(),
+                reserved_region_start=int.from_bytes(
+                    raw_values["prep_digest"][0:8], "big", signed=True
+                ),
+                reserved_region_end=int.from_bytes(
+                    raw_values["prep_digest"][8:16], "big", signed=True
+                ),
+            ),
+            post_sign_instructions=None,  # TODO deserialize
+            output=BytesIO(raw_values["output"]),
+        )
+        digest = TDigest(
+            data_digest=raw_values["data_digest"],
+            digest_algorithm=raw_values["digest_algorithm"].decode(),
+        )
+        return cls(pdf=pdf, digest=digest)
 
 
 class CscSigner(signers.ExternalSigner):
