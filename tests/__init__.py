@@ -5,6 +5,9 @@ import imp
 import os
 import unittest
 
+from ._unittest_compat import patch
+patch()
+
 
 def _import_from(mod, path, mod_dir=None):
     """

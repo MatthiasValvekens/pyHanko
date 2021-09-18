@@ -1,10 +1,10 @@
-import asyncio
 from typing import Awaitable
 
 import requests
 
 from ..api import DEFAULT_USER_AGENT
 from ..common_utils import queue_fetch_task
+from pyhanko_certvalidator._asyncio_compat import to_thread
 
 __all__ = ['RequestsFetcherMixin']
 
@@ -46,7 +46,7 @@ class RequestsFetcherMixin:
                     f"status code {response.status_code}"
                 )
             return response
-        return asyncio.to_thread(task)
+        return to_thread(task)
 
     def _post(self, url, data, *, content_type, acceptable_content_types) \
             -> Awaitable[requests.Response]:
@@ -65,4 +65,4 @@ class RequestsFetcherMixin:
                     f"status code {response.status_code}"
                 )
             return response
-        return asyncio.to_thread(task)
+        return to_thread(task)
