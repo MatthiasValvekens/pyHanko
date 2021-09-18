@@ -1,3 +1,7 @@
+"""
+Asynchronous API for fetching OCSP responses, CRLs and certificates.
+"""
+
 import abc
 from dataclasses import dataclass
 from typing import AsyncGenerator, Iterable
@@ -14,20 +18,45 @@ DEFAULT_USER_AGENT = 'pyhanko_certvalidator %s' % __version__
 
 
 class OCSPFetcher(abc.ABC):
-    # TODO docstring
+    """Utility interface to fetch and cache OCSP responses."""
+
     async def fetch(self, cert: x509.Certificate, issuer: x509.Certificate) \
             -> ocsp.OCSPResponse:
+        """
+        Fetch an OCSP response for a certificate.
+
+        :param cert:
+            The certificate for which an OCSP response has to be fetched.
+        :param issuer:
+            The relevant issuer's certificate.
+
+            .. note::
+                This parameter is used to compute the hash of the issuer's
+                public key that is sent with the OCSP request.
+        :raises:
+            OCSPFetchError - Raised if an OCSP response could not be obtained.
+        :return:
+            An OCSP response.
+        """
         raise NotImplementedError
 
     def fetched_responses(self) -> Iterable[ocsp.OCSPResponse]:
+        """
+        Return all responses fetched by this OCSP fetcher.
+        """
         raise NotImplementedError
 
     def fetched_responses_for_cert(self, cert: x509.Certificate) \
             -> Iterable[ocsp.OCSPResponse]:
+        """
+        Return all responses fetched by this OCSP fetcher that are relevant
+        to determine the revocation status of the given certificate.
+        """
         raise NotImplementedError
 
 
 class CRLFetcher(abc.ABC):
+    """Utility interface to fetch and cache CRLs."""
 
     async def fetch(self, cert: x509.Certificate, *, use_deltas=None) \
             -> Iterable[crl.CertificateList]:
@@ -54,6 +83,9 @@ class CRLFetcher(abc.ABC):
         raise NotImplementedError
 
     def fetched_crls(self) -> Iterable[crl.CertificateList]:
+        """
+        Return all CRLs fetched by this CRL fetcher.
+        """
         raise NotImplementedError
 
     def fetched_crls_for_cert(self, cert: x509.Certificate) \
@@ -71,6 +103,7 @@ class CRLFetcher(abc.ABC):
 
 
 class CertificateFetcher(abc.ABC):
+    """Utility interface to fetch and cache certificates."""
 
     def fetch_cert_issuers(self, cert: x509.Certificate) \
             -> AsyncGenerator[x509.Certificate, None]:
@@ -109,22 +142,60 @@ class CertificateFetcher(abc.ABC):
         raise NotImplementedError
 
     def fetched_certs(self) -> Iterable[x509.Certificate]:
+        """
+        Return all certificates retrieved by this certificate fetcher.
+        """
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class Fetchers:
+    """
+    Models a collection of fetchers to be used by a validation context.
+
+    The intention is that these can share resources (like a connection pool)
+    in a unified, controlled manner. See also :class:`.FetcherBackend`.
+    """
+
     ocsp_fetcher: OCSPFetcher
     crl_fetcher: CRLFetcher
     cert_fetcher: CertificateFetcher
 
 
 class FetcherBackend(abc.ABC):
+    """
+    Generic, bare-bones interface to help abstract away instantiation logic for
+    fetcher implementations.
+
+    Intended to operate as an asynchronous context manager, with
+    `async with backend_obj as fetchers: ...` putting the resulting
+    :class:`.Fetchers` object in to the variable named `fetchers`.
+
+    .. note::
+        The initialisation part of the API is necessarily synchronous,
+        for backwards compatibility with the old ``ValidationContext`` API.
+        If you need asynchronous resource management, handle it elsewhere,
+        or use some form of lazy resource provisioning.
+
+        Alternatively, you can pass :class:`Fetchers` objects to the validation
+        context yourself, and forgo use of the :class:`.FetcherBackend`
+        API altogether.
+    """
 
     def get_fetchers(self) -> Fetchers:
+        """
+        Set up fetchers synchronously.
+
+        .. note::
+            This is a synchronous method
+        """
         raise NotImplementedError
 
     async def close(self):
+        """
+        Clean up the resources associated with this fetcher backend,
+        asynchronously.
+        """
         pass
 
     async def __aenter__(self) -> Fetchers:
