@@ -61,8 +61,15 @@ revocation checks.
  - *cryptography*
  - *uritools*
  - *oscrypto*
- - *requests*
+ - *requests* or *aiohttp* (use the latter for more efficient asyncio, requires resource management)
  - Python 3.7, 3.8 or 3.9
+
+ ### Note on compatibility
+
+ Starting with `pyhanko-certvalidator` version `0.17.0`, the library has been refactored to use asynchronous I/O as much as possible. Most high-level API entrypoints can still be used synchronously, but have been deprecated in favour of their asyncio equivalents. 
+ As part of this move, the OCSP and CRL clients now have two separate implementations: a `requests`-based one, and an `aiohttp`-based one. The latter is probably more performant, but requires more resource management efforts on the caller's part, which was impossible to implement without making major breaking changes to the public API that would make the migration path more complicated. Therefore, the `requests`-based fetcher will remain the default for the time being.
+
+ NOTE: version `0.17.0` has not been released yet, details will be in the change log.
 
 ## Installation
 
