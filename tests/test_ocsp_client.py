@@ -9,7 +9,7 @@ from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.validate import verify_ocsp_response
-
+from.constants import TEST_REQUEST_TIMEOUT
 
 tests_root = os.path.dirname(__file__)
 fixtures_dir = os.path.join(tests_root, 'fixtures')
@@ -38,12 +38,14 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fetch_ocsp_aiohttp(self):
         fb = aiohttp_fetchers.AIOHttpFetcherBackend(
-            per_request_timeout=3
+            per_request_timeout=TEST_REQUEST_TIMEOUT
         )
         async with fb as fetchers:
             await self._test_with_fetchers(fetchers)
 
     async def test_fetch_ocsp_requests(self):
-        fb = requests_fetchers.RequestsFetcherBackend(per_request_timeout=3)
+        fb = requests_fetchers.RequestsFetcherBackend(
+            per_request_timeout=TEST_REQUEST_TIMEOUT
+        )
         fetchers = fb.get_fetchers()
         await self._test_with_fetchers(fetchers)

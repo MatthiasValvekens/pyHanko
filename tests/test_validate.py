@@ -22,6 +22,7 @@ from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
     OCSPFetchError, CRLFetchError, CertificateFetchError
 
 from ._unittest_compat import patch
+from .constants import TEST_REQUEST_TIMEOUT
 from .unittest_data import data_decorator, data
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers
 
@@ -161,7 +162,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             revocation_mode='hard-fail',
             weak_hash_algos={'md2', 'md5'},
             fetcher_backend=requests_fetchers.RequestsFetcherBackend(
-                per_request_timeout=30
+                per_request_timeout=TEST_REQUEST_TIMEOUT
             )
         )
         paths = context.certificate_registry.build_paths(cert)
@@ -184,7 +185,9 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         other_certs = [
             self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
         ]
-        fb = aiohttp_fetchers.AIOHttpFetcherBackend(per_request_timeout=30)
+        fb = aiohttp_fetchers.AIOHttpFetcherBackend(
+            per_request_timeout=TEST_REQUEST_TIMEOUT
+        )
         async with fb as fetchers:
             context = ValidationContext(
                 trust_roots=ca_certs,
@@ -213,7 +216,9 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         )
         ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
 
-        fb = aiohttp_fetchers.AIOHttpFetcherBackend(per_request_timeout=30)
+        fb = aiohttp_fetchers.AIOHttpFetcherBackend(
+            per_request_timeout=TEST_REQUEST_TIMEOUT
+        )
         async with fb as fetchers:
             context = ValidationContext(
                 trust_roots=ca_certs,
