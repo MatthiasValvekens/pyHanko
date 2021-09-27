@@ -46,8 +46,9 @@ Note that not all of these are necessarily exposed through the CLI.
     - RFC 3161 timestamp server support
     - Support for multiple signatures (all modifications are executed using incremental updates to 
       preserve cryptographic integrity)
-    - Supports both RSA & ECDSA
+    - Supports RSA, DSA and ECDSA
       - RSA padding modes: PKCS#1 v1.5 and RSASSA-PSS
+      - DSA
       - ECDSA curves: anything supported by the `cryptography` library, 
         see [here](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/#elliptic-curves).
     - PKCS#11 support
