@@ -295,8 +295,7 @@ def _read_ps_name(tt: ttLib.TTFont) -> str:
         name_table = tt['name']
         # extract PostScript name from the font's name table
         nr = next(nr for nr in name_table.names if nr.nameID == 6)
-        if nr.encodingIsUnicodeCompatible():
-            ps_name = nr.string.decode('utf-16be')
+        ps_name = nr.toUnicode()
     except StopIteration:  # pragma: nocover
         pass
 
@@ -749,9 +748,11 @@ class FontDescriptor(generic.DictionaryObject):
             pdf_name('/Flags'): generic.NumberObject(0b110),
             pdf_name('/StemV'): generic.NumberObject(stemv),
             pdf_name('/ItalicAngle'): generic.FloatObject(
-                tt['post'].italicAngle
+                getattr(tt['post'], 'italicAngle', 0)
             ),
-            pdf_name('/CapHeight'): generic.NumberObject(os2.sCapHeight)
+            pdf_name('/CapHeight'): generic.NumberObject(
+                getattr(os2, 'sCapHeight', 750)
+            )
         })
 
 
