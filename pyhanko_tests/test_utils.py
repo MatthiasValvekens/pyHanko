@@ -1970,3 +1970,8 @@ def test_xref_stream_null_update():
     assert r.xrefs.total_revisions == 2
     # The xref stream itself got added
     assert len(r.xrefs.explicit_refs_in_revision(1)) == 1
+
+
+def test_parse_name_invalid_utf8():
+    result = generic.NameObject.read_from_stream(BytesIO(b'/Test#ae'))
+    assert result == '/Test\u00ae'

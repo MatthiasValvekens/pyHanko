@@ -852,6 +852,7 @@ def _decode_name(name_bytes: bytes) -> 'NameObject':
             )
     except StopIteration:
         pass
+    name_bytes = result.getvalue()
     # NOTE: we assume UTF-8, but the PDF spec actually doesn't prescribe
     #  a character encoding for names, they're just byte sequences.
     #  This doesn't matter in 99.99% of cases (since names are not supposed
@@ -860,7 +861,18 @@ def _decode_name(name_bytes: bytes) -> 'NameObject':
     #  massive non-obvious API breakage (since NameObject inherits from 'str' as
     #  in PyPDF2), i.e. the correctness benefit is vastly outweighed by the
     #  risks (for now)
-    return NameObject(result.getvalue().decode('utf8'))
+    encodings_to_try = ('utf8', 'latin1')
+    # latin1 should never trigger decoding errors, since Python's implementation
+    # maps even unassigned values to corresponding unicode codepoints
+    name_str = None
+    for enc in encodings_to_try:
+        try:
+            name_str = name_bytes.decode(enc)
+            break
+        except ValueError:
+            pass
+    assert name_str is not None
+    return NameObject(name_str)
 
 
 class NameObject(str, PdfObject):
