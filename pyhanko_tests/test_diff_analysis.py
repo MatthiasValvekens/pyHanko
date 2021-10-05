@@ -39,6 +39,7 @@ from pyhanko_tests.samples import *
 from pyhanko_tests.test_signing import (
     DUMMY_TS,
     FROM_CA,
+    FROM_ECC_CA,
     PADES,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
@@ -1402,3 +1403,55 @@ def test_signed_file_diff_proxied_objs():
     r.decrypt("secret")
     result = validate_pdf_signature(r.embedded_signatures[0])
     assert result.docmdp_ok
+
+
+@freeze_time('2020-11-01')
+def test_pades_sign_twice_indirect_arrs(requests_mock):
+
+    testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
+    live_testing_vc(requests_mock)
+    with open(testfile, 'rb') as f:
+        w = IncrementalPdfFileWriter(f)
+        meta2 = signers.PdfSignatureMetadata(
+            field_name='Sig2',
+            validation_context=live_testing_vc(requests_mock),
+            subfilter=PADES, embed_validation_info=True,
+        )
+        out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
+
+        r = PdfFileReader(out)
+        s = r.embedded_regular_signatures[0]
+        assert s.field_name == 'Sig1'
+        val_trusted(s, extd=True)
+
+        s = r.embedded_regular_signatures[1]
+        assert s.field_name == 'Sig2'
+        val_trusted(s, extd=True)
+
+
+@freeze_time('2020-11-01')
+def test_pades_sign_update_dss(requests_mock):
+
+    testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test-2.pdf'
+    live_testing_vc(requests_mock)
+    with open(testfile, 'rb') as f:
+        w = IncrementalPdfFileWriter(f)
+        # add an irrelevant cert, should be harmless
+        certs = w.root['/DSS']['/Certs']
+        old_len = len(certs)
+        cert_stream = generic.StreamObject(
+            stream_data=FROM_ECC_CA.signing_cert.dump()
+        )
+        certs.append(w.add_object(cert_stream))
+        w.update_container(certs)
+        out = BytesIO()
+        w.write(out)
+
+        r = PdfFileReader(out)
+        assert len(r.root['/DSS']['/Certs']) == old_len + 1
+        s = r.embedded_regular_signatures[0]
+        assert s.field_name == 'Sig1'
+        val_trusted(s, extd=True)
+        s = r.embedded_regular_signatures[1]
+        assert s.field_name == 'Sig2'
+        val_trusted(s, extd=True)

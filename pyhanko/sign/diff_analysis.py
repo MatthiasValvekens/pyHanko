@@ -355,20 +355,49 @@ class DocInfoRule(WhitelistRule):
         )
 
 
+def _assert_stream_refs(der_obj_type, arr, err_cls, is_vri):
+    arr = arr.get_object()
+    all_stream_arr = isinstance(arr, generic.ArrayObject) and all(
+        isinstance(obj, generic.IndirectObject)
+        and isinstance(obj.get_object(), generic.StreamObject)
+        for obj in arr
+    )
+    if not all_stream_arr:
+        raise err_cls(
+            f"Expected contents of '{der_obj_type}' in "
+            f"{'VRI' if is_vri else 'DSS'} to be an array of stream references."
+        )
+
+
 def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
-                               new_dict, der_stream_keys, is_vri):
+                               old_dict, new_dict, der_stream_keys, is_vri,
+                               path: RawPdfPath):
     for der_obj_type in der_stream_keys:
+        as_update = ReferenceUpdate.curry_ref(paths_checked=path + der_obj_type)
         try:
             value = new_dict.raw_get(der_obj_type)
         except KeyError:
             continue
-        if not isinstance(value.get_object(), generic.ArrayObject):
-            raise SuspiciousModification(
-                f"Expected array at {'VRI' if is_vri else 'DSS'} "
-                f"key {der_obj_type}."
-            )
+        _assert_stream_refs(der_obj_type, value, SuspiciousModification, is_vri)
+        if isinstance(value, generic.IndirectObject):
+            new_ref = value.reference
+            try:
+                old_value = old_dict.raw_get(der_obj_type)
+                if isinstance(old_value, generic.IndirectObject):
+                    yield from map(
+                        as_update,
+                        _safe_whitelist(old, old_value.reference, new_ref)
+                    )
+                _assert_stream_refs(
+                    der_obj_type, old_value, misc.PdfReadError, is_vri
+                )
+                # We don't enforce the contents of the new array vs. the old one
+                # deleting info is allowed by PAdES, and this check can get
+                # pretty expensive.
+            except KeyError:
+                pass
 
-        yield from map(ReferenceUpdate, new.collect_dependencies(
+        yield from map(as_update, new.collect_dependencies(
             value, since_revision=old.revision + 1
         ))
 
@@ -380,8 +409,10 @@ class DSSCompareRule(WhitelistRule):
     This rule will validate the structure of the DSS quite rigidly, and
     will raise :class:`.SuspiciousModification` whenever it encounters
     structural problems with the DSS.
-    Similarly, modifications that remove items from the DSS also count as
-    suspicious.
+    Similarly, modifications that remove structural items from the DSS
+    also count as suspicious. However, merely removing individual OCSP
+    responses, CRLs or certificates when they become irrelevant is permitted.
+    This is also allowed by PAdES.
     """
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
@@ -414,7 +445,8 @@ class DSSCompareRule(WhitelistRule):
             )
 
         yield from _validate_dss_substructure(
-            old, new, new_dss, dss_der_stream_keys, is_vri=False
+            old, new, old_dss, new_dss, dss_der_stream_keys, is_vri=False,
+            path=RawPdfPath('/Root', '/DSS')
         )
 
         # check that the /VRI dictionary still contains all old keys, unchanged.
@@ -480,7 +512,9 @@ class DSSCompareRule(WhitelistRule):
                     f"{new_vri_value_keys - vri_expected_keys}."
                 )
             yield from _validate_dss_substructure(
-                old, new, new_vri_dict, vri_der_stream_keys, is_vri=True
+                old, new, generic.DictionaryObject(),
+                new_vri_dict, vri_der_stream_keys, is_vri=True,
+                path=RawPdfPath('/Root', '/DSS', '/VRI', key)
             )
 
             # /TS is also a DER stream
