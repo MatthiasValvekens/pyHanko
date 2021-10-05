@@ -415,7 +415,7 @@ def test_sign_with_ecdsa_trust():
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     si = s.signer_info
-    assert si['signature_algorithm']['algorithm'].native == 'sha256_ecdsa'
+    assert si['signature_algorithm']['algorithm'].native == 'sha384_ecdsa'
     val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
 
 
@@ -454,6 +454,7 @@ def test_sign_with_explicit_ecdsa_implied_hash():
     s = r.embedded_signatures[0]
     si = s.signer_info
     assert si['signature_algorithm']['algorithm'].native == 'ecdsa'
+    assert si['digest_algorithm']['algorithm'].native == 'sha384'
     assert s.field_name == 'Sig1'
     val_trusted(s, vc=SIMPLE_ECC_V_CONTEXT())
 
@@ -3670,7 +3671,8 @@ def test_sign_tight_container():
 def test_sign_tight_container_with_ts():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', tight_size_estimates=True
+        field_name='Sig1', tight_size_estimates=True,
+        md_algorithm='sha256'
     )
     out = signers.sign_pdf(w, meta, signer=SELF_SIGN, timestamper=DUMMY_TS)
 

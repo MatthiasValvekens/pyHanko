@@ -47,7 +47,7 @@ from .pdf_byterange import (
     PreparedByteRangeDigest,
     SignatureObject,
 )
-from .pdf_cms import PdfCMSSignedAttributes, Signer
+from .pdf_cms import PdfCMSSignedAttributes, Signer, select_suitable_signing_md
 
 __all__ = [
     'PdfSignatureMetadata', 'DSSContentSettings',
@@ -260,9 +260,8 @@ class PdfSignatureMetadata:
     The name of the digest algorithm to use.
     It should be supported by `pyca/cryptography`.
 
-    If ``None``, this will ordinarily default to the value of
-    :const:`constants.DEFAULT_MD`, unless a seed value dictionary happens
-    to be available.
+    If ``None``, :func:`.select_suitable_signing_md` will be invoked to generate
+    a suitable default, unless a seed value dictionary happens to be available.
     """
 
     location: str = None
@@ -764,7 +763,7 @@ class PdfSigner:
         #      (it has been cleared by the SV dictionary checker already)
         #  (2) Use the first algorithm specified in the seed value dictionary,
         #      if a suggestion is present
-        #  (4) fall back to DEFAULT_MD
+        #  (3) fall back to select_suitable_signing_md()
         if sv_spec is not None and sv_spec.digest_methods:
             sv_md_algorithm = sv_spec.digest_methods[0]
         else:
@@ -775,7 +774,9 @@ class PdfSigner:
         elif sv_md_algorithm is not None:
             md_algorithm = sv_md_algorithm
         else:
-            md_algorithm = constants.DEFAULT_MD
+            md_algorithm = select_suitable_signing_md(
+                self.signer.signing_cert.public_key
+            )
 
         # TODO fall back to more useful default for weak_hash_algos
         weak_hash_algos = (

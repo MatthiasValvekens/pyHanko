@@ -40,9 +40,11 @@ from pyhanko.sign.general import (
     simple_cms_attribute,
 )
 
+from . import constants
+
 __all__ = [
     'Signer', 'SimpleSigner', 'ExternalSigner',
-    'PdfCMSSignedAttributes'
+    'PdfCMSSignedAttributes', 'select_suitable_signing_md'
 ]
 
 logger = logging.getLogger(__name__)
@@ -934,3 +936,33 @@ class PdfCMSSignedAttributes:
     """
     Optional settings for CAdES-style signed attributes.
     """
+
+
+RSA_THRESHOLDS = [(2048, 'sha256'), (3072, 'sha384')]
+ECC_THRESHOLDS = [(256, 'sha256'), (384, 'sha384')]
+
+
+def select_suitable_signing_md(key: keys.PublicKeyInfo) -> str:
+    """
+    Choose a reasonable default signing message digest given the properties of
+    (the public part of) a key.
+
+    The fallback value is :const:`constants.DEFAULT_MD`.
+
+    :param key:
+        A :class:`keys.PublicKeyInfo` object.
+    :return:
+        The name of a message digest algorithm.
+    """
+
+    def _with_thresholds(key_size, thresholds):
+        for sz, md in thresholds:
+            if key_size <= sz:
+                return md
+        return 'sha512'
+
+    if key.algorithm == 'rsa':
+        return _with_thresholds(key.bit_size, RSA_THRESHOLDS)
+    elif key.algorithm == 'ec':
+        return _with_thresholds(key.bit_size, ECC_THRESHOLDS)
+    return constants.DEFAULT_MD
