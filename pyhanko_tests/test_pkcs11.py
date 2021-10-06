@@ -272,6 +272,7 @@ def test_simple_sign_dsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
 
 
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ecdsa(bulk_fetch):
