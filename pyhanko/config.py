@@ -462,6 +462,14 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     Prefer PSS to PKCS#1 v1.5 padding when creating RSA signatures.
     """
 
+    raw_mechanism: bool = False
+    """
+    Invoke the raw variant of the PKCS#11 signing operation.
+
+    .. note::
+        This is currently only supported for ECDSA signatures.
+    """
+
     @classmethod
     def process_entries(cls, config_dict):
         super().process_entries(config_dict)

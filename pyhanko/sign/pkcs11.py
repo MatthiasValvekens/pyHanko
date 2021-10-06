@@ -440,6 +440,7 @@ class PKCS11SigningContext:
         return PKCS11Signer(
             session, config.cert_label, ca_chain=config.other_certs,
             key_label=config.key_label, prefer_pss=config.prefer_pss,
+            use_raw_mechanism=config.raw_mechanism,
             other_certs_to_pull=config.other_certs_to_pull,
             bulk_fetch=config.bulk_fetch,
             key_id=config.key_id, cert_id=config.cert_id,

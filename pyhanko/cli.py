@@ -1008,6 +1008,9 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
               required=False)
 @click.option('--cert-label', help='certificate label', type=str,
               required=False)
+@click.option('--raw-mechanism',
+              help='invoke raw PKCS#11 mechanism',
+              type=bool, is_flag=True, required=False)
 @click.option('--key-label', help='key label', type=str, required=False)
 @click.option('--slot-no', help='specify PKCS#11 slot to use',
               required=False, type=int, default=None)
@@ -1019,7 +1022,8 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
                    'other options)')
 @click.pass_context
 def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
-                  cert_label, key_label, slot_no, skip_user_pin, p11_setup):
+                  cert_label, key_label, slot_no, skip_user_pin, p11_setup,
+                  raw_mechanism):
     from pyhanko.sign import pkcs11
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
@@ -1044,7 +1048,7 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
         pkcs11_config = PKCS11SignatureConfig(
             module_path=lib, cert_label=cert_label, key_label=key_label,
             slot_no=slot_no, token_label=token_label,
-            prompt_pin=not skip_user_pin
+            prompt_pin=not skip_user_pin, raw_mechanism=raw_mechanism
         )
 
     pin = pkcs11_config.user_pin
