@@ -9,12 +9,14 @@ from typing import Optional, Set
 
 from asn1crypto import x509
 from asn1crypto.algos import RSASSAPSSParams
+from cryptography.hazmat.primitives import hashes
 
 from pyhanko.config import PKCS11SignatureConfig
 from pyhanko.sign.general import (
     CertificateStore,
     SigningError,
     SimpleCertificateStore,
+    get_pyca_cryptography_hash,
 )
 from pyhanko.sign.signers import Signer
 
@@ -120,6 +122,17 @@ def _pull_cert(pkcs11_session: Session, label: Optional[str] = None,
         raise PKCS11Error(err)
 
 
+def _hash_fully(digest_algorithm):
+    md_spec = get_pyca_cryptography_hash(digest_algorithm)
+
+    def _h(data: bytes):
+        h = hashes.Hash(md_spec)
+        h.update(data)
+        return h.finalize()
+
+    return _h
+
+
 # TODO: perhaps attempt automatic key discovery if the labels aren't provided?
 
 class PKCS11Signer(Signer):
@@ -160,6 +173,15 @@ class PKCS11Signer(Signer):
         If ``False``, fetch the requested certs one by one.
         Default value is ``True``, unless ``other_certs_to_pull`` has one or
         fewer elements, in which case it is always treated as ``False``.
+    :param use_raw_mechanism:
+        Use the 'raw' equivalent of the selected signature mechanism. This is
+        useful when working with tokens that do not support a hash-then-sign
+        mode of operation.
+
+        .. note::
+            This functionality is only available for ECDSA at this time.
+            Support for other signature schemes will be added on an as-needed
+            basis.
     """
 
     def __init__(self, pkcs11_session: Session,
@@ -169,7 +191,8 @@ class PKCS11Signer(Signer):
                  prefer_pss=False,
                  other_certs_to_pull=(), bulk_fetch=True,
                  key_id: Optional[bytes] = None,
-                 cert_id: Optional[bytes] = None):
+                 cert_id: Optional[bytes] = None,
+                 use_raw_mechanism=False):
         """
         Initialise a PKCS11 signer.
         """
@@ -206,6 +229,7 @@ class PKCS11Signer(Signer):
             self.bulk_fetch = bulk_fetch
         self._key_handle = None
         self._loaded = False
+        self.use_raw_mechanism = use_raw_mechanism
         super().__init__(prefer_pss=prefer_pss)
 
     def _init_cert_registry(self):
@@ -238,8 +262,13 @@ class PKCS11Signer(Signer):
         digest_algorithm = digest_algorithm.lower()
         signature_mechanism = self.get_signature_mechanism(digest_algorithm)
         signature_algo = signature_mechanism.signature_algo
-        transform = None
+        pre_sign_transform = None
+        post_sign_transform = None
         if signature_algo == 'rsassa_pkcs1v15':
+            if self.use_raw_mechanism:
+                raise NotImplementedError(
+                    "RSASSA-PKCS1v15 not available in raw mode"
+                )
             kwargs['mechanism'] = {
                 'sha1': Mechanism.SHA1_RSA_PKCS,
                 'sha224': Mechanism.SHA224_RSA_PKCS,
@@ -248,6 +277,8 @@ class PKCS11Signer(Signer):
                 'sha512': Mechanism.SHA512_RSA_PKCS,
             }[digest_algorithm]
         elif signature_algo == 'dsa':
+            if self.use_raw_mechanism:
+                raise NotImplementedError("DSA not available in raw mode")
             kwargs['mechanism'] = {
                 'sha1': Mechanism.DSA_SHA1,
                 'sha224': Mechanism.DSA_SHA224,
@@ -260,20 +291,28 @@ class PKCS11Signer(Signer):
                 'sha512': Mechanism.DSA_SHA512,
             }[digest_algorithm]
             from pkcs11.util.dsa import encode_dsa_signature
-            transform = encode_dsa_signature
+            post_sign_transform = encode_dsa_signature
         elif signature_algo == 'ecdsa':
-            # TODO test these, SoftHSM does not support these mechanisms
-            #  apparently (only raw ECDSA)
-            kwargs['mechanism'] = {
-                'sha1': Mechanism.ECDSA_SHA1,
-                'sha224': Mechanism.ECDSA_SHA224,
-                'sha256': Mechanism.ECDSA_SHA256,
-                'sha384': Mechanism.ECDSA_SHA384,
-                'sha512': Mechanism.ECDSA_SHA512,
-            }[digest_algorithm]
+            if self.use_raw_mechanism:
+                kwargs['mechanism'] = Mechanism.ECDSA
+                pre_sign_transform = _hash_fully(digest_algorithm)
+            else:
+                # TODO test these (unsupported in SoftHSMv2 right now)
+                kwargs['mechanism'] = {
+                    'sha1': Mechanism.ECDSA_SHA1,
+                    'sha224': Mechanism.ECDSA_SHA224,
+                    'sha256': Mechanism.ECDSA_SHA256,
+                    'sha384': Mechanism.ECDSA_SHA384,
+                    'sha512': Mechanism.ECDSA_SHA512,
+                }[digest_algorithm]
+
             from pkcs11.util.ec import encode_ecdsa_signature
-            transform = encode_ecdsa_signature
+            post_sign_transform = encode_ecdsa_signature
         elif signature_algo == 'rsassa_pss':
+            if self.use_raw_mechanism:
+                raise NotImplementedError(
+                    "RSASSA-PSS not available in raw mode"
+                )
             params: RSASSAPSSParams = signature_mechanism['parameters']
             assert digest_algorithm == \
                    params['hash_algorithm']['algorithm'].native
@@ -312,9 +351,12 @@ class PKCS11Signer(Signer):
                 f"Signature algorithm '{signature_algo}' is not supported."
             )
 
+        if pre_sign_transform is not None:
+            data = pre_sign_transform(data)
+
         signature = kh.sign(data, **kwargs)
-        if transform is not None:
-            signature = transform(signature)
+        if post_sign_transform is not None:
+            signature = post_sign_transform(signature)
 
         return signature
 

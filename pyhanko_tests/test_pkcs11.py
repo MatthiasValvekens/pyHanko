@@ -272,7 +272,6 @@ def test_simple_sign_dsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
 
 
-@pytest.mark.xfail  # fails due to lack of (proper) support in SoftHSMv2
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ecdsa(bulk_fetch):
@@ -284,7 +283,7 @@ def test_simple_sign_ecdsa(bulk_fetch):
     with _simple_sess(token='testecdsa') as sess:
         signer = pkcs11.PKCS11Signer(
             sess, 'signer', other_certs_to_pull=default_other_certs,
-            bulk_fetch=bulk_fetch
+            bulk_fetch=bulk_fetch, use_raw_mechanism=True
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
