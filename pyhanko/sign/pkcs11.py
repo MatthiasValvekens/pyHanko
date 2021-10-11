@@ -3,6 +3,7 @@ This module provides PKCS#11 integration for pyHanko, by providing a wrapper
 for `python-pkcs11 <https://github.com/danni/python-pkcs11>`_ that can be
 seamlessly plugged into a :class:`~.signers.PdfSigner`.
 """
+import asyncio
 import binascii
 import logging
 from typing import Optional, Set
@@ -227,9 +228,10 @@ class PKCS11Signer(Signer):
             self.bulk_fetch = False
         else:
             self.bulk_fetch = bulk_fetch
+        self.use_raw_mechanism = use_raw_mechanism
         self._key_handle = None
         self._loaded = False
-        self.use_raw_mechanism = use_raw_mechanism
+        self.__loading_event = None
         super().__init__(prefer_pss=prefer_pss)
 
     def _init_cert_registry(self):
@@ -248,16 +250,15 @@ class PKCS11Signer(Signer):
         self._load_objects()
         return self._signing_cert
 
-    # FIXME Right now, this blocks the event loop, which is bad
-    #  Should run in thread pool executor, and update to python-pkcs11 0.7.0 to
-    #  make that work
     async def async_sign_raw(self, data: bytes,
                              digest_algorithm: str, dry_run=False) -> bytes:
         if dry_run:
             # allocate 4096 bits for the fake signature
             return b'0' * 512
 
-        self._load_objects()
+        # FIXME Right now, this blocks the event loop, which is bad
+        #  Should run in thread pool executor (but: requires coordination)
+        await self.ensure_objects_loaded()
         from pkcs11 import MGF, Mechanism, SignMixin
 
         kh: SignMixin = self._key_handle
@@ -357,11 +358,14 @@ class PKCS11Signer(Signer):
         if pre_sign_transform is not None:
             data = pre_sign_transform(data)
 
-        signature = kh.sign(data, **kwargs)
-        if post_sign_transform is not None:
-            signature = post_sign_transform(signature)
+        def _perform_signature():
+            signature = kh.sign(data, **kwargs)
+            if post_sign_transform is not None:
+                signature = post_sign_transform(signature)
+            return signature
 
-        return signature
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _perform_signature)
 
     def _load_other_certs(self) -> Set[x509.Certificate]:
         return set(self.__pull())
@@ -402,6 +406,36 @@ class PKCS11Signer(Signer):
                 logger.debug(msg)  # lgtm
                 yield _pull_cert(self.pkcs11_session, label)
 
+    async def ensure_objects_loaded(self):
+        """
+        Async method that, when awaited, ensures that objects
+        (relevant certificates, key handles, ...) are loaded.
+
+        This coroutine is guaranteed to be called & awaited in :meth:`sign_raw`,
+        but some property implementations may cause object loading to be
+        triggered synchronously (for backwards compatibility reasons).
+        This blocks the event loop the first time it happens.
+
+        To avoid this behaviour, asynchronous code should ideally perform
+        `await signer.ensure_objects_loaded()` after instantiating the signer.
+
+        .. note::
+            The asynchronous context manager on :class:`PKCS11SigningContext`
+            takes care of that automatically.
+        """
+
+        if self._loaded:
+            return
+        if self.__loading_event is None:
+            self.__loading_event = event = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._load_objects)
+            event.set()
+        else:
+            # some other coroutine is dealing with fetching already,
+            # just wait for that one to finish
+            await self.__loading_event.wait()
+
     def _load_objects(self):
         if self._loaded:
             return
@@ -430,7 +464,7 @@ class PKCS11SigningContext:
         self._session = None
         self._user_pin = user_pin
 
-    def __enter__(self):
+    def _instantiate(self) -> PKCS11Signer:
         config = self.config
         pin = self._user_pin or config.user_pin
         pin = str(pin) if pin is not None else None
@@ -450,5 +484,17 @@ class PKCS11SigningContext:
             signing_cert=config.signing_certificate
         )
 
+    def __enter__(self):
+        return self._instantiate()
+
+    async def __aenter__(self):
+        loop = asyncio.get_running_loop()
+        signer = await loop.run_in_executor(None, self._instantiate)
+        await signer.ensure_objects_loaded()
+        return signer
+
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self._session.close()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
         self._session.close()

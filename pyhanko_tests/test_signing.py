@@ -70,6 +70,7 @@ from pyhanko.sign.validation import (
     ValidationInfoReadingError,
     add_validation_info,
     apply_adobe_revocation_info,
+    async_validate_pdf_signature,
     read_certification_data,
     validate_cms_signature,
     validate_detached_cms,
@@ -209,6 +210,20 @@ def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,
     if vc is None:
         vc = SIMPLE_V_CONTEXT()
     val_status = validate_pdf_signature(embedded_sig, vc, skip_diff=not extd)
+    return _val_trusted_check_status(val_status, extd)
+
+
+async def async_val_trusted(embedded_sig: EmbeddedPdfSignature,
+                            extd=False, vc=None):
+    if vc is None:
+        vc = SIMPLE_V_CONTEXT()
+    val_status = await async_validate_pdf_signature(
+        embedded_sig, vc, skip_diff=not extd
+    )
+    return _val_trusted_check_status(val_status, extd)
+
+
+def _val_trusted_check_status(val_status, extd):
     assert val_status.intact
     assert val_status.valid
     assert val_status.trusted

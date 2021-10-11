@@ -3,12 +3,14 @@ Tests for PKCS#11 functionality.
 
 NOTE: these are not run in CI, due to lack of testing setup.
 """
+import asyncio
 import binascii
 import logging
 import os
 from io import BytesIO
 
 import pytest
+from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pkcs11 import NoSuchKey, PKCS11Error
@@ -17,13 +19,14 @@ from pyhanko_certvalidator.registry import SimpleCertificateStore
 from pyhanko.config import PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import pkcs11, signers
+from pyhanko.sign import general, pkcs11, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.pkcs11 import PKCS11SigningContext
 from pyhanko_tests.samples import MINIMAL, TESTING_CA
 from pyhanko_tests.test_signing import (
     SIMPLE_DSA_V_CONTEXT,
     SIMPLE_ECC_V_CONTEXT,
+    async_val_trusted,
     val_trusted,
 )
 
@@ -311,3 +314,92 @@ def test_simple_sign_from_config():
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
+                                            (True, False), (True, True)])
+@freeze_time('2020-11-01')
+async def test_simple_sign_from_config_async(bulk_fetch, pss):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=pkcs11_test_module, token_label='testrsa',
+        other_certs_to_pull=default_other_certs,
+        bulk_fetch=bulk_fetch, prefer_pss=pss,
+        cert_label='signer', user_pin='1234'
+    )
+    async with PKCS11SigningContext(config=config) as signer:
+        pdf_signer = signers.PdfSigner(meta, signer)
+        out = await pdf_signer.async_sign_pdf(w)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    await async_val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
+                                            (True, False), (True, True)])
+@freeze_time('2020-11-01')
+async def test_async_sign_many_concurrent(bulk_fetch, pss):
+
+    concurrent_count = 20
+    config = PKCS11SignatureConfig(
+        module_path=pkcs11_test_module, token_label='testrsa',
+        other_certs_to_pull=default_other_certs,
+        bulk_fetch=bulk_fetch, prefer_pss=pss,
+        cert_label='signer', user_pin='1234'
+    )
+    async with PKCS11SigningContext(config=config) as signer:
+        async def _job(_i):
+            w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+            meta = signers.PdfSignatureMetadata(
+                field_name='Sig1', reason=f"PKCS#11 concurrency test #{_i}!"
+            )
+            pdf_signer = signers.PdfSigner(meta, signer)
+            return _i, await pdf_signer.async_sign_pdf(w, in_place=True)
+
+        jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
+        for finished_job in jobs:
+            i, out = await finished_job
+            r = PdfFileReader(out)
+            emb = r.embedded_signatures[0]
+            assert emb.field_name == 'Sig1'
+            assert emb.sig_object['/Reason'].endswith(f"#{i}!")
+            await async_val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
+                                            (True, False), (True, True)])
+async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
+    concurrent_count = 20
+
+    # don't instantiate through PKCS11SigningContext
+    # also, just sign raw strings, we want to exercise the correctness of
+    # the awaiting logic in sign_raw for object loading
+    with _simple_sess() as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, 'signer', other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch
+        )
+
+        async def _job(_i):
+            payload = f"PKCS#11 concurrency test #{_i}!".encode('utf8')
+            return _i, await signer.async_sign_raw(payload, 'sha256')
+
+        jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
+        for finished_job in jobs:
+            i, sig = await finished_job
+            general._validate_raw(
+                signature=sig,
+                signed_data=f"PKCS#11 concurrency test #{i}!".encode('utf8'),
+                cert=signer.signing_cert,
+                md_algorithm='sha256',
+                signature_algorithm=SignedDigestAlgorithm(
+                    {'algorithm': 'sha256_rsa'}
+                )
+            )
