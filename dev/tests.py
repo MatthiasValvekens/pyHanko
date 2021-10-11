@@ -52,6 +52,8 @@ def run(matcher=None, repeat=1, ci=False):
     _preload(requires_oscrypto, not ci)
 
     warnings.filterwarnings("error")
+    # Don't fail on deprecation warnings
+    warnings.filterwarnings("once", category=DeprecationWarning)
 
     loader = unittest.TestLoader()
     # We have to manually track the list of applicable tests because for
