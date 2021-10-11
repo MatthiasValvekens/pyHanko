@@ -1,5 +1,28 @@
 # changelog
 
+## 0.17.0
+
+**!!Compatibility note!!**
+
+**This release contains breaking changes in lower-level APIs.**
+High-level API functions should continue to work as-is, although some have been deprecated.
+However, the rewrite of the CRL & OCSP fetch logic breaks compatibility with the previous
+version's API.
+
+ - Refactor OCSP/certificate/CRL fetch logic to be more modular and swappable.
+ - Automatically fetch missing issuer certificates if there is an AIA record indicating where to
+   find them
+ - Favour asynchronous I/O throughout the API. `CertificateValidator.validate_usage`,
+   `CertificateValidator.validate_tls` and the `ValidationContext.retrieve_XYZ` methods were
+   deprecated in favour of their asynchronous equivalents.
+ - Support two backends for fetching revocation information and certificates: `requests` (legacy)
+   and `aiohttp` (via the `async_http` optional dependency group).
+   - It is expected that using `aiohttp` fetchers will yield better performance with the
+     asynchronous APIs, but as these require some resource management on the caller's part,
+     `requests` is still the default.
+   - Fetcher backends can be swapped out by means of the `fetcher_backend` argument to
+     `ValidationContext`.
+
 ## 0.16.0
 
  - Refactor CertificateRegistry
