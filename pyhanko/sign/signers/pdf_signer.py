@@ -503,8 +503,7 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
+        result = asyncio.run(
             self.async_timestamp_pdf(
                 pdf_out, md_algorithm, validation_context=validation_context,
                 bytes_reserved=bytes_reserved,
@@ -673,13 +672,12 @@ class PdfTimeStamper:
         :return:
             The output stream containing the signed output.
         """
-        loop = asyncio.get_event_loop()
         coro = self.async_update_archival_timestamp_chain(
             reader=reader, validation_context=validation_context,
             in_place=in_place, output=output, chunk_size=chunk_size,
             default_md_algorithm=default_md_algorithm
         )
-        return loop.run_until_complete(coro)
+        return asyncio.run(coro)
 
     async def async_update_archival_timestamp_chain(
             self, reader: PdfFileReader, validation_context, in_place=True,
@@ -1037,8 +1035,7 @@ class PdfSigner:
             a :class:`.PdfTBSDocument` object and an output handle to which the
             document in its current state has been written.
         """
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
+        result = asyncio.run(
             self.async_digest_doc_for_signing(
                 pdf_out, existing_fields_only=existing_fields_only,
                 bytes_reserved=bytes_reserved,
@@ -1166,8 +1163,7 @@ class PdfSigner:
         :return:
             The output stream containing the signed data.
         """
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(
+        result = asyncio.run(
             self.async_sign_pdf(
                 pdf_out, existing_fields_only=existing_fields_only,
                 bytes_reserved=bytes_reserved,
@@ -2030,8 +2026,7 @@ class PdfTBSDocument:
             message digest function if the input stream does not support
             ``memoryview``.
         """
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(
+        asyncio.run(
             cls.async_finish_signing(
                 output, prepared_digest, signature_cms,
                 post_sign_instr=post_sign_instr,

@@ -793,7 +793,7 @@ class Signer:
         .. deprecated:: 0.9.0
             Use :meth:`async_sign` instead.
             The implementation of this method will invoke :meth:`async_sign`
-            using ``run_until_complete`` in the default event loop.
+            using ``asyncio.run()``.
 
         Produce a detached CMS signature from a raw data digest.
 
@@ -852,14 +852,13 @@ class Signer:
             signing_time=timestamp, adobe_revinfo_attr=revocation_info,
             cades_signed_attrs=cades_signed_attr_meta
         )
-        loop = asyncio.get_event_loop()
         sign_coro = self.async_sign(
             data_digest=data_digest, digest_algorithm=digest_algorithm,
             dry_run=dry_run, use_pades=use_pades, timestamper=timestamper,
             signed_attr_settings=signed_attr_settings,
             encap_content_info=encap_content_info
         )
-        return loop.run_until_complete(sign_coro)
+        return asyncio.run(sign_coro)
 
     def sign_prescribed_attributes(self, digest_algorithm: str,
                                    signed_attrs: cms.CMSAttributes,
@@ -873,7 +872,7 @@ class Signer:
             Use :meth:`async_sign_prescribed_attributes` instead.
             The implementation of this method will invoke
             :meth:`async_sign_prescribed_attributes` using
-            ``run_until_complete`` in the default event loop.
+            ``asyncio.run()``.
 
         Start the CMS signing process with the prescribed set of signed
         attributes.
@@ -914,14 +913,13 @@ class Signer:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
 
-        loop = asyncio.get_event_loop()
         sign_coro = self.async_sign_prescribed_attributes(
             digest_algorithm=digest_algorithm,
             signed_attrs=signed_attrs,
             cms_version=cms_version, dry_run=dry_run, timestamper=timestamper,
             encap_content_info=encap_content_info
         )
-        return loop.run_until_complete(sign_coro)
+        return asyncio.run(sign_coro)
 
     def sign_general_data(self, input_data: Union[IO, bytes,
                                                   cms.ContentInfo,
@@ -938,8 +936,7 @@ class Signer:
         .. deprecated:: 0.9.0
             Use :meth:`async_sign_general_data` instead.
             The implementation of this method will invoke
-            :meth:`async_sign_general_data` using
-            ``run_until_complete`` in the default event loop.
+            :meth:`async_sign_general_data` using ``asyncio.run()``.
 
         Produce a CMS signature for an arbitrary data stream
         (not necessarily PDF data).
@@ -997,7 +994,6 @@ class Signer:
         signed_attr_settings = PdfCMSSignedAttributes(
             signing_time=timestamp, cades_signed_attrs=cades_signed_attr_meta
         )
-        loop = asyncio.get_event_loop()
         sign_coro = self.async_sign_general_data(
             input_data=input_data, digest_algorithm=digest_algorithm,
             detached=detached, use_cades=use_cades,
@@ -1005,7 +1001,7 @@ class Signer:
             signed_attr_settings=signed_attr_settings,
             max_read=max_read
         )
-        return loop.run_until_complete(sign_coro)
+        return asyncio.run(sign_coro)
 
 
 def asyncify_signer(signer_cls):

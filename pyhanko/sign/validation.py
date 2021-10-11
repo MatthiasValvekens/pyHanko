@@ -316,14 +316,13 @@ def validate_cms_signature(signed_data: cms.SignedData,
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
-    loop = asyncio.get_event_loop()
     coro = async_validate_cms_signature(
         signed_data=signed_data, status_cls=status_cls, raw_digest=raw_digest,
         validation_context=validation_context, status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,
         encap_data_invalid=encap_data_invalid
     )
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def async_validate_cms_signature(
@@ -587,7 +586,6 @@ def validate_detached_cms(input_data: Union[bytes, IO,
     :return:
         A description of the signature's status.
     """
-    loop = asyncio.get_event_loop()
     coro = async_validate_detached_cms(
         input_data=input_data,
         signed_data=signed_data,
@@ -597,7 +595,7 @@ def validate_detached_cms(input_data: Union[bytes, IO,
         chunk_size=chunk_size,
         max_read=max_read
     )
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def async_validate_detached_cms(
@@ -1549,7 +1547,6 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     :return:
         The status of the PDF signature in question.
     """
-    loop = asyncio.get_event_loop()
     coro = async_validate_pdf_signature(
         embedded_sig=embedded_sig,
         signer_validation_context=signer_validation_context,
@@ -1557,7 +1554,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         diff_policy=diff_policy, key_usage_settings=key_usage_settings,
         skip_diff=skip_diff
     )
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def async_validate_pdf_signature(
@@ -1662,13 +1659,12 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
     :return:
         The status of the PDF timestamp in question.
     """
-    loop = asyncio.get_event_loop()
     coro = async_validate_pdf_timestamp(
         embedded_sig=embedded_sig,
         validation_context=validation_context,
         diff_policy=diff_policy, skip_diff=skip_diff
     )
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def async_validate_pdf_timestamp(
@@ -1907,7 +1903,6 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :return:
         The status of the signature.
     """
-    loop = asyncio.get_event_loop()
     coro = async_validate_pdf_ltv_signature(
         embedded_sig=embedded_sig,
         validation_type=validation_type,
@@ -1918,7 +1913,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         key_usage_settings=key_usage_settings,
         skip_diff=skip_diff
     )
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def async_validate_pdf_ltv_signature(

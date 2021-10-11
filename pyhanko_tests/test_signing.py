@@ -3379,8 +3379,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         )
         return new_output
 
-    loop = asyncio.get_event_loop()
-    r = PdfFileReader(loop.run_until_complete(full_procedure()))
+    r = PdfFileReader(asyncio.run(full_procedure()))
     # check cardinality of DSS content
     dss = DocumentSecurityStore.read_dss(handler=r)
     assert dss is not None
