@@ -1,5 +1,9 @@
 # changelog
 
+## 0.17.1
+
+ - Fixes a packaging error in `0.17.0`
+
 ## 0.17.0
 
 **!!Compatibility note!!**

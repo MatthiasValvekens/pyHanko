@@ -12,7 +12,7 @@ from setuptools.command.egg_info import egg_info
 PACKAGE_NAME = 'pyhanko-certvalidator'
 EGG_NAME = PACKAGE_NAME.replace('-', '_')
 PYTHON_PACKAGE_NAME = 'pyhanko_certvalidator'
-PACKAGE_VERSION = '0.17.0'
+PACKAGE_VERSION = '0.17.1'
 PACKAGE_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -131,7 +131,10 @@ setup(
     extras_require={
         'async_http': ['aiohttp~=3.7.4'],
     },
-    packages=[PYTHON_PACKAGE_NAME],
+    packages=[
+        PYTHON_PACKAGE_NAME + subp for subp in
+        ('', '.fetchers', '.fetchers.requests_fetchers', '.fetchers.aiohttp_fetchers')
+    ],
     package_data=package_data,
 
     test_suite='tests.make_suite',
