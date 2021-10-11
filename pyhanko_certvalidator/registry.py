@@ -373,8 +373,10 @@ class CertificateRegistry(SimpleCertificateStore):
         Builds a list of ValidationPath objects from a certificate in the
         operating system trust store to the end-entity certificate
 
-        .. warning::
-            Deprecated in favour of :meth:`async_build_paths`.
+        .. note::
+            This is a synchronous equivalent of :meth:`async_build_paths`
+            that calls the latter in a new event loop. As such, it can't be used
+            from within asynchronous code.
 
         :param end_entity_cert:
             A byte string of a DER or PEM-encoded X.509 certificate, or an
