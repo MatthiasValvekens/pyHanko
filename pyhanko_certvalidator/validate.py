@@ -2,7 +2,6 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import asyncio
-import warnings
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Optional
