@@ -283,7 +283,7 @@ def test_der_detect(tmp_path):
     assert result.dump() == orig_bytes
 
 
-def test_enforce_one_cert(tmp_path):
+def test_enforce_one_cert():
 
     fname = CRYPTO_DATA_DIR + '/some-chain.cert.pem'
 
@@ -399,6 +399,18 @@ def test_sign_with_trust():
     assert not status.trusted
 
     val_trusted(s)
+
+@freeze_time('2020-11-01')
+async def test_sign_with_trust_async():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    assert '/AP' not in s.sig_field
+    await async_val_trusted(s)
 
 
 def test_verify_sig_without_signed_attrs():
@@ -626,6 +638,29 @@ def test_sign_field_unclear():
 
     with pytest.raises(SigningError):
         signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='SigExtra'),
+            signer=FROM_CA, existing_fields_only=True
+        )
+
+
+async def test_sign_field_unclear_async():
+    # test error on signing attempt where the signature field to be used
+    # is not clear
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+
+    with pytest.raises(SigningError):
+        await signers.async_sign_pdf(
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA
+        )
+
+    with pytest.raises(SigningError):
+        await signers.async_sign_pdf(
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+            existing_fields_only=True
+        )
+
+    with pytest.raises(SigningError):
+        await signers.async_sign_pdf(
             w, signers.PdfSignatureMetadata(field_name='SigExtra'),
             signer=FROM_CA, existing_fields_only=True
         )

@@ -13,7 +13,7 @@ from .constants import (
     DEFAULT_SIGNER_KEY_USAGE,
     DEFAULT_SIGNING_STAMP_STYLE,
 )
-from .functions import embed_payload_with_cms, sign_pdf
+from .functions import async_sign_pdf, embed_payload_with_cms, sign_pdf
 from .pdf_byterange import (
     DocumentTimestamp,
     PdfByteRangeDigest,
@@ -28,7 +28,7 @@ __all__ = [
     'PdfSigner', 'PdfTimeStamper',
     'PdfByteRangeDigest', 'PdfSignedData',
     'SignatureObject', 'DocumentTimestamp',
-    'sign_pdf', 'load_certs_from_pemder',
+    'sign_pdf', 'async_sign_pdf', 'load_certs_from_pemder',
     'DEFAULT_MD', 'DEFAULT_SIGNING_STAMP_STYLE', 'DEFAULT_SIG_SUBFILTER',
     'DEFAULT_SIGNER_KEY_USAGE'
 ]
