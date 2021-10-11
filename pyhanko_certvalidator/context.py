@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import binascii
@@ -439,6 +440,10 @@ class ValidationContext:
             A list of asn1crypto.crl.CertificateList objects
         """
 
+        warnings.warn(
+            "'retrieve_crls' is deprecated, use 'async_retrieve_crls' instead",
+            DeprecationWarning
+        )
         if not self._allow_fetching:
             return self._crls
         loop = asyncio.get_event_loop()
@@ -492,6 +497,12 @@ class ValidationContext:
         :return:
             A list of asn1crypto.ocsp.OCSPResponse objects
         """
+
+        warnings.warn(
+            "'retrieve_ocsps' is deprecated, use "
+            "'async_retrieve_ocsps' instead",
+            DeprecationWarning
+        )
 
         if not self._allow_fetching:
             return self._ocsps

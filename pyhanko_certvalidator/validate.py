@@ -2,6 +2,7 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import asyncio
+import warnings
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Optional
@@ -56,9 +57,10 @@ def validate_path(validation_context, path,
     Critical extensions on the end-entity certificate are not validated
     and are left up to the consuming application to process and/or fail on.
 
-
-    .. deprecated:: 0.17.0
-        Use :func:`.async_validate_path` instead.
+    .. note::
+        This is a synchronous equivalent of :func:`.async_validate_path` that
+        calls the latter in a new event loop. As such, it can't be used
+        from within asynchronous code.
 
     :param validation_context:
         A pyhanko_certvalidator.context.ValidationContext object to use for

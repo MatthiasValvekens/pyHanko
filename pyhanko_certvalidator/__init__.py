@@ -1,4 +1,5 @@
 import asyncio
+import warnings
 
 from asn1crypto import pem
 from asn1crypto.x509 import Certificate
@@ -212,6 +213,13 @@ class CertificateValidator():
             A pyhanko_certvalidator.path.ValidationPath object of the validated
             certificate validation path
         """
+
+        warnings.warn(
+            "'validate_usage' is deprecated, use "
+            "'async_validate_usage' instead",
+            DeprecationWarning
+        )
+
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(
             self.async_validate_usage(
@@ -304,6 +312,12 @@ class CertificateValidator():
             A pyhanko_certvalidator.path.ValidationPath object of the validated
             certificate validation path
         """
+
+        warnings.warn(
+            "'validate_tls' is deprecated, use 'async_validate_tls' instead",
+            DeprecationWarning
+        )
+
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.async_validate_tls(hostname))
 
