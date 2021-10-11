@@ -387,8 +387,7 @@ class CertificateRegistry(SimpleCertificateStore):
             represent the possible paths from the end-entity certificate to one
             of the CA certs.
         """
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.async_build_paths(end_entity_cert))
+        return asyncio.run(self.async_build_paths(end_entity_cert))
 
     async def async_build_paths(self, end_entity_cert):
         """

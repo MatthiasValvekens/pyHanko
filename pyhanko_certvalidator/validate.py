@@ -81,8 +81,7 @@ def validate_path(validation_context, path,
         asn1crypto.x509.Certificate
     """
 
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(
+    result = asyncio.run(
         async_validate_path(validation_context, path, parameters=parameters)
     )
     return result

@@ -220,8 +220,7 @@ class CertificateValidator():
             DeprecationWarning
         )
 
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(
+        return asyncio.run(
             self.async_validate_usage(
                 key_usage, extended_key_usage, extended_optional
             )
@@ -318,8 +317,7 @@ class CertificateValidator():
             DeprecationWarning
         )
 
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.async_validate_tls(hostname))
+        return asyncio.run(self.async_validate_tls(hostname))
 
     async def async_validate_tls(self, hostname):
         """

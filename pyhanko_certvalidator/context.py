@@ -446,8 +446,7 @@ class ValidationContext:
         )
         if not self._allow_fetching:
             return self._crls
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.async_retrieve_crls(cert))
+        return asyncio.run(self.async_retrieve_crls(cert))
 
     async def async_retrieve_ocsps(self, cert, issuer):
         """
@@ -506,8 +505,7 @@ class ValidationContext:
 
         if not self._allow_fetching:
             return self._ocsps
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.async_retrieve_ocsps(cert, issuer))
+        return asyncio.run(self.async_retrieve_ocsps(cert, issuer))
 
     def _extract_ocsp_certs(self, ocsp_response):
         """
