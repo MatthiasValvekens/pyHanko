@@ -256,8 +256,6 @@ class PKCS11Signer(Signer):
             # allocate 4096 bits for the fake signature
             return b'0' * 512
 
-        # FIXME Right now, this blocks the event loop, which is bad
-        #  Should run in thread pool executor (but: requires coordination)
         await self.ensure_objects_loaded()
         from pkcs11 import MGF, Mechanism, SignMixin
 
