@@ -1,5 +1,10 @@
 # changelog
 
+## 0.17.2
+
+ - Replace `run_until_complete()` with `asyncio.run()` for better
+   event loop state management.
+
 ## 0.17.1
 
  - Fixes a packaging error in `0.17.0`
