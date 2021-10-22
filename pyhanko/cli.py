@@ -1,3 +1,4 @@
+import asyncio
 import getpass
 import logging
 import sys
@@ -35,6 +36,7 @@ from pyhanko.sign.general import (
     load_certs_from_pemder,
 )
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
+from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.validation import RevocationInfoValidationType
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
@@ -366,11 +368,12 @@ def _validate_detached(infile, sig_infile, validation_context,
     except ValueError as e:
         raise click.ClickException("Could not parse CMS object") from e
 
-    return validation.validate_detached_cms(
+    validation_coro = validation.async_validate_detached_cms(
         infile, signed_data=content_info['content'],
         signer_validation_context=validation_context,
         key_usage_settings=key_usage_settings
     )
+    return asyncio.run(validation_coro)
 
 
 def _signature_status_str(status_callback, pretty_print, executive_summary):
@@ -756,6 +759,14 @@ def get_text_params(ctx):
 
 def detached_sig(signer: signers.Signer, infile_path, outfile,
                  timestamp_url, use_pem):
+    coro = async_detached_sig(
+        signer, infile_path, outfile, timestamp_url, use_pem
+    )
+    return asyncio.run(coro)
+
+
+async def async_detached_sig(signer: signers.Signer, infile_path, outfile,
+                             timestamp_url, use_pem):
 
     with pyhanko_exception_manager():
         if timestamp_url is not None:
@@ -763,13 +774,15 @@ def detached_sig(signer: signers.Signer, infile_path, outfile,
             timestamp = None
         else:
             timestamper = None
-            # in this case, embed the signing time as an unsigned attr
+            # in this case, embed the signing time as a signed attr
             timestamp = datetime.now(tz=tzlocal.get_localzone())
 
         with open(infile_path, 'rb') as inf:
-            signature = signer.sign_general_data(
+            signature = await signer.async_sign_general_data(
                 inf, signers.DEFAULT_MD, timestamper=timestamper,
-                timestamp=timestamp
+                signed_attr_settings=PdfCMSSignedAttributes(
+                    signing_time=timestamp
+                )
             )
 
         output_bytes = signature.dump()
