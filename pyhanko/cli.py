@@ -161,14 +161,19 @@ def cli(ctx, config, verbose):
         log_config[None] = LogConfig(
             level=logging.DEBUG, output=root_logger_config.output
         )
-    elif 'fontTools.subset' not in log_config:
-        # the fontTools subsetter has a very noisy INFO log, so
-        # set that one to WARNING by default
-        log_config['fontTools.subset'] = LogConfig(
-            level=logging.WARNING,
-            # use the root logger's output settings to populate the default
-            output=log_config[None].output
+    else:
+        # use the root logger's output settings to populate the default
+        log_output = log_config[None].output
+        # Revinfo fetch logs -> filter by default
+        log_config['pyhanko_certvalidator.fetchers'] = LogConfig(
+            level=logging.WARNING, output=log_output
         )
+        if 'fontTools.subset' not in log_config:
+            # the fontTools subsetter has a very noisy INFO log, so
+            # set that one to WARNING by default
+            log_config['fontTools.subset'] = LogConfig(
+                level=logging.WARNING, output=log_output
+            )
 
     logging_setup(log_config)
 
