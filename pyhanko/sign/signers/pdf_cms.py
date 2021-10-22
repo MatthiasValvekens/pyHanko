@@ -4,6 +4,7 @@ signatures.
 """
 import asyncio
 import logging
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from typing import IO, Iterable, List, Optional, Union
@@ -599,6 +600,8 @@ class Signer:
                          encap_content_info=None) -> cms.ContentInfo:
 
         """
+        .. versionadded:: 0.9.0
+
         Produce a detached CMS signature from a raw data digest.
 
         :param data_digest:
@@ -661,6 +664,8 @@ class Signer:
                                                encap_content_info=None) \
             -> cms.ContentInfo:
         """
+        .. versionadded:: 0.9.0
+
         Start the CMS signing process with the prescribed set of signed
         attributes.
 
@@ -728,6 +733,8 @@ class Signer:
             PdfCMSSignedAttributes = None,
             max_read=None) -> cms.ContentInfo:
         """
+        .. versionadded:: 0.9.0
+
         Produce a CMS signature for an arbitrary data stream
         (not necessarily PDF data).
 
@@ -849,6 +856,10 @@ class Signer:
         :return:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
+        warnings.warn(
+            "'Signer.sign' is deprecated, use 'Signer.async_sign' instead",
+            DeprecationWarning
+        )
         signed_attr_settings = PdfCMSSignedAttributes(
             signing_time=timestamp, adobe_revinfo_attr=revocation_info,
             cades_signed_attrs=cades_signed_attr_meta
@@ -913,7 +924,11 @@ class Signer:
         :return:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
-
+        warnings.warn(
+            "'Signer.sign_prescribed_attributes' is deprecated, use "
+            "'Signer.async_sign_prescribed_attributes' instead",
+            DeprecationWarning
+        )
         sign_coro = self.async_sign_prescribed_attributes(
             digest_algorithm=digest_algorithm,
             signed_attrs=signed_attrs,
@@ -992,6 +1007,11 @@ class Signer:
         :return:
             A CMS ContentInfo object of type signedData.
         """
+        warnings.warn(
+            "'Signer.sign_general_data' is deprecated, use "
+            "'Signer.async_sign_general_data' instead",
+            DeprecationWarning
+        )
         signed_attr_settings = PdfCMSSignedAttributes(
             signing_time=timestamp, cades_signed_attrs=cades_signed_attr_meta
         )

@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import warnings
 from collections import namedtuple
 from dataclasses import dataclass
 from dataclasses import field as data_field
@@ -316,6 +317,13 @@ def validate_cms_signature(signed_data: cms.SignedData,
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
+
+    warnings.warn(
+        "'validate_cms_signature' is deprecated, use "
+        "'async_validate_cms_signature' instead",
+        DeprecationWarning
+    )
+
     coro = async_validate_cms_signature(
         signed_data=signed_data, status_cls=status_cls, raw_digest=raw_digest,
         validation_context=validation_context, status_kwargs=status_kwargs,
@@ -586,6 +594,13 @@ def validate_detached_cms(input_data: Union[bytes, IO,
     :return:
         A description of the signature's status.
     """
+
+    warnings.warn(
+        "'validate_detached_cms' is deprecated, use "
+        "'async_validate_detached_cms' instead",
+        DeprecationWarning
+    )
+
     coro = async_validate_detached_cms(
         input_data=input_data,
         signed_data=signed_data,
@@ -1522,9 +1537,6 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            key_usage_settings: KeyUsageConstraints = None,
                            skip_diff: bool = False) -> PdfSignatureStatus:
     """
-    .. deprecated:: 0.9.0
-        Use :func:`async_validate_pdf_signature` instead.
-
     Validate a PDF signature.
 
     :param embedded_sig:
@@ -1640,8 +1652,8 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
                            diff_policy: DiffPolicy = None,
                            skip_diff: bool = False) -> DocumentTimestampStatus:
     """
-    .. deprecated:: 0.9.0
-        Use :func:`async_validate_pdf_timestamp` instead.
+    .. versionchanged:: 0.9.0
+        Wrapper around :func:`async_validate_pdf_timestamp`.
 
     Validate a PDF document timestamp.
 
@@ -1872,8 +1884,8 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                key_usage_settings: KeyUsageConstraints = None,
                                skip_diff: bool = False) -> PdfSignatureStatus:
     """
-    .. deprecated:: 0.9.0
-        Use :func:`async_validate_pdf_ltv_signature` instead.
+    .. versionchanged:: 0.9.0
+        Wrapper around :func:`async_validate_pdf_ltv_signature`.
 
     Validate a PDF LTV signature according to a particular profile.
 
@@ -2301,12 +2313,11 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
                         in_place=False, output=None, force_write=False,
                         chunk_size=DEFAULT_CHUNK_SIZE):
     """
-    .. deprecated:: 0.9.0
-        Use :func:`async_add_validation_info` instead.
+    .. versionchanged:: 0.9.0
+        Wrapper around :func:`async_add_validation_info`
 
     Add validation info (CRLs, OCSP responses, extra certificates) for a
     signature to the DSS of a document in an incremental update.
-    This is a synchronous wrapper around :func:`async_add_validation_info`.
 
     :param embedded_sig:
         The signature for which the revocation information needs to be

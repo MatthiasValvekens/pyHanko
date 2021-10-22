@@ -5,6 +5,7 @@ import asyncio
 import enum
 import logging
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import IO, List, Optional, Set, Tuple, Union
@@ -643,9 +644,8 @@ class PdfTimeStamper:
             output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
             default_md_algorithm=constants.DEFAULT_MD):
         """
-
-        .. deprecated:: 0.9.0
-            Use :meth:`async_update_archival_timestamp_chain` instead.
+        .. versionchanged:: 0.9.0
+            Wrapper around :meth:`async_update_archival_timestamp_chain`.
 
         Validate the last timestamp in the timestamp chain on a PDF file, and
         write an updated version to an output stream.
@@ -684,6 +684,8 @@ class PdfTimeStamper:
             output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
             default_md_algorithm=constants.DEFAULT_MD):
         """
+        .. versionadded:: 0.9.0
+
         Validate the last timestamp in the timestamp chain on a PDF file, and
         write an updated version to an output stream.
 
@@ -1035,6 +1037,11 @@ class PdfSigner:
             a :class:`.PdfTBSDocument` object and an output handle to which the
             document in its current state has been written.
         """
+        warnings.warn(
+            "'digest_doc_for_signing' is deprecated, use "
+            "'async_digest_doc_for_signing' instead",
+            DeprecationWarning
+        )
         result = asyncio.run(
             self.async_digest_doc_for_signing(
                 pdf_out, existing_fields_only=existing_fields_only,
@@ -1133,6 +1140,9 @@ class PdfSigner:
                  appearance_text_params=None, in_place=False,
                  output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE):
         """
+        .. versionchanged:: 0.9.0
+            Wrapper around :meth:`async_sign_pdf`.
+
         Sign a PDF file using the provided output writer.
 
         :param pdf_out:
@@ -1178,6 +1188,8 @@ class PdfSigner:
                              appearance_text_params=None, in_place=False,
                              output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE):
         """
+        .. versionadded:: 0.9.0
+
         Sign a PDF file using the provided output writer.
 
         :param pdf_out:
