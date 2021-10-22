@@ -639,9 +639,11 @@ def test_read_pkcs11_config_no_cert_spec():
     with pytest.raises(ConfigurationError, match="Either 'cert_id'"):
         cli_config.get_pkcs11_config('foo')
 
+
 def _signer_sanity_check(signer):
     digest = hashlib.sha256(b'Hello world!').digest()
-    sig = signer.sign(digest, digest_algorithm='sha256')
+    with pytest.deprecated_call():
+        sig = signer.sign(digest, digest_algorithm='sha256')
     from pyhanko.sign.general import validate_sig_integrity
     intact, valid = validate_sig_integrity(
         sig['content']['signer_infos'][0], cert=signer.signing_cert,

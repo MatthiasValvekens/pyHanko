@@ -55,6 +55,7 @@ from pyhanko.sign.general import (
     validate_sig_integrity,
 )
 from pyhanko.sign.signers import PdfTimeStamper, cms_embedder
+from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.signers.pdf_signer import (
     DSSContentSettings,
     PdfTBSDocument,
@@ -70,10 +71,10 @@ from pyhanko.sign.validation import (
     ValidationInfoReadingError,
     add_validation_info,
     apply_adobe_revocation_info,
+    async_validate_cms_signature,
+    async_validate_detached_cms,
     async_validate_pdf_signature,
     read_certification_data,
-    validate_cms_signature,
-    validate_detached_cms,
     validate_pdf_ltv_signature,
     validate_pdf_signature,
     validate_pdf_timestamp,
@@ -2093,10 +2094,12 @@ def test_direct_pdfcmsembedder_usage():
 
     signer: signers.SimpleSigner = FROM_CA
     # let's supply the CMS object as a raw bytestring
-    cms_bytes = signer.sign(
-        data_digest=prep_digest.document_digest,
-        digest_algorithm=md_algorithm, timestamp=timestamp
-    ).dump()
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        cms_bytes = signer.sign(
+            data_digest=prep_digest.document_digest,
+            digest_algorithm=md_algorithm, timestamp=timestamp
+        ).dump()
     sig_contents = cms_writer.send(cms_bytes)
 
     # we requested in-place output
@@ -2197,9 +2200,12 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
             'algorithm': 'rsassa_pkcs1v15'
         })
     )
-    cms_obj = signer.sign(
-        data_digest=prep_digest.document_digest, digest_algorithm=md_algorithm,
-    )
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        cms_obj = signer.sign(
+            data_digest=prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+        )
     sd = cms_obj['content']
     si, = sd['signer_infos']
     signed_attrs = si['signed_attrs']
@@ -2363,10 +2369,12 @@ def _tamper_with_sig_obj(tamper_fun):
             'algorithm': 'rsassa_pkcs1v15'
         })
     )
-    cms_obj = signer.sign(
-        data_digest=prep_document_hash.document_digest,
-        digest_algorithm=md_algorithm,
-    )
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        cms_obj = signer.sign(
+            data_digest=prep_document_hash.document_digest,
+            digest_algorithm=md_algorithm,
+        )
     cms_writer.send(cms_obj)
     return output
 
@@ -2985,7 +2993,7 @@ def test_sign_weak_digest_prevention():
 
 
 @freeze_time('2020-11-01')
-def test_sign_weak_sig_digest():
+async def test_sign_weak_sig_digest():
     # We have to jump through some hoops to put together a signature
     # where the signing method's digest is not the same as the "external"
     # digest. This is intentional, since it's bad practice.
@@ -3012,9 +3020,10 @@ def test_sign_weak_sig_digest():
         signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
         cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
     )
-    cms_obj = signer.sign(
+    cms_obj = await signer.async_sign(
         data_digest=prep_digest.document_digest,
-        digest_algorithm=external_md_algorithm, timestamp=timestamp
+        digest_algorithm=external_md_algorithm,
+        signed_attr_settings=PdfCMSSignedAttributes(signing_time=timestamp)
     )
     si_obj: cms.SignerInfo = cms_obj['content']['signer_infos'][0]
     bad_algo = SignedDigestAlgorithm({'algorithm': 'md5_rsa'})
@@ -3032,12 +3041,49 @@ def test_sign_weak_sig_digest():
     r = PdfFileReader(input_buf)
     emb = r.embedded_signatures[0]
     with pytest.raises(WeakHashAlgorithmError):
-        val_trusted(emb)
+        await async_val_trusted(emb)
 
     lenient_vc = ValidationContext(
         trust_roots=[ROOT_CERT], weak_hash_algos=set()
     )
-    val_trusted(emb, vc=lenient_vc)
+    await async_val_trusted(emb, vc=lenient_vc)
+
+
+def test_generic_data_sign_legacy():
+    input_data = b'Hello world!'
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        signature = FROM_CA.sign_general_data(
+            input_data, 'sha256', detached=False
+        )
+
+    # reset the stream
+    if isinstance(input_data, BytesIO):
+        input_data.seek(0)
+
+    # re-parse just to make sure we're starting fresh
+    signature = cms.ContentInfo.load(signature.dump())
+
+    raw_digest = hashlib.sha256(b'Hello world!').digest()
+    content = signature['content']
+    assert content['version'].native == 'v1'
+    assert isinstance(content, cms.SignedData)
+
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        from pyhanko.sign.validation import validate_cms_signature
+
+        # noinspection PyDeprecation
+        status = validate_cms_signature(content, raw_digest=raw_digest)
+    assert status.valid
+    assert status.intact
+
+    eci = content['encap_content_info']
+    assert eci['content_type'].native == 'data'
+    assert eci['content'].native == b'Hello world!'
+
+    assert status.valid
+    assert status.intact
 
 
 @pytest.mark.parametrize('input_data, detached', list(itertools.product(
@@ -3052,9 +3098,9 @@ def test_sign_weak_sig_digest():
         [True, False]
     ))
 )
-def test_generic_data_sign(input_data, detached):
+async def test_generic_data_sign(input_data, detached):
 
-    signature = FROM_CA.sign_general_data(
+    signature = await FROM_CA.async_sign_general_data(
         input_data, 'sha256', detached=detached
     )
 
@@ -3069,7 +3115,7 @@ def test_generic_data_sign(input_data, detached):
     content = signature['content']
     assert content['version'].native == 'v1'
     assert isinstance(content, cms.SignedData)
-    status = validate_cms_signature(content, raw_digest=raw_digest)
+    status = await async_validate_cms_signature(content, raw_digest=raw_digest)
     assert status.valid
     assert status.intact
 
@@ -3078,7 +3124,7 @@ def test_generic_data_sign(input_data, detached):
         assert eci['content_type'].native == 'data'
         assert eci['content'].native is None
 
-        status = validate_detached_cms(input_data, content)
+        status = await async_validate_detached_cms(input_data, content)
         assert status.valid
         assert status.intact
         assert 'No available information about the signing time.' \
@@ -3094,12 +3140,12 @@ def test_generic_data_sign(input_data, detached):
 
 
 @pytest.mark.parametrize('detached', [True, False])
-def test_cms_v3_sign(detached):
-    inner_obj = FROM_CA.sign_general_data(
+async def test_cms_v3_sign(detached):
+    inner_obj = await FROM_CA.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False
     )
 
-    signature = FROM_CA.sign_general_data(
+    signature = await FROM_CA.async_sign_general_data(
         cms.EncapsulatedContentInfo({
             'content_type': 'signed_data',
             'content': inner_obj['content'].untag()
@@ -3124,18 +3170,23 @@ def test_cms_v3_sign(detached):
         raw_digest = None
         inner_eci = eci['content'].parsed['encap_content_info']
         assert inner_eci['content'].native == b'Hello world!'
-    status = validate_cms_signature(content, raw_digest=raw_digest)
+    status = await async_validate_cms_signature(
+        content, raw_digest=raw_digest
+    )
     assert status.valid
     assert status.intact
 
 
-def test_detached_cms_with_self_reported_timestamp():
+async def test_detached_cms_with_self_reported_timestamp():
     dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
-    signature = FROM_CA.sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamp=dt
+    signature = await FROM_CA.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False,
+        signed_attr_settings=PdfCMSSignedAttributes(signing_time=dt)
     )
     signature = cms.ContentInfo.load(signature.dump())
-    status = validate_detached_cms(b'Hello world!', signature['content'])
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content']
+    )
     assert status.signer_reported_dt == dt
     assert status.timestamp_validity is None
     assert 'reported by signer' in status.pretty_print_details()
@@ -3144,12 +3195,14 @@ def test_detached_cms_with_self_reported_timestamp():
 
 
 @freeze_time('2020-11-01')
-def test_detached_cms_with_tst():
-    signature = FROM_CA.sign_general_data(
+async def test_detached_cms_with_tst():
+    signature = await FROM_CA.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS
     )
     signature = cms.ContentInfo.load(signature.dump())
-    status = validate_detached_cms(b'Hello world!', signature['content'])
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content']
+    )
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
@@ -3160,13 +3213,18 @@ def test_detached_cms_with_tst():
 
 
 @freeze_time('2020-11-01')
-def test_detached_cms_with_content_tst():
-    signature = FROM_CA.sign_general_data(
+async def test_detached_cms_with_content_tst():
+    signed_attr_settings = PdfCMSSignedAttributes(
+        cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
+    )
+    signature = await FROM_CA.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
-        cades_signed_attr_meta=CAdESSignedAttrSpec(timestamp_content=True)
+        signed_attr_settings=signed_attr_settings
     )
     signature = cms.ContentInfo.load(signature.dump())
-    status = validate_detached_cms(b'Hello world!', signature['content'])
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content']
+    )
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
@@ -3183,10 +3241,10 @@ def test_detached_cms_with_content_tst():
     assert status.intact
 
 
-def test_embed_signed_attachment():
+async def test_embed_signed_attachment():
     dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
-    signature = FROM_CA.sign_general_data(
-        VECTOR_IMAGE_PDF, 'sha256', timestamp=dt
+    signature = await FROM_CA.async_sign_general_data(
+        VECTOR_IMAGE_PDF, 'sha256', PdfCMSSignedAttributes(signing_time=dt)
     )
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -3232,7 +3290,9 @@ def test_simple_interrupted_signature():
         signers.PdfSignatureMetadata(field_name='SigNew'),
         signer=FROM_CA
     )
-    prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
     md_algorithm = tbs_document.md_algorithm
     assert tbs_document.post_sign_instructions is None
 
@@ -3243,12 +3303,14 @@ def test_simple_interrupted_signature():
     new_output.write(buf)
     buf.release()
 
-    PdfTBSDocument.finish_signing(
-        new_output, prep_digest, FROM_CA.sign(
-            prep_digest.document_digest,
-            digest_algorithm=md_algorithm,
-        ),
-    )
+    with pytest.deprecated_call():
+        # noinspection PyDeprecation
+        PdfTBSDocument.finish_signing(
+            new_output, prep_digest, FROM_CA.sign(
+                prep_digest.document_digest,
+                digest_algorithm=md_algorithm,
+            ),
+        )
 
     r = PdfFileReader(new_output)
     val_trusted(r.embedded_signatures[0])
