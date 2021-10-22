@@ -346,7 +346,7 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
 @freeze_time('2020-11-01')
 async def test_async_sign_many_concurrent(bulk_fetch, pss):
 
-    concurrent_count = 20
+    concurrent_count = 10
     config = PKCS11SignatureConfig(
         module_path=pkcs11_test_module, token_label='testrsa',
         other_certs_to_pull=default_other_certs,
@@ -376,7 +376,7 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
 async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
-    concurrent_count = 20
+    concurrent_count = 10
 
     # don't instantiate through PKCS11SigningContext
     # also, just sign raw strings, we want to exercise the correctness of

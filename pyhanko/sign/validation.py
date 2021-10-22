@@ -2243,9 +2243,9 @@ def enumerate_ocsp_certs(ocsp_response):
             yield from response['certs']
 
 
-def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
-                            validation_context: ValidationContext,
-                            skip_timestamp=False):
+async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
+                                  validation_context: ValidationContext,
+                                  skip_timestamp=False):
     """
     Query revocation info for a PDF signature using a validation context,
     and store the results in a validation context.
@@ -2277,7 +2277,7 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
 
     paths = []
 
-    def _validate_signed_data(signed_data):
+    async def _validate_signed_data(signed_data):
         signer_info, cert, other_certs = \
             _extract_signer_info_and_certs(signed_data)
 
@@ -2285,12 +2285,12 @@ def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
             cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
-        path = validator.validate_usage(key_usage=set())
+        path = await validator.async_validate_usage(key_usage=set())
         paths.append(path)
 
-    _validate_signed_data(embedded_sig.signed_data)
+    await _validate_signed_data(embedded_sig.signed_data)
     if not skip_timestamp and embedded_sig.attached_timestamp_data is not None:
-        _validate_signed_data(embedded_sig.attached_timestamp_data)
+        await _validate_signed_data(embedded_sig.attached_timestamp_data)
 
     return paths
 
@@ -2301,6 +2301,59 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
                         in_place=False, output=None, force_write=False,
                         chunk_size=DEFAULT_CHUNK_SIZE):
     """
+    .. deprecated:: 0.9.0
+        Use :func:`async_add_validation_info` instead.
+
+    Add validation info (CRLs, OCSP responses, extra certificates) for a
+    signature to the DSS of a document in an incremental update.
+    This is a synchronous wrapper around :func:`async_add_validation_info`.
+
+    :param embedded_sig:
+        The signature for which the revocation information needs to be
+        collected.
+    :param validation_context:
+        The validation context to use.
+    :param skip_timestamp:
+        If ``True``, do not attempt to validate the timestamp attached to
+        the signature, if one is present.
+    :param add_vri_entry:
+        Add a ``/VRI`` entry for this signature to the document security store.
+        Default is ``True``.
+    :param output:
+        Write the output to the specified output stream.
+        If ``None``, write to a new :class:`.BytesIO` object.
+        Default is ``None``.
+    :param in_place:
+        Sign the original input stream in-place.
+        This parameter overrides ``output``.
+    :param chunk_size:
+        Chunk size parameter to use when copying output to a new stream
+        (irrelevant if ``in_place`` is ``True``).
+    :param force_write:
+        Force a new revision to be written, even if not necessary (i.e.
+        when all data in the validation context is already present in the DSS).
+    :return:
+        The (file-like) output object to which the result was written.
+    """
+
+    coro = async_add_validation_info(
+        embedded_sig=embedded_sig, validation_context=validation_context,
+        skip_timestamp=skip_timestamp, add_vri_entry=add_vri_entry,
+        output=output, in_place=in_place, chunk_size=chunk_size,
+        force_write=force_write
+    )
+    return asyncio.run(coro)
+
+
+async def async_add_validation_info(embedded_sig: EmbeddedPdfSignature,
+                                    validation_context: ValidationContext,
+                                    skip_timestamp=False, add_vri_entry=True,
+                                    in_place=False, output=None,
+                                    force_write=False,
+                                    chunk_size=DEFAULT_CHUNK_SIZE):
+    """
+    .. versionadded: 0.9.0
+
     Add validation info (CRLs, OCSP responses, extra certificates) for a
     signature to the DSS of a document in an incremental update.
     This is a wrapper around :func:`collect_validation_info`.
@@ -2348,7 +2401,7 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
     else:
         working_output = misc.prepare_rw_output_stream(output)
 
-    paths = collect_validation_info(
+    paths = await collect_validation_info(
         embedded_sig, validation_context, skip_timestamp=skip_timestamp
     )
 
