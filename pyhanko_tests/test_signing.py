@@ -1616,16 +1616,15 @@ def test_pades_revinfo_live_nofullchain():
 
 
 @freeze_time('2020-11-01')
-def test_meta_tsa_verify():
+async def test_meta_tsa_verify():
     # check if my testing setup works
     vc = ValidationContext(
         trust_roots=TRUST_ROOTS, allow_fetching=False, crls=[],
         ocsps=[FIXED_OCSP], revocation_mode='hard-fail'
     )
     with pytest.raises(PathValidationError):
-        CertificateValidator(TSA_CERT, validation_context=vc).validate_usage(
-            {'time_stamping'}
-        )
+        cv = CertificateValidator(TSA_CERT, validation_context=vc)
+        await cv.async_validate_usage({'time_stamping'})
 
 
 @freeze_time('2020-11-01')

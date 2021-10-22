@@ -291,14 +291,14 @@ def test_cert_constraint_subject():
 
 
 @freeze_time('2020-11-01')
-def test_cert_constraint_issuer(requests_mock):
+async def test_cert_constraint_issuer(requests_mock):
     vc = live_testing_vc(requests_mock)
-    signer_validation_path = CertificateValidator(
+    signer_validation_path = await CertificateValidator(
         FROM_CA.signing_cert, FROM_CA.cert_registry, validation_context=vc
-    ).validate_usage(set())
-    tsa_validation_path = CertificateValidator(
+    ).async_validate_usage(set())
+    tsa_validation_path = await CertificateValidator(
         DUMMY_TS.tsa_cert, FROM_CA.cert_registry, validation_context=vc
-    ).validate_usage(set())
+    ).async_validate_usage(set())
 
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.ISSUER,
@@ -331,14 +331,14 @@ def test_cert_constraint_issuer(requests_mock):
 
 
 @freeze_time('2020-11-01')
-def test_cert_constraint_composite(requests_mock):
+async def test_cert_constraint_composite(requests_mock):
     vc = live_testing_vc(requests_mock)
-    signer_validation_path = CertificateValidator(
+    signer_validation_path = await CertificateValidator(
         FROM_CA.signing_cert, FROM_CA.cert_registry, validation_context=vc
-    ).validate_usage(set())
-    tsa_validation_path = CertificateValidator(
+    ).async_validate_usage(set())
+    tsa_validation_path = await CertificateValidator(
         DUMMY_TS.tsa_cert, FROM_CA.cert_registry, validation_context=vc
-    ).validate_usage(set())
+    ).async_validate_usage(set())
 
     from asn1crypto import x509
     scc = fields.SigCertConstraints(
