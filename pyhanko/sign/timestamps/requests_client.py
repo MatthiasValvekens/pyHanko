@@ -50,10 +50,16 @@ class HTTPTimeStamper(TimeStamper):
     async def async_request_tsa_response(self, req: tsp.TimeStampReq) \
             -> tsp.TimeStampResp:
         def task():
-            raw_res = requests.post(
-                self.url, req.dump(), headers=self.request_headers(),
-                auth=self.auth, timeout=self.timeout
-            )
+            try:
+                raw_res = requests.post(
+                    self.url, req.dump(), headers=self.request_headers(),
+                    auth=self.auth, timeout=self.timeout
+                )
+            except IOError as e:
+                raise TimestampRequestError(
+                    'Error in communication with timestamp server',
+                ) from e
+
             if raw_res.headers.get('Content-Type') \
                     != 'application/timestamp-reply':
                 raise TimestampRequestError(

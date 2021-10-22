@@ -79,11 +79,9 @@ setup(
         'pkcs11': ['python-pkcs11>=0.6.0']
     },
     tests_require=[
-        'pytest>=6.1.1',
-        'requests-mock>=1.8.0',
-        'freezegun>=1.1.0',
-        'certomancer~=0.6.0',
-        'pytest-aiohttp~=0.3.0'
+        'pytest>=6.1.1', 'requests-mock>=1.8.0',
+        'freezegun>=1.1.0', 'certomancer~=0.6.0',
+        'aiohttp>=3.7.4', 'pytest-aiohttp~=0.3.0'
     ],
     keywords="signature pdf pades digital-signature pkcs11"
 )

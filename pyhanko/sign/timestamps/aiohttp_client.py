@@ -4,11 +4,11 @@ import aiohttp
 from asn1crypto import cms, tsp
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers.util import LazySession
 
-from pyhanko.sign.timestamps import AsyncTimeStamper, TimestampRequestError
+from pyhanko.sign.timestamps import TimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.common_utils import set_tsp_headers
 
 
-class AIOHttpTimeStamper(AsyncTimeStamper):
+class AIOHttpTimeStamper(TimeStamper):
     def __init__(self, url, session: Union[aiohttp.ClientSession, LazySession],
                  https=False, timeout=5, headers=None,
                  auth: Optional[aiohttp.BasicAuth] = None):
