@@ -1,11 +1,11 @@
-import asyncio
-
 import requests
 from asn1crypto import tsp
 
 from .api import TimeStamper, TimestampRequestError
 
 __all__ = ['HTTPTimeStamper']
+
+from pyhanko_certvalidator._asyncio_compat import to_thread
 
 from .common_utils import set_tsp_headers
 
@@ -60,5 +60,5 @@ class HTTPTimeStamper(TimeStamper):
                     'Timestamp server response is malformed.', raw_res
                 )
             return tsp.TimeStampResp.load(raw_res.content)
-        response = await asyncio.to_thread(task)
+        response = await to_thread(task)
         return response

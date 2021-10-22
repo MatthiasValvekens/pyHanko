@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
+from pyhanko_certvalidator._asyncio_compat import to_thread
 
 from pyhanko.pdf_utils import misc
 from pyhanko.sign import attributes
@@ -1012,7 +1013,7 @@ def asyncify_signer(signer_cls):
 
     async def async_sign_raw(self, data: bytes, digest_algorithm: str,
                              dry_run=False) -> bytes:
-        coro = asyncio.to_thread(
+        coro = to_thread(
             lambda: signer_cls.sign_raw(
                 self, data=data, digest_algorithm=digest_algorithm,
                 dry_run=dry_run
