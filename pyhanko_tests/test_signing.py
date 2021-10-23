@@ -3316,6 +3316,47 @@ def test_simple_interrupted_signature():
     val_trusted(r.embedded_signatures[0])
 
 
+@freeze_time('2020-11-01')
+async def test_sign_prescribed_attrs(requests_mock):
+    vc = live_testing_vc(requests_mock)
+    message = b'Hello world!'
+    digest = hashlib.sha256(message).digest()
+    signed_attrs = await FROM_CA.signed_attrs(digest, 'sha256')
+    sig_cms = await FROM_CA.async_sign_prescribed_attributes(
+        'sha256', signed_attrs=signed_attrs,
+        timestamper=DUMMY_HTTP_TS
+    )
+    status = await async_validate_detached_cms(
+        b'Hello world!', sig_cms['content'], signer_validation_context=vc
+    )
+    assert status.valid and status.intact and status.trusted
+    ts_status = status.timestamp_validity
+    assert ts_status.valid and ts_status.intact and ts_status.trusted
+
+
+# noinspection PyDeprecation
+@freeze_time('2020-11-01')
+def test_sign_prescribed_attrs_legacy(requests_mock):
+    vc = live_testing_vc(requests_mock)
+    message = b'Hello world!'
+    digest = hashlib.sha256(message).digest()
+    signed_attrs = asyncio.run(FROM_CA.signed_attrs(digest, 'sha256'))
+    with pytest.deprecated_call():
+        sig_cms = FROM_CA.sign_prescribed_attributes(
+            'sha256', signed_attrs=signed_attrs,
+            timestamper=DUMMY_HTTP_TS
+        )
+
+    from pyhanko.sign.validation import validate_detached_cms
+    with pytest.deprecated_call():
+        status = validate_detached_cms(
+            b'Hello world!', sig_cms['content'], signer_validation_context=vc
+        )
+    assert status.valid and status.intact and status.trusted
+    ts_status = status.timestamp_validity
+    assert ts_status.valid and ts_status.intact and ts_status.trusted
+
+
 # FIXME update interrupted signing docs!
 
 @freeze_time('2020-11-01')
