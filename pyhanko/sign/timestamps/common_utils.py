@@ -56,14 +56,10 @@ def handle_tsp_response(response: tsp.TimeStampResp, nonce: bytes) \
         -> cms.ContentInfo:
     pki_status_info = response['status']
     if pki_status_info['status'].native != 'granted':
-        try:
-            status_string = pki_status_info['status_string'].native
-        except KeyError:
-            status_string = ''
-        try:
-            fail_info = pki_status_info['fail_info'].native
-        except KeyError:
-            fail_info = ''
+        status_strs = pki_status_info['status_string'].native or []
+        status_string = '; '.join(status_strs)
+        fail_infos = pki_status_info['fail_info'].native or []
+        fail_info = '; '.join(fail_infos)
         raise TimestampRequestError(
             f'Timestamp server refused our request: statusString '
             f'\"{status_string}\", failInfo \"{fail_info}\"'
