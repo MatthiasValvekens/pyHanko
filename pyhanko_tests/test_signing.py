@@ -50,12 +50,13 @@ from pyhanko.sign.general import (
     as_signing_certificate,
     as_signing_certificate_v2,
     find_cms_attribute,
+    get_pyca_cryptography_hash,
     load_cert_from_pemder,
     load_certs_from_pemder,
     validate_sig_integrity,
 )
 from pyhanko.sign.signers import PdfTimeStamper, cms_embedder
-from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
+from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes, asyncify_signer
 from pyhanko.sign.signers.pdf_signer import (
     DSSContentSettings,
     PdfTBSDocument,
@@ -3967,3 +3968,46 @@ def test_signing_cert_attr_duplicated():
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
         )
+
+
+# noinspection PyAbstractClass
+@asyncify_signer
+class LegacyRSASigner(signers.Signer):
+    def __init__(self, signing_cert,
+                 signing_key, cert_registry,
+                 signature_mechanism: SignedDigestAlgorithm = None,
+                 prefer_pss=False):
+        self.signing_cert = signing_cert
+        self.signing_key = signing_key
+        self.cert_registry = cert_registry
+        self.signature_mechanism = signature_mechanism
+        super().__init__(prefer_pss=prefer_pss)
+
+    # noinspection PyUnusedLocal
+    def sign_raw(self, data: bytes, digest_algorithm: str,
+                 dry_run=False) -> bytes:
+        from cryptography.hazmat.primitives import serialization
+        priv_key = serialization.load_der_private_key(
+            self.signing_key.dump(), password=None
+        )
+
+        from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+        padding = PKCS1v15()
+        hash_algo = get_pyca_cryptography_hash(digest_algorithm)
+        return priv_key.sign(data, padding, hash_algo)
+
+
+def test_simple_sign_legacy_signer_upgrade():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    legacy_signer = LegacyRSASigner(
+        signing_cert=SELF_SIGN.signing_cert,
+        signing_key=SELF_SIGN.signing_key,
+        cert_registry=SELF_SIGN.cert_registry,
+    )
+    out = signers.sign_pdf(w, meta, signer=legacy_signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
