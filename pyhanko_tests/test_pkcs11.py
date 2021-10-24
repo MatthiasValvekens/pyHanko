@@ -9,6 +9,7 @@ import logging
 import os
 from io import BytesIO
 
+import freezegun
 import pytest
 from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.registry import CertLabel
@@ -343,7 +344,6 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
-@freeze_time('2020-11-01')
 async def test_async_sign_many_concurrent(bulk_fetch, pss):
 
     concurrent_count = 10
@@ -360,7 +360,9 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
                 field_name='Sig1', reason=f"PKCS#11 concurrency test #{_i}!"
             )
             pdf_signer = signers.PdfSigner(meta, signer)
-            return _i, await pdf_signer.async_sign_pdf(w, in_place=True)
+            sig_result = await pdf_signer.async_sign_pdf(w, in_place=True)
+            await asyncio.sleep(2)
+            return _i, sig_result
 
         jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
         for finished_job in jobs:
@@ -369,7 +371,8 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
             emb = r.embedded_signatures[0]
             assert emb.field_name == 'Sig1'
             assert emb.sig_object['/Reason'].endswith(f"#{i}!")
-            await async_val_trusted(emb)
+            with freeze_time("2020-11-01"):
+                await async_val_trusted(emb)
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
@@ -389,7 +392,9 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
 
         async def _job(_i):
             payload = f"PKCS#11 concurrency test #{_i}!".encode('utf8')
-            return _i, await signer.async_sign_raw(payload, 'sha256')
+            sig_result = await signer.async_sign_raw(payload, 'sha256')
+            await asyncio.sleep(2)
+            return _i, sig_result
 
         jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
         for finished_job in jobs:
