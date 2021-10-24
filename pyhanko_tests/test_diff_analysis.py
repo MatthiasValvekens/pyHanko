@@ -4,6 +4,7 @@ from io import BytesIO
 
 import pytest
 import pytz
+from freezegun import freeze_time
 from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic
@@ -17,7 +18,7 @@ from pyhanko.pdf_utils.reader import (
     RawPdfPath,
 )
 from pyhanko.pdf_utils.writer import copy_into_new_writer
-from pyhanko.sign import fields, signers
+from pyhanko.sign import PdfTimeStamper, fields, signers
 from pyhanko.sign.diff_analysis import (
     DEFAULT_DIFF_POLICY,
     NO_CHANGES_DIFF_POLICY,
@@ -36,17 +37,19 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko_tests.samples import *
+from pyhanko_tests.samples import MINIMAL, PDF_DATA_DIR
 from pyhanko_tests.signing_commons import (
     DUMMY_TS,
     FROM_CA,
     FROM_ECC_CA,
+    SELF_SIGN,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
     val_trusted,
     val_trusted_but_modified,
     val_untrusted,
 )
-from pyhanko_tests.test_signing import PADES
+from pyhanko_tests.test_pades import PADES
 
 
 @freeze_time('2020-11-01')
@@ -1455,3 +1458,209 @@ def test_pades_sign_update_dss(requests_mock):
         s = r.embedded_regular_signatures[1]
         assert s.field_name == 'Sig2'
         val_trusted(s, extd=True)
+
+
+def test_simple_sign_with_separate_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    signer = signers.PdfSigner(
+        signature_meta=meta, signer=SELF_SIGN,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', combine_annotation=False,
+            box=(20, 20, 80, 40)
+        )
+    )
+    out = signer.sign_pdf(w)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    assert '/AP' not in emb.sig_field
+    assert '/AP' in emb.sig_field['/Kids'][0]
+    val_untrusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_double_sign_with_separate_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    signer = signers.PdfSigner(
+        signature_meta=meta, signer=FROM_CA,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', combine_annotation=False,
+            box=(20, 20, 80, 40)
+        )
+    )
+    out = signer.sign_pdf(w, in_place=True)
+    w = IncrementalPdfFileWriter(out)
+    meta = signers.PdfSignatureMetadata(field_name='Sig2')
+    signer = signers.PdfSigner(
+        signature_meta=meta, signer=FROM_CA,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig2', combine_annotation=False,
+            box=(20, 120, 80, 140)
+        )
+    )
+    signer.sign_pdf(w, in_place=True)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    assert '/AP' not in emb.sig_field
+    assert '/AP' in emb.sig_field['/Kids'][0]
+    val_trusted(emb, extd=True)
+
+    emb = r.embedded_signatures[1]
+    assert emb.field_name == 'Sig2'
+    assert '/AP' not in emb.sig_field
+    assert '/AP' in emb.sig_field['/Kids'][0]
+    val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_validate_separate_annot_with_indir_kids():
+    with open(PDF_DATA_DIR + '/separate-annots-kids-indir.pdf', 'rb') as f:
+        r = PdfFileReader(f)
+        emb = r.embedded_signatures[0]
+        assert emb.field_name == 'Sig1'
+        assert '/AP' not in emb.sig_field
+        assert '/AP' in emb.sig_field['/Kids'][0]
+        val_trusted(emb, extd=True)
+
+        emb = r.embedded_signatures[1]
+        assert emb.field_name == 'Sig2'
+        assert '/AP' not in emb.sig_field
+        assert '/AP' in emb.sig_field['/Kids'][0]
+        val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_sign_and_update_with_orphaned_obj():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    w = IncrementalPdfFileWriter(out)
+    w.add_object(generic.pdf_string("Hello there"))
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, extd=True)
+
+
+@freeze_time('2020-11-01')
+def test_sign_and_update_with_orphaned_obj_and_other_upd():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    w = IncrementalPdfFileWriter(out)
+    w.add_object(generic.pdf_string("Hello there"))
+    w.root['/Blah'] = w.add_object(
+        generic.pdf_string("Hello there too")
+    )
+    w.update_root()
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    val_trusted_but_modified(emb)
+
+
+@freeze_time('2020-11-01')
+def test_indir_ref_in_sigref_dict(requests_mock):
+    fname = PDF_DATA_DIR + '/certified-with-indirect-refs-in-dir.pdf'
+    with open(fname, 'rb') as f:
+        content = f.read()
+
+    # first, try validating without additions
+    r = PdfFileReader(BytesIO(content))
+    emb = r.embedded_signatures[0]
+    val_trusted(emb)
+
+    w = IncrementalPdfFileWriter(BytesIO(content))
+
+    out = PdfTimeStamper(timestamper=DUMMY_TS).timestamp_pdf(
+        w, md_algorithm='sha256',
+        validation_context=live_testing_vc(requests_mock)
+    )
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    val_trusted(emb, extd=True)
+
+
+@freeze_time('2020-11-01')
+def test_skip_diff_scenario_1():
+    # Test if skip_diff behaves as expected
+    # scenario 1: sign a locked file
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='SigFirst', certify=True,
+            docmdp_permissions=fields.MDPPerm.NO_CHANGES
+        ), signer=FROM_CA,
+    )
+    w = IncrementalPdfFileWriter(out)
+
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA
+    )
+
+    # dummy out certification enforcer
+    pdf_signer._enforce_certification_constraints = lambda _: None
+
+    out = pdf_signer.sign_pdf(w)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # should be OK with skip_diff
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    assert status.docmdp_ok is None
+    assert status.bottom_line
+    assert 'skipped' in status.pretty_print_details()
+
+    # ... but not otherwise
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+    assert status.docmdp_ok is False
+    assert not status.bottom_line
+    assert 'incompatible with the current document modification' \
+           in status.pretty_print_details()
+
+
+@freeze_time('2020-11-01')
+def test_skip_diff_scenario_2():
+    # Test if skip_diff behaves as expected
+    # scenario 2: do something blatantly illegal in the second revision
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigFirst'),
+        signer=FROM_CA,
+    )
+
+    from pyhanko.pdf_utils.content import RawContent
+    w = IncrementalPdfFileWriter(out)
+    w.add_content_to_page(
+        0, RawContent(b'q BT /F1 18 Tf 0 50 Td (Sneaky text!) Tj ET Q')
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # should be OK with skip_diff
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT(), skip_diff=True)
+    assert status.docmdp_ok is None
+    assert status.bottom_line
+    assert 'skipped' in status.pretty_print_details()
+
+    # ... but not otherwise
+    status = validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+    assert status.docmdp_ok is False
+    assert not status.bottom_line
+    report = status.pretty_print_details()
+    assert 'illegitimate' in report
+    assert 'incompatible with the current document modification' in report

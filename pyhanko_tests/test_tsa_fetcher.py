@@ -1,15 +1,29 @@
 import hashlib
+from io import BytesIO
 
 import aiohttp
 import pytest
 from asn1crypto import cms, tsp
+from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
 
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.sign import signers
 from pyhanko.sign.timestamps import HTTPTimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.timestamps.common_utils import handle_tsp_response
+from pyhanko_tests.signing_commons import (
+    DUMMY_HTTP_TS,
+    DUMMY_TS,
+    FROM_CA,
+    val_trusted,
+)
+from pyhanko_tests.test_pades import ts_response_callback
 
-# Test against a real TSA
+from .samples import *
+
+# Run some tests against a real TSA
 EXTERNAL_TSA_URL = 'http://timestamp.entrust.net/TSS/RFC3161sha2TS'
 FETCH_TIMEOUT = 30
 MESSAGE = b'Hello world!'
@@ -119,3 +133,53 @@ def test_handle_bad_nonce():
     response = DUMMY_TS.request_tsa_response(req)
     with pytest.raises(TimestampRequestError, match='bad nonce'):
         handle_tsp_response(response, b'0000')
+
+
+@freeze_time('2020-11-01')
+def test_dummy_timestamp():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA, timestamper=DUMMY_TS,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    validity = val_trusted(s)
+    assert validity.timestamp_validity is not None
+    assert validity.timestamp_validity.trusted
+
+
+@freeze_time('2020-11-01')
+def test_http_timestamp(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+
+    # bad content-type
+    requests_mock.post(DUMMY_HTTP_TS.url, content=ts_response_callback)
+    from pyhanko.sign.timestamps import TimestampRequestError
+    with pytest.raises(TimestampRequestError):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+            timestamper=DUMMY_HTTP_TS,
+            existing_fields_only=True,
+        )
+
+    requests_mock.post(
+        DUMMY_HTTP_TS.url, content=ts_response_callback,
+        headers={'Content-Type': 'application/timestamp-reply'}
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
+        timestamper=DUMMY_HTTP_TS,
+        existing_fields_only=True,
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    validity = val_trusted(s)
+    assert validity.timestamp_validity is not None
+    assert validity.timestamp_validity.trusted

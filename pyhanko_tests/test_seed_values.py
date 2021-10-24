@@ -28,7 +28,7 @@ from pyhanko_tests.signing_commons import (
     dummy_ocsp_vc,
     live_testing_vc,
 )
-from pyhanko_tests.test_signing import PADES, ts_response_callback
+from pyhanko_tests.test_pades import PADES, ts_response_callback
 
 
 def test_sv_deserialisation():
@@ -903,3 +903,33 @@ def test_key_usage_decode_tolerance():
     assert too_long_ku.forbidden_set() == {
         'non_repudiation', 'key_encipherment', 'decipher_only'
     }
+
+
+def test_cert_constraint_deserialisation():
+    signer1 = FROM_CA.signing_cert
+    signer2 = SELF_SIGN.signing_cert
+    constr = fields.SigCertConstraints(subjects=[signer1, signer2])
+    constr_parsed = fields.SigCertConstraints.from_pdf_object(
+        constr.as_pdf_object()
+    )
+    signer1_parsed, signer2_parsed = constr_parsed.subjects
+    assert signer1_parsed.dump() == signer1.dump()
+    assert signer2_parsed.dump() == signer2.dump()
+    assert not constr_parsed.issuers
+
+    issuer1 = FROM_CA.signing_cert
+    issuer2 = SELF_SIGN.signing_cert
+    constr = fields.SigCertConstraints(issuers=[issuer1, issuer2])
+    constr_parsed = fields.SigCertConstraints.from_pdf_object(
+        constr.as_pdf_object()
+    )
+    issuer1_parsed, issuer2_parsed = constr_parsed.issuers
+    assert issuer1_parsed.dump() == issuer1.dump()
+    assert issuer2_parsed.dump() == issuer2.dump()
+    assert not constr_parsed.subjects
+
+    constr = fields.SigCertConstraints(subject_dn=signer1.subject)
+    constr_ser = constr.as_pdf_object()
+    assert '/C' in constr_ser['/SubjectDN'][0]
+    constr_parsed = fields.SigCertConstraints.from_pdf_object(constr_ser)
+    assert constr_parsed.subject_dn == signer1.subject
