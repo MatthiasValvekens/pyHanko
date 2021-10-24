@@ -36,17 +36,17 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko_tests.samples import *
-from pyhanko_tests.test_signing import (
+from pyhanko_tests.signing_commons import (
     DUMMY_TS,
     FROM_CA,
     FROM_ECC_CA,
-    PADES,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
     val_trusted,
     val_trusted_but_modified,
     val_untrusted,
 )
+from pyhanko_tests.test_signing import PADES
 
 
 @freeze_time('2020-11-01')

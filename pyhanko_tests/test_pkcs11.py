@@ -23,7 +23,7 @@ from pyhanko.sign import general, pkcs11, signers
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.pkcs11 import PKCS11SigningContext
 from pyhanko_tests.samples import MINIMAL, TESTING_CA
-from pyhanko_tests.test_signing import (
+from pyhanko_tests.signing_commons import (
     SIMPLE_DSA_V_CONTEXT,
     SIMPLE_ECC_V_CONTEXT,
     async_val_trusted,

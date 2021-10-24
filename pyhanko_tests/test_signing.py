@@ -8,15 +8,13 @@ from io import BytesIO
 import pytest
 import pytz
 import tzlocal
-from asn1crypto import cms, ocsp, tsp
+from asn1crypto import cms, tsp
 from asn1crypto.algos import (
     DigestAlgorithm,
-    DigestInfo,
     MaskGenAlgorithm,
     RSASSAPSSParams,
     SignedDigestAlgorithm,
 )
-from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
@@ -33,10 +31,7 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
-from pyhanko.sign.ades.cades_asn1 import (
-    SignaturePolicyId,
-    SignaturePolicyIdentifier,
-)
+from pyhanko.sign.ades.cades_asn1 import SignaturePolicyIdentifier
 from pyhanko.sign.diff_analysis import (
     NO_CHANGES_DIFF_POLICY,
     DiffResult,
@@ -66,7 +61,6 @@ from pyhanko.sign.signers.pdf_signer import (
 )
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
-    EmbeddedPdfSignature,
     RevocationInfoValidationType,
     SignatureCoverageLevel,
     ValidationInfoReadingError,
@@ -74,7 +68,6 @@ from pyhanko.sign.validation import (
     apply_adobe_revocation_info,
     async_validate_cms_signature,
     async_validate_detached_cms,
-    async_validate_pdf_signature,
     read_certification_data,
     validate_pdf_ltv_signature,
     validate_pdf_signature,
@@ -83,193 +76,37 @@ from pyhanko.sign.validation import (
 from pyhanko.stamp import QRStampStyle
 
 from .samples import *
-
-SELF_SIGN = signers.SimpleSigner.load(
-    CRYPTO_DATA_DIR + '/selfsigned.key.pem',
-    CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
-    ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
-    key_passphrase=b'secret'
+from .signing_commons import (
+    DSA_INTERM_CERT,
+    DSA_ROOT_CERT,
+    DUMMY_HTTP_TS,
+    DUMMY_HTTP_TS_VARIANT,
+    DUMMY_POLICY_ID,
+    DUMMY_TS,
+    DUMMY_TS2,
+    ECC_INTERM_CERT,
+    ECC_ROOT_CERT,
+    FIXED_OCSP,
+    FROM_CA,
+    FROM_CA_PKCS12,
+    FROM_DSA_CA,
+    FROM_ECC_CA,
+    INTERM_CERT,
+    REVOKED_SIGNER,
+    ROOT_CERT,
+    SELF_SIGN,
+    SIMPLE_DSA_V_CONTEXT,
+    SIMPLE_ECC_V_CONTEXT,
+    SIMPLE_V_CONTEXT,
+    TRUST_ROOTS,
+    TSA_CERT,
+    async_val_trusted,
+    dummy_ocsp_vc,
+    live_testing_vc,
+    val_trusted,
+    val_trusted_but_modified,
+    val_untrusted,
 )
-
-ROOT_CERT = TESTING_CA.get_cert(CertLabel('root'))
-ECC_ROOT_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('root'))
-DSA_ROOT_CERT = TESTING_CA_DSA.get_cert(CertLabel('root'))
-INTERM_CERT = TESTING_CA.get_cert(CertLabel('interm'))
-ECC_INTERM_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('interm'))
-DSA_INTERM_CERT = TESTING_CA_DSA.get_cert(CertLabel('interm'))
-OCSP_CERT = TESTING_CA.get_cert(CertLabel('interm-ocsp'))
-REVOKED_CERT = TESTING_CA.get_cert(CertLabel('signer2'))
-TSA_CERT = TESTING_CA.get_cert(CertLabel('tsa'))
-TSA2_CERT = TESTING_CA.get_cert(CertLabel('tsa2'))
-
-FROM_CA = signers.SimpleSigner(
-    signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-    signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
-    cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
-)
-
-FROM_ECC_CA = signers.SimpleSigner(
-    signing_cert=TESTING_CA_ECDSA.get_cert(CertLabel('signer1')),
-    signing_key=TESTING_CA_ECDSA.key_set.get_private_key(KeyLabel('signer1')),
-    cert_registry=SimpleCertificateStore.from_certs(
-        [ECC_ROOT_CERT, ECC_INTERM_CERT]
-    )
-)
-
-FROM_DSA_CA = signers.SimpleSigner(
-    signing_cert=TESTING_CA_DSA.get_cert(CertLabel('signer1')),
-    signing_key=TESTING_CA_DSA.key_set.get_private_key(KeyLabel('signer1')),
-    cert_registry=SimpleCertificateStore.from_certs(
-        [DSA_ROOT_CERT, DSA_INTERM_CERT]
-    )
-)
-
-REVOKED_SIGNER = signers.SimpleSigner(
-    signing_cert=TESTING_CA.get_cert(CertLabel('signer2')),
-    signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
-    cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
-)
-
-TRUST_ROOTS = [TESTING_CA.get_cert(CertLabel('root'))]
-
-FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
-    TESTING_CA_DIR + '/interm/signer1.pfx', passphrase=None
-)
-
-NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
-SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
-SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
-SIMPLE_DSA_V_CONTEXT = lambda: ValidationContext(trust_roots=[DSA_ROOT_CERT])
-
-OCSP_KEY = TESTING_CA.key_set.get_private_key('interm-ocsp')
-DUMMY_TS = timestamps.DummyTimeStamper(
-    tsa_cert=TSA_CERT,
-    tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
-    certs_to_embed=FROM_CA.cert_registry
-)
-
-DUMMY_TS2 = timestamps.DummyTimeStamper(
-    tsa_cert=TSA2_CERT,
-    tsa_key=TESTING_CA.key_set.get_private_key('tsa2'),
-    certs_to_embed=FROM_CA.cert_registry
-)
-
-DUMMY_HTTP_TS = timestamps.HTTPTimeStamper(
-    'http://pyhanko.tests/testing-ca/tsa/tsa', https=False
-)
-
-DUMMY_HTTP_TS_VARIANT = timestamps.HTTPTimeStamper(
-    'http://pyhanko.tests/unrelated-tsa/tsa/tsa', https=False
-)
-
-# with the testing CA setup update, this OCSP response is totally
-#  unrelated to the keys being used, so it should fail any sort of real
-#  validation
-FIXED_OCSP = ocsp.OCSPResponse.load(
-    read_all(CRYPTO_DATA_DIR + '/ocsp.resp.der')
-)
-
-
-DUMMY_POLICY_ID = SignaturePolicyId({
-    'sig_policy_id': '2.999',
-    'sig_policy_hash': DigestInfo({
-        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
-        'digest': hashlib.sha256().digest()
-    })
-})
-
-
-# TODO rewrite tests using new in-place signing mechanism
-
-def dummy_ocsp_vc():
-    cr = FROM_CA.cert_registry
-    assert isinstance(cr, SimpleCertificateStore)
-    vc = ValidationContext(
-        trust_roots=TRUST_ROOTS, crls=[], ocsps=[FIXED_OCSP],
-        other_certs=list(), allow_fetching=False,
-        weak_hash_algos=set()
-    )
-    return vc
-
-
-def live_testing_vc(requests_mock, with_extra_tsa=False):
-    if with_extra_tsa:
-        trust_roots = TRUST_ROOTS + [UNRELATED_TSA.get_cert(CertLabel('root'))]
-    else:
-        trust_roots = TRUST_ROOTS
-    vc = ValidationContext(
-        trust_roots=trust_roots, allow_fetching=True,
-        other_certs=[]
-    )
-    Illusionist(TESTING_CA).register(requests_mock)
-    if with_extra_tsa:
-        Illusionist(UNRELATED_TSA).register(requests_mock)
-    return vc
-
-
-def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,
-                vc=None):
-    if vc is None:
-        vc = SIMPLE_V_CONTEXT()
-    val_status = validate_pdf_signature(embedded_sig, vc, skip_diff=not extd)
-    return _val_trusted_check_status(val_status, extd)
-
-
-async def async_val_trusted(embedded_sig: EmbeddedPdfSignature,
-                            extd=False, vc=None):
-    if vc is None:
-        vc = SIMPLE_V_CONTEXT()
-    val_status = await async_validate_pdf_signature(
-        embedded_sig, vc, skip_diff=not extd
-    )
-    return _val_trusted_check_status(val_status, extd)
-
-
-def _val_trusted_check_status(val_status, extd):
-    assert val_status.intact
-    assert val_status.valid
-    assert val_status.trusted
-    val_status.pretty_print_details()
-    summ = val_status.summary()
-    assert 'INTACT' in summ
-    assert 'TRUSTED' in summ
-    if not extd:
-        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
-        assert val_status.modification_level == ModificationLevel.NONE
-    else:
-        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
-        assert val_status.modification_level <= ModificationLevel.FORM_FILLING
-    assert val_status.bottom_line
-    return val_status
-
-
-# validate a signature, don't care about trust
-def val_untrusted(embedded_sig: EmbeddedPdfSignature, extd=False):
-    val_status = validate_pdf_signature(embedded_sig, NOTRUST_V_CONTEXT())
-    assert val_status.intact
-    assert val_status.valid
-    if not extd:
-        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
-        assert val_status.modification_level == ModificationLevel.NONE
-    else:
-        assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
-        assert val_status.modification_level <= ModificationLevel.FORM_FILLING
-    summ = val_status.summary()
-    val_status.pretty_print_details()
-    assert 'INTACT' in summ
-    return val_status
-
-
-def val_trusted_but_modified(embedded_sig: EmbeddedPdfSignature):
-    val_status = validate_pdf_signature(embedded_sig, SIMPLE_V_CONTEXT())
-    assert val_status.intact
-    assert val_status.valid
-    assert val_status.trusted
-    assert val_status.coverage == SignatureCoverageLevel.ENTIRE_REVISION
-    assert val_status.modification_level == ModificationLevel.OTHER
-    assert not val_status.docmdp_ok
-    assert not val_status.bottom_line
-    return val_status
 
 
 def test_der_detect(tmp_path):
@@ -3019,7 +2856,8 @@ async def test_sign_weak_sig_digest():
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
         signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
-        cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT, INTERM_CERT])
+        cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT,
+                                                         INTERM_CERT])
     )
     cms_obj = await signer.async_sign(
         data_digest=prep_digest.document_digest,

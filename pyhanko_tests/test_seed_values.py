@@ -17,19 +17,18 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko_tests.samples import MINIMAL
-from pyhanko_tests.test_signing import (
+from pyhanko_tests.signing_commons import (
     DUMMY_HTTP_TS,
     DUMMY_TS,
     FROM_CA,
     INTERM_CERT,
-    PADES,
     ROOT_CERT,
     SELF_SIGN,
     TRUST_ROOTS,
     dummy_ocsp_vc,
     live_testing_vc,
-    ts_response_callback,
 )
+from pyhanko_tests.test_signing import PADES, ts_response_callback
 
 
 def test_sv_deserialisation():

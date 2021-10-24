@@ -111,7 +111,7 @@ def test_handle_error_response(status_string, fail_info, err_resp):
 
 
 def test_handle_bad_nonce():
-    from .test_signing import DUMMY_TS
+    from pyhanko_tests.signing_commons import DUMMY_TS
     message = b'Hello world!'
     nonce, req = DUMMY_TS.request_cms(
         hashlib.sha256(message).digest(), 'sha256'
