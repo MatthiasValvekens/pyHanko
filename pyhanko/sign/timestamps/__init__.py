@@ -1,4 +1,4 @@
-from .api import *
+from .api import TimeStamper, TimestampRequestError, TimestampSignatureStatus
 from .dummy_client import DummyTimeStamper
 from .requests_client import HTTPTimeStamper
 
