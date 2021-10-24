@@ -1,5 +1,6 @@
 import os
 import struct
+from typing import Optional
 
 from asn1crypto import cms, tsp
 from cryptography.hazmat.primitives import hashes
@@ -52,7 +53,7 @@ def dummy_digest(md_algorithm: str) -> bytes:
     return hashes.Hash(md_spec).finalize()
 
 
-def handle_tsp_response(response: tsp.TimeStampResp, nonce: bytes) \
+def handle_tsp_response(response: tsp.TimeStampResp, nonce: Optional[bytes]) \
         -> cms.ContentInfo:
     pki_status_info = response['status']
     if pki_status_info['status'].native != 'granted':
@@ -67,7 +68,7 @@ def handle_tsp_response(response: tsp.TimeStampResp, nonce: bytes) \
     tst = response['time_stamp_token']
     tst_info = tst['content']['encap_content_info']['content']
     nonce_received = tst_info.parsed['nonce'].native
-    if nonce_received != nonce:
+    if nonce is not None and nonce_received != nonce:
         raise TimestampRequestError(
             f'Time stamping authority sent back bad nonce value. Expected '
             f'{nonce}, but got {nonce_received}.'

@@ -72,12 +72,12 @@ class TimeStamper:
     Class to make :rfc:`3161` timestamp requests.
     """
 
-    def __init__(self):
+    def __init__(self, include_nonce=True):
         self._dummy_response_cache = {}
         self._certs = {}
         self.cert_registry = SimpleCertificateStore()
+        self.include_nonce = include_nonce
 
-    # noinspection PyMethodMayBeStatic
     def request_cms(self, message_digest, md_algorithm):
         """
         Format the body of an :rfc:`3161` request as a CMS object.
@@ -94,8 +94,7 @@ class TimeStamper:
         :return:
             An :class:`.asn1crypto.tsp.TimeStampReq` object.
         """
-        nonce = get_nonce()
-        req = tsp.TimeStampReq({
+        req = {
             'version': 1,
             'message_imprint': tsp.MessageImprint({
                 'hash_algorithm': algos.DigestAlgorithm({
@@ -103,11 +102,15 @@ class TimeStamper:
                 }),
                 'hashed_message': message_digest
             }),
-            'nonce': cms.Integer(nonce),
             # we want the server to send along its certs
             'cert_req': True
-        })
-        return nonce, req
+        }
+        if self.include_nonce:
+            nonce = get_nonce()
+            req['nonce'] = cms.Integer(nonce)
+        else:
+            nonce = None
+        return nonce, tsp.TimeStampReq(req)
 
     async def validation_paths(self, validation_context):
         """

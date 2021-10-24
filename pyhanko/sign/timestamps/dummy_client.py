@@ -29,13 +29,14 @@ class DummyTimeStamper(TimeStamper):
                  tsa_key: keys.PrivateKeyInfo,
                  certs_to_embed: CertificateStore = None,
                  fixed_dt: datetime = None,
+                 include_nonce=True,
                  override_md=None):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
         self.certs_to_embed = list(certs_to_embed or ())
         self.fixed_dt = fixed_dt
         self.override_md = override_md
-        super().__init__()
+        super().__init__(include_nonce=include_nonce)
 
     def request_tsa_response(self, req: tsp.TimeStampReq) \
             -> tsp.TimeStampResp:
@@ -66,7 +67,7 @@ class DummyTimeStamper(TimeStamper):
                 name='directory_name', value=self.tsa_cert.subject
             )
         }
-        if req['nonce'] is not None:
+        if req['nonce'].native is not None:
             tst_info['nonce'] = req['nonce']
 
         tst_info = tsp.TSTInfo(tst_info)
