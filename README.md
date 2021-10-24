@@ -25,7 +25,7 @@ and can be installed using `pip`:
 This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
 OpenType/TrueType support.
 
-pyHanko requires Python 3.7 or later. Python 3.10 support is currently incubating (and included in the standard CI test suite).
+PyHanko requires Python 3.7 or later. Python 3.10 support is currently incubating (and included in the standard CI test suite).
 
 
 ### Overview
