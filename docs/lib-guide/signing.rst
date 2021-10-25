@@ -706,13 +706,16 @@ Generic data signing
 
 .. versionadded:: 0.7.0
 
+.. versionchanged:: 0.9.0
+    Reference new async-first API.
+
 If you need to produce CMS signatures that are not intended to be consumed as traditional PDF
 signatures (for whatever reason), the |Signer| classes in pyHanko expose a more flexible
 API that you can use.
 
-The |Signer| class's :meth:`~pyhanko.sign.signers.pdf_cms.Signer.sign_general_data` method is a
-fairly thin wrapper around :meth:`~pyhanko.sign.signers.pdf_cms.Signer.sign` that performs some of
-the bookkeeping operations on the payload being signed.
+The |Signer| class's :meth:`~pyhanko.sign.signers.pdf_cms.Signer.async_sign_general_data` method is
+a fairly thin wrapper around :meth:`~pyhanko.sign.signers.pdf_cms.Signer.async_sign` that performs
+some of the bookkeeping operations on the payload being signed.
 It outputs a CMS object with essentially the same set of attributes that would be expected in a
 typical PDF signature, but the actual payload can be arbitrary data.
 
@@ -720,7 +723,8 @@ It can take either an IO-type object, or simply a :class:`bytes` payload. For ad
 those requiring a custom-set `contentType`), passing in a :class:`cms.ContentInfo`
 (or :class:`cms.EncapsulatedContentInfo` object) also works.
 This has a number of caveats; carefully review the API documentation for
-:meth:`~pyhanko.sign.signers.pdf_cms.Signer.sign_general_data` and section 5.1 of :rfc:`5652` first.
+:meth:`~pyhanko.sign.signers.pdf_cms.Signer.async_sign_general_data` and section 5.1 of
+:rfc:`5652` first.
 
 The signer can operate in "detached" or "encapsulating" mode. In the former case, the payload being
 signed is not encoded as part of the resulting CMS object.
@@ -737,24 +741,26 @@ a signed attachment in a PDF file.
     from pyhanko.sign.signers.functions import embed_payload_with_cms
     from pyhanko.pdf_utils import embed, writer
 
-    data = b'Hello world!'
-    # instantiate a SimpleSigner
-    sgn = SimpleSigner(...)
-    # Sign some data
-    signature = sign.sign_general_data(data, 'sha256', detached=False)
+    async def demo():
+        data = b'Hello world!'
+        # instantiate a SimpleSigner
+        sgn = SimpleSigner(...)
+        # Sign some data
+        signature = \
+            await sign.async_sign_general_data(data, 'sha256', detached=False)
 
-    # Embed the payload into a PDF file, with the signature
-    # object as a related file.
-    w = writer.PdfFileWriter()  # fresh writer, for demonstration's sake
-    embed_payload_with_cms(
-        w, file_spec_string='attachment.txt',
-        file_name='attachment.txt',
-        payload=embed.EmbeddedFileObject.from_file_data(
-            w, data=data, mime_type='text/plain',
-        ),
-        cms_obj=signature,
-        file_spec_kwargs={'description': "Signed attachment test"}
-    )
+        # Embed the payload into a PDF file, with the signature
+        # object as a related file.
+        w = writer.PdfFileWriter()  # fresh writer, for demonstration's sake
+        embed_payload_with_cms(
+            w, file_spec_string='attachment.txt',
+            file_name='attachment.txt',
+            payload=embed.EmbeddedFileObject.from_file_data(
+                w, data=data, mime_type='text/plain',
+            ),
+            cms_obj=signature,
+            file_spec_kwargs={'description': "Signed attachment test"}
+        )
 
 .. warning::
     This way of signing attachments is not standard, and chances are that your PDF reader won't
