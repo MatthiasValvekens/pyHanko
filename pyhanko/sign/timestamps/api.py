@@ -14,7 +14,6 @@ from pyhanko_certvalidator import CertificateValidator
 
 from ..general import SignatureStatus, SimpleCertificateStore
 from .common_utils import (
-    TimestampRequestError,
     dummy_digest,
     extract_ts_certs,
     get_nonce,
@@ -22,8 +21,7 @@ from .common_utils import (
 )
 
 __all__ = [
-    'TimestampSignatureStatus',
-    'TimeStamper', 'TimestampRequestError'
+    'TimestampSignatureStatus', 'TimeStamper'
 ]
 
 

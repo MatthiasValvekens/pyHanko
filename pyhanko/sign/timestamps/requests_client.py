@@ -1,13 +1,11 @@
 import requests
 from asn1crypto import tsp
-
-from .api import TimeStamper, TimestampRequestError
-
-__all__ = ['HTTPTimeStamper']
-
 from pyhanko_certvalidator._asyncio_compat import to_thread
 
-from .common_utils import set_tsp_headers
+from .api import TimeStamper
+from .common_utils import TimestampRequestError, set_tsp_headers
+
+__all__ = ['HTTPTimeStamper']
 
 
 class HTTPTimeStamper(TimeStamper):
