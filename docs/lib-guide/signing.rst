@@ -66,6 +66,9 @@ minutiae makes it relatively easy to support other signing technology
 A simple example
 ----------------
 
+.. versionchanged:: 0.9.0
+    New async-first API.
+
 Virtually all parameters of |PdfSignatureMetadata| have sane defaults.
 The only exception is the one specifying the signature field to contain the
 signature |---| this parameter is always mandatory if the number of empty
@@ -150,6 +153,44 @@ documentation for |PdfSignatureMetadata| and |PdfSigner|.
 
     For more details on signature fields and how to create them, take a look at
     :doc:`sig-fields`.
+
+
+Note that, from version 0.9.0 onwards, pyHanko can also be called asynchronously.
+In fact, this is now the preferred mode of invocation for most lower-level functionality.
+Anyway, the example from this section could have been written asynchronously as follows.
+
+.. code-block:: python
+
+    import asyncio
+    from pyhanko.sign import signers
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+
+
+    async def async_demo(signer, fname):
+        with open(fname, 'rb') as doc:
+            w = IncrementalPdfFileWriter(doc)
+            out = await signers.async_sign_pdf(
+                w, signers.PdfSignatureMetadata(field_name='Signature1'),
+                signer=signer,
+            )
+
+            return out
+
+    cms_signer = signers.SimpleSigner.load(
+        'path/to/signer/key.pem', 'path/to/signer/cert.pem',
+        ca_chain_files=('path/to/relevant/certs.pem',),
+        key_passphrase=b'secret'
+    )
+    asyncio.run(async_demo(cms_signer, 'document.pdf'))
+
+
+For a signing process with :class:`~.pyhanko.sign.signers.pdf_cms.SimpleSigner` that doesn't perform
+any certificate validation, there's no real difference. However, the asynchronous calling convention
+allows for more efficient I/O when the signing code needs to access resources over a network.
+This typically becomes relevant when
+
+ - the cryptographic operations are performed by a remote signing service, or
+ - revocation info for the chain of trust needs to be embedded.
 
 
 Signature appearance generation
@@ -470,6 +511,9 @@ accordingly.
 Extending |Signer|
 ------------------
 
+.. versionchanged:: 0.9.0
+    New async-first API.
+
 Providing detailed guidance on how to implement your own |Signer| subclass
 is beyond the scope of this guide |---| the implementations
 of :class:`~.pyhanko.sign.signers.pdf_cms.SimpleSigner` and
@@ -478,7 +522,7 @@ This subsection merely highlights some of the issues you should keep in mind.
 
 First, if all you want to do is implement a signing device or technique that's
 not supported by pyHanko, it should be sufficient to implement
-:meth:`~.pyhanko.sign.signers.pdf_cms.Signer.sign_raw`.
+:meth:`~.pyhanko.sign.signers.pdf_cms.Signer.async_sign_raw`.
 This method computes the raw cryptographic signature of some data (typically
 a document hash) with the appropriate key material.
 It also takes a ``dry_run`` flag, signifying that the returned object should
@@ -486,7 +530,7 @@ merely have the correct size, but the content doesn't matter\ [#signerdryrun]_.
 
 If your requirements necessitate further modifications to the structure of the
 CMS object, you'll most likely have to override
-:meth:`~.pyhanko.sign.signers.pdf_cms.Signer.sign`, which is responsible for the
+:meth:`~.pyhanko.sign.signers.pdf_cms.Signer.async_sign`, which is responsible for the
 construction of the CMS object itself.
 
 
@@ -707,7 +751,7 @@ Generic data signing
 .. versionadded:: 0.7.0
 
 .. versionchanged:: 0.9.0
-    Reference new async-first API.
+    New async-first API.
 
 If you need to produce CMS signatures that are not intended to be consumed as traditional PDF
 signatures (for whatever reason), the |Signer| classes in pyHanko expose a more flexible
