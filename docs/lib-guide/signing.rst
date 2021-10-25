@@ -596,6 +596,10 @@ Interrupted signing
 
 .. versionadded:: 0.7.0
 
+.. versionchanged:: 0.9.0
+    The new async-first API requires some changes to the workflow at this (relatively low)
+    level of abstraction.
+
 There are use cases where trying to run the entire signing process in one go isn't feasible.
 Think of a remote signing scenario with pyHanko running on a server, and calling an external signing
 service to perform the cryptographic operations, or a case where pyHanko needs to wait for
@@ -623,7 +627,7 @@ remote signers that supply complete CMS objects.
     # Skeleton code for an interrupted PAdES signature
 
 
-    def prep_document(w: BasePdfFileWriter):
+    async def prep_document(w: BasePdfFileWriter):
         vc = ValidationContext(...)
         pdf_signer = signers.PdfSigner(
             signers.PdfSignatureMetadata(
@@ -643,11 +647,12 @@ remote signers that supply complete CMS objects.
             ),
             timestamper=timestamps.HTTPTimeStamper('http://tsa.example.com')
         )
-        prep_digest, tbs_document, output = pdf_signer.digest_doc_for_signing(w)
+        prep_digest, tbs_document, output = \
+            await pdf_signer.async_digest_doc_for_signing(w)
         md_algorithm = tbs_document.md_algorithm
         psi = tbs_document.post_sign_instructions
 
-        signed_attrs = ext_signer.signed_attrs(
+        signed_attrs = await ext_signer.signed_attrs(
             prep_digest.document_digest, 'sha256', use_pades=True
         )
         psi = tbs_document.post_sign_instructions
@@ -660,21 +665,21 @@ remote signers that supply complete CMS objects.
     # comes back, proceed with finish_signing() after deserialising
     # all the intermediate outputs from the previous step.
 
-    def finish_signing(sig_value: bytes, prep_digest, signed_attrs,
-                       psi, output_handle):
+    async def finish_signing(sig_value: bytes, prep_digest, signed_attrs,
+                             psi, output_handle):
         # Here, assume sig_value is the signed digest of the signed_attrs
         # bytes, obtained from some remote signing service
 
         # use ExternalSigner to format the CMS given the signed value
         # we obtained from the remote signing service
         ext_signer = instantiate_external_signer(sig_value)
-        sig_cms = ext_signer.sign_prescribed_attributes(
+        sig_cms = await ext_signer.async_sign_prescribed_attributes(
             'sha256', signed_attrs=signed_attrs,
             timestamper=DUMMY_HTTP_TS
         )
 
         validation_context = ValidationContext(...)
-        PdfTBSDocument.finish_signing(
+        await PdfTBSDocument.async_finish_signing(
             output_handle, prepared_digest=prep_digest,
             signature_cms=sig_cms,
             post_sign_instr=psi,
@@ -684,7 +689,7 @@ remote signers that supply complete CMS objects.
 
 The above example below also showcases how to apply proper post-signature processing in an
 interrupted PAdES signature. This is only necessary for PAdES-LT and PAdES-LTA signatures.
-In other scenarios, you can replace the ``finish_signing`` routine with the following one-liner:
+In other scenarios, you can replace the ``async_finish_signing`` call with the following one-liner:
 
 .. code-block:: python
 

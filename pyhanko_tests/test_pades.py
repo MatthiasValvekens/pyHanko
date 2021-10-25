@@ -706,8 +706,6 @@ def test_sign_with_content_sig():
     assert eci['content_type'].native == 'tst_info'
 
 
-# FIXME update interrupted signing docs!
-
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('different_tsa', [True, False])
 def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
