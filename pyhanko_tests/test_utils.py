@@ -1975,3 +1975,21 @@ def test_xref_stream_null_update():
 def test_parse_name_invalid_utf8():
     result = generic.NameObject.read_from_stream(BytesIO(b'/Test#ae'))
     assert result == '/Test\u00ae'
+
+
+@pytest.mark.parametrize('dt,dt_str', [
+    (
+        datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('EST')),
+        "D:20201226150511-05'00'",
+    ),
+    (
+        datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.utc),
+        "D:20201226150511Z",
+    ),
+    (
+        datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('CET')),
+        "D:20201226150511+01'00'",
+    ),
+])
+def test_parse_datetime(dt, dt_str):
+    assert generic.pdf_date(dt) == dt_str

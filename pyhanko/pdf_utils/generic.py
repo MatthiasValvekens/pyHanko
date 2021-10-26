@@ -1546,7 +1546,7 @@ ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
 def pdf_date(dt: datetime) -> TextStringObject:
     """
     Convert a datetime object into a PDF string.
-    This funciton supports both timezone-aware and naive datetimes.
+    This function supports both timezone-aware and naive datetime objects.
 
     :param dt:
         The datetime object to convert.
@@ -1557,8 +1557,8 @@ def pdf_date(dt: datetime) -> TextStringObject:
     base_dt = dt.strftime(ASN_DT_FORMAT)
     utc_offset_string = ''
     if dt.tzinfo is not None:
-        # compute UTC off set string
-        tz_seconds = dt.utcoffset().seconds
+        # compute UTC offset string
+        tz_seconds = dt.utcoffset().total_seconds()
         if not tz_seconds:
             utc_offset_string = 'Z'
         else:
