@@ -132,7 +132,7 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
         logger.debug(
             f"Result for fetch job with tag {repr(tag)} was available in cache."
         )
-        return result
+        return _return_or_raise(result)
     except KeyError:
         pass
     try:
@@ -146,21 +146,34 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
         logger.debug(
             f"Received completion signal for job with tag {repr(tag)}."
         )
-        return results[tag]
+        return _return_or_raise(results[tag])
     except KeyError:
         logger.debug(
             f"Starting new fetch job with tag {repr(tag)}..."
         )
         # no fetch job running, run the task and store the result
         running_jobs[tag] = wait_event = asyncio.Event()
-        results[tag] = result = await async_fun()
+        try:
+            result = await async_fun()
+        except Exception as e:
+            logger.debug(
+                f"New fetch job with tag {repr(tag)} threw an exception: {e}"
+            )
+            result = e
+        results[tag] = result
         logger.debug(
             f"New fetch job with tag {repr(tag)} returned."
         )
         # deregister event, notify waiters
         del running_jobs[tag]
         wait_event.set()
-        return result
+        return _return_or_raise(result)
+
+
+def _return_or_raise(result):
+    if isinstance(result, Exception):
+        raise result
+    return result
 
 
 async def crl_job_results_as_completed(jobs):

@@ -43,13 +43,20 @@ class AIOHttpMixin:
             return session
 
     def get_results(self):
-        return self.__results.values()
+        return {
+            v for v in self.__results.values()
+            if not isinstance(v, Exception)
+        }
 
     def get_results_for_tag(self, tag):
-        return self.__results[tag]
+        result = self.__results[tag]
+        if isinstance(result, Exception):
+            raise KeyError
 
     def _iter_results(self):
-        yield from self.__results.items()
+        for k, v in self.__results.items():
+            if not isinstance(v, Exception):
+                yield k, v
 
     async def _post_fetch_task(self, tag, async_fun):
         return await queue_fetch_task(
