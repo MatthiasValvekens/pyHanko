@@ -9,7 +9,6 @@ import logging
 import os
 from io import BytesIO
 
-import freezegun
 import pytest
 from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.registry import CertLabel
