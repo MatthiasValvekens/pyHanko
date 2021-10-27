@@ -1,5 +1,11 @@
 # changelog
 
+## 0.17.3
+
+ - Fix a deadlocking bug caused by improper exception handling
+   in the fetcher code.
+ - Exceptions are now communicated to fetch jobs waiting for results.
+
 ## 0.17.2
 
  - Replace `run_until_complete()` with `asyncio.run()` for better
