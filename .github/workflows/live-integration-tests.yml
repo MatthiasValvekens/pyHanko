@@ -1,0 +1,33 @@
+name: Live Certomancer integration tests
+
+on:
+  push:
+    branches: [ master, "feature/*", "bugfix/*", "ci/*" ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.8"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python setup.py bdist_wheel
+          pip install certomancer[web-api,pkcs12]==0.6.0 'pytest>=6.1.1' 'aiohttp>=3.7.4' \
+              'pytest-aiohttp~=0.3.0' dist/*.whl
+      - name: Start Certomancer Animator daemon
+        run: |
+          python -m certomancer --service-url-prefix http://localhost:9000 \
+            --config pyhanko_tests/data/crypto/certomancer.yml animate &
+      - name: Test with pytest
+        run: |
+          python -m pytest pyhanko_tests/with_live_certomancer.py
+        env:
+          LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
