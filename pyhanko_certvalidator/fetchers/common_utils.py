@@ -143,14 +143,20 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
         # there's a fetch job running, wait for it to finish and then
         # return the result
         await wait_event.wait()
+        logger.debug(
+            f"Received completion signal for job with tag {repr(tag)}."
+        )
         return results[tag]
     except KeyError:
         logger.debug(
-            f"Waiting for fetch job with tag {repr(tag)} to return..."
+            f"Starting new fetch job with tag {repr(tag)}..."
         )
         # no fetch job running, run the task and store the result
         running_jobs[tag] = wait_event = asyncio.Event()
         results[tag] = result = await async_fun()
+        logger.debug(
+            f"New fetch job with tag {repr(tag)} returned."
+        )
         # deregister event, notify waiters
         del running_jobs[tag]
         wait_event.set()

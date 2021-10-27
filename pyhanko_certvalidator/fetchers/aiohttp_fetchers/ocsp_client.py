@@ -31,6 +31,9 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
 
     async def fetch(self, cert: x509.Certificate, issuer: x509.Certificate):
         tag = (cert.issuer_serial, issuer.issuer_serial)
+        logger.info(
+            f"About to queue OCSP fetch for {cert.subject.human_friendly}..."
+        )
 
         async def task():
             return await self._fetch(cert, issuer)
@@ -48,7 +51,8 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
         logger.info(
-            f"Fetching OCSP status for {cert.subject.human_friendly}..."
+            f"Fetching OCSP status for {cert.subject.human_friendly} from "
+            f"url(s) {';'.join(ocsp_urls)}..."
         )
         session = await self.get_session()
         fetch_jobs = (
