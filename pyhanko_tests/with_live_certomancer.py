@@ -123,3 +123,38 @@ async def test_pades_lt_live():
         )
         assert status.valid and status.trusted
         assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@pytest.mark.skipif(SKIP_LIVE, reason="no Certomancer instance available")
+async def test_pades_lta_live():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    arch = "testing-ca"
+
+    async with aiohttp.ClientSession() as session:
+        signer = await _retrieve_credentials(session, arch, "signer1")
+
+        vc, root = await _init_validation_context(session, arch)
+        out = await signers.async_sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=vc,
+                subfilter=SigSeedSubFilter.PADES,
+                embed_validation_info=True,
+                use_pades_lta=True
+            ),
+            signer=signer,
+            timestamper=AIOHttpTimeStamper(
+                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
+                session=session
+            )
+        )
+        r = PdfFileReader(out)
+        rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+        status = await async_validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades_lta,
+            {
+                'trust_roots': [root],
+                'fetcher_backend': _fetcher_backend(session)
+            }
+        )
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
