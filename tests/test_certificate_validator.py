@@ -33,7 +33,7 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
             cert = x509.Certificate.load(cert_bytes)
         return cert
 
-    def test_basic_certificate_validator_tls(self):
+    async def test_basic_certificate_validator_tls(self):
         cert = self._load_cert_object('mozilla.org.crt')
         other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
@@ -42,9 +42,9 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
         context = ValidationContext(moment=moment)
         validator = CertificateValidator(cert, other_certs, context)
 
-        validator.validate_tls('www.mozilla.org')
+        await validator.async_validate_tls('www.mozilla.org')
 
-    def test_basic_certificate_validator_tls_expired(self):
+    async def test_basic_certificate_validator_tls_expired(self):
         cert = self._load_cert_object('mozilla.org.crt')
         other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
@@ -54,9 +54,9 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
         validator = CertificateValidator(cert, other_certs, context)
 
         with self.assertRaisesRegex(PathValidationError, 'expired'):
-            validator.validate_tls('www.mozilla.org')
+            await validator.async_validate_tls('www.mozilla.org')
 
-    def test_basic_certificate_validator_tls_invalid_hostname(self):
+    async def test_basic_certificate_validator_tls_invalid_hostname(self):
         cert = self._load_cert_object('mozilla.org.crt')
         other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
@@ -66,9 +66,9 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
         validator = CertificateValidator(cert, other_certs, context)
 
         with self.assertRaisesRegex(PathValidationError, 'not valid'):
-            validator.validate_tls('google.com')
+            await validator.async_validate_tls('google.com')
 
-    def test_basic_certificate_validator_tls_invalid_key_usage(self):
+    async def test_basic_certificate_validator_tls_invalid_key_usage(self):
         cert = self._load_cert_object('mozilla.org.crt')
         other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
@@ -78,9 +78,9 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
         validator = CertificateValidator(cert, other_certs, context)
 
         with self.assertRaisesRegex(PathValidationError, 'for the purpose'):
-            validator.validate_usage(set(['crl_sign']))
+            await validator.async_validate_usage(set(['crl_sign']))
 
-    def test_basic_certificate_validator_tls_whitelist(self):
+    async def test_basic_certificate_validator_tls_whitelist(self):
         cert = self._load_cert_object('mozilla.org.crt')
         other_certs = [self._load_cert_object('digicert-sha2-secure-server-ca.crt')]
 
@@ -93,15 +93,15 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
         validator = CertificateValidator(cert, other_certs, context)
 
         # If whitelist does not work, this will raise exception for expiration
-        validator.validate_tls('www.mozilla.org')
+        await validator.async_validate_tls('www.mozilla.org')
 
         # If whitelist does not work, this will raise exception for hostname
-        validator.validate_tls('google.com')
+        await validator.async_validate_tls('google.com')
 
         # If whitelist does not work, this will raise exception for key usage
-        validator.validate_usage(set(['crl_sign']))
+        await validator.async_validate_usage({'crl_sign'})
 
-    def test_certvalidator_with_params(self):
+    async def test_certvalidator_with_params(self):
 
         cert = self._load_nist_cert('ValidPolicyMappingTest12EE.crt')
         ca_certs = [self._load_nist_cert('TrustAnchorRootCertificate.crt')]
@@ -120,7 +120,7 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
                 user_initial_policy_set=frozenset(['2.16.840.1.101.3.2.1.48.1'])
             )
         )
-        path = validator.validate_usage(key_usage={'digital_signature'})
+        path = await validator.async_validate_usage(key_usage={'digital_signature'})
 
         # check if we got the right policy processing
         # (i.e. if our params got through)
@@ -137,13 +137,13 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
             'when  NIST-test-policy-1 is in the user-constrained-policy-set'
         )
 
-    def test_self_signed_with_policy(self):
+    async def test_self_signed_with_policy(self):
         # tests whether a corner case in the policy validation logic when the
         # path length is zero is handled gracefully
         cert = self._load_cert_object('self-signed-with-policy.crt')
         context = ValidationContext(trust_roots=[cert], allow_fetching=False)
         validator = CertificateValidator(cert, validation_context=context)
-        path = validator.validate_usage({'digital_signature'})
+        path = await validator.async_validate_usage({'digital_signature'})
         qp, = path.qualified_policies()
         # Note: the cert declares a concrete policy, but for the purposes
         # of PKIX validation, any policy is valid, since we're validating
