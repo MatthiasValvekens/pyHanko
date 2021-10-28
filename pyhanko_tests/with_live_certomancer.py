@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from io import BytesIO
@@ -38,6 +39,10 @@ if not CERTOMANCER_HOST_URL:
 
 TEST_PASSPHRASE = b"secret"
 TIMEOUT = 5
+
+run_if_live = pytest.mark.skipif(
+    SKIP_LIVE, reason="no Certomancer instance available"
+)
 
 
 async def _retrieve_credentials(session: aiohttp.ClientSession,
@@ -91,7 +96,20 @@ async def _init_validation_context(session, arch, **kwargs):
     return vc, root
 
 
-@pytest.mark.skipif(SKIP_LIVE, reason="no Certomancer instance available")
+async def _check_pades_result(out, roots, session, rivt_pades):
+    r = PdfFileReader(out)
+    status = await async_validate_pdf_ltv_signature(
+        r.embedded_signatures[0], rivt_pades,
+        {
+            'trust_roots': roots,
+            'fetcher_backend': _fetcher_backend(session)
+        }
+    )
+    assert status.valid and status.trusted
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@run_if_live
 async def test_pades_lt_live():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     arch = "testing-ca"
@@ -112,20 +130,13 @@ async def test_pades_lt_live():
                 session=session
             )
         )
-        r = PdfFileReader(out)
-        rivt_pades = RevocationInfoValidationType.PADES_LT
-        status = await async_validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades,
-            {
-                'trust_roots': [root],
-                'fetcher_backend': _fetcher_backend(session)
-            }
+        await _check_pades_result(
+            out, [root], session,
+            RevocationInfoValidationType.PADES_LT
         )
-        assert status.valid and status.trusted
-        assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
-@pytest.mark.skipif(SKIP_LIVE, reason="no Certomancer instance available")
+@run_if_live
 async def test_pades_lta_live():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     arch = "testing-ca"
@@ -136,7 +147,8 @@ async def test_pades_lta_live():
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
             w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=vc,
+                field_name='Sig1',
+                validation_context=vc,
                 subfilter=SigSeedSubFilter.PADES,
                 embed_validation_info=True,
                 use_pades_lta=True
@@ -147,14 +159,51 @@ async def test_pades_lta_live():
                 session=session
             )
         )
-        r = PdfFileReader(out)
-        rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
-        status = await async_validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades_lta,
-            {
-                'trust_roots': [root],
-                'fetcher_backend': _fetcher_backend(session)
-            }
+        await _check_pades_result(
+            out, [root], session,
+            RevocationInfoValidationType.PADES_LTA
         )
-        assert status.valid and status.trusted
-        assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@run_if_live
+async def test_async_sign_many_concurrent():
+    arch = "testing-ca"
+    concurrent_count = 10
+
+    async with aiohttp.ClientSession() as session:
+        signer = await _retrieve_credentials(session, arch, "signer1")
+
+        vc, root = await _init_validation_context(session, arch)
+
+        timestamper = AIOHttpTimeStamper(
+            f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
+            session=session
+        )
+
+        async def _job(_i):
+            w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+            meta = signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=vc,
+                subfilter=SigSeedSubFilter.PADES,
+                embed_validation_info=True,
+                use_pades_lta=True,
+                reason=f"Live revinfo concurrency test #{_i}!",
+            )
+            pdf_signer = signers.PdfSigner(
+                meta, signer, timestamper=timestamper
+            )
+            sig_result = await pdf_signer.async_sign_pdf(w, in_place=True)
+            return _i, sig_result
+
+        jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
+        for finished_job in jobs:
+            i, out = await finished_job
+            r = PdfFileReader(out)
+            emb = r.embedded_signatures[0]
+            assert emb.field_name == 'Sig1'
+            assert emb.sig_object['/Reason'].endswith(f"#{i}!")
+            await _check_pades_result(
+                out, [root], session,
+                RevocationInfoValidationType.PADES_LTA
+            )
