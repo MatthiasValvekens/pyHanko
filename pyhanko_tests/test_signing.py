@@ -347,25 +347,20 @@ def test_certify():
 
 
 @freeze_time('2020-11-01')
-def test_no_double_certify():
+def test_no_certify_after_sign():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', certify=True,
-        ), signer=FROM_CA
+        w, signers.PdfSignatureMetadata(field_name='Sig1',),
+        signer=FROM_CA
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     assert s.field_name == 'Sig1'
     val_trusted(s)
 
-    info = read_certification_data(r)
-    assert info.author_sig == s.sig_object.get_object()
-    assert info.permission == pyhanko.sign.fields.MDPPerm.FILL_FORMS
-
     out.seek(0)
     w = IncrementalPdfFileWriter(out)
-    with pytest.raises(SigningError):
+    with pytest.raises(SigningError, match='must be the first'):
         signers.sign_pdf(
             w, signers.PdfSignatureMetadata(
                 field_name='Sig2', certify=True,

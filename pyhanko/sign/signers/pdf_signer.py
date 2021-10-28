@@ -32,6 +32,7 @@ from pyhanko.sign.fields import (
     SigSeedSubFilter,
     SigSeedValFlags,
     SigSeedValueSpec,
+    enumerate_sig_fields,
 )
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.timestamps import TimeStamper
@@ -777,6 +778,14 @@ class PdfTimeStamper:
         )
 
 
+def _signatures_exist(handler):
+    try:
+        next(enumerate_sig_fields(handler, filled_status=True))
+        return True
+    except StopIteration:
+        return False
+
+
 class PdfSigner:
     """
     .. versionchanged: 0.7.0
@@ -848,16 +857,17 @@ class PdfSigner:
         # TODO we really should take into account the /DocMDP constraints
         #  of _all_ previous signatures, i.e. also approval signatures with
         #  locking instructions etc.
+        if self.signature_meta.certify and _signatures_exist(reader):
+            raise SigningError(
+                "Certification signatures must be the first signature "
+                "in a given document."
+            )
 
         from pyhanko.sign.validation import read_certification_data
         cd = read_certification_data(reader)
         # if there is no author signature, we don't have to do anything
         if cd is None:
             return
-        if self.signature_meta.certify:
-            raise SigningError(
-                "Document already contains a certification signature"
-            )
         if cd.permission == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
 
