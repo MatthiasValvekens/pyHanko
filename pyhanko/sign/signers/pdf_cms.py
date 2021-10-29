@@ -216,6 +216,28 @@ class Signer:
         When signing using an RSA key, prefer PSS padding to legacy PKCS#1 v1.5
         padding. Default is ``False``. This option has no effect on non-RSA
         signatures.
+    :param embed_roots:
+        Option that controls whether or not additional self-signed certificates
+        should be embedded into the CMS payload. The default is ``True``.
+
+        .. note::
+            The signer's certificate is always embedded, even if it is
+            self-signed.
+
+        .. note::
+            Trust roots are configured by the validator, so embedding them
+            typically does nothing in a typical validation process.
+            Therefore they can be safely omitted in most cases.
+            Nonetheless, embedding the roots can be useful for documentation
+            purposes.
+
+        .. warning::
+            To be precise, if this flag is ``False``, a certificate will be
+            dropped if (a) it is not the signer's, (b) it is self-issued and
+            (c) its subject and authority key identifiers match (or either is
+            missing). In other words, we never validate the actual
+            self-signature. This heuristic is sufficiently accurate
+            for most applications.
     """
 
     signing_cert: x509.Certificate
@@ -235,8 +257,9 @@ class Signer:
     The (cryptographic) signature mechanism to use.
     """
 
-    def __init__(self, prefer_pss=False):
+    def __init__(self, prefer_pss=False, embed_roots=True):
         self.prefer_pss = prefer_pss
+        self.embed_roots = embed_roots
 
     def get_signature_mechanism(self, digest_algorithm):
         """
@@ -442,8 +465,19 @@ class Signer:
         if unsigned_attrs is not None:
             sig_info['unsigned_attrs'] = unsigned_attrs
 
-        # do not add the TS certs at this point
-        certs = set(self.cert_registry)
+        # Note: we do not add the TS certs at this point
+        if self.embed_roots:
+            certs = set(self.cert_registry)
+        else:
+            # asn1crypto's heuristic is good enough for now, we won't check the
+            # actual signatures. CAs that make use of self-issued certificates
+            # for things like key rollover probably also use SKI/AKI to
+            # distinguish between different certs, which will be picked up by
+            # asn1crypto either way.
+            certs = {
+                cert for cert in self.cert_registry
+                if cert.self_signed == 'no'
+            }
         certs.add(self.signing_cert)
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
@@ -1060,12 +1094,12 @@ class SimpleSigner(Signer):
                  signing_key: keys.PrivateKeyInfo,
                  cert_registry: CertificateStore,
                  signature_mechanism: SignedDigestAlgorithm = None,
-                 prefer_pss=False):
+                 prefer_pss=False, embed_roots=True):
         self.signing_cert = signing_cert
         self.signing_key = signing_key
         self.cert_registry = cert_registry
         self.signature_mechanism = signature_mechanism
-        super().__init__(prefer_pss=prefer_pss)
+        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
     async def async_sign_raw(self, data: bytes, digest_algorithm: str,
                              dry_run=False) -> bytes:
@@ -1252,12 +1286,12 @@ class ExternalSigner(Signer):
                  cert_registry: CertificateStore,
                  signature_value: bytes,
                  signature_mechanism: SignedDigestAlgorithm = None,
-                 prefer_pss=False):
+                 prefer_pss=False, embed_roots=True):
         self.signing_cert = signing_cert
         self.cert_registry = cert_registry
         self.signature_mechanism = signature_mechanism
         self._signature_value = signature_value
-        super().__init__(prefer_pss=prefer_pss)
+        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
     async def async_sign_raw(self,
                              data: bytes, digest_algorithm: str,

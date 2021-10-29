@@ -858,3 +858,24 @@ def test_direct_pdfcmsembedder_usage():
     assert dss is not None
     assert len(dss.certs) == 3
     assert len(dss.ocsps) == 1
+
+
+@freeze_time('2020-11-01')
+async def test_no_embed_root():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    cr = SimpleCertificateStore()
+    cr.register_multiple(FROM_CA.cert_registry)
+    no_embed_root_signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=cr, embed_roots=False
+    )
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=no_embed_root_signer
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    assert '/AP' not in s.sig_field
+    assert len(s.signed_data['certificates']) == 2
+    await async_val_trusted(s)

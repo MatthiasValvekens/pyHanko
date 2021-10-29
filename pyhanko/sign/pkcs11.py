@@ -189,7 +189,7 @@ class PKCS11Signer(Signer):
                  cert_label: Optional[str] = None,
                  signing_cert: x509.Certificate = None,
                  ca_chain=None, key_label: Optional[str] = None,
-                 prefer_pss=False,
+                 prefer_pss=False, embed_roots=True,
                  other_certs_to_pull=(), bulk_fetch=True,
                  key_id: Optional[bytes] = None,
                  cert_id: Optional[bytes] = None,
@@ -232,7 +232,7 @@ class PKCS11Signer(Signer):
         self._key_handle = None
         self._loaded = False
         self.__loading_event = None
-        super().__init__(prefer_pss=prefer_pss)
+        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
     def _init_cert_registry(self):
         # it's conceivable that one might want to load this separately from
