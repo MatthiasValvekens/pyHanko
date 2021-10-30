@@ -458,7 +458,11 @@ class PdfTimeStamper:
                       TimestampDSSContentSettings(),
                       chunk_size=misc.DEFAULT_CHUNK_SIZE,
                       tight_size_estimates: bool = False):
-        """Timestamp the contents of ``pdf_out``.
+        """
+        .. versionchanged:: 0.9.0
+            Wrapper around :meth:`async_timestamp_pdf`.
+
+        Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
         :param pdf_out:
@@ -527,8 +531,12 @@ class PdfTimeStamper:
                                   dss_settings: TimestampDSSContentSettings =
                                   TimestampDSSContentSettings(),
                                   chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                                  tight_size_estimates: bool = False):
-        """Timestamp the contents of ``pdf_out``.
+                                  tight_size_estimates: bool = False,
+                                  embed_roots: bool = True):
+        """
+        .. versionadded:: 0.9.0
+
+        Timestamp the contents of ``pdf_out``.
         Note that ``pdf_out`` should not be written to after this operation.
 
         :param pdf_out:
@@ -574,6 +582,16 @@ class PdfTimeStamper:
             .. note::
                 External TSAs cannot be relied upon to always produce the
                 exact same output length, which makes this option risky to use.
+        :param embed_roots:
+            Option that controls whether the root certificate of each validation
+            path should be embedded into the DSS. The default is ``True``.
+
+            .. note::
+                Trust roots are configured by the validator, so embedding them
+                typically does nothing in a typical validation process.
+                Therefore they can be safely omitted in most cases.
+                Nonetheless, embedding the roots can be useful for documentation
+                purposes.
         :return:
             The output stream containing the signed output.
         """
@@ -592,7 +610,8 @@ class PdfTimeStamper:
                 # NOTE: we have to disable VRI in this scenario
                 validation.DocumentSecurityStore.supply_dss_in_writer(
                     pdf_out, sig_contents=None, paths=validation_paths,
-                    validation_context=validation_context
+                    validation_context=validation_context,
+                    embed_roots=embed_roots
                 )
 
         field_name = self.field_name
@@ -637,7 +656,8 @@ class PdfTimeStamper:
             validation.DocumentSecurityStore.add_dss(
                 output_stream=res_output, sig_contents=sig_contents,
                 paths=validation_paths, validation_context=validation_context,
-                force_write=not dss_settings.skip_if_unneeded
+                force_write=not dss_settings.skip_if_unneeded,
+                embed_roots=embed_roots
             )
 
         return misc.finalise_output(output, res_output)
@@ -685,7 +705,8 @@ class PdfTimeStamper:
     async def async_update_archival_timestamp_chain(
             self, reader: PdfFileReader, validation_context, in_place=True,
             output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
-            default_md_algorithm=constants.DEFAULT_MD):
+            default_md_algorithm=constants.DEFAULT_MD,
+            embed_roots: bool = True):
         """
         .. versionadded:: 0.9.0
 
@@ -711,6 +732,16 @@ class PdfTimeStamper:
         :param default_md_algorithm:
             Message digest to use if there are no preceding timestamps in the
             file.
+        :param embed_roots:
+            Option that controls whether the root certificate of each validation
+            path should be embedded into the DSS. The default is ``True``.
+
+            .. note::
+                Trust roots are configured by the validator, so embedding them
+                typically does nothing in a typical validation process.
+                Therefore they can be safely omitted in most cases.
+                Nonetheless, embedding the roots can be useful for documentation
+                purposes.
         :return:
             The output stream containing the signed output.
         """
@@ -771,12 +802,14 @@ class PdfTimeStamper:
             DocumentSecurityStore.supply_dss_in_writer(
                 pdf_out, last_timestamp.pkcs7_content,
                 paths=(tst_status.validation_path,),
-                validation_context=validation_context
+                validation_context=validation_context,
+                embed_roots=embed_roots
             )
 
         # append a new timestamp
         return await self.async_timestamp_pdf(
-            pdf_out, md_algorithm, validation_context, in_place=True
+            pdf_out, md_algorithm, validation_context, in_place=True,
+            embed_roots=embed_roots
         )
 
 
@@ -1750,6 +1783,8 @@ class PdfSigningSession:
                 validation_info.signer_path
             )
 
+        signer = pdf_signer.signer
+        embed_roots = signer.embed_roots
         # take care of DSS updates, if they have to happen now
         dss_settings = signature_meta.dss_settings
         if self.use_pades and validation_info is not None:
@@ -1766,10 +1801,10 @@ class PdfSigningSession:
                     pdf_out, sig_contents=None,
                     paths=validation_info.validation_paths,
                     ocsps=validation_info.ocsps_to_embed,
-                    crls=validation_info.crls_to_embed
+                    crls=validation_info.crls_to_embed,
+                    embed_roots=embed_roots
                 )
 
-        signer = pdf_signer.signer
         md_algorithm = self.md_algorithm
 
         sig_mdp_setup = self._apply_locking_rules()
@@ -1817,7 +1852,8 @@ class PdfSigningSession:
                 timestamper=doc_timestamper,
                 timestamp_field_name=signature_meta.timestamp_field_name,
                 dss_settings=signature_meta.dss_settings,
-                tight_size_estimates=signature_meta.tight_size_estimates
+                tight_size_estimates=signature_meta.tight_size_estimates,
+                embed_roots=embed_roots
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer, signer=pdf_signer.signer,
@@ -1878,6 +1914,26 @@ class PostSignInstructions:
     .. note::
         External TSAs cannot be relied upon to always produce the
         exact same output length, which makes this option risky to use.
+    """
+
+    embed_roots: bool = True
+    """
+    .. versionadded:: 0.9.0
+
+    Option that controls whether the root certificate of each validation
+    path should be embedded into the DSS. The default is ``True``.
+
+    .. note::
+        Trust roots are configured by the validator, so embedding them
+        typically does nothing in a typical validation process.
+        Therefore they can be safely omitted in most cases.
+        Nonetheless, embedding the roots can be useful for documentation
+        purposes.
+
+    .. note::
+        This setting is not part of :class:`.DSSContentSettings` because
+        its value is taken from the corresponding property on the
+        :class:`.Signer` involved, not from the initial configuration.
     """
 
 
@@ -2153,7 +2209,8 @@ class PdfPostSignatureDocument:
             paths=validation_info.validation_paths,
             validation_context=validation_context,
             ocsps=validation_info.ocsps_to_embed,
-            crls=validation_info.crls_to_embed
+            crls=validation_info.crls_to_embed,
+            embed_roots=instr.embed_roots
         )
         if dss_settings.include_vri:
             dss_op_kwargs['sig_contents'] = self.sig_contents
@@ -2191,5 +2248,6 @@ class PdfPostSignatureDocument:
                 validation_paths=validation_info.validation_paths,
                 in_place=True, timestamper=timestamper, chunk_size=chunk_size,
                 dss_settings=dss_settings.get_settings_for_ts(),
-                tight_size_estimates=instr.tight_size_estimates
+                tight_size_estimates=instr.tight_size_estimates,
+                embed_roots=instr.embed_roots
             )

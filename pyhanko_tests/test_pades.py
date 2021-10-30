@@ -35,6 +35,7 @@ from pyhanko.sign.validation import (
     SignatureCoverageLevel,
     ValidationInfoReadingError,
     add_validation_info,
+    async_validate_pdf_ltv_signature,
     validate_pdf_ltv_signature,
     validate_pdf_timestamp,
 )
@@ -1218,3 +1219,40 @@ def test_pades_revinfo_live_nofullchain():
         # .. which should still fail because the chain of trust is broken, but
         # at least the timestamp should initially validate
         assert status.valid and not status.trusted, status.summary()
+
+
+@freeze_time('2020-11-01')
+async def test_pades_lta_no_embed_root(requests_mock):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    cr = SimpleCertificateStore()
+    cr.register_multiple(FROM_CA.cert_registry)
+    vc = live_testing_vc(requests_mock)
+    no_embed_root_signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=cr, embed_roots=False
+    )
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            embed_validation_info=True,
+            use_pades_lta=True,
+            validation_context=vc
+        ),
+        signer=no_embed_root_signer,
+        timestamper=DUMMY_HTTP_TS
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    assert '/AP' not in s.sig_field
+    # signer, intermediate, but not TSA (that one is supposed to be in the
+    # TST) and of course no root
+    assert len(s.signed_data['certificates']) == 2
+    # signer, intermediate, TSA and OCSP responder
+    assert len(r.root['/DSS']['/Certs']) == 4
+    await async_validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LTA,
+        validation_context_kwargs={'trust_roots': TRUST_ROOTS}
+    )

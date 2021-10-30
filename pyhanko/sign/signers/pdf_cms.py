@@ -217,6 +217,8 @@ class Signer:
         padding. Default is ``False``. This option has no effect on non-RSA
         signatures.
     :param embed_roots:
+        .. versionadded:: 0.9.0
+
         Option that controls whether or not additional self-signed certificates
         should be embedded into the CMS payload. The default is ``True``.
 

@@ -2361,7 +2361,8 @@ async def async_add_validation_info(embedded_sig: EmbeddedPdfSignature,
                                     skip_timestamp=False, add_vri_entry=True,
                                     in_place=False, output=None,
                                     force_write=False,
-                                    chunk_size=DEFAULT_CHUNK_SIZE):
+                                    chunk_size=DEFAULT_CHUNK_SIZE,
+                                    embed_roots: bool = True):
     """
     .. versionadded: 0.9.0
 
@@ -2393,6 +2394,16 @@ async def async_add_validation_info(embedded_sig: EmbeddedPdfSignature,
     :param force_write:
         Force a new revision to be written, even if not necessary (i.e.
         when all data in the validation context is already present in the DSS).
+    :param embed_roots:
+        Option that controls whether the root certificate of each validation
+        path should be embedded into the DSS. The default is ``True``.
+
+        .. note::
+            Trust roots are configured by the validator, so embedding them
+            typically does nothing in a typical validation process.
+            Therefore they can be safely omitted in most cases.
+            Nonetheless, embedding the roots can be useful for documentation
+            purposes.
     :return:
         The (file-like) output object to which the result was written.
     """
@@ -2425,7 +2436,7 @@ async def async_add_validation_info(embedded_sig: EmbeddedPdfSignature,
     pdf_out.IO_CHUNK_SIZE = chunk_size
     resulting_dss = DocumentSecurityStore.supply_dss_in_writer(
         pdf_out, sig_contents, validation_context=validation_context,
-        paths=paths
+        paths=paths, embed_roots=embed_roots
     )
     if force_write or resulting_dss.modified:
         if in_place:
@@ -2709,7 +2720,8 @@ class DocumentSecurityStore:
     def supply_dss_in_writer(cls, pdf_out: BasePdfFileWriter,
                              sig_contents, *, certs=None,
                              ocsps=None, crls=None, paths=None,
-                             validation_context=None) \
+                             validation_context=None,
+                             embed_roots: bool = True) \
             -> 'DocumentSecurityStore':
         """
         Add or update a DSS, and optionally associate the new information with a
@@ -2736,6 +2748,22 @@ class DocumentSecurityStore:
             to the DSS.
         :param validation_context:
             Validation context from which to draw OCSP responses and CRLs.
+        :param embed_roots:
+            .. versionadded:: 0.9.0
+
+            Option that controls whether the root certificate of each validation
+            path should be embedded into the DSS. The default is ``True``.
+
+            .. note::
+                Trust roots are configured by the validator, so embedding them
+                typically does nothing in a typical validation process.
+                Therefore they can be safely omitted in most cases.
+                Nonetheless, embedding the roots can be useful for documentation
+                purposes.
+
+            .. warning::
+                This only applies to paths, not the ``certs`` parameter.
+
         :return:
             a :class:`DocumentSecurityStore` object containing both the new
             and existing contents of the DSS (if any).
@@ -2757,7 +2785,11 @@ class DocumentSecurityStore:
             yield from certs or ()
             path: ValidationPath
             for path in (paths or ()):
-                yield from path
+                path_parts = iter(path)
+                if not embed_roots:
+                    # skip the first cert (i.e. the root)
+                    next(path_parts)
+                yield from path_parts
 
         def _ocsps():
             yield from ocsps or ()
@@ -2785,7 +2817,7 @@ class DocumentSecurityStore:
     @classmethod
     def add_dss(cls, output_stream, sig_contents, *, certs=None,
                 ocsps=None, crls=None, paths=None, validation_context=None,
-                force_write=False):
+                force_write: bool = False, embed_roots: bool = True):
         """
         Wrapper around :meth:`supply_dss_in_writer`.
 
@@ -2811,11 +2843,28 @@ class DocumentSecurityStore:
             Force a write even if the DSS doesn't have any new content.
         :param validation_context:
             Validation context from which to draw OCSP responses and CRLs.
+        :param embed_roots:
+            .. versionadded:: 0.9.0
+
+            Option that controls whether the root certificate of each validation
+            path should be embedded into the DSS. The default is ``True``.
+
+            .. note::
+                Trust roots are configured by the validator, so embedding them
+                typically does nothing in a typical validation process.
+                Therefore they can be safely omitted in most cases.
+                Nonetheless, embedding the roots can be useful for documentation
+                purposes.
+
+            .. warning::
+                This only applies to paths, not the ``certs`` parameter.
+
         """
         pdf_out = IncrementalPdfFileWriter(output_stream)
         dss = cls.supply_dss_in_writer(
             pdf_out, sig_contents, certs=certs, ocsps=ocsps,
-            crls=crls, paths=paths, validation_context=validation_context
+            crls=crls, paths=paths, validation_context=validation_context,
+            embed_roots=embed_roots
         )
         if force_write or dss.modified:
             pdf_out.write_in_place()
