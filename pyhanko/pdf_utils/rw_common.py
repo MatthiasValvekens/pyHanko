@@ -87,9 +87,10 @@ class PdfHandler:
 
             cur_page_ix = first_page_ix
             for kid_index, kid_ref in enumerate(kids):
-                # If this is not the case, the child node cannot possibly have
-                # a valid /Parent entry either, so let's assume that nobody
-                # screws up their PDF generator THAT badly
+                if not isinstance(kid_ref, generic.IndirectObject):
+                    raise misc.PdfReadError(
+                        "Page tree node children must be indirect objects"
+                    )
                 assert isinstance(kid_ref, generic.IndirectObject)
                 if kid_ref.reference in refs_seen:
                     raise misc.PdfReadError("Circular reference in page tree")

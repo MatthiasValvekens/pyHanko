@@ -2006,3 +2006,15 @@ def test_read_circular_page_tree():
         # this should raise an error
         with pytest.raises(misc.PdfReadError, match="Circular"):
             r.find_page_for_modification(1)
+
+
+def test_read_broken_page_tree_direct_kids():
+    fname = os.path.join(PDF_DATA_DIR, 'page-tree-direct-kid.pdf')
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        # this should work
+        page1, _ = r.find_page_for_modification(0)
+        assert '/Contents' in page1.get_object()
+        # this should raise an error
+        with pytest.raises(misc.PdfReadError, match="must be indirect"):
+            r.find_page_for_modification(1)
