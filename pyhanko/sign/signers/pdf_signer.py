@@ -1404,7 +1404,7 @@ class PdfSigningSession:
         timestamper = self.timestamper
         # Finally, fetch validation information for the TSA that we're going to
         # use for our own TS
-        ts_validation_paths = None
+        ts_paths = None
         if timestamper is not None:
             ts_paths = timestamper.validation_paths(validation_context)
             async for ts_path in ts_paths:
@@ -1423,7 +1423,7 @@ class PdfSigningSession:
         return PreSignValidationStatus(
             validation_paths=validation_paths,
             signer_path=signer_path,
-            ts_validation_paths=ts_validation_paths,
+            ts_validation_paths=ts_paths,
             adobe_revinfo_attr=revinfo,
             ocsps_to_embed=validation_context.ocsps,
             crls_to_embed=validation_context.crls
