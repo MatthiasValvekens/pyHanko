@@ -927,7 +927,8 @@ class SigFieldCreationRule(FieldMDPRule):
             _walk_page_tree_annots(
                 old_page_root, new_page_root,
                 field_ref_reverse, context.old,
-                valid_when_locked=True
+                valid_when_locked=True,
+                refs_seen=set()
             )
         )
 
@@ -1654,7 +1655,7 @@ def _extract_annots_from_page(page, exc):
 
 def _walk_page_tree_annots(old_page_root, new_page_root,
                            field_name_dict, old: HistoricalResolver,
-                           valid_when_locked):
+                           valid_when_locked, refs_seen):
     def get_kids(page_root, exc):
         try:
             return _arr_to_refs(page_root['/Kids'], exc)
@@ -1671,6 +1672,10 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             "Unexpected change to page tree structure."
         )
     for new_kid_ref, old_kid_ref in zip(new_kids, old_kids):
+        if old_kid_ref in refs_seen:
+            raise misc.PdfReadError(
+                "Circular reference in page tree during annotation analysis"
+            )
         new_kid = new_kid_ref.get_object()
         old_kid = old_kid_ref.get_object()
         try:
@@ -1680,7 +1685,7 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
         if node_type == '/Pages':
             yield from _walk_page_tree_annots(
                 old_kid, new_kid, field_name_dict, old,
-                valid_when_locked
+                valid_when_locked, refs_seen | {old_kid_ref},
             )
         elif node_type == '/Page':
             try:

@@ -1540,15 +1540,21 @@ class HistoricalResolver(PdfHandler):
 
         pages_ref = self.root.raw_get('/Pages')
         page_tree_nodes = set()
-        page_tree_nodes.update(
-            _collect_page_tree_refs(pages_obj=pages_ref.get_object())
-        )
+        for ref in _collect_page_tree_refs(pages_obj=pages_ref.get_object()):
+            if ref in page_tree_nodes:
+                raise misc.PdfReadError(
+                    "Circular reference in page tree in mapping stage"
+                )
+            page_tree_nodes.add(ref)
         struct_tree_nodes = set()
         try:
             struct_tree_root_ref = self.root.raw_get('/StructTreeRoot')
-            struct_tree_nodes.update(
-                _collect_struct_tree_refs(struct_tree_root_ref.get_object())
-            )
+            for ref in _collect_struct_tree_refs(struct_tree_root_ref.get_object()):
+                if ref in struct_tree_nodes:
+                    raise misc.PdfReadError(
+                        "Circular reference in structure tree in mapping stage"
+                    )
+                struct_tree_nodes.add(ref)
         except KeyError:
             pass
         _compute_paths_to_refs(

@@ -4,10 +4,9 @@ from io import BytesIO
 
 import pytest
 import pytz
-from freezegun import freeze_time
 from freezegun.api import freeze_time
 
-from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -28,6 +27,7 @@ from pyhanko.sign.diff_analysis import (
     StandardDiffPolicy,
     SuspiciousModification,
     XrefStreamRule,
+    _walk_page_tree_annots,
     is_annot_visible,
     is_field_visible,
 )
@@ -1664,3 +1664,58 @@ def test_skip_diff_scenario_2():
     report = status.pretty_print_details()
     assert 'illegitimate' in report
     assert 'incompatible with the current document modification' in report
+
+
+def test_diff_analysis_circular_page_tree():
+    fname = os.path.join(PDF_DATA_DIR, 'circular-page-tree.pdf')
+    with open(fname, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        # we should be able to grab the first page, so the signer
+        # shouldn't crash
+        out = signers.sign_pdf(
+            w, signature_meta=signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA
+        )
+    w = IncrementalPdfFileWriter(out)
+    # do an update, just so we trigger difference analysis
+    w.add_object(generic.NullObject())
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    with pytest.raises(misc.PdfReadError,
+                       match='Circular reference in page.*mapping'):
+        validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+
+    # manually call _walk_page_tree_annots to test the defence-in-depth function
+    old = r.get_historical_resolver(1)
+    new = r.get_historical_resolver(2)
+    walker = _walk_page_tree_annots(
+        old_page_root=old.root['/Pages'],
+        new_page_root=new.root['/Pages'],
+        field_name_dict={},
+        old=old, valid_when_locked=False, refs_seen=set()
+    )
+    with pytest.raises(misc.PdfReadError,
+                       match='Circular reference in page.*annot'):
+        list(walker)
+
+
+def test_diff_analysis_circular_structure_tree():
+    fname = os.path.join(PDF_DATA_DIR, 'struct-tree-circular-ref.pdf')
+    with open(fname, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        out = signers.sign_pdf(
+            w, signature_meta=signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA
+        )
+    w = IncrementalPdfFileWriter(out)
+    # do an update, just so we trigger difference analysis
+    w.add_object(generic.NullObject())
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    with pytest.raises(misc.PdfReadError,
+                       match='Circular reference in struct.*mapping'):
+        validate_pdf_signature(s, SIMPLE_V_CONTEXT())
