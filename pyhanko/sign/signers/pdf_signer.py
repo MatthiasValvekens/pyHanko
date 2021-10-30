@@ -403,9 +403,11 @@ class PdfSignatureMetadata:
     do not add safety margins.
     
     .. note::
-        This should be OK if the entire signature object is produced by pyHanko.
-        However, if it includes unsigned attributes such as document timestamps,
-        the size of the signature is not entirely predictable.
+        This should be OK if the entire CMS object is produced by pyHanko, and
+        the signing scheme produces signatures of a fixed size.
+        However, if the signature container includes unsigned attributes such
+        as signature timestamps, the size of the signature is never entirely
+        predictable.
     """
 
 
