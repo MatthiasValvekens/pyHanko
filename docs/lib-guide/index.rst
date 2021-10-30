@@ -32,3 +32,4 @@ The pyHanko library roughly consists of the following components.
     signing
     validation
     pdf-utils
+    adv-examples
