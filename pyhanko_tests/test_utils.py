@@ -1,4 +1,5 @@
 import datetime
+import os
 from fractions import Fraction
 from io import BytesIO
 from itertools import product
@@ -1993,3 +1994,15 @@ def test_parse_name_invalid_utf8():
 ])
 def test_parse_datetime(dt, dt_str):
     assert generic.pdf_date(dt) == dt_str
+
+
+def test_read_circular_page_tree():
+    fname = os.path.join(PDF_DATA_DIR, 'circular-page-tree.pdf')
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        # this should work
+        page1, _ = r.find_page_for_modification(0)
+        assert '/Contents' in page1.get_object()
+        # this should raise an error
+        with pytest.raises(misc.PdfReadError, match="Circular"):
+            r.find_page_for_modification(1)

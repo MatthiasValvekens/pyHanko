@@ -1,7 +1,7 @@
 """Utilities common to reading and writing PDF files."""
 from typing import Tuple
 
-from . import generic
+from . import generic, misc
 
 __all__ = ['PdfHandler']
 
@@ -77,7 +77,7 @@ class PdfHandler:
         if not (0 <= page_ix < page_count):
             raise ValueError('Page index out of range')
 
-        def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict):
+        def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict, refs_seen):
             pages_obj = pages_obj_ref.get_object()
             kids = pages_obj['/Kids']
             try:
@@ -91,6 +91,8 @@ class PdfHandler:
                 # a valid /Parent entry either, so let's assume that nobody
                 # screws up their PDF generator THAT badly
                 assert isinstance(kid_ref, generic.IndirectObject)
+                if kid_ref.reference in refs_seen:
+                    raise misc.PdfReadError("Circular reference in page tree")
 
                 kid = kid_ref.get_object()
 
@@ -101,7 +103,8 @@ class PdfHandler:
                     desc_count = kid['/Count']
                     if cur_page_ix <= page_ix < cur_page_ix + desc_count:
                         return _recurse(
-                            cur_page_ix, kid_ref, last_rsrc_dict
+                            cur_page_ix, kid_ref, last_rsrc_dict,
+                            refs_seen | {kid_ref.reference}
                         )
                     cur_page_ix += desc_count
                 elif node_type == '/Page':
@@ -121,7 +124,7 @@ class PdfHandler:
             # This means the PDF is not standards-compliant
             raise ValueError('Page not found')
 
-        return _recurse(0, page_tree_root_ref, root_resources)
+        return _recurse(0, page_tree_root_ref, root_resources, set())
 
     def find_page_container(self, page_ix):
         """
