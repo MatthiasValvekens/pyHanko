@@ -3,6 +3,118 @@ Release history
 ***************
 
 
+.. _release-0.9.0:
+
+0.9.0
+=====
+
+*Release date:* 2021-10-31
+
+Dependency changes
+------------------
+
+ * Update ``pyhanko-certvalidator`` to ``0.17.3``
+ * Update ``fontTools`` to ``4.27.1``
+ * Update ``certomancer`` to ``0.6.0`` (tests)
+ * Introduce ``pytest-aiohttp~=0.3.0`` and ``aiohttp>=3.7.4`` (tests)
+
+API-breaking changes
+--------------------
+
+This is a pretty big release, with a number of far-reaching changes in the
+lower levels of the API that may cause breakage.
+Much of pyHanko's internal logic has been refactored to prefer asynchronous I/O
+wherever possible (``pyhanko-certvalidator`` was also refactored accordingly).
+Some compromises were made to allow non-async-aware code to continue working as-is.
+
+If you'd like a quick overview of how you can take advantage of the new
+asynchronous library functions, take a look at
+:ref:`this section in the signing docs <async-resource-management>`.
+
+
+Here's an overview of low-level functionality that changed:
+
+ * CMS signing logic was refactored and made asynchronous
+   (only relevant if you implemented your own custom signers)
+ * Time stamp client API was refactored and made asynchronous
+   (only relevant if you implemented your own time stamping clients)
+ * The :ref:`interrupted signing <interrupted-signing>` workflow now involves more
+   asyncio as well.
+ * :meth:`~pyhanko.sign.signers.pdf_signer.PdfSigningSession.perform_presign_validation`
+   was made asynchronous.
+ * :meth:`~pyhanko.sign.signers.pdf_signer.PdfSigningSession.prepare_tbs_document`: the
+   ``bytes_reserved`` parameter is mandatory now.
+
+ * :meth:`~pyhanko.sign.signers.pdf_signer.PdfPostSignatureDocument.post_signature_processing`
+   was made asynchronous.
+ * :func:`~pyhanko.sign.validation.collect_validation_info` was made asynchronous
+
+Other functions have been deprecated in favour of asynchronous equivalents;
+such deprecations are documented in :ref:`the API reference <api-reference>`.
+The section on extending :class:`~pyhanko.sign.signers.pdf_cms.Signer`
+:ref:`has also been updated <extending-signer>`.
+
+.. warning::
+    Even though we have pretty good test coverage, due to the volume of changes,
+    some instability may ensue. Please do not hesitate to report bugs on
+    `the issue tracker <https://github.com/MatthiasValvekens/pyHanko/issues>`_!
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Async-first signing API
+ * Relax ``token-label`` requirements in PKCS#11 config, allowing ``slot-no``
+   as an alternative
+ * Allow selecting keys and certificates by ID in the PKCS#11 signer
+ * Allow the signer's certificate to be sourced from a file in the PKCS#11 signer
+ * Allow BeID module path to be specified in config
+ * Tweak cert querying logic in PKCS#11 signer
+ * Add support for raw ECDSA to the PKCS#11 signer
+ * Basic DSA support (for completeness w.r.t. ISO 32000)
+ * Choose a default message digest more cleverly, based on the signing algorithm
+   and key size
+ * Fail loudly when trying to add a certifying signature to an already-signed
+   document using the high-level signing API
+ * Provide a flag to skip embedding root certificates
+
+Validation
+^^^^^^^^^^
+
+ * Async-first validation API
+ * Use non-zero exit code on failed CLI validation
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Minor reorganisation of ``config.py`` functions
+ * Move PKCS#11 pin prompt logic to ``cli.py``
+ * Improve font embedding efficiency (better stream management)
+ * Ensure idempotence of object stream flushing
+ * Improve PKCS#11 signer logging
+ * Make ``stream_xrefs=False`` by default in ``copy_into_new_writer()``
+ * Removed a piece of fallback logic for ``md_algorithm`` that relied on
+   obsolete parts of the standard
+ * Fixed a number of issues related to unexpected cycles in PDF structures
+
+
+Bugs fixed
+----------
+
+ * Treat ASCII form feed (``\f``) as PDF whitespace
+ * Fix a corner case with null incremental updates
+ * Fix some font compatibility issues (relax assumptions about the presence of
+   certain tables/entries)
+ * Be more tolerant when parsing name objects
+ * Correct some issues related to DSS update validation
+ * Correct :func:`~pyhanko.pdf_utils.generic.pdf_date` output for negative
+   UTC offsets
+
+
 .. _release-0.8.0:
 
 0.8.0

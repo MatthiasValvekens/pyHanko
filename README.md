@@ -41,6 +41,7 @@ Note that not all of these are necessarily exposed through the CLI.
     - Add empty signature fields to existing PDFs
     - Add seed values to signature fields, with or without constraints
  - Signing
+    * Option to use async signing API
     - Signatures can be invisible, or with an appearance based on the stamping tools
     - LTV-enabled signatures are supported
         - PAdES baseline profiles B-B, B-T, B-LT and B-LTA are all supported.
