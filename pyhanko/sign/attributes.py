@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
-from asn1crypto import algos, cms, core, crl, ocsp
+from asn1crypto import algos, cms, core
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto import tsp, x509
 from cryptography.hazmat.primitives import hashes
@@ -81,44 +81,29 @@ class SigningTimeProvider(CMSAttributeProvider):
         return cms.Time({'utc_time': core.UTCTime(self.timestamp)})
 
 
+# TODO: would be nice to also provide an implementation that does this with
+#  a "live" revocation checker, for use in the lower-level APIs
+# This one relies on the revinfo being available from earlier preprocessing
+# steps, which is good enough for internal use.
+
+
 class AdobeRevinfoProvider(CMSAttributeProvider):
     """
-    Format Adobe-style revocation information for inclusion into a CMS
+    Yield Adobe-style revocation information for inclusion into a CMS
     object.
 
     :param value:
         A (pre-formatted) RevocationInfoArchival object.
-    :param ocsp_responses:
-        A list of OCSP responses to include.
-    :param crls:
-        A list of CRLs to include.
     """
 
     attribute_type: str = 'adobe_revocation_info_archival'
 
-    def __init__(self,
-                 value: Optional[asn1_pdf.RevocationInfoArchival] = None,
-                 ocsp_responses: Optional[List[ocsp.OCSPResponse]] = None,
-                 crls: Optional[List[crl.CertificateList]] = None):
-        self.ocsp_responses = ocsp_responses
-        self.crls = crls
+    def __init__(self, value: asn1_pdf.RevocationInfoArchival):
         self.value = value
 
     async def build_attr_value(self, dry_run=False) \
             -> Optional[asn1_pdf.RevocationInfoArchival]:
-        if self.value is not None:
-            return self.value
-        revinfo_dict = {}
-        if self.ocsp_responses:
-            revinfo_dict['ocsp'] = self.ocsp_responses
-
-        if self.crls:
-            revinfo_dict['crl'] = self.crls
-        if revinfo_dict:
-            self.value = value = asn1_pdf.RevocationInfoArchival(revinfo_dict)
-            return value
-        else:
-            return None
+        return self.value
 
 
 class CMSAlgorithmProtectionProvider(CMSAttributeProvider):
