@@ -1,3 +1,4 @@
+import os
 from io import BytesIO
 
 import pytest
@@ -6,7 +7,7 @@ from freezegun import freeze_time
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import PdfWriteError
+from pyhanko.pdf_utils.misc import PdfReadError, PdfWriteError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
@@ -401,3 +402,29 @@ def test_append_sig_field_acro_update():
     w = IncrementalPdfFileWriter(out)
     with pytest.raises(ValueError):
         fields.append_signature_field(w, sp)
+
+
+def test_circular_form_tree_sign():
+    fname = os.path.join(PDF_DATA_DIR, 'form-tree-circular-ref-input.pdf')
+    with open(fname, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        out = signers.sign_pdf(
+            w, signature_meta=signers.PdfSignatureMetadata(
+                field_name='Sig'
+            ), signer=FROM_CA
+        )
+    r = PdfFileReader(out)
+    with pytest.raises(PdfReadError, match='Circular.*form tree'):
+        list(r.embedded_signatures)
+
+
+def test_circular_form_tree_sign_deep():
+    fname = os.path.join(PDF_DATA_DIR, 'form-tree-circular-ref-input.pdf')
+    with open(fname, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        with pytest.raises(PdfReadError, match='Circular.*form tree'):
+            signers.sign_pdf(
+                w, signature_meta=signers.PdfSignatureMetadata(
+                    field_name='TextInput.Sig'
+                ), signer=FROM_CA
+            )

@@ -16,7 +16,12 @@ from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.content import RawContent
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.layout import BoxConstraints
-from pyhanko.pdf_utils.misc import OrderedEnum, PdfWriteError, get_and_apply
+from pyhanko.pdf_utils.misc import (
+    OrderedEnum,
+    PdfReadError,
+    PdfWriteError,
+    get_and_apply,
+)
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import (
@@ -1301,7 +1306,9 @@ def prepare_sig_field(sig_field_name, root,
         except KeyError:
             raise ValueError('/AcroForm has no /Fields')
 
-        candidates = enumerate_sig_fields_in(fields, with_name=sig_field_name)
+        candidates = enumerate_sig_fields_in(
+            fields, with_name=sig_field_name, refs_seen=set()
+        )
         sig_field_ref = None
         try:
             field_name, value, sig_field_ref = next(candidates)
@@ -1371,11 +1378,11 @@ def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
     except KeyError:
         return
 
-    yield from enumerate_sig_fields_in(fields, filled_status)
+    yield from enumerate_sig_fields_in(fields, filled_status, refs_seen=set())
 
 
 def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
-                            parent_name="", parents=None):
+                            parent_name="", parents=None, *, refs_seen):
     if not isinstance(field_list, generic.ArrayObject):
         logger.warning(
             f"Values of type {type(field_list)} are not valid as field "
@@ -1390,6 +1397,8 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
                 "Entries in field list must be indirect references -- skipping."
             )
             continue
+        if field_ref.reference in refs_seen:
+            raise PdfReadError("Circular reference in form tree")
 
         field = field_ref.get_object()
         if not isinstance(field, generic.DictionaryObject):
@@ -1441,7 +1450,8 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
             try:
                 yield from enumerate_sig_fields_in(
                     field['/Kids'], parent_name=fq_name, parents=current_path,
-                    with_name=with_name, filled_status=filled_status
+                    with_name=with_name, filled_status=filled_status,
+                    refs_seen=refs_seen | {field_ref.reference}
                 )
             except KeyError:
                 continue
