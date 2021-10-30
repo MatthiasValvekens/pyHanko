@@ -465,7 +465,7 @@ accordingly.
 .. code-block:: python
 
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import signers, general, timestamps
+    from pyhanko.sign import signers, timestamps
     from pyhanko.sign.fields import SigSeedSubFilter
     from pyhanko_certvalidator import ValidationContext
 
@@ -505,6 +505,98 @@ accordingly.
             )
 
 
+.. _async-resource-management:
+
+Using ``aiohttp`` for network I/O
+---------------------------------
+
+.. versionadded:: 0.9.0
+
+In version ``0.9.0``, pyHanko's lower-level APIs were reworked from an
+"async-first" perspective. For backwards compatibility reasons, the default
+implementation pyHanko's network I/O code (for fetching revocation info,
+timestamps, etc.) still uses the ``requests`` library with some crude
+``asyncio`` plumbing around it.
+However, to take maximal advantage of the new ``asyncio`` facilities,
+you need to use a networking library that actually supports asynchronous I/O
+natively. In principle, nothing stops you from plugging in an async-friendly
+library of your choosing, but pyHanko(and its dependency
+``pyhanko-certvalidator``) can already be used with ``aiohttp`` without much
+additional effort.
+
+.. note::
+    The reason why the ``aiohttp`` backend isn't the default one is simple:
+    using ``aiohttp`` requires the caller to manage a connection pool, which
+    was impossible to properly retrofit into pyHanko without causing major
+    breakage in the higher-level APIs as well.
+
+    Also note that ``aiohttp`` is an optional dependency.
+
+
+Here's an example demonstrating how you could use ``aiohttp``-based networking
+in pyHanko to create a PAdES-B-LTA signature.
+
+.. code-block:: python
+
+    import aiohttp
+    from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+    from pyhanko.sign import signers
+    from pyhanko.sign.fields import SigSeedSubFilter
+    from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
+    from pyhanko_certvalidator import ValidationContext
+    from pyhanko_certvalidator.fetchers.aiohttp_fetchers \
+        import AIOHttpFetcherBackend
+
+    # Load signer key material from PKCS#12 file
+    # (see earlier examples)
+    signer = signers.SimpleSigner.load_pkcs12(
+        pfx_file='signer.pfx', passphrase=b'secret'
+    )
+
+    # This demo async function takes an aiohttp session, an input
+    # file name and an output file name.
+    async def sign_doc_demo(session, input_file, output_file):
+        # Use the aiohttp fetcher backend provided by pyhanko-certvalidator,
+        # and tell it to use our client session.
+        validation_context = ValidationContext(
+            fetcher_backend=AIOHttpFetcherBackend(session),
+            allow_fetching=True
+        )
+
+        # Similarly, we choose an RFC 3161 client implementation
+        # that uses AIOHttp under the hood
+        timestamper = AIOHttpTimeStamper(
+            'http://tsa.example.com/timestampService',
+            session=session
+        )
+
+        # The signing config is otherwise the same
+        settings = signers.PdfSignatureMetadata(
+            field_name='AsyncSignatureExample',
+            validation_context=validation_context,
+            subfilter=SigSeedSubFilter.PADES,
+            embed_validation_info=True
+        )
+
+        with open(input_file, 'rb') as inf:
+            w = IncrementalPdfFileWriter(inf)
+            with open(output_file, 'wb') as outf:
+                await signers.async_sign_pdf(
+                    w, settings, signer=signer, timestamper=timestamper,
+                    output=outf
+                )
+
+    async def demo():
+       # Set up our aiohttp session
+       async with aiohttp.ClientSession() as session:
+           await sign_doc_demo(session, 'input.pdf', 'output.pdf')
+
+
+.. note::
+    Best practices for managing ``aiohttp`` sessions are beyond the scope of
+    this guide. Have a look at
+    `the documentation <https://docs.aiohttp.org/en/stable/client_quickstart.html>`_
+    for more information on how to use the ``aiohttp`` library effectively.
 
 .. _extending-signer:
 
