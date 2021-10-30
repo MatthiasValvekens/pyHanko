@@ -23,6 +23,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
+from pyhanko.sign.attributes import CMSAttributeProvider
 from pyhanko.sign.general import (
     SignatureValidationError,
     SigningError,
@@ -879,3 +880,31 @@ async def test_no_embed_root():
     assert '/AP' not in s.sig_field
     assert len(s.signed_data['certificates']) == 2
     await async_val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+async def test_noop_attribute_prov():
+    class NoopProv(CMSAttributeProvider):
+        async def build_attr_value(self, dry_run=False):
+            return None
+
+    class CustomSigner(signers.SimpleSigner):
+        def _signed_attr_providers(self, *args, **kwargs):
+            yield from super()._signed_attr_providers(*args, **kwargs)
+            yield NoopProv()
+
+    signer = CustomSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    input_data = b'Hello world!'
+    signature = await signer.async_sign_general_data(input_data, 'sha256')
+
+    # re-parse just to make sure we're starting fresh
+    signature = cms.ContentInfo.load(signature.dump())
+
+    raw_digest = hashlib.sha256(input_data).digest()
+    content = signature['content']
+    status = await async_validate_cms_signature(content, raw_digest=raw_digest)
+    assert status.valid
+    assert status.intact
