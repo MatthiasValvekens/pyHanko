@@ -295,6 +295,16 @@ def test_sign_new_existingonly(file):
         )
 
 
+@pytest.mark.parametrize('file', [0, 1])
+async def test_async_sign_new_existingonly(file):
+    w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
+    with pytest.raises(SigningError):
+        await signers.async_sign_pdf(
+            w, signers.PdfSignatureMetadata(field_name='SigNew'),
+            signer=FROM_CA, existing_fields_only=True
+        )
+
+
 def test_sign_with_new_field_spec():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
