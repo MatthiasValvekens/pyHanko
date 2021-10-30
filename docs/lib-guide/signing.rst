@@ -522,7 +522,8 @@ you need to use a networking library that actually supports asynchronous I/O
 natively. In principle, nothing stops you from plugging in an async-friendly
 library of your choosing, but pyHanko(and its dependency
 ``pyhanko-certvalidator``) can already be used with ``aiohttp`` without much
-additional effort.
+additional effort |---| ``aiohttp`` is a widely-used
+`library for asynchronous HTTP <https://github.com/aio-libs/aiohttp>`_.
 
 .. note::
     The reason why the ``aiohttp`` backend isn't the default one is simple:
