@@ -1735,7 +1735,8 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             # not much we can do.
             field_name = None
             if len(added_annots) == 1:
-                field_name = field_name_dict[next(iter(added_annots))]
+                uniq_annot_ref, = added_annots
+                field_name = field_name_dict[uniq_annot_ref]
 
             # Make sure the page dictionaries are the same, so that we
             #  can safely clear them for modification across ALL paths
