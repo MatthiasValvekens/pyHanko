@@ -114,6 +114,39 @@ the ``default-validation-context`` top-level key, like so:
             trust-replace: false
 
 
+.. _time-tolerance:
+
+Time drift tolerance
+^^^^^^^^^^^^^^^^^^^^
+
+.. versionchanged:: 0.5.0
+    Allow overriding the global value locally.
+
+By default, pyHanko allows a drift of 10 seconds when comparing times.
+This value can be overridden in two ways: using the top-level ``time-tolerance``
+configuration option, or by setting ``time-tolerance`` in a
+:ref:`named validation context <config-validation-context>`.
+
+Given the example config below, using ``setup-a`` would set the time drift
+tolerance to 180 seconds. Since the global ``time-tolerance`` setting
+is set to 30 seconds, this value would be used with ``setup-b``, or with
+any trust settings specified on the command line.
+
+
+.. code-block:: yaml
+
+    time-tolerance: 30
+    validation-contexts:
+        setup-a:
+            time-tolerance: 180
+            trust: customca.pem.cert
+            trust-replace: true
+            other-certs: some-cert.pem.cert
+        setup-b:
+            trust: customca.pem.cert
+            trust-replace: false
+
+
 .. _pkcs11-setup-conf:
 
 Named PKCS#11 setups
