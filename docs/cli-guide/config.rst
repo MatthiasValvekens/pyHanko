@@ -147,6 +147,43 @@ any trust settings specified on the command line.
             trust-replace: false
 
 
+.. retroactive-revinfo:
+
+Allow revocation information to apply retroactively
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 0.5.0
+
+By default, ``pyhanko-certvalidator`` applies OCSP and CRL validity windows
+very strictly. For an OCSP response or a CRL to be considered valid,
+the validation time must fall within this window. In other words, with the
+default settings, an OCSP response fetched at some later date does not count
+for the purposes of establishing the revocation status of a certificate used
+with an earlier signature.
+However, pyHanko's conservative default position is often more strict than
+what's practically useful, so this behaviour can be overridden with a
+configuration setting (or the ``--retroactive-revinfo`` command line flag).
+
+
+In the example config below, ``retroactive-revinfo`` is set to ``true``
+globally, but to ``false`` in ``setup-a`` specifically.
+In either case, the ``--retroactive-revinfo`` flag can override this setting.
+
+
+.. code-block:: yaml
+
+    retroactive-revinfo: true
+    validation-contexts:
+        setup-a:
+            retroactive-revinfo: false
+            trust: customca.pem.cert
+            trust-replace: true
+            other-certs: some-cert.pem.cert
+        setup-b:
+            trust: customca.pem.cert
+            trust-replace: false
+
+
 .. _pkcs11-setup-conf:
 
 Named PKCS#11 setups
