@@ -2018,3 +2018,39 @@ def test_read_broken_page_tree_direct_kids():
         # this should raise an error
         with pytest.raises(misc.PdfReadError, match="must be indirect"):
             r.find_page_for_modification(1)
+
+
+@pytest.mark.parametrize('input_str', [
+    """
+    <</A/B%bleh
+    /C/D>>
+    """,
+    """
+    <</A/B/C%bleh
+    /D>>
+    """,
+    """
+    <</A/B/C%bleh >>
+    /D>>
+    """,
+    """
+    <<%lkjadsf
+    /A/B/C%bleh >>
+    /D>>
+    """,
+    """
+    <<%lkjadsf\r/A/B/C%bleh >>
+    /D>>
+    """,
+    """
+    <<%lkjadsf\r\n/A/B/C%bleh >>\r/D>>
+    """,
+])
+def test_parse_comments(input_str):
+    strm = BytesIO(input_str.strip().encode('utf8'))
+    result = generic.DictionaryObject.read_from_stream(
+        strm, container_ref=generic.Reference(1, 0, pdf=None)
+    )
+    assert len(result) == 2
+    assert result['/A'] == '/B'
+    assert result['/C'] == '/D'
