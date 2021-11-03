@@ -1602,7 +1602,9 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
         return
 
     if not isinstance(new_ap_val, generic.DictionaryObject):
-        raise SuspiciousModification('/AP should point to a dictionary')
+        raise SuspiciousModification(
+            'AP entry should point to a dictionary'
+        )
 
     # we *never* want to whitelist an update for an existing
     # stream object (too much potential for abuse), so we insist on

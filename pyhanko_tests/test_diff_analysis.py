@@ -1340,7 +1340,7 @@ def test_form_field_ap_null():
     assert s.field_name == 'Sig1'
     status = val_trusted_but_modified(s)
     dr = status.diff_result
-    assert '/AP should point to a dictionary' in str(dr)
+    assert 'AP entry should point to a dictionary' in str(dr)
 
 
 @pytest.mark.parametrize('new_name, err', [
