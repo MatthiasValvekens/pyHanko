@@ -33,7 +33,7 @@ from pyhanko.sign.general import (
     load_cert_from_pemder,
     load_certs_from_pemder,
 )
-from pyhanko.sign.signers import PdfTimeStamper, cms_embedder
+from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes, asyncify_signer
 from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.sign.validation import (
@@ -420,18 +420,6 @@ def test_ocsp_embed():
 
     vc = apply_adobe_revocation_info(s.signer_info)
     assert len(vc.ocsps) == 1
-
-
-def test_update_no_timestamps():
-    r = PdfFileReader(BytesIO(MINIMAL))
-    output = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
-        r, dummy_ocsp_vc(), in_place=False
-    )
-    r = PdfFileReader(output)
-    status = validate_pdf_timestamp(
-        r.embedded_signatures[0], validation_context=SIMPLE_V_CONTEXT()
-    )
-    assert status.valid and status.trusted
 
 
 @freeze_time('2020-11-01')

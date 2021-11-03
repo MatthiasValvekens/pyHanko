@@ -7,6 +7,7 @@ import pytz
 from asn1crypto import tsp
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
+from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.generic import pdf_name
@@ -270,6 +271,19 @@ def test_pades_revinfo_live_update(requests_mock):
     assert len(r.embedded_regular_signatures) == 1
     assert len(r.embedded_timestamp_signatures) == 2
     assert emb_sig is r.embedded_regular_signatures[0]
+
+
+def test_update_no_timestamps():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    output = PdfTimeStamper(DUMMY_TS).update_archival_timestamp_chain(
+        r, dummy_ocsp_vc(), in_place=False
+    )
+    r = PdfFileReader(output)
+    status = validate_pdf_timestamp(
+        r.embedded_signatures[0],
+        validation_context=ValidationContext(trust_roots=TRUST_ROOTS)
+    )
+    assert status.valid and status.trusted
 
 
 def test_pades_revinfo_live_lta(requests_mock):
