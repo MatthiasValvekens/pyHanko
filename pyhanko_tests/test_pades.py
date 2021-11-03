@@ -286,6 +286,39 @@ def test_update_no_timestamps():
     assert status.valid and status.trusted
 
 
+@freeze_time('2020-11-01')
+async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock)
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', validation_context=vc,
+            subfilter=PADES, embed_validation_info=True, use_pades_lta=True
+        ), signer=FROM_CA, timestamper=DUMMY_TS
+    )
+    r = PdfFileReader(out)
+    rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
+    from pathlib import Path
+    out_path: Path = tmp_path / "out.pdf"
+    with out_path.open('wb') as outf:
+        pdf_ts = PdfTimeStamper(DUMMY_TS)
+        await pdf_ts.async_update_archival_timestamp_chain(
+            r, vc, in_place=False, output=outf
+        )
+    with out_path.open('rb') as inf:
+        r = PdfFileReader(inf)
+        emb_sig = r.embedded_signatures[0]
+        status = await async_validate_pdf_ltv_signature(
+            emb_sig, rivt_pades_lta, {'trust_roots': TRUST_ROOTS}
+        )
+        assert status.valid and status.trusted
+        assert status.modification_level == ModificationLevel.LTA_UPDATES
+        assert len(r.embedded_signatures) == 3
+        assert len(r.embedded_regular_signatures) == 1
+        assert len(r.embedded_timestamp_signatures) == 2
+        assert emb_sig is r.embedded_regular_signatures[0]
+
+
 def test_pades_revinfo_live_lta(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     _test_pades_revinfo_live_lta(w, requests_mock)

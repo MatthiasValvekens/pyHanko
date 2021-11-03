@@ -788,15 +788,13 @@ class PdfTimeStamper:
 
         # Prepare output
         if in_place:
-            output = reader.stream
+            res_output = reader.stream
         else:
-            output = misc.prepare_rw_output_stream(output)
+            res_output = misc.prepare_rw_output_stream(output)
             reader.stream.seek(0)
-            misc.chunked_write(
-                bytearray(chunk_size), reader.stream, output
-            )
+            misc.chunked_write(bytearray(chunk_size), reader.stream, res_output)
 
-        pdf_out = IncrementalPdfFileWriter(output)
+        pdf_out = IncrementalPdfFileWriter(res_output)
         if last_timestamp is not None:
             # update the DSS
             DocumentSecurityStore.supply_dss_in_writer(
@@ -807,10 +805,11 @@ class PdfTimeStamper:
             )
 
         # append a new timestamp
-        return await self.async_timestamp_pdf(
+        await self.async_timestamp_pdf(
             pdf_out, md_algorithm, validation_context, in_place=True,
             embed_roots=embed_roots
         )
+        return misc.finalise_output(output, res_output)
 
 
 def _signatures_exist(handler):
