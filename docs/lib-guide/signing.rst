@@ -42,7 +42,7 @@ some minor implications for the API design (see
 .. |TimeStamper| replace:: :class:`~.pyhanko.sign.timestamps.TimeStamper`
 
 
-The pyHanko signing API is spread across sevaral modules in the
+The pyHanko signing API is spread across several modules in the
 :mod:`.pyhanko.sign` package. Broadly speaking, it has three aspects:
 
 * |PdfSignatureMetadata| specifies high-level metadata & structural requirements
@@ -185,12 +185,18 @@ Anyway, the example from this section could have been written asynchronously as 
 
 
 For a signing process with :class:`~.pyhanko.sign.signers.pdf_cms.SimpleSigner` that doesn't perform
-any certificate validation, there's no real difference. However, the asynchronous calling convention
-allows for more efficient I/O when the signing code needs to access resources over a network.
+any certificate validation, pyHanko's move towards a more async-focused API probably doesn't buy
+you all that much.
+However, using an asynchronous calling conventions allow for more efficient I/O when the signing
+code needs to access resources over a network.
 This typically becomes relevant when
 
  - the cryptographic operations are performed by a remote signing service, or
  - revocation info for the chain of trust needs to be embedded.
+
+While you don't strictly *need* to use the new asynchronous APIs to reap all the benefits of this
+move, there are quite a few scenarios where it makes a lot of sense to do so, especially if your
+project is already structured around nonblocking/concurrent I/O operations.
 
 
 Signature appearance generation
