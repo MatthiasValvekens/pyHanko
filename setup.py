@@ -129,7 +129,7 @@ setup(
         'uritools>=3.0.1'
     ],
     extras_require={
-        'async_http': ['aiohttp~=3.7.4'],
+        'async_http': ['aiohttp~=3.8.0'],
     },
     packages=[
         PYTHON_PACKAGE_NAME + subp for subp in
