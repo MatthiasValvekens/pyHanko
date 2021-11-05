@@ -77,7 +77,7 @@ setup(
             'python-barcode>=0.13.1',
         ],
         'pkcs11': ['python-pkcs11~=0.7.0'],
-        'async_http': ['aiohttp~=3.7.4']
+        'async_http': ['aiohttp~=3.8.0']
     },
     tests_require=[
         'pytest>=6.1.1', 'requests-mock>=1.8.0',
