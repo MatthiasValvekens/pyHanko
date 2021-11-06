@@ -11,7 +11,6 @@ from asn1crypto.util import timezone
 
 from ._errors import pretty_message
 from ._types import type_name, byte_cls, str_cls
-from .errors import SoftFailError, OCSPFetchError, CRLFetchError
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .name_trees import default_permitted_subtrees, PKIXSubtrees, \
     default_excluded_subtrees
@@ -583,6 +582,9 @@ class ValidationContext:
 
         return cert.sha1 in self._whitelisted_certs
 
+    def _report_soft_fail(self, e: Exception):
+        self._soft_fail_exceptions.append(e)
+
     async def async_retrieve_crls(self, cert):
         """
         :param cert:
@@ -598,18 +600,7 @@ class ValidationContext:
         try:
             crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
         except KeyError:
-            # FIXME this ignores the distinction between EE errors
-            #  and chain errors
-            rev_essential = \
-                self.revinfo_policy.revocation_checking_policy.essential
-            try:
-                crls = await fetchers.crl_fetcher.fetch(cert)
-            except CRLFetchError as e:
-                if not rev_essential:
-                    self._soft_fail_exceptions.append(e)
-                    raise SoftFailError()
-                else:
-                    raise
+            crls = await fetchers.crl_fetcher.fetch(cert)
         return crls
 
     def retrieve_crls(self, cert):
@@ -650,23 +641,12 @@ class ValidationContext:
         fetchers = self._fetchers
         ocsps = fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
         if not ocsps:
-            try:
-                ocsp_response = await fetchers.ocsp_fetcher.fetch(cert, issuer)
-                # Responses can contain certificates that are useful in
-                # validating the response itself. We can use these since they
-                # will be validated using the local trust roots.
-                self._extract_ocsp_certs(ocsp_response)
-                ocsps = [ocsp_response]
-            except OCSPFetchError as e:
-                # FIXME this ignores the distinction between EE errors
-                #  and chain errors
-                rev_essential = \
-                    self.revinfo_policy.revocation_checking_policy.essential
-                if not rev_essential:
-                    self._soft_fail_exceptions.append(e)
-                    raise SoftFailError()
-                else:
-                    raise
+            ocsp_response = await fetchers.ocsp_fetcher.fetch(cert, issuer)
+            # Responses can contain certificates that are useful in
+            # validating the response itself. We can use these since they
+            # will be validated using the local trust roots.
+            self._extract_ocsp_certs(ocsp_response)
+            ocsps = [ocsp_response]
 
         return ocsps
 

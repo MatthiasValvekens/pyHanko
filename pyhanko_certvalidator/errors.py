@@ -63,11 +63,6 @@ class OCSPFetchError(OCSPValidationError):
     pass
 
 
-class SoftFailError(Exception):
-
-    pass
-
-
 class ValidationError(Exception):
 
     pass

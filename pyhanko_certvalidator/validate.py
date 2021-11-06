@@ -35,7 +35,6 @@ from .errors import (
     OCSPFetchError,
     PathValidationError,
     RevokedError,
-    SoftFailError,
 )
 from .path import ValidationPath, QualifiedPolicy
 
@@ -841,13 +840,15 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
             ocsp_matched = True
-        except SoftFailError:
-            soft_fail = True
         except OCSPNoMatchesError:
             pass
         except OCSPFetchError as e:
-            failures.append(e)
-            revocation_check_failed = True
+            if rev_rule.tolerant:
+                soft_fail = True
+                validation_context._report_soft_fail(e)
+            else:
+                failures.append(e)
+                revocation_check_failed = True
     if not ocsp_status_good and rev_rule.ocsp_mandatory:
         if failures:
             err_str = '; '.join(failures)
@@ -890,13 +891,15 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
             crl_matched = True
-        except SoftFailError:
-            soft_fail = True
         except CRLNoMatchesError:
             pass
         except CRLFetchError as e:
-            failures.append(e)
-            revocation_check_failed = True
+            if rev_rule.tolerant:
+                soft_fail = True
+                validation_context._report_soft_fail(e)
+            else:
+                failures.append(e)
+                revocation_check_failed = True
 
     if not crl_status_good and rev_rule.crl_mandatory:
         if failures:
