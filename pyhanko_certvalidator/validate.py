@@ -1500,12 +1500,6 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
         elif not _ocsp_allowed(responder_cert):
             authorized = False
         else:
-            # The responder cert has to have a valid path back to one of the
-            # trust roots
-            # FIXME actually no, this only needs to path back up to the issuer
-            #  but correctly manipulating the validation context to handle
-            #  that is a little tricky. Also, caching ensures that the
-            #  difference is probably negligible. Fix postponed for now.
             try:
                 await _validate_delegated_ocsp_provenance(
                     responder_cert=responder_cert, issuer=issuer,
