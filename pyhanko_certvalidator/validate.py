@@ -18,8 +18,8 @@ from cryptography.hazmat.primitives.asymmetric import (
 from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
 from ._types import str_cls, type_name
-from .context import ValidationContext, PKIXValidationParams
-from .registry import CertificateRegistry
+from .context import ValidationContext, PKIXValidationParams, \
+    RevocationCheckingRule, CertRevTrustPolicy, RevocationCheckingPolicy
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
     process_general_subtrees
 from .errors import (
@@ -40,7 +40,7 @@ from .errors import (
 from .path import ValidationPath, QualifiedPolicy
 
 from .registry import CertificateCollection, LayeredCertificateStore, \
-    SimpleCertificateStore
+    SimpleCertificateStore, CertificateRegistry
 
 
 # make sure EdDSA OIDs are known to asn1crypto
@@ -640,13 +640,12 @@ async def _validate_path(validation_context, path,
             )
 
         # Step 2 a 3 - CRL/OCSP
-        if not validation_context._skip_revocation_checks:
-            await _check_revocation(
-                cert=cert, validation_context=validation_context,
-                path=path,
-                end_entity_name_override=end_entity_name_override,
-                describe_current_cert=describe_current_cert
-            )
+        await _check_revocation(
+            cert=cert, validation_context=validation_context, path=path,
+            end_entity_name_override=end_entity_name_override,
+            describe_current_cert=describe_current_cert,
+            is_ee_cert=index == path_length
+        )
 
         # Step 2 a 4
         if cert.issuer != state.working_issuer_name:
@@ -811,17 +810,23 @@ def _finish_policy_processing(state, cert, acceptable_policies, path_length,
     return qualified_policies
 
 
-async def _check_revocation(cert, validation_context, path,
-                            end_entity_name_override, describe_current_cert):
-    status_good = False
+async def _check_revocation(cert, validation_context: ValidationContext, path,
+                            end_entity_name_override, describe_current_cert,
+                            is_ee_cert):
+    ocsp_status_good = False
     revocation_check_failed = False
-    matched = False
+    ocsp_matched = False
+    crl_matched = False
     soft_fail = False
     failures = []
-    expect_revinfo = bool(
-        cert.ocsp_urls or cert.crl_distribution_points
-    )
-    if cert.ocsp_urls or validation_context.revocation_mode == 'require':
+    revinfo_declared = bool(cert.ocsp_urls or cert.crl_distribution_points)
+    rev_check_policy = \
+        validation_context.revinfo_policy.revocation_checking_policy
+    rev_rule = rev_check_policy.ee_certificate_rule if is_ee_cert \
+        else rev_check_policy.intermediate_ca_cert_rule
+
+    # for OCSP, we don't bother if there's nothing in the certificates AIA
+    if rev_rule.ocsp_relevant and bool(cert.ocsp_urls):
         try:
             await verify_ocsp_response(
                 cert,
@@ -830,12 +835,12 @@ async def _check_revocation(cert, validation_context, path,
                 cert_description=describe_current_cert(definite=True),
                 end_entity_name_override=end_entity_name_override
             )
-            status_good = True
-            matched = True
+            ocsp_status_good = True
+            ocsp_matched = True
         except OCSPValidationIndeterminateError as e:
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
-            matched = True
+            ocsp_matched = True
         except SoftFailError:
             soft_fail = True
         except OCSPNoMatchesError:
@@ -843,24 +848,48 @@ async def _check_revocation(cert, validation_context, path,
         except OCSPFetchError as e:
             failures.append(e)
             revocation_check_failed = True
-    if not status_good and (
-            cert.crl_distribution_points or validation_context.revocation_mode == 'require'):
+    if not ocsp_status_good and rev_rule.ocsp_mandatory:
+        if failures:
+            err_str = '; '.join(failures)
+        else:
+            err_str = 'an applicable OCSP response could not be found'
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because the mandatory OCSP
+            check(s) for %s failed: %s
+            ''',
+            describe_current_cert(definite=True),
+            err_str
+        ))
+    status_good = (
+        ocsp_status_good and
+        rev_rule != RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
+    )
+
+    crl_status_good = False
+    # do not attempt to check CRLs (even cached ones) if there are no
+    # distribution points, unless we have to
+    crl_required = rev_rule.crl_mandatory or (
+        not status_good
+        and rev_rule == RevocationCheckingRule.CRL_OR_OCSP_REQUIRED
+    )
+    crl_fetchable = rev_rule.crl_relevant and bool(cert.crl_distribution_points)
+    if crl_fetchable or crl_required:
         try:
             cert_description = describe_current_cert(definite=True)
             await verify_crl(
-                cert,
-                path,
+                cert, path,
                 validation_context,
                 cert_description=cert_description,
                 end_entity_name_override=end_entity_name_override
             )
             revocation_check_failed = False
-            status_good = True
-            matched = True
+            crl_status_good = True
+            crl_matched = True
         except CRLValidationIndeterminateError as e:
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
-            matched = True
+            crl_matched = True
         except SoftFailError:
             soft_fail = True
         except CRLNoMatchesError:
@@ -868,17 +897,33 @@ async def _check_revocation(cert, validation_context, path,
         except CRLFetchError as e:
             failures.append(e)
             revocation_check_failed = True
-    # The certificate has CRL/OCSP entries but we couldn't query any of
-    # them. This should fail the validation if hard-fail is turned on.
-    expected_revinfo_not_found = not matched and (
-        # with 'require' the fact that there's no match (irrespective
-        # of certificate properties) is enough to cause a failure.
-            validation_context.revocation_mode == 'require'
-            or (
-                    expect_revinfo
-                    and validation_context.revocation_mode == 'hard-fail'
-            )
+
+    if not crl_status_good and rev_rule.crl_mandatory:
+        if failures:
+            err_str = '; '.join(failures)
+        else:
+            err_str = 'an applicable CRL could not be found'
+        raise PathValidationError(pretty_message(
+            '''
+            The path could not be validated because the mandatory CRL
+            check(s) for %s failed: %s
+            ''',
+            describe_current_cert(definite=True),
+            err_str
+        ))
+
+    # If we still didn't find a match, the certificate has CRL/OCSP entries
+    # but we couldn't query any of them. Let's check if this is disqualifying.
+    # With 'strict' the fact that there's no match (irrespective
+    # of certificate properties) is enough to cause a failure,
+    # otherwise we have to check.
+    expected_revinfo = rev_rule.strict or (
+        revinfo_declared and
+        rev_rule == RevocationCheckingRule.CHECK_IF_DECLARED
     )
+    # Did we find any revinfo that "has jurisdiction"?
+    matched = crl_matched or ocsp_matched
+    expected_revinfo_not_found = not matched and expected_revinfo
     if not soft_fail:
         if not status_good and matched and revocation_check_failed:
             raise PathValidationError(pretty_message(
@@ -1168,53 +1213,74 @@ def _self_signed(cert: x509.Certificate):
         return False
 
 
-async def _ocsp_responder_issuer(responder_cert: x509.Certificate,
-                                 issuer: x509.Certificate,
-                                 validation_context: ValidationContext,
-                                 ee_path: ValidationPath,
-                                 end_entity_name_override, cert_description):
-    certificate_registry = validation_context.certificate_registry
-    signing_cert_paths = await certificate_registry.async_build_paths(
-        responder_cert
-    )
-    for signing_cert_path in signing_cert_paths:
-        changed_revocation_flags = False
-        original_revocation_mode = validation_context.revocation_mode
+OCSP_PROVENANCE_ERR = (
+    "Unable to verify OCSP response since response signing "
+    "certificate could not be validated"
+)
+
+
+async def _validate_delegated_ocsp_provenance(
+        responder_cert: x509.Certificate,
+        issuer: x509.Certificate,
+        validation_context: ValidationContext,
+        ee_path: ValidationPath,
+        end_entity_name_override,
+        cert_description):
+    # OCSP responder certs must be issued directly by the CA on behalf of
+    # which they act.
+    # Moreover, RFC 6960 says that we don't have to accept OCSP responses signed
+    # with a different key than the one used to sign subscriber certificates.
+
+    if end_entity_name_override is None:
+        end_entity_name_override = cert_description + ' OCSP responder'
+
+    issuer_chain = ee_path.copy().truncate_to(issuer)
+    responder_chain = issuer_chain.append(responder_cert)
+    if responder_cert.ocsp_no_check_value is not None:
+        # we don't have to check the revocation of the OCSP responder,
+        # so do a simplified check
+        revinfo_policy = CertRevTrustPolicy(
+            revocation_checking_policy=RevocationCheckingPolicy(
+                ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
+                # this one should never trigger
+                intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK
+            )
+        )
+        vc = ValidationContext(
+            trust_roots=[issuer],
+            allow_fetching=False, revinfo_policy=revinfo_policy,
+            moment=validation_context.moment,
+            weak_hash_algos=validation_context.weak_hash_algos,
+            time_tolerance=validation_context.time_tolerance
+        )
+
         try:
-            # Store the original revocation check value
-            skip_ocsp = responder_cert.ocsp_no_check_value is not None
-            skip_ocsp = skip_ocsp or signing_cert_path == ee_path
-            if skip_ocsp and validation_context._skip_revocation_checks is False:
-                changed_revocation_flags = True
-                new_revocation_mode = "soft-fail" if original_revocation_mode == "soft-fail" else "hard-fail"
-
-                validation_context._skip_revocation_checks = True
-                validation_context._revocation_mode = new_revocation_mode
-
-            if end_entity_name_override is None and responder_cert.sha256 != issuer.sha256:
-                end_entity_name_override = cert_description + ' OCSP responder'
+            # verify the truncated path
             await _validate_path(
-                validation_context,
-                signing_cert_path,
+                vc, path=ValidationPath(issuer).append(responder_cert),
                 end_entity_name_override=end_entity_name_override
             )
-            return signing_cert_path.find_issuer(responder_cert)
-        except PathValidationError:
-            continue
-
+        except PathValidationError as e:
+            raise OCSPValidationError(OCSP_PROVENANCE_ERR) from e
+        # record validation in the original VC
+        # TODO maybe have an (issuer, [verified_responder]) cache?
+        #  caching OCSP responder validation results with everything else is
+        #  probably somewhat incorrect
+        validation_context.record_validation(responder_cert, responder_chain)
+    else:
+        original_revinfo_policy = validation_context.revinfo_policy
+        try:
+            # verify the truncated path against the original validation context
+            # BUT replace the policy by one that disables OCSP checks
+            # (we don't want recursive OCSP)
+            await _validate_path(
+                validation_context, path=responder_chain,
+                end_entity_name_override=end_entity_name_override
+            )
+        except PathValidationError as e:
+            raise OCSPValidationError(OCSP_PROVENANCE_ERR) from e
         finally:
-            if changed_revocation_flags:
-                validation_context._skip_revocation_checks = False
-                validation_context._revocation_mode = original_revocation_mode
-
-    raise OCSPValidationError(
-        pretty_message(
-            '''
-            Unable to verify OCSP response since response signing
-            certificate could not be validated
-            '''
-        ),
-    )
+            validation_context.revinfo_policy = original_revinfo_policy
 
 
 def _ocsp_allowed(responder_cert: x509.Certificate):
@@ -1294,7 +1360,15 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
 
     moment = validation_context.moment
 
-    issuer = path.find_issuer(cert)
+    try:
+        issuer = path.find_issuer(cert)
+    except LookupError:
+        raise OCSPNoMatchesError(pretty_message(
+            '''
+            Could not determine issuer certificate for %s in path.
+            ''',
+            cert_description
+        ))
     certificate_registry = validation_context.certificate_registry
 
     failures = []
@@ -1391,13 +1465,14 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
             ])
         if tbs_response['responder_id'].name == 'by_key':
             key_identifier = tbs_response['responder_id'].native
-            signing_cert = cert_store.retrieve_by_key_identifier(key_identifier)
+            responder_cert = cert_store.retrieve_by_key_identifier(key_identifier)
         else:
-            candidate_signing_certs = cert_store.retrieve_by_name(
+            candidate_responder_certs = cert_store.retrieve_by_name(
                 tbs_response['responder_id'].chosen
             )
-            signing_cert = candidate_signing_certs[0] if candidate_signing_certs else None
-        if not signing_cert:
+            responder_cert = candidate_responder_certs[0] if \
+                candidate_responder_certs else None
+        if not responder_cert:
             failures.append((
                 pretty_message(
                     '''
@@ -1411,44 +1486,45 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
 
         # If the cert signing the OCSP response is not the issuer, it must be
         # issued by the cert issuer and be valid for OCSP responses
-        if issuer.issuer_serial != signing_cert.issuer_serial:
+        if issuer.issuer_serial == responder_cert.issuer_serial:
+            # let's check whether the certs are actually the same
+            # (by comparing the signatures as a proxy)
+            issuer_sig = bytes(issuer['signature_value'])
+            responder_sig = bytes(responder_cert['signature_value'])
+            authorized = issuer_sig == responder_sig
+        # If OCSP is being delegated
+        # check whether the relevant OCSP-related extensions are present
+        elif not _ocsp_allowed(responder_cert):
+            authorized = False
+        else:
             # The responder cert has to have a valid path back to one of the
             # trust roots
             # FIXME actually no, this only needs to path back up to the issuer
             #  but correctly manipulating the validation context to handle
             #  that is a little tricky. Also, caching ensures that the
             #  difference is probably negligible. Fix postponed for now.
-            if not certificate_registry.is_ca(signing_cert):
-                try:
-                    ocsp_resp_issuer = await _ocsp_responder_issuer(
-                        responder_cert=signing_cert, issuer=issuer,
-                        validation_context=validation_context, ee_path=path,
-                        end_entity_name_override=end_entity_name_override,
-                        cert_description=cert_description
-                    )
-                    authorized = \
-                        ocsp_resp_issuer.issuer_serial == issuer.issuer_serial
-                except OCSPValidationError as e:
-                    failures.append((e.args[0], ocsp_response))
-                    continue
-            else:
-                # This would mean: responder cert is a trust root, but it's
-                # not the issuer of the certificate that we're querying...
-                # That's profoundly bizarre, and it also violates
-                # the letter of the OCSP spec, so dismiss as unauthorized
+            try:
+                await _validate_delegated_ocsp_provenance(
+                    responder_cert=responder_cert, issuer=issuer,
+                    validation_context=validation_context, ee_path=path,
+                    end_entity_name_override=end_entity_name_override,
+                    cert_description=cert_description
+                )
                 authorized = True
-            authorized &= _ocsp_allowed(signing_cert)
-            if not authorized:
-                failures.append((
-                    pretty_message(
-                        '''
-                        Unable to verify OCSP response since response was
-                        signed by an unauthorized certificate
-                        '''
-                    ),
-                    ocsp_response
-                ))
+            except OCSPValidationError as e:
+                failures.append((e.args[0], ocsp_response))
                 continue
+        if not authorized:
+            failures.append((
+                pretty_message(
+                    '''
+                    Unable to verify OCSP response since response was
+                    signed by an unauthorized certificate
+                    '''
+                ),
+                ocsp_response
+            ))
+            continue
 
         # Determine what algorithm was used to sign the response
         signature_algo = response['signature_algorithm'].signature_algo
@@ -1459,7 +1535,7 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
             _validate_sig(
                 signature=response['signature'].native,
                 signed_data=tbs_response.dump(),
-                public_key_info=signing_cert.public_key,
+                public_key_info=responder_cert.public_key,
                 sig_algo=signature_algo, hash_algo=hash_algo,
                 parameters=response['signature_algorithm']['parameters']
             )
@@ -1631,7 +1707,7 @@ async def _find_crl_issuer(crl_issuer_name: x509.Name,
 
         try:
             # Step g
-            _verify_signature(certificate_list, candidate_crl_issuer)
+            _verify_signature(certificate_list, candidate_crl_issuer.public_key)
 
             crl_issuer = candidate_crl_issuer
             break
@@ -1747,7 +1823,15 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
 
     certificate_lists = await validation_context.async_retrieve_crls(cert)
 
-    cert_issuer = path.find_issuer(cert)
+    try:
+        cert_issuer = path.find_issuer(cert)
+    except LookupError:
+        raise CRLNoMatchesError(pretty_message(
+            '''
+            Could not determine issuer certificate for %s in path.
+            ''',
+            cert_description
+        ))
 
     complete_lists_by_issuer = {}
     delta_lists_by_issuer = {}
@@ -2069,7 +2153,7 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
         # Step h
         if use_deltas and delta_certificate_list:
             try:
-                _verify_signature(delta_certificate_list, crl_issuer)
+                _verify_signature(delta_certificate_list, crl_issuer.public_key)
             except CRLValidationError:
                 failures.append((
                     'Delta CRL signature could not be verified',
@@ -2176,15 +2260,12 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
         )
 
 
-def _verify_signature(certificate_list, crl_issuer):
+def _verify_signature(certificate_list, public_key):
     """
     Verifies the digital signature on an asn1crypto.crl.CertificateList object
 
     :param certificate_list:
         An asn1crypto.crl.CertificateList object
-
-    :param crl_issuer:
-        An asn1crypto.x509.Certificate object of the CRL issuer
 
     :raises:
         pyhanko_certvalidator.errors.CRLValidationError - when the signature is invalid or uses an unsupported algorithm
@@ -2197,7 +2278,7 @@ def _verify_signature(certificate_list, crl_issuer):
         _validate_sig(
             signature=certificate_list['signature'].native,
             signed_data=certificate_list['tbs_cert_list'].dump(),
-            public_key_info=crl_issuer.public_key,
+            public_key_info=public_key,
             sig_algo=signature_algo, hash_algo=hash_algo,
             parameters=certificate_list['signature_algorithm']['parameters']
         )
@@ -2418,9 +2499,25 @@ class PSSParameterMismatch(InvalidSignature):
     pass
 
 
+class DSAParametersUnavailable(InvalidSignature):
+    # TODO Technically, such a signature isn't _really_ invalid
+    #  (we merely couldn't validate it).
+    # However, this is only an issue for CRLs and OCSP responses that
+    # make use of DSA parameter inheritance, which is pretty much a
+    # completely irrelevant problem in this day and age, so treating those
+    # signatures as invalid as a matter of course seems pretty much OK.
+    pass
+
+
 def _validate_sig(signature: bytes, signed_data: bytes,
                   public_key_info: PublicKeyInfo,
                   sig_algo: str, hash_algo: str, parameters=None):
+
+    if sig_algo == 'dsa' and \
+            public_key_info['algorithm']['parameters'].native is None:
+        raise DSAParametersUnavailable(
+            "DSA public key parameters were not provided."
+        )
 
     # pyca/cryptography can't load PSS-exclusive keys without some help:
     if public_key_info.algorithm == 'rsassa_pss':

@@ -1,8 +1,10 @@
 import asyncio
+import enum
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import binascii
+from typing import Optional
 
 from asn1crypto import crl, ocsp
 from asn1crypto.util import timezone
@@ -15,6 +17,197 @@ from .name_trees import default_permitted_subtrees, PKIXSubtrees, \
     default_excluded_subtrees
 from .path import ValidationPath
 from .registry import CertificateRegistry
+
+
+@enum.unique
+class RevocationCheckingRule(enum.Enum):
+    """
+    Rules determining in what circumstances revocation data has to be checked,
+    and what kind.
+    """
+
+    # yes, this is consistently misspelled in all parts of the
+    # ETSI TS 119 172 series...
+    CRL_REQUIRED = "clrcheck"
+    """
+    Check CRLs.
+    """
+
+    OCSP_REQUIRED = "ocspcheck"
+    """
+    Check OCSP.
+    """
+
+    CRL_AND_OCSP_REQUIRED = "bothcheck"
+    """
+    Check CRL and OCSP.
+    """
+
+    CRL_OR_OCSP_REQUIRED = "eithercheck"
+    """
+    Check CRL or OCSP.
+    """
+
+    NO_CHECK = "nocheck"
+    """
+    Do not check.
+    """
+
+    CHECK_IF_DECLARED = "ifdeclaredcheck"
+    """
+    Check revocation information if declared in the certificate.
+    
+    .. warning::
+        This is not an ESI check type, but is preserved for 
+        compatibility with the 'hard-fail' mode in certvalidator.
+
+    .. info::
+        In this mode, cached CRLs will _not_ be checked if the certificate
+        does not list any distribution points.
+    """
+
+    CHECK_IF_DECLARED_SOFT = "ifdeclaredsoftcheck"
+    """
+    Check revocation information if declared in the certificate, but
+    do not fail validation if the check fails.
+
+    .. warning::
+        This is not an ESI check type, but is preserved for 
+        compatibility with the 'soft-fail' mode in certvalidator.
+
+    .. info::
+        In this mode, cached CRLs will _not_ be checked if the certificate
+        does not list any distribution points.
+    """
+
+    @property
+    def strict(self) -> bool:
+        # note that this is not quite the same as (not self.tolerant)!
+        return self not in (
+            RevocationCheckingRule.CHECK_IF_DECLARED,
+            RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
+            RevocationCheckingRule.NO_CHECK
+        )
+
+    @property
+    def tolerant(self) -> bool:
+        return self in (
+            RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
+            RevocationCheckingRule.NO_CHECK
+        )
+
+    @property
+    def crl_mandatory(self) -> bool:
+        return self in (
+            RevocationCheckingRule.CRL_REQUIRED,
+            RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
+        )
+
+    @property
+    def crl_relevant(self) -> bool:
+        return self not in (
+            RevocationCheckingRule.NO_CHECK,
+            RevocationCheckingRule.OCSP_REQUIRED,
+        )
+
+    @property
+    def ocsp_mandatory(self) -> bool:
+        return self in (
+            RevocationCheckingRule.OCSP_REQUIRED,
+            RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
+        )
+
+    @property
+    def ocsp_relevant(self) -> bool:
+        return self not in (
+            RevocationCheckingRule.NO_CHECK,
+            RevocationCheckingRule.CRL_REQUIRED
+        )
+
+
+@dataclass(frozen=True)
+class RevocationCheckingPolicy:
+    """
+    Class describing a revocation checking policy
+    based on the types defined in the ETSI TS 119 172 series.
+    """
+
+    ee_certificate_rule: RevocationCheckingRule
+    """
+    Revocation rule applied to end-entity certificates.
+    """
+
+    intermediate_ca_cert_rule: RevocationCheckingRule
+    """
+    Revocation rule applied to certificates further up the path.
+    """
+
+    @classmethod
+    def from_legacy(cls, policy: str):
+        try:
+            return LEGACY_POLICY_MAP[policy]
+        except KeyError:
+            raise ValueError(f"'{policy}' is not a valid revocation mode")
+
+    @property
+    def essential(self) -> bool:
+        return not (
+            self.ee_certificate_rule.tolerant
+            and self.ee_certificate_rule.tolerant
+        )
+
+
+LEGACY_POLICY_MAP = {
+    'soft-fail': RevocationCheckingPolicy(
+        RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
+        RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
+    ),
+    'hard-fail': RevocationCheckingPolicy(
+        RevocationCheckingRule.CHECK_IF_DECLARED,
+        RevocationCheckingRule.CHECK_IF_DECLARED,
+    ),
+    'require': RevocationCheckingPolicy(
+        RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+        RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+    )
+}
+
+
+@enum.unique
+class FreshnessReqType(enum.Enum):
+    MAX_DIFF_REVOCATION_VALIDATION = enum.auto()
+    TIME_AFTER_SIGNATURE = enum.auto()
+
+
+@dataclass(frozen=True)
+class CertRevTrustPolicy:
+    """
+    Class describing conditions for trusting revocation info.
+    Based on CertificateRevTrust in ETSI TS 119 172-3.
+    """
+
+    revocation_checking_policy: RevocationCheckingPolicy
+    """
+    The revocation checking policy requirements.
+    """
+
+    freshness: Optional[timedelta] = None
+    """
+    Freshness requirements.
+    """
+
+    freshness_req_type: FreshnessReqType = \
+        FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION
+    """
+    Controls whether the freshness requirement applies relatively to the
+    signing time or to the validation time.
+    """
+
+    expected_post_expiry_revinfo_time: Optional[timedelta] = None
+    """
+    Duration for which the issuing CA is expected to supply status information
+    after a certificate expires.
+    """
 
 
 class ValidationContext:
@@ -68,22 +261,13 @@ class ValidationContext:
     # can be downloaded will also be checked. The next two attributes change
     # that behavior.
 
-    # A bool - if all CRL and OCSP revocation checks should be skipped, even if
-    # provided to the constructor. This is strictly used internally, and if for
-    # the purpose of skipping revocation checks on an single-purpose OCSP
-    # responder certificate.
-    _skip_revocation_checks = None
-
-    # A unicode string of the revocation mode - "soft-fail", "hard-fail",
-    # or "require"
-    _revocation_mode = None
-
     _fetchers: Fetchers = None
 
     def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None,
-                 whitelisted_certs=None, moment=None, allow_fetching=False, crls=None,
-                 ocsps=None, revocation_mode="soft-fail", weak_hash_algos=None,
-                 time_tolerance=timedelta(seconds=1),
+                 whitelisted_certs=None, moment=None, allow_fetching=False,
+                 crls=None, ocsps=None, revocation_mode="soft-fail",
+                 revinfo_policy: Optional[CertRevTrustPolicy] = None,
+                 weak_hash_algos=None, time_tolerance=timedelta(seconds=1),
                  retroactive_revinfo=False,
                  fetcher_backend: FetcherBackend = None,
                  fetchers: Fetchers = None):
@@ -167,6 +351,19 @@ class ValidationContext:
                 reversible revocation methods.
         """
 
+        if revinfo_policy is None:
+            revinfo_policy = CertRevTrustPolicy(
+                RevocationCheckingPolicy.from_legacy(revocation_mode),
+            )
+        elif revinfo_policy.freshness is not None:
+            raise NotImplementedError("Freshness has not been implemented yet.")
+        elif revinfo_policy.expected_post_expiry_revinfo_time is not None:
+            raise NotImplementedError(
+                "Dealing with post-expiry revocation info has not been "
+                "implemented yet."
+            )
+        self.revinfo_policy = revinfo_policy
+
         if crls is not None:
             if not isinstance(crls, (list, tuple)):
                 raise TypeError(pretty_message(
@@ -215,6 +412,8 @@ class ValidationContext:
                 new_ocsps.append(ocsp_)
             ocsps = new_ocsps
 
+        rev_essential = \
+            revinfo_policy.revocation_checking_policy.essential
         if moment is not None:
             if allow_fetching:
                 raise ValueError(pretty_message(
@@ -223,12 +422,13 @@ class ValidationContext:
                     '''
                 ))
 
-        elif not allow_fetching and crls is None and ocsps is None and revocation_mode != "soft-fail":
+        elif not allow_fetching and crls is None and ocsps is None \
+                and rev_essential:
             raise ValueError(pretty_message(
                 '''
-                revocation_mode is "%s" and allow_fetching is False, however
-                crls and ocsps are both None, meaning that no validation can
-                happen
+                revocation data is not optional and allow_fetching is False,
+                however crls and ocsps are both None, meaning that no validation
+                can happen
                 '''
             ))
 
@@ -250,15 +450,6 @@ class ValidationContext:
                     attribute is not set to a valid timezone
                     '''
                 ))
-
-        if revocation_mode not in ('soft-fail', 'hard-fail', 'require'):
-            raise ValueError(pretty_message(
-                '''
-                revocation_mode must be one of "soft-fail", "hard-fail",
-                "require", not %s
-                ''',
-                repr(revocation_mode)
-            ))
 
         self._whitelisted_certs = set()
         if whitelisted_certs is not None:
@@ -330,8 +521,6 @@ class ValidationContext:
                 self._extract_ocsp_certs(ocsp_response)
 
         self._allow_fetching = bool(allow_fetching)
-        self._skip_revocation_checks = False
-        self._revocation_mode = revocation_mode
         self._soft_fail_exceptions = []
         self.weak_hash_algos = weak_hash_algos
         self.time_tolerance = (
@@ -381,15 +570,6 @@ class ValidationContext:
 
         return self._soft_fail_exceptions
 
-    @property
-    def revocation_mode(self):
-        """
-        A unicode string of the revocation checking mode: "soft-fail",
-        "hard-fail", or "require"
-        """
-
-        return self._revocation_mode
-
     def is_whitelisted(self, cert):
         """
         Checks to see if a certificate has been whitelisted
@@ -418,10 +598,14 @@ class ValidationContext:
         try:
             crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
         except KeyError:
+            # FIXME this ignores the distinction between EE errors
+            #  and chain errors
+            rev_essential = \
+                self.revinfo_policy.revocation_checking_policy.essential
             try:
                 crls = await fetchers.crl_fetcher.fetch(cert)
             except CRLFetchError as e:
-                if self._revocation_mode == "soft-fail":
+                if not rev_essential:
                     self._soft_fail_exceptions.append(e)
                     raise SoftFailError()
                 else:
@@ -474,7 +658,11 @@ class ValidationContext:
                 self._extract_ocsp_certs(ocsp_response)
                 ocsps = [ocsp_response]
             except OCSPFetchError as e:
-                if self._revocation_mode == "soft-fail":
+                # FIXME this ignores the distinction between EE errors
+                #  and chain errors
+                rev_essential = \
+                    self.revinfo_policy.revocation_checking_policy.essential
+                if not rev_essential:
                     self._soft_fail_exceptions.append(e)
                     raise SoftFailError()
                 else:
