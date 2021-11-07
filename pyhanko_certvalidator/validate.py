@@ -1271,19 +1271,13 @@ async def _validate_delegated_ocsp_provenance(
         #  probably somewhat incorrect
         validation_context.record_validation(responder_cert, responder_chain)
     else:
-        original_revinfo_policy = validation_context.revinfo_policy
         try:
-            # verify the truncated path against the original validation context
-            # BUT replace the policy by one that disables OCSP checks
-            # (we don't want recursive OCSP)
             await _validate_path(
                 validation_context, path=responder_chain,
                 end_entity_name_override=end_entity_name_override
             )
         except PathValidationError as e:
             raise OCSPValidationError(OCSP_PROVENANCE_ERR) from e
-        finally:
-            validation_context.revinfo_policy = original_revinfo_policy
 
 
 def _ocsp_allowed(responder_cert: x509.Certificate):
