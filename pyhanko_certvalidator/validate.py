@@ -870,12 +870,12 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
     crl_status_good = False
     # do not attempt to check CRLs (even cached ones) if there are no
     # distribution points, unless we have to
-    crl_required = rev_rule.crl_mandatory or (
+    crl_required_by_policy = rev_rule.crl_mandatory or (
         not status_good
         and rev_rule == RevocationCheckingRule.CRL_OR_OCSP_REQUIRED
     )
     crl_fetchable = rev_rule.crl_relevant and bool(cert.crl_distribution_points)
-    if crl_fetchable or crl_required:
+    if crl_required_by_policy or (crl_fetchable and not status_good):
         try:
             cert_description = describe_current_cert(definite=True)
             await verify_crl(
