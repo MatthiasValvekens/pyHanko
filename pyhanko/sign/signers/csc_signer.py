@@ -3,11 +3,12 @@ import asyncio
 import base64
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from asn1crypto import algos, x509
 from cryptography.hazmat.primitives import hashes
+from dateutil.tz import tzlocal
 from pyhanko_certvalidator.registry import (
     CertificateStore,
     SimpleCertificateStore,
@@ -161,6 +162,59 @@ class CSCAuthorizationManager(abc.ABC):
             Authorization data.
         """
         raise NotImplementedError
+
+    def format_csc_auth_request(self, num_signatures: int = 1,
+                                pin: Optional[str] = None,
+                                otp: Optional[str] = None,
+                                hash_b64s: Optional[List[str]] = None,
+                                description: Optional[str] = None,
+                                client_data: Optional[str] = None) -> dict:
+        result = {'credentialID': self.csc_session_info.credential_id}
+
+        if hash_b64s is not None:
+            # make num_signatures congruent with the number of hashes passed in
+            # (this is a SHOULD in the spec, but we enforce it here)
+            num_signatures = len(hash_b64s)
+            result['hash'] = hash_b64s
+
+        result['numSignatures'] = num_signatures
+
+        if pin is not None:
+            result['PIN'] = pin
+        if otp is not None:
+            result['OTP'] = otp
+        if description is not None:
+            result['description'] = description
+        if client_data is not None:
+            result['client_data'] = client_data
+
+        return result
+
+    @staticmethod
+    def parse_csc_auth_response(response_data: dict) -> CSCAuthorizationInfo:
+
+        try:
+            sad = response_data["SAD"]
+        except KeyError:
+            raise SigningError(
+                "Could not extract SAD value from auth response"
+            )
+
+        try:
+            lifetime_seconds = int(response_data['expiresIn'])
+            now = datetime.now(tz=tzlocal.get_localzone())
+            expires_at = now + timedelta(seconds=lifetime_seconds)
+        except KeyError:
+            expires_at = None
+        except ValueError as e:
+            raise SigningError(
+                "Could not process expiresIn value in auth response"
+            ) from e
+        return CSCAuthorizationInfo(sad=sad, expires_at=expires_at)
+
+    @property
+    def auth_headers(self):
+        return self.csc_session_info.auth_headers
 
 
 class PrefetchedSADAuthorizationManager(CSCAuthorizationManager):
@@ -331,7 +385,8 @@ class CSCSigner(Signer):
         url = session_info.endpoint_url("signatures/signHash")
         session = self.session
         try:
-            async with session.post(url=url, headers=session_info.auth_headers,
+            async with session.post(url=url,
+                                    headers=self.auth_manager.auth_headers,
                                     json=req_data, raise_for_status=True,
                                     timeout=self.sign_timeout) as response:
                 response_data = await response.json()
