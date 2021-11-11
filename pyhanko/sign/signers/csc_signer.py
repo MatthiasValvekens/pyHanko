@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import tzlocal
 from asn1crypto import algos, x509
 from cryptography.hazmat.primitives import hashes
-from dateutil.tz import tzlocal
 from pyhanko_certvalidator.registry import (
     CertificateStore,
     SimpleCertificateStore,
@@ -62,7 +62,7 @@ async def fetch_certs_in_csc_credential(session: aiohttp.ClientSession,
     req_data = {
         "credentialID": csc_session_info.credential_id,
         "certificates": "chain",
-        "certInfo": True
+        "certInfo": False
     }
 
     async with session.post(url=url, headers=csc_session_info.auth_headers,
@@ -291,8 +291,6 @@ class CSCSigner(Signer):
     async def format_csc_signing_req(self, tbs_hashes: List[str],
                                      digest_algorithm: str):
 
-        # Note: with asyncio events, it's possible to perform batch signing
-        # as well (out of scope for now)
         mechanism = self.get_signature_mechanism(digest_algorithm)
         session_info = self.auth_manager.csc_session_info
         # SAD can be bound to specific hashes, but the authorization
@@ -360,9 +358,7 @@ class CSCSigner(Signer):
 
     async def commit(self):
         batch = self._current_batch
-        if batch is None:
-            raise SigningError("There is no batch to sign")
-        if batch.results is not None:
+        if batch is None or batch.results is not None:
             return
         elif batch.initiated:
             # just wait for the commit to finish together with
