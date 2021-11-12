@@ -19,7 +19,7 @@ from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 
 try:
     import aiohttp
-except ImportError:
+except ImportError:   # pragma: nocover
     raise ImportError("Install pyHanko with [async_http]")
 
 logger = logging.getLogger(__name__)
@@ -117,6 +117,9 @@ def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
     hash_pinning_required = scal_value == 2
 
     return CSCCredentialInfo(
+        # The CSC spec requires the signer's certificate to be first
+        # in the 'certs' array. The order for the others is unspecified,
+        # but that doesn't matter.
         signing_cert=certs[0], chain=certs[1:],
         supported_mechanisms=supported_algos,
         max_batch_size=max_batch_size,
