@@ -541,7 +541,12 @@ def process_config_dict(config_dict: dict) -> dict:
     # stamp style config
     # TODO this style is obviously not suited for non-signing scenarios
     #  (but it'll do for now)
-    stamp_configs = {DEFAULT_STAMP_STYLE: DEFAULT_SIGNING_STAMP_STYLE}
+    stamp_configs = {
+        DEFAULT_STAMP_STYLE: {
+            'stamp-text': DEFAULT_SIGNING_STAMP_STYLE.stamp_text,
+            'background': '__stamp__'
+        }
+    }
     try:
         stamp_specs = config_dict['stamp-styles']
         stamp_configs.update(stamp_specs)

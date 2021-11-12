@@ -931,3 +931,21 @@ def test_enforce_required_recursive():
     with pytest.raises(ConfigurationError,
                        match="Error while processing configurable field"):
         DemoConfigurableB.from_config(config_dict)
+
+
+def test_default_stamp_style_fetch():
+    # regression test for fetching the default stamp style if not explicitly
+    # defined
+
+    config_string = f"""
+    validation-contexts:
+        default:
+            trust: '{TESTING_CA_DIR}/root/root.cert.pem'
+            other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+    """
+
+    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+
+    result = cli_config.get_stamp_style(None)
+    from pyhanko.sign import DEFAULT_SIGNING_STAMP_STYLE
+    assert result == DEFAULT_SIGNING_STAMP_STYLE
