@@ -1,5 +1,11 @@
 # changelog
 
+
+## 0.17.4
+
+ - Fix mistaken assumption when a certificate's MIME type is announced as `application/x-x509-ca-cert`.
+ - Update aiohttp to 3.8.0
+
 ## 0.17.3
 
  - Fix a deadlocking bug caused by improper exception handling
