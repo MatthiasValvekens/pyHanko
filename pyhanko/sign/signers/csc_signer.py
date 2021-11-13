@@ -685,18 +685,14 @@ class CSCSigner(Signer):
 
         return req_data
 
-    async def async_sign_raw(self, data: bytes, digest_algorithm: str,
-                             dry_run=False) -> bytes:
-        if dry_run:
-            return bytes(self.est_raw_signature_size)
-
-        tbs_hash = base64_digest(data, digest_algorithm)
-        if self._current_batch is None:
-            self._current_batch = batch = _CSCBatchInfo(
-                notifier=asyncio.Event(),
-                md_algorithm=digest_algorithm,
-            )
-        else:
+    async def _ensure_batch(self, digest_algorithm) -> _CSCBatchInfo:
+        while self._current_batch is not None and self._current_batch.initiated:
+            # There's a commit going on, wait for it to finish
+            await self._current_batch.notifier.wait()
+            # ...and start a new batch right after (unless someone else
+            # already did, or the new batch is somehow already full/already
+            # committing, in which case we have to keep queueing)
+        if self._current_batch is not None:
             batch = self._current_batch
             if batch.md_algorithm != digest_algorithm:
                 raise SigningError(
@@ -704,6 +700,21 @@ class CSCSigner(Signer):
                     f"function; encountered both {batch.md_algorithm} "
                     f"and {digest_algorithm}."
                 )
+            return batch
+        self._current_batch = batch = _CSCBatchInfo(
+            notifier=asyncio.Event(),
+            md_algorithm=digest_algorithm,
+        )
+        return batch
+
+    async def async_sign_raw(self, data: bytes, digest_algorithm: str,
+                             dry_run=False) -> bytes:
+        if dry_run:
+            return bytes(self.est_raw_signature_size)
+
+        tbs_hash = base64_digest(data, digest_algorithm)
+        # ensure that there's a batch that we can hitch a ride on
+        batch = await self._ensure_batch(digest_algorithm)
         ix = batch.add(tbs_hash)
         # autocommit if the batch is full
         if self.batch_autocommit and ix == self.batch_size - 1:
@@ -740,10 +751,7 @@ class CSCSigner(Signer):
                 raise SigningError("Commit failed")
         else:
             batch.initiated = True
-            try:
-                await self._do_commit(batch)
-            finally:
-                self._current_batch = None
+            await self._do_commit(batch)
 
     async def _do_commit(self, batch: _CSCBatchInfo):
         """
@@ -779,4 +787,5 @@ class CSCSigner(Signer):
         except aiohttp.ClientError as e:
             raise SigningError("Signature request failed") from e
         finally:
+            self._current_batch = None
             batch.notifier.set()
