@@ -7,6 +7,7 @@ pyhanko.sign.signers package
    :maxdepth: 4
 
    pyhanko.sign.signers.cms_embedder
+   pyhanko.sign.signers.csc_signer
    pyhanko.sign.signers.constants
    pyhanko.sign.signers.functions
    pyhanko.sign.signers.pdf_byterange
