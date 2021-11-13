@@ -374,7 +374,8 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
                 await async_val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+# @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.skip  # FIXME flaky test, sometimes coredumps with SoftHSM
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
 async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
