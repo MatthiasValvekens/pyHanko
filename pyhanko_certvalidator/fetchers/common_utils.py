@@ -23,24 +23,25 @@ logger = logging.getLogger(__name__)
 
 ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = (
     'application/pkix-cert', 'application/pkcs7-mime',
+    'application/x-x509-ca-cert'
 )
 
 ACCEPTABLE_CERT_PEM_ALIASES = (
-    'application/x-pem-file', 'application/x-x509-ca-cert', 'text/plain',
+    'application/x-pem-file', 'text/plain',
 )
 
 
 def unpack_cert_content(response_data: bytes, content_type: str,
                         url: str, permit_pem: bool):
 
-    if content_type == 'application/pkix-cert':
+    if content_type in ('application/pkix-cert', 'application/x-x509-ca-cert'):
         yield x509.Certificate.load(response_data)
     elif permit_pem and (content_type in ACCEPTABLE_CERT_PEM_ALIASES):
         # technically, PEM is not allowed here, but of course some people don't
         # bother following the rules
         if pem.detect(response_data):
             for _, _, data in pem.unarmor(response_data, multiple=True):
-                yield x509.Certificate.load(response_data)
+                yield x509.Certificate.load(data)
         else:
             raise ValueError(
                 "Expected PEM data when extracting certs from "
