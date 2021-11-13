@@ -85,7 +85,7 @@ import base64
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import FrozenSet, List, Optional
 
 import tzlocal
 from asn1crypto import algos, x509
@@ -192,7 +192,7 @@ class CSCCredentialInfo:
     Other relevant CA certificates.
     """
 
-    supported_mechanisms: frozenset[str]
+    supported_mechanisms: FrozenSet[str]
     """
     Signature mechanisms supported by the credential.
     """
@@ -251,13 +251,13 @@ async def fetch_certs_in_csc_credential(session: aiohttp.ClientSession,
         "certInfo": False
     }
 
-    async with session.post(url=url, headers=csc_session_info.auth_headers,
-                            json=req_data, raise_for_status=True,
-                            timeout=timeout) as response:
-        try:
+    try:
+        async with session.post(url, headers=csc_session_info.auth_headers,
+                                json=req_data, raise_for_status=True,
+                                timeout=timeout) as response:
             response_data = await response.json()
-        except aiohttp.ClientError as e:
-            raise SigningError("Credential info request failed") from e
+    except aiohttp.ClientError as e:
+        raise SigningError("Credential info request failed") from e
 
     return _process_certificate_info_response(response_data)
 
@@ -281,10 +281,12 @@ def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
         ) from e
     try:
         algo_oids = response_data["key"]["algo"]
+        if not isinstance(algo_oids, list):
+            raise TypeError
         supported_algos = frozenset(
             algos.SignedDigestAlgorithmId(oid).native for oid in algo_oids
         )
-    except (KeyError, ValueError) as e:
+    except (KeyError, ValueError, TypeError) as e:
         raise SigningError(
             "Could not retrieve supported signing mechanisms from response"
         ) from e
@@ -296,10 +298,13 @@ def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
             "Could not retrieve max batch size from response"
         ) from e
 
-    scal_value = int(response_data.get("SCAL", 1))
-    if scal_value not in (1, 2):
-        logger.warning(f"Unexpected SCAL value: {scal_value}; defaulting to 1")
-        scal_value = 1
+    scal_value = response_data.get("SCAL", 1)
+    try:
+        scal_value = int(scal_value)
+        if scal_value not in (1, 2):
+            raise ValueError
+    except ValueError:
+        raise SigningError("SCAL value must be \"1\" or \"2\".")
     hash_pinning_required = scal_value == 2
 
     return CSCCredentialInfo(
@@ -435,7 +440,7 @@ class CSCAuthorizationManager(abc.ABC):
         if description is not None:
             result['description'] = description
         if client_data is not None:
-            result['client_data'] = client_data
+            result['clientData'] = client_data
 
         return result
 
@@ -452,18 +457,16 @@ class CSCAuthorizationManager(abc.ABC):
         """
 
         try:
-            sad = response_data["SAD"]
+            sad = str(response_data["SAD"])
         except KeyError:
             raise SigningError(
                 "Could not extract SAD value from auth response"
             )
 
         try:
-            lifetime_seconds = int(response_data['expiresIn'])
+            lifetime_seconds = int(response_data.get('expiresIn', 3600))
             now = datetime.now(tz=tzlocal.get_localzone())
             expires_at = now + timedelta(seconds=lifetime_seconds)
-        except KeyError:
-            expires_at = None
         except ValueError as e:
             raise SigningError(
                 "Could not process expiresIn value in auth response"
@@ -687,8 +690,13 @@ class CSCSigner(Signer):
 
     async def _ensure_batch(self, digest_algorithm) -> _CSCBatchInfo:
         while self._current_batch is not None and self._current_batch.initiated:
+            logger.debug("Commit ongoing... Waiting for it to finish")
             # There's a commit going on, wait for it to finish
             await self._current_batch.notifier.wait()
+            logger.debug(
+                f"Done waiting for commit: "
+                f"new batch: {repr(self._current_batch)})"
+            )
             # ...and start a new batch right after (unless someone else
             # already did, or the new batch is somehow already full/already
             # committing, in which case we have to keep queueing)
@@ -696,8 +704,8 @@ class CSCSigner(Signer):
             batch = self._current_batch
             if batch.md_algorithm != digest_algorithm:
                 raise SigningError(
-                    f"All signatures in the same batch must use the same digest"
-                    f"function; encountered both {batch.md_algorithm} "
+                    f"All signatures in the same batch must use the same "
+                    f"digest function; encountered both {batch.md_algorithm} "
                     f"and {digest_algorithm}."
                 )
             return batch
@@ -737,7 +745,6 @@ class CSCSigner(Signer):
 
         This coroutine does not return anything; instead, it notifies all
         waiting signing coroutines that their signature has been fetched.
-        Errors are propagated to the waiting signers as well.
         """
 
         batch = self._current_batch
@@ -759,14 +766,14 @@ class CSCSigner(Signer):
         checks.
         """
 
-        req_data = await self.format_csc_signing_req(
-            batch.b64_hashes, batch.md_algorithm
-        )
-        session_info = self.auth_manager.csc_session_info
-        url = session_info.endpoint_url("signatures/signHash")
-        session = self.session
         try:
-            async with session.post(url=url,
+            req_data = await self.format_csc_signing_req(
+                batch.b64_hashes, batch.md_algorithm
+            )
+            session_info = self.auth_manager.csc_session_info
+            url = session_info.endpoint_url("signatures/signHash")
+            session = self.session
+            async with session.post(url,
                                     headers=self.auth_manager.auth_headers,
                                     json=req_data, raise_for_status=True,
                                     timeout=self.sign_timeout) as response:
@@ -780,7 +787,9 @@ class CSCSigner(Signer):
                 )
             signatures = [base64.b64decode(sig) for sig in sig_b64s]
             batch.results = signatures
-        except (ValueError, KeyError) as e:
+        except SigningError:
+            raise
+        except (ValueError, KeyError, TypeError) as e:
             raise SigningError(
                 "Expected response with b64-encoded signature values"
             ) from e

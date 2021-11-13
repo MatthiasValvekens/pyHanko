@@ -21,13 +21,21 @@ jobs:
           python -m pip install --upgrade pip
           python setup.py bdist_wheel
           pip install certomancer[web-api,pkcs12]==0.6.0 'pytest>=6.1.1' 'aiohttp>=3.7.4' \
-              'pytest-aiohttp~=0.3.0' dist/*.whl
+              'pytest-aiohttp~=0.3.0' dist/*.whl \
+               requests-mock~=1.8.0 freezegun~=1.1.0 python-pae==0.1.0
       - name: Start Certomancer Animator daemon
         run: |
           python -m certomancer --service-url-prefix http://localhost:9000 \
             --config pyhanko_tests/data/crypto/certomancer.yml animate &
+      - name: Start CSC dummy servers
+        run: |
+          python pyhanko_tests/csc_utils/csc_dummy_server.py \
+                  pyhanko_tests/data/crypto/certomancer.yml 8999 2 &
       - name: Test with pytest
         run: |
-          python -m pytest pyhanko_tests/with_live_certomancer.py
+          python -m pytest \
+                pyhanko_tests/with_live_certomancer.py \
+                pyhanko_tests/with_live_csc_dummy.py
         env:
           LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
+          LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
