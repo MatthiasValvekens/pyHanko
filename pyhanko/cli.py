@@ -344,19 +344,21 @@ def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
 
 
 def _signature_status(ltv_profile, vc_kwargs, force_revinfo, key_usage_settings,
-                      embedded_sig):
+                      embedded_sig, skip_diff=False):
     if ltv_profile is None:
         vc = ValidationContext(**vc_kwargs)
         status = validation.validate_pdf_signature(
             embedded_sig, key_usage_settings=key_usage_settings,
-            signer_validation_context=vc
+            signer_validation_context=vc,
+            skip_diff=skip_diff
         )
     else:
         status = validation.validate_pdf_ltv_signature(
             embedded_sig, ltv_profile,
             key_usage_settings=key_usage_settings,
             force_revinfo=force_revinfo,
-            validation_context_kwargs=vc_kwargs
+            validation_context_kwargs=vc_kwargs,
+            skip_diff=skip_diff
         )
     return status
 
@@ -441,6 +443,8 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
               type=bool, is_flag=True, default=False, show_default=True)
 @click.option('--password', required=False, type=str,
               help='password to access the file (can also be read from stdin)')
+@click.option('--no-diff-analysis', default=False, type=bool, is_flag=True,
+              help='disable incremental update analysis')
 @click.option(
     '--detached', type=click.File('rb'),
     help=(
@@ -453,7 +457,7 @@ def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
                         other_certs, ltv_profile, force_revinfo,
                         soft_revocation_check, no_revocation_check, password,
-                        retroactive_revinfo, detached):
+                        retroactive_revinfo, detached, no_diff_analysis):
 
     if no_revocation_check:
         soft_revocation_check = True
@@ -513,7 +517,7 @@ def validate_signatures(ctx, infile, executive_summary,
                 status_callback=lambda: _signature_status(
                     ltv_profile=ltv_profile, force_revinfo=force_revinfo,
                     vc_kwargs=vc_kwargs, key_usage_settings=key_usage_settings,
-                    embedded_sig=embedded_sig
+                    embedded_sig=embedded_sig, skip_diff=no_diff_analysis
                 ),
                 pretty_print=pretty_print, executive_summary=executive_summary
             )
