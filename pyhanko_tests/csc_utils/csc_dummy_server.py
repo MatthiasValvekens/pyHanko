@@ -307,7 +307,6 @@ class CSCWithCertomancer:
         #  (biggest roadblock: asn1crypto doesn't implement RFC 4514)
         if cert_info_req:
             raise web.HTTPNotImplemented()
-        config = self.certomancer_config
         try:
             cred_id = str(params['credentialID'])
         except KeyError:
@@ -351,8 +350,6 @@ class CSCWithCertomancer:
         return web.json_response(response)
 
     async def credentials_authorize(self, request: web.Request):
-        config = self.certomancer_config
-
         params = await request.json()
         try:
             cred_id = str(params['credentialID'])
@@ -381,8 +378,6 @@ class CSCWithCertomancer:
         return web.json_response({'SAD': sad})
 
     async def signatures_sign_hash(self, request: web.Request):
-        config = self.certomancer_config
-
         params = await request.json()
         try:
             cred_id = str(params['credentialID'])
