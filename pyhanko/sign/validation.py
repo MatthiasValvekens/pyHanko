@@ -304,8 +304,8 @@ def validate_cms_signature(signed_data: cms.SignedData,
         Other keyword arguments to pass to the ``status_class`` when reporting
         validation results.
     :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usage
-        extensions must or must not be present in the signer's certificate.
+        A :class:`.KeyUsageConstraints` object specifying which key usages
+        must or must not be present in the signer's certificate.
     :param encap_data_invalid:
         If ``True``, the encapsulated data inside the CMS is invalid,
         but the remaining validation logic still has to be run (e.g. a
@@ -356,8 +356,8 @@ async def async_validate_cms_signature(
         Other keyword arguments to pass to the ``status_class`` when reporting
         validation results.
     :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usage
-        extensions must or must not be present in the signer's certificate.
+        A :class:`.KeyUsageConstraints` object specifying which key usages
+        must or must not be present in the signer's certificate.
     :param encap_data_invalid:
         If ``True``, the encapsulated data inside the CMS is invalid,
         but the remaining validation logic still has to be run (e.g. a
@@ -1552,8 +1552,8 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         Defaults to
         :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usage
-        extensions must or must not be present in the signer's certificate.
+        A :class:`.KeyUsageConstraints` object specifying which key usages
+        must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1594,8 +1594,8 @@ async def async_validate_pdf_signature(
         Defaults to
         :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usage
-        extensions must or must not be present in the signer's certificate.
+        A :class:`.KeyUsageConstraints` object specifying which key usages
+        must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1908,8 +1908,8 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         Defaults to
         :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usage
-        extensions must or must not be present in the signer's certificate.
+        A :class:`.KeyUsageConstraints` object specifying which key usages
+        must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:
@@ -1961,8 +1961,8 @@ async def async_validate_pdf_ltv_signature(
         Defaults to
         :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param key_usage_settings:
-        A :class:`.KeyUsageConstraints` object specifying which key usage
-        extensions must or must not be present in the signer's certificate.
+        A :class:`.KeyUsageConstraints` object specifying which key usages
+        must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :return:

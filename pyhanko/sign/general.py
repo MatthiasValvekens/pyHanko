@@ -103,7 +103,7 @@ class KeyUsageConstraints(ConfigurableMixin):
 
     key_usage_forbidden: Set[str] = None
     """
-    These key usage extensions must not be present in the signer's certificate.
+    These key usages must not be present in the signer's certificate.
     
     .. note:: 
         This behaviour is undefined in :rfc:`5280` (PKIX), but included for
@@ -116,8 +116,8 @@ class KeyUsageConstraints(ConfigurableMixin):
     usage extension in the signer's certificate, if such an extension is at all
     present. If not set, all extended key usages are considered acceptable.
     
-    If no extended key usage extension is present, or the
-    ``anyExtendedKeyUsage`` key purpose ID is present the resulting behaviour
+    If no extended key usage extension is present, or if the
+    ``anyExtendedKeyUsage`` key purpose ID is present, the resulting behaviour
     depends on :attr:`explicit_extd_key_usage_required`.
     
     Setting this option to the empty set (as opposed to ``None``) effectively
@@ -316,14 +316,13 @@ class SignatureStatus:
     #  (probably legacy behaviour)
     key_usage: ClassVar[Set[str]] = {'non_repudiation'}
     """
-    Class property indicating which key usage extensions are required to be
-    present on the signer's certificate.
-    The default is ``non_repudiation`` only.
+    Class property indicating which key usages are accepted on the signer's
+    certificate. The default is ``non_repudiation`` only.
     """
 
     extd_key_usage: ClassVar[Optional[Set[str]]] = None
     """
-    Class property indicating which extended key usage extensions are required 
+    Class property indicating which extended key usage key purposes are accepted
     to be present on the signer's certificate.
     
     See :attr:`.KeyUsageConstraints.extd_key_usage`.
