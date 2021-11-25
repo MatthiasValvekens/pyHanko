@@ -2,11 +2,13 @@
 from __future__ import unicode_literals, division, absolute_import, print_function
 
 import asyncio
+import datetime
+import logging
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
-from asn1crypto import x509, crl, algos
+from asn1crypto import x509, crl, ocsp, algos
 from asn1crypto.keys import PublicKeyInfo
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
@@ -41,6 +43,7 @@ from .path import ValidationPath, QualifiedPolicy
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
 
+logger = logging.getLogger(__name__)
 
 # make sure EdDSA OIDs are known to asn1crypto
 register_eddsa_oids()
@@ -1288,6 +1291,215 @@ def _ocsp_allowed(responder_cert: x509.Certificate):
     )
 
 
+@dataclass
+class _OCSPErrs:
+    failures: list = field(default_factory=list)
+    mismatch_failures: int = 0
+
+
+async def _handle_single_ocsp_resp(cert: x509.Certificate,
+                                   issuer: x509.Certificate,
+                                   path: ValidationPath,
+                                   ocsp_response: ocsp.OCSPResponse,
+                                   validation_context: ValidationContext,
+                                   moment: datetime.datetime,
+                                   errs: _OCSPErrs, cert_description=None,
+                                   end_entity_name_override=None) -> bool:
+
+    certificate_registry = validation_context.certificate_registry
+    # Make sure that we get a valid response back from the OCSP responder
+    status = ocsp_response['response_status'].native
+    if status != 'successful':
+        errs.mismatch_failures += 1
+        return False
+
+    response_bytes = ocsp_response['response_bytes']
+    if response_bytes['response_type'].native != 'basic_ocsp_response':
+        errs.mismatch_failures += 1
+        return False
+
+    response = response_bytes['response'].parsed
+    tbs_response = response['tbs_response_data']
+
+    # With a valid response, now a check is performed to see if the response is
+    # applicable for the cert and moment requested
+    cert_response = tbs_response['responses'][0]
+
+    response_cert_id = cert_response['cert_id']
+
+    issuer_hash_algo = response_cert_id['hash_algorithm']['algorithm'].native
+    cert_issuer_name_hash = getattr(cert.issuer, issuer_hash_algo)
+    cert_issuer_key_hash = getattr(issuer.public_key, issuer_hash_algo)
+
+    key_hash_mismatch = response_cert_id[
+                            'issuer_key_hash'].native != cert_issuer_key_hash
+
+    name_mismatch = response_cert_id[
+                        'issuer_name_hash'].native != cert_issuer_name_hash
+    serial_mismatch = response_cert_id[
+                          'serial_number'].native != cert.serial_number
+
+    if (name_mismatch or serial_mismatch) and key_hash_mismatch:
+        errs.mismatch_failures += 1
+        return False
+
+    if name_mismatch:
+        errs.failures.append((
+            'OCSP response issuer name hash does not match',
+            ocsp_response
+        ))
+        return False
+
+    if serial_mismatch:
+        errs.failures.append((
+            'OCSP response certificate serial number does not match',
+            ocsp_response
+        ))
+        return False
+
+    if key_hash_mismatch:
+        errs.failures.append((
+            'OCSP response issuer key hash does not match',
+            ocsp_response
+        ))
+        return False
+
+    retroactive = validation_context.retroactive_revinfo
+    tolerance = validation_context.time_tolerance
+
+    this_update = cert_response['this_update'].native
+    if this_update is not None and not retroactive \
+            and moment < this_update - tolerance:
+        errs.failures.append((
+            'OCSP response is from after the validation time',
+            ocsp_response
+        ))
+        return False
+
+    next_update = cert_response['next_update'].native
+    if next_update is not None and moment > next_update + tolerance:
+        errs.failures.append((
+            'OCSP response is from before the validation time',
+            ocsp_response
+        ))
+        return False
+
+    # To verify the response as legitimate, the responder cert must be located
+    cert_store: CertificateCollection = certificate_registry
+    # prioritise the certificates included with the response, if there
+    # are any
+    if response['certs']:
+        cert_store = LayeredCertificateStore([
+            SimpleCertificateStore.from_certs(response['certs']),
+            certificate_registry
+        ])
+    if tbs_response['responder_id'].name == 'by_key':
+        key_identifier = tbs_response['responder_id'].native
+        responder_cert = cert_store.retrieve_by_key_identifier(key_identifier)
+    else:
+        candidate_responder_certs = cert_store.retrieve_by_name(
+            tbs_response['responder_id'].chosen
+        )
+        responder_cert = candidate_responder_certs[0] if \
+            candidate_responder_certs else None
+    if not responder_cert:
+        errs.failures.append((
+            pretty_message(
+                '''
+                Unable to verify OCSP response since response signing
+                certificate could not be located
+                '''
+            ),
+            ocsp_response
+        ))
+        return False
+
+    # If the cert signing the OCSP response is not the issuer, it must be
+    # issued by the cert issuer and be valid for OCSP responses
+    if issuer.issuer_serial == responder_cert.issuer_serial:
+        # let's check whether the certs are actually the same
+        # (by comparing the signatures as a proxy)
+        issuer_sig = bytes(issuer['signature_value'])
+        responder_sig = bytes(responder_cert['signature_value'])
+        authorized = issuer_sig == responder_sig
+    # If OCSP is being delegated
+    # check whether the relevant OCSP-related extensions are present
+    elif not _ocsp_allowed(responder_cert):
+        authorized = False
+    else:
+        try:
+            await _validate_delegated_ocsp_provenance(
+                responder_cert=responder_cert, issuer=issuer,
+                validation_context=validation_context, ee_path=path,
+                end_entity_name_override=end_entity_name_override,
+                cert_description=cert_description
+            )
+            authorized = True
+        except OCSPValidationError as e:
+            errs.failures.append((e.args[0], ocsp_response))
+            return False
+    if not authorized:
+        errs.failures.append((
+            pretty_message(
+                '''
+                Unable to verify OCSP response since response was
+                signed by an unauthorized certificate
+                '''
+            ),
+            ocsp_response
+        ))
+        return False
+
+    # Determine what algorithm was used to sign the response
+    signature_algo = response['signature_algorithm'].signature_algo
+    hash_algo = response['signature_algorithm'].hash_algo
+
+    # Verify that the response was properly signed by the validated certificate
+    try:
+        _validate_sig(
+            signature=response['signature'].native,
+            signed_data=tbs_response.dump(),
+            public_key_info=responder_cert.public_key,
+            sig_algo=signature_algo, hash_algo=hash_algo,
+            parameters=response['signature_algorithm']['parameters']
+        )
+    except PSSParameterMismatch:
+        errs.failures.append((
+            'The signature parameters on the OCSP response do not match '
+            'the constraints on the public key',
+            ocsp_response
+        ))
+    except InvalidSignature:
+        errs.failures.append((
+            'Unable to verify OCSP response signature',
+            ocsp_response
+        ))
+        return False
+
+    # Finally check to see if the certificate has been revoked
+    status = cert_response['cert_status'].name
+    if status == 'good':
+        return True
+
+    if status == 'revoked':
+        revocation_info = cert_response['cert_status'].chosen
+        if revocation_info['revocation_reason'].native is None:
+            reason = crl.CRLReason('unspecified').human_friendly
+        else:
+            reason = revocation_info['revocation_reason'].human_friendly
+        date = revocation_info['revocation_time'].native.strftime('%Y-%m-%d')
+        time = revocation_info['revocation_time'].native.strftime('%H:%M:%S')
+        raise RevokedError(pretty_message(
+            '''
+            OCSP response indicates %s was revoked at %s on %s, due to %s
+            ''',
+            cert_description,
+            time,
+            date,
+            reason
+        ))
+
+
 async def verify_ocsp_response(cert, path, validation_context, cert_description=None, end_entity_name_override=None):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
@@ -1366,207 +1578,27 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
             ''',
             cert_description
         ))
-    certificate_registry = validation_context.certificate_registry
 
-    failures = []
-    mismatch_failures = 0
-
-    ocsp_responses = await validation_context.async_retrieve_ocsps(
-        cert, issuer
-    )
+    errs = _OCSPErrs()
+    ocsp_responses = await validation_context.async_retrieve_ocsps(cert, issuer)
 
     for ocsp_response in ocsp_responses:
-
-        # Make sure that we get a valid response back from the OCSP responder
-        status = ocsp_response['response_status'].native
-        if status != 'successful':
-            mismatch_failures += 1
-            continue
-
-        response_bytes = ocsp_response['response_bytes']
-        if response_bytes['response_type'].native != 'basic_ocsp_response':
-            mismatch_failures += 1
-            continue
-
-        response = response_bytes['response'].parsed
-        tbs_response = response['tbs_response_data']
-
-        # With a valid response, now a check is performed to see if the response is
-        # applicable for the cert and moment requested
-        cert_response = tbs_response['responses'][0]
-
-        response_cert_id = cert_response['cert_id']
-
-        issuer_hash_algo = response_cert_id['hash_algorithm']['algorithm'].native
-        cert_issuer_name_hash = getattr(cert.issuer, issuer_hash_algo)
-        cert_issuer_key_hash = getattr(issuer.public_key, issuer_hash_algo)
-
-        key_hash_mismatch = response_cert_id['issuer_key_hash'].native != cert_issuer_key_hash
-
-        name_mismatch = response_cert_id['issuer_name_hash'].native != cert_issuer_name_hash
-        serial_mismatch = response_cert_id['serial_number'].native != cert.serial_number
-
-        if (name_mismatch or serial_mismatch) and key_hash_mismatch:
-            mismatch_failures += 1
-            continue
-
-        if name_mismatch:
-            failures.append((
-                'OCSP response issuer name hash does not match',
-                ocsp_response
-            ))
-            continue
-
-        if serial_mismatch:
-            failures.append((
-                'OCSP response certificate serial number does not match',
-                ocsp_response
-            ))
-            continue
-
-        if key_hash_mismatch:
-            failures.append((
-                'OCSP response issuer key hash does not match',
-                ocsp_response
-            ))
-            continue
-
-        retroactive = validation_context.retroactive_revinfo
-        tolerance = validation_context.time_tolerance
-
-        this_update = cert_response['this_update'].native
-        if this_update is not None and not retroactive \
-                and moment < this_update - tolerance:
-            failures.append((
-                'OCSP response is from after the validation time',
-                ocsp_response
-            ))
-            continue
-
-        next_update = cert_response['next_update'].native
-        if next_update is not None and moment > next_update + tolerance:
-            failures.append((
-                'OCSP response is from before the validation time',
-                ocsp_response
-            ))
-            continue
-
-        # To verify the response as legitimate, the responder cert must be located
-        cert_store: CertificateCollection = certificate_registry
-        # prioritise the certificates included with the response, if there
-        # are any
-        if response['certs']:
-            cert_store = LayeredCertificateStore([
-                SimpleCertificateStore.from_certs(response['certs']),
-                certificate_registry
-            ])
-        if tbs_response['responder_id'].name == 'by_key':
-            key_identifier = tbs_response['responder_id'].native
-            responder_cert = cert_store.retrieve_by_key_identifier(key_identifier)
-        else:
-            candidate_responder_certs = cert_store.retrieve_by_name(
-                tbs_response['responder_id'].chosen
-            )
-            responder_cert = candidate_responder_certs[0] if \
-                candidate_responder_certs else None
-        if not responder_cert:
-            failures.append((
-                pretty_message(
-                    '''
-                    Unable to verify OCSP response since response signing
-                    certificate could not be located
-                    '''
-                ),
-                ocsp_response
-            ))
-            continue
-
-        # If the cert signing the OCSP response is not the issuer, it must be
-        # issued by the cert issuer and be valid for OCSP responses
-        if issuer.issuer_serial == responder_cert.issuer_serial:
-            # let's check whether the certs are actually the same
-            # (by comparing the signatures as a proxy)
-            issuer_sig = bytes(issuer['signature_value'])
-            responder_sig = bytes(responder_cert['signature_value'])
-            authorized = issuer_sig == responder_sig
-        # If OCSP is being delegated
-        # check whether the relevant OCSP-related extensions are present
-        elif not _ocsp_allowed(responder_cert):
-            authorized = False
-        else:
-            try:
-                await _validate_delegated_ocsp_provenance(
-                    responder_cert=responder_cert, issuer=issuer,
-                    validation_context=validation_context, ee_path=path,
-                    end_entity_name_override=end_entity_name_override,
-                    cert_description=cert_description
-                )
-                authorized = True
-            except OCSPValidationError as e:
-                failures.append((e.args[0], ocsp_response))
-                continue
-        if not authorized:
-            failures.append((
-                pretty_message(
-                    '''
-                    Unable to verify OCSP response since response was
-                    signed by an unauthorized certificate
-                    '''
-                ),
-                ocsp_response
-            ))
-            continue
-
-        # Determine what algorithm was used to sign the response
-        signature_algo = response['signature_algorithm'].signature_algo
-        hash_algo = response['signature_algorithm'].hash_algo
-
-        # Verify that the response was properly signed by the validated certificate
         try:
-            _validate_sig(
-                signature=response['signature'].native,
-                signed_data=tbs_response.dump(),
-                public_key_info=responder_cert.public_key,
-                sig_algo=signature_algo, hash_algo=hash_algo,
-                parameters=response['signature_algorithm']['parameters']
+            ocsp_good = await _handle_single_ocsp_resp(
+                cert=cert, issuer=issuer, path=path,
+                ocsp_response=ocsp_response,
+                validation_context=validation_context, moment=moment,
+                errs=errs, cert_description=cert_description,
+                end_entity_name_override=end_entity_name_override
             )
-        except PSSParameterMismatch:
-            failures.append((
-                'The signature parameters on the OCSP response do not match '
-                'the constraints on the public key',
-                ocsp_response
-            ))
-        except InvalidSignature:
-            failures.append((
-                'Unable to verify OCSP response signature',
-                ocsp_response
-            ))
-            continue
+            if ocsp_good:
+                return
+        except ValueError as e:
+            msg = "Generic processing error while validating OCSP response."
+            logging.debug(msg, exc_info=e)
+            errs.failures.append((msg, ocsp_response))
 
-        # Finally check to see if the certificate has been revoked
-        status = cert_response['cert_status'].name
-        if status == 'good':
-            return
-
-        if status == 'revoked':
-            revocation_info = cert_response['cert_status'].chosen
-            if revocation_info['revocation_reason'].native is None:
-                reason = crl.CRLReason('unspecified').human_friendly
-            else:
-                reason = revocation_info['revocation_reason'].human_friendly
-            date = revocation_info['revocation_time'].native.strftime('%Y-%m-%d')
-            time = revocation_info['revocation_time'].native.strftime('%H:%M:%S')
-            raise RevokedError(pretty_message(
-                '''
-                OCSP response indicates %s was revoked at %s on %s, due to %s
-                ''',
-                cert_description,
-                time,
-                date,
-                reason
-            ))
-
-    if mismatch_failures == len(ocsp_responses):
+    if errs.mismatch_failures == len(ocsp_responses):
         raise OCSPNoMatchesError(pretty_message(
             '''
             No OCSP responses were issued for %s
@@ -1582,7 +1614,7 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
             ''',
             cert_description
         ),
-        failures
+        errs.failures
     )
 
 
