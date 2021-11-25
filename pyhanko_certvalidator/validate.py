@@ -851,7 +851,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
                 revocation_check_failed = True
     if not ocsp_status_good and rev_rule.ocsp_mandatory:
         if failures:
-            err_str = '; '.join(failures)
+            err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable OCSP response could not be found'
         raise PathValidationError(pretty_message(
@@ -903,7 +903,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
 
     if not crl_status_good and rev_rule.crl_mandatory:
         if failures:
-            err_str = '; '.join(failures)
+            err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable CRL could not be found'
         raise PathValidationError(pretty_message(
