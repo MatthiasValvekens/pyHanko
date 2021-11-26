@@ -1,6 +1,19 @@
 # changelog
 
 
+## 0.18.0
+
+ - Replace `revocation_mode` with more flexible revocation policy controls,
+   aligned with ETSI TS 119 172. Old `revocation_mode` params will be transparently
+   translated to corresponding 'refined' policies, but the `revocation_mode` property
+   on `ValidationContext` was removed.
+ - Handle soft fails as part of revocation policies. Concretely, this means that the
+   `SoftFailError` exception type was removed. Exceptions arising from quashed
+   'soft' failures can still be retrieved via the `soft_fail_exceptions` property
+   on `ValidationContext` instances; the resulting list can contain any exception type.
+ - Fix various hiccups in CRL and OCSP handling.
+
+
 ## 0.17.4
 
  - Fix mistaken assumption when a certificate's MIME type is announced as `application/x-x509-ca-cert`.
