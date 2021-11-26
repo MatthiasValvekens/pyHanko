@@ -1500,7 +1500,10 @@ async def _handle_single_ocsp_resp(cert: x509.Certificate,
         ))
 
 
-async def verify_ocsp_response(cert, path, validation_context, cert_description=None, end_entity_name_override=None):
+async def verify_ocsp_response(cert: x509.Certificate, path: ValidationPath,
+                               validation_context: ValidationContext,
+                               cert_description=None,
+                               end_entity_name_override=None):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
     been revoked. Fulfills the requirements of
@@ -1529,32 +1532,6 @@ async def verify_ocsp_response(cert, path, validation_context, cert_description=
         pyhanko_certvalidator.errors.OCSPValidationIndeterminateError - when the OCSP response could not be verified
         pyhanko_certvalidator.errors.RevokedError - when the OCSP response indicates the certificate has been revoked
     """
-
-    if not isinstance(cert, x509.Certificate):
-        raise TypeError(pretty_message(
-            '''
-            cert must be an instance of asn1crypto.x509.Certificate, not %s
-            ''',
-            type_name(cert)
-        ))
-
-    if not isinstance(path, ValidationPath):
-        raise TypeError(pretty_message(
-            '''
-            path must be an instance of pyhanko_certvalidator.path.ValidationPath,
-            not %s
-            ''',
-            type_name(path)
-        ))
-
-    if not isinstance(validation_context, ValidationContext):
-        raise TypeError(pretty_message(
-            '''
-            validation_context must be an instance of
-            pyhanko_certvalidator.context.ValidationContext, not %s
-            ''',
-            type_name(validation_context)
-        ))
 
     if cert_description is None:
         cert_description = 'the certificate'
@@ -2177,7 +2154,9 @@ async def _handle_single_crl(cert: x509.Certificate,
     return interim_reasons
 
 
-async def verify_crl(cert, path, validation_context, use_deltas=True, cert_description=None, end_entity_name_override=None):
+async def verify_crl(cert: x509.Certificate, path: ValidationPath,
+                     validation_context: ValidationContext, use_deltas=True,
+                     cert_description=None, end_entity_name_override=None):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
     certificate has not been revoked. Uses the algorithm from
@@ -2210,32 +2189,6 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
         pyhanko_certvalidator.errors.CRLValidationError - when any error occurs trying to verify the CertificateList
         pyhanko_certvalidator.errors.RevokedError - when the CRL indicates the certificate has been revoked
     """
-
-    if not isinstance(cert, x509.Certificate):
-        raise TypeError(pretty_message(
-            '''
-            cert must be an instance of asn1crypto.x509.Certificate, not %s
-            ''',
-            type_name(cert)
-        ))
-
-    if not isinstance(path, ValidationPath):
-        raise TypeError(pretty_message(
-            '''
-            path must be an instance of pyhanko_certvalidator.path.ValidationPath,
-            not %s
-            ''',
-            type_name(path)
-        ))
-
-    if not isinstance(validation_context, ValidationContext):
-        raise TypeError(pretty_message(
-            '''
-            validation_context must be an instance of
-            pyhanko_certvalidator.context.ValidationContext, not %s
-            ''',
-            type_name(validation_context)
-        ))
 
     if cert_description is None:
         cert_description = 'the certificate'
