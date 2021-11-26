@@ -8,6 +8,11 @@ from asn1crypto import tsp
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.context import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.generic import pdf_name
@@ -966,6 +971,90 @@ def test_pades_one_revision(requests_mock):
             'revocation_mode': 'soft-fail'
         }
     )
+
+NOOP_POLICY = CertRevTrustPolicy(
+    revocation_checking_policy=RevocationCheckingPolicy(
+        ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
+        intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK
+    )
+)
+
+def _lazy_pades_signature(requests_mock):
+    w = copy_into_new_writer(
+        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
+    )
+    # set up a signer that doesn't embed anything
+    #  (but still goes through the motions)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', subfilter=PADES,
+            validation_context=live_testing_vc(
+                requests_mock, revinfo_policy=NOOP_POLICY
+            ),
+            embed_validation_info=True,
+            use_pades_lta=True
+        ),
+        timestamper=DUMMY_TS,
+        signer=FROM_CA
+    )
+    return out
+
+
+@freeze_time('2020-11-01')
+def test_pades_ltv_legacy_policy_sufficient(requests_mock):
+    out = _lazy_pades_signature(requests_mock)
+    r = PdfFileReader(out)
+    # soft fail should not apply to the internal timestamp, so we expect
+    # validation to fail
+    with pytest.raises(SignatureValidationError, match='time of signing'):
+        validate_pdf_ltv_signature(
+            r.embedded_signatures[0],
+            validation_type=RevocationInfoValidationType.PADES_LTA,
+            validation_context_kwargs={
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+                'revocation_mode': 'hard-fail'
+            },
+            # allow bootstrapping with soft-fail
+            bootstrap_validation_context=ValidationContext(
+                trust_roots=TRUST_ROOTS,
+                allow_fetching=False,
+                revocation_mode='soft-fail'
+            )
+        )
+
+
+@freeze_time('2020-11-01')
+def test_pades_ltv_upgrade_soft_fail(requests_mock):
+
+    out = _lazy_pades_signature(requests_mock)
+    r = PdfFileReader(out)
+    # soft fail should not apply to the internal timestamp, so we expect
+    # validation to fail
+    with pytest.raises(SignatureValidationError, match='time of signing'):
+        validate_pdf_ltv_signature(
+            r.embedded_signatures[0],
+            validation_type=RevocationInfoValidationType.PADES_LTA,
+            validation_context_kwargs={
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+                'revocation_mode': 'soft-fail'
+            }
+        )
+
+
+@freeze_time('2020-11-01')
+def test_pades_ltv_upgrade_lax_policy(requests_mock):
+    out = _lazy_pades_signature(requests_mock)
+    r = PdfFileReader(out)
+    # as in the soft_fail case, we expect this to fail
+    with pytest.raises(SignatureValidationError, match='time of signing'):
+        validate_pdf_ltv_signature(
+            r.embedded_signatures[0],
+            validation_type=RevocationInfoValidationType.PADES_LTA,
+            validation_context_kwargs={
+                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
+                'revinfo_policy': NOOP_POLICY
+            }
+        )
 
 
 @freeze_time('2020-11-01')

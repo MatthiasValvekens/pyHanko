@@ -19,6 +19,11 @@ from asn1crypto import tsp, x509
 from asn1crypto.x509 import Certificate
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.context import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
 from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic, misc
@@ -1759,6 +1764,21 @@ class RevocationInfoValidationType(Enum):
         return tuple(m.value for m in cls)
 
 
+DEFAULT_LTV_INTERNAL_REVO_POLICY = CertRevTrustPolicy(
+    RevocationCheckingPolicy(
+        ee_certificate_rule=RevocationCheckingRule.CHECK_IF_DECLARED,
+        intermediate_ca_cert_rule=RevocationCheckingRule.CHECK_IF_DECLARED,
+    )
+)
+
+STRICT_LTV_INTERNAL_REVO_POLICY = CertRevTrustPolicy(
+    RevocationCheckingPolicy(
+        ee_certificate_rule=RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+        intermediate_ca_cert_rule=RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+    ),
+)
+
+
 def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
     # create a new validation context using the timestamp value as the time
     # of evaluation, turn off fetching and load OCSP responses / CRL data
@@ -1768,9 +1788,24 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
 
     # Certs with OCSP/CRL endpoints should have the relevant revocation data
     # embedded, if no stricter revocation_mode policy is in place already
-    rm = validation_context_kwargs.get('revocation_mode', None)
-    if not rm or rm == 'soft-fail':
-        validation_context_kwargs['revocation_mode'] = 'hard-fail'
+
+    revinfo_policy: CertRevTrustPolicy \
+        = validation_context_kwargs.get('revinfo_policy', None)
+    if revinfo_policy is None:
+        # handle legacy revocation mode
+        legacy_rm = validation_context_kwargs.pop('revocation_mode', None)
+        if legacy_rm and legacy_rm != 'soft-fail':
+            revinfo_policy = CertRevTrustPolicy(
+                RevocationCheckingPolicy.from_legacy(legacy_rm),
+            )
+        elif legacy_rm == 'soft-fail':
+            # fall back to the default
+            revinfo_policy = DEFAULT_LTV_INTERNAL_REVO_POLICY
+    elif not revinfo_policy.revocation_checking_policy.essential:
+        # also in this case, we sub in the default
+        revinfo_policy = DEFAULT_LTV_INTERNAL_REVO_POLICY
+
+    validation_context_kwargs['revinfo_policy'] = revinfo_policy
 
 
 async def _validate_timestamp(tst_signed_data, validation_context,
@@ -1979,9 +2014,13 @@ async def async_validate_pdf_ltv_signature(
     # hard-fail by default for now. Once the timestamp is validated,
     # we switch to hard-fail forcibly.
     if force_revinfo:
-        validation_context_kwargs['revocation_mode'] = 'require'
-    else:
-        validation_context_kwargs.setdefault('revocation_mode', 'hard-fail')
+        validation_context_kwargs['revinfo_policy'] \
+            = STRICT_LTV_INTERNAL_REVO_POLICY
+    elif 'revocation_mode' not in validation_context_kwargs:
+        validation_context_kwargs.setdefault(
+            'revinfo_policy',
+            DEFAULT_LTV_INTERNAL_REVO_POLICY
+        )
 
     reader = embedded_sig.reader
     if validation_type == RevocationInfoValidationType.ADOBE_STYLE:

@@ -119,14 +119,14 @@ def dummy_ocsp_vc():
     return vc
 
 
-def live_testing_vc(requests_mock, with_extra_tsa=False):
+def live_testing_vc(requests_mock, with_extra_tsa=False, **kwargs):
     if with_extra_tsa:
         trust_roots = TRUST_ROOTS + [UNRELATED_TSA.get_cert(CertLabel('root'))]
     else:
         trust_roots = TRUST_ROOTS
     vc = ValidationContext(
         trust_roots=trust_roots, allow_fetching=True,
-        other_certs=[]
+        other_certs=[], **kwargs
     )
     Illusionist(TESTING_CA).register(requests_mock)
     if with_extra_tsa:
