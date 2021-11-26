@@ -2281,10 +2281,12 @@ async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
         A list of validation paths.
     """
 
-    if validation_context.revocation_mode == 'soft-fail':
+    revinfo_fetch_policy = \
+        validation_context.revinfo_policy.revocation_checking_policy
+    if not revinfo_fetch_policy.essential:
         logger.warning(
-            "Revocation mode is set to soft-fail; collected revocation "
-            "information may be incomplete."
+            "Revocation mode is set to soft-fail/tolerant mode; collected "
+            "revocation information may be incomplete."
         )
 
     paths = []
