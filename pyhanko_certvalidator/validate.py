@@ -1770,6 +1770,413 @@ VALID_REVOCATION_REASONS = {'key_compromise', 'ca_compromise',
                             'privilege_withdrawn', 'aa_compromise'}
 
 
+@dataclass
+class _CRLErrs:
+    failures: list = field(default_factory=list)
+    issuer_failures: int = 0
+
+
+def _find_matching_delta_crl(delta_lists, crl_issuer_name: x509.Name,
+                                   crl_idp: crl.IssuingDistributionPoint,
+                                   parent_crl_aki: Optional[bytes]):
+    for candidate_delta_cl in delta_lists:
+        # Step c 1
+        if candidate_delta_cl.issuer != crl_issuer_name:
+            continue
+
+        # Step c 2
+        delta_crl_idp = candidate_delta_cl.issuing_distribution_point_value
+        if (crl_idp is None and delta_crl_idp is not None) or (
+                crl_idp is not None and delta_crl_idp is None):
+            continue
+
+        if crl_idp is not None \
+                and crl_idp.native != delta_crl_idp.native:
+            continue
+
+        # Step c 3
+        if parent_crl_aki != candidate_delta_cl.authority_key_identifier:
+            continue
+
+        return candidate_delta_cl
+
+
+def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
+                                    certificate_list: crl.CertificateList,
+                                    crl_issuer: x509.Certificate,
+                                    crl_idp: crl.IssuingDistributionPoint,
+                                    crl_issuer_name: x509.Name,
+                                    errs: _CRLErrs) -> bool:
+    # Step b 2 i
+    has_idp_name = False
+    has_dp_name = False
+    idp_dp_match = False
+
+    idp_general_names = []
+    idp_dp_name = crl_idp['distribution_point']
+    if idp_dp_name:
+        has_idp_name = True
+        if idp_dp_name.name == 'full_name':
+            for general_name in idp_dp_name.chosen:
+                idp_general_names.append(general_name)
+        else:
+            inner_extended_issuer_name = crl_issuer.subject.copy()
+            inner_extended_issuer_name.chosen.append(
+                idp_dp_name.chosen.untag())
+            idp_general_names.append(x509.GeneralName(
+                name='directory_name',
+                value=inner_extended_issuer_name
+            ))
+
+    dps = cert.crl_distribution_points_value
+    if dps:
+        for dp in dps:
+            if idp_dp_match:
+                break
+            dp_name = dp['distribution_point']
+            if dp_name:
+                has_dp_name = True
+                if dp_name.name == 'full_name':
+                    for general_name in dp_name.chosen:
+                        if general_name in idp_general_names:
+                            idp_dp_match = True
+                            break
+                else:
+                    inner_extended_issuer_name = crl_issuer.subject.copy()
+                    inner_extended_issuer_name.chosen.append(
+                        dp_name.chosen.untag())
+                    dp_extended_issuer_name = x509.GeneralName(
+                        name='directory_name',
+                        value=inner_extended_issuer_name
+                    )
+
+                    if dp_extended_issuer_name in idp_general_names:
+                        idp_dp_match = True
+
+            elif dp['crl_issuer']:
+                has_dp_name = True
+                for dp_crl_issuer_name in dp['crl_issuer']:
+                    if dp_crl_issuer_name in idp_general_names:
+                        idp_dp_match = True
+                        break
+    else:
+        # If there is no DP, we consider the CRL issuer name to be it
+        has_dp_name = True
+        general_name = x509.GeneralName(
+            name='directory_name',
+            value=crl_issuer_name
+        )
+        if general_name in idp_general_names:
+            idp_dp_match = True
+
+    if has_idp_name and has_dp_name and not idp_dp_match:
+        errs.failures.append((
+            pretty_message(
+                '''
+                The CRL issuing distribution point extension does not
+                share any names with the certificate CRL distribution
+                point extension
+                '''
+            ),
+            certificate_list
+        ))
+        errs.issuer_failures += 1
+        return False
+
+    # Step b 2 ii
+    if crl_idp['only_contains_user_certs'].native:
+        if cert.basic_constraints_value and \
+                cert.basic_constraints_value['ca'].native:
+            errs.failures.append((
+                pretty_message(
+                    '''
+                    CRL only contains end-entity certificates and
+                    certificate is a CA certificate
+                    '''
+                ),
+                certificate_list
+            ))
+            return False
+
+    # Step b 2 iii
+    if crl_idp['only_contains_ca_certs'].native:
+        if not cert.basic_constraints_value or \
+                cert.basic_constraints_value['ca'].native is False:
+            errs.failures.append((
+                pretty_message(
+                    '''
+                    CRL only contains CA certificates and certificate
+                    is an end-entity certificate
+                    '''
+                ),
+                certificate_list
+            ))
+            return False
+
+    # Step b 2 iv
+    if crl_idp['only_contains_attribute_certs'].native:
+        errs.failures.append((
+            'CRL only contains attribute certificates',
+            certificate_list
+        ))
+        return False
+
+    return True
+
+
+async def _handle_single_crl(cert: x509.Certificate,
+                             cert_issuer: x509.Certificate,
+                             certificate_list: crl.CertificateList,
+                             path: ValidationPath,
+                             validation_context: ValidationContext,
+                             delta_lists_by_issuer,
+                             use_deltas: bool, errs: _CRLErrs,
+                             cert_description=None,
+                             end_entity_name_override=None):
+
+    moment = validation_context.moment
+    certificate_registry = validation_context.certificate_registry
+    crl_idp: crl.IssuingDistributionPoint \
+        = certificate_list.issuing_distribution_point_value
+    delta_certificate_list = None
+
+    is_indirect = False
+
+    if crl_idp and crl_idp['indirect_crl'].native:
+        is_indirect = True
+        crl_idp_name = crl_idp['distribution_point']
+        if crl_idp_name:
+            if crl_idp_name.name == 'full_name':
+                crl_issuer_name = crl_idp_name.chosen[0].chosen
+            else:
+                crl_issuer_name = cert_issuer.subject.copy().chosen.append(
+                    crl_idp_name.chosen
+                )
+        elif certificate_list.authority_key_identifier:
+            tmp_crl_issuer = certificate_registry.retrieve_by_key_identifier(
+                certificate_list.authority_key_identifier
+            )
+            crl_issuer_name = tmp_crl_issuer.subject
+        else:
+            errs.failures.append((
+                'CRL is marked as an indirect CRL, but provides no '
+                'mechanism for locating the CRL issuer certificate',
+                certificate_list
+            ))
+            return None
+    else:
+        crl_issuer_name = certificate_list.issuer
+
+    # check if we already know the issuer of this CRL
+    crl_issuer = validation_context.check_crl_issuer(certificate_list)
+    # if not, attempt to determine it
+    if not crl_issuer:
+        try:
+            crl_issuer = await _find_crl_issuer(
+                crl_issuer_name, certificate_list,
+                cert=cert, cert_issuer=cert_issuer,
+                cert_path=path,
+                validation_context=validation_context,
+                is_indirect=is_indirect,
+                end_entity_name_override=end_entity_name_override,
+                cert_description=cert_description
+            )
+        except CRLNoMatchesError:
+            # this no-match issue will be dealt with at a higher level later
+            errs.issuer_failures += 1
+            return None
+        except (CertificateFetchError, CRLValidationError) as e:
+            errs.failures.append((e.args[0], certificate_list))
+            return None
+
+    # Step b 1
+    has_dp_crl_issuer = False
+    dp_match = False
+
+    dps = cert.crl_distribution_points_value
+    if dps:
+        crl_issuer_general_name = x509.GeneralName(
+            name='directory_name',
+            value=crl_issuer.subject
+        )
+        for dp in dps:
+            if dp['crl_issuer']:
+                has_dp_crl_issuer = True
+                if crl_issuer_general_name in dp['crl_issuer']:
+                    dp_match = True
+
+    same_issuer = crl_issuer.subject == cert_issuer.subject
+    indirect_match = has_dp_crl_issuer and dp_match and is_indirect
+    missing_idp = has_dp_crl_issuer and (not dp_match or not is_indirect)
+    indirect_crl_issuer = crl_issuer.issuer == cert_issuer.subject
+
+    if (not same_issuer and not indirect_match and not indirect_crl_issuer) \
+            or missing_idp:
+        errs.issuer_failures += 1
+        return None
+
+    # Check to make sure the CRL is valid for the moment specified
+    tolerance = validation_context.time_tolerance
+    retroactive = validation_context.retroactive_revinfo
+    crl_this_update = certificate_list['tbs_cert_list']['this_update'].native
+    if not retroactive and moment < crl_this_update - tolerance:
+        errs.failures.append((
+            'CRL is from after the validation time',
+            certificate_list
+        ))
+        return None
+    crl_next_update = certificate_list['tbs_cert_list']['next_update'].native
+    if moment > crl_next_update + tolerance:
+        errs.failures.append((
+            'CRL should have been regenerated by the validation time',
+            certificate_list
+        ))
+        return None
+
+    # Step b 2
+
+    if crl_idp is not None:
+        crl_idp_match = _handle_crl_idp_ext_constraints(
+            cert=cert, certificate_list=certificate_list,
+            crl_issuer=crl_issuer, crl_idp=crl_idp,
+            crl_issuer_name=crl_issuer_name, errs=errs
+        )
+        # error reporting is taken care of in the delegated method
+        if not crl_idp_match:
+            return None
+
+    # Step c
+    if use_deltas and certificate_list.freshest_crl_value \
+            and len(certificate_list.freshest_crl_value) > 0:
+        candidate_delta_lists = \
+            delta_lists_by_issuer.get(crl_issuer_name.hashable, [])
+        delta_certificate_list = _find_matching_delta_crl(
+            delta_lists=candidate_delta_lists,
+            crl_issuer_name=crl_issuer_name, crl_idp=crl_idp,
+            parent_crl_aki=certificate_list.authority_key_identifier
+        )
+
+    # Step d
+    idp_reasons = None
+
+    if crl_idp and crl_idp['only_some_reasons'].native is not None:
+        idp_reasons = crl_idp['only_some_reasons'].native
+
+    reason_keys = None
+    if idp_reasons:
+        reason_keys = idp_reasons
+
+    if reason_keys is None:
+        interim_reasons = VALID_REVOCATION_REASONS.copy()
+    else:
+        interim_reasons = reason_keys
+
+    # Step e
+    # We don't skip a CRL if it only contains reasons already checked since
+    # a certificate issuer can self-issue a new cert that is used for CRLs
+
+    if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
+        errs.failures.append((
+            'One or more unrecognized critical extensions are present in '
+            'the CRL',
+            certificate_list
+        ))
+        return None
+
+    if use_deltas and delta_certificate_list and \
+            delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
+        errs.failures.append((
+            'One or more unrecognized critical extensions are present in '
+            'the delta CRL',
+            delta_certificate_list
+        ))
+        return None
+
+    # Step h
+    if use_deltas and delta_certificate_list:
+        try:
+            _verify_signature(delta_certificate_list, crl_issuer.public_key)
+        except CRLValidationError:
+            errs.failures.append((
+                'Delta CRL signature could not be verified',
+                certificate_list,
+                delta_certificate_list
+            ))
+            return None
+
+        retroactive = validation_context.retroactive_revinfo
+        crl_this_update = \
+            delta_certificate_list['tbs_cert_list']['this_update'].native
+        if not retroactive and moment < crl_this_update - tolerance:
+            errs.failures.append((
+                'Delta CRL is from after the validation time',
+                certificate_list,
+                delta_certificate_list
+            ))
+            return None
+        crl_next_update = \
+            delta_certificate_list['tbs_cert_list']['next_update'].native
+        if moment > crl_next_update + tolerance:
+            errs.failures.append((
+                'Delta CRL is from before the validation time',
+                certificate_list,
+                delta_certificate_list
+            ))
+            return None
+
+    # Step i
+    revoked_reason = None
+    revoked_date = None
+
+    if use_deltas and delta_certificate_list:
+        try:
+            revoked_date, revoked_reason = \
+                _find_cert_in_list(cert, cert_issuer,
+                                   delta_certificate_list, crl_issuer)
+        except NotImplementedError:
+            errs.failures.append((
+                'One or more unrecognized critical extensions are present in '
+                'the CRL entry for the certificate',
+                delta_certificate_list
+            ))
+            return None
+
+    # Step j
+    if revoked_reason is None:
+        try:
+            revoked_date, revoked_reason = \
+                _find_cert_in_list(cert, cert_issuer,
+                                   certificate_list, crl_issuer)
+        except NotImplementedError:
+            errs.failures.append((
+                'One or more unrecognized critical extensions are present in '
+                'the CRL entry for the certificate',
+                certificate_list
+            ))
+            return None
+
+    # Step k
+    if revoked_reason and revoked_reason.native == 'remove_from_crl':
+        revoked_reason = None
+        revoked_date = None
+
+    if revoked_reason:
+        reason = revoked_reason.human_friendly
+        date = revoked_date.native.strftime('%Y-%m-%d')
+        time = revoked_date.native.strftime('%H:%M:%S')
+        raise RevokedError(pretty_message(
+            '''
+            CRL indicates %s was revoked at %s on %s, due to %s
+            ''',
+            cert_description,
+            time,
+            date,
+            reason
+        ))
+
+    return interim_reasons
+
+
 async def verify_crl(cert, path, validation_context, use_deltas=True, cert_description=None, end_entity_name_override=None):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
@@ -1841,9 +2248,6 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
             type_name(cert_description)
         ))
 
-    moment = validation_context.moment
-    certificate_registry = validation_context.certificate_registry
-
     certificate_lists = await validation_context.async_retrieve_crls(cert)
 
     try:
@@ -1898,366 +2302,29 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
 
     checked_reasons = set()
 
-    failures = []
-    issuer_failures = 0
+    errs = _CRLErrs()
 
     while len(crls_to_process) > 0:
         certificate_list = crls_to_process.pop(0)
-        crl_idp: crl.IssuingDistributionPoint \
-            = certificate_list.issuing_distribution_point_value
-        delta_certificate_list = None
-
-        is_indirect = False
-
-        if crl_idp and crl_idp['indirect_crl'].native:
-            is_indirect = True
-            crl_idp_name = crl_idp['distribution_point']
-            if crl_idp_name:
-                if crl_idp_name.name == 'full_name':
-                    crl_issuer_name = crl_idp_name.chosen[0].chosen
-                else:
-                    crl_issuer_name = cert_issuer.subject.copy().chosen.append(
-                        crl_idp_name.chosen
-                    )
-            elif certificate_list.authority_key_identifier:
-                tmp_crl_issuer = certificate_registry.retrieve_by_key_identifier(
-                    certificate_list.authority_key_identifier
-                )
-                crl_issuer_name = tmp_crl_issuer.subject
-            else:
-                failures.append((
-                    'CRL is marked as an indirect CRL, but provides no '
-                    'mechanism for locating the CRL issuer certificate',
-                    certificate_list
-                ))
-                continue
-        else:
-            crl_issuer_name = certificate_list.issuer
-
-        # check if we already know the issuer of this CRL
-        crl_issuer = validation_context.check_crl_issuer(certificate_list)
-        # if not, attempt to determine it
-        if not crl_issuer:
-            try:
-                crl_issuer = await _find_crl_issuer(
-                    crl_issuer_name, certificate_list,
-                    cert=cert, cert_issuer=cert_issuer,
-                    cert_path=path,
-                    validation_context=validation_context,
-                    is_indirect=is_indirect,
-                    end_entity_name_override=end_entity_name_override,
-                    cert_description=cert_description
-                )
-            except CRLNoMatchesError:
-                # this no-match issue will be dealt with at a higher level later
-                issuer_failures += 1
-                continue
-            except (CertificateFetchError, CRLValidationError) as e:
-                failures.append((e.args[0], certificate_list))
-                continue
-
-        # Step b 1
-        has_dp_crl_issuer = False
-        dp_match = False
-
-        dps = cert.crl_distribution_points_value
-        if dps:
-            crl_issuer_general_name = x509.GeneralName(
-                name='directory_name',
-                value=crl_issuer.subject
-            )
-            for dp in dps:
-                if dp['crl_issuer']:
-                    has_dp_crl_issuer = True
-                    if crl_issuer_general_name in dp['crl_issuer']:
-                        dp_match = True
-
-        same_issuer = crl_issuer.subject == cert_issuer.subject
-        indirect_match = has_dp_crl_issuer and dp_match and is_indirect
-        missing_idp = has_dp_crl_issuer and (not dp_match or not is_indirect)
-        indirect_crl_issuer = crl_issuer.issuer == cert_issuer.subject
-
-        if (not same_issuer and not indirect_match and not indirect_crl_issuer) or missing_idp:
-            issuer_failures += 1
-            continue
-
-        # Check to make sure the CRL is valid for the moment specified
-        tolerance = validation_context.time_tolerance
-        retroactive = validation_context.retroactive_revinfo
-        crl_this_update = certificate_list['tbs_cert_list']['this_update'].native
-        if not retroactive and moment < crl_this_update - tolerance:
-            failures.append((
-                'CRL is from after the validation time',
-                certificate_list
-            ))
-            continue
-        crl_next_update = certificate_list['tbs_cert_list']['next_update'].native
-        if moment > crl_next_update + tolerance:
-            failures.append((
-                'CRL should have been regenerated by the validation time',
-                certificate_list
-            ))
-            continue
-
-        # Step b 2
-
-        if crl_idp is not None:
-            # Step b 2 i
-            has_idp_name = False
-            has_dp_name = False
-            idp_dp_match = False
-
-            idp_general_names = []
-            idp_dp_name = crl_idp['distribution_point']
-            if idp_dp_name:
-                has_idp_name = True
-                if idp_dp_name.name == 'full_name':
-                    for general_name in idp_dp_name.chosen:
-                        idp_general_names.append(general_name)
-                else:
-                    inner_extended_issuer_name = crl_issuer.subject.copy()
-                    inner_extended_issuer_name.chosen.append(idp_dp_name.chosen.untag())
-                    idp_general_names.append(x509.GeneralName(
-                        name='directory_name',
-                        value=inner_extended_issuer_name
-                    ))
-
-            dps = cert.crl_distribution_points_value
-            if dps:
-                for dp in dps:
-                    if idp_dp_match:
-                        break
-                    dp_name = dp['distribution_point']
-                    if dp_name:
-                        has_dp_name = True
-                        if dp_name.name == 'full_name':
-                            for general_name in dp_name.chosen:
-                                if general_name in idp_general_names:
-                                    idp_dp_match = True
-                                    break
-                        else:
-                            inner_extended_issuer_name = crl_issuer.subject.copy()
-                            inner_extended_issuer_name.chosen.append(dp_name.chosen.untag())
-                            dp_extended_issuer_name = x509.GeneralName(
-                                name='directory_name',
-                                value=inner_extended_issuer_name
-                            )
-
-                            if dp_extended_issuer_name in idp_general_names:
-                                idp_dp_match = True
-
-                    elif dp['crl_issuer']:
-                        has_dp_name = True
-                        for dp_crl_issuer_name in dp['crl_issuer']:
-                            if dp_crl_issuer_name in idp_general_names:
-                                idp_dp_match = True
-                                break
-            else:
-                # If there is no DP, we consider the CRL issuer name to be it
-                has_dp_name = True
-                general_name = x509.GeneralName(
-                    name='directory_name',
-                    value=crl_issuer_name
-                )
-                if general_name in idp_general_names:
-                    idp_dp_match = True
-
-            idp_dp_match_failed = has_idp_name and has_dp_name and not idp_dp_match
-
-            if idp_dp_match_failed:
-                failures.append((
-                    pretty_message(
-                        '''
-                        The CRL issuing distribution point extension does not
-                        share any names with the certificate CRL distribution
-                        point extension
-                        '''
-                    ),
-                    certificate_list
-                ))
-                issuer_failures += 1
-                continue
-
-            # Step b 2 ii
-            if crl_idp['only_contains_user_certs'].native:
-                if cert.basic_constraints_value and cert.basic_constraints_value['ca'].native:
-                    failures.append((
-                        pretty_message(
-                            '''
-                            CRL only contains end-entity certificates and
-                            certificate is a CA certificate
-                            '''
-                        ),
-                        certificate_list
-                    ))
-                    continue
-
-            # Step b 2 iii
-            if crl_idp['only_contains_ca_certs'].native:
-                if not cert.basic_constraints_value or cert.basic_constraints_value['ca'].native is False:
-                    failures.append((
-                        pretty_message(
-                            '''
-                            CRL only contains CA certificates and certificate
-                            is an end-entity certificate
-                            '''
-                        ),
-                        certificate_list
-                    ))
-                    continue
-
-            # Step b 2 iv
-            if crl_idp['only_contains_attribute_certs'].native:
-                failures.append((
-                    'CRL only contains attribute certificates',
-                    certificate_list
-                ))
-                continue
-
-        # Step c
-        if use_deltas and certificate_list.freshest_crl_value and len(certificate_list.freshest_crl_value) > 0:
-            for candidate_delta_cl in delta_lists_by_issuer.get(crl_issuer_name.hashable, []):
-
-                # Step c 1
-                if candidate_delta_cl.issuer != crl_issuer_name:
-                    continue
-
-                # Step c 2
-                delta_crl_idp = candidate_delta_cl.issuing_distribution_point_value
-                if (crl_idp is None and delta_crl_idp is not None) or (crl_idp is not None and delta_crl_idp is None):
-                    continue
-
-                if crl_idp is not None \
-                        and crl_idp.native != delta_crl_idp.native:
-                    continue
-
-                # Step c 3
-                if certificate_list.authority_key_identifier != candidate_delta_cl.authority_key_identifier:
-                    continue
-
-                delta_certificate_list = candidate_delta_cl
-                break
-
-        # Step d
-        idp_reasons = None
-
-        if crl_idp and crl_idp['only_some_reasons'].native is not None:
-            idp_reasons = crl_idp['only_some_reasons'].native
-
-        reason_keys = None
-        if idp_reasons:
-            reason_keys = idp_reasons
-
-        if reason_keys is None:
-            interim_reasons = VALID_REVOCATION_REASONS.copy()
-        else:
-            interim_reasons = reason_keys
-
-        # Step e
-        # We don't skip a CRL if it only contains reasons already checked since
-        # a certificate issuer can self-issue a new cert that is used for CRLs
-
-        if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-            failures.append((
-                'One or more unrecognized critical extensions are present in '
-                'the CRL',
-                certificate_list
-            ))
-            continue
-
-        if use_deltas and delta_certificate_list and delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-            failures.append((
-                'One or more unrecognized critical extensions are present in '
-                'the delta CRL',
-                delta_certificate_list
-            ))
-            continue
-
-        # Step h
-        if use_deltas and delta_certificate_list:
-            try:
-                _verify_signature(delta_certificate_list, crl_issuer.public_key)
-            except CRLValidationError:
-                failures.append((
-                    'Delta CRL signature could not be verified',
-                    certificate_list,
-                    delta_certificate_list
-                ))
-                continue
-
-            retroactive = validation_context.retroactive_revinfo
-            crl_this_update = delta_certificate_list['tbs_cert_list']['this_update'].native
-            if not retroactive and moment < crl_this_update - tolerance:
-                failures.append((
-                    'Delta CRL is from after the validation time',
-                    certificate_list,
-                    delta_certificate_list
-                ))
-                continue
-            crl_next_update = delta_certificate_list['tbs_cert_list']['next_update'].native
-            if moment > crl_next_update + tolerance:
-                failures.append((
-                    'Delta CRL is from before the validation time',
-                    certificate_list,
-                    delta_certificate_list
-                ))
-                continue
-
-        # Step i
-        revoked_reason = None
-        revoked_date = None
-
-        if use_deltas and delta_certificate_list:
-            try:
-                revoked_date, revoked_reason = _find_cert_in_list(cert, cert_issuer, delta_certificate_list, crl_issuer)
-            except NotImplementedError:
-                failures.append((
-                    'One or more critical extensions are present in the CRL '
-                    'entry for the certificate',
-                    delta_certificate_list
-                ))
-                continue
-
-        # Step j
-        if revoked_reason is None:
-            try:
-                revoked_date, revoked_reason = _find_cert_in_list(cert, cert_issuer, certificate_list, crl_issuer)
-            except NotImplementedError:
-                failures.append((
-                    'One or more critical extensions are present in the CRL '
-                    'entry for the certificate',
-                    certificate_list
-                ))
-                continue
-
-        # Step k
-        if revoked_reason and revoked_reason.native == 'remove_from_crl':
-            revoked_reason = None
-            revoked_date = None
-
-        if revoked_reason:
-            reason = revoked_reason.human_friendly
-            date = revoked_date.native.strftime('%Y-%m-%d')
-            time = revoked_date.native.strftime('%H:%M:%S')
-            raise RevokedError(pretty_message(
-                '''
-                CRL indicates %s was revoked at %s on %s, due to %s
-                ''',
-                cert_description,
-                time,
-                date,
-                reason
-            ))
-
-        # Step l
-        checked_reasons |= interim_reasons
+        interim_reasons = await _handle_single_crl(
+            cert=cert, cert_issuer=cert_issuer,
+            certificate_list=certificate_list, path=path,
+            validation_context=validation_context,
+            delta_lists_by_issuer=delta_lists_by_issuer,
+            use_deltas=use_deltas, errs=errs,
+            cert_description=cert_description,
+            end_entity_name_override=end_entity_name_override
+        )
+        if interim_reasons is not None:
+            # Step l
+            checked_reasons |= interim_reasons
 
     # CRLs should not include this value, but at least one of the examples
     # from the NIST test suite does
     checked_reasons -= {'unused'}
 
     if checked_reasons != VALID_REVOCATION_REASONS:
-        if total_crls == issuer_failures:
+        if total_crls == errs.issuer_failures:
             raise CRLNoMatchesError(pretty_message(
                 '''
                 No CRLs were issued by the issuer of %s, or any indirect CRL
@@ -2266,8 +2333,8 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
                 cert_description
             ))
 
-        if not failures:
-            failures.append((
+        if not errs.failures:
+            errs.failures.append((
                 'The available CRLs do not cover all revocation reasons',
             ))
 
@@ -2279,7 +2346,7 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
                 ''',
                 cert_description
             ),
-            failures
+            errs.failures
         )
 
 

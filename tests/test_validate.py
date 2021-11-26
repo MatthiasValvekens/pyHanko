@@ -1645,8 +1645,9 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 PathValidationError,
                 (
                     'The path could not be validated because the end-entity '
-                    'certificate revocation checks failed: One or more critical '
-                    'extensions are present in the CRL entry for the certificate'
+                    'certificate revocation checks failed: One or more '
+                    'unrecognized critical extensions are present in the CRL '
+                    'entry for the certificate'
                 )
             ),
             (
