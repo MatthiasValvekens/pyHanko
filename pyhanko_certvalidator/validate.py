@@ -2260,21 +2260,25 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
             cert_description
         ))
 
-    complete_lists_by_issuer = {}
-    delta_lists_by_issuer = {}
+    errs = _CRLErrs()
+
+    complete_lists_by_issuer = defaultdict(list)
+    delta_lists_by_issuer = defaultdict(list)
     for certificate_list in certificate_lists:
-        issuer_hashable = certificate_list.issuer.hashable
-        if certificate_list.delta_crl_indicator_value is None:
-            if issuer_hashable not in complete_lists_by_issuer:
-                complete_lists_by_issuer[issuer_hashable] = []
-            complete_lists_by_issuer[issuer_hashable].append(certificate_list)
-        else:
-            if issuer_hashable not in delta_lists_by_issuer:
-                delta_lists_by_issuer[issuer_hashable] = []
-            delta_lists_by_issuer[issuer_hashable].append(certificate_list)
+        try:
+            issuer_hashable = certificate_list.issuer.hashable
+            if certificate_list.delta_crl_indicator_value is None:
+                complete_lists_by_issuer[issuer_hashable]\
+                    .append(certificate_list)
+            else:
+                delta_lists_by_issuer[issuer_hashable].append(certificate_list)
+        except ValueError as e:
+            msg = "Generic processing error while classifying CRL."
+            logging.debug(msg, exc_info=e)
+            errs.failures.append((msg, certificate_list))
 
     # In the main loop, only complete CRLs are processed, so delta CRLs are
-    # weeded out of the todo list
+    # weeded out of the to-do list
     crls_to_process = []
     for issuer_crls in complete_lists_by_issuer.values():
         crls_to_process.extend(issuer_crls)
@@ -2302,22 +2306,25 @@ async def verify_crl(cert, path, validation_context, use_deltas=True, cert_descr
 
     checked_reasons = set()
 
-    errs = _CRLErrs()
-
     while len(crls_to_process) > 0:
         certificate_list = crls_to_process.pop(0)
-        interim_reasons = await _handle_single_crl(
-            cert=cert, cert_issuer=cert_issuer,
-            certificate_list=certificate_list, path=path,
-            validation_context=validation_context,
-            delta_lists_by_issuer=delta_lists_by_issuer,
-            use_deltas=use_deltas, errs=errs,
-            cert_description=cert_description,
-            end_entity_name_override=end_entity_name_override
-        )
-        if interim_reasons is not None:
-            # Step l
-            checked_reasons |= interim_reasons
+        try:
+            interim_reasons = await _handle_single_crl(
+                cert=cert, cert_issuer=cert_issuer,
+                certificate_list=certificate_list, path=path,
+                validation_context=validation_context,
+                delta_lists_by_issuer=delta_lists_by_issuer,
+                use_deltas=use_deltas, errs=errs,
+                cert_description=cert_description,
+                end_entity_name_override=end_entity_name_override
+            )
+            if interim_reasons is not None:
+                # Step l
+                checked_reasons |= interim_reasons
+        except ValueError as e:
+            msg = "Generic processing error while validating CRL."
+            logging.debug(msg, exc_info=e)
+            errs.failures.append((msg, certificate_list))
 
     # CRLs should not include this value, but at least one of the examples
     # from the NIST test suite does
