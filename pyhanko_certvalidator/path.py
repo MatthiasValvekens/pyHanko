@@ -1,5 +1,4 @@
 # coding: utf-8
-from __future__ import unicode_literals, division, absolute_import, print_function
 
 from typing import FrozenSet
 from dataclasses import dataclass
