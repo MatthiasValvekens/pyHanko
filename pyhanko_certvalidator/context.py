@@ -11,6 +11,7 @@ from asn1crypto.util import timezone
 
 from ._errors import pretty_message
 from ._types import type_name, byte_cls, str_cls
+from .errors import OCSPFetchError
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .name_trees import default_permitted_subtrees, PKIXSubtrees, \
     default_excluded_subtrees
@@ -645,7 +646,12 @@ class ValidationContext:
             # Responses can contain certificates that are useful in
             # validating the response itself. We can use these since they
             # will be validated using the local trust roots.
-            self._extract_ocsp_certs(ocsp_response)
+            try:
+                self._extract_ocsp_certs(ocsp_response)
+            except ValueError:
+                raise OCSPFetchError(
+                    "Failed to extract certificates from fetched OCSP response"
+                )
             ocsps = [ocsp_response]
 
         return ocsps

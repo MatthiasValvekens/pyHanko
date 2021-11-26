@@ -97,7 +97,12 @@ def format_ocsp_request(cert: x509.Certificate, issuer: x509.Certificate,
 
 def process_ocsp_response_data(response_data: bytes, *,
                                ocsp_request: ocsp.OCSPRequest, ocsp_url: str):
-    ocsp_response = ocsp.OCSPResponse.load(response_data)
+    try:
+        ocsp_response = ocsp.OCSPResponse.load(response_data)
+    except ValueError:
+        raise errors.OCSPFetchError(
+            'Failed to parse response from OCSP server'
+        )
     status = ocsp_response['response_status'].native
     if status != 'successful':
         raise errors.OCSPValidationError(
