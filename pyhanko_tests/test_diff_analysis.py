@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from io import BytesIO
+from itertools import product
 
 import pytest
 import pytz
@@ -1221,16 +1222,21 @@ def test_not_all_paths_cleared():
 
 
 @freeze_time('2020-11-01')
-def test_double_signature_tagged_file():
-    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
+@pytest.mark.parametrize('level,tagged', list(product(
+    [fields.MDPPerm.FILL_FORMS, fields.MDPPerm.ANNOTATE],
+    [True, False]
+)))
+def test_double_signature_certify_first(level, tagged):
+    inf = MINIMAL_TWO_FIELDS_TAGGED if tagged else MINIMAL_TWO_FIELDS
+    w = IncrementalPdfFileWriter(BytesIO(inf))
+    # start with a certifying signature
     out = signers.sign_pdf(
         w, signers.PdfSignatureMetadata(
-            field_name='Sig1', certify=True,
-            docmdp_permissions=fields.MDPPerm.FILL_FORMS
+            field_name='Sig1', certify=True, docmdp_permissions=level
         ), signer=FROM_CA
     )
 
-    # create a new signature field after signing
+    # sign other (existing) field
     w = IncrementalPdfFileWriter(out)
 
     out = signers.sign_pdf(
