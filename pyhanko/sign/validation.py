@@ -1223,11 +1223,10 @@ class EmbeddedPdfSignature:
         # here, we allow arbitrary byte ranges
         # for the coverage check, we'll impose more constraints
         total_len = 0
+        chunk_buf = bytearray(DEFAULT_CHUNK_SIZE)
         for lo, chunk_len in misc.pair_iter(self.byte_range):
             stream.seek(lo)
-            chunk = stream.read(chunk_len)
-            assert len(chunk) == chunk_len
-            md.update(chunk)
+            misc.chunked_digest(chunk_buf, stream, md, max_read=chunk_len)
             total_len += chunk_len
 
         self.total_len = total_len
