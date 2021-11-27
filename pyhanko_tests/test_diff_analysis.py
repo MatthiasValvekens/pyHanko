@@ -32,7 +32,7 @@ from pyhanko.sign.diff_analysis import (
     is_annot_visible,
     is_field_visible,
 )
-from pyhanko.sign.general import SigningError
+from pyhanko.sign.general import KeyUsageConstraints, SigningError
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
     validate_pdf_signature,
@@ -1725,3 +1725,28 @@ def test_diff_analysis_circular_structure_tree():
     with pytest.raises(misc.PdfReadError,
                        match='Circular reference in struct.*mapping'):
         validate_pdf_signature(s, SIMPLE_V_CONTEXT())
+
+
+LENIENT_KU = KeyUsageConstraints(key_usage=set())
+
+
+@pytest.mark.parametrize('fname,expected_level', [
+    ('tail-uncovered.pdf', SignatureCoverageLevel.CONTIGUOUS_BLOCK_FROM_START),
+    ('signature-gap-too-big.pdf', SignatureCoverageLevel.UNCLEAR),
+    ('one-byterange.pdf', SignatureCoverageLevel.UNCLEAR),
+    ('weird-byterange.pdf', SignatureCoverageLevel.UNCLEAR),
+])
+def test_anomalous_coverage(fname, expected_level):
+    fpath = os.path.join(PDF_DATA_DIR, 'coverage-anomalies', fname)
+    with open(fpath, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        status = validate_pdf_signature(
+            s, SIMPLE_V_CONTEXT(), key_usage_settings=LENIENT_KU
+        )
+        assert status.valid
+        assert status.intact
+        assert not status.trusted
+        assert status.coverage == expected_level
+        assert not status.bottom_line
+        assert 'NONSTANDARD_COVERAGE' in status.summary()
