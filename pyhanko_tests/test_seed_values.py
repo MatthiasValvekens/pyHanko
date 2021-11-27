@@ -13,8 +13,8 @@ from pyhanko.sign.general import SigningError, UnacceptableSignerError
 from pyhanko.sign.validation import (
     EmbeddedPdfSignature,
     RevocationInfoValidationType,
-    validate_pdf_ltv_signature,
-    validate_pdf_signature,
+    async_validate_pdf_ltv_signature,
+    async_validate_pdf_signature,
 )
 from pyhanko_tests.samples import MINIMAL
 from pyhanko_tests.signing_commons import (
@@ -383,18 +383,18 @@ def prepare_sv_field(sv_spec, add_field_lock=False):
     return out
 
 
-def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, *,
-                 test_violation=False, add_field_lock=False):
+async def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, *,
+                       test_violation=False, add_field_lock=False):
     w = IncrementalPdfFileWriter(
         prepare_sv_field(sv_spec, add_field_lock=add_field_lock)
     )
 
     pdf_signer = signers.PdfSigner(sig_meta, signer, timestamper=timestamper)
     pdf_signer._ignore_sv = test_violation
-    out = pdf_signer.sign_pdf(w)
+    out = await pdf_signer.async_sign_pdf(w)
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
-    status = validate_pdf_signature(s, dummy_ocsp_vc())
+    status = await async_validate_pdf_signature(s, dummy_ocsp_vc())
     summary = status.pretty_print_details()
     if test_violation:
         assert 'not satisfy the SV constraints' in summary
@@ -405,26 +405,26 @@ def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, *,
     return EmbeddedPdfSignature(r, s.sig_field, s.fq_name)
 
 
-def test_sv_sign_md_req():
+async def test_sv_sign_md_req():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.DIGEST_METHOD,
         digest_methods=['sha256', 'sha512'],
     )
     with pytest.raises(SigningError):
-        sign_with_sv(
+        await sign_with_sv(
             sv, signers.PdfSignatureMetadata(
                 md_algorithm='sha1', field_name='Sig'
             )
         )
-    sign_with_sv(
+    await sign_with_sv(
         sv, signers.PdfSignatureMetadata(md_algorithm='sha1', field_name='Sig'),
         test_violation=True
     )
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert emb_sig.md_algorithm == 'sha256'
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(
             md_algorithm='sha512', field_name='Sig'
         )
@@ -432,19 +432,19 @@ def test_sv_sign_md_req():
     assert emb_sig.md_algorithm == 'sha512'
 
 
-def test_sv_sign_md_hint():
+async def test_sv_sign_md_hint():
     sv = fields.SigSeedValueSpec(digest_methods=['sha256', 'sha512'])
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(
             md_algorithm='sha1', field_name='Sig'
         )
     )
     assert emb_sig.md_algorithm == 'sha1'
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert emb_sig.md_algorithm == 'sha256'
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(
             md_algorithm='sha512', field_name='Sig'
         )
@@ -452,46 +452,46 @@ def test_sv_sign_md_hint():
     assert emb_sig.md_algorithm == 'sha512'
 
 
-def test_sv_sign_subfilter_req():
+async def test_sv_sign_subfilter_req():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.SUBFILTER, subfilters=[PADES]
     )
     with pytest.raises(SigningError):
-        sign_with_sv(
+        await sign_with_sv(
             sv, signers.PdfSignatureMetadata(
                 md_algorithm='sha1', field_name='Sig',
                 subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
             )
         )
-    sign_with_sv(
+    await sign_with_sv(
         sv, signers.PdfSignatureMetadata(
             md_algorithm='sha1', field_name='Sig',
             subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
         ), test_violation=True
     )
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert emb_sig.sig_object['/SubFilter'] == PADES.value
 
 
-def test_sv_sign_subfilter_hint():
+async def test_sv_sign_subfilter_hint():
     sv = fields.SigSeedValueSpec(subfilters=[PADES])
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(
             md_algorithm='sha1', field_name='Sig',
             subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
         )
     )
     assert emb_sig.sig_object['/SubFilter'] == '/adbe.pkcs7.detached'
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert emb_sig.sig_object['/SubFilter'] == PADES.value
 
 
 @freeze_time('2020-11-01')
-def test_sv_sign_addrevinfo_req(requests_mock):
+async def test_sv_sign_addrevinfo_req(requests_mock):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
         add_rev_info=True
@@ -502,8 +502,8 @@ def test_sv_sign_addrevinfo_req(requests_mock):
         subfilter=fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED,
         embed_validation_info=True
     )
-    emb_sig = sign_with_sv(sv, meta)
-    status = validate_pdf_ltv_signature(
+    emb_sig = await sign_with_sv(sv, meta)
+    status = await async_validate_pdf_ltv_signature(
         emb_sig, RevocationInfoValidationType.ADOBE_STYLE,
         {'trust_roots': TRUST_ROOTS}
     )
@@ -516,8 +516,8 @@ def test_sv_sign_addrevinfo_req(requests_mock):
         embed_validation_info=False
     )
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
-    sign_with_sv(sv, meta, test_violation=True)
+        await sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta, test_violation=True)
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', validation_context=vc,
         subfilter=fields.SigSeedSubFilter.PADES,
@@ -525,12 +525,12 @@ def test_sv_sign_addrevinfo_req(requests_mock):
     )
     # this shouldn't work with PAdES
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
-    sign_with_sv(sv, meta, test_violation=True)
+        await sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta, test_violation=True)
 
 
 @freeze_time('2020-11-01')
-def test_sv_sign_addrevinfo_subfilter_conflict():
+async def test_sv_sign_addrevinfo_subfilter_conflict():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
         subfilters=[PADES], add_rev_info=True
@@ -540,7 +540,7 @@ def test_sv_sign_addrevinfo_subfilter_conflict():
             field_name='Sig', validation_context=dummy_ocsp_vc(),
             embed_validation_info=True
         )
-        sign_with_sv(sv, meta)
+        await sign_with_sv(sv, meta)
 
     revinfo_and_subfilter = (
         fields.SigSeedValFlags.ADD_REV_INFO | fields.SigSeedValFlags.SUBFILTER
@@ -553,8 +553,8 @@ def test_sv_sign_addrevinfo_subfilter_conflict():
         embed_validation_info=True
     )
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
-    sign_with_sv(sv, meta, test_violation=True)
+        await sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta, test_violation=True)
 
     sv = fields.SigSeedValueSpec(
         flags=revinfo_and_subfilter, subfilters=[PADES], add_rev_info=False
@@ -562,10 +562,10 @@ def test_sv_sign_addrevinfo_subfilter_conflict():
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', validation_context=dummy_ocsp_vc(),
     )
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
 
-def test_sv_sign_cert_constraint():
+async def test_sv_sign_cert_constraint():
     # this is more thoroughly unit tested at a lower level (see further up),
     # so we simply try two basic scenarios here for now
     from asn1crypto import x509
@@ -575,7 +575,7 @@ def test_sv_sign_cert_constraint():
             subject_dn=x509.Name.build({'common_name': 'Alice'}),
         )
     )
-    sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+    await sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
     sv = fields.SigSeedValueSpec(
         cert=fields.SigCertConstraints(
             flags=fields.SigCertConstraintFlags.SUBJECT_DN,
@@ -583,13 +583,13 @@ def test_sv_sign_cert_constraint():
         )
     )
     with pytest.raises(SigningError):
-        sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
-    sign_with_sv(
+        await sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+    await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig'), test_violation=True
     )
 
 
-def test_sv_flag_unsupported():
+async def test_sv_flag_unsupported():
     sv = fields.SigSeedValueSpec(
         flags=(
             fields.SigSeedValFlags.LEGAL_ATTESTATION
@@ -600,10 +600,10 @@ def test_sv_flag_unsupported():
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(NotImplementedError):
-        sign_with_sv(sv, meta, test_violation=True)
+        await sign_with_sv(sv, meta, test_violation=True)
 
 
-def test_sv_cert_flag_unsupported():
+async def test_sv_cert_flag_unsupported():
     sv = fields.SigSeedValueSpec(
         cert=fields.SigCertConstraints(
             flags=fields.SigCertConstraintFlags.RESERVED,
@@ -611,58 +611,58 @@ def test_sv_cert_flag_unsupported():
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(NotImplementedError):
-        sign_with_sv(sv, meta)
+        await sign_with_sv(sv, meta)
 
 
-def test_sv_flag_appearance_required():
+async def test_sv_flag_appearance_required():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.APPEARANCE_FILTER,
         appearance='test'
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
+        await sign_with_sv(sv, meta)
 
 
-def test_sv_mdp_no_certify():
+async def test_sv_mdp_no_certify():
 
     sv = fields.SigSeedValueSpec(
         seed_signature_type=fields.SeedSignatureType(),
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
+        await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
-    sign_with_sv(sv, meta, test_violation=True)
+    await sign_with_sv(sv, meta, test_violation=True)
 
 
-def test_sv_mdp_must_certify():
+async def test_sv_mdp_must_certify():
 
     sv = fields.SigSeedValueSpec(
         seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.FILL_FORMS),
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
+        await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig')
-    sign_with_sv(sv, meta, test_violation=True)
+    await sign_with_sv(sv, meta, test_violation=True)
 
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', certify=True,
         docmdp_permissions=fields.MDPPerm.NO_CHANGES
     )
-    sign_with_sv(sv, meta, test_violation=True)
+    await sign_with_sv(sv, meta, test_violation=True)
 
 
-def test_sv_mdp_must_certify_wrong_docmdp():
+async def test_sv_mdp_must_certify_wrong_docmdp():
 
     sv = fields.SigSeedValueSpec(
         seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.FILL_FORMS),
@@ -672,7 +672,7 @@ def test_sv_mdp_must_certify_wrong_docmdp():
         docmdp_permissions=fields.MDPPerm.NO_CHANGES
     )
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta)
+        await sign_with_sv(sv, meta)
 
 
 def test_sv_subfilter_unsupported():
@@ -739,7 +739,7 @@ def test_sv_subfilter_unsupported_partial():
         )
 
 
-def test_sv_timestamp_url(requests_mock):
+async def test_sv_timestamp_url(requests_mock):
     # state issues (see comment in signers.py), so create a fresh signer
     sv = fields.SigSeedValueSpec(
         timestamp_server_url=DUMMY_HTTP_TS.url,
@@ -758,55 +758,55 @@ def test_sv_timestamp_url(requests_mock):
         headers={'Content-Type': 'application/timestamp-reply'}
     )
     # noinspection PyTypeChecker
-    sign_with_sv(sv, meta, timestamper=None)
+    await sign_with_sv(sv, meta, timestamper=None)
     assert ts_requested
 
 
-def test_sv_sign_reason_req():
+async def test_sv_sign_reason_req():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.REASONS,
         reasons=['I agree', 'Works for me']
     )
     aw_yiss = signers.PdfSignatureMetadata(reason='Aw yiss', field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(sv, aw_yiss)
-    sign_with_sv(sv, aw_yiss, test_violation=True)
+        await sign_with_sv(sv, aw_yiss)
+    await sign_with_sv(sv, aw_yiss, test_violation=True)
 
     with pytest.raises(SigningError):
-        sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
-    sign_with_sv(
+        await sign_with_sv(sv, signers.PdfSignatureMetadata(field_name='Sig'))
+    await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig'),
         test_violation=True
     )
 
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig', reason='I agree')
     )
     assert emb_sig.sig_object['/Reason'] == 'I agree'
 
 
 @pytest.mark.parametrize('reasons_param', [None, [], ["."]])
-def test_sv_sign_reason_prohibited(reasons_param):
+async def test_sv_sign_reason_prohibited(reasons_param):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.REASONS, reasons=reasons_param
     )
     aw_yiss = signers.PdfSignatureMetadata(reason='Aw yiss', field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(sv, aw_yiss)
-    sign_with_sv(sv, aw_yiss, test_violation=True)
+        await sign_with_sv(sv, aw_yiss)
+    await sign_with_sv(sv, aw_yiss, test_violation=True)
 
     dot = signers.PdfSignatureMetadata(reason='.', field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(sv, dot)
-    sign_with_sv(sv, dot, test_violation=True)
+        await sign_with_sv(sv, dot)
+    await sign_with_sv(sv, dot, test_violation=True)
 
-    emb_sig = sign_with_sv(
+    emb_sig = await sign_with_sv(
         sv, signers.PdfSignatureMetadata(field_name='Sig')
     )
     assert pdf_name('/Reason') not in emb_sig.sig_object
 
 
-def test_sv_lock_certify():
+async def test_sv_lock_certify():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
         lock_document=fields.SeedLockDocument.LOCK
@@ -815,24 +815,24 @@ def test_sv_lock_certify():
         field_name='Sig', certify=True,
         docmdp_permissions=fields.MDPPerm.NO_CHANGES
     )
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig', certify=True)
-    sign_with_sv(sv, meta)
-    sign_with_sv(sv, meta, test_violation=True)
+    await sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta, test_violation=True)
 
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', certify=True,
         docmdp_permissions=fields.MDPPerm.ANNOTATE
     )
-    sign_with_sv(sv, meta)
-    sign_with_sv(sv, meta, test_violation=True)
+    await sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta, test_violation=True)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig')
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
 
-def test_sv_no_lock_certify():
+async def test_sv_no_lock_certify():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
         lock_document=fields.SeedLockDocument.DO_NOT_LOCK
@@ -841,36 +841,36 @@ def test_sv_no_lock_certify():
         field_name='Sig', certify=True,
         docmdp_permissions=fields.MDPPerm.FILL_FORMS
     )
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', certify=True,
         docmdp_permissions=fields.MDPPerm.ANNOTATE
     )
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', certify=True,
     )
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(field_name='Sig')
-    sign_with_sv(sv, meta)
+    await sign_with_sv(sv, meta)
 
     meta = signers.PdfSignatureMetadata(
         field_name='Sig', certify=True,
         docmdp_permissions=fields.MDPPerm.NO_CHANGES
     )
-    sign_with_sv(sv, meta, test_violation=True)
+    await sign_with_sv(sv, meta, test_violation=True)
 
 
-def test_field_lock_compat():
+async def test_field_lock_compat():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
         lock_document=fields.SeedLockDocument.LOCK
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
-    sign_with_sv(sv, meta, add_field_lock=True)
+    await sign_with_sv(sv, meta, add_field_lock=True)
 
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
@@ -878,7 +878,7 @@ def test_field_lock_compat():
     )
     meta = signers.PdfSignatureMetadata(field_name='Sig')
     with pytest.raises(SigningError):
-        sign_with_sv(sv, meta, add_field_lock=True)
+        await sign_with_sv(sv, meta, add_field_lock=True)
 
 
 @pytest.mark.parametrize('must_have_set, forbidden_set, as_string', [
