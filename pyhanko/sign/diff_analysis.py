@@ -2056,6 +2056,13 @@ class StandardDiffPolicy(DiffPolicy):
               field_mdp_spec: Optional[FieldMDPSpec] = None,
               doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
 
+        if doc_mdp == MDPPerm.ANNOTATE:
+            logger.warning(
+                "StandardDiffPolicy was not designed to support "
+                "DocMDP level 3 (MDPPerm.ANNOTATE). Unexpected validation "
+                "results may occur."
+            )
+
         if self.reject_object_freeing:
             freed = new.refs_freed_in_revision()
             if freed:
