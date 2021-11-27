@@ -29,7 +29,6 @@ from pyhanko_tests.samples import (
 SELF_SIGN = signers.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',
     CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
-    ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
     key_passphrase=b'secret'
 )
 ROOT_CERT = TESTING_CA.get_cert(CertLabel('root'))
