@@ -2054,3 +2054,56 @@ def test_parse_comments(input_str):
     assert len(result) == 2
     assert result['/A'] == '/B'
     assert result['/C'] == '/D'
+
+
+NONEXISTENT_XREF_PATH = os.path.join(
+    PDF_DATA_DIR, 'minimal-with-nonexistent-refs.pdf'
+)
+
+
+def test_nonexistent_xref_access():
+    with open(NONEXISTENT_XREF_PATH, 'rb') as inf:
+        r = PdfFileReader(inf)
+        bad_ref = r.root['/Pages']['/Kids'][0].raw_get('/Bleh')
+        with pytest.raises(misc.PdfReadError,
+                           match='not found.*error in strict mode'):
+            bad_ref.get_object()
+
+
+def test_nonexistent_xref_access_nonstrict():
+    with open(NONEXISTENT_XREF_PATH, 'rb') as inf:
+        r = PdfFileReader(inf, strict=False)
+        bad_ref = r.root['/Pages']['/Kids'][0].raw_get('/Bleh')
+        assert isinstance(bad_ref.get_object(), generic.NullObject)
+
+
+def test_historical_nonexistent_xref_access():
+    out = BytesIO()
+    with open(NONEXISTENT_XREF_PATH, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        pg_dict = w.root['/Pages']['/Kids'][0]
+        del pg_dict['/Bleh']
+        w.update_container(pg_dict)
+        w.write(out)
+    r = PdfFileReader(out)
+    current_state = r.root['/Pages']['/Kids'][0]
+    assert '/Bleh' not in current_state
+    hist_root = r.get_historical_root(0)
+    bad_ref = hist_root['/Pages']['/Kids'][0].raw_get('/Bleh')
+    with pytest.raises(misc.PdfReadError,
+                       match='not found.*error in strict mode'):
+        bad_ref.get_object()
+
+
+def test_historical_nonexistent_xref_access_nonstrict():
+    out = BytesIO()
+    with open(NONEXISTENT_XREF_PATH, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        pg_dict = w.root['/Pages']['/Kids'][0]
+        del pg_dict['/Bleh']
+        w.update_container(pg_dict)
+        w.write(out)
+    r = PdfFileReader(out, strict=False)
+    hist_root = r.get_historical_root(0)
+    bad_ref = hist_root['/Pages']['/Kids'][0].raw_get('/Bleh')
+    assert isinstance(bad_ref.get_object(), generic.NullObject)

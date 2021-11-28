@@ -236,6 +236,8 @@ class XRefCache:
 
     def get_last_change(self, ref: generic.Reference):
         ref_hist = self.history[(ref.generation, ref.idnum)]
+        if not ref_hist:
+            raise KeyError
         section, _ = ref_hist[0]
         return self.xref_sections - 1 - section
 
@@ -311,10 +313,7 @@ class XRefCache:
         for rev_index, marker in self.history[ix]:
             if revision >= max_index - rev_index:
                 return marker
-        raise PdfReadError(
-            f'Could not find object ({ref.idnum} {ref.generation}) '
-            f'in history at revision {revision}'
-        )
+        return None
 
     def __getitem__(self, ref):
         if ref.generation == 0 and \
@@ -324,7 +323,7 @@ class XRefCache:
             try:
                 return self.standard_xrefs[(ref.generation, ref.idnum)]
             except KeyError:
-                raise PdfReadError("Could not find object.")
+                return None
 
     def read_xref_table(self):
         stream = self.reader.stream
@@ -719,9 +718,7 @@ class PdfFileReader(PdfHandler):
         :return:
             The value of the document catalog dictionary for that revision.
         """
-        ref = self.trailer.raw_get('/Root', revision=revision)
-        marker = self.xrefs.get_historical_ref(ref, revision)
-        return self._read_object(ref, marker)
+        return self.get_historical_resolver(revision).root
 
     @property
     def total_revisions(self) -> int:
@@ -775,7 +772,14 @@ class PdfFileReader(PdfHandler):
         else:
             # never cache historical refs
             marker = self.xrefs.get_historical_ref(ref, revision)
-            obj = self._read_object(ref, marker, never_decrypt=never_decrypt)
+            if marker is None:
+                logger.warning(
+                    f'Could not find object ({ref.idnum} {ref.generation}) '
+                    f'in history at revision {revision}.'
+                )
+            obj = self._read_object(
+                ref, marker, never_decrypt=never_decrypt
+            )
 
         if transparent_decrypt and \
                 isinstance(obj, generic.DecryptedObjectProxy):
@@ -785,7 +789,19 @@ class PdfFileReader(PdfHandler):
 
     def _read_object(self, ref, marker, never_decrypt=False):
         if marker is None:
-            return generic.NullObject()
+            if self.strict:
+                raise PdfReadError(
+                    f"Object addressed by {ref} not found in the current "
+                    f"context. This is an error in strict mode."
+                )
+            else:
+                logger.info(
+                    f"Object addressed by {ref} not found in the current "
+                    f"context, substituting null in non-strict mode."
+                )
+                obj = generic.NullObject()
+                obj.container_ref = ref
+                return obj
         elif isinstance(marker, tuple):
             # object in object stream
             (obj_stream_num, obj_stream_ix) = marker
@@ -1249,7 +1265,14 @@ class HistoricalResolver(PdfHandler):
             # we can grab it from the "normal" shared cache.
             reader = self.reader
             revision = self.revision
-            if reader.xrefs.get_last_change(ref) <= revision:
+            try:
+                last_change = reader.xrefs.get_last_change(ref)
+            except KeyError:
+                logger.warning(
+                    f"Could not determine history of {ref} in xref sections"
+                )
+                last_change = None
+            if last_change is not None and last_change <= revision:
                 obj = reader.get_object(ref, transparent_decrypt=False)
             else:
                 obj = reader.get_object(
@@ -1362,12 +1385,8 @@ class HistoricalResolver(PdfHandler):
         # TODO double-check behaviour of freed objects
 
         xref_cache = self.reader.xrefs
-        try:
-            xref_cache.get_historical_ref(ref, self.revision)
-            # if we get here, the ref was taken
-            return False
-        except misc.PdfReadError:
-            return True
+        marker = xref_cache.get_historical_ref(ref, self.revision)
+        return marker is None
 
     def collect_dependencies(self, obj: generic.PdfObject, since_revision=None):
         """
