@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+from asn1crypto import pdf as asn1_pdf
 from freezegun.api import freeze_time
 from pyhanko_certvalidator import CertificateValidator
 
@@ -10,6 +11,9 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.general import SigningError, UnacceptableSignerError
+from pyhanko.sign.signers import cms_embedder
+from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
+from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.sign.validation import (
     EmbeddedPdfSignature,
     RevocationInfoValidationType,
@@ -563,6 +567,54 @@ async def test_sv_sign_addrevinfo_subfilter_conflict():
         field_name='Sig', validation_context=dummy_ocsp_vc(),
     )
     await sign_with_sv(sv, meta)
+
+
+@freeze_time('2020-11-01')
+async def test_add_revinfo_wrong_subfilter():
+    sv = fields.SigSeedValueSpec(
+        flags=fields.SigSeedValFlags.ADD_REV_INFO,
+        add_rev_info=True
+    )
+
+    sig_field_spec = fields.SigFieldSpec(
+        sig_field_name='Sig', seed_value_dict=sv,
+    )
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    fields.append_signature_field(w, sig_field_spec)
+
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
+        field_name='Sig', writer=w
+    )
+    next(cms_writer)
+    # wrong subfilter: PAdES
+    #  but we do embed an (empty) RevInfoArchival attribute
+    sig_obj = signers.SignatureObject(bytes_reserved=8192, subfilter=PADES)
+
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
+
+    prep_digest, output = cms_writer.send(
+        cms_embedder.SigIOSetup(md_algorithm='sha256', in_place=True)
+    )
+    cms_obj = await FROM_CA.async_sign(
+        data_digest=prep_digest.document_digest,
+        digest_algorithm='sha256',
+        signed_attr_settings=PdfCMSSignedAttributes(
+            # empty
+            adobe_revinfo_attr=asn1_pdf.RevocationInfoArchival({
+                'ocsp': []
+            })
+        )
+    )
+    await PdfTBSDocument.async_finish_signing(output, prep_digest, cms_obj)
+    r = PdfFileReader(output)
+    s = r.embedded_signatures[0]
+    status = await async_validate_pdf_signature(s, dummy_ocsp_vc())
+    summary = status.pretty_print_details()
+    assert status.intact and status.valid
+    assert 'not satisfy the SV constraints' in summary
+    assert 'requires subfilter' in status.seed_value_constraint_error.args[0]
+    assert not status.seed_value_ok
 
 
 async def test_sv_sign_cert_constraint():
