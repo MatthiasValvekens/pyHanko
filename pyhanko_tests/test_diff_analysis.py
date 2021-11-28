@@ -970,6 +970,102 @@ def test_pades_double_sign_delete_vri(requests_mock):
 
 
 @freeze_time('2020-11-01')
+def test_pades_double_sign_delete_entry_in_vri(requests_mock):
+    """
+    This test documents the current diff_analysis checker's behaviour
+    when it notices that VRI entries were deleted.
+
+    (intended for use with DTSes, but here we use regular signatures for ease
+    of manipulation)
+    """
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    meta2 = signers.PdfSignatureMetadata(
+        field_name='Sig2', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA, timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(out)
+    vri = w.root['/DSS']['/VRI']
+    k, = vri.keys()
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(out)
+    # clobber the first signature's VRI entry
+    vri = w.root['/DSS']['/VRI']
+    del vri[k]
+    w.update_container(vri)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert k not in r.root['/DSS']['/VRI']
+    assert s.field_name == 'Sig1'
+    # this one is trusted, since the VRI addition and deletion both happened
+    # after the signature was made
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    # the VRI diff happened against a revision covered by this signature
+    val_trusted_but_modified(s)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('indirect', [True, False])
+def test_pades_vri_allow_ts_addition(requests_mock, indirect):
+    """
+    This test verifies whether the diff analysis checker allows the /TS
+    entry in VRI dictionaries (it's completely pointless, but nice to have
+    for compatibility with legacy implementations)
+    """
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta1 = signers.PdfSignatureMetadata(
+        field_name='Sig1', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True
+    )
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA, timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(out)
+    meta2 = signers.PdfSignatureMetadata(
+        field_name='Sig2', validation_context=live_testing_vc(requests_mock),
+        subfilter=PADES, embed_validation_info=True,
+    )
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA, timestamper=DUMMY_TS)
+    w = IncrementalPdfFileWriter(out)
+    vri = w.root['/DSS']['/VRI']
+    if indirect:
+        # insert a DER-encoded ASN.1 NULL value
+        ts = w.add_object(generic.StreamObject(stream_data=b'\x05\x00'))
+    else:
+        # insert a bogus string (which the validator will accept because
+        #  it doesn't process TS in any way)
+        ts = generic.TextStringObject('')
+    # this VRI entry doesn't make any sense, but right now the validator
+    # doesn't really care, and this is easier than hooking into the actual
+    # VRI generation code
+    vri[f'/{"DEADBEEF" * 5}'] = generic.DictionaryObject({
+        generic.pdf_name('/TS'): ts
+    })
+    w.update_container(vri)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'Sig2'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+
+@freeze_time('2020-11-01')
 def test_pades_dss_object_clobber(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
     meta1 = signers.PdfSignatureMetadata(
