@@ -88,12 +88,12 @@ def test_no_changes_policy():
 
 
 DOUBLE_SIG_TESTDATA_FILES = [
-    MINIMAL, MINIMAL_XREF, MINIMAL_ONE_FIELD
+    MINIMAL, MINIMAL_XREF, MINIMAL_ONE_FIELD, MINIMAL_TWO_PAGES
 ]
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('file_ix', [0, 1, 2])
+@pytest.mark.parametrize('file_ix', [0, 1, 2, 3])
 def test_double_sig_add_field(file_ix):
     w = IncrementalPdfFileWriter(BytesIO(DOUBLE_SIG_TESTDATA_FILES[file_ix]))
     out = signers.sign_pdf(
@@ -122,6 +122,51 @@ def test_double_sig_add_field(file_ix):
     s = r.embedded_signatures[1]
     assert s.field_name == 'SigNew'
     val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_double_sig_different_pages():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_PAGES))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1',
+            on_page=0,
+            box=(10, 10, 10, 10)
+        ),
+        signer=FROM_CA,
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='SigNew',
+            on_page=1,
+            box=(10, 10, 10, 10)
+        ),
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    # throw in an /Info update for good measure
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
+    info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
+    w.set_info(info)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+    assert status.docmdp_ok
+
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'SigNew'
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert status.docmdp_ok
 
 
 @freeze_time('2020-11-01')
