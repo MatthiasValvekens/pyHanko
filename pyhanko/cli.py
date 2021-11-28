@@ -452,12 +452,18 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
         'this can be used to verify signatures on non-PDF files'
     )
 )
+@click.option('--no-strict-syntax',
+              help='Attempt to ignore syntactical problems in the input file '
+                   '(warning: this may affect validation results in unexpected '
+                   'ways.)',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
 def validate_signatures(ctx, infile, executive_summary,
                         pretty_print, validation_context, trust, trust_replace,
                         other_certs, ltv_profile, force_revinfo,
                         soft_revocation_check, no_revocation_check, password,
-                        retroactive_revinfo, detached, no_diff_analysis):
+                        retroactive_revinfo, detached, no_diff_analysis,
+                        no_strict_syntax):
 
     if no_revocation_check:
         soft_revocation_check = True
@@ -496,7 +502,14 @@ def validate_signatures(ctx, infile, executive_summary,
                 raise click.ClickException(status_str)
             return
 
-        r = PdfFileReader(infile)
+        if no_strict_syntax:
+            logger.info(
+                "Strict PDF syntax is disabled; this could impact validation "
+                "results. Use caution."
+            )
+            r = PdfFileReader(infile, strict=False)
+        else:
+            r = PdfFileReader(infile)
         sh = r.security_handler
         if isinstance(sh, crypt.StandardSecurityHandler):
             if password is None:
