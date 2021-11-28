@@ -3,6 +3,57 @@ Release history
 ***************
 
 
+.. _release-0.10.0:
+
+0.10.0
+======
+
+*Release date:* 2021-11-28
+
+Dependency changes
+------------------
+
+ * Update ``pyhanko-certvalidator`` to ``0.18.0``
+ * Update ``aiohttp`` to ``3.8.0`` (optional dependency)
+ * Introduce ``python-pae==0.1.0`` (tests)
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * There's a new :class:`~pyhanko.sign.signers.pdf_cms.Signer` implementation
+   that allows pyHanko to be used with remote signing services that implement the
+   Cloud Signature Consortium API. Since auth handling differs from vendor to vendor, using
+   this feature requires still the caller to supply an authentication handler implementation;
+   see :mod:`pyhanko.sign.signers.csc_signer` for more information.
+   *This feature is currently incubating.*
+
+Validation
+^^^^^^^^^^
+
+ * Add CLI option to skip diff analysis.
+ * Add CLI flag to disable strict syntax checks.
+ * Use chunked digests while validating.
+ * Improved difference analysis logging.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Better handling of nonexistent objects: clearer errors in strict mode, better fallback behaviour
+   in nonstrict mode. This applies to both regular object dereferencing and xref history analysis.
+ * Added many new tests for various edge cases, mainly in validation code.
+ * Added ``Python :: 3`` and ``Python :: 3.10`` classifiers to distribution.
+
+Bugs fixed
+----------
+
+ * Fix bug in output handler in timestamp updater that caused empty output in some configurations.
+ * Fix a config parsing error when no stamp styles are defined in the configuration file.
+
+
 .. _release-0.9.0:
 
 0.9.0

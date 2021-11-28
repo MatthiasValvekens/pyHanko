@@ -1,4 +1,7 @@
 """
+
+.. versionadded:: 0.10.0
+
 Asynchronous :class:`~pyhanko.sign.signers.pdf_cms.Signer` implementation for
 interacting with a remote signing service using the Cloud Signature Consortium
 (CSC) API.
