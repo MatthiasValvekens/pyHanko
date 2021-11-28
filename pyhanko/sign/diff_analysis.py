@@ -1715,10 +1715,6 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                     f"Annotations {deleted_annots} were deleted."
                 )
 
-            if not added_annots:
-                # nothing to do
-                continue
-
             # look up the names of the associated form field(s)
             # if any of the refs are not in the list
             # -> unrelated annotation -> bail

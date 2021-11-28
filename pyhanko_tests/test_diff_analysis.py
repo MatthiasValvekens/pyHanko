@@ -1795,3 +1795,85 @@ def test_anomalous_coverage(fname, expected_level):
         assert status.coverage == expected_level
         assert not status.bottom_line
         assert 'NONSTANDARD_COVERAGE' in status.summary()
+
+
+def test_delete_sig_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    pg_dict = w.root['/Pages']['/Kids'][0]
+    del pg_dict['/Annots']
+    w.update_container(pg_dict)
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted_but_modified(s)
+
+
+def test_double_sig_delete_old_sig_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+    )
+
+    # create a new signature field after signing
+    w = IncrementalPdfFileWriter(out)
+
+    w = IncrementalPdfFileWriter(out)
+    annots = w.root['/Pages']['/Kids'][0]['/Annots']
+    del annots[0]
+
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
+
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'SigNew'
+    val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_double_sig_different_pages_delete_old_annot():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_PAGES))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1',
+            on_page=0,
+            box=(10, 10, 10, 10)
+        ),
+        signer=FROM_CA,
+    )
+
+    w = IncrementalPdfFileWriter(out)
+    annots = w.root['/Pages']['/Kids'][0]['/Annots']
+    del annots[0]
+    w.update_container(annots)
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        new_field_spec=fields.SigFieldSpec(
+            sig_field_name='SigNew',
+            on_page=1,
+            box=(10, 10, 10, 10)
+        ),
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert s.field_name == 'Sig1'
+    val_trusted_but_modified(s)
+
+    s = r.embedded_signatures[1]
+    assert s.field_name == 'SigNew'
+    val_trusted(s)
