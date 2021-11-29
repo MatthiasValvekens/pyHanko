@@ -26,7 +26,7 @@ class QualifiedPolicy:
     """
 
 
-class ValidationPath():
+class ValidationPath:
     """
     Represents a path going towards an end-entity certificate
     """
