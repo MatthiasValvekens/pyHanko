@@ -1,12 +1,10 @@
 # coding: utf-8
 
-from typing import FrozenSet, Union
+from typing import FrozenSet
 from dataclasses import dataclass
 
-from asn1crypto import pem, x509
+from asn1crypto import x509
 
-from ._errors import pretty_message
-from ._types import type_name
 from .errors import DuplicateCertificateError
 
 
@@ -178,20 +176,15 @@ class ValidationPath():
 
         return self
 
-    def _prepare_addition(self, cert: Union[x509.Certificate, bytes]) \
+    def _prepare_addition(self, cert: x509.Certificate) \
             -> x509.Certificate:
-        if isinstance(cert, bytes):
-            if pem.detect(cert):
-                _, _, cert = pem.unarmor(cert)
-            cert = x509.Certificate.load(cert)
-
         if cert.issuer_serial in self._cert_hashes:
             raise DuplicateCertificateError()
 
         self._cert_hashes.add(cert.issuer_serial)
         return cert
 
-    def append(self, cert: Union[x509.Certificate, bytes]):
+    def append(self, cert: x509.Certificate):
         """
         Appends a cert to the path. This should be a cert issued by the last
         cert in the path.
@@ -206,7 +199,7 @@ class ValidationPath():
         self._certs.append(self._prepare_addition(cert))
         return self
 
-    def prepend(self, cert: Union[x509.Certificate, bytes]):
+    def prepend(self, cert: x509.Certificate):
         """
         Prepends a cert to the path. This should be the issuer of the previously
         prepended cert.

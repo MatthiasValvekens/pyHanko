@@ -2,8 +2,7 @@ import asyncio
 import warnings
 from typing import List, Optional
 
-from asn1crypto import pem
-from asn1crypto.x509 import Certificate
+from asn1crypto import x509
 
 from .context import ValidationContext, PKIXValidationParams
 from .errors import ValidationError, PathBuildingError, InvalidCertificateError
@@ -22,7 +21,7 @@ __all__ = [
 ]
 
 
-class CertificateValidator():
+class CertificateValidator:
 
     # A pyhanko_certvalidator.context.ValidationContext object
     _context = None
@@ -36,19 +35,18 @@ class CertificateValidator():
     # A pyhanko_certvalidator.context.PKIXValidationParams object
     _params = None
 
-    def __init__(self, end_entity_cert: Certificate,
-                 intermediate_certs: Optional[List[Certificate]] = None,
+    def __init__(self, end_entity_cert: x509.Certificate,
+                 intermediate_certs: Optional[List[x509.Certificate]] = None,
                  validation_context: ValidationContext = None,
                  pkix_params: PKIXValidationParams = None):
         """
         :param end_entity_cert:
-            An asn1crypto.x509.Certificate object or a byte string of the DER or
-            PEM-encoded X.509 end-entity certificate to validate
+            An asn1crypto.x509.Certificate object X.509 end-entity
+            certificate to validate
 
         :param intermediate_certs:
-            None or a list of asn1crypto.x509.Certificate objects or a byte
-            string of a DER or PEM-encoded X.509 certificate. Used in
-            constructing certificate paths for validation.
+            None or a list of asn1crypto.x509.Certificate
+            Used in constructing certificate paths for validation.
 
         :param validation_context:
             A pyhanko_certvalidator.context.ValidationContext() object that
@@ -66,11 +64,6 @@ class CertificateValidator():
             Ancillary validation of CRLs and OCSP responses ignore these
             settings.
         """
-
-        if isinstance(end_entity_cert, bytes):
-            if pem.detect(end_entity_cert):
-                _, _, end_entity_cert = pem.unarmor(end_entity_cert)
-            end_entity_cert = Certificate.load(end_entity_cert)
 
         if validation_context is None:
             validation_context = ValidationContext()

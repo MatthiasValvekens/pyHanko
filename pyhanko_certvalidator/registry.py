@@ -2,14 +2,13 @@
 
 import abc
 from collections import defaultdict
-from typing import List, Optional, Iterable, Union
+from typing import List, Optional, Iterable
 import asyncio
 
-from asn1crypto import pem, x509
+from asn1crypto import x509
 from oscrypto import trust_list
 
 from ._errors import pretty_message
-from ._types import type_name
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
@@ -206,15 +205,15 @@ class CertificateRegistry(SimpleCertificateStore):
         if other_certs is None:
             other_certs = []
         else:
-            other_certs = self._validate_unarmor(other_certs, 'other_certs')
+            other_certs = list(other_certs)
 
         if trust_roots is None:
             trust_roots = [e[0] for e in trust_list.get_list()]
         else:
-            trust_roots = self._validate_unarmor(trust_roots, 'trust_roots')
+            trust_roots = list(trust_roots)
 
         if extra_trust_roots is not None:
-            trust_roots.extend(self._validate_unarmor(extra_trust_roots, 'extra_trust_roots'))
+            trust_roots.extend(extra_trust_roots)
 
         for trust_root in trust_roots:
             self.register(trust_root)
@@ -224,40 +223,6 @@ class CertificateRegistry(SimpleCertificateStore):
             self.register(other_cert)
 
         self.fetcher = cert_fetcher
-
-    def _validate_unarmor(self, certs, var_name):
-        """
-        Takes a list of byte strings or asn1crypto.x509.Certificates objects,
-        validates and loads them while unarmoring any PEM-encoded contents
-
-        :param certs:
-            A list of byte strings or asn1crypto.x509.Certificate objects
-
-        :param var_name:
-            A unicode variable name to use in any TypeError exceptions
-
-        :return:
-            A list of asn1crypto.x509.Certificate objects
-        """
-
-        output = []
-        for cert in certs:
-            if isinstance(cert, x509.Certificate):
-                output.append(cert)
-            else:
-                if not isinstance(cert, bytes):
-                    raise TypeError(pretty_message(
-                        '''
-                        %s must contain only byte strings or
-                        asn1crypto.x509.Certificate objects, not %s
-                        ''',
-                        var_name,
-                        type_name(cert)
-                    ))
-                if pem.detect(cert):
-                    _, _, cert = pem.unarmor(cert)
-                output.append(x509.Certificate.load(cert))
-        return output
 
     def is_ca(self, cert):
         """
@@ -278,18 +243,12 @@ class CertificateRegistry(SimpleCertificateStore):
         check via OCSP or CRL, or some other method
 
         :param cert:
-            An asn1crypto.x509.Certificate object or a byte string of a DER or
-            PEM-encoded certificate
+            An asn1crypto.x509.Certificate object
 
         :return:
             A boolean indicating if the certificate was added - will return
             False if the certificate was already present
         """
-
-        if isinstance(cert, bytes):
-            if pem.detect(cert):
-                _, _, cert = pem.unarmor(cert)
-            cert = x509.Certificate.load(cert)
 
         return self.register(cert)
 
@@ -342,7 +301,7 @@ class CertificateRegistry(SimpleCertificateStore):
         return asyncio.run(self.async_build_paths(end_entity_cert))
 
     async def async_build_paths(
-            self, end_entity_cert: Union[x509.Certificate, bytes]):
+            self, end_entity_cert: x509.Certificate):
         """
         Builds a list of ValidationPath objects from a certificate in the
         operating system trust store to the end-entity certificate
@@ -356,11 +315,6 @@ class CertificateRegistry(SimpleCertificateStore):
             represent the possible paths from the end-entity certificate to one
             of the CA certs.
         """
-
-        if isinstance(end_entity_cert, bytes):
-            if pem.detect(end_entity_cert):
-                _, _, end_entity_cert = pem.unarmor(end_entity_cert)
-            end_entity_cert = x509.Certificate.load(end_entity_cert)
 
         path = ValidationPath(end_entity_cert)
         paths = []

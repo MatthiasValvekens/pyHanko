@@ -22,7 +22,7 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
             cert = x509.Certificate.load(cert_bytes)
 
         with open(os.path.join(fixtures_dir, 'digicert-sha2-secure-server-ca.crt'), 'rb') as f:
-            other_certs = [f.read()]
+            other_certs = [x509.Certificate.load(f.read())]
 
         repo = CertificateRegistry(other_certs=other_certs)
         paths = repo.build_paths(cert)
@@ -47,7 +47,7 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
             cert = x509.Certificate.load(cert_bytes)
 
         with open(os.path.join(fixtures_dir, 'digicert-sha2-secure-server-ca.crt'), 'rb') as f:
-            other_certs = [f.read()]
+            other_certs = [x509.Certificate.load(f.read())]
 
         repo = CertificateRegistry(trust_roots=other_certs)
         paths = repo.build_paths(cert)
