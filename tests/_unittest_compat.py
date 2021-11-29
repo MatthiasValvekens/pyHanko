@@ -7,12 +7,6 @@ import unittest
 import re
 from unittest import TestCase
 
-if sys.version_info < (3,):
-    str_cls = unicode  # noqa
-else:
-    str_cls = str
-
-
 _non_local = {'patched': False}
 
 
@@ -233,7 +227,7 @@ def _assert_not_in(self, member, container, msg=None):
 
 def _assert_regex(self, text, expected_regexp, msg=None):
     """Fail the test unless the text matches the regular expression."""
-    if isinstance(expected_regexp, str_cls):
+    if isinstance(expected_regexp, str):
         expected_regexp = re.compile(expected_regexp)
     if not expected_regexp.search(text):
         msg = msg or "Regexp didn't match"

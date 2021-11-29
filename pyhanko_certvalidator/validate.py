@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.asymmetric import (
 
 from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
-from ._types import str_cls, type_name
+from ._types import type_name
 from .context import ValidationContext, PKIXValidationParams, \
     RevocationCheckingRule, CertRevTrustPolicy, RevocationCheckingPolicy
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
@@ -557,7 +557,7 @@ async def _validate_path(validation_context, path,
 
     moment = validation_context.moment
 
-    if end_entity_name_override is not None and not isinstance(end_entity_name_override, str_cls):
+    if end_entity_name_override is not None and not isinstance(end_entity_name_override, str):
         raise TypeError(pretty_message(
             '''
             end_entity_name_override must be a unicode string, not %s
@@ -1535,7 +1535,7 @@ async def verify_ocsp_response(cert: x509.Certificate, path: ValidationPath,
     if cert_description is None:
         cert_description = 'the certificate'
 
-    if not isinstance(cert_description, str_cls):
+    if not isinstance(cert_description, str):
         raise TypeError(pretty_message(
             '''
             cert_description must be a unicode string, not %s
@@ -2192,7 +2192,7 @@ async def verify_crl(cert: x509.Certificate, path: ValidationPath,
     if cert_description is None:
         cert_description = 'the certificate'
 
-    if not isinstance(cert_description, str_cls):
+    if not isinstance(cert_description, str):
         raise TypeError(pretty_message(
             '''
             cert_description must be a unicode string, not %s

@@ -10,7 +10,7 @@ from asn1crypto import crl, ocsp
 from asn1crypto.util import timezone
 
 from ._errors import pretty_message
-from ._types import type_name, byte_cls, str_cls
+from ._types import type_name
 from .errors import OCSPFetchError
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .name_trees import default_permitted_subtrees, PKIXSubtrees, \
@@ -376,7 +376,7 @@ class ValidationContext:
             new_crls = []
             for crl_ in crls:
                 if not isinstance(crl_, crl.CertificateList):
-                    if not isinstance(crl_, byte_cls):
+                    if not isinstance(crl_, bytes):
                         raise TypeError(pretty_message(
                             '''
                             crls must be a list of byte strings or
@@ -400,7 +400,7 @@ class ValidationContext:
             new_ocsps = []
             for ocsp_ in ocsps:
                 if not isinstance(ocsp_, ocsp.OCSPResponse):
-                    if not isinstance(ocsp_, byte_cls):
+                    if not isinstance(ocsp_, bytes):
                         raise TypeError(pretty_message(
                             '''
                             ocsps must be a list of byte strings or
@@ -454,9 +454,9 @@ class ValidationContext:
         self._whitelisted_certs = set()
         if whitelisted_certs is not None:
             for whitelisted_cert in whitelisted_certs:
-                if isinstance(whitelisted_cert, byte_cls):
+                if isinstance(whitelisted_cert, bytes):
                     whitelisted_cert = whitelisted_cert.decode('ascii')
-                if not isinstance(whitelisted_cert, str_cls):
+                if not isinstance(whitelisted_cert, str):
                     raise TypeError(pretty_message(
                         '''
                         whitelisted_certs must contain only byte strings or

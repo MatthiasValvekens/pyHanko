@@ -9,7 +9,7 @@ from asn1crypto import pem, x509
 from oscrypto import trust_list
 
 from ._errors import pretty_message
-from ._types import byte_cls, type_name
+from ._types import type_name
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
@@ -268,7 +268,7 @@ class CertificateRegistry(SimpleCertificateStore):
             if isinstance(cert, x509.Certificate):
                 output.append(cert)
             else:
-                if not isinstance(cert, byte_cls):
+                if not isinstance(cert, bytes):
                     raise TypeError(pretty_message(
                         '''
                         %s must contain only byte strings or
@@ -310,7 +310,7 @@ class CertificateRegistry(SimpleCertificateStore):
         """
 
         if not isinstance(cert, x509.Certificate):
-            if not isinstance(cert, byte_cls):
+            if not isinstance(cert, bytes):
                 raise TypeError(pretty_message(
                     '''
                     cert must be a byte string or an instance of
@@ -403,7 +403,7 @@ class CertificateRegistry(SimpleCertificateStore):
             of the CA certs.
         """
 
-        if not isinstance(end_entity_cert, byte_cls) and \
+        if not isinstance(end_entity_cert, bytes) and \
                 not isinstance(end_entity_cert, x509.Certificate):
             raise TypeError(pretty_message(
                 '''
@@ -413,7 +413,7 @@ class CertificateRegistry(SimpleCertificateStore):
                 type_name(end_entity_cert)
             ))
 
-        if isinstance(end_entity_cert, byte_cls):
+        if isinstance(end_entity_cert, bytes):
             if pem.detect(end_entity_cert):
                 _, _, end_entity_cert = pem.unarmor(end_entity_cert)
             end_entity_cert = x509.Certificate.load(end_entity_cert)

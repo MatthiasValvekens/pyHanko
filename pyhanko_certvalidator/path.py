@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from asn1crypto import pem, x509
 
 from ._errors import pretty_message
-from ._types import byte_cls, type_name
+from ._types import type_name
 from .errors import DuplicateCertificateError
 
 
@@ -191,7 +191,7 @@ class ValidationPath():
         """
 
         if not isinstance(cert, x509.Certificate):
-            if not isinstance(cert, byte_cls):
+            if not isinstance(cert, bytes):
                 raise TypeError(pretty_message(
                     '''
                     cert must be a byte string or an
@@ -224,7 +224,7 @@ class ValidationPath():
         """
 
         if not isinstance(cert, x509.Certificate):
-            if not isinstance(cert, byte_cls):
+            if not isinstance(cert, bytes):
                 raise TypeError(pretty_message(
                     '''
                     cert must be a byte string or an

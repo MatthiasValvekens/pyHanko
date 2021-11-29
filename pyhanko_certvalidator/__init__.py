@@ -9,7 +9,7 @@ from .errors import ValidationError, PathBuildingError, InvalidCertificateError
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
 from ._errors import pretty_message
-from ._types import type_name, str_cls, byte_cls
+from ._types import type_name
 
 
 __all__ = [
@@ -66,7 +66,7 @@ class CertificateValidator():
         """
 
         if not isinstance(end_entity_cert, Certificate):
-            if not isinstance(end_entity_cert, byte_cls):
+            if not isinstance(end_entity_cert, bytes):
                 raise TypeError(pretty_message(
                     '''
                     end_entity_cert must be a byte string or an instance of
@@ -150,7 +150,7 @@ class CertificateValidator():
 
         non_signature_exception = None
         for exception in exceptions:
-            if 'signature' not in str_cls(exception):
+            if 'signature' not in str(exception):
                 non_signature_exception = exception
 
         if non_signature_exception:

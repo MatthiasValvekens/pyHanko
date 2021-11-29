@@ -1,16 +1,6 @@
 # coding: utf-8
 
 import inspect
-import sys
-
-
-if sys.version_info < (3,):
-    str_cls = unicode  # noqa
-    byte_cls = str
-
-else:
-    str_cls = str
-    byte_cls = bytes
 
 
 def type_name(value):
@@ -28,6 +18,6 @@ def type_name(value):
         cls = value
     else:
         cls = value.__class__
-    if cls.__module__ in set(['builtins', '__builtin__']):
+    if cls.__module__ in {'builtins', '__builtin__'}:
         return cls.__name__
     return '%s.%s' % (cls.__module__, cls.__name__)
