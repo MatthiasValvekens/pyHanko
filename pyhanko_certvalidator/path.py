@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from typing import FrozenSet
+from typing import FrozenSet, Union
 from dataclasses import dataclass
 
 from asn1crypto import pem, x509
@@ -178,7 +178,20 @@ class ValidationPath():
 
         return self
 
-    def append(self, cert):
+    def _prepare_addition(self, cert: Union[x509.Certificate, bytes]) \
+            -> x509.Certificate:
+        if isinstance(cert, bytes):
+            if pem.detect(cert):
+                _, _, cert = pem.unarmor(cert)
+            cert = x509.Certificate.load(cert)
+
+        if cert.issuer_serial in self._cert_hashes:
+            raise DuplicateCertificateError()
+
+        self._cert_hashes.add(cert.issuer_serial)
+        return cert
+
+    def append(self, cert: Union[x509.Certificate, bytes]):
         """
         Appends a cert to the path. This should be a cert issued by the last
         cert in the path.
@@ -190,28 +203,10 @@ class ValidationPath():
             The current ValidationPath object, for chaining
         """
 
-        if not isinstance(cert, x509.Certificate):
-            if not isinstance(cert, bytes):
-                raise TypeError(pretty_message(
-                    '''
-                    cert must be a byte string or an
-                    asn1crypto.x509.Certificate object, not %s
-                    ''',
-                    type_name(cert)
-                ))
-            if pem.detect(cert):
-                _, _, cert = pem.unarmor(cert)
-            cert = x509.Certificate.load(cert)
-
-        if cert.issuer_serial in self._cert_hashes:
-            raise DuplicateCertificateError()
-
-        self._cert_hashes.add(cert.issuer_serial)
-        self._certs.append(cert)
-
+        self._certs.append(self._prepare_addition(cert))
         return self
 
-    def prepend(self, cert):
+    def prepend(self, cert: Union[x509.Certificate, bytes]):
         """
         Prepends a cert to the path. This should be the issuer of the previously
         prepended cert.
@@ -223,25 +218,7 @@ class ValidationPath():
             The current ValidationPath object, for chaining
         """
 
-        if not isinstance(cert, x509.Certificate):
-            if not isinstance(cert, bytes):
-                raise TypeError(pretty_message(
-                    '''
-                    cert must be a byte string or an
-                    asn1crypto.x509.Certificate object, not %s
-                    ''',
-                    type_name(cert)
-                ))
-            if pem.detect(cert):
-                _, _, cert = pem.unarmor(cert)
-            cert = x509.Certificate.load(cert)
-
-        if cert.issuer_serial in self._cert_hashes:
-            raise DuplicateCertificateError()
-
-        self._cert_hashes.add(cert.issuer_serial)
-        self._certs.insert(0, cert)
-
+        self._certs.insert(0, self._prepare_addition(cert))
         return self
 
     def _set_qualified_policies(self, policies):

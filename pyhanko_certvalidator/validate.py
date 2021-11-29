@@ -5,7 +5,7 @@ import datetime
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Set
 
 from asn1crypto import x509, crl, ocsp, algos
 from asn1crypto.keys import PublicKeyInfo
@@ -120,7 +120,8 @@ async def async_validate_path(validation_context, path,
     return await _validate_path(validation_context, path, parameters=parameters)
 
 
-def validate_tls_hostname(validation_context, cert, hostname):
+def validate_tls_hostname(validation_context: ValidationContext,
+                          cert: x509.Certificate, hostname: str):
     """
     Validates the end-entity certificate from a
     pyhanko_certvalidator.path.ValidationPath object to ensure that the certificate
@@ -142,15 +143,6 @@ def validate_tls_hostname(validation_context, cert, hostname):
     :raises:
         pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for TLS or the hostname
     """
-
-    if not isinstance(validation_context, ValidationContext):
-        raise TypeError(pretty_message(
-            '''
-            validation_context must be an instance of
-            pyhanko_certvalidator.context.ValidationContext, not %s
-            ''',
-            type_name(validation_context)
-        ))
 
     if validation_context.is_whitelisted(cert):
         return
@@ -177,7 +169,11 @@ def validate_tls_hostname(validation_context, cert, hostname):
         ))
 
 
-def validate_usage(validation_context, cert, key_usage, extended_key_usage, extended_optional):
+def validate_usage(validation_context: ValidationContext,
+                   cert: x509.Certificate,
+                   key_usage: Set[str],
+                   extended_key_usage: Set[str],
+                   extended_optional: bool):
     """
     Validates the end-entity certificate from a
     pyhanko_certvalidator.path.ValidationPath object to ensure that the certificate
@@ -206,15 +202,6 @@ def validate_usage(validation_context, cert, key_usage, extended_key_usage, exte
         pyhanko_certvalidator.errors.InvalidCertificateError - when the certificate is not valid for the usages specified
     """
 
-    if not isinstance(validation_context, ValidationContext):
-        raise TypeError(pretty_message(
-            '''
-            validation_context must be an instance of
-            pyhanko_certvalidator.context.ValidationContext, not %s
-            ''',
-            type_name(validation_context)
-        ))
-
     if validation_context.is_whitelisted(cert):
         return
 
@@ -223,30 +210,6 @@ def validate_usage(validation_context, cert, key_usage, extended_key_usage, exte
 
     if extended_key_usage is None:
         extended_key_usage = set()
-
-    if not isinstance(key_usage, set):
-        raise TypeError(pretty_message(
-            '''
-            key_usage must be a set of unicode strings, not %s
-            ''',
-            type_name(key_usage)
-        ))
-
-    if not isinstance(extended_key_usage, set):
-        raise TypeError(pretty_message(
-            '''
-            extended_key_usage must be a set of unicode strings, not %s
-            ''',
-            type_name(extended_key_usage)
-        ))
-
-    if not isinstance(extended_optional, bool):
-        raise TypeError(pretty_message(
-            '''
-            extended_optional must be a boolean, not %s
-            ''',
-            type_name(extended_optional)
-        ))
 
     missing_key_usage = key_usage
     if cert.key_usage_value:
@@ -507,8 +470,9 @@ SUPPORTED_EXTENSIONS = frozenset([
 ])
 
 
-async def _validate_path(validation_context, path,
-                         end_entity_name_override=None,
+async def _validate_path(validation_context: ValidationContext,
+                         path: ValidationPath,
+                         end_entity_name_override: Optional[str] = None,
                          parameters: PKIXValidationParams = None):
     """
     Internal copy of validate_path() that allows overriding the name of the
@@ -537,33 +501,7 @@ async def _validate_path(validation_context, path,
         asn1crypto.x509.Certificate
     """
 
-    if not isinstance(path, ValidationPath):
-        raise TypeError(pretty_message(
-            '''
-            path must be an instance of
-            pyhanko_certvalidator.path.ValidationPath, not %s
-            ''',
-            type_name(path)
-        ))
-
-    if not isinstance(validation_context, ValidationContext):
-        raise TypeError(pretty_message(
-            '''
-            validation_context must be an instance of
-            pyhanko_certvalidator.context.ValidationContext, not %s
-            ''',
-            type_name(validation_context)
-        ))
-
     moment = validation_context.moment
-
-    if end_entity_name_override is not None and not isinstance(end_entity_name_override, str):
-        raise TypeError(pretty_message(
-            '''
-            end_entity_name_override must be a unicode string, not %s
-            ''',
-            type_name(end_entity_name_override)
-        ))
 
     # Inputs
 
@@ -1501,8 +1439,8 @@ async def _handle_single_ocsp_resp(cert: x509.Certificate,
 
 async def verify_ocsp_response(cert: x509.Certificate, path: ValidationPath,
                                validation_context: ValidationContext,
-                               cert_description=None,
-                               end_entity_name_override=None):
+                               cert_description: Optional[str] = None,
+                               end_entity_name_override: Optional[str] = None):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
     been revoked. Fulfills the requirements of
@@ -1534,14 +1472,6 @@ async def verify_ocsp_response(cert: x509.Certificate, path: ValidationPath,
 
     if cert_description is None:
         cert_description = 'the certificate'
-
-    if not isinstance(cert_description, str):
-        raise TypeError(pretty_message(
-            '''
-            cert_description must be a unicode string, not %s
-            ''',
-            type_name(cert_description)
-        ))
 
     moment = validation_context.moment
 
@@ -2155,7 +2085,8 @@ async def _handle_single_crl(cert: x509.Certificate,
 
 async def verify_crl(cert: x509.Certificate, path: ValidationPath,
                      validation_context: ValidationContext, use_deltas=True,
-                     cert_description=None, end_entity_name_override=None):
+                     cert_description: Optional[str] = None,
+                     end_entity_name_override: Optional[str] = None):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
     certificate has not been revoked. Uses the algorithm from
@@ -2191,14 +2122,6 @@ async def verify_crl(cert: x509.Certificate, path: ValidationPath,
 
     if cert_description is None:
         cert_description = 'the certificate'
-
-    if not isinstance(cert_description, str):
-        raise TypeError(pretty_message(
-            '''
-            cert_description must be a unicode string, not %s
-            ''',
-            type_name(cert_description)
-        ))
 
     certificate_lists = await validation_context.async_retrieve_crls(cert)
 

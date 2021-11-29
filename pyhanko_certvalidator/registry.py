@@ -2,7 +2,7 @@
 
 import abc
 from collections import defaultdict
-from typing import List
+from typing import List, Optional, Iterable, Union
 import asyncio
 
 from asn1crypto import pem, x509
@@ -173,8 +173,11 @@ class CertificateRegistry(SimpleCertificateStore):
     # Each value is a bool - if the certificate is a CA cert.
     _ca_lookup = None
 
-    def __init__(self, trust_roots=None, extra_trust_roots=None,
-                 other_certs=None, *, cert_fetcher: CertificateFetcher = None):
+    def __init__(self,
+                 trust_roots: Optional[Iterable[x509.Certificate]] = None,
+                 extra_trust_roots: Optional[Iterable[x509.Certificate]] = None,
+                 other_certs: Optional[Iterable[x509.Certificate]] = None,
+                 *, cert_fetcher: CertificateFetcher = None):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -196,32 +199,6 @@ class CertificateRegistry(SimpleCertificateStore):
             validated. In SSL, these would be intermediate chain certs.
         """
 
-        if trust_roots is not None and not isinstance(trust_roots, list):
-            raise TypeError(pretty_message(
-                '''
-                trust_roots must be a list of byte strings or
-                asn1crypto.x509.Certificate objects, not %s
-                ''',
-                type_name(trust_roots)
-            ))
-
-        if extra_trust_roots is not None and not isinstance(extra_trust_roots, list):
-            raise TypeError(pretty_message(
-                '''
-                extra_trust_roots must be a list of byte strings or
-                asn1crypto.x509.Certificate objects, not %s
-                ''',
-                type_name(extra_trust_roots)
-            ))
-
-        if other_certs is not None and not isinstance(other_certs, list):
-            raise TypeError(pretty_message(
-                '''
-                other_certs must be a list of byte strings or
-                asn1crypto.x509.Certificate objects, not %s
-                ''',
-                type_name(other_certs)
-            ))
         super().__init__()
 
         self._ca_lookup = set()
@@ -309,22 +286,15 @@ class CertificateRegistry(SimpleCertificateStore):
             False if the certificate was already present
         """
 
-        if not isinstance(cert, x509.Certificate):
-            if not isinstance(cert, bytes):
-                raise TypeError(pretty_message(
-                    '''
-                    cert must be a byte string or an instance of
-                    asn1crypto.x509.Certificate, not %s
-                    ''',
-                    type_name(cert)
-                ))
+        if isinstance(cert, bytes):
             if pem.detect(cert):
                 _, _, cert = pem.unarmor(cert)
             cert = x509.Certificate.load(cert)
 
         return self.register(cert)
 
-    def retrieve_by_name(self, name, first_certificate=None):
+    def retrieve_by_name(self, name: x509.Name,
+                         first_certificate: Optional[x509.Certificate] = None):
         """
         Retrieves a list certs via their subject name
 
@@ -338,23 +308,6 @@ class CertificateRegistry(SimpleCertificateStore):
         :return:
             A list of asn1crypto.x509.Certificate objects
         """
-
-        if not isinstance(name, x509.Name):
-            raise TypeError(pretty_message(
-                '''
-                name must be an instance of asn1crypto.x509.Name, not %s
-                ''',
-                type_name(name)
-            ))
-
-        if first_certificate and not isinstance(first_certificate, x509.Certificate):
-            raise TypeError(pretty_message(
-                '''
-                first_certificate must be an instance of
-                asn1crypto.x509.Certificate, not %s
-                ''',
-                type_name(first_certificate)
-            ))
 
         output = []
         first = None
@@ -388,7 +341,8 @@ class CertificateRegistry(SimpleCertificateStore):
         """
         return asyncio.run(self.async_build_paths(end_entity_cert))
 
-    async def async_build_paths(self, end_entity_cert):
+    async def async_build_paths(
+            self, end_entity_cert: Union[x509.Certificate, bytes]):
         """
         Builds a list of ValidationPath objects from a certificate in the
         operating system trust store to the end-entity certificate
@@ -402,16 +356,6 @@ class CertificateRegistry(SimpleCertificateStore):
             represent the possible paths from the end-entity certificate to one
             of the CA certs.
         """
-
-        if not isinstance(end_entity_cert, bytes) and \
-                not isinstance(end_entity_cert, x509.Certificate):
-            raise TypeError(pretty_message(
-                '''
-                end_entity_cert must be a byte string or an instance of
-                asn1crypto.x509.Certificate, not %s
-                ''',
-                type_name(end_entity_cert)
-            ))
 
         if isinstance(end_entity_cert, bytes):
             if pem.detect(end_entity_cert):

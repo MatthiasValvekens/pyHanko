@@ -1,5 +1,6 @@
 import asyncio
 import warnings
+from typing import List, Optional
 
 from asn1crypto import pem
 from asn1crypto.x509 import Certificate
@@ -35,7 +36,8 @@ class CertificateValidator():
     # A pyhanko_certvalidator.context.PKIXValidationParams object
     _params = None
 
-    def __init__(self, end_entity_cert, intermediate_certs=None,
+    def __init__(self, end_entity_cert: Certificate,
+                 intermediate_certs: Optional[List[Certificate]] = None,
                  validation_context: ValidationContext = None,
                  pkix_params: PKIXValidationParams = None):
         """
@@ -65,30 +67,13 @@ class CertificateValidator():
             settings.
         """
 
-        if not isinstance(end_entity_cert, Certificate):
-            if not isinstance(end_entity_cert, bytes):
-                raise TypeError(pretty_message(
-                    '''
-                    end_entity_cert must be a byte string or an instance of
-                    asn1crypto.x509.Certificate, not %s
-                    ''',
-                    type_name(end_entity_cert)
-                ))
+        if isinstance(end_entity_cert, bytes):
             if pem.detect(end_entity_cert):
                 _, _, end_entity_cert = pem.unarmor(end_entity_cert)
             end_entity_cert = Certificate.load(end_entity_cert)
 
         if validation_context is None:
             validation_context = ValidationContext()
-
-        if not isinstance(validation_context, ValidationContext):
-            raise TypeError(pretty_message(
-                '''
-                validation_context must be an instance of
-                pyhanko_certvalidator.context.ValidationContext, not %s
-                ''',
-                type_name(validation_context)
-            ))
 
         if intermediate_certs is not None:
             certificate_registry = validation_context.certificate_registry

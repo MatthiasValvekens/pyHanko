@@ -4,9 +4,9 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import binascii
-from typing import Optional
+from typing import Optional, Iterable, Union
 
-from asn1crypto import crl, ocsp
+from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
 from ._errors import pretty_message
@@ -263,14 +263,23 @@ class ValidationContext:
 
     _fetchers: Fetchers = None
 
-    def __init__(self, trust_roots=None, extra_trust_roots=None, other_certs=None,
-                 whitelisted_certs=None, moment=None, allow_fetching=False,
-                 crls=None, ocsps=None, revocation_mode="soft-fail",
-                 revinfo_policy: Optional[CertRevTrustPolicy] = None,
-                 weak_hash_algos=None, time_tolerance=timedelta(seconds=1),
-                 retroactive_revinfo=False,
-                 fetcher_backend: FetcherBackend = None,
-                 fetchers: Fetchers = None):
+    def __init__(
+            self,
+            trust_roots: Optional[Iterable[x509.Certificate]] = None,
+            extra_trust_roots: Optional[Iterable[x509.Certificate]] = None,
+            other_certs: Optional[Iterable[x509.Certificate]] = None,
+            whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
+            moment: Optional[datetime] = None,
+            allow_fetching: bool = False,
+            crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
+            ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
+            revocation_mode: str = "soft-fail",
+            revinfo_policy: Optional[CertRevTrustPolicy] = None,
+            weak_hash_algos: Iterable[str] = None,
+            time_tolerance: timedelta = timedelta(seconds=1),
+            retroactive_revinfo: bool = False,
+            fetcher_backend: FetcherBackend = None,
+            fetchers: Fetchers = None):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -365,14 +374,6 @@ class ValidationContext:
         self.revinfo_policy = revinfo_policy
 
         if crls is not None:
-            if not isinstance(crls, (list, tuple)):
-                raise TypeError(pretty_message(
-                    '''
-                    crls must be a list of byte strings or
-                    asn1crypto.crl.CertificateList objects, not %s
-                    ''',
-                    type_name(crls)
-                ))
             new_crls = []
             for crl_ in crls:
                 if not isinstance(crl_, crl.CertificateList):
@@ -389,14 +390,6 @@ class ValidationContext:
             crls = new_crls
 
         if ocsps is not None:
-            if not isinstance(ocsps, list):
-                raise TypeError(pretty_message(
-                    '''
-                    ocsps must be a list of byte strings or
-                    asn1crypto.ocsp.OCSPResponse objects, not %s
-                    ''',
-                    type_name(ocsps)
-                ))
             new_ocsps = []
             for ocsp_ in ocsps:
                 if not isinstance(ocsp_, ocsp.OCSPResponse):
@@ -434,36 +427,19 @@ class ValidationContext:
 
         if moment is None:
             moment = datetime.now(timezone.utc)
-        else:
-            if not isinstance(moment, datetime):
-                raise TypeError(pretty_message(
-                    '''
-                    moment must be a datetime object, not %s
-                    ''',
-                    type_name(moment)
-                ))
-
-            if moment.utcoffset() is None:
-                raise ValueError(pretty_message(
-                    '''
-                    moment is a naive datetime object, meaning the tzinfo
-                    attribute is not set to a valid timezone
-                    '''
-                ))
+        elif moment.utcoffset() is None:
+            raise ValueError(pretty_message(
+                '''
+                moment is a naive datetime object, meaning the tzinfo
+                attribute is not set to a valid timezone
+                '''
+            ))
 
         self._whitelisted_certs = set()
         if whitelisted_certs is not None:
             for whitelisted_cert in whitelisted_certs:
                 if isinstance(whitelisted_cert, bytes):
                     whitelisted_cert = whitelisted_cert.decode('ascii')
-                if not isinstance(whitelisted_cert, str):
-                    raise TypeError(pretty_message(
-                        '''
-                        whitelisted_certs must contain only byte strings or
-                        unicode strings, not %s
-                        ''',
-                        type_name(whitelisted_cert)
-                    ))
                 # Allow users to copy from various OS and browser info dialogs,
                 # some of which separate the hex char pairs via spaces or colons
                 whitelisted_cert = whitelisted_cert.replace(' ', '').replace(':', '')
@@ -472,15 +448,9 @@ class ValidationContext:
                 )
 
         if weak_hash_algos is not None:
-            if not isinstance(weak_hash_algos, set):
-                raise TypeError(pretty_message(
-                    '''
-                    weak_hash_algos must be a set of unicode strings, not %s
-                    ''',
-                    type_name(weak_hash_algos)
-                ))
+            self.weak_hash_algos = set(weak_hash_algos)
         else:
-            weak_hash_algos = {'md2', 'md5', 'sha1'}
+            self.weak_hash_algos = {'md2', 'md5', 'sha1'}
 
         cert_fetcher = None
         if allow_fetching:
@@ -522,7 +492,6 @@ class ValidationContext:
 
         self._allow_fetching = bool(allow_fetching)
         self._soft_fail_exceptions = []
-        self.weak_hash_algos = weak_hash_algos
         self.time_tolerance = (
             abs(time_tolerance) if time_tolerance else timedelta(0)
         )
