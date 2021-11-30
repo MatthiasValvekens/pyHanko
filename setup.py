@@ -71,7 +71,7 @@ setup(
     ],
     extras_require={
         'extra_pubkey_algs': ['oscrypto>=1.2.1'],
-        'opentype': ['fonttools>=4.27.1', 'uharfbuzz==0.16.1'],
+        'opentype': ['fonttools>=4.28.2', 'uharfbuzz==0.16.1'],
         'image-support': [
             # Only tested systematically on 8.x,
             # but we allow 7.2.x to support system PIL on Ubuntu
