@@ -1,8 +1,8 @@
 import asyncio
 import warnings
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from asn1crypto import x509
+from asn1crypto import x509, cms
 
 from .context import ValidationContext, PKIXValidationParams
 from .errors import ValidationError, PathBuildingError, InvalidCertificateError
@@ -35,9 +35,11 @@ class CertificateValidator:
     # A pyhanko_certvalidator.context.PKIXValidationParams object
     _params = None
 
-    def __init__(self, end_entity_cert: x509.Certificate,
+    def __init__(self,
+                 end_entity_cert:
+                 Union[x509.Certificate, cms.AttributeCertificateV2],
                  intermediate_certs: Optional[List[x509.Certificate]] = None,
-                 validation_context: ValidationContext = None,
+                 validation_context: Optional[ValidationContext] = None,
                  pkix_params: PKIXValidationParams = None):
         """
         :param end_entity_cert:
@@ -120,7 +122,7 @@ class CertificateValidator:
                 await async_validate_path(self._context, candidate_path, self._params)
                 self._path = candidate_path
                 return
-            except (ValidationError) as e:
+            except ValidationError as e:
                 exceptions.append(e)
 
         if len(exceptions) == 1:
