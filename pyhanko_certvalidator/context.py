@@ -4,7 +4,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import binascii
-from typing import Optional, Iterable, Union
+from typing import Optional, Iterable, Union, List
 
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
@@ -818,4 +818,32 @@ class PKIXValidationParams:
     By default, no names are excluded.
     This behaviour can be modified by name constraints on intermediate CA
     certificates.
+    """
+
+
+@dataclass(frozen=True)
+class AATargetDescription:
+    """
+    Value type to guide attribute certificate targeting checks, for
+    attribute certificates that use the target information extension.
+
+    As stipulated in RFC 5755, an AC targeting check passes if the
+    information in the relevant :class:`.AATargetDescription` matches
+    at least one ``Target`` in the AC's target information extension.
+    """
+
+    validator_names: List[x509.GeneralName] = field(default_factory=list)
+    """
+    The validating entity's names.
+
+    This value is matched directly against any ``Target``s that use the
+    ``targetName`` alternative.
+    """
+
+    group_memberships: List[x509.GeneralName] = field(default_factory=list)
+    """
+    The validating entity's group memberships.
+
+    This value is matched against any ``Target``s that use the ``targetGroup``
+    alternative.
     """
