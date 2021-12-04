@@ -1,5 +1,8 @@
 # changelog
 
+## 0.18.1
+
+ - Various improvements to error handling in certificate fetchers
 
 ## 0.18.0
 
