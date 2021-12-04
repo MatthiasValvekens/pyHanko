@@ -1,4 +1,3 @@
-import asyncio
 from typing import Union, Iterable
 
 import aiohttp
@@ -9,8 +8,9 @@ from ...errors import CertificateFetchError
 from ..api import CertificateFetcher
 from .util import AIOHttpMixin, LazySession
 from ..common_utils import (
-    unpack_cert_content, ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
-    ACCEPTABLE_CERT_PEM_ALIASES
+    unpack_cert_content, complete_certificate_fetch_jobs,
+    ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
+    ACCEPTABLE_CERT_PEM_ALIASES, gather_aia_issuer_urls
 )
 
 
@@ -49,46 +49,28 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
                     url_origin_type=url_origin_type
                 )
             except (ValueError, aiohttp.ClientError) as e:
-                raise CertificateFetchError(
-                    f"Failed to fetch certificate(s) from url {url}."
-                ) from e
+                msg = f"Failed to fetch certificate(s) from url {url}."
+                logger.debug(msg, exc_info=e)
+                raise CertificateFetchError(msg)
 
         return await self._post_fetch_task(url, task)
 
-    # FIXME improve error granularity (allow job to succeed if one of the
-    #  fetches fails)
-    async def fetch_cert_issuers(self, cert: x509.Certificate):
-        aia_value = cert.authority_information_access_value
-        if aia_value is None:
-            return
-        fetch_jobs = []
-        for entry in aia_value:
-            if entry['access_method'].native == 'ca_issuers':
-                location = entry['access_location']
-                if location.name != 'uniform_resource_identifier':
-                    continue
-                url = location.native
-                if url.startswith('http'):
-                    fetch_jobs.append(
-                        self.fetch_certs(url, url_origin_type='certificate')
-                    )
+    def fetch_cert_issuers(self, cert: x509.Certificate):
+        fetch_jobs = [
+            self.fetch_certs(url, url_origin_type='certificate')
+            for url in gather_aia_issuer_urls(cert)
+        ]
         logger.info(
             f"Retrieving issuer certs for {cert.subject.human_friendly}..."
         )
-        for fetch_job in asyncio.as_completed(fetch_jobs):
-            certs_fetched = await fetch_job
-            for cert in certs_fetched:
-                yield cert
+        return complete_certificate_fetch_jobs(fetch_jobs)
 
-    async def fetch_crl_issuers(self, certificate_list):
+    def fetch_crl_issuers(self, certificate_list):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='CRL')
             for url in certificate_list.issuer_cert_urls
         ]
-        for fetch_job in asyncio.as_completed(fetch_jobs):
-            certs_fetched = await fetch_job
-            for cert in certs_fetched:
-                yield cert
+        return complete_certificate_fetch_jobs(fetch_jobs)
 
     def fetched_certs(self) -> Iterable[x509.Certificate]:
         return self.get_results()
