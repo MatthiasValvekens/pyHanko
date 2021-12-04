@@ -52,7 +52,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
                 raise CertificateFetchError(
                     f"Failed to fetch certificate(s) from url {url}."
                 ) from e
-            return list(results)
+            return results
         return await self._perform_fetch(url, task)
 
     async def fetch_cert_issuers(self, cert: x509.Certificate):
@@ -119,4 +119,4 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
         certs = unpack_cert_content(
             response.content, content_type, url, permit_pem
         )
-        return certs
+        return list(certs)
