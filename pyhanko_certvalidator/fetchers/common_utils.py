@@ -13,6 +13,7 @@ __all__ = [
     'queue_fetch_task',
     'crl_job_results_as_completed',
     'ocsp_job_get_earliest',
+    'complete_certificate_fetch_jobs', 'gather_aia_issuer_urls',
     'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
     'ACCEPTABLE_CERT_PEM_ALIASES'
 ]
@@ -223,3 +224,31 @@ async def ocsp_job_get_earliest(jobs):
         await cancel_all(queue)
         return ocsp_resp
     raise last_e or errors.OCSPFetchError("No OCSP results")
+
+
+def gather_aia_issuer_urls(cert: x509.Certificate):
+    aia_value = cert.authority_information_access_value
+    if aia_value is None:
+        return
+    for entry in aia_value:
+        if entry['access_method'].native == 'ca_issuers':
+            location = entry['access_location']
+            if location.name != 'uniform_resource_identifier':
+                continue
+            url = location.native
+            if url.startswith('http'):
+                yield url
+
+
+async def complete_certificate_fetch_jobs(fetch_jobs):
+    for fetch_job in asyncio.as_completed(fetch_jobs):
+        try:
+            certs_fetched = await fetch_job
+        except errors.CertificateFetchError as e:
+            logger.warning(
+                f'Error during certificate fetch job, skipping... '
+                f'(Error: {e})',
+            )
+            continue
+        for cert in certs_fetched:
+            yield cert
