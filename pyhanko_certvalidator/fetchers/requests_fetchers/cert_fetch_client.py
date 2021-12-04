@@ -45,8 +45,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
             try:
                 logger.info(f"Fetching certificates from {url}...")
                 results = await self._grab_certs(
-                    url, url_origin_type=url_origin_type,
-                    permit_pem=self.permit_pem,
+                    url, url_origin_type=url_origin_type
                 )
             except (ValueError, requests.RequestException) as e:
                 raise CertificateFetchError(
@@ -80,7 +79,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
     def fetched_certs(self) -> Iterable[x509.Certificate]:
         return self.get_results()
 
-    async def _grab_certs(self, url, *, url_origin_type, permit_pem=True):
+    async def _grab_certs(self, url, *, url_origin_type):
         """
         Grab one or more certificates from a caIssuers URL.
 
@@ -94,6 +93,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
         """
 
         acceptable_cts = ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
+        permit_pem = self.permit_pem
         if permit_pem:
             acceptable_cts += ACCEPTABLE_CERT_PEM_ALIASES
 
