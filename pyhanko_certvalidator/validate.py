@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.asymmetric import (
 
 from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
-from ._types import type_name
+from .asn1_types import AAControls
 from .context import ValidationContext, PKIXValidationParams, \
     RevocationCheckingRule, CertRevTrustPolicy, RevocationCheckingPolicy
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
@@ -235,6 +235,38 @@ def validate_usage(validation_context: ValidationContext,
         ))
 
 
+def validate_aa_usage(validation_context: ValidationContext,
+                      cert: x509.Certificate,
+                      extended_key_usage: Optional[Set[str]] = None):
+    """
+    Validate AA certificate profile conditions in RFC 5755 § 4.5
+
+    :param validation_context:
+    :param cert:
+    :param extended_key_usage:
+    :return:
+    """
+    if validation_context.is_whitelisted(cert):
+        return
+
+    # Check key usage requirements
+    validate_usage(
+        validation_context, cert, key_usage={'digital_signature'},
+        extended_key_usage=extended_key_usage or set(),
+        extended_optional=extended_key_usage is not None
+    )
+
+    # Check basic constraints: AA must not be a CA
+    bc = cert.basic_constraints_value
+    if bc is not None and bool(bc['ca']):
+        raise InvalidCertificateError(pretty_message(
+            '''
+            The X.509 certificate provided is a CA certificate, so
+            it cannot be used to validate attribute certificates.
+            '''
+        ))
+
+
 @dataclass
 class _PathValidationState:
     """
@@ -247,10 +279,12 @@ class _PathValidationState:
     inhibit_any_policy: int
     policy_mapping: int
     max_path_length: int
+    max_aa_path_length: int
     working_public_key: x509.PublicKeyInfo
     working_issuer_name: x509.Name
     permitted_subtrees: PermittedSubtrees
     excluded_subtrees: ExcludedSubtrees
+    aa_controls_used: bool = False
 
     def update_policy_restrictions(self, cert: x509.Certificate):
         # Step 3 h
@@ -466,7 +500,8 @@ SUPPORTED_EXTENSIONS = frozenset([
     'policy_constraints',
     'inhibit_any_policy',
     'name_constraints',
-    'subject_alt_name'
+    'subject_alt_name',
+    'aa_controls'
 ])
 
 
@@ -549,7 +584,13 @@ async def _validate_path(validation_context: ValidationContext,
         max_path_length=(
             path_length if trust_anchor.max_path_length is None
             else trust_anchor.max_path_length
-        )
+        ),
+        # NOTE: the algorithm (for now) assumes that the AA CA of RFC 5755 is
+        # trusted by fiat, and does not require chaining up to a distinct CA.
+        # In particular, we assume that the AA CA is the trust anchor in the
+        # path. This matches the validation model used in signature policies
+        # (where there are separate trust trees for attributes)
+        max_aa_path_length=path_length
     )
 
     # Step 2: basic processing
@@ -963,11 +1004,44 @@ def _prepare_next_step(index, cert: x509.Certificate,
                 '''
             ))
         state.max_path_length -= 1
+        if state.max_aa_path_length == 0:
+            raise PathValidationError(pretty_message(
+                '''
+                The path could not be validated because it exceeds the
+                maximum path length for an AA certificate
+                '''
+            ))
+        state.max_aa_path_length -= 1
 
     # Step 3 m
     if cert.max_path_length is not None \
             and cert.max_path_length < state.max_path_length:
         state.max_path_length = cert.max_path_length
+
+    aa_controls = AAControls.read_extension_value(cert)
+    if aa_controls is not None:
+        if not state.aa_controls_used and index > 1:
+            raise PathValidationError(pretty_message(
+                '''
+                AA controls extension only present on part of the certificate
+                chain: %s has AA controls while preceding certificates do not.
+                ''',
+                describe_current_cert(definite=True)
+            ))
+        state.aa_controls_used = True
+        # deal with path length
+        new_max_aa_path_length = aa_controls['path_len_constraint'].native
+        if new_max_aa_path_length is not None \
+                and new_max_aa_path_length < state.max_aa_path_length:
+            state.max_aa_path_length = new_max_aa_path_length
+    elif state.aa_controls_used:
+        raise PathValidationError(pretty_message(
+            '''
+            AA controls extension only present on part of the certificate chain:
+            %s has no AA controls
+            ''',
+            describe_current_cert(definite=True)
+        ))
 
     # Step 3 n
     if cert.key_usage_value \

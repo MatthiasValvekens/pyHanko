@@ -3,8 +3,9 @@
 from typing import FrozenSet
 from dataclasses import dataclass
 
-from asn1crypto import x509
+from asn1crypto import x509, cms
 
+from .asn1_types import AAControls
 from .errors import DuplicateCertificateError
 
 
@@ -40,6 +41,8 @@ class ValidationPath:
     _cert_hashes = None
 
     _qualified_policies = None
+
+    _path_aa_controls = None
 
     def __init__(self, end_entity_cert=None):
         """
@@ -219,6 +222,27 @@ class ValidationPath:
 
     def qualified_policies(self) -> FrozenSet[QualifiedPolicy]:
         return self._qualified_policies
+
+    def aa_attr_in_scope(self, attr_id: cms.AttCertAttributeType) -> bool:
+        aa_controls_extensions = [
+            AAControls.read_extension_value(cert) for cert in self
+        ]
+        aa_controls_used = any(x is not None for x in aa_controls_extensions)
+        if not aa_controls_used:
+            return True
+        else:
+            # the path validation code ensures that all non-anchor certs
+            # have an AAControls extension, but we still enforce the root's
+            # AAControls if there is one (since we might as well treat it
+            # as a configuration setting/failsafe at that point)
+            # This is appropriate in PKIX-land (see RFC 5280, § 6.2 as
+            # updated in RFC 6818, § 4)
+            return all(
+                ctrl.accept(attr_id) for ctrl in aa_controls_extensions
+                # None check for defensiveness (already enforced by validation
+                # algorithm), and to (potentially) skip the root
+                if ctrl is not None
+            )
 
     def __len__(self):
         return len(self._certs)
