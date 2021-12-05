@@ -32,7 +32,10 @@ from .rw_common import PdfHandler
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['PdfFileReader', 'HistoricalResolver', 'parse_catalog_version']
+__all__ = [
+    'PdfFileReader', 'HistoricalResolver', 'parse_catalog_version',
+    'RawPdfPath'
+]
 
 header_regex = re.compile(b'%PDF-(\\d).(\\d)')
 catalog_version_regex = re.compile(r'/(\d).(\d)')
@@ -1121,6 +1124,8 @@ def convert_to_int(d, size):
 class RawPdfPath:
     """
     Class to model raw paths in a file.
+
+    This class is internal API.
     """
 
     def __init__(self, *path: Union[str, int]):

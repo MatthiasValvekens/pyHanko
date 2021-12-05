@@ -28,9 +28,6 @@ from pyhanko.sign.diff_analysis import (
     StandardDiffPolicy,
     SuspiciousModification,
     XrefStreamRule,
-    _walk_page_tree_annots,
-    is_annot_visible,
-    is_field_visible,
 )
 from pyhanko.sign.general import KeyUsageConstraints, SigningError
 from pyhanko.sign.validation import (
@@ -1064,7 +1061,6 @@ def test_pades_vri_allow_ts_addition(requests_mock, indirect):
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 
 
-
 @freeze_time('2020-11-01')
 def test_pades_dss_object_clobber(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
@@ -1433,6 +1429,12 @@ def test_orphan(ignored):
 
 
 def test_is_field_visible():
+
+    from pyhanko.sign.diff_analysis.rules.form_field_rules import (
+        is_annot_visible,
+        is_field_visible,
+    )
+
     assert not is_annot_visible({})
     assert not is_field_visible({})
     assert not is_annot_visible({'/Rect': 1})
@@ -1837,6 +1839,9 @@ def test_diff_analysis_circular_page_tree():
     # manually call _walk_page_tree_annots to test the defence-in-depth function
     old = r.get_historical_resolver(1)
     new = r.get_historical_resolver(2)
+    from pyhanko.sign.diff_analysis.rules.form_field_rules import (
+        _walk_page_tree_annots,
+    )
     walker = _walk_page_tree_annots(
         old_page_root=old.root['/Pages'],
         new_page_root=new.root['/Pages'],
