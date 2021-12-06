@@ -1,3 +1,5 @@
+.. _pyhanko-config-api-ref:
+
 pyhanko.pdf\_utils.config_utils module
 ======================================
 

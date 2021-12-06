@@ -405,3 +405,46 @@ All parameters have sane defaults.
   If not specified, pyHanko will use a standard monospaced Courier font.
   See :class:`~pyhanko.pdf_utils.text.TextBoxStyle` in the API reference for
   other customisable parameters.
+
+
+The parameters used in the example styles shown above are not the only ones.
+The :ref:`dynamic configuration mechanism <pyhanko-config-api-ref>` used by pyHanko automatically
+exposes virtually all styling settings that are available to users of the (high-level) library API.
+For example, to use a stamp style where the text box is shifted to the right, and the background
+image is displayed on the left with custom margins, you could write something like the following:
+
+.. code-block:: yaml
+
+    stamp-styles:
+        more-complex-demo:
+            type: text
+            stamp-text: "Test Test Test\n%(ts)s"
+            background: image.png
+            background-opacity: 1
+            background-layout:
+              x-align: left
+              margins:
+                left: 10
+                top: 10
+                bottom: 10
+            inner-content-layout:
+              x-align: right
+              margins:
+                right: 10
+
+These settings are documented in the API reference documentation for
+:class:`~pyhanko.stamp.BaseStampStyle` and its subclasses.
+
+.. note::
+    In general, the following rules apply when working with these "autoconfigurable" classes
+    from within YAML.
+
+        * Underscores in field names (at the Python level) can be replaced with hyphens in YAML.
+        * Some fields will in turn be of an autoconfigurable type, e.g.
+          :attr:`~pyhanko.stamp.BaseStampStyle.background_layout` is a
+          :class:`~pyhanko.pdf_utils.layout.SimpleBoxLayoutRule`, which can also be configured
+          using a YAML dictionary (as shown in the example above).
+        * In other cases, custom logic is provided to initialise certain fields, which is
+          then documented on the (overridden)
+          :meth:`~pyhanko.pdf_utils.config_utils.ConfigurableMixin.process_entries` method of the
+          relevant class.
