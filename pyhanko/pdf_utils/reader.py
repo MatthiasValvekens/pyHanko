@@ -444,10 +444,12 @@ def read_object_header(stream, strict):
     misc.skip_over_comment(stream)
     extra |= misc.skip_over_whitespace(stream)
     stream.seek(-1, os.SEEK_CUR)
-    idnum = misc.read_until_whitespace(stream)
+    idnum_bytes = misc.read_until_whitespace(stream)
+    idnum = int(idnum_bytes)
     extra |= misc.skip_over_whitespace(stream)
     stream.seek(-1, os.SEEK_CUR)
-    generation = misc.read_until_whitespace(stream)
+    generation_bytes = misc.read_until_whitespace(stream)
+    generation = int(generation_bytes)
     stream.read(3)
     misc.read_non_whitespace(stream, seek_back=True)
 
@@ -456,7 +458,7 @@ def read_object_header(stream, strict):
             f"Superfluous whitespace found in object header "
             f"{idnum} {generation}"
         )
-    return int(idnum), int(generation)
+    return idnum, generation
 
 
 def process_data_at_eof(stream) -> int:
@@ -591,12 +593,44 @@ class TrailerDictionary(generic.PdfObject):
         )
 
 
+def _attempt_startxref_correction(stream, startxref):
+    # couldn't process data at location pointed to by startxref.
+    # Let's see if we can find the xref table nearby, as we've observed this
+    # error with an off-by-one before.
+    stream.seek(-11, os.SEEK_CUR)
+    tmp = stream.read(20)
+    xref_loc = tmp.find(b"xref")
+    if xref_loc != -1:
+        return startxref - (10 - xref_loc)
+    # No explicit xref table, try finding a cross-reference stream, with a
+    # negative offset to account for the startxref being wrong in either
+    # direction
+    xrefstm_readback = 5
+    stream.seek(startxref - xrefstm_readback)
+    tmp = stream.read(2 * xrefstm_readback)
+    newline_loc = tmp.rfind(b"\n")
+    if newline_loc != -1:
+        stream.seek(startxref - xrefstm_readback + newline_loc - 1)
+        misc.skip_over_whitespace(stream)
+        line_start = stream.tell()
+        for look in range(5):
+            if stream.read(1).isdigit():
+                # This is not a standard PDF, consider adding a warning
+                return line_start + look
+
+    # no xref table found at specified location
+    raise PdfReadError(
+        "Could not find xref table at specified location"
+    )
+
+
 class PdfFileReader(PdfHandler):
     """Class implementing functionality to read a PDF file and cache
     certain data about it."""
 
     last_startxref = None
     has_xref_stream = False
+    err_limit = 10
 
     def __init__(self, stream, strict=True):
         """
@@ -893,8 +927,14 @@ class PdfFileReader(PdfHandler):
         self.trailer.container_ref = generic.TrailerReference(self)
         startxref = self.last_startxref
         xref_location_log = self.xrefs.xref_locations
+        # Tracks the number of times we retried to read a particular xref
+        # section
+        err_count = 0
         while startxref is not None:
-            xref_location_log.append(startxref)
+            if (self.strict and err_count) or err_count > self.err_limit:
+                raise PdfReadError("Failed to locate xref section")
+            if not err_count:
+                xref_location_log.append(startxref)
             # load the xref table
             stream.seek(startxref)
             x = stream.read(1)
@@ -907,33 +947,19 @@ class PdfFileReader(PdfHandler):
             elif x.isdigit():
                 # PDF 1.5+ Cross-Reference Stream
                 stream.seek(-1, os.SEEK_CUR)
-                startxref = self._read_xref_stream()
+                try:
+                    startxref = self._read_xref_stream()
+                except ValueError:
+                    # can be caused by an OBO error (pointing too far)
+                    startxref = _attempt_startxref_correction(stream, startxref)
+                    err_count += 1
+                    continue
                 self.has_xref_stream = True
             else:
-                # bad xref character at startxref.  Let's see if we can find
-                # the xref table nearby, as we've observed this error with an
-                # off-by-one before.
-                stream.seek(-11, os.SEEK_CUR)
-                tmp = stream.read(20)
-                xref_loc = tmp.find(b"xref")
-                if xref_loc != -1:
-                    startxref -= (10 - xref_loc)
-                    continue
-                # No explicit xref table, try finding a cross-reference stream.
-                stream.seek(startxref)
-                found = False
-                for look in range(5):
-                    if stream.read(1).isdigit():
-                        # This is not a standard PDF, consider adding a warning
-                        startxref += look
-                        found = True
-                        break
-                if found:
-                    continue
-                # no xref table found at specified location
-                raise PdfReadError(
-                    "Could not find xref table at specified location"
-                )
+                startxref = _attempt_startxref_correction(stream, startxref)
+                err_count += 1
+                continue
+            err_count = 0
 
         if self.xrefs._previous_expected_free:
             orphans = ','.join(

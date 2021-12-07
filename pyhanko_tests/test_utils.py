@@ -156,15 +156,53 @@ def test_read_rewrite():
     assert out.getvalue() == MINIMAL
 
 
-def test_mildly_malformed_xref_read():
+@pytest.mark.parametrize('fname', [
     # this file has an xref table starting at 1
     # and several badly aligned xref rows
-    malformed = BytesIO(read_all(PDF_DATA_DIR + '/minimal-badxref.pdf'))
-    reader = PdfFileReader(malformed)
+    'minimal-badxref.pdf',
+    # startxref table offset is off by one
+    'minimal-startxref-obo1.pdf',
+    # startxref table offset is off by one (in the other direction)
+    'minimal-startxref-obo2.pdf',
+    # startxref stream offset is off by one
+    'minimal-startxref-obo3.pdf',
+    # startxref stream offset is off by one (in the other direction)
+    'minimal-startxref-obo4.pdf',
+    # startxref stream offset is off by two (lands on a digit)
+    'minimal-startxref-obo5.pdf',
+    # startxref stream offset is off by some nonsense
+    'minimal-startxref-obo6.pdf',
+])
+def test_mildly_malformed_xref_read(fname):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        reader = PdfFileReader(inf, strict=False)
 
-    # try something
-    root = reader.root
-    assert '/Pages' in root
+        # try something
+        root = reader.root
+        assert '/Pages' in root
+
+
+def test_hopelessly_malformed_xref_read():
+    fname = 'minimal-startxref-hopeless.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match='Could not find xref'):
+            PdfFileReader(inf, strict=False)
+
+
+@pytest.mark.parametrize('fname', [
+    # startxref table offset is off by one
+    'minimal-startxref-obo1.pdf',
+    # startxref table offset is off by one (in the other direction)
+    'minimal-startxref-obo2.pdf',
+    # startxref stream offset is off by one
+    'minimal-startxref-obo3.pdf',
+    # startxref stream offset is off by one (in the other direction)
+    'minimal-startxref-obo4.pdf',
+])
+def test_xref_locate_fail_strict(fname):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match='Failed to locate xref'):
+            PdfFileReader(inf, strict=True)
 
 
 def test_whitespace_variants():
@@ -173,7 +211,7 @@ def test_whitespace_variants():
     for whitespace in [b' ', b'\n', b'\r', b'\t', b'\f']:
         new_snippet = snippet_to_replace.replace(b' ', whitespace)
         r = PdfFileReader(BytesIO(MINIMAL.replace(snippet_to_replace, new_snippet)))
-        pages = r.root['/Pages']['/Count'] == 1
+        assert r.root['/Pages']['/Count'] == 1
 
 
 TEST_STRING = b'\x74\x77\x74\x84\x66'
