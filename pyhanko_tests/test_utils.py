@@ -313,8 +313,6 @@ def test_page_tree_import(stream_xrefs, with_objstreams, encrypt):
     new_page_tree = w.import_object(
         r.root.raw_get('/Pages'), obj_stream=objstream
     )
-    if objstream is not None:
-        w.add_object(objstream.as_pdf_object())
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
     w.write(out)
@@ -326,6 +324,8 @@ def test_page_tree_import(stream_xrefs, with_objstreams, encrypt):
     # just a piece of data I know occurs in the decoded content stream
     # of the (only) page in VECTOR_IMAGE_PDF
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+    if with_objstreams:
+        assert len(r.xrefs.object_streams_used_in(0)) == 1
 
 
 @pytest.mark.parametrize('inherit_filters', [True, False])
