@@ -89,7 +89,7 @@ class ObjectStream:
             raise TypeError(
                 'Stream objects and bare references cannot be embedded into '
                 'object streams.'
-            )  # pragma: nocover
+            )
         self._obj_refs[idnum] = obj
 
     def register_and_emit(self):
@@ -752,7 +752,7 @@ class BasePdfFileWriter(PdfHandler):
         :return:
             An :class:`.ObjectStream` object.
         """
-        if not self.stream_xrefs:  # pragma: no cover
+        if not self.stream_xrefs:
             raise PdfWriteError(
                 'Object streams require Xref streams to be enabled.'
             )

@@ -683,15 +683,25 @@ class PdfFileReader(PdfHandler):
         # This is an xref to a stream, so its type better be a stream
         assert stream['/Type'] == '/ObjStm'
         # /N is the number of indirect objects in the stream
-        assert idx < stream['/N']
+        if not (0 <= idx < stream['/N']):
+            if self.strict:
+                raise PdfReadError("Object stream does not contain index")
+            else:
+                return generic.NullObject()
         stream_data = BytesIO(stream.data)
         first_object = stream['/First']
         for i in range(stream['/N']):
-            misc.read_non_whitespace(stream_data, seek_back=True)
-            objnum = generic.NumberObject.read_from_stream(stream_data)
-            misc.read_non_whitespace(stream_data, seek_back=True)
-            offset = generic.NumberObject.read_from_stream(stream_data)
-            misc.read_non_whitespace(stream_data, seek_back=True)
+            try:
+                misc.read_non_whitespace(stream_data, seek_back=True)
+                objnum = generic.NumberObject.read_from_stream(stream_data)
+                misc.read_non_whitespace(stream_data, seek_back=True)
+                offset = generic.NumberObject.read_from_stream(stream_data)
+                misc.read_non_whitespace(stream_data, seek_back=True)
+            except ValueError:
+                if self.strict:
+                    raise PdfReadError("Object stream header possibly corrupted")
+                else:
+                    return generic.NullObject()
             if objnum != idnum:
                 # We're only interested in one object
                 continue
@@ -703,7 +713,7 @@ class PdfFileReader(PdfHandler):
                 obj = generic.read_object(
                     stream_data, generic.Reference(idnum, 0, self),
                 )
-            except misc.PdfStreamError as e:
+            except (misc.PdfStreamError, misc.PdfReadError) as e:
                 # Stream object cannot be read. Normally, a critical error, but
                 # Adobe Reader doesn't complain, so continue (in strict mode?)
                 logger.warning(
@@ -714,14 +724,26 @@ class PdfFileReader(PdfHandler):
                     raise PdfReadError("Can't read object stream: %s" % e)
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
+            if isinstance(obj, (generic.StreamObject, generic.IndirectObject)):
+                if self.strict:
+                    raise PdfReadError(
+                        "Encountered forbidden object type in object stream"
+                    )
+                else:
+                    return obj
+
             generic.read_non_whitespace(
                 stream_data, seek_back=True, allow_eof=True
             )
             return obj
 
         if self.strict:
-            raise PdfReadError("This is a fatal error in strict mode.")
-        return generic.NullObject()
+            raise PdfReadError(
+                "Object not found in stream, "
+                "this is a fatal error in strict mode"
+            )
+        else:
+            return generic.NullObject()
 
     def _get_encryption_params(self) -> Optional[generic.DictionaryObject]:
         try:

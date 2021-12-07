@@ -209,6 +209,54 @@ def test_xref_locate_fail_strict(fname):
             PdfFileReader(inf, strict=True)
 
 
+@pytest.mark.parametrize('fname,err,obj_to_get', [
+    # object count is too low
+    ('broken-objstream1.pdf', 'Object stream does not contain index', 4),
+    # attempt to fetch object that has the wrong index
+    ('broken-objstream2.pdf', 'Object is in wrong index.', 4),
+    # attempt to fetch object that would require reading beyond the objstm
+    # header section
+    ('broken-objstream3.pdf', 'Object stream header possibly corrupted', 6),
+    # attempt to fetch an object that isn't in the stream at all
+    ('broken-objstream4.pdf', 'not found in stream', 6),
+    # attempt to fetch a stream from an object stream
+    ('broken-objstream5.pdf', 'forbidden object type', 9),
+    # object stream ends prematurely
+    ('broken-objstream6.pdf', 'Can\'t read', 4),
+])
+def test_broken_objstream(fname, err, obj_to_get):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match=err):
+            r = PdfFileReader(inf, strict=True)
+            r.get_object(generic.Reference(idnum=obj_to_get))
+
+
+@pytest.mark.parametrize('fname,obj_to_get,expect_null', [
+    # object count is too low
+    ('broken-objstream1.pdf', 4, True),
+    # attempt to fetch object that has the wrong index
+    ('broken-objstream2.pdf', 4, False),
+    # attempt to fetch object that would require reading beyond the objstm
+    # header section
+    ('broken-objstream3.pdf', 6, True),
+    # attempt to fetch an object that isn't in the stream at all
+    ('broken-objstream4.pdf', 6, True),
+    # attempt to fetch a stream from an object stream
+    ('broken-objstream5.pdf', 9, False),
+    # object stream ends prematurely
+    ('broken-objstream6.pdf', 4, True),
+])
+def test_broken_obj_stream_fallback(fname, obj_to_get, expect_null):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        r = PdfFileReader(inf, strict=False)
+        obj = r.get_object(generic.Reference(idnum=obj_to_get))
+        if expect_null:
+            assert isinstance(obj, generic.NullObject)
+        else:
+            # we set up the tests to always point to dictionaries
+            assert isinstance(obj, generic.DictionaryObject)
+
+
 def test_whitespace_variants():
     snippet_to_replace = b' /Pages 2 0 R'
     assert snippet_to_replace in MINIMAL
@@ -2149,3 +2197,31 @@ def test_historical_nonexistent_xref_access_nonstrict():
     hist_root = r.get_historical_root(0)
     bad_ref = hist_root['/Pages']['/Kids'][0].raw_get('/Bleh')
     assert isinstance(bad_ref.get_object(), generic.NullObject)
+
+
+def test_no_objstms_without_xref_stm():
+    w = writer.PdfFileWriter(stream_xrefs=False)
+    with pytest.raises(misc.PdfWriteError, match='Obj'):
+        w.prepare_object_stream()
+
+
+def test_no_stms_in_obj_stm():
+    w = writer.PdfFileWriter(stream_xrefs=True)
+    obj_stm = w.prepare_object_stream()
+
+    with pytest.raises(TypeError, match='Stream obj.*references'):
+        w.add_object(
+            generic.StreamObject(stream_data=b'Hello world!'),
+            obj_stream=obj_stm
+        )
+
+
+def test_no_refs_in_obj_stm():
+    w = writer.PdfFileWriter(stream_xrefs=True)
+    obj_stm = w.prepare_object_stream()
+
+    with pytest.raises(TypeError, match='Stream obj.*references'):
+        w.add_object(
+            generic.IndirectObject(2, 0, w),
+            obj_stream=obj_stm
+        )
