@@ -198,6 +198,10 @@ def test_hopelessly_malformed_xref_read():
     'minimal-startxref-obo3.pdf',
     # startxref stream offset is off by one (in the other direction)
     'minimal-startxref-obo4.pdf',
+    # startxref stream offset is off by two (lands on a digit)
+    'minimal-startxref-obo5.pdf',
+    # startxref stream offset is off by some nonsense
+    'minimal-startxref-obo6.pdf',
 ])
 def test_xref_locate_fail_strict(fname):
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
