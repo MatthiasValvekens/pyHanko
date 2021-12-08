@@ -145,8 +145,6 @@ class ASCIIHexDecode(Decoder, metaclass=Singleton):
         return binascii.hexlify(data) + b'>'
 
     def decode(self, data, decode_params=None):
-        if isinstance(data, str):
-            data = data.encode('ascii')
         data, _ = data.split(ASCII_HEX_EOD_MARKER, 1)
         data = WS_REGEX.sub(b'', data)
         return binascii.unhexlify(data)
@@ -195,8 +193,6 @@ class ASCII85Decode(Decoder, metaclass=Singleton):
         return out.getvalue()
 
     def decode(self, data, decode_params=None):
-        if isinstance(data, str):
-            data = data.encode('ascii')
         data, _ = data.split(ASCII_85_EOD_MARKER, 1)
         data = BytesIO(WS_REGEX.sub(b'', data))
         out = BytesIO()
