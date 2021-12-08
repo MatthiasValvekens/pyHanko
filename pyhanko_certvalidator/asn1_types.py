@@ -75,9 +75,9 @@ class AAControls(core.Sequence):
 
 
 def _make_tag_explicit(field_decl):
-    if 'explicit' in field_decl:
-        return
     tag_dict = field_decl[2]
+    if 'explicit' in tag_dict:
+        return
     tag_dict['explicit'] = tag_dict['implicit']
     del tag_dict['implicit']
 
