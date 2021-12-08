@@ -5,7 +5,7 @@ Taken from PyPDF2 with modifications. See :ref:`here <pypdf2-license>`
 for the original license of the PyPDF2 project.
 
 Note that not all decoders specified in the standard are supported.
-In particular ``/Crypt`` and ``/LZWDecode`` are missing.
+In particular ``/LZWDecode`` and the various JPEG-based decoders are missing.
 """
 import binascii
 import re
@@ -13,7 +13,7 @@ import struct
 import zlib
 from io import BytesIO
 
-from .misc import PdfReadError, PdfStreamError, Singleton
+from .misc import PdfStreamError, Singleton
 
 __all__ = [
     'Decoder', 'ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode',
@@ -83,9 +83,7 @@ def _png_decode(data: memoryview, columns):
                 result_row[i] = (x + y) % 256
         else:
             # unsupported PNG filter
-            raise PdfReadError(
-                "Unsupported PNG filter %r" % filter_byte
-            )
+            raise NotImplementedError("Unsupported PNG filter %r" % filter_byte)
         prev_result = result_row
         output.write(result_row)
     return output.getvalue()
@@ -120,7 +118,7 @@ class FlateDecode(Decoder, metaclass=Singleton):
             return _png_decode(data, columns)
         else:
             # unsupported predictor
-            raise PdfReadError(
+            raise NotImplementedError(
                 "Unsupported flatedecode predictor %r" % predictor
             )
 
@@ -290,5 +288,5 @@ def get_generic_decoder(name: str) -> Decoder:
     try:
         cls = DECODERS[name]
     except KeyError:
-        raise PdfStreamError(f"Stream filter '{name}' is not supported.")
+        raise NotImplementedError(f"Stream filter '{name}' is not supported.")
     return cls()
