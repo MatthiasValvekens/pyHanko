@@ -39,6 +39,7 @@ from pyhanko.sign.validation import (
     DocumentSecurityStore,
     async_validate_cms_signature,
     async_validate_detached_cms,
+    collect_validation_info,
 )
 from pyhanko_tests.samples import (
     CRYPTO_DATA_DIR,
@@ -908,3 +909,47 @@ async def test_noop_attribute_prov():
     status = await async_validate_cms_signature(content, raw_digest=raw_digest)
     assert status.valid
     assert status.intact
+
+
+@pytest.mark.parametrize('delete', [True, False])
+async def test_no_certificates(delete):
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+    md_algorithm = 'sha256'
+
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+    sig_obj = signers.SignatureObject(bytes_reserved=8192)
+
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
+
+    prep_digest, output = cms_writer.send(
+        cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    signer: signers.SimpleSigner = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    cms_obj = await signer.async_sign(
+        data_digest=prep_digest.document_digest,
+        digest_algorithm=md_algorithm,
+    )
+    sd = cms_obj['content']
+    if delete:
+        del sd['certificates']
+    else:
+        sd['certificates'] = cms.CertificateSet([])
+    cms_writer.send(cms_obj)
+
+    r = PdfFileReader(output)
+    with pytest.raises(SignatureValidationError, match='signer cert.*includ'):
+        emb = r.embedded_signatures[0]
+        await collect_validation_info(
+            embedded_sig=emb, validation_context=ValidationContext()
+        )
