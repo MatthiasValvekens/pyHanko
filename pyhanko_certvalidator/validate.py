@@ -5,7 +5,7 @@ import datetime
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Set, List
+from typing import Iterable, Optional, Set, List, Dict
 
 from asn1crypto import x509, crl, ocsp, algos, cms, core
 from asn1crypto.keys import PublicKeyInfo
@@ -383,7 +383,7 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
     # TODO support matching against subjectAltName?
     #  Outside the scope of RFC 5755, but it might make sense
 
-    issuer_rec = attr_cert['issuer']
+    issuer_rec = attr_cert['ac_info']['issuer']
     aa_names: Optional[x509.GeneralNames] = None
     aa_iss_serial: Optional[bytes] = None
     if issuer_rec.name == 'v1_form':
@@ -495,7 +495,7 @@ class ACValidationResult:
     attr_cert: cms.AttributeCertificateV2
     aa_cert: x509.Certificate
     aa_path: ValidationPath
-    approved_attributes: List[cms.AttCertAttribute]
+    approved_attributes: Dict[str, cms.AttCertAttribute]
 
 
 async def async_validate_ac(
@@ -578,13 +578,14 @@ async def async_validate_ac(
             except ValidationError as e:
                 exceptions.append(e)
 
-    # TODO log audit identifier
-    if not exceptions:
-        raise PathBuildingError(
-            "Could not find a suitable AA for the attribute certificate"
-        )
-    elif aa_path is None:
-        raise exceptions[0]
+    if aa_path is None:
+        # TODO log audit identifier
+        if not exceptions:
+            raise PathBuildingError(
+                "Could not find a suitable AA for the attribute certificate"
+            )
+        else:
+            raise exceptions[0]
 
     # check the signature
     aa_cert = aa_path.last
@@ -599,10 +600,11 @@ async def async_validate_ac(
             "Revocation checking for ACs has not been implemented yet"
         )
 
-    ok_attrs = [
-        attr for attr in attr_cert['ac_info']['attributes']
+    ok_attrs = {
+        attr['type'].native: attr
+        for attr in attr_cert['ac_info']['attributes']
         if aa_path.aa_attr_in_scope(attr['type'])
-    ]
+    }
 
     return ACValidationResult(
         attr_cert=attr_cert, aa_cert=aa_cert,
