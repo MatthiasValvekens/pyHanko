@@ -210,6 +210,34 @@ class CertRevTrustPolicy:
     """
 
 
+@dataclass(frozen=True)
+class ACTargetDescription:
+    """
+    Value type to guide attribute certificate targeting checks, for
+    attribute certificates that use the target information extension.
+
+    As stipulated in RFC 5755, an AC targeting check passes if the
+    information in the relevant :class:`.AATargetDescription` matches
+    at least one ``Target`` in the AC's target information extension.
+    """
+
+    validator_names: List[x509.GeneralName] = field(default_factory=list)
+    """
+    The validating entity's names.
+
+    This value is matched directly against any ``Target``s that use the
+    ``targetName`` alternative.
+    """
+
+    group_memberships: List[x509.GeneralName] = field(default_factory=list)
+    """
+    The validating entity's group memberships.
+
+    This value is matched against any ``Target``s that use the ``targetGroup``
+    alternative.
+    """
+
+
 class ValidationContext:
 
     # A pyhanko_certvalidator.registry.CertificateRegistry() object
@@ -263,6 +291,8 @@ class ValidationContext:
 
     _fetchers: Fetchers = None
 
+    _acceptable_ac_targets = None
+
     def __init__(
             self,
             trust_roots: Optional[Iterable[x509.Certificate]] = None,
@@ -279,6 +309,7 @@ class ValidationContext:
             time_tolerance: timedelta = timedelta(seconds=1),
             retroactive_revinfo: bool = False,
             fetcher_backend: FetcherBackend = None,
+            acceptable_ac_targets: Optional[ACTargetDescription] = None,
             fetchers: Fetchers = None):
         """
         :param trust_roots:
@@ -496,6 +527,8 @@ class ValidationContext:
             abs(time_tolerance) if time_tolerance else timedelta(0)
         )
         self.retroactive_revinfo = retroactive_revinfo
+
+        self._acceptable_ac_targets = acceptable_ac_targets
 
     @property
     def fetching_allowed(self) -> bool:
@@ -744,6 +777,10 @@ class ValidationContext:
 
         return self._crl_issuer_map.get(certificate_list.signature)
 
+    @property
+    def acceptable_ac_targets(self) -> ACTargetDescription:
+        return self._acceptable_ac_targets
+
 
 @dataclass(frozen=True)
 class PKIXValidationParams:
@@ -818,32 +855,4 @@ class PKIXValidationParams:
     By default, no names are excluded.
     This behaviour can be modified by name constraints on intermediate CA
     certificates.
-    """
-
-
-@dataclass(frozen=True)
-class ACTargetDescription:
-    """
-    Value type to guide attribute certificate targeting checks, for
-    attribute certificates that use the target information extension.
-
-    As stipulated in RFC 5755, an AC targeting check passes if the
-    information in the relevant :class:`.AATargetDescription` matches
-    at least one ``Target`` in the AC's target information extension.
-    """
-
-    validator_names: List[x509.GeneralName] = field(default_factory=list)
-    """
-    The validating entity's names.
-
-    This value is matched directly against any ``Target``s that use the
-    ``targetName`` alternative.
-    """
-
-    group_memberships: List[x509.GeneralName] = field(default_factory=list)
-    """
-    The validating entity's group memberships.
-
-    This value is matched against any ``Target``s that use the ``targetGroup``
-    alternative.
     """

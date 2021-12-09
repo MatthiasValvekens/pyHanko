@@ -5,9 +5,9 @@ import datetime
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Set
+from typing import Iterable, Optional, Set, List
 
-from asn1crypto import x509, crl, ocsp, algos, cms
+from asn1crypto import x509, crl, ocsp, algos, cms, core
 from asn1crypto.keys import PublicKeyInfo
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
@@ -38,8 +38,10 @@ from .errors import (
     OCSPNoMatchesError,
     OCSPValidationIndeterminateError,
     OCSPFetchError,
+    ValidationError,
     PathValidationError,
     RevokedError,
+    PathBuildingError,
 )
 from .path import ValidationPath, QualifiedPolicy
 
@@ -311,6 +313,301 @@ def _validate_ac_targeting(attr_cert: cms.AttributeCertificateV2,
 
     # TODO log audit identity
     raise InvalidCertificateError("AC targeting check failed")
+
+
+SUPPORTED_AC_EXTENSIONS = frozenset([
+    'authority_information_access',
+    'authority_key_identifier',
+    'crl_distribution_points',
+    'freshest_crl',
+    'key_identifier',
+    'no_rev_avail',
+    'target_information',
+    # NOTE: we don't actively process this extension, but we never log holder
+    # identifying information, so the purpose of the audit identity
+    # extension is still satisfied.
+    # TODO actually use audit_identity for logging purposes, falling back
+    #  to holder info if audit_identity is not available.
+    'audit_identity'
+])
+
+
+def _extract_issuer_dir_name(issuer_names: x509.GeneralNames,
+                             err_msg_prefix: str) -> x509.Name:
+    try:
+        issuer_dirname: x509.Name = next(
+            gname.chosen for gname in issuer_names
+            if gname.name == 'directory_name'
+        )
+    except StopIteration:
+        raise NotImplementedError(
+            f"{err_msg_prefix}; only distinguished names are supported, "
+            f"and none were found."
+        )
+    issuer_dirname.untag()
+    return issuer_dirname
+
+
+def _parse_iss_serial(iss_serial: cms.IssuerSerial, err_msg_prefix: str) \
+        -> bytes:
+    """
+    Render a cms.IssuerSerial value into something that matches
+    x509.Certificate.issuer_serial output.
+    """
+    issuer_names = iss_serial['issuer']
+    issuer_dirname = _extract_issuer_dir_name(issuer_names, err_msg_prefix)
+    result_bytes = b'%s:%d' % (
+        issuer_dirname.sha256, iss_serial['serial'].native
+    )
+    return result_bytes
+
+
+def _process_aki_ext(aki_ext: x509.AuthorityKeyIdentifier):
+
+    aki = aki_ext['key_identifier'].native  # could be None
+    auth_iss_ser = auth_iss_dirname = None
+    if not isinstance(aki_ext['authority_cert_issuer'], core.Void):
+        auth_iss_dirname = _extract_issuer_dir_name(
+            aki_ext['authority_cert_issuer'],
+            "Could not decode authority issuer in AKI extension"
+        )
+        auth_ser = aki_ext['authority_cert_serial_number'].native
+        if auth_ser is not None:
+            auth_iss_ser = b'%s:%d' % (auth_ser.sha256, auth_ser)
+
+    return aki, auth_iss_dirname, auth_iss_ser
+
+
+def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
+                          registry: CertificateCollection):
+    # TODO support matching against subjectAltName?
+    #  Outside the scope of RFC 5755, but it might make sense
+
+    issuer_rec = attr_cert['issuer']
+    aa_names: Optional[x509.GeneralNames] = None
+    aa_iss_serial: Optional[bytes] = None
+    if issuer_rec.name == 'v1_form':
+        aa_names = issuer_rec.chosen
+    else:
+        issuerv2: cms.V2Form = issuer_rec.chosen
+        if not isinstance(issuerv2['issuer_name'], core.Void):
+            aa_names = issuerv2['issuer_name']
+        if not isinstance(issuerv2['base_certificate_id'], core.Void):
+            # not allowed by RFC 5755, but let's parse it anyway if
+            # we encounter it
+            aa_iss_serial = _parse_iss_serial(
+                issuerv2['base_certificate_id'],
+                "Could not identify AA issuer in base_certificate_id"
+            )
+        if not isinstance(issuerv2['object_digest_info'], core.Void):
+            # TODO support objectdigestinfo? Also not allowed by RFC 5755
+            raise NotImplementedError(
+                "Could not identify AA; objectDigestInfo is not supported."
+            )
+
+    # Process the AKI extension if there is one
+    try:
+        aki_ext = next(
+            ext['extn_value'].parsed
+            for ext in attr_cert['ac_info']['extensions']
+            if ext['extn_id'].native == 'authority_key_identifier'
+        )
+        aki, aa_issuer, aki_aa_iss_serial = _process_aki_ext(aki_ext)
+        if aki_aa_iss_serial is not None:
+            if aa_iss_serial is not None and aa_iss_serial != aki_aa_iss_serial:
+                raise InvalidCertificateError(
+                    "AC's AKI extension and issuer include conflicting "
+                    "identifying information for the issuing AA"
+                )
+            else:
+                aa_iss_serial = aki_aa_iss_serial
+    except StopIteration:
+        aki = None
+
+    candidates = ()
+    aa_name = None
+    if aa_names is not None:
+        aa_name = _extract_issuer_dir_name(
+            aa_names, "Could not identify AA by name"
+        )
+    if aa_iss_serial is not None:
+        exact_cert = registry.retrieve_by_issuer_serial(aa_iss_serial)
+        if exact_cert is not None:
+            candidates = (exact_cert,)
+    elif aa_name is not None:
+        candidates = registry.retrieve_by_name(aa_name)
+
+    for aa_candidate in candidates:
+        if aa_name is not None and aa_candidate.subject != aa_name:
+            continue
+        if aki is not None and aa_candidate.key_identifier != aki:
+            # AC's AKI doesn't match candidate's SKI
+            continue
+        yield aa_candidate
+
+
+def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
+                        aa_cert: x509.Certificate,
+                        validation_context: ValidationContext):
+
+    signature_algo = attr_cert['signature_algorithm'].signature_algo
+    hash_algo = attr_cert['signature_algorithm'].hash_algo
+
+    if hash_algo in validation_context.weak_hash_algos:
+        raise PathValidationError(pretty_message(
+            '''
+            The attribute certificate could not be validated because 
+            the signature uses the weak hash algorithm %s
+            ''',
+            hash_algo
+        ))
+
+    try:
+        _validate_sig(
+            signature=attr_cert['signature'].native,
+            signed_data=attr_cert['ac_info'].dump(),
+            # TODO support PK parameter inheritance?
+            #  (would have to remember the working public key from the
+            #  validation algo)
+            # low-priority since this only affects DSA in practice
+            public_key_info=aa_cert.public_key,
+            sig_algo=signature_algo, hash_algo=hash_algo,
+            parameters=attr_cert['signature_algorithm']['parameters']
+        )
+    except PSSParameterMismatch:
+        raise PathValidationError(pretty_message(
+            '''
+            The signature parameters for the attribute certificate
+            do not match the constraints on the public key.
+            '''
+        ))
+    except InvalidSignature:
+        raise PathValidationError(pretty_message(
+            '''
+            The attribute certificate could not be validated because the
+            signature could not be verified.
+            ''',
+        ))
+
+
+@dataclass(frozen=True)
+class ACValidationResult:
+    attr_cert: cms.AttributeCertificateV2
+    aa_cert: x509.Certificate
+    aa_path: ValidationPath
+    approved_attributes: List[cms.AttCertAttribute]
+
+
+async def async_validate_ac(
+        attr_cert: cms.AttributeCertificateV2,
+        validation_context: ValidationContext,
+        aa_pkix_params: PKIXValidationParams = PKIXValidationParams(),
+        holder_cert: Optional[x509.Certificate] = None) -> ACValidationResult:
+
+    # Process extensions
+    # We do this first because all later steps may involve potentially slow
+    #  network IO, so this allows quicker failure.
+    extensions_present = {
+        ext['extn_id'].native: bool(ext['critical'])
+        for ext in attr_cert['ac_info']['extensions']
+    }
+    unsupported_critical_extensions = {
+        ext for ext, crit in extensions_present.items()
+        if crit and ext not in SUPPORTED_AC_EXTENSIONS
+    }
+    if unsupported_critical_extensions:
+        raise PathValidationError(pretty_message(
+            '''
+            The AC could not be validated because it contains the
+            following unsupported critical extension%s: %s
+            ''',
+            's' if len(unsupported_critical_extensions) != 1 else '',
+            ', '.join(sorted(unsupported_critical_extensions)),
+        ))
+    if 'target_information' in extensions_present:
+        targ_desc = validation_context.acceptable_ac_targets
+        if targ_desc is None:
+            raise InvalidCertificateError(
+                '''
+                The attribute certificate is targeted, but no targeting
+                information is available in the validation context.
+                '''
+            )
+        _validate_ac_targeting(attr_cert, targ_desc)
+
+    validity = attr_cert['ac_info']['att_cert_validity_period']
+    _check_validity(
+        validity=Validity({
+            'not_before': validity['not_before_time'],
+            'not_after': validity['not_after_time'],
+        }),
+        moment=validation_context.moment,
+        tolerance=validation_context.time_tolerance,
+        describe_current_cert='the attribute certificate'
+    )
+
+    if holder_cert is not None:
+        raise NotImplementedError(
+            "Holder verification has not been implemented yet"
+            )
+
+    registry = validation_context.certificate_registry
+    aa_candidates = _candidate_ac_issuers(attr_cert, registry)
+
+    exceptions = []
+    aa_path: Optional[ValidationPath] = None
+    for aa_candidate in aa_candidates:
+        try:
+            validate_aa_usage(validation_context, aa_candidate)
+        except InvalidCertificateError as e:
+            exceptions.append(e)
+            continue
+        try:
+            paths = await registry.async_build_paths(aa_candidate)
+        except PathBuildingError as e:
+            exceptions.append(e)
+            continue
+
+        for candidate_path in paths:
+            try:
+                await async_validate_path(
+                    validation_context, candidate_path, aa_pkix_params
+                )
+                aa_path = candidate_path
+                break
+            except ValidationError as e:
+                exceptions.append(e)
+
+    # TODO log audit identifier
+    if not exceptions:
+        raise PathBuildingError(
+            "Could not find a suitable AA for the attribute certificate"
+        )
+    elif aa_path is None:
+        raise exceptions[0]
+
+    # check the signature
+    aa_cert = aa_path.last
+    _check_ac_signature(attr_cert, aa_cert, validation_context)
+
+    # TODO check AC revocation status
+    revinfo_chk_policy = \
+        validation_context.revinfo_policy.revocation_checking_policy
+    if 'no_rev_avail' not in extensions_present \
+            and revinfo_chk_policy.essential:
+        raise NotImplementedError(
+            "Revocation checking for ACs has not been implemented yet"
+        )
+
+    ok_attrs = [
+        attr for attr in attr_cert['ac_info']['attributes']
+        if aa_path.aa_attr_in_scope(attr['type'])
+    ]
+
+    return ACValidationResult(
+        attr_cert=attr_cert, aa_cert=aa_cert,
+        aa_path=aa_path, approved_attributes=ok_attrs
+    )
 
 
 @dataclass

@@ -101,3 +101,6 @@ ext_specs['no_rev_avail'] = core.Null
 
 ext_map['1.3.6.1.5.5.7.1.6'] = 'aa_controls'
 ext_specs['aa_controls'] = AAControls
+
+ext_map['1.3.6.1.5.5.7.1.4'] = 'audit_identity'
+ext_specs['audit_identity'] = core.OctetString

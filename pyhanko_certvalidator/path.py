@@ -67,6 +67,17 @@ class ValidationPath:
 
         return self._certs[0]
 
+    @property
+    def last(self):
+        """
+        Returns the current end of the path - the end entity certificate
+
+        :return:
+            The last asn1crypto.x509.Certificate object in the path
+        """
+
+        return self._certs[len(self._certs) - 1]
+
     def find_issuer(self, cert):
         """
         Return the issuer of the cert specified, as defined by this path
