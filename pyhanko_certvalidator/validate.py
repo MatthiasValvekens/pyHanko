@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Set
 
-from asn1crypto import x509, crl, ocsp, algos
+from asn1crypto import x509, crl, ocsp, algos, cms
 from asn1crypto.keys import PublicKeyInfo
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
@@ -16,11 +16,15 @@ from cryptography.hazmat.primitives.asymmetric import (
     padding, rsa, ec, dsa, ed25519, ed448
 )
 
+from . import asn1_types
 from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
 from .asn1_types import AAControls
-from .context import ValidationContext, PKIXValidationParams, \
-    RevocationCheckingRule, CertRevTrustPolicy, RevocationCheckingPolicy
+from .context import (
+    ValidationContext, PKIXValidationParams,
+    RevocationCheckingRule, CertRevTrustPolicy, RevocationCheckingPolicy,
+    ACTargetDescription
+)
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
     process_general_subtrees
 from .errors import (
@@ -265,6 +269,48 @@ def validate_aa_usage(validation_context: ValidationContext,
             it cannot be used to validate attribute certificates.
             '''
         ))
+
+
+def _validate_ac_targeting(attr_cert: cms.AttributeCertificateV2,
+                           acceptable_targets: ACTargetDescription):
+
+    try:
+        target_info = next(
+            ext['extn_value'].parsed
+            for ext in attr_cert['ac_info']['extensions']
+            if ext['extn_id'].native == 'target_information'
+        )
+    except StopIteration:
+        return
+
+    target: asn1_types.Target
+    for targets in target_info:
+        for target in targets:
+            if target.name == 'target_name':
+                gen_name: x509.GeneralName = target.chosen
+                valid_names = acceptable_targets.validator_names
+            elif target.name == 'target_group':
+                gen_name: x509.GeneralName = target.chosen
+                valid_names = acceptable_targets.group_memberships
+            else:
+                logger.info(
+                    f"'{target.name}' is not supported as a targeting mode; "
+                    f"ignoring."
+                )
+                continue
+            try:
+                target_ok = gen_name in valid_names
+            except ValueError:
+                # fall back to binary comparison in case the name type is not
+                # supported by asn1crypto's comparison logic for GeneralName
+                #  (we could be more efficient here, but this is probably
+                #   rare, so let's follow YAGNI)
+                target_ok = gen_name.dump() in {n.dump() for n in valid_names}
+            if target_ok:
+                return
+
+    # TODO log audit identity
+    raise InvalidCertificateError("AC targeting check failed")
 
 
 @dataclass

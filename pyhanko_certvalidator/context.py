@@ -822,7 +822,7 @@ class PKIXValidationParams:
 
 
 @dataclass(frozen=True)
-class AATargetDescription:
+class ACTargetDescription:
     """
     Value type to guide attribute certificate targeting checks, for
     attribute certificates that use the target information extension.

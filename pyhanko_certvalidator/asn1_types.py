@@ -66,7 +66,7 @@ class AAControls(core.Sequence):
         # not available as an attribute).
         try:
             return next(
-                ext['extn_value'].native
+                ext['extn_value'].parsed
                 for ext in cert['tbs_certificate']['extensions']
                 if ext['extn_id'].native == 'aa_controls'
             )
