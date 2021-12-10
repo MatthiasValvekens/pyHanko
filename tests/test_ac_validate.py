@@ -6,7 +6,7 @@ from asn1crypto import cms, x509
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
 from pyhanko_certvalidator.errors import PathValidationError
-from .test_validate import MockFetcherBackend, fixtures_dir
+from .test_validate import fixtures_dir
 
 attr_cert_dir = os.path.join(fixtures_dir, 'attribute-certs')
 basic_aa_dir = os.path.join(attr_cert_dir, 'basic-aa')
@@ -39,7 +39,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, role_aa],
-            fetcher_backend=MockFetcherBackend(),
         )
 
         result = await validate.async_validate_ac(ac, vc)
@@ -63,7 +62,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, role_aa],
-            fetcher_backend=MockFetcherBackend(),
         )
 
         msg = 'AA controls extension only present on part '
@@ -89,7 +87,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, role_aa, inbetween],
-            fetcher_backend=MockFetcherBackend(),
         )
 
         msg = 'exceeds the maximum path length for an AA certificate'
@@ -115,7 +112,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, aa],
-            fetcher_backend=MockFetcherBackend(),
         )
 
         msg = 'no targeting information'
@@ -127,7 +123,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, aa],
-            fetcher_backend=MockFetcherBackend(),
             acceptable_ac_targets=ACTargetDescription(
                 validator_names=[x509.GeneralName(
                     name='directory_name', value=x509.Name.build({
@@ -149,7 +144,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, aa],
-            fetcher_backend=MockFetcherBackend(),
             acceptable_ac_targets=ACTargetDescription(
                 group_memberships=[x509.GeneralName(
                     name='directory_name', value=x509.Name.build({
@@ -170,7 +164,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, aa],
-            fetcher_backend=MockFetcherBackend(),
             acceptable_ac_targets=ACTargetDescription(
                 validator_names=[x509.GeneralName(
                     name='directory_name', value=x509.Name.build({
@@ -193,7 +186,6 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         vc = ValidationContext(
             trust_roots=[root], other_certs=[interm, aa],
-            fetcher_backend=MockFetcherBackend(),
             acceptable_ac_targets=ACTargetDescription(
                 group_memberships=[x509.GeneralName(
                     name='directory_name', value=x509.Name.build({
