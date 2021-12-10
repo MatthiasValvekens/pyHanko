@@ -5,7 +5,7 @@ import datetime
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Set, List, Dict
+from typing import Iterable, Optional, Set, Dict
 
 from asn1crypto import x509, crl, ocsp, algos, cms, core
 from asn1crypto.keys import PublicKeyInfo
@@ -1005,6 +1005,8 @@ async def _validate_path(validation_context: ValidationContext,
                 describe_current_cert=describe_current_cert
             )
 
+        _check_aa_controls(cert, state, index, describe_current_cert)
+
         # Step 3 o / 4 f
         # Check for critical unsupported extensions
         unsupported_critical_extensions = \
@@ -1273,6 +1275,34 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
             ))
 
 
+def _check_aa_controls(cert: x509.Certificate, state: _PathValidationState,
+                       index, describe_current_cert):
+    aa_controls = AAControls.read_extension_value(cert)
+    if aa_controls is not None:
+        if not state.aa_controls_used and index > 1:
+            raise PathValidationError(pretty_message(
+                '''
+                AA controls extension only present on part of the certificate
+                chain: %s has AA controls while preceding certificates do not.
+                ''',
+                describe_current_cert(definite=True)
+            ))
+        state.aa_controls_used = True
+        # deal with path length
+        new_max_aa_path_length = aa_controls['path_len_constraint'].native
+        if new_max_aa_path_length is not None \
+                and new_max_aa_path_length < state.max_aa_path_length:
+            state.max_aa_path_length = new_max_aa_path_length
+    elif state.aa_controls_used:
+        raise PathValidationError(pretty_message(
+            '''
+            AA controls extension only present on part of the certificate chain:
+            %s has no AA controls
+            ''',
+            describe_current_cert(definite=True)
+        ))
+
+
 def _prepare_next_step(index, cert: x509.Certificate,
                        state: _PathValidationState,
                        describe_current_cert):
@@ -1362,31 +1392,6 @@ def _prepare_next_step(index, cert: x509.Certificate,
     if cert.max_path_length is not None \
             and cert.max_path_length < state.max_path_length:
         state.max_path_length = cert.max_path_length
-
-    aa_controls = AAControls.read_extension_value(cert)
-    if aa_controls is not None:
-        if not state.aa_controls_used and index > 1:
-            raise PathValidationError(pretty_message(
-                '''
-                AA controls extension only present on part of the certificate
-                chain: %s has AA controls while preceding certificates do not.
-                ''',
-                describe_current_cert(definite=True)
-            ))
-        state.aa_controls_used = True
-        # deal with path length
-        new_max_aa_path_length = aa_controls['path_len_constraint'].native
-        if new_max_aa_path_length is not None \
-                and new_max_aa_path_length < state.max_aa_path_length:
-            state.max_aa_path_length = new_max_aa_path_length
-    elif state.aa_controls_used:
-        raise PathValidationError(pretty_message(
-            '''
-            AA controls extension only present on part of the certificate chain:
-            %s has no AA controls
-            ''',
-            describe_current_cert(definite=True)
-        ))
 
     # Step 3 n
     if cert.key_usage_value \

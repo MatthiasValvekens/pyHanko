@@ -73,7 +73,7 @@ pki-architectures:
       bob:
         template: alice
         subject: bob
-      interm-role:
+      interm-unrestricted:
         subject: interm
         issuer: root
         validity:
@@ -94,10 +94,15 @@ pki-architectures:
             smart-value:
               schema: crl-dist-url
               params: {crl-repo-names: [root]}
+      interm-role:
+        template: interm-unrestricted
+        subject: interm
+        extensions:
           - id: aa_controls
             critical: true
             value:
-              permitted_attrs: ['role']
+              path-len-constraint: 0
+              permitted-attrs: ['role']
       role-aa:
         subject: aa
         issuer: interm
