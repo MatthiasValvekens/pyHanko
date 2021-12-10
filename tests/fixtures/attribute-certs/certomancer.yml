@@ -41,6 +41,11 @@ pki-architectures:
       bob:
         organizational-unit-name: People
         common-name: Bob
+      validator:
+        common-name: Validator
+        organizational-unit-name: Validators
+      validator-group:
+        organizational-unit-name: Validators
     certs:
       root:
         subject: root
@@ -141,8 +146,21 @@ pki-architectures:
           - id: aa_controls
             critical: true
             value:
-              permitted_attrs: ['role']
-              permit_unspecified: false
+              permitted-attrs: ['role']
+              permit-unspecified: false
+      aa-unrestricted:
+        subject: aa
+        issuer: interm
+        issuer-cert: interm-unrestricted
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature, crl_sign]
     attr-certs:
       alice-role-with-rev:
         holder:
@@ -196,6 +214,37 @@ pki-architectures:
           valid-to: "2030-01-01T00:00:00+0000"
         extensions:
           - id: no_rev_avail
+      alice-norev-targeted:
+        holder:
+          name: alice
+        issuer: aa
+        issuer-cert: aa-unrestricted
+        attributes:
+          - id: role
+            multivalued: true
+            smart-value:
+              schema: role-syntax
+              params:
+                - name: {type: email, value: alice@example.com}
+                - name: {type: email, value: alice2@example.com}
+          - id: group
+            smart-value:
+              schema: ietf-attribute
+              params:
+                - "Employees"
+                - "Team FooBar"
+        validity:
+          valid-from: "2010-01-01T00:00:00+0000"
+          valid-to: "2030-01-01T00:00:00+0000"
+        extensions:
+          - id: no_rev_avail
+          - id: target_information
+            critical: true
+            smart-value:
+              schema: ac-targets
+              params:
+                - {type: directory_name, value: validator}
+                - {type: directory_name, is-group: true, value: validator-group}
     services:
       ocsp:
         role-aa:

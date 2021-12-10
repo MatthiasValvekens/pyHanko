@@ -527,12 +527,12 @@ async def async_validate_ac(
     if 'target_information' in extensions_present:
         targ_desc = validation_context.acceptable_ac_targets
         if targ_desc is None:
-            raise InvalidCertificateError(
+            raise InvalidCertificateError(pretty_message(
                 '''
                 The attribute certificate is targeted, but no targeting
                 information is available in the validation context.
                 '''
-            )
+            ))
         _validate_ac_targeting(attr_cert, targ_desc)
 
     validity = attr_cert['ac_info']['att_cert_validity_period']

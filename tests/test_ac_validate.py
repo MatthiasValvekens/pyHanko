@@ -3,8 +3,8 @@ import unittest
 
 from asn1crypto import cms, x509
 
-from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator import validate
+from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
 from pyhanko_certvalidator.errors import PathValidationError
 from .test_validate import MockFetcherBackend, fixtures_dir
 
@@ -95,3 +95,117 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         msg = 'exceeds the maximum path length for an AA certificate'
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc)
+
+    def _load_targeted_ac(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-norev-targeted.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-unrestricted.crt')
+        )
+        aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'aa-unrestricted.crt')
+        )
+        return root, interm, aa, ac
+
+    async def test_basic_ac_validation_no_targeting(self):
+        root, interm, aa, ac = self._load_targeted_ac()
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, aa],
+            fetcher_backend=MockFetcherBackend(),
+        )
+
+        msg = 'no targeting information'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)
+
+    async def test_basic_ac_validation_bad_targeting_name(self):
+        root, interm, aa, ac = self._load_targeted_ac()
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, aa],
+            fetcher_backend=MockFetcherBackend(),
+            acceptable_ac_targets=ACTargetDescription(
+                validator_names=[x509.GeneralName(
+                    name='directory_name', value=x509.Name.build({
+                        'country_name': 'XX',
+                        'organization_name': 'Testing Attribute Authority',
+                        'organizational_unit_name': 'Validators',
+                        'common_name': 'Not Validator'
+                    })
+                )]
+            )
+        )
+
+        msg = 'AC targeting'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)
+
+    async def test_basic_ac_validation_bad_targeting_group(self):
+        root, interm, aa, ac = self._load_targeted_ac()
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, aa],
+            fetcher_backend=MockFetcherBackend(),
+            acceptable_ac_targets=ACTargetDescription(
+                group_memberships=[x509.GeneralName(
+                    name='directory_name', value=x509.Name.build({
+                        'country_name': 'XX',
+                        'organization_name': 'Testing Attribute Authority',
+                        'organizational_unit_name': 'Not Validators',
+                    })
+                )]
+            )
+        )
+
+        msg = 'AC targeting'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)
+
+    async def test_basic_ac_validation_good_targeting_name(self):
+        root, interm, aa, ac = self._load_targeted_ac()
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, aa],
+            fetcher_backend=MockFetcherBackend(),
+            acceptable_ac_targets=ACTargetDescription(
+                validator_names=[x509.GeneralName(
+                    name='directory_name', value=x509.Name.build({
+                        'country_name': 'XX',
+                        'organization_name': 'Testing Attribute Authority',
+                        'organizational_unit_name': 'Validators',
+                        'common_name': 'Validator'
+                    })
+                )]
+            )
+        )
+
+        result = await validate.async_validate_ac(ac, vc)
+        assert len(result.aa_path) == 3
+        assert 'role' in result.approved_attributes
+        assert 'group' in result.approved_attributes
+
+    async def test_basic_ac_validation_good_targeting_group(self):
+        root, interm, aa, ac = self._load_targeted_ac()
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, aa],
+            fetcher_backend=MockFetcherBackend(),
+            acceptable_ac_targets=ACTargetDescription(
+                group_memberships=[x509.GeneralName(
+                    name='directory_name', value=x509.Name.build({
+                        'country_name': 'XX',
+                        'organization_name': 'Testing Attribute Authority',
+                        'organizational_unit_name': 'Validators',
+                    })
+                )]
+            )
+        )
+
+        result = await validate.async_validate_ac(ac, vc)
+        assert len(result.aa_path) == 3
+        assert 'role' in result.approved_attributes
+        assert 'group' in result.approved_attributes
