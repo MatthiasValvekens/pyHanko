@@ -69,3 +69,29 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         msg = 'AA controls extension only present on part '
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc)
+
+    async def test_basic_ac_validation_aa_controls_path_too_long(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-norev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        # no AA controls on this one
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'inbetween', 'interm-pathlen-violation.crt'
+        ))
+        inbetween = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'inbetween-aa.crt'
+        ))
+        role_aa = load_cert(os.path.join(
+            basic_aa_dir, 'interm', 'role-aa.crt'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa, inbetween],
+            fetcher_backend=MockFetcherBackend(),
+        )
+
+        msg = 'exceeds the maximum path length for an AA certificate'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)

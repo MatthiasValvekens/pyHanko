@@ -7,6 +7,8 @@ keysets:
         path: root.key.pem
       interm:
         path: interm.key.pem
+      inbetween:
+        path: inbetween.key.pem
       aa:
         path: aa.key.pem
       people-ca:
@@ -25,6 +27,8 @@ pki-architectures:
     entities:
       root:
         common-name: Root AA CA
+      inbetween:
+        common-name: Inbetween Intermediate AA CA
       interm:
         common-name: Intermediate AA CA
       aa:
@@ -84,7 +88,6 @@ pki-architectures:
             critical: true
             value:
               ca: true
-              path-len-constraint: 0
           - id: key_usage
             critical: true
             smart-value:
@@ -94,6 +97,25 @@ pki-architectures:
             smart-value:
               schema: crl-dist-url
               params: {crl-repo-names: [root]}
+      inbetween-aa:
+        template: interm-unrestricted
+        subject: inbetween
+        extensions:
+          - id: aa_controls
+            critical: true
+            value:
+              path-len-constraint: 0
+              permitted-attrs: ['role']
+      interm-pathlen-violation:
+        template: interm-unrestricted
+        subject: interm
+        issuer: inbetween
+        issuer-cert: inbetween-aa
+        extensions:
+          - id: aa_controls
+            critical: true
+            value:
+              permitted-attrs: ['role']
       interm-role:
         template: interm-unrestricted
         subject: interm
