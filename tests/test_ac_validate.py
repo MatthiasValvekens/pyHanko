@@ -46,6 +46,26 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         assert 'role' in result.approved_attributes
         assert 'group' not in result.approved_attributes
 
+    async def test_basic_ac_validation_bad_signature(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+        )
+        msg = 'signature could not be verified'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)
+
     async def test_basic_ac_validation_bad_aa_controls(self):
         ac = load_attr_cert(
             os.path.join(basic_aa_dir, 'aa', 'alice-role-norev.attr.crt')
