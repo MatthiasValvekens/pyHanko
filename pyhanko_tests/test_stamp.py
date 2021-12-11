@@ -93,6 +93,7 @@ def _arabic_text_page(stream_xrefs):
     return w
 
 
+@with_layout_comparison
 def test_arabic_box():
     w = _arabic_text_page(stream_xrefs=False)
     compare_output(
@@ -100,6 +101,7 @@ def test_arabic_box():
     )
 
 
+@with_layout_comparison
 def test_fonts_with_obj_streams():
     # this should automatically put some stuff in object streams
     w = _arabic_text_page(stream_xrefs=True)
@@ -107,6 +109,7 @@ def test_fonts_with_obj_streams():
         writer=w, expected_output_path=f'{EXPECTED_OUTPUT_DIR}/arabic-box.pdf'
     )
     assert w.objs_in_streams
+
 
 @pytest.mark.parametrize('stream_xrefs', [True, False])
 @with_layout_comparison
