@@ -2,7 +2,7 @@ from typing import Union, Iterable
 
 import aiohttp
 import logging
-from asn1crypto import x509
+from asn1crypto import x509, cms
 
 from ...errors import CertificateFetchError
 from ..api import CertificateFetcher
@@ -55,7 +55,9 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
 
         return await self._post_fetch_task(url, task)
 
-    def fetch_cert_issuers(self, cert: x509.Certificate):
+    def fetch_cert_issuers(
+            self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')
             for url in gather_aia_issuer_urls(cert)

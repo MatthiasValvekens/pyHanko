@@ -5,7 +5,11 @@ and OCSP responses.
 import asyncio
 import logging
 import os
+
+from typing import Union
+
 from .. import errors
+from ..util import extract_ac_issuer_dir_name, get_ac_extension_value
 from asn1crypto import x509, pem, cms, ocsp, algos, core
 
 __all__ = [
@@ -17,7 +21,6 @@ __all__ = [
     'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
     'ACCEPTABLE_CERT_PEM_ALIASES'
 ]
-
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +67,29 @@ def unpack_cert_content(response_data: bytes, content_type: str,
                     yield cert_choice.chosen
 
 
-def format_ocsp_request(cert: x509.Certificate, issuer: x509.Certificate,
-                        *, certid_hash_algo: str, request_nonces: bool):
+def get_certid(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+               issuer: x509.Certificate, *, certid_hash_algo) -> ocsp.CertId:
+
+    if isinstance(cert, x509.Certificate):
+        iss_name = cert.issuer
+    else:
+        iss_name = extract_ac_issuer_dir_name(cert)
+
+    iss_name_hash = getattr(iss_name, certid_hash_algo)
     cert_id = ocsp.CertId({
         'hash_algorithm': algos.DigestAlgorithm(
             {'algorithm': certid_hash_algo}
         ),
-        'issuer_name_hash': getattr(cert.issuer, certid_hash_algo),
+        'issuer_name_hash': iss_name_hash,
         'issuer_key_hash': getattr(issuer.public_key, certid_hash_algo),
         'serial_number': cert.serial_number,
     })
+    return cert_id
+
+
+def format_ocsp_request(cert: x509.Certificate, issuer: x509.Certificate,
+                        *, certid_hash_algo: str, request_nonces: bool):
+    cert_id = get_certid(cert, issuer, certid_hash_algo=certid_hash_algo)
 
     request = ocsp.Request({
         'req_cert': cert_id,
@@ -226,8 +242,12 @@ async def ocsp_job_get_earliest(jobs):
     raise last_e or errors.OCSPFetchError("No OCSP results")
 
 
-def gather_aia_issuer_urls(cert: x509.Certificate):
-    aia_value = cert.authority_information_access_value
+def gather_aia_issuer_urls(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+    if isinstance(cert, x509.Certificate):
+        aia_value = cert.authority_information_access_value
+    else:
+        aia_value = get_ac_extension_value(cert, 'authority_information_access')
     if aia_value is None:
         return
     for entry in aia_value:

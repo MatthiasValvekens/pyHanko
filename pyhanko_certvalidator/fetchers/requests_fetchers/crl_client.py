@@ -1,14 +1,14 @@
-from typing import Iterable
+from typing import Iterable, Union
 
 import logging
 import requests
-from asn1crypto import crl, x509, pem
+from asn1crypto import crl, x509, pem, cms
 
 from ... import errors
 from .util import RequestsFetcherMixin
 from ..api import CRLFetcher
 from ..common_utils import crl_job_results_as_completed
-
+from ...util import issuer_serial, get_relevant_crl_dps
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +19,19 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
         super().__init__(*args, **kwargs)
         self._by_cert = {}
 
-    async def fetch(self, cert: x509.Certificate, *, use_deltas=True):
+    async def fetch(self,
+                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                    *, use_deltas=True):
+        iss_serial = issuer_serial(cert)
         try:
-            return self._by_cert[cert.issuer_serial]
+            return self._by_cert[iss_serial]
         except KeyError:
             pass
 
         results = []
         async for fetched_crl in self._fetch(cert, use_deltas=use_deltas):
             results.append(fetched_crl)
-        self._by_cert[cert.issuer_serial] = results
+        self._by_cert[iss_serial] = results
         return results
 
     async def _fetch_single(self, url):
@@ -50,13 +53,7 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
 
-        # FIXME: Same as corresponding aiohttp FIXME note
-        sources = cert.crl_distribution_points
-        if use_deltas:
-            sources.extend(cert.delta_crl_distribution_points)
-
-        if not sources:
-            return
+        sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
 
         def _fetch_jobs():
             for distribution_point in sources:
@@ -74,4 +71,4 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
         return {crl_ for crl_ in self.get_results()}
 
     def fetched_crls_for_cert(self, cert) -> Iterable[crl.CertificateList]:
-        return self._by_cert[cert.issuer_serial]
+        return self._by_cert[issuer_serial(cert)]

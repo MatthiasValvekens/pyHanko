@@ -2,12 +2,13 @@ from typing import Union, Iterable
 
 import logging
 import aiohttp
-from asn1crypto import crl, x509, pem
+from asn1crypto import crl, x509, pem, cms
 
 from ... import errors
 from .util import AIOHttpMixin, LazySession
 from ..api import CRLFetcher
 from ..common_utils import crl_job_results_as_completed
+from ...util import get_relevant_crl_dps, issuer_serial
 
 logger = logging.getLogger(__name__)
 
@@ -19,31 +20,24 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         super().__init__(session, user_agent, per_request_timeout)
         self._by_cert = {}
 
-    async def fetch(self, cert: x509.Certificate, *, use_deltas=True):
+    async def fetch(self,
+                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                    *, use_deltas=True):
+        iss_serial = issuer_serial(cert)
         try:
-            return self._by_cert[cert.issuer_serial]
+            return self._by_cert[iss_serial]
         except KeyError:
             pass
 
         results = []
         async for fetched_crl in self._fetch(cert, use_deltas=use_deltas):
             results.append(fetched_crl)
-        self._by_cert[cert.issuer_serial] = results
+        self._by_cert[iss_serial] = results
         return results
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
 
-        # FIXME: This utility property in asn1crypto is not precise enough.
-        #  More to the point, URLs attached to the same distribution point
-        #  are considered interchangeable, but URLs belonging to different
-        #  distribution points very much aren't---different distribution points
-        #  can differ in what reason codes they record, etc.
-        # For the time being, we'll assume that people who care about that sort
-        # of nuance will run in 'require' mode, in which case the validator
-        # should complain if the available CRLs don't cover all reason codes.
-        sources = cert.crl_distribution_points
-        if use_deltas:
-            sources.extend(cert.delta_crl_distribution_points)
+        sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
 
         if not sources:
             return
@@ -78,7 +72,7 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         return {crl_ for crl_ in self.get_results()}
 
     def fetched_crls_for_cert(self, cert) -> Iterable[crl.CertificateList]:
-        return self._by_cert[cert.issuer_serial]
+        return self._by_cert[issuer_serial(cert)]
 
 
 async def _grab_crl(url, *, user_agent, session: aiohttp.ClientSession,

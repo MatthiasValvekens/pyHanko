@@ -4,9 +4,9 @@ Asynchronous API for fetching OCSP responses, CRLs and certificates.
 
 import abc
 from dataclasses import dataclass
-from typing import AsyncGenerator, Iterable
+from typing import AsyncGenerator, Iterable, Union
 
-from asn1crypto import x509, ocsp, crl
+from asn1crypto import x509, ocsp, crl, cms
 from pyhanko_certvalidator.version import __version__
 
 __all__ = [
@@ -20,8 +20,9 @@ DEFAULT_USER_AGENT = 'pyhanko_certvalidator %s' % __version__
 class OCSPFetcher(abc.ABC):
     """Utility interface to fetch and cache OCSP responses."""
 
-    async def fetch(self, cert: x509.Certificate, issuer: x509.Certificate) \
-            -> ocsp.OCSPResponse:
+    async def fetch(self,
+                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                    issuer: x509.Certificate) -> ocsp.OCSPResponse:
         """
         Fetch an OCSP response for a certificate.
 
@@ -46,7 +47,9 @@ class OCSPFetcher(abc.ABC):
         """
         raise NotImplementedError
 
-    def fetched_responses_for_cert(self, cert: x509.Certificate) \
+    def fetched_responses_for_cert(
+            self,
+            cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
             -> Iterable[ocsp.OCSPResponse]:
         """
         Return all responses fetched by this OCSP fetcher that are relevant
@@ -58,8 +61,9 @@ class OCSPFetcher(abc.ABC):
 class CRLFetcher(abc.ABC):
     """Utility interface to fetch and cache CRLs."""
 
-    async def fetch(self, cert: x509.Certificate, *, use_deltas=None) \
-            -> Iterable[crl.CertificateList]:
+    async def fetch(self,
+                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                    *, use_deltas=None) -> Iterable[crl.CertificateList]:
         """
         Fetches the CRLs for a certificate.
 
@@ -88,7 +92,9 @@ class CRLFetcher(abc.ABC):
         """
         raise NotImplementedError
 
-    def fetched_crls_for_cert(self, cert: x509.Certificate) \
+    def fetched_crls_for_cert(
+            self,
+            cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
             -> Iterable[crl.CertificateList]:
         """
         Return all relevant fetched CRLs for the given certificate
@@ -105,14 +111,16 @@ class CRLFetcher(abc.ABC):
 class CertificateFetcher(abc.ABC):
     """Utility interface to fetch and cache certificates."""
 
-    def fetch_cert_issuers(self, cert: x509.Certificate) \
+    def fetch_cert_issuers(
+            self,
+            cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
             -> AsyncGenerator[x509.Certificate, None]:
         """
         Fetches certificates from the authority information access extension of
-        an asn1crypto.x509.Certificate
+        a certificate.
 
         :param cert:
-            An asn1crypto.x509.Certificate object
+            A certificate
 
         :raises:
             CertificateFetchError - when a network I/O or decoding error occurs

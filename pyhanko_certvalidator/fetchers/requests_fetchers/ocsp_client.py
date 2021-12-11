@@ -1,8 +1,8 @@
-from typing import Iterable
+from typing import Iterable, Union
 
 import logging
 import requests
-from asn1crypto import ocsp, x509
+from asn1crypto import ocsp, x509, cms
 
 from ... import errors
 from ..api import OCSPFetcher
@@ -10,6 +10,7 @@ from .util import RequestsFetcherMixin
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
+from ...util import issuer_serial
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,11 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         self.certid_hash_algo = certid_hash_algo
         self.request_nonces = request_nonces
 
-    async def fetch(self, cert: x509.Certificate, issuer: x509.Certificate):
-        tag = (cert.issuer_serial, issuer.issuer_serial)
+    async def fetch(self,
+                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                    issuer: x509.Certificate) -> ocsp.OCSPResponse:
+
+        tag = (issuer_serial(cert), issuer.issuer_serial)
         return await self._perform_fetch(tag, lambda: self._fetch(cert, issuer))
 
     async def _fetch_single(self, ocsp_url, ocsp_request):
@@ -48,7 +52,9 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
                 f"Failed to fetch OCSP response from {ocsp_url}",
             ) from e
 
-    async def _fetch(self, cert: x509.Certificate, issuer: x509.Certificate):
+    async def _fetch(self,
+                     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                     issuer: x509.Certificate):
         ocsp_request = format_ocsp_request(
             cert, issuer, certid_hash_algo=self.certid_hash_algo,
             request_nonces=self.request_nonces
@@ -69,9 +75,10 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
     def fetched_responses(self) -> Iterable[ocsp.OCSPResponse]:
         return self.get_results()
 
-    def fetched_responses_for_cert(self, cert: x509.Certificate) \
+    def fetched_responses_for_cert(
+            self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
             -> Iterable[ocsp.OCSPResponse]:
-        target_is = cert.issuer_serial
+        target_is = issuer_serial(cert)
         return {
             resp for (subj_is, _), resp in self._iter_results()
             if subj_is == target_is

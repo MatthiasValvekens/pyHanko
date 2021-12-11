@@ -6,7 +6,7 @@ import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Set, Dict, Union, List
+from typing import Iterable, Optional, Set, Dict, Union
 
 from asn1crypto import x509, crl, ocsp, algos, cms, core
 from asn1crypto.keys import PublicKeyInfo
@@ -48,6 +48,9 @@ from .path import ValidationPath, QualifiedPolicy
 
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
+from .util import extract_dir_name, extract_ac_issuer_dir_name, \
+    get_ac_extension_value, _get_ac_crl_dps, _get_ac_delta_crl_dps, \
+    get_relevant_crl_dps
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +280,7 @@ def validate_aa_usage(validation_context: ValidationContext,
 def _validate_ac_targeting(attr_cert: cms.AttributeCertificateV2,
                            acceptable_targets: ACTargetDescription):
 
-    target_info = _get_ac_extension_value(attr_cert, 'target_information')
+    target_info = get_ac_extension_value(attr_cert, 'target_information')
     if target_info is None:
         return
 
@@ -328,21 +331,6 @@ SUPPORTED_AC_EXTENSIONS = frozenset([
 ])
 
 
-def _extract_dir_name(names: x509.GeneralNames,
-                      err_msg_prefix: str) -> x509.Name:
-    try:
-        name: x509.Name = next(
-            gname.chosen for gname in names
-            if gname.name == 'directory_name'
-        )
-    except StopIteration:
-        raise NotImplementedError(
-            f"{err_msg_prefix}; only distinguished names are supported, "
-            f"and none were found."
-        )
-    return name.untag()
-
-
 def _parse_iss_serial(iss_serial: cms.IssuerSerial, err_msg_prefix: str) \
         -> bytes:
     """
@@ -350,7 +338,7 @@ def _parse_iss_serial(iss_serial: cms.IssuerSerial, err_msg_prefix: str) \
     x509.Certificate.issuer_serial output.
     """
     issuer_names = iss_serial['issuer']
-    issuer_dirname = _extract_dir_name(issuer_names, err_msg_prefix)
+    issuer_dirname = extract_dir_name(issuer_names, err_msg_prefix)
     result_bytes = b'%s:%d' % (
         issuer_dirname.sha256, iss_serial['serial'].native
     )
@@ -362,7 +350,7 @@ def _process_aki_ext(aki_ext: x509.AuthorityKeyIdentifier):
     aki = aki_ext['key_identifier'].native  # could be None
     auth_iss_ser = auth_iss_dirname = None
     if not isinstance(aki_ext['authority_cert_issuer'], core.Void):
-        auth_iss_dirname = _extract_dir_name(
+        auth_iss_dirname = extract_dir_name(
             aki_ext['authority_cert_issuer'],
             "Could not decode authority issuer in AKI extension"
         )
@@ -401,7 +389,7 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
             )
 
     # Process the AKI extension if there is one
-    aki_ext = _get_ac_extension_value(attr_cert, 'authority_key_identifier')
+    aki_ext = get_ac_extension_value(attr_cert, 'authority_key_identifier')
     if aki_ext is not None:
         aki, aa_issuer, aki_aa_iss_serial = _process_aki_ext(aki_ext)
         if aki_aa_iss_serial is not None:
@@ -418,9 +406,7 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
     candidates = ()
     aa_name = None
     if aa_names is not None:
-        aa_name = _extract_dir_name(
-            aa_names, "Could not identify AA by name"
-        )
+        aa_name = extract_dir_name(aa_names, "Could not identify AA by name")
     if aa_iss_serial is not None:
         exact_cert = registry.retrieve_by_issuer_serial(aa_iss_serial)
         if exact_cert is not None:
@@ -514,7 +500,7 @@ def check_ac_holder_match(holder_cert: x509.Certificate, holder: cms.Holder):
     entity_name = holder['entity_name']
     # TODO what about subjectAltName matches?
     if not isinstance(entity_name, core.Void):
-        holder_dn = _extract_dir_name(
+        holder_dn = extract_dir_name(
             entity_name,
             "Could not identify AC holder DN"
         )
@@ -1752,7 +1738,7 @@ async def _handle_single_ocsp_resp(
         cert_issuer_name_hash = getattr(cert.issuer, issuer_hash_algo)
         cert_serial_number = cert.serial_number
     else:
-        iss_name = _extract_ac_issuer_dir_name(cert)
+        iss_name = extract_ac_issuer_dir_name(cert)
         cert_issuer_name_hash = getattr(iss_name, issuer_hash_algo)
         cert_serial_number = cert['ac_info']['serial_number'].native
     cert_issuer_key_hash = getattr(issuer.public_key, issuer_hash_algo)
@@ -2393,49 +2379,6 @@ def _handle_attr_cert_crl_idp_ext_constraints(
     return True
 
 
-def _get_ac_extension_value(attr_cert: cms.AttributeCertificateV2,
-                            ext_name: str):
-    try:
-        return next(
-            ext['extn_value'].parsed
-            for ext in attr_cert['ac_info']['extensions']
-            if ext['extn_id'].native == ext_name
-        )
-    except StopIteration:
-        return None
-
-
-def _get_absolute_http_crls(dps: Optional[x509.CRLDistributionPoints]):
-    # see x509._get_http_crl_distribution_points
-
-    if dps is None:
-        return
-
-    for distribution_point in dps:
-        distribution_point_name = distribution_point['distribution_point']
-        if isinstance(distribution_point_name, core.Void):
-            continue
-        # RFC 5280 indicates conforming CA should not use the relative form
-        if distribution_point_name.name == 'name_relative_to_crl_issuer':
-            continue
-        # This library is currently only concerned with HTTP-based CRLs
-        for general_name in distribution_point_name.chosen:
-            if general_name.name == 'uniform_resource_identifier':
-                yield distribution_point
-
-
-def _get_ac_crl_dps(attr_cert: cms.AttributeCertificateV2) \
-        -> List[x509.DistributionPoint]:
-    dps_ext = _get_ac_extension_value(attr_cert, 'crl_distribution_points')
-    return list(_get_absolute_http_crls(dps_ext))
-
-
-def _get_ac_delta_crl_dps(attr_cert: cms.AttributeCertificateV2) \
-        -> List[x509.DistributionPoint]:
-    delta_dps_ext = _get_ac_extension_value(attr_cert, 'freshest_crl')
-    return list(_get_absolute_http_crls(delta_dps_ext))
-
-
 async def _handle_single_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer: x509.Certificate,
@@ -2511,7 +2454,7 @@ async def _handle_single_crl(
     if is_pkc:
         crl_dps = cert.crl_distribution_points_value
     else:
-        crl_dps = _get_ac_extension_value(cert, 'crl_distribution_points')
+        crl_dps = get_ac_extension_value(cert, 'crl_distribution_points')
     if crl_dps:
         crl_issuer_general_name = x509.GeneralName(
             name='directory_name',
@@ -2702,18 +2645,6 @@ async def _handle_single_crl(
     return interim_reasons
 
 
-def _extract_ac_issuer_dir_name(attr_cert: cms.AttributeCertificateV2) \
-        -> x509.Name:
-    issuer_rec = attr_cert['ac_info']['issuer']
-    if issuer_rec.name == 'v1_form':
-        aa_names = issuer_rec.chosen
-    else:
-        issuerv2: cms.V2Form = issuer_rec.chosen
-        if not isinstance(issuerv2['issuer_name'], core.Void):
-            aa_names = issuerv2['issuer_name']
-        else:
-            aa_names = x509.GeneralNames([])
-    return _extract_dir_name(aa_names, "Could not extract AC issuer name")
 
 
 async def verify_crl(
@@ -2804,15 +2735,7 @@ async def verify_crl(
     # an issuer name hashable
     distribution_point_map = {}
 
-    if is_pkc:
-        sources = list(cert.crl_distribution_points)
-    else:
-        sources = _get_ac_crl_dps(cert)
-    if use_deltas:
-        if is_pkc:
-            sources.extend(cert.delta_crl_distribution_points)
-        else:
-            sources.extend(_get_ac_delta_crl_dps(cert))
+    sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
     for distribution_point in sources:
         if isinstance(distribution_point['crl_issuer'], x509.GeneralNames):
             dp_name_hashes = []
@@ -2822,7 +2745,7 @@ async def verify_crl(
         elif is_pkc:
             dp_name_hashes = [cert.issuer.hashable]
         else:
-            iss_dir_name = _extract_ac_issuer_dir_name(cert)
+            iss_dir_name = extract_ac_issuer_dir_name(cert)
             dp_name_hashes = [iss_dir_name.hashable]
         for dp_name_hash in dp_name_hashes:
             if dp_name_hash not in distribution_point_map:
