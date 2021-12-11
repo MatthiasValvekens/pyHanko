@@ -691,7 +691,7 @@ class CIDFontType2(CIDFont):
     def __init__(self, tt: ttLib.TTFont, base_ps_name, subset_prefix):
         super().__init__(
             tt,
-            '/CIDFontType0',
+            '/CIDFontType2',
             registry="Adobe",
             # i.e. "no defined character set, just do whatever"
             # This makes sense because there's no native notion of character
@@ -709,10 +709,7 @@ class CIDFontType2(CIDFont):
         self.tt_font.save(stream_buf)
         stream_buf.seek(0)
 
-        font_stream = generic.StreamObject({
-            # this is a Type2 TTF font program
-            pdf_name('/Subtype'): pdf_name('/CIDFontType2'),
-        }, stream_data=stream_buf.read())
+        font_stream = generic.StreamObject(stream_data=stream_buf.read())
         font_stream.compress()
         font_stream_ref = writer.add_object(font_stream)
         self._font_descriptor[pdf_name('/FontFile2')] = font_stream_ref
