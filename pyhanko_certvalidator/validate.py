@@ -1644,41 +1644,6 @@ def _describe_cert(index, last_index, end_entity_name_override):
     return _describe
 
 
-def _self_signed(cert: x509.Certificate):
-    """
-    Determines if a certificate is self-signed
-
-    :param cert:
-        An asn1crypto.x509.Certificate object to check
-
-    :return:
-        A boolean - True if the certificate is self-signed, False otherwise
-    """
-
-    self_signed = cert.self_signed
-
-    if self_signed == 'yes':
-        return True
-    if self_signed == 'no':
-        return False
-
-    # In the case of "maybe", we have to check the signature
-    signature_algo = cert['signature_algorithm'].signature_algo
-    hash_algo = cert['signature_algorithm'].hash_algo
-
-    try:
-        _validate_sig(
-            signature=cert['signature_value'].native,
-            signed_data=cert['tbs_certificate'].dump(),
-            public_key_info=cert.public_key,
-            sig_algo=signature_algo, hash_algo=hash_algo,
-            parameters=cert['signature_algorithm']['parameters']
-        )
-        return True
-    except InvalidSignature:
-        return False
-
-
 OCSP_PROVENANCE_ERR = (
     "Unable to verify OCSP response since response signing "
     "certificate could not be validated"
