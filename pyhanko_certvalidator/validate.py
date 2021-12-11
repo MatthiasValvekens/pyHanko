@@ -2195,12 +2195,11 @@ def _find_matching_delta_crl(delta_lists, crl_issuer_name: x509.Name,
         return candidate_delta_cl
 
 
-def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
-                                    certificate_list: crl.CertificateList,
-                                    crl_issuer: x509.Certificate,
-                                    crl_idp: crl.IssuingDistributionPoint,
-                                    crl_issuer_name: x509.Name,
-                                    errs: _CRLErrs) -> bool:
+def _match_dps_idp_names(crl_idp: crl.IssuingDistributionPoint,
+                         crl_dps: Optional[x509.CRLDistributionPoints],
+                         crl_issuer: x509.Certificate,
+                         crl_issuer_name: x509.Name) -> bool:
+
     # Step b 2 i
     has_idp_name = False
     has_dp_name = False
@@ -2222,9 +2221,8 @@ def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
                 value=inner_extended_issuer_name
             ))
 
-    dps = cert.crl_distribution_points_value
-    if dps:
-        for dp in dps:
+    if crl_dps:
+        for dp in crl_dps:
             if idp_dp_match:
                 break
             dp_name = dp['distribution_point']
@@ -2263,7 +2261,21 @@ def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
         if general_name in idp_general_names:
             idp_dp_match = True
 
-    if has_idp_name and has_dp_name and not idp_dp_match:
+    return idp_dp_match or not has_idp_name or not has_dp_name
+
+
+def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
+                                    certificate_list: crl.CertificateList,
+                                    crl_issuer: x509.Certificate,
+                                    crl_idp: crl.IssuingDistributionPoint,
+                                    crl_issuer_name: x509.Name,
+                                    errs: _CRLErrs) -> bool:
+    match = _match_dps_idp_names(
+        crl_idp=crl_idp, crl_dps=cert.crl_distribution_points_value,
+        crl_issuer=crl_issuer,
+        crl_issuer_name=crl_issuer_name,
+    )
+    if not match:
         errs.failures.append((
             pretty_message(
                 '''
@@ -2311,6 +2323,52 @@ def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
     if crl_idp['only_contains_attribute_certs'].native:
         errs.failures.append((
             'CRL only contains attribute certificates',
+            certificate_list
+        ))
+        return False
+
+    return True
+
+
+def _handle_attr_cert_crl_idp_ext_constraints(
+        certificate_list: crl.CertificateList,
+        crl_dps: Optional[x509.CRLDistributionPoints],
+        crl_issuer: x509.Certificate,
+        crl_idp: crl.IssuingDistributionPoint,
+        crl_issuer_name: x509.Name,
+        errs: _CRLErrs) -> bool:
+
+    match = _match_dps_idp_names(
+        crl_idp=crl_idp, crl_dps=crl_dps,
+        crl_issuer=crl_issuer, crl_issuer_name=crl_issuer_name,
+    )
+    if not match:
+        errs.failures.append((
+            pretty_message(
+                '''
+                The CRL issuing distribution point extension does not
+                share any names with the attribute certificate's
+                CRL distribution point extension
+                '''
+            ),
+            certificate_list
+        ))
+        errs.issuer_failures += 1
+        return False
+
+    # Step b 2 ii
+    pkc_only = (
+       crl_idp['only_contains_user_certs'].native
+       or crl_idp['only_contains_ca_certs'].native
+    )
+    if pkc_only:
+        errs.failures.append((
+            pretty_message(
+                '''
+                CRL only contains public-key certificates, but
+                certificate is an attribute certificate
+                '''
+            ),
             certificate_list
         ))
         return False
