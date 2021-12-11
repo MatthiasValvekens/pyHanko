@@ -49,8 +49,7 @@ from .path import ValidationPath, QualifiedPolicy
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
 from .util import extract_dir_name, extract_ac_issuer_dir_name, \
-    get_ac_extension_value, _get_ac_crl_dps, _get_ac_delta_crl_dps, \
-    get_relevant_crl_dps
+    get_ac_extension_value, get_relevant_crl_dps
 
 logger = logging.getLogger(__name__)
 
