@@ -490,6 +490,22 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
 
 
 def check_ac_holder_match(holder_cert: x509.Certificate, holder: cms.Holder):
+    """
+    Match a candidate holder certificate against the holder entry of an
+    attribute certificate.
+
+    :param holder_cert:
+        Candidate holder certificate.
+    :param holder:
+        Holder value to match against.
+    :return:
+        Return the parts of the holder entry that mismatched as a set.
+        Possible values are `'base_certificate_id'`, `'entity_name'` and
+        `'object_digest_info'`.
+        If the returned set is empty, all entries in the holder entry
+        matched the information in the certificate.
+    """
+
     base_cert_id = holder['base_certificate_id']
     mismatches = set()
     # TODO what about subjectAltName matches?
@@ -524,10 +540,30 @@ def check_ac_holder_match(holder_cert: x509.Certificate, holder: cms.Holder):
 
 @dataclass(frozen=True)
 class ACValidationResult:
+    """
+    The result of a successful attribute certificate validation.
+    """
+
     attr_cert: cms.AttributeCertificateV2
+    """
+    The attribute certificate that was validated.
+    """
+
     aa_cert: x509.Certificate
+    """
+    The attribute authority that issued the certificate.
+    """
+
     aa_path: ValidationPath
+    """
+    The validation path of the attribute authority's certificate.
+    """
+
     approved_attributes: Dict[str, cms.AttCertAttribute]
+    """
+    Approved attributes in the attribute certificate, possibly filtered by
+    AA controls.
+    """
 
 
 async def async_validate_ac(
@@ -535,6 +571,30 @@ async def async_validate_ac(
         validation_context: ValidationContext,
         aa_pkix_params: PKIXValidationParams = PKIXValidationParams(),
         holder_cert: Optional[x509.Certificate] = None) -> ACValidationResult:
+    """
+    Validate an attribute certificate with respect to a given validation
+    context.
+
+    :param attr_cert:
+        The attribute certificate to validate.
+    :param validation_context:
+        The validation context to validate against.
+    :param aa_pkix_params:
+        PKIX validation parameters to supply to the path validation algorithm
+        applied to the attribute authority's certificate.
+    :param holder_cert:
+        Certificate of the presumed holder to match against the AC's holder
+        entry. If not provided, the holder check is left to the caller to
+        perform.
+
+        .. note::
+            This is a convenience option in case there's only one reasonable
+            candidate holder certificate (e.g. when the attribute certificates
+            are part of a CMS SignedData value with only a single signer).
+    :return:
+        An :class:`.ACValidationResult` detailing the validation result,
+        if successful.
+    """
 
     # Process extensions
     # We do this first because all later steps may involve potentially slow
