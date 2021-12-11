@@ -12,12 +12,12 @@ attr_cert_dir = os.path.join(fixtures_dir, 'attribute-certs')
 basic_aa_dir = os.path.join(attr_cert_dir, 'basic-aa')
 
 
-def load_cert(fname):
+def load_cert(fname) -> x509.Certificate:
     with open(fname, 'rb') as inf:
         return x509.Certificate.load(inf.read())
 
 
-def load_attr_cert(fname):
+def load_attr_cert(fname) -> cms.AttributeCertificateV2:
     with open(fname, 'rb') as inf:
         return cms.AttributeCertificateV2.load(inf.read())
 
@@ -221,3 +221,49 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         assert len(result.aa_path) == 3
         assert 'role' in result.approved_attributes
         assert 'group' in result.approved_attributes
+
+    async def test_match_holder_ac(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-norev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        alice = load_cert(
+            os.path.join(basic_aa_dir, 'people-ca', 'alice.crt')
+        )
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+        )
+
+        await validate.async_validate_ac(ac, vc, holder_cert=alice)
+
+    async def test_match_holder_ac_mismatch(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-norev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        bob = load_cert(os.path.join(basic_aa_dir, 'people-ca', 'bob.crt'))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+        )
+
+        msg = 'Could not match.*base_certificate_id'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc, holder_cert=bob)

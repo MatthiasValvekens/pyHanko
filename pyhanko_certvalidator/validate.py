@@ -332,11 +332,11 @@ SUPPORTED_AC_EXTENSIONS = frozenset([
 ])
 
 
-def _extract_issuer_dir_name(issuer_names: x509.GeneralNames,
-                             err_msg_prefix: str) -> x509.Name:
+def _extract_dir_name(names: x509.GeneralNames,
+                      err_msg_prefix: str) -> x509.Name:
     try:
-        issuer_dirname: x509.Name = next(
-            gname.chosen for gname in issuer_names
+        name: x509.Name = next(
+            gname.chosen for gname in names
             if gname.name == 'directory_name'
         )
     except StopIteration:
@@ -344,8 +344,7 @@ def _extract_issuer_dir_name(issuer_names: x509.GeneralNames,
             f"{err_msg_prefix}; only distinguished names are supported, "
             f"and none were found."
         )
-    issuer_dirname.untag()
-    return issuer_dirname
+    return name.untag()
 
 
 def _parse_iss_serial(iss_serial: cms.IssuerSerial, err_msg_prefix: str) \
@@ -355,7 +354,7 @@ def _parse_iss_serial(iss_serial: cms.IssuerSerial, err_msg_prefix: str) \
     x509.Certificate.issuer_serial output.
     """
     issuer_names = iss_serial['issuer']
-    issuer_dirname = _extract_issuer_dir_name(issuer_names, err_msg_prefix)
+    issuer_dirname = _extract_dir_name(issuer_names, err_msg_prefix)
     result_bytes = b'%s:%d' % (
         issuer_dirname.sha256, iss_serial['serial'].native
     )
@@ -367,7 +366,7 @@ def _process_aki_ext(aki_ext: x509.AuthorityKeyIdentifier):
     aki = aki_ext['key_identifier'].native  # could be None
     auth_iss_ser = auth_iss_dirname = None
     if not isinstance(aki_ext['authority_cert_issuer'], core.Void):
-        auth_iss_dirname = _extract_issuer_dir_name(
+        auth_iss_dirname = _extract_dir_name(
             aki_ext['authority_cert_issuer'],
             "Could not decode authority issuer in AKI extension"
         )
@@ -427,7 +426,7 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
     candidates = ()
     aa_name = None
     if aa_names is not None:
-        aa_name = _extract_issuer_dir_name(
+        aa_name = _extract_dir_name(
             aa_names, "Could not identify AA by name"
         )
     if aa_iss_serial is not None:
@@ -490,6 +489,39 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
         ))
 
 
+def check_ac_holder_match(holder_cert: x509.Certificate, holder: cms.Holder):
+    base_cert_id = holder['base_certificate_id']
+    mismatches = set()
+    # TODO what about subjectAltName matches?
+
+    if not isinstance(base_cert_id, core.Void):
+        # repurpose _parse_iss_serial since RFC 5755 restricts
+        # baseCertificateID.issuer to a single DN
+        designated_iss_serial = _parse_iss_serial(
+            base_cert_id, "Could not identify holder certificate issuer"
+        )
+        if designated_iss_serial != holder_cert.issuer_serial:
+            mismatches.add('base_certificate_id')
+
+    entity_name = holder['entity_name']
+    # TODO what about subjectAltName matches?
+    if not isinstance(entity_name, core.Void):
+        holder_dn = _extract_dir_name(
+            entity_name,
+            "Could not identify AC holder DN"
+        )
+        if holder_dn != holder_cert.subject:
+            mismatches.add('entity_name')
+
+    # TODO implement objectDigestInfo support
+    obj_digest_info = holder['object_digest_info']
+    if not isinstance(obj_digest_info, core.Void):
+        raise NotImplementedError(
+            "Object digest info is currently not supported"
+        )
+    return mismatches
+
+
 @dataclass(frozen=True)
 class ACValidationResult:
     attr_cert: cms.AttributeCertificateV2
@@ -546,9 +578,16 @@ async def async_validate_ac(
         describe_current_cert='the attribute certificate'
     )
 
+    ac_holder = attr_cert['ac_info']['holder']
+    if len(ac_holder) == 0:
+        raise InvalidCertificateError("AC holder entry is empty")
+
     if holder_cert is not None:
-        raise NotImplementedError(
-            "Holder verification has not been implemented yet"
+        mismatches = check_ac_holder_match(holder_cert, ac_holder)
+        if mismatches:
+            raise InvalidCertificateError(
+                f"Could not match AC holder entry against supplied holder "
+                f"certificate; mismatched entries: {', '.join(mismatches)}"
             )
 
     registry = validation_context.certificate_registry
