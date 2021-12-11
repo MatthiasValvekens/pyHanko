@@ -1,11 +1,13 @@
+import datetime
 import os
 import unittest
 
-from asn1crypto import cms, x509
+from asn1crypto import cms, x509, crl
 
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
-from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.errors import PathValidationError, RevokedError
+from pyhanko_certvalidator.path import ValidationPath
 from .test_validate import fixtures_dir
 
 attr_cert_dir = os.path.join(fixtures_dir, 'attribute-certs')
@@ -20,6 +22,10 @@ def load_cert(fname) -> x509.Certificate:
 def load_attr_cert(fname) -> cms.AttributeCertificateV2:
     with open(fname, 'rb') as inf:
         return cms.AttributeCertificateV2.load(inf.read())
+
+def load_crl(fname) -> crl.CertificateList:
+    with open(fname, 'rb') as inf:
+        return crl.CertificateList.load(inf.read())
 
 
 # noinspection PyMethodMayBeStatic
@@ -267,3 +273,70 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         msg = 'Could not match.*base_certificate_id'
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc, holder_cert=bob)
+
+
+# noinspection PyMethodMayBeStatic
+class ACCRLTests(unittest.IsolatedAsyncioTestCase):
+
+    async def test_ac_revoked(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        role_aa_crl = load_crl(os.path.join(
+            basic_aa_dir, 'role-aa-some-revoked.crl'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            crls=[role_aa_crl],
+            moment=datetime.datetime(
+                year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+        aa_path = ValidationPath()
+        aa_path.append(root)
+        aa_path.append(interm)
+        aa_path.append(role_aa)
+
+        with self.assertRaises(RevokedError):
+            await validate.verify_crl(ac, aa_path, vc)
+
+    async def test_ac_unrevoked(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        role_aa_crl = load_crl(os.path.join(
+            basic_aa_dir, 'role-aa-all-good.crl'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            crls=[role_aa_crl],
+            moment=datetime.datetime(
+                year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+        aa_path = ValidationPath()
+        aa_path.append(root)
+        aa_path.append(interm)
+        aa_path.append(role_aa)
+
+        await validate.verify_crl(ac, aa_path, vc)

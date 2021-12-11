@@ -260,10 +260,12 @@ pki-architectures:
         interm:
           for-issuer: interm
           signing-key: interm
+          issuer-cert: interm
           simulated-update-schedule: "P30D"
         role-aa:
           for-issuer: aa
           signing-key: aa
+          issuer-cert: role-aa
           simulated-update-schedule: "P30D"
           crl-type: ac-only
       cert-repo:

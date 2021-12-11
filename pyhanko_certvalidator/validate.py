@@ -2710,7 +2710,8 @@ async def verify_crl(
         object to check for in the CRLs
 
     :param path:
-        A pyhanko_certvalidator.path.ValidationPath object of the cert's validation path
+        A pyhanko_certvalidator.path.ValidationPath object of the cert's
+        validation path, or in the case of an AC, the AA's validation path.
 
     :param validation_context:
         A pyhanko_certvalidator.context.ValidationContext object to use for caching
@@ -2739,15 +2740,18 @@ async def verify_crl(
 
     certificate_lists = await validation_context.async_retrieve_crls(cert)
 
-    try:
-        cert_issuer = path.find_issuer(cert)
-    except LookupError:
-        raise CRLNoMatchesError(pretty_message(
-            '''
-            Could not determine issuer certificate for %s in path.
-            ''',
-            cert_description
-        ))
+    if is_pkc:
+        try:
+            cert_issuer = path.find_issuer(cert)
+        except LookupError:
+            raise CRLNoMatchesError(pretty_message(
+                '''
+                Could not determine issuer certificate for %s in path.
+                ''',
+                cert_description
+            ))
+    else:
+        cert_issuer = path.last
 
     errs = _CRLErrs()
 
