@@ -2,10 +2,11 @@
 
 import asyncio
 import datetime
+import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Set, Dict
+from typing import Iterable, Optional, Set, Dict, Union, List
 
 from asn1crypto import x509, crl, ocsp, algos, cms, core
 from asn1crypto.keys import PublicKeyInfo
@@ -276,13 +277,8 @@ def validate_aa_usage(validation_context: ValidationContext,
 def _validate_ac_targeting(attr_cert: cms.AttributeCertificateV2,
                            acceptable_targets: ACTargetDescription):
 
-    try:
-        target_info = next(
-            ext['extn_value'].parsed
-            for ext in attr_cert['ac_info']['extensions']
-            if ext['extn_id'].native == 'target_information'
-        )
-    except StopIteration:
+    target_info = _get_ac_extension_value(attr_cert, 'target_information')
+    if target_info is None:
         return
 
     target: asn1_types.Target
@@ -405,12 +401,8 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
             )
 
     # Process the AKI extension if there is one
-    try:
-        aki_ext = next(
-            ext['extn_value'].parsed
-            for ext in attr_cert['ac_info']['extensions']
-            if ext['extn_id'].native == 'authority_key_identifier'
-        )
+    aki_ext = _get_ac_extension_value(attr_cert, 'authority_key_identifier')
+    if aki_ext is not None:
         aki, aa_issuer, aki_aa_iss_serial = _process_aki_ext(aki_ext)
         if aki_aa_iss_serial is not None:
             if aa_iss_serial is not None and aa_iss_serial != aki_aa_iss_serial:
@@ -420,7 +412,7 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
                 )
             else:
                 aa_iss_serial = aki_aa_iss_serial
-    except StopIteration:
+    else:
         aki = None
 
     candidates = ()
@@ -2041,16 +2033,18 @@ async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
     return candidates
 
 
-async def _find_crl_issuer(crl_issuer_name: x509.Name,
-                           certificate_list: crl.CertificateList,
-                           *, cert: x509.Certificate,
-                           cert_issuer: x509.Certificate,
-                           cert_path: ValidationPath,
-                           validation_context: ValidationContext,
-                           is_indirect: bool,
-                           end_entity_name_override,
-                           cert_description):
+async def _find_crl_issuer(
+        crl_issuer_name: x509.Name,
+        certificate_list: crl.CertificateList,
+        *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert_issuer: x509.Certificate,
+        cert_path: ValidationPath,
+        validation_context: ValidationContext,
+        is_indirect: bool,
+        end_entity_name_override,
+        cert_description):
 
+    cert_sha256 = hashlib.sha256(cert.dump()).digest()
     candidates_skipped = 0
     signatures_failed = 0
     unauthorized_certs = 0
@@ -2071,7 +2065,7 @@ async def _find_crl_issuer(crl_issuer_name: x509.Name,
         # incorrect results.
         indirect_issuer = (
             candidate_crl_issuer.issuer == cert_issuer.subject
-            and candidate_crl_issuer.sha256 != cert.sha256
+            and candidate_crl_issuer.sha256 != cert_sha256
         )
 
         if not direct_issuer and not indirect_issuer and not is_indirect:
@@ -2376,21 +2370,67 @@ def _handle_attr_cert_crl_idp_ext_constraints(
     return True
 
 
-async def _handle_single_crl(cert: x509.Certificate,
-                             cert_issuer: x509.Certificate,
-                             certificate_list: crl.CertificateList,
-                             path: ValidationPath,
-                             validation_context: ValidationContext,
-                             delta_lists_by_issuer,
-                             use_deltas: bool, errs: _CRLErrs,
-                             cert_description=None,
-                             end_entity_name_override=None):
+def _get_ac_extension_value(attr_cert: cms.AttributeCertificateV2,
+                            ext_name: str):
+    try:
+        return next(
+            ext['extn_value'].parsed
+            for ext in attr_cert['ac_info']['extensions']
+            if ext['extn_id'].native == ext_name
+        )
+    except StopIteration:
+        return None
+
+
+def _get_absolute_http_crls(dps: Optional[x509.CRLDistributionPoints]):
+    # see x509._get_http_crl_distribution_points
+
+    if dps is None:
+        return
+
+    for distribution_point in dps:
+        distribution_point_name = distribution_point['distribution_point']
+        if isinstance(distribution_point_name, core.Void):
+            continue
+        # RFC 5280 indicates conforming CA should not use the relative form
+        if distribution_point_name.name == 'name_relative_to_crl_issuer':
+            continue
+        # This library is currently only concerned with HTTP-based CRLs
+        for general_name in distribution_point_name.chosen:
+            if general_name.name == 'uniform_resource_identifier':
+                yield distribution_point
+
+
+def _get_ac_crl_dps(attr_cert: cms.AttributeCertificateV2) \
+        -> List[x509.DistributionPoint]:
+    dps_ext = _get_ac_extension_value(attr_cert, 'crl_distribution_points')
+    return list(_get_absolute_http_crls(dps_ext))
+
+
+def _get_ac_delta_crl_dps(attr_cert: cms.AttributeCertificateV2) \
+        -> List[x509.DistributionPoint]:
+    delta_dps_ext = _get_ac_extension_value(attr_cert, 'freshest_crl')
+    return list(_get_absolute_http_crls(delta_dps_ext))
+
+
+async def _handle_single_crl(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert_issuer: x509.Certificate,
+        certificate_list: crl.CertificateList,
+        path: ValidationPath,
+        validation_context: ValidationContext,
+        delta_lists_by_issuer,
+        use_deltas: bool, errs: _CRLErrs,
+        cert_description=None,
+        end_entity_name_override=None):
 
     moment = validation_context.moment
     certificate_registry = validation_context.certificate_registry
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
     delta_certificate_list = None
+
+    is_pkc = isinstance(cert, x509.Certificate)
 
     is_indirect = False
 
@@ -2445,13 +2485,16 @@ async def _handle_single_crl(cert: x509.Certificate,
     has_dp_crl_issuer = False
     dp_match = False
 
-    dps = cert.crl_distribution_points_value
-    if dps:
+    if is_pkc:
+        crl_dps = cert.crl_distribution_points_value
+    else:
+        crl_dps = _get_ac_extension_value(cert, 'crl_distribution_points')
+    if crl_dps:
         crl_issuer_general_name = x509.GeneralName(
             name='directory_name',
             value=crl_issuer.subject
         )
-        for dp in dps:
+        for dp in crl_dps:
             if dp['crl_issuer']:
                 has_dp_crl_issuer = True
                 if crl_issuer_general_name in dp['crl_issuer']:
@@ -2488,11 +2531,18 @@ async def _handle_single_crl(cert: x509.Certificate,
     # Step b 2
 
     if crl_idp is not None:
-        crl_idp_match = _handle_crl_idp_ext_constraints(
-            cert=cert, certificate_list=certificate_list,
-            crl_issuer=crl_issuer, crl_idp=crl_idp,
-            crl_issuer_name=crl_issuer_name, errs=errs
-        )
+        if is_pkc:
+            crl_idp_match = _handle_crl_idp_ext_constraints(
+                cert=cert, certificate_list=certificate_list,
+                crl_issuer=crl_issuer, crl_idp=crl_idp,
+                crl_issuer_name=crl_issuer_name, errs=errs
+            )
+        else:
+            crl_idp_match = _handle_attr_cert_crl_idp_ext_constraints(
+                crl_dps=crl_dps, certificate_list=certificate_list,
+                crl_issuer=crl_issuer, crl_idp=crl_idp,
+                crl_issuer_name=crl_issuer_name, errs=errs
+            )
         # error reporting is taken care of in the delegated method
         if not crl_idp_match:
             return None
@@ -2629,10 +2679,26 @@ async def _handle_single_crl(cert: x509.Certificate,
     return interim_reasons
 
 
-async def verify_crl(cert: x509.Certificate, path: ValidationPath,
-                     validation_context: ValidationContext, use_deltas=True,
-                     cert_description: Optional[str] = None,
-                     end_entity_name_override: Optional[str] = None):
+def _extract_ac_issuer_dir_name(attr_cert: cms.AttributeCertificateV2) \
+        -> x509.Name:
+    issuer_rec = attr_cert['ac_info']['issuer']
+    if issuer_rec.name == 'v1_form':
+        aa_names = issuer_rec.chosen
+    else:
+        issuerv2: cms.V2Form = issuer_rec.chosen
+        if not isinstance(issuerv2['issuer_name'], core.Void):
+            aa_names = issuerv2['issuer_name']
+        else:
+            aa_names = x509.GeneralNames([])
+    return _extract_dir_name(aa_names, "Could not extract AC issuer name")
+
+
+async def verify_crl(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        path: ValidationPath,
+        validation_context: ValidationContext, use_deltas=True,
+        cert_description: Optional[str] = None,
+        end_entity_name_override: Optional[str] = None):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
     certificate has not been revoked. Uses the algorithm from
@@ -2640,7 +2706,8 @@ async def verify_crl(cert: x509.Certificate, path: ValidationPath,
     implementation differs to allow CRLs from unrecorded locations.
 
     :param cert:
-        An asn1cyrpto.x509.Certificate object to check for in the CRLs
+        An asn1crypto.x509.Certificate or asn1crypto.cms.AttributeCertificateV2
+        object to check for in the CRLs
 
     :param path:
         A pyhanko_certvalidator.path.ValidationPath object of the cert's validation path
@@ -2666,8 +2733,9 @@ async def verify_crl(cert: x509.Certificate, path: ValidationPath,
         pyhanko_certvalidator.errors.RevokedError - when the CRL indicates the certificate has been revoked
     """
 
+    is_pkc = isinstance(cert, x509.Certificate)
     if cert_description is None:
-        cert_description = 'the certificate'
+        cert_description = f'the {"" if is_pkc else "attribute "}certificate'
 
     certificate_lists = await validation_context.async_retrieve_crls(cert)
 
@@ -2708,22 +2776,31 @@ async def verify_crl(cert: x509.Certificate, path: ValidationPath,
     # Build a lookup table for the Distribution point objects associated with
     # an issuer name hashable
     distribution_point_map = {}
-    sources = [cert.crl_distribution_points]
+
+    if is_pkc:
+        sources = list(cert.crl_distribution_points)
+    else:
+        sources = _get_ac_crl_dps(cert)
     if use_deltas:
-        sources.extend(cert.delta_crl_distribution_points)
-    for dp_list in sources:
-        for distribution_point in dp_list:
-            if isinstance(distribution_point['crl_issuer'], x509.GeneralNames):
-                dp_name_hashes = []
-                for general_name in distribution_point['crl_issuer']:
-                    if general_name.name == 'directory_name':
-                        dp_name_hashes.append(general_name.chosen.hashable)
-            else:
-                dp_name_hashes = [cert.issuer.hashable]
-            for dp_name_hash in dp_name_hashes:
-                if dp_name_hash not in distribution_point_map:
-                    distribution_point_map[dp_name_hash] = []
-                distribution_point_map[dp_name_hash].append(distribution_point)
+        if is_pkc:
+            sources.extend(cert.delta_crl_distribution_points)
+        else:
+            sources.extend(_get_ac_delta_crl_dps(cert))
+    for distribution_point in sources:
+        if isinstance(distribution_point['crl_issuer'], x509.GeneralNames):
+            dp_name_hashes = []
+            for general_name in distribution_point['crl_issuer']:
+                if general_name.name == 'directory_name':
+                    dp_name_hashes.append(general_name.chosen.hashable)
+        elif is_pkc:
+            dp_name_hashes = [cert.issuer.hashable]
+        else:
+            iss_dir_name = _extract_ac_issuer_dir_name(cert)
+            dp_name_hashes = [iss_dir_name.hashable]
+        for dp_name_hash in dp_name_hashes:
+            if dp_name_hash not in distribution_point_map:
+                distribution_point_map[dp_name_hash] = []
+            distribution_point_map[dp_name_hash].append(distribution_point)
 
     checked_reasons = set()
 
@@ -2814,12 +2891,18 @@ KNOWN_CRL_ENTRY_EXTENSIONS = {
 }
 
 
-def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
+def _find_cert_in_list(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        issuer: x509.Certificate,
+        certificate_list: crl.CertificateList,
+        crl_issuer: x509.Certificate):
     """
     Looks for a cert in the list of revoked certificates
 
     :param cert:
-        An asn1crypto.x509.Certificate object of the cert being checked
+        An asn1crypto.x509.Certificate object of the cert being checked,
+        or an asn1crypto.cms.AttributeCertificateV2 object in the case
+        of an attribute certificate.
 
     :param issuer:
         An asn1crypto.x509.Certificate object of the cert issuer
@@ -2836,9 +2919,14 @@ def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
         representing the date/time the object was revoked and why
     """
 
-    revoked_certificates = certificate_list['tbs_cert_list']['revoked_certificates']
+    revoked_certificates \
+        = certificate_list['tbs_cert_list']['revoked_certificates']
 
-    cert_serial = cert.serial_number
+    if isinstance(cert, x509.Certificate):
+        cert_serial = cert.serial_number
+    else:
+        cert_serial = cert['ac_info']['serial_number'].native
+
     issuer_name = issuer.subject
 
     last_issuer_name = crl_issuer.subject
@@ -2847,7 +2935,8 @@ def _find_cert_in_list(cert, issuer, certificate_list, crl_issuer):
         if revoked_cert.critical_extensions - KNOWN_CRL_ENTRY_EXTENSIONS:
             raise NotImplementedError()
 
-        if revoked_cert.issuer_name and revoked_cert.issuer_name != last_issuer_name:
+        if revoked_cert.issuer_name and \
+                revoked_cert.issuer_name != last_issuer_name:
             last_issuer_name = revoked_cert.issuer_name
         if last_issuer_name != issuer_name:
             continue
