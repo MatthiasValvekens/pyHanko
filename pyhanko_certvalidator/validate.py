@@ -1714,14 +1714,15 @@ class _OCSPErrs:
     mismatch_failures: int = 0
 
 
-async def _handle_single_ocsp_resp(cert: x509.Certificate,
-                                   issuer: x509.Certificate,
-                                   path: ValidationPath,
-                                   ocsp_response: ocsp.OCSPResponse,
-                                   validation_context: ValidationContext,
-                                   moment: datetime.datetime,
-                                   errs: _OCSPErrs, cert_description=None,
-                                   end_entity_name_override=None) -> bool:
+async def _handle_single_ocsp_resp(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        issuer: x509.Certificate,
+        path: ValidationPath,
+        ocsp_response: ocsp.OCSPResponse,
+        validation_context: ValidationContext,
+        moment: datetime.datetime,
+        errs: _OCSPErrs, cert_description=None,
+        end_entity_name_override=None) -> bool:
 
     certificate_registry = validation_context.certificate_registry
     # Make sure that we get a valid response back from the OCSP responder
@@ -1745,16 +1746,24 @@ async def _handle_single_ocsp_resp(cert: x509.Certificate,
     response_cert_id = cert_response['cert_id']
 
     issuer_hash_algo = response_cert_id['hash_algorithm']['algorithm'].native
-    cert_issuer_name_hash = getattr(cert.issuer, issuer_hash_algo)
+
+    is_pkc = isinstance(cert, x509.Certificate)
+    if is_pkc:
+        cert_issuer_name_hash = getattr(cert.issuer, issuer_hash_algo)
+        cert_serial_number = cert.serial_number
+    else:
+        iss_name = _extract_ac_issuer_dir_name(cert)
+        cert_issuer_name_hash = getattr(iss_name, issuer_hash_algo)
+        cert_serial_number = cert['ac_info']['serial_number'].native
     cert_issuer_key_hash = getattr(issuer.public_key, issuer_hash_algo)
 
-    key_hash_mismatch = response_cert_id[
-                            'issuer_key_hash'].native != cert_issuer_key_hash
+    key_hash_mismatch = \
+        response_cert_id['issuer_key_hash'].native != cert_issuer_key_hash
 
-    name_mismatch = response_cert_id[
-                        'issuer_name_hash'].native != cert_issuer_name_hash
-    serial_mismatch = response_cert_id[
-                          'serial_number'].native != cert.serial_number
+    name_mismatch = \
+        response_cert_id['issuer_name_hash'].native != cert_issuer_name_hash
+    serial_mismatch = \
+        response_cert_id['serial_number'].native != cert_serial_number
 
     if (name_mismatch or serial_mismatch) and key_hash_mismatch:
         errs.mismatch_failures += 1
@@ -1840,8 +1849,12 @@ async def _handle_single_ocsp_resp(cert: x509.Certificate,
         responder_sig = bytes(responder_cert['signature_value'])
         authorized = issuer_sig == responder_sig
     # If OCSP is being delegated
-    # check whether the relevant OCSP-related extensions are present
-    elif not _ocsp_allowed(responder_cert):
+    # check whether the relevant OCSP-related extensions are present.
+    # Also, explicitly disallow delegation for attribute authorities
+    # since they cannot act as CAs and hence can't issue responder certificates.
+    # This would otherwise be detected during path validation or while checking
+    # the basicConstraints on the AA certificate, but this is more explicit.
+    elif not _ocsp_allowed(responder_cert) or not is_pkc:
         authorized = False
     else:
         try:
@@ -1917,24 +1930,29 @@ async def _handle_single_ocsp_resp(cert: x509.Certificate,
         ))
 
 
-async def verify_ocsp_response(cert: x509.Certificate, path: ValidationPath,
-                               validation_context: ValidationContext,
-                               cert_description: Optional[str] = None,
-                               end_entity_name_override: Optional[str] = None):
+async def verify_ocsp_response(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        path: ValidationPath,
+        validation_context: ValidationContext,
+        cert_description: Optional[str] = None,
+        end_entity_name_override: Optional[str] = None):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
     been revoked. Fulfills the requirements of
     https://tools.ietf.org/html/rfc6960#section-3.2.
 
     :param cert:
-        An asn1cyrpto.x509.Certificate object to verify the OCSP reponse for
+        An asn1cyrpto.x509.Certificate object or
+        an asn1crypto.cms.AttributeCertificateV2 object to verify the OCSP
+        response for
 
     :param path:
-        A pyhanko_certvalidator.path.ValidationPath object for the cert
+        A pyhanko_certvalidator.path.ValidationPath object of the cert's
+        validation path, or in the case of an AC, the AA's validation path.
 
     :param validation_context:
-        A pyhanko_certvalidator.context.ValidationContext object to use for caching
-        validation information
+        A pyhanko_certvalidator.context.ValidationContext object to use for
+        caching validation information
 
     :param cert_description:
         None or a unicode string containing a description of the certificate to
@@ -1955,23 +1973,28 @@ async def verify_ocsp_response(cert: x509.Certificate, path: ValidationPath,
 
     moment = validation_context.moment
 
-    try:
-        issuer = path.find_issuer(cert)
-    except LookupError:
-        raise OCSPNoMatchesError(pretty_message(
-            '''
-            Could not determine issuer certificate for %s in path.
-            ''',
-            cert_description
-        ))
+    if isinstance(cert, x509.Certificate):
+        try:
+            cert_issuer = path.find_issuer(cert)
+        except LookupError:
+            raise CRLNoMatchesError(pretty_message(
+                '''
+                Could not determine issuer certificate for %s in path.
+                ''',
+                cert_description
+            ))
+    else:
+        cert_issuer = path.last
 
     errs = _OCSPErrs()
-    ocsp_responses = await validation_context.async_retrieve_ocsps(cert, issuer)
+    ocsp_responses = await validation_context.async_retrieve_ocsps(
+        cert, cert_issuer
+    )
 
     for ocsp_response in ocsp_responses:
         try:
             ocsp_good = await _handle_single_ocsp_resp(
-                cert=cert, issuer=issuer, path=path,
+                cert=cert, issuer=cert_issuer, path=path,
                 ocsp_response=ocsp_response,
                 validation_context=validation_context, moment=moment,
                 errs=errs, cert_description=cert_description,

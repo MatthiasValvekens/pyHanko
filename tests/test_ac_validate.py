@@ -2,7 +2,7 @@ import datetime
 import os
 import unittest
 
-from asn1crypto import cms, x509, crl
+from asn1crypto import cms, x509, crl, ocsp
 
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
@@ -23,10 +23,15 @@ def load_attr_cert(fname) -> cms.AttributeCertificateV2:
     with open(fname, 'rb') as inf:
         return cms.AttributeCertificateV2.load(inf.read())
 
+
 def load_crl(fname) -> crl.CertificateList:
     with open(fname, 'rb') as inf:
         return crl.CertificateList.load(inf.read())
 
+
+def load_ocsp_response(fname) -> ocsp.OCSPResponse:
+    with open(fname, 'rb') as inf:
+        return ocsp.OCSPResponse.load(inf.read())
 
 # noinspection PyMethodMayBeStatic
 class ACValidateTests(unittest.IsolatedAsyncioTestCase):
@@ -340,3 +345,69 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
         aa_path.append(role_aa)
 
         await validate.verify_crl(ac, aa_path, vc)
+
+
+# noinspection PyMethodMayBeStatic
+class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ac_revoked(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        ocsp_resp = load_ocsp_response(os.path.join(
+            basic_aa_dir, 'alice-revoked.ors'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            ocsps=[ocsp_resp],
+            moment=datetime.datetime(
+                year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+        aa_path = ValidationPath()
+        aa_path.append(root)
+        aa_path.append(interm)
+        aa_path.append(role_aa)
+
+        with self.assertRaises(RevokedError):
+            await validate.verify_ocsp_response(ac, aa_path, vc)
+
+    async def test_ac_unrevoked(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        ocsp_resp = load_ocsp_response(os.path.join(
+            basic_aa_dir, 'alice-all-good.ors'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            ocsps=[ocsp_resp],
+            moment=datetime.datetime(
+                year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+        aa_path = ValidationPath()
+        aa_path.append(root)
+        aa_path.append(interm)
+        aa_path.append(role_aa)
+
+        await validate.verify_ocsp_response(ac, aa_path, vc)

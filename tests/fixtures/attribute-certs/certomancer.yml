@@ -249,6 +249,7 @@ pki-architectures:
       ocsp:
         role-aa:
           for-issuer: aa
+          issuer-cert: role-aa
           responder-cert: role-aa
           signing-key: aa
           is-aa-responder: true
