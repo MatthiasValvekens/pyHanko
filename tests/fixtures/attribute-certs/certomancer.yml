@@ -147,6 +147,13 @@ pki-architectures:
             smart-value:
               schema: crl-dist-url
               params: {crl-repo-names: [interm]}
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ca-issuer-links:
+                  - repo: interm
+                    include-repo-authority: true
           - id: aa_controls
             critical: true
             value:
@@ -279,4 +286,5 @@ pki-architectures:
           publish-issued-certs: yes
         interm:
           for-issuer: interm
+          issuer-cert: interm-role
           publish-issued-certs: no
