@@ -1,4 +1,4 @@
-external-url-prefix: "http://aa.example.com"
+external-url-prefix: "http://localhost:9000"
 keysets:
   testing-aa:
     path-prefix: keys
