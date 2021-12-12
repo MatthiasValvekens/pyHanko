@@ -143,6 +143,10 @@ pki-architectures:
             smart-value:
               schema: key-usage
               params: [digital_signature, crl_sign]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params: {crl-repo-names: [interm]}
           - id: aa_controls
             critical: true
             value:
@@ -261,7 +265,7 @@ pki-architectures:
         interm:
           for-issuer: interm
           signing-key: interm
-          issuer-cert: interm
+          issuer-cert: interm-role
           simulated-update-schedule: "P30D"
         role-aa:
           for-issuer: aa

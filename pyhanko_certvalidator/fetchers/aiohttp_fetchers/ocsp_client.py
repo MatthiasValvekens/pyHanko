@@ -56,9 +56,15 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         ocsp_urls = get_ocsp_urls(cert)
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
+
+        if isinstance(cert, x509.Certificate):
+            target = cert.subject.human_friendly
+        else:
+            # TODO log audit ID
+            target = "attribute certificate"
         logger.info(
-            f"Fetching OCSP status for {cert.subject.human_friendly} from "
-            f"url(s) {';'.join(ocsp_urls)}..."
+            f"Fetching OCSP status for {target} from url(s) "
+            f"{';'.join(ocsp_urls)}..."
         )
         session = await self.get_session()
         fetch_jobs = (

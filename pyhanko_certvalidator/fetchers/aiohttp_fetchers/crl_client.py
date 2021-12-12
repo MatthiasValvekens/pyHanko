@@ -42,7 +42,12 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         if not sources:
             return
 
-        logger.info(f"Retrieving CRLs for {cert.subject.human_friendly}...")
+        if isinstance(cert, x509.Certificate):
+            target = cert.subject.human_friendly
+        else:
+            # TODO log audit ID
+            target = "attribute certificate"
+        logger.info(f"Retrieving CRLs for {target}...")
 
         def _fetch_jobs():
             for distribution_point in sources:

@@ -72,8 +72,10 @@ def get_certid(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
 
     if isinstance(cert, x509.Certificate):
         iss_name = cert.issuer
+        serial_number = cert.serial_number
     else:
         iss_name = extract_ac_issuer_dir_name(cert)
+        serial_number = cert['ac_info']['serial_number'].native
 
     iss_name_hash = getattr(iss_name, certid_hash_algo)
     cert_id = ocsp.CertId({
@@ -82,7 +84,7 @@ def get_certid(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         ),
         'issuer_name_hash': iss_name_hash,
         'issuer_key_hash': getattr(issuer.public_key, certid_hash_algo),
-        'serial_number': cert.serial_number,
+        'serial_number': serial_number,
     })
     return cert_id
 

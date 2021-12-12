@@ -62,9 +62,13 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
             self.fetch_certs(url, url_origin_type='certificate')
             for url in gather_aia_issuer_urls(cert)
         ]
-        logger.info(
-            f"Retrieving issuer certs for {cert.subject.human_friendly}..."
-        )
+
+        if isinstance(cert, x509.Certificate):
+            target = cert.subject.human_friendly
+        else:
+            # TODO log audit ID
+            target = "attribute certificate"
+        logger.info(f"Retrieving issuer certs for {target}...")
         return complete_certificate_fetch_jobs(fetch_jobs)
 
     def fetch_crl_issuers(self, certificate_list):

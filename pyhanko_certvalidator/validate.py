@@ -646,8 +646,10 @@ async def async_validate_ac(
 
         for candidate_path in paths:
             try:
-                await async_validate_path(
-                    validation_context, candidate_path, aa_pkix_params
+                await _validate_path(
+                    validation_context, candidate_path,
+                    end_entity_name_override="AA certificate",
+                    parameters=aa_pkix_params
                 )
                 aa_path = candidate_path
                 break

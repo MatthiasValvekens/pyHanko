@@ -63,8 +63,14 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
 
+        if isinstance(cert, x509.Certificate):
+            target = cert.subject.human_friendly
+        else:
+            # TODO log audit ID
+            target = "attribute certificate"
         logger.info(
-            f"Fetching OCSP status for {cert.subject.human_friendly}..."
+            f"Fetching OCSP status for {target} from url(s) "
+            f"{';'.join(ocsp_urls)}..."
         )
         ocsp_response = await ocsp_job_get_earliest(
             self._fetch_single(ocsp_url, ocsp_request)
