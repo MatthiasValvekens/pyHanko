@@ -21,6 +21,7 @@ from pyhanko.pdf_utils import content, generic, layout
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import rd
 from pyhanko.pdf_utils.qr import PdfStreamQRImage
 from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle
@@ -575,7 +576,10 @@ class TextStamp(BaseStamp):
         _text_params = self.get_default_text_params()
         if self.text_params is not None:
             _text_params.update(self.text_params)
-        text = self.style.stamp_text % _text_params
+        try:
+            text = self.style.stamp_text % _text_params
+        except KeyError as e:
+            raise LayoutError(f"Stamp text parameter '{e.args[0]}' is missing")
         tb.content = text
 
         # Render the text box in its natural size, we'll deal with

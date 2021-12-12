@@ -9,6 +9,7 @@ from pyhanko.pdf_utils import generic, layout, writer
 from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
+from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.text import TextBoxStyle
 from pyhanko.stamp import (
     STAMP_ART_CONTENT,
@@ -46,6 +47,17 @@ def test_simple_text_stamp(tmp_path):
         MINIMAL_PATH, str(outfile),
         TextStampStyle(stamp_text="Hi, it's\n%(ts)s"), dest_page=0, x=70, y=50
     )
+
+
+def test_simple_text_stamp_missing_params(tmp_path):
+    outfile: Path = tmp_path / "test-out.pdf"
+    msg = "Stamp text parameter 'foo' is missing"
+    with pytest.raises(LayoutError, match=msg):
+        text_stamp_file(
+            MINIMAL_PATH, str(outfile),
+            TextStampStyle(stamp_text="%(foo)s missing"),
+            dest_page=0, x=70, y=50
+        )
 
 
 def test_simple_qr_stamp(tmp_path):
