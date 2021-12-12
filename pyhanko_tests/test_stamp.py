@@ -26,10 +26,17 @@ from .layout_test_utils import compare_output, with_layout_comparison
 from .samples import *
 
 FONT_DIR = 'pyhanko_tests/data/fonts'
+
+# Noto fonts are licensed under the OFL
 NOTO_SERIF_JP = f'{FONT_DIR}/NotoSerifJP-Regular.otf'
 NOTO_SANS_ARABIC = f'{FONT_DIR}/NotoSansArabic-Regular.ttf'
 NOTO_SANS = f'{FONT_DIR}/NotoSans-Regular.ttf'
 
+# This font is licensed under a modified version of the GPLv3.
+# See https://www.gnu.org/software/freefont/license.html
+# We're only using it here because it's a useful example of a string-keyed
+# CFF font.
+FREE_SERIF = f'{FONT_DIR}/FreeSerif.otf'
 EXPECTED_OUTPUT_DIR = 'pyhanko_tests/data/pdf/layout-tests'
 
 
@@ -292,3 +299,22 @@ def test_static_stamp_enforce_box_defined(box):
 
     with pytest.raises(layout.LayoutError, match="predetermined bounding box"):
         style.create_stamp(w, box=box, text_params={})
+
+
+@with_layout_comparison
+def test_simple_text_stamp_string_keyed_font():
+    gaf = GlyphAccumulatorFactory(FREE_SERIF, font_size=10)
+
+    w = empty_page()
+    style = TextStampStyle(
+        stamp_text=(
+            "Hi, this is a string-keyed font test.\n"
+            "This should have a ligature: difficult"
+        ),
+        text_box_style=TextBoxStyle(font=gaf),
+    )
+
+    ts = TextStamp(w, style, box=layout.BoxConstraints(200, 50))
+    ts.apply(dest_page=0, x=70, y=50)
+
+    compare_output(w, f'{EXPECTED_OUTPUT_DIR}/freeserif-test.pdf')

@@ -364,13 +364,13 @@ class GlyphAccumulator(FontEngine):
 
             # CFF font programs are embedded differently
             #  (in a more Adobe-native way)
-            self.is_cff_font = True
-            self.cidfont_obj = CIDFontType0(
+            self.cidfont_obj = cidfont_obj = CIDFontType0(
                 tt, base_ps_name, self.subset_prefix
             )
+            self.use_raw_gids = cidfont_obj.use_raw_gids
         except KeyError:
             self.cff_charset = None
-            self.is_cff_font = False
+            self.use_raw_gids = True
             self.cidfont_obj = CIDFontType2(
                 tt, base_ps_name, self.subset_prefix
             )
@@ -408,7 +408,7 @@ class GlyphAccumulator(FontEngine):
         except KeyError:
             pass
 
-        if self.is_cff_font:
+        if not self.use_raw_gids:
             cid_str = self.cff_charset[glyph_id]
             current_cid = int(cid_str[3:])
             glyph = self._glyph_set.get(cid_str)
@@ -553,8 +553,11 @@ class GlyphAccumulator(FontEngine):
         return stream
 
     def _extract_subset(self, options=None):
-        options = options or subset.Options(layout_closure=False)
-        if not self.is_cff_font:
+        if options is None:
+            options = subset.Options(layout_closure=False)
+            options.drop_tables += ['GPOS', 'GDEF', 'GSUB']
+
+        if self.use_raw_gids:
             # Have to retain GIDs in the Type2 (non-CFF) case, since we don't
             # have a predefined character set available (i.e. the ROS ordering
             # param is 'Identity')
@@ -563,9 +566,14 @@ class GlyphAccumulator(FontEngine):
             # the output.
             # This is fine, because fonts with a number of glyphs where this
             # would matter (i.e. large CJK fonts, basically), are subsetted as
-            # CFF fonts anyway (and based on a predetermined charset),
+            # CID-keyed CFF fonts anyway (and based on a predetermined charset),
             # so this subtlety doesn't apply and the space overhead is very
             # small.
+
+            # NOTE: we apply the same procedure to string-keyed CFF fonts,
+            # even though this is rather inefficient... XeTeX can subset these
+            # much more compactly, presumably by rewriting the CFF charset data.
+            # TODO look into how that works
             options.retain_gids = True
 
         subsetter: subset.Subsetter = subset.Subsetter(options=options)
@@ -658,10 +666,11 @@ class CIDFontType0(CIDFont):
         td = cff[0]
         try:
             registry, ordering, supplement = td.ROS
-        except (AttributeError, ValueError):  # pragma: nocover
-            # XXX If these attributes aren't present, chances are that the
-            # font won't work regardless.
-            logger.warning("No ROS metadata. Is this really a CIDFont?")
+            self.use_raw_gids = False
+        except (AttributeError, ValueError):
+            self.use_raw_gids = True
+            # String-keyed CFF font
+            logger.warning("No ROS metadata. Assuming identity.")
             registry = "Adobe"
             ordering = "Identity"
             supplement = 0
