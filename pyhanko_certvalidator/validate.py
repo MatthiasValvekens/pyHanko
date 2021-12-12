@@ -49,7 +49,7 @@ from .path import ValidationPath, QualifiedPolicy
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
 from .util import extract_dir_name, extract_ac_issuer_dir_name, \
-    get_ac_extension_value, get_relevant_crl_dps
+    get_ac_extension_value, get_relevant_crl_dps, get_declared_revinfo
 
 logger = logging.getLogger(__name__)
 
@@ -667,13 +667,12 @@ async def async_validate_ac(
     aa_cert = aa_path.last
     _check_ac_signature(attr_cert, aa_cert, validation_context)
 
-    # TODO check AC revocation status
-    revinfo_chk_policy = \
-        validation_context.revinfo_policy.revocation_checking_policy
-    if 'no_rev_avail' not in extensions_present \
-            and revinfo_chk_policy.essential:
-        raise NotImplementedError(
-            "Revocation checking for ACs has not been implemented yet"
+    if 'no_rev_avail' not in extensions_present:
+        await _check_revocation(
+            attr_cert, validation_context, aa_path,
+            end_entity_name_override="attribute certificate",
+            is_ee_cert=True,
+            describe_current_cert=_describe_cert(0, 0, "attribute certificate")
         )
 
     ok_attrs = {
@@ -1222,14 +1221,15 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
     crl_matched = False
     soft_fail = False
     failures = []
-    revinfo_declared = bool(cert.ocsp_urls or cert.crl_distribution_points)
+    cert_has_crl, cert_has_ocsp = get_declared_revinfo(cert)
+    revinfo_declared = cert_has_crl or cert_has_ocsp
     rev_check_policy = \
         validation_context.revinfo_policy.revocation_checking_policy
     rev_rule = rev_check_policy.ee_certificate_rule if is_ee_cert \
         else rev_check_policy.intermediate_ca_cert_rule
 
-    # for OCSP, we don't bother if there's nothing in the certificates AIA
-    if rev_rule.ocsp_relevant and bool(cert.ocsp_urls):
+    # for OCSP, we don't bother if there's nothing in the certificate's AIA
+    if rev_rule.ocsp_relevant and cert_has_ocsp:
         try:
             await verify_ocsp_response(
                 cert,
@@ -1278,7 +1278,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
         not status_good
         and rev_rule == RevocationCheckingRule.CRL_OR_OCSP_REQUIRED
     )
-    crl_fetchable = rev_rule.crl_relevant and bool(cert.crl_distribution_points)
+    crl_fetchable = rev_rule.crl_relevant and cert_has_crl
     if crl_required_by_policy or (crl_fetchable and not status_good):
         try:
             cert_description = describe_current_cert(definite=True)

@@ -11,7 +11,7 @@ from .util import AIOHttpMixin, LazySession
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
-from ...util import issuer_serial
+from ...util import issuer_serial, get_ocsp_urls
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         )
         # Try the OCSP responders in arbitrary order, and process the responses
         # as they come in
-        ocsp_urls = cert.ocsp_urls
+        ocsp_urls = get_ocsp_urls(cert)
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
         logger.info(

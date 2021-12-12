@@ -10,7 +10,7 @@ from .util import RequestsFetcherMixin
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
-from ...util import issuer_serial
+from ...util import issuer_serial, get_ocsp_urls
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
             cert, issuer, certid_hash_algo=self.certid_hash_algo,
             request_nonces=self.request_nonces
         )
-        ocsp_urls = cert.ocsp_urls
+        ocsp_urls = get_ocsp_urls(cert)
         if not ocsp_urls:
             raise errors.OCSPFetchError("No URLs to fetch OCSP responses from")
 

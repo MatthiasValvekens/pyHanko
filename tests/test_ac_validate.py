@@ -346,6 +346,60 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
 
         await validate.verify_crl(ac, aa_path, vc)
 
+    async def test_ac_revoked_full_path_validation(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        role_aa_crl = load_crl(os.path.join(
+            basic_aa_dir, 'role-aa-some-revoked.crl'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            crls=[role_aa_crl],
+            moment=datetime.datetime(
+                year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+
+        with self.assertRaises(RevokedError):
+            await validate.async_validate_ac(ac, vc)
+
+    async def test_ac_unrevoked_full_path_validation(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        role_aa_crl = load_crl(os.path.join(
+            basic_aa_dir, 'role-aa-all-good.crl'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            crls=[role_aa_crl],
+            moment=datetime.datetime(
+                year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+        await validate.async_validate_ac(ac, vc)
+
 
 # noinspection PyMethodMayBeStatic
 class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
@@ -411,3 +465,58 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         aa_path.append(role_aa)
 
         await validate.verify_ocsp_response(ac, aa_path, vc)
+
+    async def test_ac_revoked_full_path_validation(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        ocsp_resp = load_ocsp_response(os.path.join(
+            basic_aa_dir, 'alice-revoked.ors'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            ocsps=[ocsp_resp],
+            moment=datetime.datetime(
+                year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+
+        with self.assertRaises(RevokedError):
+            await validate.async_validate_ac(ac, vc)
+
+    async def test_ac_unrevoked_full_path_validation(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        ocsp_resp = load_ocsp_response(os.path.join(
+            basic_aa_dir, 'alice-all-good.ors'
+        ))
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            ocsps=[ocsp_resp],
+            moment=datetime.datetime(
+                year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
+            )
+        )
+
+        await validate.async_validate_ac(ac, vc)

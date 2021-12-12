@@ -111,3 +111,49 @@ def get_relevant_crl_dps(
             sources.extend(_get_ac_delta_crl_dps(cert))
 
     return sources
+
+
+def _get_http_ocsp_urls(aia_ext):
+    if aia_ext is None:
+        return
+
+    for entry in aia_ext:
+        # compare x509.Certificate.ocsp_urls
+        if entry['access_method'].native == 'ocsp':
+            location = entry['access_location']
+            if location.name != 'uniform_resource_identifier':
+                continue
+            url = location.native
+            if url.lower().startswith(('http://', 'https://', )):
+                yield url
+
+
+def get_ocsp_urls(cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+    if isinstance(cert, x509.Certificate):
+        aia = cert.authority_information_access_value
+    else:
+        aia = get_ac_extension_value(cert, 'authority_information_access')
+
+    return list(_get_http_ocsp_urls(aia))
+
+
+def get_declared_revinfo(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+
+    if isinstance(cert, x509.Certificate):
+        aia = cert.authority_information_access_value
+        crl_dps = cert.crl_distribution_points_value
+    else:
+        aia = get_ac_extension_value(cert, 'authority_information_access')
+        crl_dps = get_ac_extension_value(cert, 'crl_distribution_points')
+
+    has_crl = crl_dps is not None
+
+    # check if the AIA contains any OCSP entries (and here we include all
+    #  entries, including those that we can't query)
+    if aia is not None:
+        has_ocsp = any(entry['access_method'].native == 'ocsp' for entry in aia)
+    else:
+        has_ocsp = False
+
+    return has_crl, has_ocsp
