@@ -35,9 +35,12 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
                     issuer: x509.Certificate) -> ocsp.OCSPResponse:
 
         tag = (issuer_serial(cert), issuer.issuer_serial)
-        logger.info(
-            f"About to queue OCSP fetch for {cert.subject.human_friendly}..."
-        )
+        if isinstance(cert, x509.Certificate):
+            target = cert.subject.human_friendly
+        else:
+            # TODO log audit ID
+            target = "attribute certificate"
+        logger.info(f"About to queue OCSP fetch for {target}...")
 
         async def task():
             return await self._fetch(cert, issuer)
