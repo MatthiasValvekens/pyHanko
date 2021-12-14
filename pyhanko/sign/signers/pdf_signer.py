@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
@@ -408,6 +409,13 @@ class PdfSignatureMetadata:
         However, if the signature container includes unsigned attributes such
         as signature timestamps, the size of the signature is never entirely
         predictable.
+    """
+
+    ac_validation_context: Optional[ValidationContext] = None
+    """
+    .. versionadded:: 0.11.0
+
+    Validation context for attribute certificates
     """
 
 
@@ -1345,6 +1353,11 @@ class PreSignValidationStatus:
     List of CRLS collected so far.
     """
 
+    ac_validation_paths: Optional[List[ValidationPath]] = None
+    """
+    List of validation paths relevant for embedded attribute certificates.
+    """
+
 
 class PdfSigningSession:
     """
@@ -1445,6 +1458,18 @@ class PdfSigningSession:
         else:
             ts_paths = None
 
+        # fetch attribute certificate validation paths
+        if signature_meta.ac_validation_context is not None:
+            async_aa_paths = self._perform_presign_ac_validation(
+                signature_meta.ac_validation_context
+            )
+            aa_paths = []
+            async for aa_path in async_aa_paths:
+                validation_paths.append(aa_path)
+                aa_paths.append(aa_path)
+        else:
+            aa_paths = None
+
         # do we need adobe-style revocation info?
         if signature_meta.embed_validation_info and not self.use_pades:
             assert validation_context is not None  # checked earlier
@@ -1461,8 +1486,21 @@ class PdfSigningSession:
             ts_validation_paths=ts_paths,
             adobe_revinfo_attr=revinfo,
             ocsps_to_embed=validation_context.ocsps,
-            crls_to_embed=validation_context.crls
+            crls_to_embed=validation_context.crls,
+            ac_validation_paths=aa_paths
         )
+
+    async def _perform_presign_ac_validation(self, validation_context):
+        signer = self.pdf_signer.signer
+        ac_jobs = [
+            async_validate_ac(
+                ac, validation_context,
+                holder_cert=signer.signing_cert
+            ) for ac in signer.attribute_certs
+        ]
+        for ac_job in asyncio.as_completed(ac_jobs):
+            result: ACValidationResult = await ac_job
+            yield result.aa_path
 
     async def _perform_presign_signer_validation(self, validation_context,
                                                  key_usage):

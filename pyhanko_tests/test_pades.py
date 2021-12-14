@@ -5,7 +5,8 @@ from io import BytesIO
 import pytest
 import pytz
 from asn1crypto import tsp
-from certomancer.registry import CertLabel, KeyLabel
+from certomancer.integrations.illusionist import Illusionist
+from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.context import (
@@ -13,13 +14,16 @@ from pyhanko_certvalidator.context import (
     RevocationCheckingPolicy,
     RevocationCheckingRule,
 )
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
-from pyhanko.sign import PdfTimeStamper, fields, signers
+from pyhanko.sign import PdfTimeStamper, fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
 from pyhanko.sign.ades.cades_asn1 import SignaturePolicyIdentifier
 from pyhanko.sign.diff_analysis import ModificationLevel
@@ -46,6 +50,7 @@ from pyhanko.sign.validation import (
     validate_pdf_timestamp,
 )
 from pyhanko_tests.samples import (
+    CERTOMANCER,
     MINIMAL,
     MINIMAL_ONE_FIELD,
     MINIMAL_TWO_FIELDS,
@@ -1392,3 +1397,71 @@ async def test_pades_lta_no_embed_root(requests_mock):
         validation_type=RevocationInfoValidationType.PADES_LTA,
         validation_context_kwargs={'trust_roots': TRUST_ROOTS}
     )
+
+
+@freeze_time('2020-11-01')
+async def test_pades_live_ac_presign_validation(requests_mock):
+    # integration test for heavy-duty autofetching logic with ACs
+    # NOTE: certificate autofetching is not tested due to lack of availability
+    # in Illusionist (at the time of writing)
+
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    authorities = [
+        pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+        pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
+        pki_arch.get_cert('leaf-aa')
+    ]
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(authorities),
+        attribute_certs=[
+            pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+        ]
+    )
+    dummy_ts = timestamps.DummyTimeStamper(
+        tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
+        tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
+        certs_to_embed=SimpleCertificateStore.from_certs(
+            [pki_arch.get_cert('root')]
+        )
+    )
+
+    fetchers = RequestsFetcherBackend().get_fetchers()
+    vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
+        other_certs=authorities, fetchers=fetchers,
+        revocation_mode='require'
+    )
+    ac_vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
+        other_certs=authorities, fetchers=fetchers,
+        revocation_mode='require'
+    )
+    Illusionist(pki_arch).register(requests_mock)
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            validation_context=vc, ac_validation_context=ac_vc,
+            subfilter=PADES, embed_validation_info=True,
+            dss_settings=DSSContentSettings(
+                include_vri=False,
+                placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
+            )
+        ), signer=signer, timestamper=dummy_ts,
+        existing_fields_only=True
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert, 1 TSA cert,
+    # 1 OCSP responder cert -> 9 certs total
+    # 7 (4 CA + 1 AA + 1 AC + 1 signer) are in the CMS payload
+    certs = s.signed_data['certificates']
+    assert len([c for c in certs if c.name == 'certificate']) == 6
+    assert len([c for c in certs if c.name == 'v2_attr_cert']) == 1
+    dss = r.root['/DSS']
+    assert len(dss['/Certs']) == 8  # no ACs here, but OCSP and TSA are present
+    assert len(dss['/OCSPs']) == 2  # signer + AC (leaf-aa has OCSP)
+    assert len(dss['/CRLs']) == 3  # root, interm-aa, root-aa

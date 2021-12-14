@@ -259,6 +259,11 @@ class Signer:
     The (cryptographic) signature mechanism to use.
     """
 
+    attribute_certs: Iterable[cms.AttributeCertificateV2] = ()
+    """
+    Attribute certificates to include with the signature.
+    """
+
     def __init__(self, prefer_pss=False, embed_roots=True):
         self.prefer_pss = prefer_pss
         self.embed_roots = embed_roots
@@ -469,7 +474,10 @@ class Signer:
 
         # Note: we do not add the TS certs at this point
         if self.embed_roots:
-            certs = set(self.cert_registry)
+            certs = {
+                cms.CertificateChoices(name='certificate', value=cert)
+                for cert in self.cert_registry
+            }
         else:
             # asn1crypto's heuristic is good enough for now, we won't check the
             # actual signatures. CAs that make use of self-issued certificates
@@ -477,10 +485,17 @@ class Signer:
             # distinguish between different certs, which will be picked up by
             # asn1crypto either way.
             certs = {
-                cert for cert in self.cert_registry
-                if cert.self_signed == 'no'
+                cms.CertificateChoices(name='certificate', value=cert)
+                for cert in self.cert_registry if cert.self_signed == 'no'
             }
-        certs.add(self.signing_cert)
+        certs.add(
+            cms.CertificateChoices(name='certificate', value=self.signing_cert)
+        )
+
+        # add attribute certs
+        for ac in self.attribute_certs:
+            certs.add(cms.CertificateChoices(name='v2_attr_cert', value=ac))
+
         # this is the SignedData object for our message (see RFC 2315 § 9.1)
         signed_data = {
             'version': cms_version,
@@ -1096,11 +1111,13 @@ class SimpleSigner(Signer):
                  signing_key: keys.PrivateKeyInfo,
                  cert_registry: CertificateStore,
                  signature_mechanism: SignedDigestAlgorithm = None,
-                 prefer_pss=False, embed_roots=True):
+                 prefer_pss=False, embed_roots=True, attribute_certs=None):
         self.signing_cert = signing_cert
         self.signing_key = signing_key
         self.cert_registry = cert_registry
         self.signature_mechanism = signature_mechanism
+        if attribute_certs is not None:
+            self.attribute_certs = list(attribute_certs)
         super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
     async def async_sign_raw(self, data: bytes, digest_algorithm: str,

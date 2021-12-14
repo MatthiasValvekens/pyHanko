@@ -14,7 +14,7 @@ from asn1crypto.algos import (
     RSASSAPSSParams,
     SignedDigestAlgorithm,
 )
-from certomancer.registry import CertLabel, KeyLabel
+from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.registry import SimpleCertificateStore
@@ -42,6 +42,7 @@ from pyhanko.sign.validation import (
     collect_validation_info,
 )
 from pyhanko_tests.samples import (
+    CERTOMANCER,
     CRYPTO_DATA_DIR,
     MINIMAL,
     PDF_DATA_DIR,
@@ -953,3 +954,34 @@ async def test_no_certificates(delete):
         await collect_validation_info(
             embedded_sig=emb, validation_context=ValidationContext()
         )
+
+
+@freeze_time('2020-11-01')
+async def test_embed_ac():
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [
+                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa')
+            ]
+        ),
+        attribute_certs=[
+            pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+        ]
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=signer
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
+    certs = s.signed_data['certificates']
+    assert len([c for c in certs if c.name == 'certificate']) == 6
+    assert len([c for c in certs if c.name == 'v2_attr_cert']) == 1
+    await async_val_trusted(s)
