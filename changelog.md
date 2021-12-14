@@ -1,5 +1,15 @@
 # changelog
 
+## 0.19.0
+
+ - Attribute certificate validation support
+ - Support for `AAControls` extension
+ - Refactored OCSP and CRL logic to work with attribute certificate validation
+ - Many nominal type checks removed in favour of type annotations
+ - Many API entry points now accept both `asn1crypto.x509.Certificate` and `asn1crypto.cms.AttributeCertificateV2`
+ - Minor breaking change: `bytes` is no longer acceptable as a substitute for `asn1crypto.x509.Certificate` in the public API
+
+
 ## 0.18.1
 
  - Various improvements to error handling in certificate fetchers

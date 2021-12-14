@@ -50,6 +50,7 @@ revocation checks.
  - CRL and OCSP HTTP clients
  - Point-in-time validation
  - Name constraints
+ - Attribute certificate support
 
 ## Current Release
 
