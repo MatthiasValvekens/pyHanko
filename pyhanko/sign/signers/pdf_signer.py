@@ -253,13 +253,13 @@ class PdfSignatureMetadata:
     Specification for a PDF signature.
     """
 
-    field_name: str = None
+    field_name: Optional[str] = None
     """
     The name of the form field to contain the signature.
     If there is only one available signature field, the name may be inferred.
     """
 
-    md_algorithm: str = None
+    md_algorithm: Optional[str] = None
     """
     The name of the digest algorithm to use.
     It should be supported by `pyca/cryptography`.
@@ -268,17 +268,17 @@ class PdfSignatureMetadata:
     a suitable default, unless a seed value dictionary happens to be available.
     """
 
-    location: str = None
+    location: Optional[str] = None
     """
     Location of signing.
     """
 
-    reason: str = None
+    reason: Optional[str] = None
     """
     Reason for signing (textual).
     """
 
-    name: str = None
+    name: Optional[str] = None
     """
     Name of the signer. This value is usually not necessary to set, since
     it should appear on the signer's certificate, but there are cases
@@ -294,7 +294,7 @@ class PdfSignatureMetadata:
     """
     # TODO Does this restriction also apply to prior document timestamps?
 
-    subfilter: SigSeedSubFilter = None
+    subfilter: Optional[SigSeedSubFilter] = None
     """
     Signature subfilter to use.
 
@@ -342,13 +342,13 @@ class PdfSignatureMetadata:
     See also :meth:`.PdfTimeStamper.update_archival_timestamp_chain`.
     """
 
-    timestamp_field_name: str = None
+    timestamp_field_name: Optional[str] = None
     """
     Name of the timestamp field created when :attr:`use_pades_lta` is ``True``.
     If not specified, a unique name will be generated using :mod:`uuid`.
     """
 
-    validation_context: ValidationContext = None
+    validation_context: Optional[ValidationContext] = None
     """
     The validation context to use when validating signatures.
     If provided, the signer's certificate and any timestamp certificates
