@@ -1362,6 +1362,7 @@ def test_empty_user_pass():
     assert r.root_ref == old_root_ref
     assert len(r.root['/AcroForm']['/Fields']) == 1
     assert len(r.root['/Pages']['/Kids']) == 1
+    assert r.trailer['/Info']['/Producer'].startswith('pyHanko')
 
 
 def test_load_pkcs12():
@@ -2225,3 +2226,51 @@ def test_no_refs_in_obj_stm():
             generic.IndirectObject(2, 0, w),
             obj_stream=obj_stm
         )
+
+
+def test_producer_override():
+    # file produced with cairo
+    inf = BytesIO(VECTOR_IMAGE_PDF)
+    w = writer.copy_into_new_writer(PdfFileReader(inf))
+    outf = BytesIO()
+    w.write(outf)
+    r = PdfFileReader(outf)
+    proc = r.trailer['/Info']['/Producer']
+    assert proc.startswith('cairo')
+    assert 'pyHanko' in proc
+
+    w = writer.copy_into_new_writer(r)
+    outf2 = BytesIO()
+    w.write(outf2)
+    r = PdfFileReader(outf)
+    proc2 = r.trailer['/Info']['/Producer']
+
+    # now it shouldn't have changed
+    assert proc == proc2
+
+
+def test_fresh_producer():
+    inf = BytesIO(MINIMAL)
+    w = writer.copy_into_new_writer(PdfFileReader(inf))
+    outf = BytesIO()
+    w.write(outf)
+    r = PdfFileReader(outf)
+    proc = r.trailer['/Info']['/Producer']
+    assert proc.startswith('pyHanko')
+
+
+def test_fresh_producer_existing_info():
+    inf = BytesIO(MINIMAL)
+    w = writer.copy_into_new_writer(PdfFileReader(inf))
+    w.set_info(generic.DictionaryObject({'/Title': generic.pdf_string('test')}))
+    outf = BytesIO()
+    w.write(outf)
+    r = PdfFileReader(outf)
+    assert '/Producer' not in r.trailer['/Info']
+
+    w = writer.copy_into_new_writer(r)
+    outf2 = BytesIO()
+    w.write(outf2)
+    r = PdfFileReader(outf2)
+    proc = r.trailer['/Info']['/Producer']
+    assert proc.startswith('pyHanko')

@@ -1286,7 +1286,7 @@ class PageObject(generic.DictionaryObject):
 class PdfFileWriter(BasePdfFileWriter):
     """Class to write new PDF files."""
 
-    def __init__(self, stream_xrefs=True, init_page_tree=True):
+    def __init__(self, stream_xrefs=True, init_page_tree=True, info=None):
         # root object
         root = generic.DictionaryObject({
             pdf_name("/Type"): pdf_name("/Catalog"),
@@ -1297,9 +1297,10 @@ class PdfFileWriter(BasePdfFileWriter):
         id_obj = generic.ArrayObject([id1, id2])
 
         # info object
-        info = generic.DictionaryObject({
-            pdf_name('/Producer'): pdf_string(VENDOR)
-        })
+        if info is None:
+            info = generic.DictionaryObject({
+                pdf_name('/Producer'): pdf_string(VENDOR)
+            })
 
         self._custom_trailer_entries = {}
         super().__init__(root, info, id_obj, stream_xrefs=stream_xrefs)
@@ -1405,6 +1406,21 @@ class PdfFileWriter(BasePdfFileWriter):
         super()._populate_trailer(trailer)
 
 
+# skip Trapped because we don't care, and because it's not a string
+PERMISSIBLE_INFO_KEYS = {
+    '/Title', '/Author', '/Subject', '/Keywords', '/Creator', '/Producer',
+    '/CreationDate', '/ModDate'
+}
+
+
+def _clone_info_dict(input_info_dict):
+    return generic.DictionaryObject({
+        k: pdf_string(str(v.get_object()))
+        for k, v in input_info_dict.items()
+        if k in PERMISSIBLE_INFO_KEYS
+    })
+
+
 def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
     """
     Copy all objects in a given PDF handler into a new :class:`.PdfFileWriter`.
@@ -1425,8 +1441,26 @@ def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
         New :class:`.PdfFileWriter` containing all objects from the input
         handler.
     """
+    try:
+        info_ref = input_handler.trailer_view.raw_get('/Info')
+    except KeyError:
+        info_ref = None
+
+    if info_ref is not None:
+        info = _clone_info_dict(info_ref.get_object())
+        try:
+            producer_string = info['/Producer']
+            if VENDOR not in producer_string:
+                producer_string = pdf_string(f"{producer_string}; {VENDOR}")
+        except KeyError:
+            producer_string = pdf_string(VENDOR)
+        # always override this
+        info['/Producer'] = producer_string
+    else:
+        info = None
+
     # TODO try to be more clever with object streams
-    w = PdfFileWriter(init_page_tree=False, stream_xrefs=False)
+    w = PdfFileWriter(init_page_tree=False, stream_xrefs=False, info=info)
     input_root_ref = input_handler.root_ref
     output_root_ref = w.root_ref
     # call _import_object in such a way that we translate the input handler's
