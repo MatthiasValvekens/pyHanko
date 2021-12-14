@@ -23,7 +23,7 @@ jobs:
           pip install certomancer[web-api,pkcs12]==0.7.0 'pytest>=6.1.1' 'aiohttp>=3.7.4' \
               'pytest-aiohttp~=0.3.0' dist/*.whl \
                requests-mock~=1.8.0 freezegun~=1.1.0 python-pae==0.1.0 \
-               pyhanko-certvalidator~=0.18.0
+               pyhanko-certvalidator~=0.19.0
       - name: Start Certomancer Animator daemon
         run: |
           python -m certomancer --service-url-prefix http://localhost:9000 \
