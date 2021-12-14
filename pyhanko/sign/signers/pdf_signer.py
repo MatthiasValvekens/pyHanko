@@ -1436,11 +1436,14 @@ class PdfSigningSession:
         timestamper = self.timestamper
         # Finally, fetch validation information for the TSA that we're going to
         # use for our own TS
-        ts_paths = None
         if timestamper is not None:
-            ts_paths = timestamper.validation_paths(validation_context)
-            async for ts_path in ts_paths:
+            async_ts_paths = timestamper.validation_paths(validation_context)
+            ts_paths = []
+            async for ts_path in async_ts_paths:
                 validation_paths.append(ts_path)
+                ts_paths.append(ts_path)
+        else:
+            ts_paths = None
 
         # do we need adobe-style revocation info?
         if signature_meta.embed_validation_info and not self.use_pades:
