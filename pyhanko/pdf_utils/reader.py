@@ -435,7 +435,11 @@ class XRefCache:
         self._next_section()
 
 
-def read_object_header(stream, strict):
+class ObjectHeaderReadError(misc.PdfReadError):
+    pass
+
+
+def _read_object_header(stream, strict):
     # Should never be necessary to read out whitespace, since the
     # cross-reference table should put us in the right spot to read the
     # object header.  In reality... some files have stupid cross reference
@@ -459,6 +463,16 @@ def read_object_header(stream, strict):
             f"{idnum} {generation}"
         )
     return idnum, generation
+
+
+def read_object_header(stream, strict):
+    pos = stream.tell()
+    try:
+        return _read_object_header(stream, strict)
+    except ValueError as e:
+        raise ObjectHeaderReadError(
+            f"Failed to read object header at {pos}"
+        ) from e
 
 
 def process_data_at_eof(stream) -> int:
@@ -971,7 +985,11 @@ class PdfFileReader(PdfHandler):
                 stream.seek(-1, os.SEEK_CUR)
                 try:
                     startxref = self._read_xref_stream()
-                except ValueError:
+                except ObjectHeaderReadError as e:
+                    logger.debug(
+                        "Failed to read xref stream header, attempting to "
+                        "correct...", exc_info=e
+                    )
                     # can be caused by an OBO error (pointing too far)
                     startxref = _attempt_startxref_correction(stream, startxref)
                     err_count += 1
