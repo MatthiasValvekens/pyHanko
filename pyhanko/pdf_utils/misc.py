@@ -102,12 +102,16 @@ def skip_over_whitespace(stream):
     """
     Similar to readNonWhitespace, but returns a Boolean if more than
     one whitespace character was read.
+
+    Will return the cursor to before the first non-whitespace character
+    encountered.
     """
     tok = PDF_WHITESPACE[0]
     cnt = 0
     while tok in PDF_WHITESPACE:
         tok = stream.read(1)
         cnt += 1
+    stream.seek(-1, os.SEEK_CUR)
     return cnt > 1
 
 

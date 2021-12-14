@@ -160,11 +160,11 @@ def test_read_rewrite():
     # this file has an xref table starting at 1
     # and several badly aligned xref rows
     'minimal-badxref.pdf',
-    # startxref table offset is off by one
+    # startxref table offset is off by one (but it's whitespace)
     'minimal-startxref-obo1.pdf',
     # startxref table offset is off by one (in the other direction)
     'minimal-startxref-obo2.pdf',
-    # startxref stream offset is off by one
+    # startxref stream offset is off by one (but it's whitespace)
     'minimal-startxref-obo3.pdf',
     # startxref stream offset is off by one (in the other direction)
     'minimal-startxref-obo4.pdf',
@@ -190,12 +190,12 @@ def test_hopelessly_malformed_xref_read():
 
 
 @pytest.mark.parametrize('fname', [
-    # startxref table offset is off by one
-    'minimal-startxref-obo1.pdf',
+    # startxref table offset is off by one (but it's whitespace)
+    # 'minimal-startxref-obo1.pdf',
     # startxref table offset is off by one (in the other direction)
     'minimal-startxref-obo2.pdf',
-    # startxref stream offset is off by one
-    'minimal-startxref-obo3.pdf',
+    # startxref stream offset is off by one (but it's whitespace)
+    # 'minimal-startxref-obo3.pdf',
     # startxref stream offset is off by one (in the other direction)
     'minimal-startxref-obo4.pdf',
     # startxref stream offset is off by two (lands on a digit)

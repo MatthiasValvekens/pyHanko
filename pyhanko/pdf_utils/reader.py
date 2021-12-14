@@ -447,11 +447,9 @@ def _read_object_header(stream, strict):
     extra = False
     misc.skip_over_comment(stream)
     extra |= misc.skip_over_whitespace(stream)
-    stream.seek(-1, os.SEEK_CUR)
     idnum_bytes = misc.read_until_whitespace(stream)
     idnum = int(idnum_bytes)
     extra |= misc.skip_over_whitespace(stream)
-    stream.seek(-1, os.SEEK_CUR)
     generation_bytes = misc.read_until_whitespace(stream)
     generation = int(generation_bytes)
     stream.read(3)
@@ -973,6 +971,14 @@ class PdfFileReader(PdfHandler):
                 xref_location_log.append(startxref)
             # load the xref table
             stream.seek(startxref)
+            if misc.skip_over_whitespace(stream):
+                # This is common in linearised files, so we're not marking
+                # this as an error, even in strict mode.
+                logger.debug(
+                    "Encountered unexpected whitespace when looking "
+                    "for xref stream"
+                )
+                startxref = stream.tell()
             x = stream.read(1)
             if x == b"x":
                 # standard cross-reference table
