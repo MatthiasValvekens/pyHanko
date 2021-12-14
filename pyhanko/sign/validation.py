@@ -206,7 +206,10 @@ def _compute_tst_digest(signer_info: cms.SignerInfo) -> Optional[bytes]:
 
 
 def _extract_signer_info_and_certs(signed_data: cms.SignedData):
-    certs = [c.parse() for c in signed_data['certificates']]
+    certs = [
+        c.chosen for c in signed_data['certificates']
+        if c.name == 'certificate'
+    ]
 
     signer_info = _extract_signer_info(signed_data)
     cert, other_certs = partition_certs(certs, signer_info)
