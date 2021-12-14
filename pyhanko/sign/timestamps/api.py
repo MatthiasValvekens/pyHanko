@@ -6,6 +6,7 @@ The tools in this module allow pyHanko to obtain such tokens from
 :rfc:`3161`-compliant time stamping
 authorities.
 """
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -123,15 +124,19 @@ class TimeStamper:
             An asynchronous generator of validation paths.
         """
         await self._ensure_dummy()
-        for cert in self._certs.values():
+
+        def _validation_job(cert):
             validator = CertificateValidator(
                 cert,
                 intermediate_certs=self.cert_registry,
                 validation_context=validation_context
             )
-            yield await validator.async_validate_usage(
-                set(), {"time_stamping"}
-            )
+            return validator.async_validate_usage(set(), {"time_stamping"})
+
+        jobs = map(_validation_job, self._certs.values())
+
+        for job in asyncio.as_completed(jobs):
+            yield await job
 
     def _register_dummy(self, md_algorithm, dummy):
         self._dummy_response_cache[md_algorithm] = dummy
