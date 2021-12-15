@@ -64,10 +64,11 @@ from .general import (
     SignatureStatus,
     SignatureValidationError,
     UnacceptableSignerError,
+    extract_certificate_info,
     extract_message_digest,
+    extract_signer_info,
     find_unique_cms_attribute,
     get_pyca_cryptography_hash,
-    match_issuer_serial,
     validate_sig_integrity,
 )
 from .timestamps import TimestampSignatureStatus
@@ -115,53 +116,7 @@ class SigSeedValueValidationError(SignatureValidationError):
         super().__init__(failure_message)
 
 
-def _get_signer_predicate(sid: cms.SignerIdentifier):
-    if sid.name == 'issuer_and_serial_number':
-        return lambda c: match_issuer_serial(sid.chosen, c)
-    elif sid.name == 'subject_key_identifier':
-        # subject key identifier (not all certs have this, but that shouldn't
-        # be an issue in this case)
-        ski = sid.chosen.native
-        logger.warning(
-            "The signature in this file seems to be identified by a subject "
-            "key identifier --- this is legal in CMS, but many PDF viewers and "
-            "SDKs do not support this."
-        )
-        return lambda c: c.key_identifier == ski
-    raise NotImplementedError
-
-
-def partition_certs(certs, signer_info):
-    # The 'certificates' entry is defined as a set in PCKS#7.
-    # In particular, we cannot make any assumptions about the order.
-    # This means that we have to manually dig through the list to find
-    # the actual signer
-    predicate = _get_signer_predicate(signer_info['sid'])
-    cert = None
-    other_certs = []
-    for c in certs:
-        if predicate(c):
-            cert = c
-        else:
-            other_certs.append(c)
-    if cert is None:
-        raise SignatureValidationError(
-            'signer certificate not included in signature'
-        )
-    return cert, other_certs
-
-
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
-
-
-def _extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
-    try:
-        signer_info, = signed_data['signer_infos']
-        return signer_info
-    except ValueError:  # pragma: nocover
-        raise ValueError(
-            'signer_infos should contain exactly one entry'
-        )
 
 
 def _extract_self_reported_ts(signer_info: cms.SignerInfo) \
@@ -205,18 +160,6 @@ def _compute_tst_digest(signer_info: cms.SignerInfo) -> Optional[bytes]:
     return md.finalize()
 
 
-def _extract_signer_info_and_certs(signed_data: cms.SignedData):
-    certs = [
-        c.chosen for c in signed_data['certificates']
-        if c.name == 'certificate'
-    ]
-
-    signer_info = _extract_signer_info(signed_data)
-    cert, other_certs = partition_certs(certs, signer_info)
-
-    return signer_info, cert, other_certs
-
-
 async def _validate_cms_signature(signed_data: cms.SignedData,
                                   status_cls:
                                   Type[StatusType] = SignatureStatus,
@@ -229,7 +172,10 @@ async def _validate_cms_signature(signed_data: cms.SignedData,
     """
     Validate CMS and PKCS#7 signatures.
     """
-    signer_info, cert, other_certs = _extract_signer_info_and_certs(signed_data)
+    signer_info = extract_signer_info(signed_data)
+    cert_info = extract_certificate_info(signed_data)
+    cert = cert_info.signer_cert
+    other_certs = cert_info.other_certs
 
     weak_hash_algos = None
     if validation_context is not None:
@@ -629,8 +575,7 @@ async def async_validate_detached_cms(
         ts_validation_context: ValidationContext = None,
         key_usage_settings: KeyUsageConstraints = None,
         chunk_size=DEFAULT_CHUNK_SIZE,
-        max_read=None
-    ) -> StandardCMSSignatureStatus:
+        max_read=None) -> StandardCMSSignatureStatus:
     """
     .. versionadded: 0.9.0
 
@@ -663,7 +608,7 @@ async def async_validate_detached_cms(
 
     if ts_validation_context is None:
         ts_validation_context = signer_validation_context
-    signer_info = _extract_signer_info(signed_data)
+    signer_info = extract_signer_info(signed_data)
     digest_algorithm = signer_info['digest_algorithm']['algorithm'].native
     h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
     if isinstance(input_data, bytes):
@@ -942,11 +887,6 @@ class EmbeddedPdfSignature:
     CMS signed data in the signature.
     """
 
-    signer_cert: x509.Certificate
-    """
-    Certificate of the signer.
-    """
-
     def __init__(self, reader: PdfFileReader,
                  sig_field: generic.DictionaryObject, fq_name: str):
         self.reader = reader
@@ -981,8 +921,8 @@ class EmbeddedPdfSignature:
         signed_data = message['content']
         self.signed_data: cms.SignedData = signed_data
 
-        self.signer_info, self.signer_cert, _ = \
-            _extract_signer_info_and_certs(signed_data)
+        self.signer_info = extract_signer_info(signed_data)
+        self._sd_cert_info = extract_certificate_info(signed_data)
 
         # The PDF standard does not define a way to specify the digest algorithm
         # used other than this one.
@@ -1029,6 +969,13 @@ class EmbeddedPdfSignature:
         self.diff_result = None
         self._integrity_checked = False
         self.fq_name = fq_name
+
+    @property
+    def signer_cert(self) -> x509.Certificate:
+        """
+        Certificate of the signer.
+        """
+        return self._sd_cert_info.signer_cert
 
     @property
     def sig_object_type(self) -> generic.NameObject:
@@ -1873,8 +1820,9 @@ def get_timestamp_chain(reader: PdfFileReader) \
     )
 
 
-async def _establish_timestamp_trust_lta(reader, bootstrap_validation_context,
-                                   validation_context_kwargs, until_revision):
+async def _establish_timestamp_trust_lta(
+        reader, bootstrap_validation_context,
+        validation_context_kwargs, until_revision):
     timestamps = get_timestamp_chain(reader)
     validation_context_kwargs = dict(validation_context_kwargs)
     current_vc = bootstrap_validation_context
@@ -2333,8 +2281,9 @@ async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
     paths = []
 
     async def _validate_signed_data(signed_data):
-        signer_info, cert, other_certs = \
-            _extract_signer_info_and_certs(signed_data)
+        cert_info = extract_certificate_info(signed_data)
+        cert = cert_info.signer_cert
+        other_certs = cert_info.other_certs
 
         validator = CertificateValidator(
             cert, intermediate_certs=other_certs,

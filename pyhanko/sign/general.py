@@ -9,11 +9,9 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 import hashlib
 import logging
 from dataclasses import dataclass
-from typing import ClassVar, Optional, Set, Tuple, Union
+from typing import ClassVar, List, Optional, Set, Tuple, Union
 
 from asn1crypto import algos, cms, keys, pem, tsp, x509
-
-# noinspection PyProtectedMember
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -52,6 +50,7 @@ __all__ = [
     'SigningError', 'UnacceptableSignerError', 'WeakHashAlgorithmError',
     'NonexistentAttributeError', 'MultivaluedAttributeError',
     'SignatureValidationError',
+    'SignedDataCerts', 'extract_signer_info', 'extract_certificate_info',
     'load_certs_from_pemder', 'load_cert_from_pemder',
     'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
     'DEFAULT_WEAK_HASH_ALGORITHMS',
@@ -981,3 +980,75 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
     )
 
     return intact, valid
+
+
+@dataclass(frozen=True)
+class SignedDataCerts:
+    signer_cert: x509.Certificate
+    other_certs: List[x509.Certificate]
+    attribute_certs: List[cms.AttributeCertificateV2]
+
+
+def _get_signer_predicate(sid: cms.SignerIdentifier):
+    if sid.name == 'issuer_and_serial_number':
+        return lambda c: match_issuer_serial(sid.chosen, c)
+    elif sid.name == 'subject_key_identifier':
+        # subject key identifier (not all certs have this, but that shouldn't
+        # be an issue in this case)
+        ski = sid.chosen.native
+        logger.warning(
+            "The signature in this SignedData value seems to be identified by "
+            "a subject key identifier --- this is legal in CMS, but many PDF "
+            "viewers and SDKs do not support this feature."
+        )
+        return lambda c: c.key_identifier == ski
+    raise NotImplementedError
+
+
+def _partition_certs(certs, signer_info):
+    # The 'certificates' entry is defined as a set in PCKS#7.
+    # In particular, we cannot make any assumptions about the order.
+    # This means that we have to manually dig through the list to find
+    # the actual signer
+    predicate = _get_signer_predicate(signer_info['sid'])
+    cert = None
+    other_certs = []
+    for c in certs:
+        if predicate(c):
+            cert = c
+        else:
+            other_certs.append(c)
+    if cert is None:
+        raise SignatureValidationError(
+            'signer certificate not included in signature'
+        )
+    return cert, other_certs
+
+
+def extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
+    try:
+        signer_info, = signed_data['signer_infos']
+        return signer_info
+    except ValueError:  # pragma: nocover
+        raise ValueError(
+            'signer_infos should contain exactly one entry'
+        )
+
+
+def extract_certificate_info(signed_data: cms.SignedData) -> SignedDataCerts:
+    certs = []
+    attr_certs = []
+    for c in signed_data['certificates']:
+        cert = c.chosen.untag()
+        if c.name == 'certificate':
+            certs.append(cert)
+        elif c.name == 'v2_attr_cert':
+            attr_certs.append(cert)
+    signer_info = extract_signer_info(signed_data)
+    signer_cert, other_certs = _partition_certs(certs, signer_info)
+
+    cert_info = SignedDataCerts(
+        signer_cert=signer_cert, other_certs=other_certs,
+        attribute_certs=attr_certs
+    )
+    return cert_info

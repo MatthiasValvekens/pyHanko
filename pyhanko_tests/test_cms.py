@@ -30,6 +30,7 @@ from pyhanko.sign.general import (
     WeakHashAlgorithmError,
     as_signing_certificate,
     as_signing_certificate_v2,
+    extract_certificate_info,
     find_cms_attribute,
     validate_sig_integrity,
 )
@@ -982,6 +983,7 @@ async def test_embed_ac():
     s = r.embedded_signatures[0]
     # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
     certs = s.signed_data['certificates']
-    assert len([c for c in certs if c.name == 'certificate']) == 6
-    assert len([c for c in certs if c.name == 'v2_attr_cert']) == 1
+    cert_info = extract_certificate_info(s.signed_data)
+    assert len(cert_info.other_certs) == 5  # signer cert is excluded
+    assert len(cert_info.attribute_certs) == 1
     await async_val_trusted(s)
