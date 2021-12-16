@@ -984,9 +984,24 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
 
 @dataclass(frozen=True)
 class SignedDataCerts:
+    """
+    Value type to describe certificates included in a CMS signed data payload.
+    """
+
     signer_cert: x509.Certificate
+    """
+    The certificate identified as the signer's certificate.
+    """
+
     other_certs: List[x509.Certificate]
+    """
+    Other (public-key) certificates included in the signed data object.
+    """
+
     attribute_certs: List[cms.AttributeCertificateV2]
+    """
+    Attribute certificates included in the signed data object.
+    """
 
 
 def _get_signer_predicate(sid: cms.SignerIdentifier):
