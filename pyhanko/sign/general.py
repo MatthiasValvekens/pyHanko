@@ -1041,6 +1041,17 @@ def _partition_certs(certs, signer_info):
 
 
 def extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
+    """
+    Extract the unique ``SignerInfo`` entry of a CMS signed data value, or
+    throw a ``ValueError``.
+
+    :param signed_data:
+        A CMS ``SignedData`` value.
+    :return:
+        A CMS ``SignerInfo`` value.
+    :raises ValueError:
+        If the number of ``SignerInfo`` values is not exactly one.
+    """
     try:
         signer_info, = signed_data['signer_infos']
         return signer_info
@@ -1051,6 +1062,15 @@ def extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
 
 
 def extract_certificate_info(signed_data: cms.SignedData) -> SignedDataCerts:
+    """
+    Extract and classify embedded certificates found in the ``certificates``
+    field of the signed data value.
+
+    :param signed_data:
+        A CMS ``SignedData`` value.
+    :return:
+        A :class:`SignedDataCerts` object containing the embedded certificates.
+    """
     certs = []
     attr_certs = []
     for c in signed_data['certificates']:
