@@ -345,7 +345,7 @@ def _signature_status(ltv_profile, vc_kwargs, force_revinfo, key_usage_settings,
                       embedded_sig, skip_diff=False):
     if ltv_profile is None:
         vc = ValidationContext(**vc_kwargs)
-        status = pyhanko.sign.validation.pdf_embedded.validate_pdf_signature(
+        status = pyhanko.sign.validation.validate_pdf_signature(
             embedded_sig, key_usage_settings=key_usage_settings,
             signer_validation_context=vc,
             skip_diff=skip_diff
