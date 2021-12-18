@@ -49,11 +49,11 @@ __all__ = [
     'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
     'apply_adobe_revocation_info', 'get_timestamp_chain',
     'read_certification_data',
-    'validate_pdf_ltv_signature', 'async_validate_pdf_ltv_signature',
     'validate_pdf_signature', 'async_validate_pdf_signature',
     'validate_cms_signature', 'async_validate_cms_signature',
     'validate_detached_cms', 'async_validate_detached_cms',
     'validate_pdf_timestamp', 'async_validate_pdf_timestamp',
+    'validate_pdf_ltv_signature', 'async_validate_pdf_ltv_signature',
     'collect_validation_info',
     'add_validation_info',
 ]

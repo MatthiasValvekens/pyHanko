@@ -30,11 +30,7 @@ from .generic_cms import (
     cms_basic_validation,
     validate_tst_signed_data,
 )
-from .pdf_embedded import (
-    EmbeddedPdfSignature,
-    _validate_sv_and_update,
-    read_certification_data,
-)
+from .pdf_embedded import EmbeddedPdfSignature, _validate_sv_and_update
 from .settings import KeyUsageConstraints
 from .status import (
     PdfSignatureStatus,
@@ -45,8 +41,7 @@ from .status import (
 __all__ = [
     'RevocationInfoValidationType',
     'apply_adobe_revocation_info', 'retrieve_adobe_revocation_info',
-    'get_timestamp_chain',
-    'read_certification_data', 'async_validate_pdf_ltv_signature',
+    'get_timestamp_chain', 'async_validate_pdf_ltv_signature',
 ]
 
 
@@ -156,8 +151,9 @@ def get_timestamp_chain(reader: PdfFileReader) \
     :param reader:
         A :class:`.PdfFileReader`.
     :return:
-        An iterable of :class:`.EmbeddedPdfSignature` objects representing
-        document timestamps.
+        An iterable of
+        :class:`~pyhanko.sign.validation.pdf_embedded.EmbeddedPdfSignature`
+        objects representing document timestamps.
     """
     return filter(
         lambda sig: sig.sig_object.get('/Type', None) == '/DocTimeStamp',

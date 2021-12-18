@@ -26,7 +26,7 @@ setup(
         'pyhanko.pdf_utils', 'pyhanko.pdf_utils.font',
         'pyhanko.sign', 'pyhanko.sign.ades', 'pyhanko.sign.signers',
         'pyhanko.sign.diff_analysis', 'pyhanko.sign.diff_analysis.rules',
-        'pyhanko.sign.timestamps'
+        'pyhanko.sign.timestamps', 'pyhanko.sign.validation'
     ],
     url='https://github.com/MatthiasValvekens/pyHanko',
     license='MIT',

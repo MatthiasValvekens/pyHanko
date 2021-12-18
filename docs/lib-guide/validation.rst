@@ -14,10 +14,10 @@ Validation functionality
     and likely to change by the time pyHanko reaches its beta stage.
 
 
-.. |EmbeddedPdfSignature| replace:: :class:`~.pyhanko.sign.validation.EmbeddedPdfSignature`
-.. |SignatureStatus| replace:: :class:`~.pyhanko.sign.general.SignatureStatus`
-.. |PdfSignatureStatus| replace:: :class:`~.pyhanko.sign.validation.PdfSignatureStatus`
-.. |DocumentSecurityStore| replace:: :class:`~.pyhanko.sign.validation.DocumentSecurityStore`
+.. |EmbeddedPdfSignature| replace:: :class:`~.pyhanko.sign.validation.pdf_embedded.EmbeddedPdfSignature`
+.. |SignatureStatus| replace:: :class:`~.pyhanko.sign.validation.status.SignatureStatus`
+.. |PdfSignatureStatus| replace:: :class:`~.pyhanko.sign.validation.status.PdfSignatureStatus`
+.. |DocumentSecurityStore| replace:: :class:`~.pyhanko.sign.validation.dss.DocumentSecurityStore`
 .. |ValidationContext| replace:: :class:`~.pyhanko_certvalidator.ValidationContext`
 
 General API design
@@ -180,11 +180,11 @@ and its tests, and/or play around a little.
     validation of the signing time and validation of the signature itself.
     In fact, :func:`~.pyhanko.sign.validation.validate_pdf_signature` reports both
     (see the docs for
-    :attr:`~.pyhanko.sign.validation.StandardCMSSignatureStatus.timestamp_validity`).
+    :attr:`~.pyhanko.sign.validation.status.StandardCMSSignatureStatus.timestamp_validity`).
 
     However, since the LTV adjudication process is entirely moot without a trusted record
     of the signing time, :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
-    will raise a :class:`~.pyhanko.sign.general.SignatureValidationError`
+    will raise a :class:`~.pyhanko.sign.validation.errors.SignatureValidationError`
     if the timestamp token (or timestamp chain) fails to validate.
     Otherwise, :func:`~.pyhanko.sign.validation.validate_pdf_ltv_signature`
     returns a |PdfSignatureStatus| as usual.
@@ -263,8 +263,8 @@ To actually use a custom diff policy, you can proceed as follows.
         print(status.pretty_print_details())
 
 
-The :attr:`~.pyhanko.sign.validation.PdfSignatureStatus.modification_level`
-and :attr:`~.pyhanko.sign.validation.PdfSignatureStatus.docmdp_ok` attributes
+The :attr:`~.pyhanko.sign.validation.status.PdfSignatureStatus.modification_level`
+and :attr:`~.pyhanko.sign.validation.status.PdfSignatureStatus.docmdp_ok` attributes
 on |PdfSignatureStatus| will tell you to what degree the signed file has been
 modified after signing (according to the diff policy used).
 
@@ -329,9 +329,9 @@ The |PdfSignatureStatus| objects returned by
 granular account of the validity of the signature.
 
 You can print a human-readable validity report by calling
-:meth:`~.pyhanko.sign.validation.StandardCMSSignatureStatus.pretty_print_details`, and
+:meth:`~.pyhanko.sign.validation.status.StandardCMSSignatureStatus.pretty_print_details`, and
 if all you're interested in is a yes/no judgment, use the the
-:attr:`~.pyhanko.sign.validation.PdfSignatureStatus.bottom_line` property.
+:attr:`~.pyhanko.sign.validation.status.PdfSignatureStatus.bottom_line` property.
 
 Should you ever need to know more, a |PdfSignatureStatus| object also
 includes information on things like
