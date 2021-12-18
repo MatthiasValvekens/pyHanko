@@ -7,13 +7,11 @@ The tools in this module allow pyHanko to obtain such tokens from
 authorities.
 """
 import asyncio
-from dataclasses import dataclass
-from datetime import datetime
 
 from asn1crypto import algos, cms, tsp
 from pyhanko_certvalidator import CertificateValidator
 
-from ..general import SignatureStatus, SimpleCertificateStore
+from ..general import SimpleCertificateStore
 from .common_utils import (
     dummy_digest,
     extract_ts_certs,
@@ -21,46 +19,7 @@ from .common_utils import (
     handle_tsp_response,
 )
 
-__all__ = [
-    'TimestampSignatureStatus', 'TimeStamper'
-]
-
-
-@dataclass(frozen=True)
-class TimestampSignatureStatus(SignatureStatus):
-    """
-    Signature status class used when validating timestamp tokens.
-    """
-    key_usage = set()
-    """
-    There are no (non-extended) key usage requirements for TSA certificates.
-    """
-
-    extd_key_usage = {'time_stamping'}
-    """
-    TSA certificates must have the ``time_stamping`` extended key usage 
-    extension (OID 1.3.6.1.5.5.7.3.8).
-    """
-
-    timestamp: datetime
-    """
-    Value of the timestamp token as a datetime object.
-    """
-
-    def describe_timestamp_trust(self):
-        tsa = self.signing_cert
-
-        return (
-            "This timestamp is backed by a time stamping authority.\n"
-            "The timestamp token is cryptographically "
-            f"{'' if self.intact and self.valid else 'un'}sound.\n"
-            f"TSA certificate subject: \"{tsa.subject.human_friendly}\"\n"
-            f"TSA certificate SHA1 fingerprint: {tsa.sha1.hex()}\n"
-            f"TSA certificate SHA256 fingerprint: {tsa.sha256.hex()}\n"
-            f"TSA cert trust anchor: \"{self._trust_anchor}\"\n"
-            "The TSA certificate is "
-            f"{'' if self.trusted else 'un'}trusted."
-        )
+__all__ = ['TimeStamper']
 
 
 class TimeStamper:

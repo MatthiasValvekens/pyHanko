@@ -644,7 +644,7 @@ def _signer_sanity_check(signer):
     digest = hashlib.sha256(b'Hello world!').digest()
     with pytest.deprecated_call():
         sig = signer.sign(digest, digest_algorithm='sha256')
-    from pyhanko.sign.general import validate_sig_integrity
+    from pyhanko.sign.validation.generic_cms import validate_sig_integrity
     intact, valid = validate_sig_integrity(
         sig['content']['signer_infos'][0], cert=signer.signing_cert,
         expected_content_type='data', actual_digest=digest

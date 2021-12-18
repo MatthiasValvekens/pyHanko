@@ -27,11 +27,7 @@ from pyhanko.sign import PdfTimeStamper, fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
 from pyhanko.sign.ades.cades_asn1 import SignaturePolicyIdentifier
 from pyhanko.sign.diff_analysis import ModificationLevel
-from pyhanko.sign.general import (
-    SignatureValidationError,
-    SigningError,
-    find_cms_attribute,
-)
+from pyhanko.sign.general import SigningError, find_cms_attribute
 from pyhanko.sign.signers.pdf_signer import (
     DSSContentSettings,
     PdfTBSDocument,
@@ -49,6 +45,7 @@ from pyhanko.sign.validation import (
     validate_pdf_ltv_signature,
     validate_pdf_timestamp,
 )
+from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko_tests.samples import (
     CERTOMANCER,
     MINIMAL,

@@ -760,13 +760,9 @@ class PdfTimeStamper:
         # in the current chain is valid.
         # TODO: add an option to validate the entire timestamp chain
         #  plus all signatures
-        from pyhanko.sign.validation import (
-            DocumentSecurityStore,
-            _establish_timestamp_trust,
-            get_timestamp_chain,
-        )
+        from .. import validation
 
-        timestamps = get_timestamp_chain(reader)
+        timestamps = validation.get_timestamp_chain(reader)
         try:
             last_timestamp = next(timestamps)
         except StopIteration:
@@ -788,7 +784,7 @@ class PdfTimeStamper:
             expected_imprint = last_timestamp.external_digest
 
             # run validation logic
-            tst_status = await _establish_timestamp_trust(
+            tst_status = await validation.ltv._establish_timestamp_trust(
                 tst_token, validation_context, expected_imprint
             )
 
@@ -805,7 +801,7 @@ class PdfTimeStamper:
         pdf_out = IncrementalPdfFileWriter(res_output)
         if last_timestamp is not None:
             # update the DSS
-            DocumentSecurityStore.supply_dss_in_writer(
+            validation.DocumentSecurityStore.supply_dss_in_writer(
                 pdf_out, last_timestamp.pkcs7_content,
                 paths=(tst_status.validation_path,),
                 validation_context=validation_context,

@@ -9,7 +9,7 @@ from typing import List, Optional, Set, Union
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
-from pyhanko_certvalidator import InvalidCertificateError
+from pyhanko_certvalidator.errors import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic
@@ -24,11 +24,7 @@ from pyhanko.pdf_utils.misc import (
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
-from pyhanko.sign.general import (
-    KeyUsageConstraints,
-    SigningError,
-    UnacceptableSignerError,
-)
+from pyhanko.sign.general import SigningError, UnacceptableSignerError
 
 __all__ = [
     'SigFieldSpec', 'SigSeedValFlags', 'SigCertConstraints',
@@ -611,6 +607,7 @@ class SigCertConstraints:
                 )
         if (flags & SigCertConstraintFlags.KEY_USAGE) \
                 and self.key_usage is not None:
+            from .validation.settings import KeyUsageConstraints
             for ku in self.key_usage:
                 try:
                     KeyUsageConstraints(
@@ -1567,4 +1564,3 @@ class SignatureFormField(generic.DictionaryObject):
         else:
             annot_ref = sig_field_ref
         writer.register_annotation(self.page_ref, annot_ref)
-

@@ -36,8 +36,8 @@ async def test_ts_fetch_aiohttp():
             EXTERNAL_TSA_URL, session, timeout=FETCH_TIMEOUT
         )
         ts_result = await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
-        from pyhanko.sign.validation import _validate_timestamp
-        result = await _validate_timestamp(
+        from pyhanko.sign.validation.generic_cms import validate_tst_signed_data
+        result = await validate_tst_signed_data(
             ts_result['content'], ValidationContext(trust_roots=[]),
             expected_tst_imprint=MESSAGE_DIGEST
         )
@@ -61,8 +61,8 @@ async def test_ts_fetch_requests():
         EXTERNAL_TSA_URL, timeout=FETCH_TIMEOUT
     )
     ts_result = await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
-    from pyhanko.sign.validation import _validate_timestamp
-    result = await _validate_timestamp(
+    from pyhanko.sign.validation.generic_cms import validate_tst_signed_data
+    result = await validate_tst_signed_data(
         ts_result['content'], ValidationContext(trust_roots=[]),
         expected_tst_imprint=MESSAGE_DIGEST
     )

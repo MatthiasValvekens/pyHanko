@@ -11,6 +11,7 @@ import tzlocal
 from asn1crypto import cms, pem
 from pyhanko_certvalidator import ValidationContext
 
+import pyhanko.sign.validation.pdf_embedded
 from pyhanko import __version__
 from pyhanko.config import (
     CLIConfig,
@@ -30,15 +31,12 @@ from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers, validation
-from pyhanko.sign.general import (
-    SignatureValidationError,
-    SigningError,
-    load_certs_from_pemder,
-)
+from pyhanko.sign.general import SigningError, load_certs_from_pemder
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.validation import RevocationInfoValidationType
+from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
 __all__ = ['cli']
@@ -347,7 +345,7 @@ def _signature_status(ltv_profile, vc_kwargs, force_revinfo, key_usage_settings,
                       embedded_sig, skip_diff=False):
     if ltv_profile is None:
         vc = ValidationContext(**vc_kwargs)
-        status = validation.validate_pdf_signature(
+        status = pyhanko.sign.validation.pdf_embedded.validate_pdf_signature(
             embedded_sig, key_usage_settings=key_usage_settings,
             signer_validation_context=vc,
             skip_diff=skip_diff

@@ -29,11 +29,12 @@ from pyhanko.sign.diff_analysis import (
     SuspiciousModification,
     XrefStreamRule,
 )
-from pyhanko.sign.general import KeyUsageConstraints, SigningError
+from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
     validate_pdf_signature,
 )
+from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko_tests.samples import *
 from pyhanko_tests.samples import MINIMAL, PDF_DATA_DIR
 from pyhanko_tests.signing_commons import (

@@ -399,7 +399,7 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
         jobs = asyncio.as_completed(map(_job, range(1, concurrent_count + 1)))
         for finished_job in jobs:
             i, sig = await finished_job
-            general._validate_raw(
+            general.validate_raw(
                 signature=sig,
                 signed_data=f"PKCS#11 concurrency test #{i}!".encode('utf8'),
                 cert=signer.signing_cert,

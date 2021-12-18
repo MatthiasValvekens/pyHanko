@@ -32,7 +32,6 @@ from pyhanko.sign.general import (
     CertificateStore,
     SigningError,
     SimpleCertificateStore,
-    _process_pss_params,
     _translate_pyca_cryptography_cert_to_asn1,
     _translate_pyca_cryptography_key_to_asn1,
     get_pyca_cryptography_hash,
@@ -40,6 +39,7 @@ from pyhanko.sign.general import (
     load_certs_from_pemder,
     load_private_key_from_pemder,
     optimal_pss_params,
+    process_pss_params,
     simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
@@ -1149,7 +1149,7 @@ class SimpleSigner(Signer):
             return priv_key.sign(data, padding, hash_algo)
         elif mechanism == 'rsassa_pss':
             params = signature_mechanism['parameters']
-            padding, hash_algo = _process_pss_params(params, digest_algorithm)
+            padding, hash_algo = process_pss_params(params, digest_algorithm)
             assert isinstance(priv_key, RSAPrivateKey)
             return priv_key.sign(data, padding, hash_algo)
         elif mechanism == 'ecdsa':

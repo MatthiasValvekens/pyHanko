@@ -25,13 +25,10 @@ from pyhanko.sign import fields, signers
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.attributes import CMSAttributeProvider
 from pyhanko.sign.general import (
-    SignatureValidationError,
     SigningError,
-    WeakHashAlgorithmError,
     as_signing_certificate,
     as_signing_certificate_v2,
     find_cms_attribute,
-    validate_sig_integrity,
 )
 from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
@@ -40,7 +37,13 @@ from pyhanko.sign.validation import (
     async_validate_cms_signature,
     async_validate_detached_cms,
     collect_validation_info,
+    validate_cms_signature,
 )
+from pyhanko.sign.validation.errors import (
+    SignatureValidationError,
+    WeakHashAlgorithmError,
+)
+from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko_tests.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -93,7 +96,6 @@ def test_generic_data_sign_legacy():
 
     with pytest.deprecated_call():
         # noinspection PyDeprecation
-        from pyhanko.sign.validation import validate_cms_signature
 
         # noinspection PyDeprecation
         status = validate_cms_signature(content, raw_digest=raw_digest)
@@ -949,7 +951,7 @@ async def test_no_certificates(delete):
     cms_writer.send(cms_obj)
 
     r = PdfFileReader(output)
-    with pytest.raises(SignatureValidationError, match='signer cert.*includ'):
+    with pytest.raises(ValueError, match='signer cert.*includ'):
         emb = r.embedded_signatures[0]
         await collect_validation_info(
             embedded_sig=emb, validation_context=ValidationContext()

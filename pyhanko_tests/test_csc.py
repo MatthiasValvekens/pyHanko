@@ -9,8 +9,9 @@ from asn1crypto import algos
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
 
-from pyhanko.sign.general import SigningError, _validate_raw
+from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import csc_signer
+from pyhanko.sign.validation.utils import validate_raw
 from pyhanko_tests.csc_utils.csc_dummy_client import CSCDummyClientAuthManager
 from pyhanko_tests.csc_utils.csc_dummy_server import (
     CSCWithCertomancer,
@@ -338,6 +339,7 @@ async def test_sign_wrong_number_of_sigs(aiohttp_client):
     app = web.Application()
     app.router.add_post('/csc/v1/signatures/signHash',  fake_return)
     client = await aiohttp_client(app)
+    # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(
         client, auth_manager=auth_man, batch_size=2,
         batch_autocommit=False
@@ -377,6 +379,7 @@ async def test_sign_unreadable_sig(aiohttp_client, response_obj):
     app = web.Application()
     app.router.add_post('/csc/v1/signatures/signHash',  fake_return)
     client = await aiohttp_client(app)
+    # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(
         client, auth_manager=auth_man, batch_size=1,
         batch_autocommit=False, client_data='Some client data, because why not'
@@ -474,7 +477,7 @@ async def test_submit_job_during_commit(aiohttp_client):
 
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     for ix, sig in enumerate([sig1, *others]):
-        _validate_raw(
+        validate_raw(
             sig, b'foobar%d' % (ix + 1), signer_cert,
             signature_algorithm=algos.SignedDigestAlgorithm({
                 'algorithm': 'sha256_rsa'
@@ -539,7 +542,7 @@ async def test_csc_with_parameters(aiohttp_client):
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     mech = signer.get_signature_mechanism('sha256')
     assert mech.signature_algo == 'rsassa_pss'
-    _validate_raw(
+    validate_raw(
         result, b'foobar', signer_cert,
         signature_algorithm=mech, md_algorithm='sha256'
     )
@@ -568,7 +571,7 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
 
     result = await signer.async_sign_raw(b'foobar', digest_algorithm='sha256')
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
-    _validate_raw(
+    validate_raw(
         result, b'foobar', signer_cert,
         signature_algorithm=algos.SignedDigestAlgorithm({
             'algorithm': 'sha256_rsa'

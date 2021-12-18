@@ -27,7 +27,6 @@ from pyhanko.sign.diff_analysis import (
     ModificationLevel,
 )
 from pyhanko.sign.general import (
-    SignatureValidationError,
     SigningError,
     get_pyca_cryptography_hash,
     load_cert_from_pemder,
@@ -48,6 +47,7 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
     validate_pdf_timestamp,
 )
+from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle
 
 from .samples import *

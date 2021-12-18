@@ -13,8 +13,9 @@ from pyhanko.pdf_utils import config_utils
 from pyhanko.pdf_utils.config_utils import ConfigurationError, check_config_keys
 from pyhanko.pdf_utils.misc import get_and_apply
 from pyhanko.sign import SimpleSigner, load_certs_from_pemder
-from pyhanko.sign.general import KeyUsageConstraints, load_cert_from_pemder
+from pyhanko.sign.general import load_cert_from_pemder
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
+from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 
 
