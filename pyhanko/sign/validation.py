@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from dataclasses import field as data_field
 from datetime import datetime
 from enum import Enum, unique
-from typing import IO, Iterator, Optional, Type, TypeVar, Union
+from typing import IO, Iterator, List, Optional, Type, TypeVar, Union
 
 from asn1crypto import cms, core
 from asn1crypto import crl as asn1_crl
@@ -969,6 +969,20 @@ class EmbeddedPdfSignature:
         self.diff_result = None
         self._integrity_checked = False
         self.fq_name = fq_name
+
+    @property
+    def embedded_attr_certs(self) -> List[cms.AttributeCertificateV2]:
+        """
+        Embedded attribute certificates.
+        """
+        return list(self._sd_cert_info.attribute_certs)
+
+    @property
+    def other_embedded_certs(self) -> List[x509.Certificate]:
+        """
+        Embedded X.509 certificates, excluding than that of the signer.
+        """
+        return list(self._sd_cert_info.other_certs)
 
     @property
     def signer_cert(self) -> x509.Certificate:

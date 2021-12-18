@@ -1458,9 +1458,8 @@ async def test_pades_live_ac_presign_validation(requests_mock):
     # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert, 1 TSA cert,
     # 1 OCSP responder cert -> 9 certs total
     # 7 (4 CA + 1 AA + 1 AC + 1 signer) are in the CMS payload
-    certs = s.signed_data['certificates']
-    assert len([c for c in certs if c.name == 'certificate']) == 6
-    assert len([c for c in certs if c.name == 'v2_attr_cert']) == 1
+    assert len(s.other_embedded_certs) == 5
+    assert len(s.embedded_attr_certs) == 1
     dss = r.root['/DSS']
     assert len(dss['/Certs']) == 8  # no ACs here, but OCSP and TSA are present
     assert len(dss['/OCSPs']) == 2  # signer + AC (leaf-aa has OCSP)
