@@ -960,11 +960,11 @@ async def test_no_certificates(delete):
         )
 
 
-def get_ac_aware_signer():
+def get_ac_aware_signer(actual_signer='signer1'):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
-        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
-        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        signing_cert=pki_arch.get_cert(CertLabel(actual_signer)),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel(actual_signer)),
         cert_registry=SimpleCertificateStore.from_certs(
             [
                 pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
@@ -1030,6 +1030,23 @@ async def test_ac_attr_validation_fail(requests_mock):
         input_data, output['content'],
         signer_validation_context=main_vc,
         ac_validation_context=main_vc  # pass in the wrong VC on purpose
+    )
+    assert status.bottom_line  # this should still be OK
+    assert 'role' not in status.ac_attrs  # ...but the attribute check fails
+
+
+@freeze_time('2020-11-01')
+async def test_ac_attr_validation_holder_mismatch(requests_mock):
+    input_data = b'Hello world!'
+    # sign with a key pair that's not the same as the holder of the AC
+    # that we're embedding
+    signer = get_ac_aware_signer('signer2')
+    output = await signer.async_sign_general_data(input_data, 'sha256')
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    status = await async_validate_detached_cms(
+        input_data, output['content'],
+        signer_validation_context=main_vc,
+        ac_validation_context=ac_vc
     )
     assert status.bottom_line  # this should still be OK
     assert 'role' not in status.ac_attrs  # ...but the attribute check fails
