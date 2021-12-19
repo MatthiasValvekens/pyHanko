@@ -1,10 +1,11 @@
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from enum import unique
-from typing import ClassVar, Optional, Set, Union
+from typing import ClassVar, Dict, Iterable, Optional, Set, Union
 
-from asn1crypto import core, keys, x509
+from asn1crypto import cms, core, keys, x509
 from pyhanko_certvalidator import CertificateValidator
 from pyhanko_certvalidator.errors import (
     InvalidCertificateError,
@@ -13,6 +14,7 @@ from pyhanko_certvalidator.errors import (
     RevokedError,
 )
 from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.validate import ACValidationResult
 
 from ...pdf_utils.misc import OrderedEnum
 from ..diff_analysis import (
@@ -24,7 +26,9 @@ from .errors import SigSeedValueValidationError
 from .settings import KeyUsageConstraints
 
 __all__ = [
-    'SignatureStatus', 'TimestampSignatureStatus', 'StandardCMSSignatureStatus',
+    'SignatureStatus', 'TimestampSignatureStatus',
+    'CertifiedAttributeInfo', 'CertifiedAttributes',
+    'StandardCMSSignatureStatus',
     'SignatureCoverageLevel', 'ModificationInfo',
     'PdfSignatureStatus', 'DocumentTimestampStatus'
 ]
@@ -205,6 +209,62 @@ class TimestampSignatureStatus(SignatureStatus):
 
 
 @dataclass(frozen=True)
+class CertifiedAttributeInfo:
+    attr_type: cms.AttCertAttributeType
+    """
+    The certified attribute's type.
+    """
+
+    attr_values: Iterable[core.Asn1Value]
+    """
+    The certified attribute's values.
+    """
+
+    validation_results: Iterable[ACValidationResult]
+    """
+    The validation details for the attribute in question
+    (possibly several if values for the same attribute were sourced from
+    several different ACs).
+    """
+
+
+class CertifiedAttributes:
+
+    @classmethod
+    def from_results(cls, results: Iterable[ACValidationResult]):
+        # first, classify the attributes and results by type
+        by_type = defaultdict(lambda: ([], []))
+        for result in results:
+            for attr_type, attr in result.approved_attributes.items():
+                type_values, type_results = by_type[attr_type]
+                type_values.extend(attr['values'])
+                type_results.append(result)
+
+        # then, for each type, we package 'em up in a CertifiedAttributeInfo
+        infos = CertifiedAttributes()
+        for attr_type, (type_values, type_results) in by_type.items():
+            infos._attrs[attr_type] = CertifiedAttributeInfo(
+                attr_type=cms.AttCertAttributeType(attr_type),
+                # (shallow) immutability
+                attr_values=tuple(type_values),
+                validation_results=tuple(type_results)
+            )
+        return infos
+
+    def __init__(self):
+        self._attrs: Dict[str, CertifiedAttributeInfo] = {}
+
+    def __getitem__(self, item: str) -> CertifiedAttributeInfo:
+        return self._attrs[item]
+
+    def __iter__(self):
+        return iter(self._attrs.values())
+
+    def __contains__(self, item: str) -> bool:
+        return item in self._attrs
+
+
+@dataclass(frozen=True)
 class StandardCMSSignatureStatus(SignatureStatus):
     """
     Status of a standard "end-entity" CMS signature, potentially with
@@ -228,6 +288,17 @@ class StandardCMSSignatureStatus(SignatureStatus):
     """
     Validation status of the content timestamp token embedded in this
     signature, if present.
+    """
+
+    # TODO also provide an entry for CAdES-style signer attributes
+    #  (can also be done through ACs, but embedded using a different mechanism)
+    ac_attrs: Optional[CertifiedAttributes] = None
+    """
+    Certified attributes sourced from valid attribute certificates embedded into
+    the ``SignedData``'s ``certificates`` field.
+
+    Will be ``None`` if no validation context for attribute certificate
+    validation was provided.
     """
 
     @property

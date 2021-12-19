@@ -36,6 +36,7 @@ from pyhanko.sign.validation import (
     DocumentSecurityStore,
     async_validate_cms_signature,
     async_validate_detached_cms,
+    async_validate_pdf_signature,
     collect_validation_info,
     validate_cms_signature,
 )
@@ -69,6 +70,7 @@ from pyhanko_tests.signing_commons import (
     SIMPLE_ECC_V_CONTEXT,
     SIMPLE_V_CONTEXT,
     async_val_trusted,
+    live_ac_vcs,
     val_trusted,
     val_untrusted,
 )
@@ -958,8 +960,7 @@ async def test_no_certificates(delete):
         )
 
 
-@freeze_time('2020-11-01')
-async def test_embed_ac():
+def get_ac_aware_signer():
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -975,6 +976,12 @@ async def test_embed_ac():
             pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
         ]
     )
+    return signer
+
+
+@freeze_time('2020-11-01')
+async def test_embed_ac(requests_mock):
+    signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
         w, signers.PdfSignatureMetadata(field_name='Sig1'),
@@ -985,4 +992,44 @@ async def test_embed_ac():
     # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
     assert len(s.other_embedded_certs) == 5  # signer cert is excluded
     assert len(s.embedded_attr_certs) == 1
-    await async_val_trusted(s)
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc, ac_validation_context=ac_vc
+    )
+    assert status.bottom_line
+    roles = list(status.ac_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+
+
+@freeze_time('2020-11-01')
+async def test_ac_detached(requests_mock):
+    input_data = b'Hello world!'
+    signer = get_ac_aware_signer()
+    output = await signer.async_sign_general_data(input_data, 'sha256')
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    status = await async_validate_detached_cms(
+        input_data, output['content'],
+        signer_validation_context=main_vc, ac_validation_context=ac_vc
+    )
+    assert status.bottom_line
+    roles = list(status.ac_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+
+
+@freeze_time('2020-11-01')
+async def test_ac_attr_validation_fail(requests_mock):
+    input_data = b'Hello world!'
+    signer = get_ac_aware_signer()
+    output = await signer.async_sign_general_data(input_data, 'sha256')
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    status = await async_validate_detached_cms(
+        input_data, output['content'],
+        signer_validation_context=main_vc,
+        ac_validation_context=main_vc  # pass in the wrong VC on purpose
+    )
+    assert status.bottom_line  # this should still be OK
+    assert 'role' not in status.ac_attrs  # ...but the attribute check fails

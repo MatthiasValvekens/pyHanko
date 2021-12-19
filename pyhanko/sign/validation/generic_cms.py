@@ -1,11 +1,14 @@
+import asyncio
 import logging
 from datetime import datetime
-from typing import IO, Optional, Tuple, Type, TypeVar, Union
+from typing import IO, Iterable, Optional, Tuple, Type, TypeVar, Union
 
 from asn1crypto import cms, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
+from pyhanko_certvalidator.validate import async_validate_ac
 
 from pyhanko.sign.general import (
     MultivaluedAttributeError,
@@ -21,6 +24,7 @@ from ...pdf_utils import misc
 from .errors import SignatureValidationError, WeakHashAlgorithmError
 from .settings import KeyUsageConstraints
 from .status import (
+    CertifiedAttributes,
     SignatureStatus,
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
@@ -36,7 +40,8 @@ __all__ = [
     'collect_timing_info', 'validate_tst_signed_data',
     'async_validate_detached_cms', 'cms_basic_validation',
     'compute_signature_tst_digest', 'extract_tst_data',
-    'extract_self_reported_ts'
+    'extract_self_reported_ts',
+    'collect_certified_attr_status',
 ]
 
 logger = logging.getLogger(__name__)
@@ -487,17 +492,53 @@ async def validate_tst_signed_data(
     )
 
 
+async def process_certified_attrs(
+        acs: Iterable[cms.AttributeCertificateV2],
+        signer_cert: x509.Certificate,
+        validation_context: ValidationContext) -> CertifiedAttributes:
+    jobs = [
+        async_validate_ac(ac, validation_context, holder_cert=signer_cert)
+        for ac in acs
+    ]
+    results = []
+    for job in asyncio.as_completed(jobs):
+        try:
+            results.append(await job)
+        except (PathBuildingError, PathValidationError) as e:
+            logger.info(
+                "Error while validating attribute certificate -- skipping: %s",
+                # no stack trace, just print the exception message
+                str(e)
+            )
+    return CertifiedAttributes.from_results(results)
+
+
+async def collect_certified_attr_status(
+        sd_attr_certificates: Iterable[cms.AttributeCertificateV2],
+        signer_cert: x509.Certificate,
+        validation_context: ValidationContext):
+
+    attrs = await process_certified_attrs(
+        sd_attr_certificates, signer_cert, validation_context
+    )
+    return {'ac_attrs': attrs}
+
+
 async def async_validate_detached_cms(
         input_data: Union[bytes, IO,
                           cms.ContentInfo, cms.EncapsulatedContentInfo],
         signed_data: cms.SignedData,
         signer_validation_context: ValidationContext = None,
         ts_validation_context: ValidationContext = None,
+        ac_validation_context: ValidationContext = None,
         key_usage_settings: KeyUsageConstraints = None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
         max_read=None) -> StandardCMSSignatureStatus:
     """
     .. versionadded: 0.9.0
+
+    .. versionchanged: 0.11.0
+        Added ``ac_validation_context`` param.
 
     Validate a detached CMS signature.
 
@@ -516,6 +557,13 @@ async def async_validate_detached_cms(
         Validation context to use to verify the TSA certificate's trust, if
         a timestamp token is present.
         By default, the same validation context as that of the signer is used.
+    :param ac_validation_context:
+        Validation context to use to validate attribute certificates.
+        If not supplied, no AC validation will be performed.
+
+        .. note::
+            :rfc:`5755` requires attribute authority trust roots to be specified
+            explicitly; hence why there's no default.
     :param key_usage_settings:
         Key usage parameters for the signer.
     :param chunk_size:
@@ -544,10 +592,23 @@ async def async_validate_detached_cms(
         signer_info, ts_validation_context=ts_validation_context,
         raw_digest=digest_bytes
     )
-    return await async_validate_cms_signature(
+    status_kwargs = await cms_basic_validation(
         signed_data, status_cls=StandardCMSSignatureStatus,
         raw_digest=digest_bytes,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings
     )
+    if ac_validation_context is not None:
+        cert_info = extract_certificate_info(signed_data)
+        ac_validation_context.certificate_registry.register_multiple(
+            cert_info.other_certs
+        )
+        status_kwargs.update(
+            await collect_certified_attr_status(
+                sd_attr_certificates=cert_info.attribute_certs,
+                signer_cert=cert_info.signer_cert,
+                validation_context=ac_validation_context
+            )
+        )
+    return StandardCMSSignatureStatus(**status_kwargs)

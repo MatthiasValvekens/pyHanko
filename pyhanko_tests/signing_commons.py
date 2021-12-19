@@ -3,7 +3,7 @@ import hashlib
 from asn1crypto import ocsp
 from asn1crypto.algos import DigestAlgorithm, DigestInfo
 from certomancer.integrations.illusionist import Illusionist
-from certomancer.registry import CertLabel, KeyLabel
+from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
@@ -17,6 +17,7 @@ from pyhanko.sign.validation import (
     validate_pdf_signature,
 )
 from pyhanko_tests.samples import (
+    CERTOMANCER,
     CRYPTO_DATA_DIR,
     TESTING_CA,
     TESTING_CA_DIR,
@@ -131,6 +132,20 @@ def live_testing_vc(requests_mock, with_extra_tsa=False, **kwargs):
     if with_extra_tsa:
         Illusionist(UNRELATED_TSA).register(requests_mock)
     return vc
+
+
+def live_ac_vcs(requests_mock):
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    main_vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert(CertLabel('root'))],
+        allow_fetching=True, other_certs=[],
+    )
+    ac_vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert(CertLabel('root-aa'))],
+        allow_fetching=True, other_certs=[],
+    )
+    Illusionist(pki_arch).register(requests_mock)
+    return main_vc, ac_vc
 
 
 def val_trusted(embedded_sig: EmbeddedPdfSignature, extd=False,

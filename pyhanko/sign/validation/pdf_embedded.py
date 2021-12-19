@@ -45,6 +45,7 @@ from .errors import (
 )
 from .generic_cms import (
     cms_basic_validation,
+    collect_certified_attr_status,
     collect_timing_info,
     compute_signature_tst_digest,
     extract_self_reported_ts,
@@ -759,11 +760,16 @@ async def async_validate_pdf_signature(
                            embedded_sig: EmbeddedPdfSignature,
                            signer_validation_context: ValidationContext = None,
                            ts_validation_context: ValidationContext = None,
+                           ac_validation_context: ValidationContext = None,
                            diff_policy: DiffPolicy = None,
                            key_usage_settings: KeyUsageConstraints = None,
                            skip_diff: bool = False) -> PdfSignatureStatus:
     """
     .. versionadded:: 0.9.0
+
+    .. versionchanged: 0.11.0
+        Added ``ac_validation_context`` param.
+
 
     Validate a PDF signature.
 
@@ -774,6 +780,13 @@ async def async_validate_pdf_signature(
     :param ts_validation_context:
         Validation context to use to validate the timestamp's chain of trust
         (defaults to ``signer_validation_context``).
+    :param ac_validation_context:
+        Validation context to use to validate attribute certificates.
+        If not supplied, no AC validation will be performed.
+
+        .. note::
+            :rfc:`5755` requires attribute authority trust roots to be specified
+            explicitly; hence why there's no default.
     :param diff_policy:
         Policy to evaluate potential incremental updates that were appended
         to the signed revision of the document.
@@ -831,6 +844,17 @@ async def async_validate_pdf_signature(
         and tst_validity.valid and tst_validity.trusted
     )
     _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found)
+    if ac_validation_context is not None:
+        ac_validation_context.certificate_registry.register_multiple(
+            embedded_sig.other_embedded_certs
+        )
+        status_kwargs.update(
+            await collect_certified_attr_status(
+                sd_attr_certificates=embedded_sig.embedded_attr_certs,
+                signer_cert=embedded_sig.signer_cert,
+                validation_context=ac_validation_context
+            )
+        )
     return PdfSignatureStatus(**status_kwargs)
 
 
