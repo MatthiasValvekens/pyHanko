@@ -1017,6 +1017,7 @@ async def test_ac_detached(requests_mock):
     roles = list(status.ac_attrs['role'].attr_values)
     role = roles[0]
     assert isinstance(role, cms.RoleSyntax)
+    assert len(list(status.ac_attrs)) == 1
     assert role['role_name'].native == 'bigboss@example.com'
 
 
@@ -1032,6 +1033,7 @@ async def test_ac_attr_validation_fail(requests_mock):
         ac_validation_context=main_vc  # pass in the wrong VC on purpose
     )
     assert status.bottom_line  # this should still be OK
+    assert len(list(status.ac_attrs)) == 0
     assert 'role' not in status.ac_attrs  # ...but the attribute check fails
 
 
@@ -1049,4 +1051,5 @@ async def test_ac_attr_validation_holder_mismatch(requests_mock):
         ac_validation_context=ac_vc
     )
     assert status.bottom_line  # this should still be OK
+    assert len(list(status.ac_attrs)) == 0
     assert 'role' not in status.ac_attrs  # ...but the attribute check fails
