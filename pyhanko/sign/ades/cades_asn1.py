@@ -1,3 +1,5 @@
+from typing import Any
+
 from asn1crypto import algos, cms, core
 
 from .asn1_util import register_cms_attribute
@@ -154,11 +156,67 @@ class SignaturePolicyStore(core.Sequence):
     ]
 
 
+class OtherAttrCertId(core.ObjectIdentifier):
+    _map = {}  # empty map
+
+
+class OtherAttrCert(core.Sequence):
+    _fields = [
+        ('other_attr_cert_id', OtherAttrCertId),
+        ('other_attr_cert', Any),
+    ]
+
+    _oid_pair = ('other_attr_cert_id', 'other_attr_cert')
+    _oid_specs = {}  # empty map
+
+
+class CertifiedAttributeChoices(core.Choice):
+    _alternatives = [
+        ('attr_cert', cms.AttributeCertificateV2, {'explicit': 0}),
+        ('other_attr_cert', OtherAttrCert, {'explicit': 1}),
+    ]
+
+
+class CertifiedAttributesV2(core.SequenceOf):
+    _child_spec = CertifiedAttributeChoices
+
+
+class SignedAssertionId(core.ObjectIdentifier):
+    _map = {}  # empty map
+
+
+class SignedAssertion(core.Sequence):
+    _fields = [
+        ('signed_assertion_id', SignedAssertionId),
+        ('signed_assertion', Any),
+    ]
+
+    _oid_pair = ('signed_assertion_id', 'signed_assertion')
+    _oid_specs = {}  # empty map
+
+
+class SignedAssertions(core.SequenceOf):
+    _child_spec = SignedAssertion
+
+
+class SignerAttributesV2(core.Sequence):
+    _fields = [
+        # CAdES says that the definition of Attribute is as in X.509.
+        # asn1crypto defines this in two different places, but the "canonical"
+        # one in x509.Attribute doesn't supply any concrete attribute
+        # definitions, so we use the definition in cms.AttCertAttribute instead
+        ('claimed_attributes', cms.AttCertAttributes,
+         {'optional': True, 'explicit': 0}),
+        ('certified_attributes_v2', CertifiedAttributesV2,
+         {'optional': True, 'explicit': 1}),
+        ('signed_assertions', SignedAssertions,
+         {'optional': True, 'explicit': 2}),
+    ]
+
+
 # TODO define SignerLocation (uses DirectoryString from X.520), non-PAdES
 # TODO define validation data archival types
 #  (non-PAdES, more or less replaced by DSS in PDF)
-
-# TODO define SignerAttributesV2 (uses AttributeCertificate from RFC 5755)
 
 register_cms_attribute(
     '1.2.840.113549.1.9.16.2.15', 'signature_policy_identifier',
@@ -173,4 +231,10 @@ register_cms_attribute(
 register_cms_attribute('0.4.0.1733.2.1', 'mime_type', core.UTF8String)
 register_cms_attribute(
     '0.4.0.19122.1', 'signature_policy_store', SignaturePolicyStore
+)
+register_cms_attribute(
+    '0.4.0.19122.1.1', 'signer_attributes_v2', SignerAttributesV2
+)
+register_cms_attribute(
+    '0.4.0.19122.1.2', 'claimed_saml', core.OctetString
 )
