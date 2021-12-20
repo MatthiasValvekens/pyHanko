@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pytest
 import pytz
-from asn1crypto import tsp
+from asn1crypto import cms, tsp
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
@@ -1461,3 +1461,105 @@ async def test_pades_live_ac_presign_validation(requests_mock):
     assert len(dss['/Certs']) == 8  # no ACs here, but OCSP and TSA are present
     assert len(dss['/OCSPs']) == 2  # signer + AC (leaf-aa has OCSP)
     assert len(dss['/CRLs']) == 3  # root, interm-aa, root-aa
+    status = await async_validate_pdf_ltv_signature(
+        s, validation_type=RevocationInfoValidationType.PADES_LT,
+        validation_context_kwargs={
+            'trust_roots': [pki_arch.get_cert('root')],
+            'revocation_mode': 'require'
+        },
+        ac_validation_context_kwargs={
+            'trust_roots': [pki_arch.get_cert('root-aa')],
+            'revocation_mode': 'require'
+        }
+    )
+    assert status.bottom_line
+    roles = list(status.ac_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert len(list(status.ac_attrs)) == 1
+    assert role['role_name'].native == 'bigboss@example.com'
+
+
+@pytest.mark.parametrize('with_force_revinfo', [True, False])
+async def test_pades_lta_live_ac_presign_validation(requests_mock,
+                                                    with_force_revinfo):
+    # Same as the above, but with LTA instead (+some time manipulation)
+
+    with freeze_time('2020-11-01'):
+        pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+        authorities = [
+            pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+            pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
+            pki_arch.get_cert('leaf-aa')
+        ]
+        signer = signers.SimpleSigner(
+            signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+            signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+            cert_registry=SimpleCertificateStore.from_certs(authorities),
+            attribute_certs=[
+                pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+            ]
+        )
+        dummy_ts = timestamps.DummyTimeStamper(
+            tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
+            tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
+            certs_to_embed=SimpleCertificateStore.from_certs(
+                [pki_arch.get_cert('root')]
+            )
+        )
+
+        fetchers = RequestsFetcherBackend().get_fetchers()
+        vc = ValidationContext(
+            trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
+            other_certs=authorities, fetchers=fetchers,
+            revocation_mode='require'
+        )
+        ac_vc = ValidationContext(
+            trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
+            other_certs=authorities, fetchers=fetchers,
+            revocation_mode='require'
+        )
+        Illusionist(pki_arch).register(requests_mock)
+
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+        out = await signers.async_sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                validation_context=vc, ac_validation_context=ac_vc,
+                subfilter=PADES, embed_validation_info=True,
+                use_pades_lta=True
+            ), signer=signer, timestamper=dummy_ts,
+            existing_fields_only=True
+        )
+
+    revo_policy = CertRevTrustPolicy(
+        RevocationCheckingPolicy(
+            RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+            RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+        )
+    )
+
+    with freeze_time('2028-02-01'):
+        r = PdfFileReader(out)
+        s = r.embedded_signatures[0]
+        vc_kwargs = {
+            'trust_roots': [pki_arch.get_cert('root')],
+        }
+        ac_vc_kwargs = {
+            'trust_roots': [pki_arch.get_cert('root-aa')],
+        }
+        if not with_force_revinfo:
+            # supply parameters the usual way
+            vc_kwargs['revinfo_policy'] = revo_policy
+            ac_vc_kwargs['revinfo_policy'] = revo_policy
+        status = await async_validate_pdf_ltv_signature(
+            s, validation_type=RevocationInfoValidationType.PADES_LTA,
+            validation_context_kwargs=vc_kwargs,
+            ac_validation_context_kwargs=ac_vc_kwargs,
+            force_revinfo=with_force_revinfo
+        )
+        assert status.bottom_line
+        roles = list(status.ac_attrs['role'].attr_values)
+        role = roles[0]
+        assert isinstance(role, cms.RoleSyntax)
+        assert len(list(status.ac_attrs)) == 1
+        assert role['role_name'].native == 'bigboss@example.com'

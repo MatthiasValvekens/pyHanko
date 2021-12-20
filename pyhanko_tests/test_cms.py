@@ -21,7 +21,7 @@ from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import fields, signers
+from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.attributes import CMSAttributeProvider
 from pyhanko.sign.general import (
@@ -36,6 +36,7 @@ from pyhanko.sign.validation import (
     DocumentSecurityStore,
     async_validate_cms_signature,
     async_validate_detached_cms,
+    async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
     collect_validation_info,
     validate_cms_signature,
@@ -995,6 +996,67 @@ async def test_embed_ac(requests_mock):
     main_vc, ac_vc = live_ac_vcs(requests_mock)
     status = await async_validate_pdf_signature(
         s, signer_validation_context=main_vc, ac_validation_context=ac_vc
+    )
+    assert status.bottom_line
+    roles = list(status.ac_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+
+
+@freeze_time('2020-11-01')
+async def test_embed_ac_revinfo_adobe_style(requests_mock):
+    signer = get_ac_aware_signer()
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    dummy_ts = timestamps.DummyTimeStamper(
+        tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
+        tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
+        certs_to_embed=SimpleCertificateStore.from_certs(
+            [pki_arch.get_cert('root')]
+        )
+    )
+    from certomancer.integrations.illusionist import Illusionist
+    from pyhanko_certvalidator.fetchers.requests_fetchers import (
+        RequestsFetcherBackend,
+    )
+    fetchers = RequestsFetcherBackend().get_fetchers()
+    main_vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
+        other_certs=signer.cert_registry, fetchers=fetchers,
+        revocation_mode='require'
+    )
+    ac_vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
+        other_certs=signer.cert_registry, fetchers=fetchers,
+        revocation_mode='require'
+    )
+    Illusionist(pki_arch).register(requests_mock)
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            embed_validation_info=True,
+            validation_context=main_vc,
+            ac_validation_context=ac_vc
+        ),
+        timestamper=dummy_ts,
+        signer=signer
+    )
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
+    assert len(s.other_embedded_certs) == 5  # signer cert is excluded
+    assert len(s.embedded_attr_certs) == 1
+    from pyhanko.sign.validation import RevocationInfoValidationType
+    status = await async_validate_pdf_ltv_signature(
+        s, RevocationInfoValidationType.ADOBE_STYLE,
+        validation_context_kwargs={
+            'trust_roots': [pki_arch.get_cert('root')]
+        },
+        ac_validation_context_kwargs={
+            'trust_roots': [pki_arch.get_cert('root-aa')]
+        }
     )
     assert status.bottom_line
     roles = list(status.ac_attrs['role'].attr_values)
