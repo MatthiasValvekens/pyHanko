@@ -230,11 +230,11 @@ register_cms_attribute(
 )
 register_cms_attribute('0.4.0.1733.2.1', 'mime_type', core.UTF8String)
 register_cms_attribute(
-    '0.4.0.19122.1', 'signature_policy_store', SignaturePolicyStore
-)
-register_cms_attribute(
     '0.4.0.19122.1.1', 'signer_attributes_v2', SignerAttributesV2
 )
 register_cms_attribute(
     '0.4.0.19122.1.2', 'claimed_saml', core.OctetString
+)
+register_cms_attribute(
+    '0.4.0.19122.1.3', 'signature_policy_store', SignaturePolicyStore
 )
