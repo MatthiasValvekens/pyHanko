@@ -7,6 +7,7 @@ from typing import List, Optional, Union
 from asn1crypto import cms, x509
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
@@ -61,7 +62,8 @@ from .status import (
 
 __all__ = [
     'EmbeddedPdfSignature', 'DocMDPInfo', 'read_certification_data',
-    'async_validate_pdf_signature', 'async_validate_pdf_timestamp'
+    'async_validate_pdf_signature', 'async_validate_pdf_timestamp',
+    'report_seed_value_validation'
 ]
 
 logger = logging.getLogger(__name__)
@@ -567,9 +569,10 @@ def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
 
 
 def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
-                             signing_cert, validation_path, timestamp_found):
+                             validation_path, timestamp_found):
 
     sv_spec = emb_sig.seed_value_spec
+    signing_cert = emb_sig.signer_cert
     if sv_spec.cert is not None:
         try:
             sv_spec.cert.satisfied_by(signing_cert, validation_path)
@@ -724,24 +727,37 @@ def _validate_sv_constraints(emb_sig: EmbeddedPdfSignature,
             )
 
 
-# TODO give this functionality a cleaner API and export it
+def report_seed_value_validation(embedded_sig: EmbeddedPdfSignature,
+                                 validation_path: ValidationPath,
+                                 timestamp_found: bool):
+    """
+    Internal API function to enforce seed value constraints (if present)
+    and report on the result(s).
 
-def _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found):
+    :param embedded_sig:
+        The embedded signature.
+    :param validation_path:
+        The validation path for the signer's certificate.
+    :param timestamp_found:
+        Flag indicating whether a valid timestamp was found or not.
+    :return:
+        A ``status_kwargs`` dict.
+    """
     sv_spec = embedded_sig.seed_value_spec
     if sv_spec is None:
-        return
-    status_kwargs['has_seed_values'] = True
+        return {}
+    sv_err: Optional[SigSeedValueValidationError]
     try:
         _validate_sv_constraints(
-            embedded_sig, status_kwargs['signing_cert'],
-            status_kwargs['validation_path'], timestamp_found=timestamp_found
+            embedded_sig, validation_path, timestamp_found=timestamp_found
         )
-        status_kwargs['seed_value_constraint_error'] = None
+        sv_err = None
     except SigSeedValueValidationError as e:
         logger.warning(
             "Error in seed value validation.", exc_info=e
         )
-        status_kwargs['seed_value_constraint_error'] = e
+        sv_err = e
+    return {'has_seed_values': True, 'seed_value_constraint_error': sv_err}
 
 
 def _validate_subfilter(subfilter_str, permitted_subfilters, err_msg):
@@ -843,7 +859,10 @@ async def async_validate_pdf_signature(
         tst_validity is not None
         and tst_validity.valid and tst_validity.trusted
     )
-    _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found)
+    sv_update = report_seed_value_validation(
+        embedded_sig, status_kwargs['validation_path'], timestamp_found
+    )
+    status_kwargs.update(sv_update)
     if ac_validation_context is not None:
         ac_validation_context.certificate_registry.register_multiple(
             embedded_sig.other_embedded_certs

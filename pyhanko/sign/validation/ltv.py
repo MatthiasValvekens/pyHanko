@@ -32,7 +32,7 @@ from .generic_cms import (
     collect_certified_attr_status,
     validate_tst_signed_data,
 )
-from .pdf_embedded import EmbeddedPdfSignature, _validate_sv_and_update
+from .pdf_embedded import EmbeddedPdfSignature, report_seed_value_validation
 from .settings import KeyUsageConstraints
 from .status import (
     PdfSignatureStatus,
@@ -466,7 +466,9 @@ async def async_validate_pdf_ltv_signature(
         key_usage_settings=key_usage_settings
     )
 
-    _validate_sv_and_update(embedded_sig, status_kwargs, timestamp_found=True)
+    report_seed_value_validation(
+        embedded_sig, status_kwargs['validation_path'], timestamp_found=True
+    )
     if stored_ac_vc is not None:
         stored_ac_vc.certificate_registry.register_multiple(
             embedded_sig.other_embedded_certs
