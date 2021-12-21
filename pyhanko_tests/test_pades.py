@@ -24,8 +24,15 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import PdfTimeStamper, fields, signers, timestamps
-from pyhanko.sign.ades.api import CAdESSignedAttrSpec, GenericCommitment
-from pyhanko.sign.ades.cades_asn1 import SignaturePolicyIdentifier
+from pyhanko.sign.ades.api import (
+    CAdESSignedAttrSpec,
+    GenericCommitment,
+    SignerAttrSpec,
+)
+from pyhanko.sign.ades.cades_asn1 import (
+    CommitmentTypeIndication,
+    SignaturePolicyIdentifier,
+)
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.general import SigningError, find_cms_attribute
 from pyhanko.sign.signers.pdf_signer import (
@@ -52,6 +59,7 @@ from pyhanko_tests.samples import (
     MINIMAL_ONE_FIELD,
     MINIMAL_TWO_FIELDS,
     PDF_DATA_DIR,
+    SAMPLE_GROUP_ATTR,
     TESTING_CA,
     UNRELATED_TSA,
 )
@@ -69,6 +77,7 @@ from pyhanko_tests.signing_commons import (
     SIMPLE_ECC_V_CONTEXT,
     TRUST_ROOTS,
     dummy_ocsp_vc,
+    live_ac_vcs,
     live_testing_vc,
     val_trusted,
 )
@@ -1563,3 +1572,40 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock,
         assert isinstance(role, cms.RoleSyntax)
         assert len(list(status.ac_attrs)) == 1
         assert role['role_name'].native == 'bigboss@example.com'
+
+
+@freeze_time('2020-11-01')
+async def test_cades_signer_attrs_autofill_dss(requests_mock):
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore(),  # no certs here on purpose
+    )
+    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            embed_validation_info=True,
+            validation_context=main_vc,
+            ac_validation_context=ac_vc,
+            cades_signed_attr_spec=CAdESSignedAttrSpec(
+                commitment_type=CommitmentTypeIndication({
+                    'commitment_type_id': 'proof_of_approval',
+                }),
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=[SAMPLE_GROUP_ATTR],
+                    certified_attrs=[
+                        pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+                    ]
+                )
+            )
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    # 4 CA certs, 1 AA certs, 1 signer cert, 1 OCSP responder cert -> 7 certs
+    dss = r.root['/DSS']
+    assert len(dss['/Certs']) == 7

@@ -1,17 +1,21 @@
 import enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
+
+from asn1crypto import cms
 
 from pyhanko.sign.timestamps import TimeStamper
 
 from ..attributes import CMSAttributeProvider, TSTProvider
 from .cades_asn1 import (
+    CertifiedAttributeChoices,
     CommitmentTypeIdentifier,
     CommitmentTypeIndication,
     SignaturePolicyIdentifier,
+    SignerAttributesV2,
 )
 
-__all__ = ['GenericCommitment', 'CAdESSignedAttrSpec']
+__all__ = ['GenericCommitment', 'CAdESSignedAttrSpec', 'SignerAttrSpec']
 
 
 # TODO add semantics explanations from the standard
@@ -30,6 +34,30 @@ class GenericCommitment(enum.Enum):
         return CommitmentTypeIndication({
             'commitment_type_id': CommitmentTypeIdentifier(self.name.lower())
         })
+
+
+@dataclass(frozen=True)
+class SignerAttrSpec:
+    """
+    Class that controls the ``signer-attributes-v2`` signed CAdES attribute.
+
+    These represent attributes of the signing entity, not the signature or
+    signed content.
+
+    .. note::
+        Out of the box, only basic claimed attributes and certified attributes
+        through V2 X.509 attribute certificates are supported.
+    """
+
+    claimed_attrs: Iterable[cms.AttCertAttribute]
+    """
+    Attributes claimed by the signer without further justification.
+    """
+
+    certified_attrs: Iterable[cms.AttributeCertificateV2]
+    """
+    Attribute certificates containing signer attributes.
+    """
 
 
 @dataclass(frozen=True)
@@ -67,6 +95,12 @@ class CAdESSignedAttrSpec:
         provisions of the signature policy are adhered to.
     """
 
+    signer_attributes: Optional[SignerAttrSpec] = None
+    """
+    Settings for signer's attributes, to be included in a
+    ``signer-attributes-v2`` attribute on the signature.
+    """
+
     def prepare_providers(self, message_digest, md_algorithm,
                           timestamper: Optional[TimeStamper] = None):
 
@@ -80,6 +114,8 @@ class CAdESSignedAttrSpec:
             yield SigPolicyIDProvider(self.signature_policy_identifier)
         if self.commitment_type is not None:
             yield CommitmentTypeProvider(self.commitment_type)
+        if self.signer_attributes is not None:
+            yield SignerAttributesProvider(self.signer_attributes)
 
 
 class CommitmentTypeProvider(CMSAttributeProvider):
@@ -101,3 +137,25 @@ class SigPolicyIDProvider(CMSAttributeProvider):
     async def build_attr_value(self, dry_run=False) \
             -> SignaturePolicyIdentifier:
         return self.policy_id
+
+
+class SignerAttributesProvider(CMSAttributeProvider):
+    attribute_type = 'signer_attributes_v2'
+
+    def __init__(self, signer_attr_spec: SignerAttrSpec):
+        self.signer_attr_spec = signer_attr_spec
+
+    async def build_attr_value(self, dry_run=False) \
+            -> SignerAttributesV2:
+        spec = self.signer_attr_spec
+        claimed = list(spec.claimed_attrs)
+        certified = list(spec.certified_attrs)
+        result = {}
+        if claimed:
+            result['claimed_attributes'] = claimed
+        if certified:
+            result['certified_attributes_v2'] = [
+                CertifiedAttributeChoices(name='attr_cert', value=attr_cert)
+                for attr_cert in certified
+            ]
+        return SignerAttributesV2(result)

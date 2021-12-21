@@ -1,4 +1,5 @@
 import yaml
+from asn1crypto import cms
 from certomancer.registry import ArchLabel, CertomancerConfig
 
 from pyhanko.pdf_utils.crypt import SimpleEnvelopeKeyDecrypter
@@ -121,3 +122,15 @@ UNRELATED_TSA = CERTOMANCER.get_pki_arch(ArchLabel('unrelated-tsa'))
 TESTING_CA_ECDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ecdsa'))
 TESTING_CA_DSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-dsa'))
 TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'
+
+SAMPLE_GROUP_ATTR = cms.AttCertAttribute({
+    'type': cms.AttCertAttributeType('group'),
+    'values': [
+        cms.IetfAttrSyntax({
+            'values': [
+                cms.IetfAttrValue(name='string', value='Employees'),
+                cms.IetfAttrValue(name='string', value='Executives')
+            ]
+        })
+    ]
+})

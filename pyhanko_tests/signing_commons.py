@@ -134,15 +134,22 @@ def live_testing_vc(requests_mock, with_extra_tsa=False, **kwargs):
     return vc
 
 
-def live_ac_vcs(requests_mock):
+def live_ac_vcs(requests_mock, with_authorities=False):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    if with_authorities:
+        other_certs = [
+            pki_arch.get_cert('interm'), pki_arch.get_cert('interm-aa'),
+            pki_arch.get_cert('leaf-aa')
+        ]
+    else:
+        other_certs = []
     main_vc = ValidationContext(
         trust_roots=[pki_arch.get_cert(CertLabel('root'))],
-        allow_fetching=True, other_certs=[],
+        allow_fetching=True, other_certs=other_certs,
     )
     ac_vc = ValidationContext(
         trust_roots=[pki_arch.get_cert(CertLabel('root-aa'))],
-        allow_fetching=True, other_certs=[],
+        allow_fetching=True, other_certs=other_certs,
     )
     Illusionist(pki_arch).register(requests_mock)
     return main_vc, ac_vc

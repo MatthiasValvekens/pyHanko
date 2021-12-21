@@ -1488,11 +1488,19 @@ class PdfSigningSession:
 
     async def _perform_presign_ac_validation(self, validation_context):
         signer = self.pdf_signer.signer
+        attr_certs = list(signer.attribute_certs)
+        cades_attr_spec = self.pdf_signer.signature_meta.cades_signed_attr_spec
+        # also make sure to pull in the validation chains for all attribute
+        # certificates included in the signer-attributes-v2 attr, if there is
+        # one.
+        if cades_attr_spec is not None and \
+                cades_attr_spec.signer_attributes is not None:
+            attr_certs.extend(cades_attr_spec.signer_attributes.certified_attrs)
         ac_jobs = [
             async_validate_ac(
                 ac, validation_context,
                 holder_cert=signer.signing_cert
-            ) for ac in signer.attribute_certs
+            ) for ac in attr_certs
         ]
         for ac_job in asyncio.as_completed(ac_jobs):
             result: ACValidationResult = await ac_job
