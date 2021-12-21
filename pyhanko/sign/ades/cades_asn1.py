@@ -18,7 +18,10 @@ __all__ = [
     'SPUserNotice', 'SPDocSpecification', 'SigPolicyQualifierInfo',
     'SigPolicyQualifierInfos', 'SignaturePolicyId', 'SignaturePolicyIdentifier',
     'SignaturePolicyDocument', 'SignaturePolicyStore',
-    'DisplayText'
+    'DisplayText',
+    'SignerAttributesV2', 'CertifiedAttributesV2', 'CertifiedAttributeChoices',
+    'OtherAttrCert', 'OtherAttrCertId', 'SignedAssertions', 'SignedAssertion',
+    'SignedAssertionId'
 ]
 
 
