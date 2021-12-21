@@ -78,9 +78,10 @@ def find_cms_attribute(attrs, name):
         Raised when no such type entry could be found in the
         :class:`.cms.CMSAttributes` object.
     """
-    for attr in attrs:
-        if attr['type'].native == name:
-            return attr['values']
+    if attrs:
+        for attr in attrs:
+            if attr['type'].native == name:
+                return attr['values']
     raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
 
 
