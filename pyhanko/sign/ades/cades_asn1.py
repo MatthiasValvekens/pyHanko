@@ -1,5 +1,3 @@
-from typing import Any
-
 from asn1crypto import algos, cms, core
 
 from .asn1_util import register_cms_attribute
@@ -163,7 +161,7 @@ class OtherAttrCertId(core.ObjectIdentifier):
 class OtherAttrCert(core.Sequence):
     _fields = [
         ('other_attr_cert_id', OtherAttrCertId),
-        ('other_attr_cert', Any),
+        ('other_attr_cert', core.Any),
     ]
 
     _oid_pair = ('other_attr_cert_id', 'other_attr_cert')
@@ -188,7 +186,7 @@ class SignedAssertionId(core.ObjectIdentifier):
 class SignedAssertion(core.Sequence):
     _fields = [
         ('signed_assertion_id', SignedAssertionId),
-        ('signed_assertion', Any),
+        ('signed_assertion', core.Any),
     ]
 
     _oid_pair = ('signed_assertion_id', 'signed_assertion')
