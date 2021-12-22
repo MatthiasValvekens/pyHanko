@@ -82,9 +82,18 @@ def _make_tag_explicit(field_decl):
     del tag_dict['implicit']
 
 
+def _make_tag_implicit(field_decl):
+    tag_dict = field_decl[2]
+    if 'implicit' in tag_dict:
+        return
+    tag_dict['implicit'] = tag_dict['explicit']
+    del tag_dict['explicit']
+
 # Deal with wbond/asn1crypto#218
 _make_tag_explicit(cms.RoleSyntax._fields[1])
 _make_tag_explicit(cms.SecurityCategory._fields[1])
+# Deal with wbond/asn1crypto#220
+_make_tag_implicit(cms.AttCertIssuer._alternatives[1])
 
 # patch in attribute certificate extensions
 # Note: unlike in Certomancer, we don't do this one conditionally, since
