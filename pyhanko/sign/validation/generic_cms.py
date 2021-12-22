@@ -1,14 +1,14 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import IO, Iterable, Optional, Tuple, Type, TypeVar, Union
+from typing import IO, Iterable, List, Optional, Tuple, Type, TypeVar, Union
 
-from asn1crypto import cms, tsp, x509
+from asn1crypto import cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
-from pyhanko_certvalidator.validate import async_validate_ac
+from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
     MultivaluedAttributeError,
@@ -24,7 +24,9 @@ from ...pdf_utils import misc
 from .errors import SignatureValidationError, WeakHashAlgorithmError
 from .settings import KeyUsageConstraints
 from .status import (
+    CAdESSignerAttributeAssertions,
     CertifiedAttributes,
+    ClaimedAttributes,
     SignatureStatus,
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
@@ -41,7 +43,7 @@ __all__ = [
     'async_validate_detached_cms', 'cms_basic_validation',
     'compute_signature_tst_digest', 'extract_tst_data',
     'extract_self_reported_ts',
-    'collect_certified_attr_status',
+    'collect_signer_attr_status',
 ]
 
 logger = logging.getLogger(__name__)
@@ -495,33 +497,109 @@ async def validate_tst_signed_data(
 async def process_certified_attrs(
         acs: Iterable[cms.AttributeCertificateV2],
         signer_cert: x509.Certificate,
-        validation_context: ValidationContext) -> CertifiedAttributes:
+        validation_context: ValidationContext) \
+        -> Tuple[List[ACValidationResult], List[Exception]]:
     jobs = [
         async_validate_ac(ac, validation_context, holder_cert=signer_cert)
         for ac in acs
     ]
     results = []
+    errors = []
     for job in asyncio.as_completed(jobs):
         try:
             results.append(await job)
         except (PathBuildingError, PathValidationError) as e:
-            logger.info(
-                "Error while validating attribute certificate -- skipping: %s",
-                # no stack trace, just print the exception message
-                str(e)
-            )
-    return CertifiedAttributes.from_results(results)
+            errors.append(e)
+    return results, errors
 
 
-async def collect_certified_attr_status(
+async def collect_signer_attr_status(
         sd_attr_certificates: Iterable[cms.AttributeCertificateV2],
         signer_cert: x509.Certificate,
-        validation_context: ValidationContext):
+        validation_context: Optional[ValidationContext],
+        sd_signed_attrs: cms.CMSAttributes):
+    # check if we need to process signer-attrs-v2 first
+    try:
+        signer_attrs = \
+            find_unique_cms_attribute(sd_signed_attrs, 'signer_attributes_v2')
+    except NonexistentAttributeError:
+        signer_attrs = None
+    except MultivaluedAttributeError as e:
+        raise SignatureValidationError(str(e)) from e
 
-    attrs = await process_certified_attrs(
-        sd_attr_certificates, signer_cert, validation_context
-    )
-    return {'ac_attrs': attrs}
+    result = {}
+    cades_ac_results = None
+    cades_ac_errors = None
+    if signer_attrs is not None:
+        claimed_asn1 = signer_attrs['claimed_attributes']
+        # process claimed attributes (no verification possible/required,
+        # so this is independent of whether we have a validation context
+        # available)
+        claimed = ClaimedAttributes.from_iterable(
+            claimed_asn1 if not isinstance(claimed_asn1, core.Void) else ()
+        )
+        # extract all X.509 attribute certs
+        certified_asn1 = signer_attrs['certified_attributes_v2']
+        unknown_cert_attrs = False
+        if not isinstance(certified_asn1, core.Void):
+            # if there are certified attributes but validation_context is None,
+            # then cades_ac_results remains None
+            cades_acs = [
+                attr.chosen for attr in certified_asn1
+                if attr.name == 'attr_cert'
+            ]
+            # record if there were other types of certified attributes
+            unknown_cert_attrs = len(cades_acs) != len(certified_asn1)
+            if validation_context is not None:
+                # validate retrieved AC's
+                val_job = process_certified_attrs(
+                    cades_acs, signer_cert, validation_context,
+                )
+                cades_ac_results, cades_ac_errors = await val_job
+
+        # If we were able to validate AC's from the signers-attrs-v2 attribute,
+        # compile the validation results
+        if cades_ac_results is not None:
+            certified = CertifiedAttributes.from_results(cades_ac_results)
+        else:
+            certified = None
+
+        # If there's a validation context (i.e. the caller cares about attribute
+        #  validation semantics), then log a warning message in case there were
+        # signed assertions or certified attributes that we didn't understand.
+        unknown_attrs = (
+            unknown_cert_attrs or
+            not isinstance(signer_attrs['signed_assertions'], core.Void)
+        )
+        if validation_context is not None and unknown_attrs:
+            logger.warning(
+                "CAdES signer attributes with externally certified assertions "
+                "for which no validation method is available. This may affect "
+                "signature semantics in unexpected ways."
+            )
+
+        # store the result of the signer-attrs-v2 processing step
+        result['cades_signer_attrs'] = CAdESSignerAttributeAssertions(
+            claimed_attrs=claimed, certified_attrs=certified,
+            ac_validation_errs=cades_ac_errors,
+            unknown_attrs_present=unknown_attrs
+        )
+
+    if validation_context is not None:
+        # validate the ac's in the SD's 'certificates' entry, we have to do that
+        # anyway
+        ac_results, ac_errors = await process_certified_attrs(
+            sd_attr_certificates, signer_cert, validation_context
+        )
+        # if there were validation results from the signer-attrs-v2 validation,
+        # add them to the report here.
+        if cades_ac_results:
+            ac_results.extend(cades_ac_results)
+        if cades_ac_errors:
+            ac_errors.extend(cades_ac_errors)
+        result['ac_attrs'] = CertifiedAttributes.from_results(ac_results)
+        result['ac_validation_errs'] = ac_errors
+    return result
 
 
 async def async_validate_detached_cms(
@@ -599,16 +677,17 @@ async def async_validate_detached_cms(
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings
     )
+    cert_info = extract_certificate_info(signed_data)
     if ac_validation_context is not None:
-        cert_info = extract_certificate_info(signed_data)
         ac_validation_context.certificate_registry.register_multiple(
             cert_info.other_certs
         )
-        status_kwargs.update(
-            await collect_certified_attr_status(
-                sd_attr_certificates=cert_info.attribute_certs,
-                signer_cert=cert_info.signer_cert,
-                validation_context=ac_validation_context
-            )
+    status_kwargs.update(
+        await collect_signer_attr_status(
+            sd_attr_certificates=cert_info.attribute_certs,
+            signer_cert=cert_info.signer_cert,
+            validation_context=ac_validation_context,
+            sd_signed_attrs=signer_info['signed_attrs']
         )
+    )
     return StandardCMSSignatureStatus(**status_kwargs)

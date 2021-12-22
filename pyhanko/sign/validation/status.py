@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from enum import unique
-from typing import ClassVar, Dict, Iterable, Optional, Set, Union
+from typing import ClassVar, Collection, Dict, Iterable, Optional, Set, Union
 
 from asn1crypto import cms, core, keys, x509
 from pyhanko_certvalidator import CertificateValidator
@@ -27,7 +27,9 @@ from .settings import KeyUsageConstraints
 
 __all__ = [
     'SignatureStatus', 'TimestampSignatureStatus',
-    'CertifiedAttributeInfo', 'CertifiedAttributes',
+    'X509AttributeInfo', 'CertifiedAttributeInfo',
+    'ClaimedAttributes', 'CertifiedAttributes',
+    'CAdESSignerAttributeAssertions',
     'StandardCMSSignatureStatus',
     'SignatureCoverageLevel', 'ModificationInfo',
     'PdfSignatureStatus', 'DocumentTimestampStatus'
@@ -209,7 +211,11 @@ class TimestampSignatureStatus(SignatureStatus):
 
 
 @dataclass(frozen=True)
-class CertifiedAttributeInfo:
+class X509AttributeInfo:
+    """
+    Info on an X.509 attribute.
+    """
+
     attr_type: cms.AttCertAttributeType
     """
     The certified attribute's type.
@@ -218,6 +224,13 @@ class CertifiedAttributeInfo:
     attr_values: Iterable[core.Asn1Value]
     """
     The certified attribute's values.
+    """
+
+
+@dataclass(frozen=True)
+class CertifiedAttributeInfo(X509AttributeInfo):
+    """
+    Info on a certified attribute, including AC validation results.
     """
 
     validation_results: Iterable[ACValidationResult]
@@ -229,6 +242,9 @@ class CertifiedAttributeInfo:
 
 
 class CertifiedAttributes:
+    """
+    Container class for extracted attribute certificate information.
+    """
 
     @classmethod
     def from_results(cls, results: Iterable[ACValidationResult]):
@@ -257,11 +273,111 @@ class CertifiedAttributes:
     def __getitem__(self, item: str) -> CertifiedAttributeInfo:
         return self._attrs[item]
 
+    def __len__(self):
+        return len(self._attrs)
+
+    def __bool__(self):
+        return bool(self._attrs)
+
     def __iter__(self):
         return iter(self._attrs.values())
 
     def __contains__(self, item: str) -> bool:
         return item in self._attrs
+
+
+class ClaimedAttributes:
+    """
+    Container class for extracted information on attributes asserted
+    by a signer without an attribute certificate.
+    """
+
+    @classmethod
+    def from_iterable(cls, attrs: Iterable[cms.AttCertAttribute]):
+        infos = ClaimedAttributes()
+        by_type = defaultdict(lambda: ([], []))
+        for attr in attrs:
+            type_values, type_results = by_type[attr['type'].native]
+            type_values.extend(attr['values'])
+        for attr_type, (type_values, type_results) in by_type.items():
+            infos._attrs[attr_type] = CertifiedAttributeInfo(
+                attr_type=cms.AttCertAttributeType(attr_type),
+                # (shallow) immutability
+                attr_values=tuple(type_values),
+                validation_results=tuple(type_results)
+            )
+        return infos
+
+    def __init__(self):
+        self._attrs: Dict[str, X509AttributeInfo] = {}
+
+    def __getitem__(self, item: str) -> X509AttributeInfo:
+        return self._attrs[item]
+
+    def __len__(self):
+        return len(self._attrs)
+
+    def __bool__(self):
+        return bool(self._attrs)
+
+    def __iter__(self):
+        return iter(self._attrs.values())
+
+    def __contains__(self, item: str) -> bool:
+        return item in self._attrs
+
+
+@dataclass(frozen=True)
+class CAdESSignerAttributeAssertions:
+    """
+    Value type describing information extracted (and, if relevant, validated)
+    from a ``signer-attrs-v2`` signed attribute.
+    """
+
+    claimed_attrs: ClaimedAttributes
+    """
+    Attributes claimed by the signer without additional justification.
+    May be empty.
+    """
+
+    certified_attrs: Optional[CertifiedAttributes] = None
+    """
+    Attributes claimed by the signer using an attribute certificate.
+
+    This field will only be populated if an attribute certificate
+    validation context is available, otherwise its value will be ``None``,
+    even if there are no attribute certificates present.
+    """
+
+    ac_validation_errs: \
+        Optional[Collection[Union[PathValidationError, PathBuildingError]]] \
+        = None
+    """
+    Attribute certificate validation errors.
+
+    This field will only be populated if an attribute certificate
+    validation context is available, otherwise its value will be ``None``,
+    even if there are no attribute certificates present.
+    """
+
+    unknown_attrs_present: bool = False
+    """
+    Records if the ``signer-attrs-v2`` attribute contained certificate types
+    or signed assertions that could not be processed.
+
+    This does not affect the validation process by default, but will trigger
+    a warning.
+    """
+
+    @property
+    def valid(self):
+        return not self.ac_validation_errs
+    # TODO This is current policy, but may still change. Should check
+    #  CAdES validation guidelines first.
+    #  Add a note along the following lines if we decide to keep it:
+    # Since these attribute certificates are part of the signed content
+    # of the signature, a validation failure on any of the ACs will cause
+    # the signature to be rejected.
 
 
 @dataclass(frozen=True)
@@ -290,15 +406,45 @@ class StandardCMSSignatureStatus(SignatureStatus):
     signature, if present.
     """
 
-    # TODO also provide an entry for CAdES-style signer attributes
-    #  (can also be done through ACs, but embedded using a different mechanism)
     ac_attrs: Optional[CertifiedAttributes] = None
     """
     Certified attributes sourced from valid attribute certificates embedded into
-    the ``SignedData``'s ``certificates`` field.
+    the ``SignedData``'s ``certificates`` field and the CAdES-style
+    ``signer-attrs-v2`` attribute (if present).
 
     Will be ``None`` if no validation context for attribute certificate
     validation was provided.
+
+    .. note::
+        There is a semantic difference between attribute certificates
+        extracted from the ``certificates`` field and those extracted from
+        the ``signer-attrs-v2`` attribute.
+        In the former case, the ACs are not covered by the signature.
+        However, a CAdES-style ``signer-attrs-v2`` attribute is signed, so
+        the signer is expected to have explicitly _acknowledged_ all attributes,
+        in the AC. See also :attr:`cades_signer_attrs`.
+    """
+
+    ac_validation_errs: \
+        Optional[Collection[Union[PathValidationError, PathBuildingError]]] \
+        = None
+    """
+    Errors encountered while validating attribute certificates embedded into
+    the ``SignedData``'s ``certificates`` field and the CAdES-style
+    ``signer-attrs-v2`` attribute (if present).
+
+    Will be ``None`` if no validation context for attribute certificate
+    validation was provided.
+
+    Since the ``certificates`` field is not part of the signed data, errors
+    resulting from invalid ACs in the ``certificates`` field do not impact
+    the overall validity of the signature.
+    """
+
+    cades_signer_attrs: Optional[CAdESSignerAttributeAssertions] = None
+    """
+    Information extracted and validated from the signed ``signer-attrs-v2``
+    attribute defined in CAdES.
     """
 
     @property
@@ -324,9 +470,15 @@ class StandardCMSSignatureStatus(SignatureStatus):
             content_timestamp_ok = True
         else:
             content_timestamp_ok = content_ts.valid and content_ts.trusted
+
+        if self.cades_signer_attrs is None:
+            signer_attrs_ok = True
+        else:
+            signer_attrs_ok = self.cades_signer_attrs.valid
+
         return (
                 self.intact and self.valid and self.trusted and timestamp_ok
-                and content_timestamp_ok
+                and content_timestamp_ok and signer_attrs_ok
         )
 
     def summary_fields(self):
@@ -336,6 +488,9 @@ class StandardCMSSignatureStatus(SignatureStatus):
             yield 'TIMESTAMP_TOKEN<%s>' % (
                 '|'.join(self.timestamp_validity.summary_fields())
             )
+        if self.cades_signer_attrs is not None \
+                and not self.cades_signer_attrs.valid:
+            yield 'CERTIFIED_SIGNER_ATTRS_INVALID'
 
     def pretty_print_details(self):
         def fmt_section(hdr, body):
@@ -354,6 +509,7 @@ class StandardCMSSignatureStatus(SignatureStatus):
     def pretty_print_sections(self):
         cert: x509.Certificate = self.signing_cert
 
+        # TODO add section about ACs
         if self.trusted:
             trust_status = "trusted"
         elif self.revoked:
@@ -537,16 +693,12 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
         :return:
             ``True`` if all constraints are satisfied, ``False`` otherwise.
         """
+        generic_checks_ok = super().bottom_line
 
-        ts = self.timestamp_validity
-        if ts is None:
-            timestamp_ok = True
-        else:
-            timestamp_ok = ts.intact and ts.valid and ts.trusted
         return (
-                self.intact and self.valid and self.trusted and self.seed_value_ok
+                generic_checks_ok
+                and self.seed_value_ok
                 and (self.docmdp_ok or self.modification_level is None)
-                and timestamp_ok
         )
 
     @property

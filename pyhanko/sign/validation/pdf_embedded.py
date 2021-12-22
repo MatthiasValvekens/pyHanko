@@ -46,7 +46,7 @@ from .errors import (
 )
 from .generic_cms import (
     cms_basic_validation,
-    collect_certified_attr_status,
+    collect_signer_attr_status,
     collect_timing_info,
     compute_signature_tst_digest,
     extract_self_reported_ts,
@@ -867,13 +867,14 @@ async def async_validate_pdf_signature(
         ac_validation_context.certificate_registry.register_multiple(
             embedded_sig.other_embedded_certs
         )
-        status_kwargs.update(
-            await collect_certified_attr_status(
-                sd_attr_certificates=embedded_sig.embedded_attr_certs,
-                signer_cert=embedded_sig.signer_cert,
-                validation_context=ac_validation_context
-            )
+    status_kwargs.update(
+        await collect_signer_attr_status(
+            sd_attr_certificates=embedded_sig.embedded_attr_certs,
+            signer_cert=embedded_sig.signer_cert,
+            validation_context=ac_validation_context,
+            sd_signed_attrs=embedded_sig.signer_info['signed_attrs']
         )
+    )
     return PdfSignatureStatus(**status_kwargs)
 
 

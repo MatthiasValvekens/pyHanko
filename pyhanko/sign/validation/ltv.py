@@ -29,7 +29,7 @@ from .errors import (
 from .generic_cms import (
     async_validate_cms_signature,
     cms_basic_validation,
-    collect_certified_attr_status,
+    collect_signer_attr_status,
     validate_tst_signed_data,
 )
 from .pdf_embedded import EmbeddedPdfSignature, report_seed_value_validation
@@ -473,13 +473,14 @@ async def async_validate_pdf_ltv_signature(
         stored_ac_vc.certificate_registry.register_multiple(
             embedded_sig.other_embedded_certs
         )
-        status_kwargs.update(
-            await collect_certified_attr_status(
-                sd_attr_certificates=embedded_sig.embedded_attr_certs,
-                signer_cert=embedded_sig.signer_cert,
-                validation_context=stored_ac_vc
-            )
+    status_kwargs.update(
+        await collect_signer_attr_status(
+            sd_attr_certificates=embedded_sig.embedded_attr_certs,
+            signer_cert=embedded_sig.signer_cert,
+            validation_context=stored_ac_vc,
+            sd_signed_attrs=embedded_sig.signer_info['signed_attrs']
         )
+    )
 
     return PdfSignatureStatus(**status_kwargs)
 

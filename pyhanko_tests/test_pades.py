@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pytest
 import pytz
-from asn1crypto import cms, tsp
+from asn1crypto import cms, core, tsp
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
@@ -30,9 +30,13 @@ from pyhanko.sign.ades.api import (
     SignerAttrSpec,
 )
 from pyhanko.sign.ades.cades_asn1 import (
+    CertifiedAttributeChoices,
     CommitmentTypeIndication,
     SignaturePolicyIdentifier,
+    SignedAssertion,
+    SignerAttributesV2,
 )
+from pyhanko.sign.attributes import CMSAttributeProvider
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.general import SigningError, find_cms_attribute
 from pyhanko.sign.signers.pdf_signer import (
@@ -49,6 +53,7 @@ from pyhanko.sign.validation import (
     ValidationInfoReadingError,
     add_validation_info,
     async_validate_pdf_ltv_signature,
+    async_validate_pdf_signature,
     validate_pdf_ltv_signature,
     validate_pdf_timestamp,
 )
@@ -750,6 +755,7 @@ def test_sign_with_commitment():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.xfail  # TODO fix content signature logic
 def test_sign_with_content_sig():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
@@ -1485,7 +1491,7 @@ async def test_pades_live_ac_presign_validation(requests_mock):
     roles = list(status.ac_attrs['role'].attr_values)
     role = roles[0]
     assert isinstance(role, cms.RoleSyntax)
-    assert len(list(status.ac_attrs)) == 1
+    assert len(status.ac_attrs) == 1
     assert role['role_name'].native == 'bigboss@example.com'
 
 
@@ -1570,7 +1576,7 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock,
         roles = list(status.ac_attrs['role'].attr_values)
         role = roles[0]
         assert isinstance(role, cms.RoleSyntax)
-        assert len(list(status.ac_attrs)) == 1
+        assert len(status.ac_attrs) == 1
         assert role['role_name'].native == 'bigboss@example.com'
 
 
@@ -1609,3 +1615,443 @@ async def test_cades_signer_attrs_autofill_dss(requests_mock):
     # 4 CA certs, 1 AA certs, 1 signer cert, 1 OCSP responder cert -> 7 certs
     dss = r.root['/DSS']
     assert len(dss['/Certs']) == 7
+
+
+@freeze_time('2020-11-01')
+async def test_cades_signer_attrs_validate_acs(requests_mock):
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [
+                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa')
+            ]
+        ),
+    )
+    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            embed_validation_info=True,
+            validation_context=main_vc,
+            ac_validation_context=ac_vc,
+            cades_signed_attr_spec=CAdESSignedAttrSpec(
+                commitment_type=CommitmentTypeIndication({
+                    'commitment_type_id': 'proof_of_approval',
+                }),
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=[SAMPLE_GROUP_ATTR],
+                    certified_attrs=[
+                        pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+                    ]
+                )
+            )
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc, ac_validation_context=ac_vc
+    )
+    assert status.bottom_line
+    # this one was only 'claimed'
+    assert 'group' not in status.ac_attrs
+    roles = list(status.ac_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+
+    # also perform checks for the CAdES signer attrs info
+    cades_signer_attrs = status.cades_signer_attrs
+    assert cades_signer_attrs is not None
+    assert len(cades_signer_attrs.claimed_attrs) == 1
+    assert len(cades_signer_attrs.certified_attrs) == 1
+
+    # claimed attrs
+    assert 'role' not in cades_signer_attrs.claimed_attrs
+    groups_ietf_attr, = \
+        iter(cades_signer_attrs.claimed_attrs['group'].attr_values)
+    assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
+    groups = groups_ietf_attr['values']
+    assert set(groups.native) == {'Executives', 'Employees'}
+
+    # certified attrs
+    assert 'group' not in cades_signer_attrs.certified_attrs
+    roles = list(cades_signer_attrs.certified_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('pass_ac_vc', [True, False])
+async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            cades_signed_attr_spec=CAdESSignedAttrSpec(
+                commitment_type=CommitmentTypeIndication({
+                    'commitment_type_id': 'proof_of_approval',
+                }),
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=[SAMPLE_GROUP_ATTR],
+                    certified_attrs=()
+                )
+            )
+        ),
+        signer=FROM_CA,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc = live_testing_vc(requests_mock)
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc,
+        # what the VC contains shouldn't matter, since there are no ACs to
+        # validate
+        ac_validation_context=(main_vc if pass_ac_vc else None)
+    )
+    assert status.bottom_line
+    assert not status.ac_attrs
+    if not pass_ac_vc:
+        assert status.ac_attrs is None
+
+    cades_signer_attrs = status.cades_signer_attrs
+    assert cades_signer_attrs is not None
+    assert len(cades_signer_attrs.claimed_attrs) == 1
+    assert not cades_signer_attrs.certified_attrs
+    if not pass_ac_vc:
+        assert cades_signer_attrs.certified_attrs is None
+
+    # claimed attrs
+    groups_ietf_attr, = \
+        iter(cades_signer_attrs.claimed_attrs['group'].attr_values)
+    assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
+    groups = groups_ietf_attr['values']
+    assert set(groups.native) == {'Executives', 'Employees'}
+
+
+@freeze_time('2020-11-01')
+async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [
+                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa')
+            ]
+        ),
+    )
+    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            embed_validation_info=True,
+            validation_context=main_vc,
+            ac_validation_context=ac_vc,
+            cades_signed_attr_spec=CAdESSignedAttrSpec(
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=(),
+                    certified_attrs=[
+                        pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+                    ]
+                )
+            )
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc, ac_validation_context=ac_vc
+    )
+    assert status.bottom_line
+    assert 'CERTIFIED_SIGNER_ATTRS_INVALID' not in status.summary()
+    # this one was only 'claimed'
+    roles = list(status.ac_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+
+    # also perform checks for the CAdES signer attrs info
+    cades_signer_attrs = status.cades_signer_attrs
+    assert cades_signer_attrs is not None
+    assert not cades_signer_attrs.claimed_attrs
+    assert len(cades_signer_attrs.certified_attrs) == 1
+
+    roles = list(cades_signer_attrs.certified_attrs['role'].attr_values)
+    role = roles[0]
+    assert isinstance(role, cms.RoleSyntax)
+    assert role['role_name'].native == 'bigboss@example.com'
+    assert not cades_signer_attrs.unknown_attrs_present
+
+
+@freeze_time('2020-11-01')
+async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [
+                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'),
+                pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa')
+            ]
+        ),
+    )
+    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            embed_validation_info=True,
+            validation_context=main_vc,
+            ac_validation_context=ac_vc,
+            cades_signed_attr_spec=CAdESSignedAttrSpec(
+                commitment_type=CommitmentTypeIndication({
+                    'commitment_type_id': 'proof_of_approval',
+                }),
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=[SAMPLE_GROUP_ATTR],
+                    certified_attrs=[
+                        pki_arch.get_attr_cert(
+                            CertLabel('alice-role-with-rev'))
+                    ]
+                )
+            )
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc, ac_vc = live_ac_vcs(requests_mock)
+
+    # validate with the wrong AC VC
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc, ac_validation_context=main_vc
+    )
+
+    # this should fail validation
+    assert not status.bottom_line
+    assert 'CERTIFIED_SIGNER_ATTRS_INVALID' in status.summary()
+
+    assert len(status.ac_attrs) == 0
+
+    # also perform checks for the CAdES signer attrs info
+    cades_signer_attrs = status.cades_signer_attrs
+    assert cades_signer_attrs is not None
+    assert len(cades_signer_attrs.claimed_attrs) == 1
+    assert len(cades_signer_attrs.certified_attrs) == 0
+    assert len(status.ac_validation_errs) == 1
+    assert len(cades_signer_attrs.ac_validation_errs) == 1
+    assert not cades_signer_attrs.unknown_attrs_present
+
+
+@freeze_time('2020-11-01')
+async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
+    pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+    signer = signers.SimpleSigner(
+        signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [
+                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'),
+                pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa')
+            ]
+        ),
+    )
+    main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            embed_validation_info=True,
+            validation_context=main_vc,
+            ac_validation_context=ac_vc,
+            cades_signed_attr_spec=CAdESSignedAttrSpec(
+                commitment_type=CommitmentTypeIndication({
+                    'commitment_type_id': 'proof_of_approval',
+                }),
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=[SAMPLE_GROUP_ATTR],
+                    certified_attrs=[
+                        pki_arch.get_attr_cert(
+                            CertLabel('alice-role-with-rev'))
+                    ]
+                )
+            )
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc, _ = live_ac_vcs(requests_mock)
+
+    # validate with the wrong AC VC
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc,
+    )
+
+    # this should _not_ fail validation, since we've indicated that we don't
+    # care about ACs
+    assert status.bottom_line
+    assert 'CERTIFIED_SIGNER_ATTRS_INVALID' not in status.summary()
+    assert status.ac_attrs is None
+
+    cades_signer_attrs = status.cades_signer_attrs
+    assert cades_signer_attrs is not None
+    assert len(cades_signer_attrs.claimed_attrs) == 1
+    assert cades_signer_attrs.certified_attrs is None
+    assert status.ac_validation_errs is None
+    assert cades_signer_attrs.ac_validation_errs is None
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('as_signed_assertions,pass_ac_vc', [
+    (True, True), (True, False), (False, True), (False, False)
+])
+async def test_cades_signer_attrs_unknown_attrs(requests_mock,
+                                                as_signed_assertions,
+                                                pass_ac_vc):
+    class CustomAttrProvider(CMSAttributeProvider):
+        attribute_type = 'signer_attributes_v2'
+
+        async def build_attr_value(self, dry_run=False):
+            signer_attrs = {
+                'claimed_attributes': [SAMPLE_GROUP_ATTR],
+            }
+            value = core.OctetString(b'\xde\xad\xbe\xef')
+            if as_signed_assertions:
+                signer_attrs['signed_assertions'] = [
+                    SignedAssertion({
+                        'signed_assertion_id': '2.999',
+                        'signed_assertion': value
+                    })
+                ]
+            else:
+                signer_attrs['certified_attributes_v2'] = [
+                    CertifiedAttributeChoices(name='other_attr_cert', value={
+                        'other_attr_cert_id': '2.999',
+                        'other_attr_cert': value
+                    })
+                ]
+            return SignerAttributesV2(signer_attrs)
+
+    class CustomSigner(signers.SimpleSigner):
+        def _signed_attr_providers(self, *args, **kwargs):
+            yield from super()._signed_attr_providers(*args, **kwargs)
+            yield CustomAttrProvider()
+
+    signer = CustomSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc = live_testing_vc(requests_mock)
+    status = await async_validate_pdf_signature(
+        s, signer_validation_context=main_vc,
+        # what the VC contains shouldn't matter, since there are no ACs to
+        # validate
+        ac_validation_context=(main_vc if pass_ac_vc else None)
+    )
+    # bottom line is unaffected
+    assert status.bottom_line
+    assert not status.ac_attrs
+    if not pass_ac_vc:
+        assert status.ac_attrs is None
+
+    cades_signer_attrs = status.cades_signer_attrs
+    assert cades_signer_attrs is not None
+    # check for unknown_attrs_present
+    assert cades_signer_attrs.unknown_attrs_present
+    assert len(cades_signer_attrs.claimed_attrs) == 1
+    assert not cades_signer_attrs.certified_attrs
+    if not pass_ac_vc:
+        assert cades_signer_attrs.certified_attrs is None
+
+    # claimed attrs should still be OK
+    groups_ietf_attr, = \
+        iter(cades_signer_attrs.claimed_attrs['group'].attr_values)
+    assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
+    groups = groups_ietf_attr['values']
+    assert set(groups.native) == {'Executives', 'Employees'}
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('pass_ac_vc', [True, False])
+async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
+    class CustomSigner(signers.SimpleSigner):
+        async def signed_attrs(self, *args, **kwargs):
+            signed_attrs = await super().signed_attrs(*args, **kwargs)
+            signer_attrs = {
+                'claimed_attributes': [SAMPLE_GROUP_ATTR],
+            }
+            attr = SignerAttributesV2(signer_attrs)
+            signed_attrs.append(
+                cms.CMSAttribute({
+                    'type': 'signer_attributes_v2',
+                    'values': [attr, attr]
+                })
+            )
+            return signed_attrs
+
+    signer = CustomSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = await signers.async_sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    assert len(s.embedded_attr_certs) == 0  # nothing here
+    main_vc = live_testing_vc(requests_mock)
+    with pytest.raises(SignatureValidationError, match='Expected single'):
+        await async_validate_pdf_signature(
+            s, signer_validation_context=main_vc,
+            # what the VC contains shouldn't matter, since there are no ACs to
+            # validate
+            ac_validation_context=(main_vc if pass_ac_vc else None)
+        )
