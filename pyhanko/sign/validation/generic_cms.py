@@ -469,7 +469,10 @@ async def validate_tst_signed_data(
         Keyword arguments for a :class:`.TimeStampSignatureStatus`.
     """
 
-    tst_info = tst_signed_data['encap_content_info']['content'].parsed
+    tst_info = None
+    tst_info_bytes = tst_signed_data['encap_content_info']['content']
+    if isinstance(tst_info_bytes, core.ParsableOctetString):
+        tst_info = tst_info_bytes.parsed
     if not isinstance(tst_info, tsp.TSTInfo):
         raise SignatureValidationError(
             "SignedData does not encapsulate TSTInfo"

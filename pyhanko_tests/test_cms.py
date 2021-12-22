@@ -7,7 +7,7 @@ from io import BytesIO
 import pytest
 import pytz
 import tzlocal
-from asn1crypto import cms
+from asn1crypto import cms, core
 from asn1crypto.algos import (
     DigestAlgorithm,
     MaskGenAlgorithm,
@@ -308,6 +308,53 @@ async def test_detached_cms_with_wrong_content_tst():
     assert status.intact
     assert 'CONTENT_TIMESTAMP_TOKEN<INVALID>' in status.summary()
     assert 'TIMESTAMP_TOKEN<INTACT:UNTRUSTED>' in status.summary()
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.parametrize('content,detach', [
+    (b'This is not a TST!', True),
+    (b'This is not a TST!', False),
+    (cms.ContentInfo({
+        'content_type': 'data', 'content': b'This is not a TST!'
+    }), False),
+    (cms.EncapsulatedContentInfo({
+        'content_type': '2.999',
+        'content': core.ParsableOctetString(
+            core.OctetString(b'This is not a TST!').dump()
+        )
+    }), False),
+])
+async def test_detached_with_malformed_content_tst(content, detach):
+    class CustomProvider(CMSAttributeProvider):
+        attribute_type = 'content_time_stamp'
+
+        async def build_attr_value(self, dry_run=False):
+            attr_value = await FROM_CA.async_sign_general_data(
+                content, 'sha256',
+                detached=detach,
+            )
+            return attr_value
+
+    class CustomSigner(signers.SimpleSigner):
+        def _signed_attr_providers(self, *args, **kwargs):
+            yield from super()._signed_attr_providers(*args, **kwargs)
+            yield CustomProvider()
+
+    signer = CustomSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    signature = await signer.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False,
+        timestamper=DUMMY_TS,
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    with pytest.raises(SignatureValidationError,
+                       match="does not encapsulate TSTInfo"):
+        await async_validate_detached_cms(
+            b'Hello world!', signature['content']
+        )
 
 
 @freeze_time('2020-11-01')
