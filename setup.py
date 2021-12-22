@@ -61,7 +61,7 @@ setup(
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
-        'pyhanko-certvalidator~=0.19.1',
+        'pyhanko-certvalidator~=0.19.2',
         'click>=7.1.2',
         'requests>=2.24.0',
         'pyyaml>=5.3.1',
@@ -84,7 +84,7 @@ setup(
     },
     tests_require=[
         'pytest>=6.1.1', 'requests-mock>=1.8.0',
-        'freezegun>=1.1.0', 'certomancer~=0.7.0',
+        'freezegun>=1.1.0', 'certomancer~=0.7.1',
         'aiohttp~=3.8.0', 'pytest-aiohttp~=0.3.0',
         'python-pae==0.1.0'
     ],
