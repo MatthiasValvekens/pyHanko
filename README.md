@@ -63,7 +63,7 @@ revocation checks.
  - *uritools*
  - *oscrypto*
  - *requests* or *aiohttp* (use the latter for more efficient asyncio, requires resource management)
- - Python 3.7, 3.8 or 3.9
+ - Python 3.7, 3.8, 3.9 or 3.10
 
  ### Note on compatibility
 
