@@ -595,7 +595,8 @@ class Signer:
             digest_algorithm=digest_algorithm, signature=signature,
             timestamper=timestamper
         )
-        return await format_attributes(list(provs), dry_run=dry_run)
+        attrs = await format_attributes(list(provs), dry_run=dry_run)
+        return attrs or None
 
     async def signed_attrs(self, data_digest: bytes,
                            digest_algorithm: str,

@@ -165,6 +165,8 @@ async def test_generic_data_sign(input_data, detached):
     assert status.valid
     assert status.intact
 
+    assert content['signer_infos'][0]['unsigned_attrs'].native is None
+
 
 @pytest.mark.parametrize('detached', [True, False])
 async def test_cms_v3_sign(detached):
