@@ -127,21 +127,25 @@ class CMSAlgorithmProtectionProvider(CMSAttributeProvider):
 class TSTProvider(CMSAttributeProvider):
     def __init__(self, digest_algorithm: str, data_to_ts: bytes,
                  timestamper: TimeStamper,
-                 attr_type: str = 'signature_time_stamp_token'):
+                 attr_type: str = 'signature_time_stamp_token',
+                 prehashed=False):
         self.attribute_type = attr_type
         self.digest_algorithm = digest_algorithm
         self.timestamper = timestamper
         self.data = data_to_ts
+        self.prehashed = prehashed
 
     async def build_attr_value(self, dry_run=False) -> cms.ContentInfo:
         digest_algorithm = self.digest_algorithm
-        md_spec = get_pyca_cryptography_hash(digest_algorithm)
-        md = hashes.Hash(md_spec)
-        md.update(self.data)
+        if self.prehashed:
+            digest = self.data
+        else:
+            md_spec = get_pyca_cryptography_hash(digest_algorithm)
+            md = hashes.Hash(md_spec)
+            md.update(self.data)
+            digest = md.finalize()
         if dry_run:
             ts_coro = self.timestamper.async_dummy_response(digest_algorithm)
         else:
-            ts_coro = self.timestamper.async_timestamp(
-                md.finalize(), digest_algorithm
-            )
+            ts_coro = self.timestamper.async_timestamp(digest, digest_algorithm)
         return await ts_coro

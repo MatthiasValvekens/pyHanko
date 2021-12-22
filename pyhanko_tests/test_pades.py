@@ -36,7 +36,7 @@ from pyhanko.sign.ades.cades_asn1 import (
     SignedAssertion,
     SignerAttributesV2,
 )
-from pyhanko.sign.attributes import CMSAttributeProvider
+from pyhanko.sign.attributes import CMSAttributeProvider, TSTProvider
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.general import SigningError, find_cms_attribute
 from pyhanko.sign.signers.pdf_signer import (
@@ -48,6 +48,7 @@ from pyhanko.sign.signers.pdf_signer import (
 )
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
+    PdfSignatureStatus,
     RevocationInfoValidationType,
     SignatureCoverageLevel,
     ValidationInfoReadingError,
@@ -80,6 +81,7 @@ from pyhanko_tests.signing_commons import (
     INTERM_CERT,
     ROOT_CERT,
     SIMPLE_ECC_V_CONTEXT,
+    SIMPLE_V_CONTEXT,
     TRUST_ROOTS,
     dummy_ocsp_vc,
     live_ac_vcs,
@@ -755,7 +757,6 @@ def test_sign_with_commitment():
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.xfail  # TODO fix content signature logic
 def test_sign_with_content_sig():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
@@ -767,13 +768,59 @@ def test_sign_with_content_sig():
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    val_trusted(emb)
+    status = val_trusted(emb)
+    assert isinstance(status, PdfSignatureStatus)
+    assert status.content_timestamp_validity.intact
+    assert status.content_timestamp_validity.valid
+    assert status.content_timestamp_validity.trusted
 
     content_ts = find_cms_attribute(
         emb.signer_info['signed_attrs'], 'content_time_stamp'
     )[0]
     eci = content_ts['content']['encap_content_info']
     assert eci['content_type'].native == 'tst_info'
+
+
+@freeze_time('2020-11-01')
+async def test_sign_with_wrong_content_sig():
+
+    class CustomSigner(signers.SimpleSigner):
+        def _signed_attr_providers(self, *args, **kwargs):
+            yield from super()._signed_attr_providers(*args, **kwargs)
+            yield TSTProvider(
+                digest_algorithm='sha256',
+                data_to_ts=b'\xde\xad\xbe\xef',
+                timestamper=DUMMY_TS,
+                attr_type='content_time_stamp',
+            )
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+    )
+    signer = CustomSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    out = await signers.async_sign_pdf(
+        w, meta, signer=signer, timestamper=DUMMY_TS
+    )
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    status = await async_validate_pdf_signature(
+        embedded_sig=emb, signer_validation_context=SIMPLE_V_CONTEXT()
+    )
+    assert not status.bottom_line
+    assert status.valid
+    assert status.intact
+    assert status.trusted
+    assert not status.content_timestamp_validity.intact
+    assert not status.content_timestamp_validity.valid
+    assert not status.content_timestamp_validity.trusted
+    assert status.timestamp_validity.intact
+    assert status.timestamp_validity.valid
+    assert status.timestamp_validity.trusted
 
 
 @freeze_time('2020-11-01')

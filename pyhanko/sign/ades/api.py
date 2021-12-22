@@ -108,7 +108,9 @@ class CAdESSignedAttrSpec:
             yield TSTProvider(
                 digest_algorithm=md_algorithm,
                 data_to_ts=message_digest,
-                timestamper=timestamper, attr_type='content_time_stamp'
+                timestamper=timestamper,
+                attr_type='content_time_stamp',
+                prehashed=True
             )
         if self.signature_policy_identifier is not None:
             yield SigPolicyIDProvider(self.signature_policy_identifier)
