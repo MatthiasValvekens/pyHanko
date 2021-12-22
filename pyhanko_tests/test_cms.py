@@ -272,10 +272,6 @@ async def test_detached_cms_with_content_tst():
 
 @freeze_time('2020-11-01')
 async def test_detached_cms_with_wrong_content_tst():
-    signed_attr_settings = PdfCMSSignedAttributes(
-        cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
-    )
-
     class CustomSigner(signers.SimpleSigner):
         def _signed_attr_providers(self, *args, **kwargs):
             yield from super()._signed_attr_providers(*args, **kwargs)
@@ -291,7 +287,6 @@ async def test_detached_cms_with_wrong_content_tst():
     )
     signature = await signer.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
-        signed_attr_settings=signed_attr_settings
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
