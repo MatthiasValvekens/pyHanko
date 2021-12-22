@@ -94,10 +94,19 @@ def _ensure_content_type(encap_content_info):
     return encap_content_info, content_type
 
 
-def _cms_version(content_type: Union[str, core.ObjectIdentifier]):
+def _cms_version(content_type: Union[str, core.ObjectIdentifier],
+                 has_attribute_certs):
+
+    if has_attribute_certs:
+        return 'v4'
+
     if isinstance(content_type, core.ObjectIdentifier):
         content_type = content_type.native
 
+    # We don't support signing with subjectKeyIdentifier, so there's no
+    # need to take that into account here. We also don't do version 1 attribute
+    # certificates.
+    # (these matter for distinguishing v1<>v3)
     return 'v1' if content_type == 'data' else 'v3'
 
 
@@ -262,6 +271,9 @@ class Signer:
     attribute_certs: Iterable[cms.AttributeCertificateV2] = ()
     """
     Attribute certificates to include with the signature.
+
+    .. note::
+        Only ``v2`` attribute certificates are supported.
     """
 
     def __init__(self, prefer_pss=False, embed_roots=True):
@@ -703,7 +715,7 @@ class Signer:
         )
         return await self.async_sign_prescribed_attributes(
             digest_algorithm, signed_attrs,
-            cms_version=_cms_version(content_type),
+            cms_version=_cms_version(content_type, bool(self.attribute_certs)),
             dry_run=dry_run, timestamper=timestamper,
             encap_content_info=encap_content_info
         )
@@ -801,10 +813,13 @@ class Signer:
                 and :class:`cms.EncapsulatedContentInfo` otherwise.
 
             .. warning::
-                We currently only support CMS v1 and v3 signatures.
-                This is only a concern if you need attribute certificate
-                support, in which case you can override the CMS version number
+                We currently only support CMS v1, v3 and v4 signatures.
+                This is only a concern if you need certificates or CRLs
+                of type 'other', in which case you can change the version
                 yourself (this will not invalidate any signatures).
+                You'll also need to do this if you need support for version 1
+                attribute certificates, or if you want to sign with
+                ``subjectKeyIdentifier`` in the ``sid`` field.
         :param digest_algorithm:
             The name of the digest algorithm to use.
         :param detached:
@@ -1021,10 +1036,13 @@ class Signer:
                 and :class:`cms.EncapsulatedContentInfo` otherwise.
 
             .. warning::
-                We currently only support CMS v1 and v3 signatures.
-                This is only a concern if you need attribute certificate
-                support, in which case you can override the CMS version number
+                We currently only support CMS v1, v3 and v4 signatures.
+                This is only a concern if you need certificates or CRLs
+                of type 'other', in which case you can change the version
                 yourself (this will not invalidate any signatures).
+                You'll also need to do this if you need support for version 1
+                attribute certificates, or if you want to sign with
+                ``subjectKeyIdentifier`` in the ``sid`` field.
         :param digest_algorithm:
             The name of the digest algorithm to use.
         :param detached:

@@ -1080,6 +1080,7 @@ async def test_embed_ac(requests_mock):
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
+    assert s.signed_data['version'].native == 'v4'
     # 4 CA certs, 1 AA certs, 1 AC, 1 signer cert -> 7 certs
     assert len(s.other_embedded_certs) == 5  # signer cert is excluded
     assert len(s.embedded_attr_certs) == 1
@@ -1160,6 +1161,7 @@ async def test_ac_detached(requests_mock):
     input_data = b'Hello world!'
     signer = get_ac_aware_signer()
     output = await signer.async_sign_general_data(input_data, 'sha256')
+    assert output['content']['version'].native == 'v4'
     main_vc, ac_vc = live_ac_vcs(requests_mock)
     status = await async_validate_detached_cms(
         input_data, output['content'],
