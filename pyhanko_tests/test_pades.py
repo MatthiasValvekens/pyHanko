@@ -1724,8 +1724,9 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
 
     # claimed attrs
     assert 'role' not in cades_signer_attrs.claimed_attrs
-    groups_ietf_attr, = \
-        iter(cades_signer_attrs.claimed_attrs['group'].attr_values)
+    all_values, = iter(cades_signer_attrs.claimed_attrs)
+    assert all_values == cades_signer_attrs.claimed_attrs['group']
+    groups_ietf_attr, = iter(all_values.attr_values)
     assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
     groups = groups_ietf_attr['values']
     assert set(groups.native) == {'Executives', 'Employees'}
