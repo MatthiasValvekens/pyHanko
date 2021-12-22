@@ -1,5 +1,9 @@
 # changelog
 
+## 0.19.2
+
+ - Patch `asn1crypto` to work around tagging issue in AC issuer field
+
 ## 0.19.1
 
  - Properly enforce algo matching in AC validation
