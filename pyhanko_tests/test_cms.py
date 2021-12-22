@@ -23,7 +23,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
-from pyhanko.sign.attributes import CMSAttributeProvider
+from pyhanko.sign.attributes import CMSAttributeProvider, TSTProvider
 from pyhanko.sign.general import (
     SigningError,
     as_signing_certificate,
@@ -257,9 +257,52 @@ async def test_detached_cms_with_content_tst():
     assert status.timestamp_validity.valid
     assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
     assert status.content_timestamp_validity
+    assert status.content_timestamp_validity.intact
+    assert status.content_timestamp_validity.valid
+    assert status.content_timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    pretty_print = status.pretty_print_details()
+    assert 'The TSA certificate is untrusted' in pretty_print
+    assert 'Content timestamp' in pretty_print
+    assert 'Signature timestamp' in pretty_print
+    assert status.valid
+    assert status.intact
+
+
+@freeze_time('2020-11-01')
+async def test_detached_cms_with_wrong_content_tst():
+    signed_attr_settings = PdfCMSSignedAttributes(
+        cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
+    )
+
+    class CustomSigner(signers.SimpleSigner):
+        def _signed_attr_providers(self, *args, **kwargs):
+            yield from super()._signed_attr_providers(*args, **kwargs)
+            yield TSTProvider(
+                digest_algorithm='sha256', data_to_ts=b'\xde\xad\xbe\xef',
+                timestamper=DUMMY_TS, attr_type='content_time_stamp',
+            )
+
+    signer = CustomSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    signature = await signer.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        signed_attr_settings=signed_attr_settings
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content']
+    )
+    assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
     assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.content_timestamp_validity
+    assert not status.content_timestamp_validity.intact
+    assert not status.content_timestamp_validity.valid
+    assert status.content_timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
     pretty_print = status.pretty_print_details()
     assert 'The TSA certificate is untrusted' in pretty_print
     assert 'Content timestamp' in pretty_print
