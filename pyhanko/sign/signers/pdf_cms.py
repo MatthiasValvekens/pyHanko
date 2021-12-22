@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import IO, Iterable, List, Optional, Union
 
+import tzlocal
 from asn1crypto import algos, cms, core, keys
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto import x509
@@ -387,24 +388,29 @@ class Signer:
 
     def _signed_attr_providers(self, data_digest: bytes, digest_algorithm: str,
                                attr_settings: PdfCMSSignedAttributes,
-                               timestamper=None, use_pades=False):
+                               timestamper=None, use_cades=False,
+                               is_pdf_sig=True):
         """
         Prepare "standard" signed attribute providers. Internal API.
         """
         yield attributes.SigningCertificateV2Provider(
             signing_cert=self.signing_cert
         )
-        if not use_pades:
+        if not is_pdf_sig or not use_cades:
+            # NOTE: PAdES actually forbids this, but CAdES requires it!
             signing_time = attr_settings.signing_time
+            if signing_time is None and not is_pdf_sig and use_cades:
+                # Ensure CAdES mandate is followed
+                signing_time = datetime.now(tz=tzlocal.get_localzone())
             if signing_time is not None:
-                # NOTE: PAdES actually forbids this!
                 yield attributes.SigningTimeProvider(timestamp=signing_time)
+        if not use_cades:
             if attr_settings.adobe_revinfo_attr is not None:
                 yield attributes.AdobeRevinfoProvider(
                     value=attr_settings.adobe_revinfo_attr
                 )
 
-            # TODO not sure if PAdES allows this, need to check.
+            # TODO not sure if PAdES/CAdES allow this, need to check.
             #  It *should*, but perhaps the version of CMS it is based on is too
             #  old, or it might not allow undefined signed attributes.
             # In the meantime, we only add this attribute to non-PAdES sigs
@@ -602,7 +608,7 @@ class Signer:
                            digest_algorithm: str,
                            attr_settings: PdfCMSSignedAttributes = None,
                            content_type='data', use_pades=False,
-                           timestamper=None, dry_run=False):
+                           timestamper=None, dry_run=False, is_pdf_sig=True):
         """
         .. versionchanged:: 0.4.0
             Added positional ``digest_algorithm`` parameter _(breaking change)_.
@@ -641,6 +647,11 @@ class Signer:
             .. danger::
                 This parameter is internal API, and non-default values must not
                 be used to produce PDF signatures.
+        :param is_pdf_sig:
+            Whether the signature being generated is for use in a PDF document.
+
+            .. danger::
+                This parameter is internal API.
         :return:
             An :class:`.asn1crypto.cms.CMSAttributes` object.
         """
@@ -649,8 +660,8 @@ class Signer:
 
         provs = self._signed_attr_providers(
             data_digest=data_digest, digest_algorithm=digest_algorithm,
-            use_pades=use_pades, attr_settings=attr_settings,
-            timestamper=timestamper
+            use_cades=use_pades, attr_settings=attr_settings,
+            timestamper=timestamper, is_pdf_sig=is_pdf_sig
         )
 
         return await format_signed_attributes(
@@ -661,7 +672,8 @@ class Signer:
     async def async_sign(self, data_digest: bytes, digest_algorithm: str,
                          dry_run=False, use_pades=False, timestamper=None,
                          signed_attr_settings: PdfCMSSignedAttributes = None,
-                         encap_content_info=None) -> cms.ContentInfo:
+                         is_pdf_sig=True, encap_content_info=None) \
+            -> cms.ContentInfo:
 
         """
         .. versionadded:: 0.9.0
@@ -697,6 +709,11 @@ class Signer:
                 this might still hit the timestamping server (in order to
                 produce a realistic size estimate), but the dummy response will
                 be cached.
+        :param is_pdf_sig:
+            Whether the signature being generated is for use in a PDF document.
+
+            .. danger::
+                This parameter is internal API.
         :param encap_content_info:
             Data to encapsulate in the CMS object.
 
@@ -712,7 +729,7 @@ class Signer:
         signed_attrs = await self.signed_attrs(
             data_digest, digest_algorithm, attr_settings=signed_attr_settings,
             use_pades=use_pades, timestamper=timestamper,
-            dry_run=dry_run, content_type=content_type
+            dry_run=dry_run, content_type=content_type, is_pdf_sig=is_pdf_sig
         )
         return await self.async_sign_prescribed_attributes(
             digest_algorithm, signed_attrs,
@@ -853,7 +870,7 @@ class Signer:
         )
         return await self.async_sign(
             data_digest=digest_bytes, digest_algorithm=digest_algorithm,
-            use_pades=use_cades,
+            use_pades=use_cades, is_pdf_sig=False,
             timestamper=timestamper, encap_content_info=encap_content_info,
             signed_attr_settings=signed_attr_settings
         )

@@ -1209,3 +1209,22 @@ async def test_ac_attr_validation_holder_mismatch(requests_mock):
     assert status.bottom_line  # this should still be OK
     assert len(list(status.ac_attrs)) == 0
     assert 'role' not in status.ac_attrs  # ...but the attribute check fails
+
+
+@freeze_time('2020-11-01')
+async def test_detached_cades_cms_with_tst():
+    signature = await FROM_CA.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        use_cades=True
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content']
+    )
+    assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
+    assert status.timestamp_validity.intact
+    assert status.timestamp_validity.valid
+    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert 'The TSA certificate is untrusted' in status.pretty_print_details()
+    assert status.valid
+    assert status.intact
