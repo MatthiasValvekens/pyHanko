@@ -1,5 +1,5 @@
 # coding: utf-8
 
 
-__version__ = '0.19.1-rc1'
-__version_info__ = (0, 19, 1, 'rc1')
+__version__ = '0.19.1'
+__version_info__ = (0, 19, 1)
