@@ -119,12 +119,12 @@ class SignatureStatus:
         yield cert_status
 
     # TODO explain in more detail.
-    def summary(self):
+    def summary(self, delimiter=','):
         """
         Provide a textual but machine-parsable summary of the validity.
         """
         if self.intact and self.valid:
-            return 'INTACT:' + ','.join(self.summary_fields())
+            return 'INTACT:' + delimiter.join(self.summary_fields())
         else:
             return 'INVALID'
 
@@ -486,7 +486,11 @@ class StandardCMSSignatureStatus(SignatureStatus):
 
         if self.timestamp_validity is not None:
             yield 'TIMESTAMP_TOKEN<%s>' % (
-                '|'.join(self.timestamp_validity.summary_fields())
+                self.timestamp_validity.summary(delimiter='|')
+            )
+        if self.content_timestamp_validity is not None:
+            yield 'CONTENT_TIMESTAMP_TOKEN<%s>' % (
+                self.content_timestamp_validity.summary(delimiter='|')
             )
         if self.cades_signer_attrs is not None \
                 and not self.cades_signer_attrs.valid:

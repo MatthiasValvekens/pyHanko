@@ -266,6 +266,8 @@ async def test_detached_cms_with_content_tst():
     assert 'Signature timestamp' in pretty_print
     assert status.valid
     assert status.intact
+    assert 'CONTENT_TIMESTAMP_TOKEN<INTACT:UNTRUSTED>' in status.summary()
+    assert ',TIMESTAMP_TOKEN<INTACT:UNTRUSTED>' in status.summary()
 
 
 @freeze_time('2020-11-01')
@@ -309,6 +311,8 @@ async def test_detached_cms_with_wrong_content_tst():
     assert 'Signature timestamp' in pretty_print
     assert status.valid
     assert status.intact
+    assert 'CONTENT_TIMESTAMP_TOKEN<INVALID>' in status.summary()
+    assert 'TIMESTAMP_TOKEN<INTACT:UNTRUSTED>' in status.summary()
 
 
 @freeze_time('2020-11-01')
