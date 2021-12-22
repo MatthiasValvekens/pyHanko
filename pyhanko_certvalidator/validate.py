@@ -426,7 +426,17 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
                         aa_cert: x509.Certificate,
                         validation_context: ValidationContext):
 
-    signature_algo = attr_cert['signature_algorithm'].signature_algo
+    sd_algo = attr_cert['signature_algorithm']
+    embedded_sd_algo = attr_cert['ac_info']['signature']
+    if sd_algo.native != embedded_sd_algo.native:
+        raise InvalidCertificateError(pretty_message(
+            '''
+            Signature algorithm declaration in signed portion of AC does not
+            match the signature algorithm declaration on the envelope.
+            '''
+        ))
+
+    signature_algo = sd_algo.signature_algo
     hash_algo = attr_cert['signature_algorithm'].hash_algo
 
     if hash_algo in validation_context.weak_hash_algos:
