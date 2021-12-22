@@ -77,6 +77,33 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc)
 
+    async def test_basic_ac_validation_sig_algo_mismatch(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt')
+        )
+        # manipulate the signature algorithm
+        ac = cms.AttributeCertificateV2({
+            'ac_info': ac['ac_info'],
+            'signature_algorithm': {'algorithm': 'md5_rsa'},
+            'signature': ac['signature']
+        })
+        ac.dump()
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+        )
+        msg = 'algorithm declaration.*does not match'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)
+
     async def test_basic_ac_validation_bad_aa_controls(self):
         ac = load_attr_cert(
             os.path.join(basic_aa_dir, 'aa', 'alice-role-norev.attr.crt')
