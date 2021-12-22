@@ -323,6 +323,7 @@ async def test_detached_cms_with_wrong_content_tst():
             core.OctetString(b'This is not a TST!').dump()
         )
     }), False),
+    (cms.ContentInfo({'content_type': '2.999',}), True),
 ])
 async def test_detached_with_malformed_content_tst(content, detach):
     class CustomProvider(CMSAttributeProvider):
