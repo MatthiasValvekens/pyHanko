@@ -8,10 +8,10 @@ from pyhanko.sign.timestamps.common_utils import set_tsp_headers
 
 try:
     import aiohttp
-except ImportError as e:
+except ImportError as _e:  # pragma: nocover
     raise ImportError(
         "Install pyHanko with the [async_http] optional dependency group"
-    ) from e
+    ) from _e
 
 
 class AIOHttpTimeStamper(TimeStamper):
