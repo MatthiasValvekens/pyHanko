@@ -1900,8 +1900,7 @@ async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
         s, signer_validation_context=main_vc, ac_validation_context=main_vc
     )
 
-    # this should fail validation
-    assert not status.bottom_line
+    assert not status.cades_signer_attrs.valid
     assert 'CERTIFIED_SIGNER_ATTRS_INVALID' in status.summary()
 
     assert len(status.ac_attrs) == 0

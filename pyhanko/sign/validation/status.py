@@ -372,12 +372,6 @@ class CAdESSignerAttributeAssertions:
     @property
     def valid(self):
         return not self.ac_validation_errs
-    # TODO This is current policy, but may still change. Should check
-    #  CAdES validation guidelines first.
-    #  Add a note along the following lines if we decide to keep it:
-    # Since these attribute certificates are part of the signed content
-    # of the signature, a validation failure on any of the ACs will cause
-    # the signature to be rejected.
 
 
 @dataclass(frozen=True)
@@ -435,10 +429,6 @@ class StandardCMSSignatureStatus(SignatureStatus):
 
     Will be ``None`` if no validation context for attribute certificate
     validation was provided.
-
-    Since the ``certificates`` field is not part of the signed data, errors
-    resulting from invalid ACs in the ``certificates`` field do not impact
-    the overall validity of the signature.
     """
 
     cades_signer_attrs: Optional[CAdESSignerAttributeAssertions] = None
@@ -471,14 +461,9 @@ class StandardCMSSignatureStatus(SignatureStatus):
         else:
             content_timestamp_ok = content_ts.valid and content_ts.trusted
 
-        if self.cades_signer_attrs is None:
-            signer_attrs_ok = True
-        else:
-            signer_attrs_ok = self.cades_signer_attrs.valid
-
         return (
                 self.intact and self.valid and self.trusted and timestamp_ok
-                and content_timestamp_ok and signer_attrs_ok
+                and content_timestamp_ok
         )
 
     def summary_fields(self):
