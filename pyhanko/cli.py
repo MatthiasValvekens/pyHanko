@@ -593,8 +593,7 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
 #  warn if none is present
 
 @signing.command(name='ltvfix',
-                 help='add revocation information for a signature to the '
-                      'document security store')
+                 help='add revocation information for a signature to the DSS')
 @click.argument('infile', type=click.File('r+b'))
 @click.option('--field', help='name of the signature field', required=True)
 @click.option('--timestamp-url', help='URL for timestamp server',
