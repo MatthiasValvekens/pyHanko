@@ -79,6 +79,10 @@ class CertificateValidator:
         self._certificate = end_entity_cert
         self._params = pkix_params
 
+    @property
+    def certificate(self):
+        return self._certificate
+
     async def _validate_path(self):
         """
         Builds possible certificate paths and validates them until a valid one
