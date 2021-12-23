@@ -1128,16 +1128,21 @@ PKCS11_COMMANDS = [
     ('beid', 'use Belgian eID to sign', addsig_beid)
 ]
 
-if pkcs11_available:
-    for args in PKCS11_COMMANDS:
-        _pkcs11_cmd(*args)
-else:
-    def _unavailable():
-        raise click.ClickException(
-            "This subcommand requires python-pkcs11 to be installed."
-        )
-    for name, hlp, fun in PKCS11_COMMANDS:
-        _pkcs11_cmd(name, hlp + ' [dependencies missing]', _unavailable)
+
+def _process_pkcs11_commands():
+    if pkcs11_available:
+        for args in PKCS11_COMMANDS:
+            _pkcs11_cmd(*args)
+    else:
+        def _unavailable():
+            raise click.ClickException(
+                "This subcommand requires python-pkcs11 to be installed."
+            )
+        for name, hlp, fun in PKCS11_COMMANDS:
+            _pkcs11_cmd(name, hlp + ' [dependencies missing]', _unavailable)
+
+
+_process_pkcs11_commands()
 
 
 def _index_page(page):
