@@ -11,17 +11,18 @@
 
 ## Basic Path Validation
 
-Basic path validation is peformed using the `CertificateValidator()` class. The
+Basic path validation is performed using the `CertificateValidator()` class. The
 only required parameter for the class is the `end_entity_cert`, which must be
 a byte string of a DER or PEM-encoded X.509 certificate, or an instance of
 `asn1crypto.x509.Certificate`.
 
 ```python
 from pyhanko_certvalidator import CertificateValidator
+from asn1crypto import x509
 
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 validator = CertificateValidator(end_entity_cert)
 ```
@@ -57,16 +58,17 @@ trying to build a path or check the key usage, a
 
 ```python
 from pyhanko_certvalidator import CertificateValidator, errors
-
+from asn1crypto import x509
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 try:
     validator = CertificateValidator(end_entity_cert)
-    validator.validate_usage(set(['digital_signature']))
-except (errors.PathValidationError):
-    # The certificate could not be validated
+    validator.validate_usage({'digital_signature'})
+except errors.PathValidationError:
+    # The certificate could not be validated (handle error...)
+    pass
 ```
 
 The list of valid key usages can be found in the
@@ -82,20 +84,17 @@ third parameter, `extended_optional`.
 
 ```python
 from pyhanko_certvalidator import CertificateValidator, errors
-
+from asn1crypto import x509
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 try:
     validator = CertificateValidator(end_entity_cert)
-    validator.validate_usage(
-        set(['digital_signature']),
-        set(['server_auth']),
-        True
-    )
-except (errors.PathValidationError):
-    # The certificate could not be validated
+    validator.validate_usage({'digital_signature'}, {'server_auth'}, True)
+except errors.PathValidationError:
+    # The certificate could not be validated (handle error...)
+    pass
 ```
 
 ## TLS/SSL Server Validation
@@ -115,8 +114,10 @@ connection = tls.TLSSocket('www.google.com', 443, session=session)
 try:
     validator = CertificateValidator(connection.certificate, connection.intermediates)
     validator.validate_tls(connection.hostname)
-except (errors.PathValidationError):
-    # The certificate did not match the hostname, or could not be otherwise validated
+except errors.PathValidationError:
+    # The certificate did not match the hostname, or could not be otherwise validated 
+    # (handle error...)
+    pass
 ```
 
 ## Advanced Features
@@ -167,12 +168,13 @@ most useful method.
 
 ```python
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 whitelist = [
-     end_entity_cert.sha1_fingerprint,
+    end_entity_cert.sha1_fingerprint,
 ]
 context = ValidationContext(whitelisted_certs=whitelist)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -190,10 +192,11 @@ list of weak hash algorithms to the `weak_hash_algos` keyword parameter of
 
 ```python
 from __future__ import unicode_literals
-rom pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 context = ValidationContext(weak_hash_algos=['md2', 'md5', 'sha1'])
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -220,9 +223,10 @@ of `ValidationContext()` must be `True`.
 
 ```python
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 context = ValidationContext(allow_fetching=True)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -248,17 +252,18 @@ be a list of byte strings containing the DER-encoded OCSP responses, or
 
 ```python
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509, crl, ocsp
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 crls = []
 with open('/path/to/root_crl.der', 'rb') as f:
-    crls.append(f.read())
+    crls.append(crl.CertificateList.load(f.read()))
 
 ocsps = []
 with open('/path/to/end_entity_ocsp_response.der', 'rb') as f:
-    ocsps.append(f.read())
+    ocsps.append(ocsp.OCSPResponse.load(f.read()))
 
 context = ValidationContext(crls=crls, ocsps=ocsps)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -291,9 +296,10 @@ unicode string of: `"soft-fail"`, `"hard-fail"` or `"require"`.
 ```python
 from __future__ import unicode_literals
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 context = ValidationContext(allow_fetching=True, revocation_mode="hard-fail")
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -315,21 +321,22 @@ certificates, or `asn1crypto.x509.Certificate` objects.
 
 ```python
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509, crl, ocsp
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 crls = []
 with open('/path/to/root_crl.der', 'rb') as f:
-    crls.append(f.read())
+    crls.append(crl.CertificateList.load(f.read()))
 
 ocsps = []
 with open('/path/to/end_entity_ocsp_response.der', 'rb') as f:
-    ocsps.append(f.read())
+    ocsps.append(ocsp.OCSPResponse.load(f.read()))
 
 other_certs = []
 with open('/path/to/ocsp_responder_cert.crt', 'rb') as f:
-    other_certs.append(f.read())
+     other_certs.append(x509.Certificate.load(f.read()))
 
 context = ValidationContext(crls=crls, ocsps=ocsps, other_certs=other_certs)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -347,14 +354,15 @@ PEM-encoded X.509 certificates or `asn1crypto.x509.Certificate` objects to the
 ```python
 from asn1crypto import pem
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509
 
 trust_roots = []
 with open('/path/to/ca_certs.bundle', 'rb') as f:
     for _, _, der_bytes in pem.unarmor(f.read(), multiple=True):
-        trust_roots.append(der_bytes)
+        trust_roots.append(x509.Certificate.load(der_bytes))
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 context = ValidationContext(trust_roots=trust_roots)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -366,14 +374,15 @@ To simply add one or more extra trust roots, pass the list to the
 ```python
 from asn1crypto import pem
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from asn1crypto import x509
 
 extra_trust_roots = []
 with open('/path/to/extra_ca_certs.bundle', 'rb') as f:
     for _, _, der_bytes in pem.unarmor(f.read(), multiple=True):
-        extra_trust_roots.append(der_bytes)
+        extra_trust_roots.append(x509.Certificate.load(der_bytes))
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 context = ValidationContext(extra_trust_roots=extra_trust_roots)
 validator = CertificateValidator(end_entity_cert, validation_context=context)
@@ -393,14 +402,15 @@ UTC timezone, `asn1crypto.util.timezone.utc` can be used.
 ```python
 from datetime import datetime
 from asn1crypto.util import timezone
+from asn1crypto import x509
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 
 with open('/path/to/cert.crt', 'rb') as f:
-    end_entity_cert = f.read()
+    end_entity_cert = x509.Certificate.load(f.read())
 
 validation_time = datetime(2012, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 context = ValidationContext(moment=validation_time)
-validator = CertificateValidator(end_entity_cert, validation_context=context)
+validator = CertificateValidator(x509.Certificate.load(end_entity_cert), validation_context=context)
 ```
 
 If moment-in-time validation is being performed, the `allow_fetching` option
