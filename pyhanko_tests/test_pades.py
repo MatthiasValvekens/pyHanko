@@ -51,14 +51,16 @@ from pyhanko.sign.validation import (
     PdfSignatureStatus,
     RevocationInfoValidationType,
     SignatureCoverageLevel,
-    ValidationInfoReadingError,
     add_validation_info,
     async_validate_pdf_ltv_signature,
     async_validate_pdf_signature,
     validate_pdf_ltv_signature,
     validate_pdf_timestamp,
 )
-from pyhanko.sign.validation.errors import SignatureValidationError
+from pyhanko.sign.validation.errors import (
+    SignatureValidationError,
+    ValidationInfoReadingError,
+)
 from pyhanko_tests.samples import (
     CERTOMANCER,
     MINIMAL,
