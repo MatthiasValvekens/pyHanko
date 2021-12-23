@@ -129,8 +129,9 @@ class SignatureStatus:
             return 'INVALID'
 
     @classmethod
-    async def validate_cert_usage(cls, validator: CertificateValidator,
-                                  key_usage_settings: KeyUsageConstraints = None):
+    async def validate_cert_usage(
+            cls, validator: CertificateValidator,
+            key_usage_settings: KeyUsageConstraints = None):
         key_usage_settings = key_usage_settings or KeyUsageConstraints()
         key_usage_settings = KeyUsageConstraints(
             key_usage=(
