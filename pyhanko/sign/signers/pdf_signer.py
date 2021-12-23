@@ -784,7 +784,7 @@ class PdfTimeStamper:
             expected_imprint = last_timestamp.external_digest
 
             # run validation logic
-            tst_status = await validation.ltv._establish_timestamp_trust(
+            tst_status = await validation.ltv.establish_timestamp_trust(
                 tst_token, validation_context, expected_imprint
             )
 

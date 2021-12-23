@@ -44,6 +44,7 @@ __all__ = [
     'RevocationInfoValidationType',
     'apply_adobe_revocation_info', 'retrieve_adobe_revocation_info',
     'get_timestamp_chain', 'async_validate_pdf_ltv_signature',
+    'establish_timestamp_trust'
 ]
 
 
@@ -125,10 +126,32 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
     validation_context_kwargs['revinfo_policy'] = revinfo_policy
 
 
-async def _establish_timestamp_trust(
-        tst_signed_data, bootstrap_validation_context, expected_tst_imprint):
+async def establish_timestamp_trust(
+        tst_signed_data: cms.SignedData,
+        validation_context: ValidationContext,
+        expected_tst_imprint: bytes):
+    """
+    Wrapper around :func:`validate_tst_signed_data` for use when analysing
+    timestamps for the purpose of establishing a timestamp chain.
+    Its main purpose is throwing/logging an error if validation fails, since
+    that amounts to lack of trust in the purported validation time.
+
+    This is internal API.
+
+    :param tst_signed_data:
+        The ``SignedData`` value to validate; must encapsulate a ``TSTInfo``
+        value.
+    :param validation_context:
+        The validation context to apply to the timestamp.
+    :param expected_tst_imprint:
+        The expected message imprint for the ``TSTInfo`` value.
+    :return:
+        A :class:`.TimestampSignatureStatus` if validation is successful.
+    :raises:
+        :class:`SignatureValidationError` if validation fails.
+    """
     timestamp_status_kwargs = await validate_tst_signed_data(
-        tst_signed_data, bootstrap_validation_context, expected_tst_imprint
+        tst_signed_data, validation_context, expected_tst_imprint
     )
     timestamp_status = TimestampSignatureStatus(**timestamp_status_kwargs)
 
@@ -198,7 +221,7 @@ async def _establish_timestamp_trust_lta(
             break
 
         emb_timestamp.compute_digest()
-        ts_status = await _establish_timestamp_trust(
+        ts_status = await establish_timestamp_trust(
             emb_timestamp.signed_data, current_vc, emb_timestamp.external_digest
         )
         # set up the validation kwargs for the next iteration
@@ -361,7 +384,7 @@ async def async_validate_pdf_ltv_signature(
     # a PAdES validation profile)
     tst_signed_data = embedded_sig.attached_timestamp_data
     if tst_signed_data is not None:
-        earliest_good_timestamp_st = await _establish_timestamp_trust(
+        earliest_good_timestamp_st = await establish_timestamp_trust(
             tst_signed_data, current_vc, embedded_sig.tst_signature_digest
         )
     elif validation_type == RevocationInfoValidationType.PADES_LTA \
