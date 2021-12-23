@@ -385,11 +385,11 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
     try:
         status = status_callback()
         if executive_summary and not pretty_print:
-            return ('VALID' if status.bottom_line else 'INVALID', status.bottom_line)
+            return 'VALID' if status.bottom_line else 'INVALID', status.bottom_line
         elif pretty_print:
-            return (status.pretty_print_details(), status.bottom_line)
+            return status.pretty_print_details(), status.bottom_line
         else:
-            return (status.summary(), status.bottom_line)
+            return status.summary(), status.bottom_line
     except validation.ValidationInfoReadingError as e:
         msg = (
             'An error occurred while parsing the revocation information '
@@ -397,16 +397,16 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
         )
         logger.error(msg)
         if pretty_print:
-            return (msg, False)
+            return msg, False
         else:
-            return ('REVINFO_FAILURE', False)
+            return 'REVINFO_FAILURE', False
     except SignatureValidationError as e:
         msg = 'An error occurred while validating this signature: ' + str(e)
         logger.error(msg, exc_info=e)
         if pretty_print:
-            return (msg, False)
+            return msg, False
         else:
-            return ('INVALID', False)
+            return 'INVALID', False
 
 
 # TODO add an option to do LTV, but guess the profile
