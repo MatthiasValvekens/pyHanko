@@ -3,6 +3,100 @@ Release history
 ***************
 
 
+.. _release-0.11.0:
+
+0.11.0
+======
+
+*Release date:* 2021-12-23
+
+Dependency changes
+------------------
+
+ * Update ``pyhanko-certvalidator`` to ``0.19.2``
+ * Bump ``fontTools`` to ``4.28.2``
+ * Update ``certomancer`` test dependency to ``0.7.1``
+
+
+.. _release-0.11.0-breaking:
+
+Breaking changes
+----------------
+
+Due to import order issues resulting from refactoring of the validation code, some classes
+and class hierarchies in the higher-level API had to be moved. The affected classes are listed
+below, with links to their respective new locations in the API reference.
+
+ * :class:`~pyhanko.sign.validation.settings.KeyUsageConstraints`
+ * :class:`~pyhanko.sign.validation.errors.SignatureValidationError`
+ * :class:`~pyhanko.sign.validation.errors.WeakHashAlgorithmError`
+ * :class:`~pyhanko.sign.validation.errors.SigSeedValueValidationError`
+ * :class:`~pyhanko.sign.validation.status.SignatureStatus`
+ * :class:`~pyhanko.sign.validation.status.StandardCMSSignatureStatus`
+ * :class:`~pyhanko.sign.validation.status.PdfSignatureStatus`
+ * :class:`~pyhanko.sign.validation.status.TimestampSignatureStatus`
+ * :class:`~pyhanko.sign.validation.status.DocumentTimestampStatus`
+
+The low-level function :func:`~pyhanko.sign.validation.generic_cms.validate_sig_integrity` was also
+moved.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Support embedding attribute certificates into CMS signatures, either in the ``certificates``
+   field or using the CAdES ``signer-attrs-v2`` attribute.
+ * More explicit errors on unfulfilled text parameters
+ * Better use of ``asyncio`` when collecting validation information for timestamps
+ * Internally disambiguate PAdES and CAdES for the purpose of attribute handling.
+
+
+Validation
+^^^^^^^^^^
+
+ * Refactor ``diff_analysis`` module into sub-package
+ * Refactor ``validation`` module into sub-package
+   (together with portions of :mod:`pyhanko.sign.general`); see :ref:`release-0.11.0-breaking`.
+ * Make extracted certificate information more easily accessible.
+ * Integrated attribute certificate validation (requires a separate validation context with trust
+   roots for attribute authorities)
+ * Report on signer attributes as supplied by the CAdES ``signer-attrs-v2`` attribute.
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Various parsing and error handling improvements to xref processing, object streams, and object
+   header handling.
+ * Use :class:`NotImplementedError` for unimplemented stream filters instead of
+   less-appropriate exceptions
+ * Always drop GPOS/GDEF/GSUB when subsetting OpenType and TrueType fonts
+ * Initial support for string-keyed CFF fonts as CIDFonts (subsetting is still inefficient)
+ * :func:`~pyhanko.pdf_utils.writer.copy_into_new_writer` is now smarter about how it deals with the
+   ``/Producer`` line
+ * Fix a typo in the ASN.1 definition of ``signature-policy-store``
+ * Various, largely aesthetic, cleanup & docstring fixes in internal APIs
+
+Bugs fixed
+----------
+
+ * Fix a critical bug in content timestamp generation causing the wrong message imprint to be sent
+   to the timestamping service. The bug only affected the signed ``content-time-stamp`` attribute
+   from CAdES, not the (much more widely used) ``signature-time-stamp`` attribute. The former
+   timestamps the content (and is part of the signed data), while the latter timestamps the
+   signature (and is therefore not part of the signed data).
+ * Fix a bug causing an empty unsigned attribute sequence to be written if there were no
+   unsigned attributes. This is not allowed (although many validators accept it), and was a
+   regression introduced in ``0.9.0``.
+ * Ensure non-PDF CAdES signatures always have ``signingTime`` set.
+ * Fix and improve timestamp summary reporting
+ * Corrected TrueType subtype handling
+ * Properly set :attr:`~pyhanko.sign.signers.pdf_signer.PreSignValidationStatus.ts_validation_paths`
+ * Gracefully deal with unsupported certificate types in CMS
+ * Ensure attribute inspection internals can deal with ``SignerInfo`` without ``signedAttrs``.
+
 .. _release-0.10.0:
 
 0.10.0
