@@ -249,7 +249,13 @@ class DocumentSecurityStore:
 
         return pdf_dict
 
-    def _load_certs(self):
+    def load_certs(self):
+        """
+        Return a generator that parses and yields all certificates in the DSS.
+
+        :return:
+            A generator yielding :class:`.Certificate` objects.
+        """
         for cert_ref in self.certs.values():
             cert_stream: generic.StreamObject = cert_ref.get_object()
             cert = Certificate.load(cert_stream.data)
@@ -270,7 +276,7 @@ class DocumentSecurityStore:
 
         validation_context_kwargs = dict(validation_context_kwargs)
         extra_certs = validation_context_kwargs.pop('other_certs', [])
-        certs = list(self._load_certs()) + extra_certs
+        certs = list(self.load_certs()) + extra_certs
 
         if include_revinfo:
             ocsps = list(validation_context_kwargs.pop('ocsps', ()))

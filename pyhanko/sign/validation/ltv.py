@@ -317,7 +317,7 @@ async def async_validate_pdf_ltv_signature(
         else:
             current_vc = bootstrap_validation_context
             # add the certs from the DSS
-            for cert in dss._load_certs():
+            for cert in dss.load_certs():
                 current_vc.certificate_registry.add_other_cert(cert)
 
     embedded_sig.compute_digest()
