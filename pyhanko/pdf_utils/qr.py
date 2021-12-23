@@ -32,4 +32,10 @@ class PdfStreamQRImage(BaseImage):
         return ' '.join(command_stream).encode('ascii')
 
     def save(self, stream, kind=None):
-        stream.write(self.render_command_stream())
+        raise NotImplementedError
+
+    def process(self):
+        raise NotImplementedError
+
+    def drawrect_context(self, row, col, active, context):
+        return self.drawrect(row, col)  # pragma: nocover
