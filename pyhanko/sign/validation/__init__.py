@@ -71,7 +71,7 @@ def validate_cms_signature(signed_data: cms.SignedData,
                            encap_data_invalid=False):
     """
     .. deprecated:: 0.9.0
-        Use :func:`async_validate_cms_signature` instead.
+        Use :func:`~.generic_cms.async_validate_cms_signature` instead.
 
     .. versionchanged:: 0.7.0
         Now handles both detached and enveloping signatures.
@@ -130,7 +130,7 @@ def validate_detached_cms(input_data: Union[bytes, IO,
                           max_read=None) -> StandardCMSSignatureStatus:
     """
     .. deprecated:: 0.9.0
-        Use :func:`async_validate_detached_cms` instead.
+        Use :func:`.generic_cms.async_validate_detached_cms` instead.
 
     .. versionadded: 0.7.0
 
@@ -186,6 +186,9 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            key_usage_settings: KeyUsageConstraints = None,
                            skip_diff: bool = False) -> PdfSignatureStatus:
     """
+    .. versionchanged:: 0.9.0
+        Wrapper around :func:`~.pdf_embedded.async_validate_pdf_signature`.
+
     Validate a PDF signature.
 
     :param embedded_sig:
@@ -224,7 +227,7 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
                            skip_diff: bool = False) -> DocumentTimestampStatus:
     """
     .. versionchanged:: 0.9.0
-        Wrapper around :func:`async_validate_pdf_timestamp`.
+        Wrapper around :func:`~.pdf_embedded.async_validate_pdf_timestamp`.
 
     Validate a PDF document timestamp.
 
@@ -257,7 +260,7 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
                         chunk_size=misc.DEFAULT_CHUNK_SIZE):
     """
     .. versionchanged:: 0.9.0
-        Wrapper around :func:`async_add_validation_info`
+        Wrapper around :func:`~.dss.async_add_validation_info`
 
     Add validation info (CRLs, OCSP responses, extra certificates) for a
     signature to the DSS of a document in an incremental update.
