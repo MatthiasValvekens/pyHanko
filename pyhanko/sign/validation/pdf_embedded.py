@@ -12,11 +12,7 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.misc import DEFAULT_CHUNK_SIZE
-from pyhanko.pdf_utils.reader import (
-    PdfFileReader,
-    XRefCache,
-    process_data_at_eof,
-)
+from pyhanko.pdf_utils.reader import PdfFileReader, process_data_at_eof
 from pyhanko.sign.diff_analysis import (
     DEFAULT_DIFF_POLICY,
     DiffPolicy,
@@ -458,7 +454,7 @@ class EmbeddedPdfSignature:
             The coverage level of the signature.
         """
 
-        xref_cache: XRefCache = self.reader.xrefs
+        xref_cache = self.reader.xrefs
         # for the coverage check, we're more strict with regards to the byte
         #  range
         stream = self.reader.stream

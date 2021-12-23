@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'PdfFileReader', 'HistoricalResolver', 'parse_catalog_version',
-    'RawPdfPath'
+    'RawPdfPath', 'process_data_at_eof'
 ]
 
 header_regex = re.compile(b'%PDF-(\\d).(\\d)')
@@ -191,6 +191,22 @@ class XRefCache:
         except KeyError:
             # this object might simply not have been reclaimed
             pass
+
+    def check_orphaned_freed_objects(self):
+        """
+        Check for orphaned freed objects in the current revision.
+
+        Internal API.
+        """
+        if self._previous_expected_free:
+            orphans = ','.join(
+                f'{k} {v} obj'
+                for k, v in self._previous_expected_free.items()
+            )
+            raise PdfReadError(
+                "Xref table contains orphaned higher generation objects: "
+                + orphans
+            )
 
     def put_ref(self, idnum, generation, start):
         if idnum in self._initially_dead_objects:
@@ -477,6 +493,9 @@ def process_data_at_eof(stream) -> int:
     """
     Auxiliary function that reads backwards from the current position
     in a stream to find the EOF marker and startxref value
+
+    This is internal API.
+
     :param stream:
         A stream to read from
     :return:
@@ -711,7 +730,9 @@ class PdfFileReader(PdfHandler):
                 misc.read_non_whitespace(stream_data, seek_back=True)
             except ValueError:
                 if self.strict:
-                    raise PdfReadError("Object stream header possibly corrupted")
+                    raise PdfReadError(
+                        "Object stream header possibly corrupted"
+                    )
                 else:
                     return generic.NullObject()
             if objnum != idnum:
@@ -1007,15 +1028,7 @@ class PdfFileReader(PdfHandler):
                 continue
             err_count = 0
 
-        if self.xrefs._previous_expected_free:
-            orphans = ','.join(
-                f'{k} {v} obj'
-                for k, v in self.xrefs._previous_expected_free.items()
-            )
-            raise PdfReadError(
-                "Xref table contains orphaned higher generation objects: "
-                + orphans
-            )
+        self.xrefs.check_orphaned_freed_objects()
 
     def read(self):
         # first, read the header & PDF version number
@@ -1546,15 +1559,15 @@ class HistoricalResolver(PdfHandler):
             # separately.
 
             if isinstance(obj, generic.IndirectObject):
-                ref = obj.reference
-                if ref in seen_in_path:
+                obj_ref = obj.reference
+                if obj_ref in seen_in_path:
                     return
-                collected[ref].add(cur_path)
-                seen_in_path = seen_in_path.cons(ref)
-                obj = self(ref)
-                if not is_page_tree and ref in page_tree_objs:
+                collected[obj_ref].add(cur_path)
+                seen_in_path = seen_in_path.cons(obj_ref)
+                obj = self(obj_ref)
+                if not is_page_tree and obj_ref in page_tree_objs:
                     return
-                if not is_struct_tree and ref in struct_tree_objs:
+                if not is_struct_tree and obj_ref in struct_tree_objs:
                     return
             if isinstance(obj, generic.DictionaryObject):
                 for k, v in obj.items():
@@ -1646,7 +1659,8 @@ class HistoricalResolver(PdfHandler):
         struct_tree_nodes = set()
         try:
             struct_tree_root_ref = self.root.raw_get('/StructTreeRoot')
-            for ref in _collect_struct_tree_refs(struct_tree_root_ref.get_object()):
+            struct_tree_root = struct_tree_root_ref.get_object()
+            for ref in _collect_struct_tree_refs(struct_tree_root):
                 if ref in struct_tree_nodes:
                     raise misc.PdfReadError(
                         "Circular reference in structure tree in mapping stage"
