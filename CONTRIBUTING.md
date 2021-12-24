@@ -38,7 +38,7 @@ minimal, reproducible code sample.
  * When available, example files are appreciated. If you're not comfortable sharing your example
    files in public, you can also email them to `pyhanko.samples@mvalvekens.be`.
 
-**IMPORTANT: NEVER disclose production private keys in your bug report or in your e-mails.**
+**IMPORTANT: NEVER disclose production private keys in your bug reports or in your e-mails.**
 
 
 ### New features
