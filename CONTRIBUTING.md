@@ -1,118 +1,135 @@
 # Contributing to pyHanko
 
-Hi, thanks for checking in! As I write this, pyHanko has been on GitHub for about a year and a half,
-and the codebase has grown a lot. Since there has been some discussion in issues and pull requests
-over the course of the past few months or so, I figured now would be a good time to set forth some
-contribution guidelines.
+Hi, thanks for checking in! As I write this, pyHanko has been on GitHub for
+about a year and a half, and the codebase has grown a lot. Since there has been
+some discussion in issues and pull requests over the course of the past few
+months or so, I figured now would be a good time to set forth some contribution
+guidelines.
 
 
 ## Code of conduct
 
-Interactions between contributors are governed by the [Code of Conduct](CODE_OF_CONDUCT.md),
-which is based on the standard Contributor Covenant template. Discussion is allowed and encouraged,
-but be civil, play nice, share your toys; the usual.
+Interactions between contributors are governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md),
+which is based on the standard Contributor Covenant template. Discussion is
+allowed and encouraged, but be civil, play nice, share your toys; the usual.
 
 
 ## Use of the issue tracker and discussion forum
 
 ### Questions about pyHanko
 
-**Do not ask for support on the issue tracker.** The issue tracker is for bug reports and actionable
-feature requests. Questions related to pyHanko usage and development should be asked in the
-discussion forum instead.
+**Do not ask for support on the issue tracker.** The issue tracker is for bug
+reports and actionable feature requests. Questions related to pyHanko usage
+and development should be asked in the discussion forum instead.
 
-Note that community support is provided on a best-effort basis without any service level guarantees.
+Note that community support is provided on a best-effort basis without any
+service level guarantees.
 
 
 ### Bug reports
 
-If you think you've encountered a bug in pyHanko, you can submit a bug report in the issue tracker
-by filling out the bug report template. Please include all relevant information indicated in the
-template.
+If you think you've encountered a bug in pyHanko, you can submit a bug report
+in the issue tracker by filling out the bug report template. Please include all
+relevant information indicated in the template.
 
 Some additional pointers:
 
- * For bugs in library code, always include a stack trace, and (if at all possible) a
-minimal, reproducible code sample.
+ * For bugs in library code, always include a stack trace, and (if at all
+   possible) a minimal, reproducible code sample.
  * For issues with CLI bugs, include the full output in `--verbose` mode.
- * When available, example files are appreciated. If you're not comfortable sharing your example
-   files in public, you can also email them to `pyhanko.samples@mvalvekens.be`.
+ * When available, example files are appreciated. If you're not comfortable
+   sharing your example files in public, you can also email them to
+   `pyhanko.samples@mvalvekens.be`.
 
-**IMPORTANT: NEVER disclose production private keys in your bug reports or in your e-mails.**
+**IMPORTANT: NEVER disclose production private keys in your bug reports or
+in your e-mails.**
 
 
 ### New features
 
-If you have an idea for a feature, consider allowing for some discussion on the discussion forum
-before creating a feature request in the issue tracker or submitting a PR. This allows for smoother
-collaboration, ensures that feature requests stay within the project's scope, and increases
-the chances that your feature request or PR will be worked on and/or reviewed.
+If you have an idea for a feature, consider allowing for some discussion on
+the discussion forum before creating a feature request in the issue tracker
+or submitting a PR. This allows for smoother collaboration, ensures that
+feature requests stay within the project's scope, and increases the chances
+that your feature request or PR will be worked on and/or reviewed.
 
-If you need ideas, take a look at [currently open feature requests](https://github.com/MatthiasValvekens/pyHanko/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement),
+If you need ideas, take a look at [currently open feature requests][feature-requests],
 or ask on the discussion forum.
+
+[feature-requests]: https://github.com/MatthiasValvekens/pyHanko/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement
 
 
 ## Compatibility
 
-Currently, pyHanko aims to remain compatible with Python versions 3.7 and up, and this is expected
-of new contributions as well (for the time being).
+Currently, pyHanko aims to remain compatible with Python versions 3.7 and up,
+and this is expected of new contributions as well (for the time being).
 
-PyHanko follows [SemVer](https://semver.org/), but has not yet reached `1.0.0`. As such, breaking
-changes in the public API between releases are permitted, but they must be well-documented and
-motivated. Documentation for such changes must be supplied in a format suitable for inclusion in the
-release notes.
+PyHanko follows [SemVer](https://semver.org/), but has not yet reached `1.0.0`.
+As such, breaking changes in the public API between releases are permitted,
+but they must be well-documented and motivated. Documentation for such changes
+must be supplied in a format suitable for inclusion in the release notes.
 
-Breaking changes in internal APIs (this includes all undocumented functionality and all code that is
-not yet part of any release tag) are fair game, but PRs proposing such changes must include a
-summary describing what breaks in which way.
+Breaking changes in internal APIs (this includes all undocumented
+functionality and all code that is not yet part of any release tag) are fair
+game, but PRs proposing such changes must include a summary describing what
+breaks in which way.
 
-Dependency changes (both version changes and new dependencies) must always be motivated.
-Besides issues of technical compatibility, also consider the licence under which said dependencies
-are made available.
+Dependency changes (both version changes and new dependencies) must always be
+motivated. Besides issues of technical compatibility, also consider the
+licence under which said dependencies are made available.
 
 
 ## Tests
 
-As a general rule, all PRs should have 100% statement coverage on new code. Deviations are
-permitted but must be motivated.
+As a general rule, all PRs should have 100% statement coverage on new code.
+Deviations are permitted but must be motivated.
 
 In addition, keep in mind the following when writing test cases:
 
  * Test both the "happy path" (i.e. expected input) and error behaviour.
- * Make liberal use of [Certomancer](https://github.com/MatthiasValvekens/certomancer) for PKI
-   service mocking. If you need help, just ask on the discussion forum, or in your PR.
- * When committing a bugfix, verify that your new test (or tests) fails before the fix was applied.
- * Don't just shoot for high statement coverage. Diversity in scenarios is hard to measure, but
-   no less important.
+ * Make liberal use of [Certomancer][certomancer] for PKI
+   service mocking. If you need help, just ask on the discussion forum, or in
+   your PR.
+ * When committing a bugfix, verify that your new tests fail before the fix
+   was applied.
+ * Don't just shoot for high statement coverage. Diversity in scenarios is
+   hard to measure, but no less important.
 
+[certomancer]: https://github.com/MatthiasValvekens/certomancer
 
 ## Code style
 
-Code style is currently not formally standardised; fixing that is on the TODO list. As such, code
-style issues will be handled on a case-by-case basis for the time being (sorry about that).
+Code style is currently not formally standardised; fixing that is on the TODO
+list. As such, code style issues will be handled on a case-by-case basis for
+the time being (sorry about that).
 
 Nevertheless, here are some pointers.
 
  * Avoid overly long function definitions.
- * Avoid letting builtin exceptions (`KeyError`, `ValueError`, ...) bubble up through public API
-   entry points.
+ * Avoid letting builtin exceptions (`KeyError`, `ValueError`, ...) bubble up
+   through public API entry points.
  * Docstrings must be written in ReStructured Text.
- * All new public API entry points must be documented. Documentation may be omitted from internal
-   API functions if their purpose is sufficiently clear.
- * As a general rule, keep your lines under 80 characters. This makes it easier to view multiple
-   files side-by-side on a single monitor. Exceeding the limit is permissible in documentation
-   files.
+ * All new public API entry points must be documented. Documentation may be
+   omitted from internal API functions if their purpose is sufficiently clear.
+ * As a general rule, keep your lines under 80 characters. This makes it easier
+   to view multiple files side-by-side on a single monitor. Exceeding the limit
+   is permissible in documentation files.
  * Format imports using `isort --profile black --line-length 80`.
  * Check for whitespace errors using `git diff-index --check --cached HEAD`.
 
-You can put the last two in a pre-commit hook to avoid getting yelled at by the CI linter.
+You can put the last two in a pre-commit hook to avoid getting yelled at by the
+CI linter.
 
 
 ## Copyright issues
 
-PyHanko is distributed under the [MIT licence](LICENSE), and explicitly does *not* require its
-contributors to sign a contributor licence agreement (CLA). Our approach is instead based on the
-[Developer certificate of origin (DCO)](https://developercertificate.org/), reproduced below.
+PyHanko is distributed under the [MIT licence](LICENSE), and explicitly does
+*not* require its contributors to sign a contributor licence agreement (CLA).
+Our approach is instead based on the
+[Developer certificate of origin (DCO)][dco], reproduced below.
+
+[dco]: https://developercertificate.org/
 
 ```
 Developer Certificate of Origin
@@ -152,5 +169,6 @@ By making a contribution to this project, I certify that:
 
 ```
 
-In particular, the DCO allows you to retain ownership of your changes, while permitting them to be
-distributed under the terms of the project's licence.
+In particular, the DCO allows you to retain ownership of your changes,
+while permitting them to be distributed under the terms of the project's
+licence.
