@@ -29,3 +29,15 @@ Proof-of-concept code and/or sample documents are appreciated if available.
 
 
 [website]: https://mvalvekens.be/contact.html
+
+
+## Spec issues
+
+Note that code analysis tools may report various issues regarding the use of
+weak or outdated cryptographic algorithms, in particular in the code that
+handles file encryption and decryption. Usually, these relate to historical
+baggage in the PDF standard, and therefore they can't be addressed within
+pyHanko without breaking compatibility with other PDF tooling.
+
+Keep that in mind, but when in doubt, report the issue anyway. Better safe than
+sorry.
