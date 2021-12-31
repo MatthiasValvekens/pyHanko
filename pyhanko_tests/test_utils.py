@@ -2274,3 +2274,21 @@ def test_fresh_producer_existing_info():
     r = PdfFileReader(outf2)
     proc = r.trailer['/Info']['/Producer']
     assert proc.startswith('pyHanko')
+
+
+def test_xref_orphaned_nonstrict():
+    # higher-generation xref without matching free
+    # should work in nonstrict mode
+    fpath = os.path.join(PDF_DATA_DIR, 'minimal-with-orphaned-xrefs.pdf')
+    with open(fpath, 'rb') as inf:
+        r = PdfFileReader(inf, strict=False)
+        assert r.root_ref.generation == 9
+
+
+def test_xref_orphaned_strict():
+    # higher-generation xref without matching free
+    # should not work in strict mode
+    fpath = os.path.join(PDF_DATA_DIR, 'minimal-with-orphaned-xrefs.pdf')
+    with open(fpath, 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match="Xref.*orphaned.*1 9 obj"):
+            PdfFileReader(inf, strict=True)

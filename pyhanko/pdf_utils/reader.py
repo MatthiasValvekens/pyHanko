@@ -1028,7 +1028,8 @@ class PdfFileReader(PdfHandler):
                 continue
             err_count = 0
 
-        self.xrefs.check_orphaned_freed_objects()
+        if self.strict:
+            self.xrefs.check_orphaned_freed_objects()
 
     def read(self):
         # first, read the header & PDF version number
