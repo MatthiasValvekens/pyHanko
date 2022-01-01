@@ -277,10 +277,12 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         other_certs = [
             self._load_cert_object('testing-ca-pss', 'interm.cert.pem')
         ]
+        moment = datetime(2021, 5, 3, tzinfo=timezone.utc)
         context = ValidationContext(
             trust_roots=ca_certs,
             other_certs=other_certs,
             allow_fetching=False,
+            moment=moment,
             revocation_mode='soft-fail',
             weak_hash_algos={'md2', 'md5'}
         )
@@ -302,10 +304,12 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 'testing-ca-pss-exclusive', 'interm.cert.pem'
             )
         ]
+        moment = datetime(2021, 5, 3, tzinfo=timezone.utc)
         context = ValidationContext(
             trust_roots=ca_certs,
             other_certs=other_certs,
             allow_fetching=False,
+            moment=moment,
             revocation_mode='soft-fail',
             weak_hash_algos={'md2', 'md5'}
         )
