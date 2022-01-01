@@ -115,7 +115,7 @@ async def test_pades_lt_live():
     arch = "testing-ca"
 
     async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_credentials(session, arch, "signer1")
+        signer = await _retrieve_credentials(session, arch, "signer1-long")
 
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
@@ -142,7 +142,7 @@ async def test_pades_lta_live():
     arch = "testing-ca"
 
     async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_credentials(session, arch, "signer1")
+        signer = await _retrieve_credentials(session, arch, "signer1-long")
 
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
@@ -171,7 +171,7 @@ async def test_async_sign_many_concurrent():
     concurrent_count = 10
 
     async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_credentials(session, arch, "signer1")
+        signer = await _retrieve_credentials(session, arch, "signer1-long")
 
         vc, root = await _init_validation_context(session, arch)
 
