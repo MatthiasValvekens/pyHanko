@@ -1899,6 +1899,7 @@ def test_anomalous_coverage(fname, expected_level):
         assert 'NONSTANDARD_COVERAGE' in status.summary()
 
 
+@freeze_time('2020-11-01')
 def test_delete_sig_annot():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
@@ -1917,6 +1918,7 @@ def test_delete_sig_annot():
     val_trusted_but_modified(s)
 
 
+@freeze_time('2020-11-01')
 def test_double_sig_delete_old_sig_annot():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(

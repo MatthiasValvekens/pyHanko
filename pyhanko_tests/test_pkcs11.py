@@ -298,6 +298,7 @@ def test_simple_sign_ecdsa(bulk_fetch):
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@freeze_time('2020-11-01')
 def test_simple_sign_from_config():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))

@@ -652,6 +652,7 @@ async def test_sign_weak_sig_digest():
 
 
 @pytest.mark.parametrize("with_issser", [False, True])
+@freeze_time('2020-11-01')
 def test_old_style_signing_cert_attr_ok(with_issser):
     if with_issser:
         fname = 'pades-with-old-style-signing-cert-attr-issser.pdf'
@@ -666,6 +667,7 @@ def test_old_style_signing_cert_attr_ok(with_issser):
 
 
 @pytest.mark.parametrize("with_issser", [False, True])
+@freeze_time('2020-11-01')
 def test_old_style_signing_cert_attr_mismatch(with_issser):
 
     if with_issser:
