@@ -83,6 +83,16 @@ def read_next_end_line(stream):
 
 
 class XRefCache:
+    """
+    Internal class to parse & store information from the xref section(s) of a
+    PDF document.
+
+    Stores both the most recent status of all xrefs in addition to their
+    historical values.
+
+    All members of this class are considered internal API and are subject
+    to change without notice.
+    """
 
     def __init__(self, reader):
         super().__init__()
@@ -124,6 +134,25 @@ class XRefCache:
             return False
 
     def free_ref(self, idnum, next_generation):
+        """
+        Mark an object reference as freed in the current revision.
+
+        This removes the object ID from the "expected free" set, and
+        causes references with ``(idnum, next_generation-1)`` to return the
+        null object.
+
+        Since we read files back to front, we can cross-check this against
+        generation numbers against later versions of the object (if any exist).
+
+        The case ``next_generation=0`` is treated specially to compensate
+        for PDF behaviour "in the wild"; see inline comments in the code.
+
+        :param idnum:
+            The xref's ID number
+        :param next_generation:
+            The expected generation number next time the object is reused.
+        """
+
         if not idnum:
             return
 
