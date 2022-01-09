@@ -21,6 +21,7 @@ from pyhanko.pdf_utils.misc import (
     PdfReadError,
     PdfWriteError,
     get_and_apply,
+    rd,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
@@ -1527,7 +1528,7 @@ class SignatureFormField(generic.DictionaryObject):
                  annot_flags=0b10000100):
 
         if box is not None:
-            rect = list(map(generic.FloatObject, box))
+            rect = [generic.FloatObject(rd(x)) for x in box]
         else:
             rect = [generic.FloatObject(0)] * 4
 
