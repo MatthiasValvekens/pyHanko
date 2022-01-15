@@ -1,12 +1,3 @@
----
-name: Default PR template
-about: Submit a pull request
-title: ''
-labels: ''
-assignees: ''
-
----
-
 ## Description of the changes
 
 Describe the changes in this PR, with references to issues in the issue tracker and forum discussions (if applicable).
