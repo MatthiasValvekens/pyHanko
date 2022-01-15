@@ -2,7 +2,7 @@
 name: New feature
 about: Submit an implementation of a new feature
 title: ''
-labels: 'new-feature'
+labels: 'enhancement'
 assignees: ''
 
 ---

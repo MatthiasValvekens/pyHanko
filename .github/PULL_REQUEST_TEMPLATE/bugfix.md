@@ -2,7 +2,7 @@
 name: Bugfix
 about: Submit a fix for a problem with an existing feature in the codebase
 title: ''
-labels: 'bugfix'
+labels: 'bug'
 assignees: ''
 
 ---
