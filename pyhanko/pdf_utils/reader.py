@@ -9,15 +9,16 @@ through incremental updates.
 This comes at a cost, and future iterations of this module may offer more
 flexibility in terms of the level of detail with which file size is scrutinised.
 """
-
+import enum
 import logging
 import os
 import re
 import struct
 from collections import defaultdict
+from dataclasses import dataclass
 from io import BytesIO
 from itertools import chain
-from typing import List, Optional, Set, Tuple, Union
+from typing import Iterator, List, Optional, Set, Tuple, Union
 
 from . import generic, misc
 from .crypt import (
@@ -34,7 +35,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'PdfFileReader', 'HistoricalResolver', 'parse_catalog_version',
-    'RawPdfPath', 'process_data_at_eof'
+    'RawPdfPath', 'process_data_at_eof',
+    'XRefType', 'XRefEntry', 'parse_xref_table', 'parse_xref_stream',
 ]
 
 header_regex = re.compile(b'%PDF-(\\d).(\\d)')
@@ -82,6 +84,217 @@ def read_next_end_line(stream):
     return bytes(reversed(tuple(_build())))
 
 
+@enum.unique
+class XRefType(enum.Enum):
+    """
+    Different types of cross-reference entries.
+    """
+
+    FREE = enum.auto()
+    """
+    A freeing instruction.
+    """
+
+    STANDARD = enum.auto()
+    """
+    A regular top-level object.
+    """
+
+    IN_OBJ_STREAM = enum.auto()
+    """
+    An object that is part of an object stream.
+    """
+
+
+@dataclass(frozen=True)
+class ObjStreamRef:
+    """
+    Identifies an object that's part of an object stream.
+    """
+
+    obj_stream_id: int
+    """
+    The ID number of the object stream (its generation number is presumed zero).
+    """
+
+    ix_in_stream: int
+    """
+    The index of the object in the stream.
+    """
+
+
+@dataclass(frozen=True)
+class XRefEntry:
+    """
+    Value type representing a single cross-reference entry.
+    """
+
+    xref_type: XRefType
+    """
+    The type of cross-reference entry.
+    """
+
+    location: Optional[Union[int, ObjStreamRef]]
+    """
+    Location the cross-reference points to.
+    """
+
+    idnum: int
+    """
+    The ID of the object being referenced.
+    """
+
+    generation: int = 0
+    """
+    The generation number of the object being referenced.
+    """
+
+
+def parse_xref_table(stream) -> Iterator[XRefEntry]:
+    """
+    Parse a single cross-reference table and yield its entries one by one.
+
+    This is internal API.
+
+    :param stream:
+        A file-like object pointed to the start of the cross-reference table.
+    :return:
+        A generator object yielding :class:`.XRefEntry` objects.
+    """
+
+    misc.read_non_whitespace(stream)
+    stream.seek(-1, os.SEEK_CUR)
+    while True:
+        num = generic.NumberObject.read_from_stream(stream)
+        misc.read_non_whitespace(stream)
+        stream.seek(-1, os.SEEK_CUR)
+        size = generic.NumberObject.read_from_stream(stream)
+        misc.read_non_whitespace(stream)
+        stream.seek(-1, os.SEEK_CUR)
+        for cnt in range(0, size):
+            line = stream.read(20)
+
+            # It's very clear in section 3.4.3 of the PDF spec
+            # that all cross-reference table lines are a fixed
+            # 20 bytes (as of PDF 1.7). However, some files have
+            # 21-byte entries (or more) due to the use of \r\n
+            # (CRLF) EOL's. Detect that case, and adjust the line
+            # until it does not begin with a \r (CR) or \n (LF).
+            while line[0] in b"\x0D\x0A":
+                stream.seek(-20 + 1, os.SEEK_CUR)
+                line = stream.read(20)
+
+            # On the other hand, some malformed PDF files
+            # use a single character EOL without a preceding
+            # space.  Detect that case, and seek the stream
+            # back one character.  (0-9 means we've bled into
+            # the next xref entry, t means we've bled into the
+            # text "trailer"):
+            if line[-1] in b"0123456789t":
+                stream.seek(-1, os.SEEK_CUR)
+
+            offset, generation, marker = line[:18].split(b" ")
+            if marker == b'n':
+                yield XRefEntry(
+                    xref_type=XRefType.STANDARD,
+                    location=int(offset),
+                    idnum=num, generation=int(generation)
+                )
+            elif marker == b'f':
+                yield XRefEntry(
+                    xref_type=XRefType.FREE,
+                    location=None,
+                    idnum=num, generation=int(generation)
+                )
+            num += 1
+        misc.read_non_whitespace(stream)
+        stream.seek(-1, os.SEEK_CUR)
+        trailertag = stream.read(7)
+        if trailertag != b"trailer":
+            # more xrefs!
+            stream.seek(-7, os.SEEK_CUR)
+        else:
+            break
+    misc.read_non_whitespace(stream)
+    stream.seek(-1, os.SEEK_CUR)
+
+
+def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
+    """
+    Parse a single cross-reference stream and yield its entries one by one.
+
+    This is internal API.
+
+    :param xref_stream:
+        A :class:`~generic.StreamObject`.
+    :return:
+        A generator object yielding :class:`.XRefEntry` objects.
+    """
+
+    stream_data = BytesIO(xref_stream.data)
+    # Index pairs specify the subsections in the dictionary. If
+    # none create one subsection that spans everything.
+    idx_pairs = xref_stream.get("/Index", [0, xref_stream.get("/Size")])
+    entry_sizes = xref_stream.get("/W")
+
+    def get_entry(ix):
+        # Reads the correct number of bytes for each entry. See the
+        # discussion of the W parameter in ISO 32000-1 table 17.
+        if entry_sizes[ix] > 0:
+            d = stream_data.read(entry_sizes[ix])
+            return convert_to_int(d, entry_sizes[ix])
+
+        # ISO 32000-1 Table 17: A value of zero for an element in the
+        # W array indicates...the default value shall be used
+        if ix == 0:
+            return 1  # First value defaults to 1
+        else:
+            return 0
+
+    # Iterate through each subsection
+    last_end = 0
+    for start, size in misc.pair_iter(idx_pairs):
+        # The subsections must increase
+        assert start >= last_end
+        last_end = start + size
+        for num in range(start, start + size):
+            # The first entry is the type
+            xref_type = get_entry(0)
+            # The rest of the elements depend on the xref_type
+            if xref_type == 1:
+                # objects that are in use but are not compressed
+                location = get_entry(1)
+                generation = get_entry(2)
+                yield XRefEntry(
+                    xref_type=XRefType.STANDARD,
+                    idnum=num, location=location,
+                    generation=generation
+                )
+            elif xref_type == 2:
+                # compressed objects
+                objstr_num = get_entry(1)
+                objstr_idx = get_entry(2)
+                location = ObjStreamRef(objstr_num, objstr_idx)
+                yield XRefEntry(
+                    xref_type=XRefType.IN_OBJ_STREAM,
+                    idnum=num, location=location
+                )
+            elif xref_type == 0:
+                # freed object
+                # we ignore the linked list aspect anyway, so discard first
+                get_entry(1)
+                next_generation = get_entry(2)
+                yield XRefEntry(
+                    xref_type=XRefType.FREE,
+                    idnum=num, generation=next_generation,
+                    location=None
+                )
+            else:
+                # unknown type (=> ignore).
+                get_entry(1)
+                get_entry(2)
+
+
 class XRefCache:
     """
     Internal class to parse & store information from the xref section(s) of a
@@ -119,7 +332,7 @@ class XRefCache:
 
         self._obj_streams_by_revision = defaultdict(set)
 
-    def _next_section(self):
+    def next_section(self):
         self.xref_sections += 1
         self._refs_by_section.append(self._current_section_ids)
         self._current_section_ids = set()
@@ -373,111 +586,27 @@ class XRefCache:
             except KeyError:
                 return None
 
+    def _process_entries(self, entries: Iterator[XRefEntry]):
+        for xref_entry in entries:
+            if xref_entry.xref_type == XRefType.STANDARD:
+                self.put_ref(
+                    xref_entry.idnum, xref_entry.generation,
+                    xref_entry.location
+                )
+            elif xref_entry.xref_type == XRefType.FREE:
+                self.free_ref(xref_entry.idnum, xref_entry.generation)
+            elif xref_entry.xref_type == XRefType.IN_OBJ_STREAM:
+                location: ObjStreamRef = xref_entry.location
+                self.put_obj_stream_ref(
+                    xref_entry.idnum, location.obj_stream_id,
+                    location.ix_in_stream
+                )
+
     def read_xref_table(self):
-        stream = self.reader.stream
-        misc.read_non_whitespace(stream)
-        stream.seek(-1, os.SEEK_CUR)
-        while True:
-            num = generic.NumberObject.read_from_stream(stream)
-            misc.read_non_whitespace(stream)
-            stream.seek(-1, os.SEEK_CUR)
-            size = generic.NumberObject.read_from_stream(stream)
-            misc.read_non_whitespace(stream)
-            stream.seek(-1, os.SEEK_CUR)
-            for cnt in range(0, size):
-                line = stream.read(20)
-
-                # It's very clear in section 3.4.3 of the PDF spec
-                # that all cross-reference table lines are a fixed
-                # 20 bytes (as of PDF 1.7). However, some files have
-                # 21-byte entries (or more) due to the use of \r\n
-                # (CRLF) EOL's. Detect that case, and adjust the line
-                # until it does not begin with a \r (CR) or \n (LF).
-                while line[0] in b"\x0D\x0A":
-                    stream.seek(-20 + 1, os.SEEK_CUR)
-                    line = stream.read(20)
-
-                # On the other hand, some malformed PDF files
-                # use a single character EOL without a preceding
-                # space.  Detect that case, and seek the stream
-                # back one character.  (0-9 means we've bled into
-                # the next xref entry, t means we've bled into the
-                # text "trailer"):
-                if line[-1] in b"0123456789t":
-                    stream.seek(-1, os.SEEK_CUR)
-
-                offset, generation, marker = line[:18].split(b" ")
-                if marker == b'n':
-                    self.put_ref(num, int(generation), int(offset))
-                elif marker == b'f':
-                    self.free_ref(num, int(generation))
-                num += 1
-            misc.read_non_whitespace(stream)
-            stream.seek(-1, os.SEEK_CUR)
-            trailertag = stream.read(7)
-            if trailertag != b"trailer":
-                # more xrefs!
-                stream.seek(-7, os.SEEK_CUR)
-            else:
-                break
-        misc.read_non_whitespace(stream)
-        stream.seek(-1, os.SEEK_CUR)
-
-        self._next_section()
+        self._process_entries(parse_xref_table(self.reader.stream))
 
     def read_xref_stream(self, xrefstream):
-        stream_data = BytesIO(xrefstream.data)
-        # Index pairs specify the subsections in the dictionary. If
-        # none create one subsection that spans everything.
-        idx_pairs = xrefstream.get("/Index", [0, xrefstream.get("/Size")])
-        entry_sizes = xrefstream.get("/W")
-
-        def get_entry(ix):
-            # Reads the correct number of bytes for each entry. See the
-            # discussion of the W parameter in PDF spec table 17.
-            if entry_sizes[ix] > 0:
-                d = stream_data.read(entry_sizes[ix])
-                return convert_to_int(d, entry_sizes[ix])
-
-            # PDF Spec Table 17: A value of zero for an element in the
-            # W array indicates...the default value shall be used
-            if ix == 0:
-                return 1  # First value defaults to 1
-            else:
-                return 0
-
-        # Iterate through each subsection
-        last_end = 0
-        for start, size in misc.pair_iter(idx_pairs):
-            # The subsections must increase
-            assert start >= last_end
-            last_end = start + size
-            for num in range(start, start + size):
-                # The first entry is the type
-                xref_type = get_entry(0)
-                # The rest of the elements depend on the xref_type
-                if xref_type == 1:
-                    # objects that are in use but are not compressed
-                    byte_offset = get_entry(1)
-                    generation = get_entry(2)
-                    self.put_ref(num, generation, byte_offset)
-                elif xref_type == 2:
-                    # compressed objects
-                    objstr_num = get_entry(1)
-                    objstr_idx = get_entry(2)
-                    self.put_obj_stream_ref(num, objstr_num, objstr_idx)
-                elif xref_type == 0:
-                    # freed object
-                    # we ignore the linked list aspect anyway, so discard first
-                    get_entry(1)
-                    next_generation = get_entry(2)
-                    self.free_ref(num, next_generation)
-                else:
-                    # unknown type (=> ignore).
-                    get_entry(1)
-                    get_entry(2)
-
-        self._next_section()
+        self._process_entries(parse_xref_stream(xrefstream))
 
 
 class ObjectHeaderReadError(misc.PdfReadError):
@@ -987,6 +1116,7 @@ class PdfFileReader(PdfHandler):
         xref_cache.xref_container_info.append((xrefstream_ref, stream.tell()))
         xref_cache.xref_stream_refs.add(xrefstream_ref)
         xref_cache.read_xref_stream(xrefstream)
+        xref_cache.next_section()
 
         self.trailer.add_trailer_revision(xrefstream)
         return xrefstream.get('/Prev')
@@ -996,6 +1126,7 @@ class PdfFileReader(PdfHandler):
         xref_cache = self.xrefs
         xref_start = stream.tell()
         xref_cache.read_xref_table()
+        xref_cache.next_section()
         xref_end = stream.tell()
         xref_cache.xref_container_info.append((xref_start, xref_end))
         new_trailer = generic.DictionaryObject.read_from_stream(
