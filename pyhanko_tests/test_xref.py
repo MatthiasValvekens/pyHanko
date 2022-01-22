@@ -1,3 +1,4 @@
+import binascii
 import os
 from io import BytesIO
 
@@ -5,7 +6,13 @@ import pytest
 
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.reader import (
+    ObjStreamRef,
+    PdfFileReader,
+    XRefEntry,
+    XRefType,
+    parse_xref_stream,
+)
 from pyhanko_tests.samples import (
     MINIMAL,
     MINIMAL_AES256,
@@ -479,3 +486,109 @@ def test_xref_orphaned_strict():
     with open(fpath, 'rb') as inf:
         with pytest.raises(misc.PdfReadError, match="Xref.*orphaned.*1 9 obj"):
             PdfFileReader(inf, strict=True)
+
+
+def test_xref_stream_parse_entry_types():
+    encoded_entries = [
+        "0000000000ffff",  # free
+        "01000000110000",  # regular objects
+        "01000000840000",
+        "01000000bc0005",
+        "01000001b40000",
+        "01000002990000",
+        "02000000030001",  # object in stream
+        "03deadbeef1337",  # undefined (should be ignored)
+        "02000000030002",  # object in stream
+        "ffcafebabe0007",  # another undefined one
+    ]
+    xref_data = b''.join(binascii.unhexlify(entr) for entr in encoded_entries)
+    stream_obj = generic.StreamObject(
+        dict_data={
+            generic.pdf_name('/W'): generic.ArrayObject(list(
+                map(generic.NumberObject, [1, 4, 2])
+            )),
+            generic.pdf_name('/Size'): 10
+        },
+        stream_data=xref_data
+    )
+
+    expected_out = [
+        XRefEntry(
+            xref_type=XRefType.FREE, location=None, idnum=0, generation=0xffff
+        ),
+        XRefEntry(xref_type=XRefType.STANDARD, location=0x11, idnum=1),
+        XRefEntry(xref_type=XRefType.STANDARD, location=0x84, idnum=2),
+        XRefEntry(
+            xref_type=XRefType.STANDARD, location=0xbc, idnum=3, generation=5
+        ),
+        XRefEntry(xref_type=XRefType.STANDARD, location=0x1b4, idnum=4),
+        XRefEntry(xref_type=XRefType.STANDARD, location=0x299, idnum=5),
+        XRefEntry(
+            xref_type=XRefType.IN_OBJ_STREAM,
+            location=ObjStreamRef(3, 1), idnum=6
+        ),
+        XRefEntry(
+            xref_type=XRefType.IN_OBJ_STREAM,
+            location=ObjStreamRef(3, 2),
+            idnum=8   # idnum jump because of undefined entry
+        ),
+    ]
+
+    actual_out = list(parse_xref_stream(stream_obj))
+    assert expected_out == actual_out
+
+
+def test_xref_stream_parse_width_value_default_ix0():
+    encoded_entries = [
+        "00000000ffff",
+        "000000110000",
+    ]
+    xref_data = b''.join(binascii.unhexlify(entr) for entr in encoded_entries)
+    stream_obj = generic.StreamObject(
+        dict_data={
+            generic.pdf_name('/W'): generic.ArrayObject(list(
+                map(generic.NumberObject, [0, 4, 2])
+            )),
+            generic.pdf_name('/Size'): 2
+        },
+        stream_data=xref_data
+    )
+
+    expected_out = [
+        XRefEntry(
+            xref_type=XRefType.STANDARD, location=0, idnum=0,
+            generation=0xffff
+        ),
+        XRefEntry(xref_type=XRefType.STANDARD, location=0x11, idnum=1),
+    ]
+
+    actual_out = list(parse_xref_stream(stream_obj))
+    assert expected_out == actual_out
+
+
+def test_xref_stream_parse_width_value_default_ix2():
+    # no tail part
+    encoded_entries = [
+        "0000000000",
+        "0100000011",
+    ]
+    xref_data = b''.join(binascii.unhexlify(entr) for entr in encoded_entries)
+    stream_obj = generic.StreamObject(
+        dict_data={
+            generic.pdf_name('/W'): generic.ArrayObject(list(
+                map(generic.NumberObject, [1, 4, 0])
+            )),
+            generic.pdf_name('/Size'): 2
+        },
+        stream_data=xref_data
+    )
+
+    expected_out = [
+        XRefEntry(
+            xref_type=XRefType.FREE, location=None, idnum=0, generation=0
+        ),
+        XRefEntry(xref_type=XRefType.STANDARD, location=0x11, idnum=1),
+    ]
+
+    actual_out = list(parse_xref_stream(stream_obj))
+    assert expected_out == actual_out
