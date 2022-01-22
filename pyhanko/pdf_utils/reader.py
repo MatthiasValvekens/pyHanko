@@ -210,13 +210,14 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
         misc.read_non_whitespace(stream)
         stream.seek(-1, os.SEEK_CUR)
         trailertag = stream.read(7)
-        if trailertag != b"trailer":
+        if trailertag == b"trailer":
+            # we're done, finish by reading to the first non-whitespace char
+            misc.read_non_whitespace(stream)
+            stream.seek(-1, os.SEEK_CUR)
+            return
+        else:
             # more xrefs!
             stream.seek(-7, os.SEEK_CUR)
-        else:
-            break
-    misc.read_non_whitespace(stream)
-    stream.seek(-1, os.SEEK_CUR)
 
 
 def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
@@ -240,9 +241,16 @@ def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
     def get_entry(ix):
         # Reads the correct number of bytes for each entry. See the
         # discussion of the W parameter in ISO 32000-1 table 17.
-        if entry_sizes[ix] > 0:
-            d = stream_data.read(entry_sizes[ix])
-            return convert_to_int(d, entry_sizes[ix])
+        entry_width = entry_sizes[ix]
+        if entry_width > 0:
+            d = stream_data.read(entry_width)
+            if len(d) < entry_width:
+                raise misc.PdfReadError(
+                    "XRef stream ended prematurely; incomplete entry: "
+                    f"expected to read {entry_width} bytes, but only got "
+                    f"{len(d)}."
+                )
+            return convert_to_int(d, entry_width)
 
         # ISO 32000-1 Table 17: A value of zero for an element in the
         # W array indicates...the default value shall be used

@@ -592,3 +592,21 @@ def test_xref_stream_parse_width_value_default_ix2():
 
     actual_out = list(parse_xref_stream(stream_obj))
     assert expected_out == actual_out
+
+
+def test_premature_xref_stream_end():
+    encoded_entries = ["000000ffff", "0100110000"]
+
+    xref_data = b''.join(binascii.unhexlify(entr) for entr in encoded_entries)
+    stream_obj = generic.StreamObject(
+        dict_data={
+            generic.pdf_name('/W'): generic.ArrayObject(list(
+                map(generic.NumberObject, [1, 2, 2])
+            )),
+            generic.pdf_name('/Size'): 3  # one too many
+        },
+        stream_data=xref_data
+    )
+
+    with pytest.raises(misc.PdfReadError, match='incomplete entry'):
+        list(parse_xref_stream(stream_obj))
