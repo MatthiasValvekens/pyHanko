@@ -631,6 +631,8 @@ class TrailerDictionary(generic.PdfObject):
         trailer.pop('/W', None)
         trailer.pop('/Type', None)
         trailer.pop('/Index', None)
+        # this one also doesn't make sense to auto-rewrite
+        trailer.pop('/XRefStm', None)
         return trailer
 
     def __contains__(self, item):
