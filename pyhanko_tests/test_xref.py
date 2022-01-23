@@ -12,6 +12,7 @@ from pyhanko.pdf_utils.xref import (
     XRefEntry,
     XRefType,
     parse_xref_stream,
+    read_object_header,
 )
 from pyhanko_tests.samples import (
     MINIMAL,
@@ -21,6 +22,17 @@ from pyhanko_tests.samples import (
     PDF_DATA_DIR,
 )
 from pyhanko_tests.test_utils import NONEXISTENT_XREF_PATH
+
+
+@pytest.mark.parametrize('data', [
+    b'1 0 obj\n<<>>',
+    b'\n1 0 obj\n<<>>',
+    b'\n1  0 obj\n<<>>',
+    b'%this is a comment\n1  0 obj\n<<>>',
+])
+def test_object_header_whitespace(data):
+    result = read_object_header(BytesIO(data), strict=True)
+    assert result == (1, 0)
 
 
 @pytest.mark.parametrize('fname', [
@@ -135,7 +147,7 @@ def test_preallocate():
     assert alloc.get_object() == "Test Test"
 
 
-def fmt_dummy_xrefs(xrefs, sep=b'\r\n'):
+def fmt_dummy_xrefs(xrefs, sep=b'\r\n', manual_size=None):
     dummy_hdr = b'%PDF-1.7\n%owqi'
 
     def _gen():
@@ -143,7 +155,7 @@ def fmt_dummy_xrefs(xrefs, sep=b'\r\n'):
         yield dummy_hdr
         offset = len(dummy_hdr) + 1
         init_section_entries = next(xrefs_iter)
-        sz = len(init_section_entries)
+        sz = manual_size or len(init_section_entries)
         section_bytes = b'xref\n' + sep.join(init_section_entries) + sep + \
                         b'trailer<</Size %d>>' % sz
         startxref = offset
@@ -158,6 +170,42 @@ def fmt_dummy_xrefs(xrefs, sep=b'\r\n'):
         yield b'startxref\n%d' % startxref
         yield b'%%EOF'
     return b'\n'.join(_gen())
+
+
+def test_illegal_generation():
+    xrefs = [
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000100 99999 n'],
+    ]
+
+    with pytest.raises(misc.PdfReadError, match='Illegal generation'):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_xref_table_too_many_entries():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n',
+         b'0000000200 00000 n',],
+    ]
+
+    with pytest.raises(misc.PdfReadError, match='table size mismatch'):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs, manual_size=2)))
+
+
+def test_xref_wrong_preamble():
+    xrefs = [
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000100 00000 n'],
+    ]
+
+    fmtd = fmt_dummy_xrefs(xrefs)
+    fmtd = fmtd.replace(b'\nxref', b'\nxzzz')
+    with pytest.raises(misc.PdfReadError, match='table read error'):
+        PdfFileReader(BytesIO(fmtd))
 
 
 def test_object_free():
@@ -237,6 +285,21 @@ def test_forbid_obj_kill():
     ]
     with pytest.raises(misc.PdfReadError,
                        match='free xref with next generation 0'):
+        PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
+
+
+def test_no_resurrection_allowed():
+    xrefs = [
+        [b'0 3',
+         b'0000000000 65535 f',
+         b'0000000000 00000 f',
+         b'0000000200 00000 n'],
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000300 00001 n'],
+    ]
+
+    with pytest.raises(misc.PdfReadError, match='listed as dead'):
         PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
 
 
@@ -390,6 +453,24 @@ def test_xref_stream_null_update():
     assert r.xrefs.total_revisions == 2
     # The xref stream itself got added
     assert len(r.xrefs.explicit_refs_in_revision(1)) == 1
+
+
+def test_no_clobbering_xref_streams():
+    # Test witnessing the limitation on our reader implementation
+    # that disallows references to the xref stream of a previous revision
+    # from being overridden.
+    # (this behaviour may change in the future, but for now, the test is in
+    # place to deal with it)
+
+    buf = BytesIO(MINIMAL_XREF)
+    w = IncrementalPdfFileWriter(buf)
+    # update the xref stream in the previous revision
+    stream_ref = w.prev.xrefs.get_xref_container_info(0).stream_ref
+    w.mark_update(stream_ref)
+    w.write_in_place()
+    with pytest.raises(misc.PdfReadError, match="XRef.*must not be clobbered"):
+        PdfFileReader(buf)
+
 
 
 def test_nonexistent_xref_access():
@@ -639,4 +720,25 @@ def test_premature_xref_stream_end():
     )
 
     with pytest.raises(misc.PdfReadError, match='incomplete entry'):
+        list(parse_xref_stream(stream_obj))
+
+
+def test_xref_stream_trailing_data():
+    encoded_entries = [
+        "0000000000ffff",  # free
+        "01000000110000",
+        "deadbeef"
+    ]
+    xref_data = b''.join(binascii.unhexlify(entr) for entr in encoded_entries)
+    stream_obj = generic.StreamObject(
+        dict_data={
+            generic.pdf_name('/W'): generic.ArrayObject(list(
+                map(generic.NumberObject, [1, 4, 2])
+            )),
+            generic.pdf_name('/Size'): 2
+        },
+        stream_data=xref_data
+    )
+
+    with pytest.raises(misc.PdfReadError, match='Trailing'):
         list(parse_xref_stream(stream_obj))
