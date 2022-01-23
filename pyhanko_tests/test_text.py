@@ -133,7 +133,9 @@ def test_write_embedded_string_objstream():
     conts = page_obj['/Contents']
     assert len(conts) == 2
     assert stream_ref.idnum in (c.idnum for c in conts)
-    assert font_ref.idnum in r.xrefs.in_obj_stream
+    xref_sections = r.xrefs._xref_sections
+    last = xref_sections[len(xref_sections) - 1]
+    assert font_ref.idnum in last.xref_data.xrefs_in_objstm
     out.seek(0)
 
     # attempt to grab the font from the object stream

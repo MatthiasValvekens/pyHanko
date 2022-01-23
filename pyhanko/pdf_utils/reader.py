@@ -457,8 +457,7 @@ class XRefSection:
 def _check_xref_consistency(all_sections: List[XRefSection]):
 
     # put the sections in chronological order for code readability reasons
-    chrono_sections = list(reversed(all_sections))
-    for ix, section in enumerate(chrono_sections):
+    for ix, section in enumerate(all_sections):
 
         # Prevent xref stream objects from being overwritten.
         # (stricter than the spec, but it makes our lives easier at the cost
@@ -468,7 +467,7 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
         xstream_ref = section.meta_info.stream_ref
         if xstream_ref:
             as_tuple = (xstream_ref.idnum, xstream_ref.generation)
-            for section_ in chrono_sections[ix + 1:]:
+            for section_ in all_sections[ix + 1:]:
                 data = section_.xref_data
                 if as_tuple in data.explicit_refs_in_revision:
                     raise misc.PdfReadError(
@@ -506,7 +505,7 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
                 )
 
             improper_generation = None
-            for succ in chrono_sections[ix + 1:]:
+            for succ in all_sections[ix + 1:]:
                 data = succ.xref_data
                 if idnum in data.xrefs_in_objstm:
                     improper_generation = 0
@@ -543,7 +542,7 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
         # Verify that all such higher-generation refs are
         # preceded by an appropriate free instruction of the previous generation
         for idnum, generation in higher_gen:
-            for prec in reversed(chrono_sections[:ix]):
+            for prec in reversed(all_sections[:ix]):
                 try:
                     next_generation = prec.xref_data.freed[idnum]
                     if next_generation == generation:
@@ -618,10 +617,11 @@ class XRefBuilder:
         assert isinstance(new_trailer, generic.DictionaryObject)
         declared_size = int(new_trailer['/Size'])
 
-        if self.strict and highest > declared_size:
+        if self.strict and highest >= declared_size:
             raise misc.PdfReadError(
-                f"Xref table size mismatch: trailer declares size of "
-                f"{declared_size}, but allocated object with id {highest}."
+                f"Xref table size mismatch: table allocated object with id "
+                f"{highest}, but according to the trailer {declared_size - 1} "
+                f"is the maximal allowed object id."
             )
 
         xref_meta_info = XRefSectionMetaInfo(
@@ -686,8 +686,12 @@ class XRefBuilder:
                 continue
             err_count = 0
 
+        # put the sections in chronological order from this point onwards
+        #  (better readability)
+        chrono_sections = list(reversed(self.sections))
         if self.strict:
-            _check_xref_consistency(self.sections)
+            _check_xref_consistency(chrono_sections)
+        return chrono_sections
 
 
 class XRefCache:
@@ -702,10 +706,9 @@ class XRefCache:
     to change without notice.
     """
 
-    def __init__(self, reader, all_sections: List[XRefSection]):
+    def __init__(self, reader, xref_sections: List[XRefSection]):
         self.reader = reader
-        self._xref_sections = len(all_sections)
-        self.all_sections = all_sections
+        self._xref_sections = xref_sections
 
         # Our consistency checker forbids these from being clobbered in strict
         # mode even though the spec allows it. It's too much of a pain
@@ -713,56 +716,44 @@ class XRefCache:
         # for the time being, I'm willing to deal with the possibility of
         # having to reject a few potentially legitimate files because of this.
         self.xref_stream_refs = {
-            section.meta_info.stream_ref for section in all_sections
+            section.meta_info.stream_ref for section in xref_sections
             if section.meta_info.stream_ref is not None
         }
 
     @property
     def total_revisions(self):
-        return self._xref_sections
+        return len(self._xref_sections)
 
     def get_last_change(self, ref: generic.Reference):
-        freed_at = None
-        for ix, section in enumerate(self.all_sections):
+        for ix, section in enumerate(reversed(self._xref_sections)):
             try:
-                result = section.xref_data.try_resolve(ref)
-                if result is None:
-                    # for frees, we need to find the first free
-                    # that affects this generation
-                    freed_at = ix
-                    continue
-                elif freed_at is not None:
-                    # we found a revision defining a use for this
-                    # object, but freed_at is set
-                    # -> that's our first relevant free
-                    return self._xref_sections - 1 - freed_at
-                else:
-                    return self._xref_sections - 1 - ix
+                section.xref_data.try_resolve(ref)
+                return len(self._xref_sections) - 1 - ix
             except KeyError:
                 # nothing in this section
                 pass
         raise KeyError
 
     def object_streams_used_in(self, revision):
-        section = self.all_sections[self._xref_sections - 1 - revision]
+        section = self._xref_sections[revision]
         return {
             generic.Reference(objstm_id, pdf=self.reader)
             for objstm_id in section.xref_data.obj_streams_used
         }
 
     def get_introducing_revision(self, ref: generic.Reference):
-        for ix, section in enumerate(reversed(self.all_sections)):
+        for ix, section in enumerate(self._xref_sections):
             try:
                 result = section.xref_data.try_resolve(ref)
                 if result is not None:
-                    return self._xref_sections - 1 - ix
+                    return ix
             except KeyError:
                 # nothing in this section
                 pass
         raise KeyError
 
     def get_xref_container_info(self, revision) -> XRefSectionMetaInfo:
-        section = self.all_sections[self._xref_sections - 1 - revision]
+        section = self._xref_sections[revision]
         return section.meta_info
 
     def explicit_refs_in_revision(self, revision) -> Set[generic.Reference]:
@@ -775,7 +766,7 @@ class XRefCache:
         :return:
             A set of Reference objects.
         """
-        section = self.all_sections[self._xref_sections - 1 - revision]
+        section = self._xref_sections[revision]
         return {
             generic.Reference(*ref, pdf=self.reader)
             for ref in section.xref_data.explicit_refs_in_revision
@@ -791,7 +782,7 @@ class XRefCache:
         :return:
             A set of Reference objects.
         """
-        section = self.all_sections[self._xref_sections - 1 - revision]
+        section = self._xref_sections[revision]
         return {
             generic.Reference(idnum, gen - 1, pdf=self.reader)
             for idnum, gen in section.xref_data.freed.items()
@@ -808,7 +799,7 @@ class XRefCache:
         :return:
             An integer pointer
         """
-        section = self.all_sections[self._xref_sections - 1 - revision]
+        section = self._xref_sections[revision]
         return section.meta_info.declared_startxref
 
     def get_historical_ref(self, ref, revision) \
@@ -829,15 +820,9 @@ class XRefCache:
             An integer offset, an object stream reference, or ``None`` if
             the reference does not resolve in the specified revision.
         """
-        # Remember: in the history record, revisions are numbered backwards.
-        # (i.e. the first item is the most recent, and the last one is
-        # the oldest)
-        # Hence, the first match that corresponds to a point in time at or
-        # before 'revision' is the one we want
-        revision_ix = self._xref_sections - 1 - revision
-        for revision in self.all_sections[revision_ix:]:
+        for section in reversed(self._xref_sections[:revision + 1]):
             try:
-                result = revision.xref_data.try_resolve(ref)
+                result = section.xref_data.try_resolve(ref)
                 return result
             except KeyError:
                 continue
@@ -847,7 +832,7 @@ class XRefCache:
     def __getitem__(self, ref):
         # No need to make this more efficient, since the reader caches
         # objects for us.
-        return self.get_historical_ref(ref, self._xref_sections - 1)
+        return self.get_historical_ref(ref, len(self._xref_sections) - 1)
 
 
 class ObjectHeaderReadError(misc.PdfReadError):
@@ -1375,8 +1360,8 @@ class PdfFileReader(PdfHandler):
             stream=stream, strict=self.strict,
             last_startxref=last_startxref
         )
-        xref_builder.read_xrefs()
-        xref_cache = XRefCache(self, xref_builder.sections)
+        xref_sections = xref_builder.read_xrefs()
+        xref_cache = XRefCache(self, xref_sections)
         self.has_xref_stream = xref_builder.has_xref_stream
         return xref_cache, xref_builder.trailer
 
@@ -1798,7 +1783,9 @@ class HistoricalResolver(PdfHandler):
 
         xref_cache = self.reader.xrefs
         meta = xref_cache.get_xref_container_info(self.revision)
-        return ref.idnum > meta.size
+        # the maximal object ID is (size - 1), so the reference is allocatable
+        # as long as the ID is strictly less than meta.size
+        return ref.idnum >= meta.size
 
     def collect_dependencies(self, obj: generic.PdfObject, since_revision=None):
         """

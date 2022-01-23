@@ -1289,6 +1289,7 @@ def test_sign_reject_freed(forbid_freeing):
     last_startxref = r.last_startxref
 
     len_out = out.seek(0, os.SEEK_END)
+    sz = r.trailer_view['/Size']
     out.write(
         b'\n'.join([
             b'xref',
@@ -1296,7 +1297,7 @@ def test_sign_reject_freed(forbid_freeing):
             b'0000000000 65535 f ',
             b'%d 1' % freed.idnum,
             b'0000000000 00001 f ',
-            b'trailer<</Prev %d>>' % last_startxref,
+            b'trailer<</Prev %d/Size %d>>' % (last_startxref, sz),
             b'startxref',
             b'%d' % len_out,
             b'%%EOF'
