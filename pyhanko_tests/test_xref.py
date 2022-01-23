@@ -6,9 +6,9 @@ import pytest
 
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.reader import (
+from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.xref import (
     ObjStreamRef,
-    PdfFileReader,
     XRefEntry,
     XRefType,
     parse_xref_stream,

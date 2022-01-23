@@ -20,3 +20,4 @@ pyhanko.pdf\_utils package
    pyhanko.pdf_utils.rw_common
    pyhanko.pdf_utils.text
    pyhanko.pdf_utils.writer
+   pyhanko.pdf_utils.xref
