@@ -1,6 +1,5 @@
 from typing import Iterable, Tuple
 
-from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
@@ -84,7 +83,7 @@ class XrefStreamRule(WhitelistRule):
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
             -> Iterable[Reference]:
-        xref_start, _ = new.reader.xrefs.get_xref_container_info(new.revision)
-        if isinstance(xref_start, generic.Reference) \
-                and old.is_ref_available(xref_start):
-            yield ReferenceUpdate(xref_start)
+        xref_meta = new.reader.xrefs.get_xref_container_info(new.revision)
+        xref_stm = xref_meta.stream_ref
+        if xref_stm is not None and old.is_ref_available(xref_stm):
+            yield ReferenceUpdate(xref_stm)

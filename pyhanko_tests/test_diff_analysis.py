@@ -1303,7 +1303,7 @@ def test_sign_reject_freed(forbid_freeing):
         ])
     )
     r = PdfFileReader(out)
-    last_rev = r.xrefs.xref_sections - 1
+    last_rev = r.xrefs.total_revisions - 1
 
     assert freed.reference in r.xrefs.refs_freed_in_revision(last_rev)
 

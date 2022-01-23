@@ -142,14 +142,16 @@ def fmt_dummy_xrefs(xrefs, sep=b'\r\n'):
         xrefs_iter = iter(xrefs)
         yield dummy_hdr
         offset = len(dummy_hdr) + 1
-        section_bytes = b'xref\n' + sep.join(next(xrefs_iter)) + sep + \
-                        b'trailer<<>>'
+        init_section_entries = next(xrefs_iter)
+        sz = len(init_section_entries)
+        section_bytes = b'xref\n' + sep.join(init_section_entries) + sep + \
+                        b'trailer<</Size %d>>' % sz
         startxref = offset
         offset += len(section_bytes) + 1
         yield section_bytes
         for section in xrefs_iter:
             section_bytes = b'xref\n' + sep.join(section) + sep + \
-                            b'trailer<</Prev %d>>' % startxref
+                            b'trailer<</Prev %d/Size %d>>' % (startxref, sz)
             startxref = offset
             offset += len(section_bytes) + 1
             yield section_bytes
@@ -173,7 +175,7 @@ def test_object_free():
     ]
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
-    assert r.xrefs.xref_sections == 3
+    assert r.xrefs.total_revisions == 3
     assert r.xrefs[generic.Reference(1, 0)] is None
     assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
     assert r.xrefs[generic.Reference(1, 1)] == 300
@@ -197,7 +199,7 @@ def test_object_free_no_override():
     ]
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
-    assert r.xrefs.xref_sections == 4
+    assert r.xrefs.total_revisions == 4
     assert r.xrefs[generic.Reference(1, 0)] is None
     assert r.xrefs[generic.Reference(1, 1)] is None
     assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
@@ -206,7 +208,6 @@ def test_object_free_no_override():
 
 def test_refree_dead_object():
     # I've seen the pattern below in Acrobat output.
-    # (minus the second update)
     xrefs = [
         [b'0 3',
          b'0000000000 65535 f',
@@ -215,17 +216,13 @@ def test_refree_dead_object():
         [b'0 2',
          b'0000000000 65535 f',
          b'0000000000 00001 f'],
-        [b'0 2',
-         b'0000000000 65535 f',
-         b'0000000300 00001 n'],  # reintroduce as gen 1
     ]
 
     r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
-    assert r.xrefs.xref_sections == 3
+    assert r.xrefs.total_revisions == 2
     assert generic.Reference(1, 0) not in r.xrefs.refs_freed_in_revision(0)
-    assert generic.Reference(1, 0) not in r.xrefs.refs_freed_in_revision(1)
-    assert generic.Reference(1, 0) not in r.xrefs.explicit_refs_in_revision(1)
-    assert generic.Reference(1, 1) in r.xrefs.explicit_refs_in_revision(2)
+    assert generic.Reference(1, 0) in r.xrefs.refs_freed_in_revision(1)
+    assert generic.Reference(1, 0) in r.xrefs.explicit_refs_in_revision(1)
 
 
 def test_forbid_obj_kill():
@@ -238,7 +235,8 @@ def test_forbid_obj_kill():
          b'0000000000 65535 f',
          b'0000000000 00000 f'],  # this should be forbidden
     ]
-    with pytest.raises(misc.PdfReadError):
+    with pytest.raises(misc.PdfReadError,
+                       match='free xref with next generation 0'):
         PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
 
 
@@ -484,7 +482,8 @@ def test_xref_orphaned_strict():
     # should not work in strict mode
     fpath = os.path.join(PDF_DATA_DIR, 'minimal-with-orphaned-xrefs.pdf')
     with open(fpath, 'rb') as inf:
-        with pytest.raises(misc.PdfReadError, match="Xref.*orphaned.*1 9 obj"):
+        with pytest.raises(misc.PdfReadError,
+                           match="Object with id 1.*orphaned.*generation 9"):
             PdfFileReader(inf, strict=True)
 
 
@@ -535,7 +534,7 @@ def test_xref_stream_parse_entry_types():
     ]
 
     actual_out = list(parse_xref_stream(stream_obj))
-    assert expected_out == actual_out
+    assert actual_out == expected_out
 
 
 def test_xref_stream_parse_width_value_default_ix0():
@@ -563,7 +562,38 @@ def test_xref_stream_parse_width_value_default_ix0():
     ]
 
     actual_out = list(parse_xref_stream(stream_obj))
-    assert expected_out == actual_out
+    assert actual_out == expected_out
+
+
+def test_xref_stream_parse_long_width_value():
+    encoded_entries = [
+        "0000000000000000000000ffff",
+        "01000000000011000000110000",
+    ]
+    xref_data = b''.join(binascii.unhexlify(entr) for entr in encoded_entries)
+    stream_obj = generic.StreamObject(
+        dict_data={
+            generic.pdf_name('/W'): generic.ArrayObject(list(
+                map(generic.NumberObject, [1, 10, 2])
+            )),
+            generic.pdf_name('/Size'): 2
+        },
+        stream_data=xref_data
+    )
+
+    expected_out = [
+        XRefEntry(
+            xref_type=XRefType.FREE, location=None, idnum=0,
+            generation=0xffff
+        ),
+        XRefEntry(
+            xref_type=XRefType.STANDARD,
+            location=0x1100000011, idnum=1
+        ),
+    ]
+
+    actual_out = list(parse_xref_stream(stream_obj))
+    assert actual_out == expected_out
 
 
 def test_xref_stream_parse_width_value_default_ix2():
@@ -591,7 +621,7 @@ def test_xref_stream_parse_width_value_default_ix2():
     ]
 
     actual_out = list(parse_xref_stream(stream_obj))
-    assert expected_out == actual_out
+    assert actual_out == expected_out
 
 
 def test_premature_xref_stream_end():

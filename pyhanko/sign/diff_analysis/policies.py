@@ -301,7 +301,7 @@ class StandardDiffPolicy(DiffPolicy):
 
         changed_form_fields = set()
 
-        rev_count = reader.xrefs.xref_sections
+        rev_count = reader.xrefs.total_revisions
         current_max = ModificationLevel.NONE
         if isinstance(base_revision, int):
             base_rev_resolver = reader.get_historical_resolver(

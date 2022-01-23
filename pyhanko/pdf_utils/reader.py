@@ -18,7 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from io import BytesIO
 from itertools import chain
-from typing import Iterator, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Set, Tuple, Union
 
 from . import generic, misc
 from .crypt import (
@@ -220,7 +220,8 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
             stream.seek(-7, os.SEEK_CUR)
 
 
-def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
+def parse_xref_stream(xref_stream: generic.StreamObject,
+                      strict: bool = True) -> Iterator[XRefEntry]:
     """
     Parse a single cross-reference stream and yield its entries one by one.
 
@@ -228,6 +229,8 @@ def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
 
     :param xref_stream:
         A :class:`~generic.StreamObject`.
+    :param strict:
+        Boolean indicating whether we're running in strict mode.
     :return:
         A generator object yielding :class:`.XRefEntry` objects.
     """
@@ -244,13 +247,14 @@ def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
         entry_width = entry_sizes[ix]
         if entry_width > 0:
             d = stream_data.read(entry_width)
-            if len(d) < entry_width:
+            if len(d) >= entry_width:
+                return convert_to_int(d, entry_width)
+            elif strict:
                 raise misc.PdfReadError(
                     "XRef stream ended prematurely; incomplete entry: "
                     f"expected to read {entry_width} bytes, but only got "
                     f"{len(d)}."
                 )
-            return convert_to_int(d, entry_width)
 
         # ISO 32000-1 Table 17: A value of zero for an element in the
         # W array indicates...the default value shall be used
@@ -302,6 +306,389 @@ def parse_xref_stream(xref_stream: generic.StreamObject) -> Iterator[XRefEntry]:
                 get_entry(1)
                 get_entry(2)
 
+    if len(stream_data.read(1)) > 0 and strict:
+        raise misc.PdfReadError("Trailing data in cross-reference stream")
+
+
+@enum.unique
+class XRefSectionType(enum.Enum):
+    STANDARD = enum.auto()
+    STREAM = enum.auto()
+    HYBRID = enum.auto()  # TODO support hybrid reference files
+
+
+@dataclass(frozen=True)
+class XRefSectionMetaInfo:
+    xref_section_type: XRefSectionType
+    """
+    The type of cross-reference section.
+    """
+
+    size: int
+    """
+    The highest object ID in scope for this xref section.
+    """
+
+    declared_startxref: int
+    """
+    Location pointed to by the startxref pointer in that revision.
+    """
+
+    start_location: int
+    """
+    Actual start location of the xref data. This should be equal
+    to `declared_startxref`, but in broken files that may not be the case.
+    """
+
+    end_location: int
+    """
+    Location where the xref data ended.
+    """
+
+    stream_ref: Optional[generic.Reference]
+    """
+    Reference to the relevant xref stream, if applicable.
+    """
+
+
+class XRefSectionData:
+    """
+    Internal class for bookkeeping on a single cross-reference section,
+    independently of the others.
+    """
+
+    def __init__(self):
+        # TODO Food for thought: is there an efficient IntMap implementation out
+        #  there that can beat generic python dicts in real-world scenarios?
+        self.freed: Dict[int, int] = {}
+        self.standard_xrefs: Dict[int, (int, int)] = {}
+        self.xrefs_in_objstm: Dict[int, ObjStreamRef] = {}
+        self.explicit_refs_in_revision = set()
+        self.obj_streams_used = set()
+
+    def try_resolve(self,
+                    ref: Union[generic.Reference, generic.IndirectObject]) \
+            -> Optional[Union[int, ObjStreamRef]]:
+
+        # The lookups are ordered more or less in the order we expect
+        # them to be queried most frequently in a given file.
+
+        # In files that use object streams in a context where it provides
+        #  significant savings, we also expect _most_ objects (esp. lots of
+        #  small ones) to be stored in object streams (case in point: tagged
+        #  documents). As such, it makes sense to look there first.
+        # Note: generation must be zero
+        if ref.generation == 0:
+            try:
+                return self.xrefs_in_objstm[ref.idnum]
+            except KeyError:
+                pass
+
+        std_ref = self.standard_xrefs.get(ref.idnum, None)
+        if std_ref is not None:
+            # check if the generations match
+            if std_ref[0] == ref.generation:
+                return std_ref[1]
+            else:
+                raise KeyError(ref)
+
+        freed_next_generation = self.freed.get(ref.idnum, None)
+        # The generation in a free entry is the _next_ gen number at which
+        # the reference may be used, hence the -1
+        # Otherwise, the freed entry is irrelevant, so we fall through.
+        if freed_next_generation is not None \
+                and ref.generation == freed_next_generation - 1:
+            return None
+
+        raise KeyError(ref)
+
+    def process_entries(self, entries: Iterator[XRefEntry]):
+        highest_id = 0
+        for xref_entry in entries:
+            idnum = xref_entry.idnum
+            generation = xref_entry.generation
+            highest_id = max(idnum, highest_id)
+            if generation > 0xffff:
+                raise PdfReadError(
+                    f"Illegal generation {generation} for object ID {idnum}."
+                )
+            if xref_entry.idnum == 0:
+                continue  # don't bother
+            if xref_entry.xref_type == XRefType.STANDARD:
+                self.standard_xrefs[idnum] = (generation, xref_entry.location)
+                self.explicit_refs_in_revision.add((idnum, generation))
+            elif xref_entry.xref_type == XRefType.IN_OBJ_STREAM:
+                assert generation == 0
+                loc: ObjStreamRef = xref_entry.location
+                self.xrefs_in_objstm[idnum] = loc
+                self.obj_streams_used.add(loc.obj_stream_id)
+                self.explicit_refs_in_revision.add((idnum, 0))
+            elif xref_entry.xref_type == XRefType.FREE:
+                self.freed[idnum] = generation
+                # subtract one, since we're removing one generation before
+                #  this one.
+                self.explicit_refs_in_revision.add((idnum, generation - 1))
+        return highest_id
+
+    def higher_generation_refs(self):
+        for idnum, (generation, _) in self.standard_xrefs.items():
+            if generation > 0:
+                yield idnum, generation
+
+
+@dataclass(frozen=True)
+class XRefSection:
+    """
+    Describes a cross-reference section and describes how it is serialised into
+    the PDF file.
+    """
+
+    meta_info: XRefSectionMetaInfo
+    """
+    Metadata about the cross-reference section.
+    """
+
+    xref_data: XRefSectionData
+    """
+    A description of the actual object pointer definitions.
+    """
+
+
+def _check_xref_consistency(all_sections: List[XRefSection]):
+
+    # put the sections in chronological order for code readability reasons
+    chrono_sections = list(reversed(all_sections))
+    for ix, section in enumerate(chrono_sections):
+
+        # Prevent xref stream objects from being overwritten.
+        # (stricter than the spec, but it makes our lives easier at the cost
+        # of rejecting some theoretically valid files)
+        # The reason is because of the potential for caching issues with
+        # encrypted files.
+        xstream_ref = section.meta_info.stream_ref
+        if xstream_ref:
+            as_tuple = (xstream_ref.idnum, xstream_ref.generation)
+            for section_ in chrono_sections[ix + 1:]:
+                data = section_.xref_data
+                if as_tuple in data.explicit_refs_in_revision:
+                    raise misc.PdfReadError(
+                        "XRef stream objects must not be clobbered in strict "
+                        "mode."
+                    )
+
+        # For all free refs, check that _if_ redefined, they're
+        # redefined with a proper generation number
+        for idnum, expected_next_generation in section.xref_data.freed.items():
+            # When rewriting files & removing dead objects, Acrobat will
+            # enter the deleted reference into the Xref table/stream with
+            # a 'next generation' ID of 0. It doesn't contradict the spec
+            # directly, but I assumed that this was the way to indicate that
+            # generation 0xffff had just been freed. Apparently not, because
+            # I've seen Acrobat put that same freed reference in later revisions
+            # with a next_gen number of 1. Bizarre.
+            #
+            # Anyhow, given the ubiquity of Adobe (Acrobat|Reader), it's
+            # probably prudent to special-case this one.
+            # In doing so, we're probably not dealing correctly with the case
+            # where the 0xffff'th generation of an object is freed, but I'm
+            # happy to assume that that will never happen in a legitimate file.
+
+            # We will raise an error on any reuse of such "dead" objects
+            #  in anything else than a 'free'.
+            #
+            # To be explicit (while still accepting legitimate files)
+            #  we'll throw an error if this happens in a non-initial revision,
+            #  until someone complains.
+            if expected_next_generation == 0 and ix > 0:
+                raise misc.PdfReadError(
+                    "In strict mode, a free xref with next generation 0 is only"
+                    "permitted in an initial revision due to unclear semantics."
+                )
+
+            improper_generation = None
+            for succ in chrono_sections[ix + 1:]:
+                data = succ.xref_data
+                if idnum in data.xrefs_in_objstm:
+                    improper_generation = 0
+                else:
+                    try:
+                        next_generation, _ = data.standard_xrefs[idnum]
+                        # We compare using < instead of forcing equality.
+                        # Jumps in the generation number will be detected
+                        # by the higher_gen check further down.
+                        # For the == 0 check, see comment about dead objects
+                        # further up.
+                        if expected_next_generation == 0 or \
+                                next_generation < expected_next_generation:
+                            improper_generation = next_generation
+                    except KeyError:
+                        pass
+
+                if improper_generation is not None:
+                    if expected_next_generation == 0:
+                        raise misc.PdfReadError(
+                            f"Object with id {idnum} was listed as dead, "
+                            f"but is reused later, with generation "
+                            f"number {improper_generation}."
+                        )
+                    else:
+                        raise misc.PdfReadError(
+                            f"Object with id {idnum} and generation "
+                            f"{improper_generation} was found after "
+                            f"{expected_next_generation - 1} was freed."
+                        )
+
+        # collect all higher-generation refs
+        higher_gen = set(section.xref_data.higher_generation_refs())
+        # Verify that all such higher-generation refs are
+        # preceded by an appropriate free instruction of the previous generation
+        for idnum, generation in higher_gen:
+            for prec in reversed(chrono_sections[:ix]):
+                try:
+                    next_generation = prec.xref_data.freed[idnum]
+                    if next_generation == generation:
+                        break  # we've found the appropriate 'free'
+                except KeyError:
+                    continue
+            else:
+                raise misc.PdfReadError(
+                    f"Object with id {idnum} has an orphaned "
+                    f"generation: generation {generation} was "
+                    f"not preceded by a free instruction for "
+                    f"generation {generation - 1}."
+                )
+
+
+class XRefBuilder:
+
+    err_limit = 10
+
+    def __init__(self, handler: PdfHandler, stream, strict: bool, last_startxref):
+        self.handler = handler
+        self.stream = stream
+        self.strict = strict
+        self.last_startxref = last_startxref
+        self.sections = []
+
+        self.trailer = TrailerDictionary()
+        self.trailer.container_ref = generic.TrailerReference(self)
+        self.has_xref_stream = False
+
+    def _read_xref_stream(self, declared_startxref: int):
+        stream = self.stream
+        start_location = stream.tell()
+        idnum, generation = read_object_header(stream, strict=self.strict)
+        xrefstream_ref = generic.Reference(idnum, generation, pdf=self.handler)
+        xrefstream = generic.StreamObject.read_from_stream(
+            stream, xrefstream_ref
+        )
+        xrefstream.container_ref = xrefstream_ref
+        assert xrefstream["/Type"] == "/XRef"
+
+        xref_section_data = XRefSectionData()
+        xref_section_data.process_entries(
+            parse_xref_stream(xrefstream, strict=self.strict)
+        )
+        xref_meta_info = XRefSectionMetaInfo(
+            xref_section_type=XRefSectionType.STREAM,
+            # in a stream, the number of entries is enforced, so we don't need
+            # to check it explicitly
+            size=int(xrefstream['/Size']),
+            declared_startxref=declared_startxref,
+            start_location=start_location,
+            end_location=stream.tell(),
+            stream_ref=xrefstream_ref
+        )
+        self.sections.append(XRefSection(xref_meta_info, xref_section_data))
+
+        self.trailer.add_trailer_revision(xrefstream)
+        return xrefstream.get('/Prev')
+
+    def _read_xref_table(self, declared_startxref: int):
+        stream = self.stream
+        xref_start = stream.tell()
+        xref_section_data = XRefSectionData()
+        highest = xref_section_data.process_entries(parse_xref_table(stream))
+        xref_end = stream.tell()
+
+        # TODO check for hybrid XRef in the trailer
+        new_trailer = generic.DictionaryObject.read_from_stream(
+            stream, generic.TrailerReference(self.handler)
+        )
+        assert isinstance(new_trailer, generic.DictionaryObject)
+        declared_size = int(new_trailer['/Size'])
+
+        if self.strict and highest > declared_size:
+            raise misc.PdfReadError(
+                f"Xref table size mismatch: trailer declares size of "
+                f"{declared_size}, but allocated object with id {highest}."
+            )
+
+        xref_meta_info = XRefSectionMetaInfo(
+            xref_section_type=XRefSectionType.STANDARD,
+            size=declared_size,
+            declared_startxref=declared_startxref,
+            start_location=xref_start,
+            end_location=xref_end,
+            stream_ref=None,
+        )
+        self.sections.append(XRefSection(xref_meta_info, xref_section_data))
+
+        self.trailer.add_trailer_revision(new_trailer)
+        return new_trailer.get('/Prev')
+
+    def read_xrefs(self):
+        # read all cross reference tables and their trailers
+        stream = self.stream
+        declared_startxref = startxref = self.last_startxref
+        # Tracks the number of times we retried to read a particular xref
+        # section
+        err_count = 0
+        while startxref is not None:
+            if (self.strict and err_count) or err_count > self.err_limit:
+                raise PdfReadError("Failed to locate xref section")
+            if not err_count:
+                declared_startxref = startxref
+            stream.seek(startxref)
+            if misc.skip_over_whitespace(stream):
+                # This is common in linearised files, so we're not marking
+                # this as an error, even in strict mode.
+                logger.debug(
+                    "Encountered unexpected whitespace when looking "
+                    "for xref stream"
+                )
+                startxref = stream.tell()
+            x = stream.read(1)
+            if x == b"x":
+                # standard cross-reference table
+                ref = stream.read(4)
+                if ref[:3] != b"ref":
+                    raise PdfReadError("xref table read error")
+                startxref = self._read_xref_table(declared_startxref)
+            elif x.isdigit():
+                # PDF 1.5+ Cross-Reference Stream
+                stream.seek(-1, os.SEEK_CUR)
+                try:
+                    startxref = self._read_xref_stream(declared_startxref)
+                except ObjectHeaderReadError as e:
+                    logger.debug(
+                        "Failed to read xref stream header, attempting to "
+                        "correct...", exc_info=e
+                    )
+                    # can be caused by an OBO error (pointing too far)
+                    startxref = _attempt_startxref_correction(stream, startxref)
+                    err_count += 1
+                    continue
+                self.has_xref_stream = True
+            else:
+                startxref = _attempt_startxref_correction(stream, startxref)
+                err_count += 1
+                continue
+            err_count = 0
+
+        if self.strict:
+            _check_xref_consistency(self.sections)
+
 
 class XRefCache:
     """
@@ -315,211 +702,68 @@ class XRefCache:
     to change without notice.
     """
 
-    def __init__(self, reader):
-        super().__init__()
+    def __init__(self, reader, all_sections: List[XRefSection]):
         self.reader = reader
-        self.xref_sections = 0
-        self.xref_locations = []
-        self.in_obj_stream = {}
-        self.standard_xrefs = {}
-        # making this a dict doesn't make much sense
-        self.history = defaultdict(list)
-        self._current_section_ids = set()
-        self._current_section_freed = set()
-        self._refs_by_section = []
-        self._freed_by_section = []
-        self._generations = {}
-        self._previous_expected_free = {}
-        self.xref_container_info = []
-        self.xref_stream_refs = set()
+        self._xref_sections = len(all_sections)
+        self.all_sections = all_sections
 
-        # Objects that were declared as 'xxxxxxx 00000 f' in the
-        # initial revision. This sometimes happens when PDF writers clean up
-        # dead objects in a file, but want to preserve existing object IDs
-        self._initially_dead_objects = set()
-
-        self._obj_streams_by_revision = defaultdict(set)
-
-    def next_section(self):
-        self.xref_sections += 1
-        self._refs_by_section.append(self._current_section_ids)
-        self._current_section_ids = set()
-        self._freed_by_section.append(self._current_section_freed)
-        self._current_section_freed = set()
-
-    def used_later(self, idnum, generation) -> bool:
-        # We move backwards through the xrefs, don't replace any.
-        try:
-            return generation in self._generations[idnum]
-        except KeyError:
-            return False
-
-    def free_ref(self, idnum, next_generation):
-        """
-        Mark an object reference as freed in the current revision.
-
-        This removes the object ID from the "expected free" set, and
-        causes references with ``(idnum, next_generation-1)`` to return the
-        null object.
-
-        Since we read files back to front, we can cross-check this against
-        generation numbers against later versions of the object (if any exist).
-
-        The case ``next_generation=0`` is treated specially to compensate
-        for PDF behaviour "in the wild"; see inline comments in the code.
-
-        :param idnum:
-            The xref's ID number
-        :param next_generation:
-            The expected generation number next time the object is reused.
-        """
-
-        if not idnum:
-            return
-
-        # When rewriting files & removing dead objects, Acrobat will
-        # enter the deleted reference into the Xref table/stream with
-        # a 'next generation' ID of 0. It doesn't contradict the spec directly,
-        # but I assumed that this was the way to indicate that generation 0xffff
-        # had just been freed. Apparently not, because I've seen Acrobat
-        # put that same freed reference in later revisions with a next_gen
-        # number of 1. Bizarre.
-        #
-        # Anyhow, given the ubiquity of Adobe (Acrobat|Reader), it's probably
-        # prudent to special-case this one.
-        # In doing so, we're probably not dealing correctly with the case
-        # where the 0xffff'th generation of an object is freed, but I'm happy
-        # to assume that that will never happen in a legitimate file.
-        if not next_generation:
-            self._initially_dead_objects.add(idnum)
-            # remove any subsequent freeings of the 0th generation, since it
-            # never existed in the first place
-            zeroth_gen_ref = generic.Reference(idnum, 0)
-            later_revs = zip(self._freed_by_section, self._refs_by_section)
-            for freed, defd in later_revs:
-                try:
-                    freed.remove(zeroth_gen_ref)
-                except KeyError:
-                    continue  # not freed in this revision, move on
-
-                # also delete the record of the ref being modified in that
-                # generation (freed is a subset of defd by construction)
-                defd.remove(zeroth_gen_ref)
-            return
-
-        # treat this as setting idnum, next_generation-1 to null
-        prev_generation = next_generation - 1
-        self.standard_xrefs[(prev_generation, idnum)] = None
-        null_ref = generic.Reference(idnum, prev_generation)
-        self._current_section_freed.add(null_ref)
-        self._current_section_ids.add(null_ref)
-        try:
-            # check for sneaky reuse: does prev_generation (or any lower one)
-            # still occur later in the file?
-            conflicting_gen = next(
-                gen for gen in self._generations[idnum]
-                if gen <= prev_generation
-            )
-            raise PdfReadError(
-                f"Generation {conflicting_gen} of object {idnum} occurs "
-                f"after generation {prev_generation} was freed."
-            )
-        except KeyError:
-            self._generations[idnum] = {prev_generation}
-        except StopIteration:
-            self._generations[idnum].add(prev_generation)
-
-        try:
-            # remove from expected free dict
-            expected_generation = self._previous_expected_free.pop(idnum)
-            if expected_generation != next_generation:
-                raise PdfReadError(
-                    f"Encountered freeing instruction with next generation "
-                    f"{next_generation} of object ID {idnum}, but next use of "
-                    f"this object has generation {expected_generation}."
-                )
-        except KeyError:
-            # this object might simply not have been reclaimed
-            pass
-
-    def check_orphaned_freed_objects(self):
-        """
-        Check for orphaned freed objects in the current revision.
-
-        Internal API.
-        """
-        if self._previous_expected_free:
-            orphans = ','.join(
-                f'{k} {v} obj'
-                for k, v in self._previous_expected_free.items()
-            )
-            raise PdfReadError(
-                "Xref table contains orphaned higher generation objects: "
-                + orphans
-            )
-
-    def put_ref(self, idnum, generation, start):
-        if idnum in self._initially_dead_objects:
-            # see comments in free_ref for justification
-            raise PdfReadError(
-                f"Spurious history for object {idnum}; is treated as dead "
-                f"reference later in file."
-            )
-        if idnum in self._previous_expected_free:
-            raise PdfReadError(
-                f"Generation {generation} of object {idnum} was "
-                "never freed, but reused later."
-            )
-        if generation > 0xffff:  # pragma: nocover
-            raise PdfReadError(
-                f"Illegal generation {generation} for object ID {idnum}."
-            )
-        elif generation > 0:
-            # we must encounter a freeing instruction further back in the file
-            self._previous_expected_free[idnum] = generation
-        if not self.used_later(idnum, generation):
-            self.standard_xrefs[(generation, idnum)] = start
-            self._generations[idnum] = {generation}
-        else:
-            self._generations[idnum].add(generation)
-        self.history[(generation, idnum)].append((self.xref_sections, start))
-        self._current_section_ids.add(
-            generic.Reference(idnum, generation, self.reader)
-        )
-
-    def put_obj_stream_ref(self, idnum, obj_stream_num, obj_stream_ix):
-        self._obj_streams_by_revision[self.xref_sections].add(
-            generic.Reference(obj_stream_num, 0, self.reader)
-        )
-        marker = (obj_stream_num, obj_stream_ix)
-        if not self.used_later(idnum, 0):
-            self.in_obj_stream[idnum] = marker
-            self._generations[idnum] = {0}
-
-        self.history[(0, idnum)].append((self.xref_sections, marker))
-        self._current_section_ids.add(generic.Reference(idnum, 0, self.reader))
+        # Our consistency checker forbids these from being clobbered in strict
+        # mode even though the spec allows it. It's too much of a pain
+        # to deal with the impact on encryption semantics correctly, and
+        # for the time being, I'm willing to deal with the possibility of
+        # having to reject a few potentially legitimate files because of this.
+        self.xref_stream_refs = {
+            section.meta_info.stream_ref for section in all_sections
+            if section.meta_info.stream_ref is not None
+        }
 
     @property
     def total_revisions(self):
-        return self.xref_sections
+        return self._xref_sections
 
     def get_last_change(self, ref: generic.Reference):
-        ref_hist = self.history[(ref.generation, ref.idnum)]
-        if not ref_hist:
-            raise KeyError
-        section, _ = ref_hist[0]
-        return self.xref_sections - 1 - section
+        freed_at = None
+        for ix, section in enumerate(self.all_sections):
+            try:
+                result = section.xref_data.try_resolve(ref)
+                if result is None:
+                    # for frees, we need to find the first free
+                    # that affects this generation
+                    freed_at = ix
+                    continue
+                elif freed_at is not None:
+                    # we found a revision defining a use for this
+                    # object, but freed_at is set
+                    # -> that's our first relevant free
+                    return self._xref_sections - 1 - freed_at
+                else:
+                    return self._xref_sections - 1 - ix
+            except KeyError:
+                # nothing in this section
+                pass
+        raise KeyError
 
     def object_streams_used_in(self, revision):
-        return self._obj_streams_by_revision[self.xref_sections - 1 - revision]
+        section = self.all_sections[self._xref_sections - 1 - revision]
+        return {
+            generic.Reference(objstm_id, pdf=self.reader)
+            for objstm_id in section.xref_data.obj_streams_used
+        }
 
     def get_introducing_revision(self, ref: generic.Reference):
-        ref_hist = self.history[(ref.generation, ref.idnum)]
-        section, _ = ref_hist[len(ref_hist) - 1]
-        return self.xref_sections - 1 - section
+        for ix, section in enumerate(reversed(self.all_sections)):
+            try:
+                result = section.xref_data.try_resolve(ref)
+                if result is not None:
+                    return self._xref_sections - 1 - ix
+            except KeyError:
+                # nothing in this section
+                pass
+        raise KeyError
 
-    def get_xref_container_info(self, revision):
-        return self.xref_container_info[self.xref_sections - 1 - revision]
+    def get_xref_container_info(self, revision) -> XRefSectionMetaInfo:
+        section = self.all_sections[self._xref_sections - 1 - revision]
+        return section.meta_info
 
     def explicit_refs_in_revision(self, revision) -> Set[generic.Reference]:
         """
@@ -531,8 +775,11 @@ class XRefCache:
         :return:
             A set of Reference objects.
         """
-        rbs = self._refs_by_section
-        return rbs[self.xref_sections - 1 - revision]
+        section = self.all_sections[self._xref_sections - 1 - revision]
+        return {
+            generic.Reference(*ref, pdf=self.reader)
+            for ref in section.xref_data.explicit_refs_in_revision
+        }
 
     def refs_freed_in_revision(self, revision) -> Set[generic.Reference]:
         """
@@ -544,10 +791,14 @@ class XRefCache:
         :return:
             A set of Reference objects.
         """
-        fbs = self._freed_by_section
-        return fbs[self.xref_sections - 1 - revision]
+        section = self.all_sections[self._xref_sections - 1 - revision]
+        return {
+            generic.Reference(idnum, gen - 1, pdf=self.reader)
+            for idnum, gen in section.xref_data.freed.items()
+            if gen > 0  # don't acknowledge "dead" objects as freeings
+        }
 
-    def get_startxref_for_revision(self, revision):
+    def get_startxref_for_revision(self, revision) -> int:
         """
         Look up the location of the XRef table/stream associated with a specific
         revision, as indicated by startxref or /Prev.
@@ -557,64 +808,46 @@ class XRefCache:
         :return:
             An integer pointer
         """
-        return self.xref_locations[self.xref_sections - 1 - revision]
+        section = self.all_sections[self._xref_sections - 1 - revision]
+        return section.meta_info.declared_startxref
 
-    def get_historical_ref(self, ref, revision):
+    def get_historical_ref(self, ref, revision) \
+            -> Optional[Union[int, ObjStreamRef]]:
         """
         Look up the location of the historical value of an object.
+
+        .. note::
+            This method is not suitable for determining whether or not
+            a particular object ID is available in a given revision, since
+            it treats unused objects and freed objects the same way.
 
         :param ref:
             An object reference.
         :param revision:
             A revision number. The oldest revision is zero.
         :return:
-            An integer offset, or a pair of integers indicating an object
-            in an object stream.
+            An integer offset, an object stream reference, or ``None`` if
+            the reference does not resolve in the specified revision.
         """
-        max_index = self.xref_sections - 1
-        ix = (ref.generation, ref.idnum)
-
         # Remember: in the history record, revisions are numbered backwards.
         # (i.e. the first item is the most recent, and the last one is
         # the oldest)
         # Hence, the first match that corresponds to a point in time at or
         # before 'revision' is the one we want
-        for rev_index, marker in self.history[ix]:
-            if revision >= max_index - rev_index:
-                return marker
+        revision_ix = self._xref_sections - 1 - revision
+        for revision in self.all_sections[revision_ix:]:
+            try:
+                result = revision.xref_data.try_resolve(ref)
+                return result
+            except KeyError:
+                continue
+
         return None
 
     def __getitem__(self, ref):
-        if ref.generation == 0 and \
-                ref.idnum in self.in_obj_stream:
-            return self.in_obj_stream[ref.idnum]
-        else:
-            try:
-                return self.standard_xrefs[(ref.generation, ref.idnum)]
-            except KeyError:
-                return None
-
-    def _process_entries(self, entries: Iterator[XRefEntry]):
-        for xref_entry in entries:
-            if xref_entry.xref_type == XRefType.STANDARD:
-                self.put_ref(
-                    xref_entry.idnum, xref_entry.generation,
-                    xref_entry.location
-                )
-            elif xref_entry.xref_type == XRefType.FREE:
-                self.free_ref(xref_entry.idnum, xref_entry.generation)
-            elif xref_entry.xref_type == XRefType.IN_OBJ_STREAM:
-                location: ObjStreamRef = xref_entry.location
-                self.put_obj_stream_ref(
-                    xref_entry.idnum, location.obj_stream_id,
-                    location.ix_in_stream
-                )
-
-    def read_xref_table(self):
-        self._process_entries(parse_xref_table(self.reader.stream))
-
-    def read_xref_stream(self, xrefstream):
-        self._process_entries(parse_xref_stream(xrefstream))
+        # No need to make this more efficient, since the reader caches
+        # objects for us.
+        return self.get_historical_ref(ref, self._xref_sections - 1)
 
 
 class ObjectHeaderReadError(misc.PdfReadError):
@@ -829,7 +1062,7 @@ class PdfFileReader(PdfHandler):
 
     last_startxref = None
     has_xref_stream = False
-    err_limit = 10
+    xrefs: XRefCache
 
     def __init__(self, stream, strict=True):
         """
@@ -847,10 +1080,9 @@ class PdfFileReader(PdfHandler):
         self.resolved_objects = {}
         self._header_version = None
         self._input_version = None
-        self.xrefs = XRefCache(self)
         self._historical_resolver_cache = {}
         self.stream = stream
-        self.read()
+        self.xrefs, self.trailer = self.read()
         encrypt_dict = self._get_encryption_params()
         if encrypt_dict is not None:
             self.security_handler = SecurityHandler.build(encrypt_dict)
@@ -1062,11 +1294,10 @@ class PdfFileReader(PdfHandler):
                 obj = generic.NullObject()
                 obj.container_ref = ref
                 return obj
-        elif isinstance(marker, tuple):
+        elif isinstance(marker, ObjStreamRef):
             # object in object stream
-            (obj_stream_num, obj_stream_ix) = marker
             retval = self._get_object_from_stream(
-                ref.idnum, obj_stream_num, obj_stream_ix
+                ref.idnum, marker.obj_stream_id, marker.ix_in_stream
             )
         else:
             obj_start = marker
@@ -1111,96 +1342,6 @@ class PdfFileReader(PdfHandler):
         self.resolved_objects[(generation, idnum)] = obj
         return obj
 
-    def _read_xref_stream(self):
-        stream = self.stream
-        idnum, generation = read_object_header(stream, strict=self.strict)
-        xrefstream_ref = generic.Reference(idnum, generation, self)
-        xrefstream = generic.StreamObject.read_from_stream(
-            stream, xrefstream_ref
-        )
-        xrefstream.container_ref = xrefstream_ref
-        assert xrefstream["/Type"] == "/XRef"
-        xref_cache = self.xrefs
-        xref_cache.xref_container_info.append((xrefstream_ref, stream.tell()))
-        xref_cache.xref_stream_refs.add(xrefstream_ref)
-        xref_cache.read_xref_stream(xrefstream)
-        xref_cache.next_section()
-
-        self.trailer.add_trailer_revision(xrefstream)
-        return xrefstream.get('/Prev')
-
-    def _read_xref_table(self):
-        stream = self.stream
-        xref_cache = self.xrefs
-        xref_start = stream.tell()
-        xref_cache.read_xref_table()
-        xref_cache.next_section()
-        xref_end = stream.tell()
-        xref_cache.xref_container_info.append((xref_start, xref_end))
-        new_trailer = generic.DictionaryObject.read_from_stream(
-            stream, generic.TrailerReference(self)
-        )
-        assert isinstance(new_trailer, generic.DictionaryObject)
-
-        self.trailer.add_trailer_revision(new_trailer)
-        return new_trailer.get('/Prev')
-
-    def _read_xrefs(self):
-        # read all cross reference tables and their trailers
-        stream = self.stream
-        self.trailer = TrailerDictionary()
-        self.trailer.container_ref = generic.TrailerReference(self)
-        startxref = self.last_startxref
-        xref_location_log = self.xrefs.xref_locations
-        # Tracks the number of times we retried to read a particular xref
-        # section
-        err_count = 0
-        while startxref is not None:
-            if (self.strict and err_count) or err_count > self.err_limit:
-                raise PdfReadError("Failed to locate xref section")
-            if not err_count:
-                xref_location_log.append(startxref)
-            # load the xref table
-            stream.seek(startxref)
-            if misc.skip_over_whitespace(stream):
-                # This is common in linearised files, so we're not marking
-                # this as an error, even in strict mode.
-                logger.debug(
-                    "Encountered unexpected whitespace when looking "
-                    "for xref stream"
-                )
-                startxref = stream.tell()
-            x = stream.read(1)
-            if x == b"x":
-                # standard cross-reference table
-                ref = stream.read(4)
-                if ref[:3] != b"ref":
-                    raise PdfReadError("xref table read error")
-                startxref = self._read_xref_table()
-            elif x.isdigit():
-                # PDF 1.5+ Cross-Reference Stream
-                stream.seek(-1, os.SEEK_CUR)
-                try:
-                    startxref = self._read_xref_stream()
-                except ObjectHeaderReadError as e:
-                    logger.debug(
-                        "Failed to read xref stream header, attempting to "
-                        "correct...", exc_info=e
-                    )
-                    # can be caused by an OBO error (pointing too far)
-                    startxref = _attempt_startxref_correction(stream, startxref)
-                    err_count += 1
-                    continue
-                self.has_xref_stream = True
-            else:
-                startxref = _attempt_startxref_correction(stream, startxref)
-                err_count += 1
-                continue
-            err_count = 0
-
-        if self.strict:
-            self.xrefs.check_orphaned_freed_objects()
-
     def read(self):
         # first, read the header & PDF version number
         # (version number can be overridden in the document catalog later)
@@ -1227,8 +1368,17 @@ class PdfFileReader(PdfHandler):
             raise PdfReadError('Cannot read an empty file')
 
         # This needs to be recorded for incremental update purposes
-        self.last_startxref = process_data_at_eof(stream)
-        self._read_xrefs()
+        self.last_startxref = last_startxref = process_data_at_eof(stream)
+        # Read the xref table
+        xref_builder = XRefBuilder(
+            handler=self,
+            stream=stream, strict=self.strict,
+            last_startxref=last_startxref
+        )
+        xref_builder.read_xrefs()
+        xref_cache = XRefCache(self, xref_builder.sections)
+        self.has_xref_stream = xref_builder.has_xref_stream
+        return xref_cache, xref_builder.trailer
 
     def decrypt(self, password: Union[str, bytes]):
         """
@@ -1375,7 +1525,7 @@ def convert_to_int(d, size):
         padding = bytes(8 - size)
         return struct.unpack(">q", padding + d)[0]
     else:
-        return sum(digit ** (size - ix - 1) for ix, digit in enumerate(d))
+        return sum(digit * 256 ** (size - ix - 1) for ix, digit in enumerate(d))
 
 
 class RawPdfPath:
@@ -1635,20 +1785,20 @@ class HistoricalResolver(PdfHandler):
 
     def is_ref_available(self, ref: generic.Reference) -> bool:
         """
-        Check if the reference in question would already point to an object
-        in this revision.
+        Check if the reference in question was in scope for this revision.
+        This call doesn't care about the specific semantics of free vs. used
+        objects; it conservatively answers 'no' in any situation where
+        the object ID _could_ have been assigned by the revision in question.
 
         :param ref:
-            A reference object (usually one written to by a by a newer revision)
+            A reference object (usually one written to by a newer revision)
         :return:
-            ``True`` if the reference is undefined, ``False`` otherwise.
+            ``True`` if the reference is unassignable, ``False`` otherwise.
         """
 
-        # TODO double-check behaviour of freed objects
-
         xref_cache = self.reader.xrefs
-        marker = xref_cache.get_historical_ref(ref, self.revision)
-        return marker is None
+        meta = xref_cache.get_xref_container_info(self.revision)
+        return ref.idnum > meta.size
 
     def collect_dependencies(self, obj: generic.PdfObject, since_revision=None):
         """

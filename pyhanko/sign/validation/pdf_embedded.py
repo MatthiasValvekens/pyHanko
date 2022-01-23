@@ -512,8 +512,8 @@ class EmbeddedPdfSignature:
         # ... then check (1) for all revisions up to and including
         # signed_revision
         for revision in range(signed_rev + 1):
-            xref_start, xref_end = xref_cache.get_xref_container_info(revision)
-            if xref_end > signed_zone_len:
+            xref_meta = xref_cache.get_xref_container_info(revision)
+            if xref_meta.end_location > signed_zone_len:
                 return SignatureCoverageLevel.CONTIGUOUS_BLOCK_FROM_START
 
         return SignatureCoverageLevel.ENTIRE_REVISION
