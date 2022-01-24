@@ -783,8 +783,42 @@ def test_update_hybrid():
         w.write(out)
 
     r = PdfFileReader(out)
+    assert '/XRefStm' not in r.trailer_view
     assert r.trailer['/Info']['/Title'] == 'Updated'
     container_info = r.xrefs.get_xref_container_info(1)
     assert container_info.xref_section_type == XRefSectionType.HYBRID_MAIN
     container_info = r.xrefs.get_xref_container_info(2)
+    assert container_info.xref_section_type == XRefSectionType.STANDARD
+
+
+def test_update_hybrid_twice():
+    fname = 'minimal-hybrid-xref.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        t_obj = w.trailer['/Info'].raw_get('/Title')
+        assert isinstance(t_obj, generic.IndirectObject)
+        w.objects[(t_obj.generation, t_obj.idnum)] \
+            = generic.pdf_string('Updated')
+        out = BytesIO()
+        w.write(out)
+
+    r = PdfFileReader(out)
+    assert r.trailer['/Info']['/Title'] == 'Updated'
+    container_info = r.xrefs.get_xref_container_info(1)
+    assert container_info.xref_section_type == XRefSectionType.HYBRID_MAIN
+    container_info = r.xrefs.get_xref_container_info(2)
+    assert container_info.xref_section_type == XRefSectionType.STANDARD
+
+    w = IncrementalPdfFileWriter(out)
+    w.add_object(generic.pdf_string('This is an object'))
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    assert '/XRefStm' not in r.trailer_view
+    assert r.trailer['/Info']['/Title'] == 'Updated'
+    container_info = r.xrefs.get_xref_container_info(1)
+    assert container_info.xref_section_type == XRefSectionType.HYBRID_MAIN
+    container_info = r.xrefs.get_xref_container_info(2)
+    assert container_info.xref_section_type == XRefSectionType.STANDARD
+    container_info = r.xrefs.get_xref_container_info(3)
     assert container_info.xref_section_type == XRefSectionType.STANDARD
