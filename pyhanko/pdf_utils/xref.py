@@ -670,7 +670,7 @@ class XRefBuilder:
             xref_type = XRefSectionType.HYBRID_MAIN
         else:
             stream_ref = None
-            xref_type = XRefType.STANDARD
+            xref_type = XRefSectionType.STANDARD
 
         xref_meta_info = XRefSectionMetaInfo(
             xref_section_type=xref_type,
