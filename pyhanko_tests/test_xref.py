@@ -776,6 +776,7 @@ def test_update_hybrid():
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         t_obj = w.trailer['/Info'].raw_get('/Title')
+        assert '/XRefStm' in w.trailer
         assert isinstance(t_obj, generic.IndirectObject)
         w.objects[(t_obj.generation, t_obj.idnum)] \
             = generic.pdf_string('Updated')
@@ -783,6 +784,7 @@ def test_update_hybrid():
         w.write(out)
 
     r = PdfFileReader(out)
+    assert '/XRefStm' not in r.trailer
     assert '/XRefStm' not in r.trailer_view
     assert r.trailer['/Info']['/Title'] == 'Updated'
     container_info = r.xrefs.get_xref_container_info(1)
@@ -814,6 +816,7 @@ def test_update_hybrid_twice():
     w.write_in_place()
 
     r = PdfFileReader(out)
+    assert '/XRefStm' not in r.trailer
     assert '/XRefStm' not in r.trailer_view
     assert r.trailer['/Info']['/Title'] == 'Updated'
     container_info = r.xrefs.get_xref_container_info(1)

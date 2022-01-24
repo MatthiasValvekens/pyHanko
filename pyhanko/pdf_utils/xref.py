@@ -23,11 +23,9 @@ __all__ = [
     'XRefCache', 'XRefBuilder',
     'XRefType', 'XRefEntry',
     'ObjStreamRef', 'ObjectHeaderReadError',
-    'XRefSection', 'XRefSectionData', 'XRefSectionType',
-    'XRefSectionMetaInfo',
-    'read_object_header',
-    'parse_xref_stream',
-    'parse_xref_table'
+    'XRefSection', 'XRefSectionData', 'XRefSectionType', 'XRefSectionMetaInfo',
+    'TrailerDictionary',
+    'read_object_header', 'parse_xref_stream', 'parse_xref_table'
 ]
 
 logger = logging.getLogger(__name__)
@@ -804,6 +802,13 @@ class TrailerDictionary(generic.PdfObject):
     this class implements fallbacks.
     """
 
+    # These keys shouldn't really be considered part of the trailer dictionary,
+    # and in particular are not subject to inheritance rules.
+    non_trailer_keys = {
+        '/Length', '/Filter', '/DecodeParms', '/W', '/Type', '/Index',
+        '/XRefStm'
+    }
+
     def __init__(self):
         # trailer revisions, numbered backwards (i.e. in processing order)
         # The element at index 0 is the most recent one.
@@ -829,6 +834,11 @@ class TrailerDictionary(generic.PdfObject):
             # xref sections are numbered backwards
             section = len(revisions) - 1 - revision
             revisions = revisions[section:]
+
+        if key in self.non_trailer_keys:
+            # These are not subject to trailer inheritance;
+            # only look in the most recent revision
+            return revisions[0].raw_get(key, decrypt)
 
         for revision in revisions:
             try:
@@ -863,20 +873,16 @@ class TrailerDictionary(generic.PdfObject):
 
         # ensure that the trailer isn't polluted using stream
         # compression / XRef parameters
-        trailer.pop('/Length', None)
-        trailer.pop('/Filter', None)
-        trailer.pop('/DecodeParms', None)
-        trailer.pop('/W', None)
-        trailer.pop('/Type', None)
-        trailer.pop('/Index', None)
-        # this one also doesn't make sense to auto-rewrite
-        trailer.pop('/XRefStm', None)
+        for key in self.non_trailer_keys:
+            trailer.pop(key, None)
         return trailer
 
     def __contains__(self, item):
-        if item in self._new_changes:
+        try:
+            self.raw_get(item, decrypt=False)
             return True
-        return any(item in revision for revision in self._trailer_revisions)
+        except KeyError:
+            return False
 
     def keys(self):
         return frozenset(chain(self._new_changes, *self._trailer_revisions))
