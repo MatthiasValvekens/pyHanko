@@ -482,10 +482,11 @@ def _check_freed_refs(ix, section, all_sections):
                 next_section.xref_data.hybrid.xref_data
                 if next_section.xref_data.hybrid is not None else None
             )
-            if idnum in hybrid.standard_xrefs \
-                    or idnum in hybrid.xrefs_in_objstm:
-                # exemption!
-                continue
+            if hybrid is not None:
+                if idnum in hybrid.standard_xrefs \
+                        or idnum in hybrid.xrefs_in_objstm:
+                    # exemption!
+                    continue
 
         improper_generation = None
         for succ in all_sections[ix + 1:]:
