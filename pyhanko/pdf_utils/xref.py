@@ -263,7 +263,8 @@ def parse_xref_stream(xref_stream: generic.StreamObject,
 class XRefSectionType(enum.Enum):
     STANDARD = enum.auto()
     STREAM = enum.auto()
-    HYBRID = enum.auto()  # TODO support hybrid reference files
+    HYBRID_MAIN = enum.auto()
+    HYBRID_STREAM = enum.auto()
 
 
 @dataclass(frozen=True)
@@ -314,6 +315,7 @@ class XRefSectionData:
         self.xrefs_in_objstm: Dict[int, ObjStreamRef] = {}
         self.explicit_refs_in_revision = set()
         self.obj_streams_used = set()
+        self.hybrid: Optional[XRefSection] = None
 
     def try_resolve(self,
                     ref: Union[generic.Reference, generic.IndirectObject]) \
@@ -347,9 +349,17 @@ class XRefSectionData:
         # Otherwise, the freed entry is irrelevant, so we fall through.
         if freed_next_generation is not None \
                 and ref.generation == freed_next_generation - 1:
+            # note: 7.5.8.4 is confusingly worded, but we do _not_ need to
+            # fall back to the hybrid ref here, because the main section
+            # still takes precedence!
             return None
 
-        raise KeyError(ref)
+        # ISO 32000-2:2020, 7.5.8.4 says that we have to look in the hybrid
+        # stream section before moving on now.
+        if self.hybrid is not None:
+            return self.hybrid.xref_data.try_resolve(ref)
+        else:
+            raise KeyError(ref)
 
     def process_entries(self, entries: Iterator[XRefEntry]):
         highest_id = 0
@@ -379,6 +389,12 @@ class XRefSectionData:
                 self.explicit_refs_in_revision.add((idnum, generation - 1))
         return highest_id
 
+    def process_hybrid_entries(self, entries: Iterator[XRefEntry],
+                               xref_meta_info: XRefSectionMetaInfo):
+        hybrid = XRefSectionData()
+        hybrid.process_entries(entries)
+        self.hybrid = XRefSection(xref_meta_info, hybrid)
+
     def higher_generation_refs(self):
         for idnum, (generation, _) in self.standard_xrefs.items():
             if generation > 0:
@@ -403,95 +419,151 @@ class XRefSection:
     """
 
 
+def _check_freed_refs(ix, section, all_sections):
+
+    # Prevent xref stream objects from being overwritten.
+    # (stricter than the spec, but it makes our lives easier at the cost
+    # of rejecting some theoretically valid files)
+    # The reason is because of the potential for caching issues with
+    # encrypted files.
+    xstream_ref = section.meta_info.stream_ref
+    if xstream_ref:
+        as_tuple = (xstream_ref.idnum, xstream_ref.generation)
+        for section_ in all_sections[ix + 1:]:
+            data = section_.xref_data
+            if as_tuple in data.explicit_refs_in_revision:
+                raise misc.PdfReadError(
+                    "XRef stream objects must not be clobbered in strict "
+                    "mode."
+                )
+
+    hybrid: Optional[XRefSectionData] = (
+        section.xref_data.hybrid.xref_data
+        if section.xref_data.hybrid is not None else None
+    )
+
+    # For all free refs, check that _if_ redefined, they're
+    # redefined with a proper generation number
+    for idnum, expected_next_generation in section.xref_data.freed.items():
+
+        # We have to exempt free refs in HYBRID_MAIN sections
+        #  from conflicting with later overrides in HYBRID_STREAM sections.
+        #  But also this provision is interpreted more strictly in pyHanko:
+        #   we only allow the hybrid stream associated with _that specific_
+        #   section to be used.
+
+        if hybrid is not None:
+            # don't enforce generations here, conflicts with common usage
+            # and examples in the spec.
+            if idnum in hybrid.standard_xrefs \
+                    or idnum in hybrid.xrefs_in_objstm:
+                # exemption!
+                continue
+
+        # When rewriting files & removing dead objects, Acrobat will
+        # enter the deleted reference into the Xref table/stream with
+        # a 'next generation' ID of 0. It doesn't contradict the spec
+        # directly, but I assumed that this was the way to indicate that
+        # generation 0xffff had just been freed. Apparently not, because
+        # I've seen Acrobat put that same freed reference in later revisions
+        # with a next_gen number of 1. Bizarre.
+        #
+        # Anyhow, given the ubiquity of Adobe (Acrobat|Reader), it's
+        # probably prudent to special-case this one.
+        # In doing so, we're probably not dealing correctly with the case
+        # where the 0xffff'th generation of an object is freed, but I'm
+        # happy to assume that that will never happen in a legitimate file.
+
+        # We will raise an error on any reuse of such "dead" objects
+        #  in anything else than a 'free'.
+        #
+        # To be explicit (while still accepting legitimate files)
+        #  we'll throw an error if this happens in a non-initial revision,
+        #  until someone complains.
+        if expected_next_generation == 0 and ix > 0:
+            raise misc.PdfReadError(
+                "In strict mode, a free xref with next generation 0 is only"
+                "permitted in an initial revision due to unclear semantics."
+            )
+
+        improper_generation = None
+        for succ in all_sections[ix + 1:]:
+            data = succ.xref_data
+            # don't enforce
+            if idnum in data.xrefs_in_objstm:
+                improper_generation = 0
+            else:
+                try:
+                    next_generation, _ = data.standard_xrefs[idnum]
+                    # We compare using < instead of forcing equality.
+                    # Jumps in the generation number will be detected
+                    # by the higher_gen check further down.
+                    # For the == 0 check, see comment about dead objects
+                    # further up.
+                    if expected_next_generation == 0 or \
+                            next_generation < expected_next_generation:
+                        improper_generation = next_generation
+                except KeyError:
+                    pass
+
+            if improper_generation is not None:
+                if expected_next_generation == 0:
+                    raise misc.PdfReadError(
+                        f"Object with id {idnum} was listed as dead, "
+                        f"but is reused later, with generation "
+                        f"number {improper_generation}."
+                    )
+                else:
+                    raise misc.PdfReadError(
+                        f"Object with id {idnum} and generation "
+                        f"{improper_generation} was found after "
+                        f"{expected_next_generation - 1} was freed."
+                    )
+
+
+def _with_hybrids(sections: List[XRefSection]):
+    for section in sections:
+        if section.xref_data.hybrid is not None:
+            yield section.xref_data.hybrid
+        yield section
+
+
 def _check_xref_consistency(all_sections: List[XRefSection]):
+    # TODO add a check to make sure the xref sizes only increase
+
+    # expand out the hybrid sections as separate sections for the purposes
+    # of the xref consistency check (try_resolve takes hybrids into account,
+    # but
 
     # put the sections in chronological order for code readability reasons
     for ix, section in enumerate(all_sections):
+        # check freed refs
+        _check_freed_refs(ix, section, all_sections)
 
-        # Prevent xref stream objects from being overwritten.
-        # (stricter than the spec, but it makes our lives easier at the cost
-        # of rejecting some theoretically valid files)
-        # The reason is because of the potential for caching issues with
-        # encrypted files.
-        xstream_ref = section.meta_info.stream_ref
-        if xstream_ref:
-            as_tuple = (xstream_ref.idnum, xstream_ref.generation)
-            for section_ in all_sections[ix + 1:]:
-                data = section_.xref_data
-                if as_tuple in data.explicit_refs_in_revision:
-                    raise misc.PdfReadError(
-                        "XRef stream objects must not be clobbered in strict "
-                        "mode."
-                    )
-
-        # For all free refs, check that _if_ redefined, they're
-        # redefined with a proper generation number
-        for idnum, expected_next_generation in section.xref_data.freed.items():
-            # When rewriting files & removing dead objects, Acrobat will
-            # enter the deleted reference into the Xref table/stream with
-            # a 'next generation' ID of 0. It doesn't contradict the spec
-            # directly, but I assumed that this was the way to indicate that
-            # generation 0xffff had just been freed. Apparently not, because
-            # I've seen Acrobat put that same freed reference in later revisions
-            # with a next_gen number of 1. Bizarre.
-            #
-            # Anyhow, given the ubiquity of Adobe (Acrobat|Reader), it's
-            # probably prudent to special-case this one.
-            # In doing so, we're probably not dealing correctly with the case
-            # where the 0xffff'th generation of an object is freed, but I'm
-            # happy to assume that that will never happen in a legitimate file.
-
-            # We will raise an error on any reuse of such "dead" objects
-            #  in anything else than a 'free'.
-            #
-            # To be explicit (while still accepting legitimate files)
-            #  we'll throw an error if this happens in a non-initial revision,
-            #  until someone complains.
-            if expected_next_generation == 0 and ix > 0:
-                raise misc.PdfReadError(
-                    "In strict mode, a free xref with next generation 0 is only"
-                    "permitted in an initial revision due to unclear semantics."
-                )
-
-            improper_generation = None
-            for succ in all_sections[ix + 1:]:
-                data = succ.xref_data
-                if idnum in data.xrefs_in_objstm:
-                    improper_generation = 0
-                else:
-                    try:
-                        next_generation, _ = data.standard_xrefs[idnum]
-                        # We compare using < instead of forcing equality.
-                        # Jumps in the generation number will be detected
-                        # by the higher_gen check further down.
-                        # For the == 0 check, see comment about dead objects
-                        # further up.
-                        if expected_next_generation == 0 or \
-                                next_generation < expected_next_generation:
-                            improper_generation = next_generation
-                    except KeyError:
-                        pass
-
-                if improper_generation is not None:
-                    if expected_next_generation == 0:
-                        raise misc.PdfReadError(
-                            f"Object with id {idnum} was listed as dead, "
-                            f"but is reused later, with generation "
-                            f"number {improper_generation}."
-                        )
-                    else:
-                        raise misc.PdfReadError(
-                            f"Object with id {idnum} and generation "
-                            f"{improper_generation} was found after "
-                            f"{expected_next_generation - 1} was freed."
-                        )
-
+    expanded_sections = list(_with_hybrids(all_sections))
+    for ix, section in enumerate(expanded_sections):
         # collect all higher-generation refs
         higher_gen = set(section.xref_data.higher_generation_refs())
+
         # Verify that all such higher-generation refs are
         # preceded by an appropriate free instruction of the previous generation
+        # HOWEVER: the generation match is disabled for matching pairs
+        #  of HYBRID_MAIN <> HYBRID_STREAM (see corresponding part of
+        # _check_freed_refs())
+        is_hybrid_stream = \
+            section.meta_info.xref_section_type == XRefSectionType.HYBRID_STREAM
         for idnum, generation in higher_gen:
-            for prec in reversed(all_sections[:ix]):
+            preceding = reversed(expanded_sections[:ix])
+
+            # this is the matched pair special case
+            if is_hybrid_stream:
+                prec = next(preceding)
+                # don't apply generation check, just verify whether a free
+                #  was present.
+                if idnum in prec.xref_data.freed:
+                    break
+
+            for prec in preceding:
                 try:
                     next_generation = prec.xref_data.freed[idnum]
                     if next_generation == generation:
@@ -511,7 +583,8 @@ class XRefBuilder:
 
     err_limit = 10
 
-    def __init__(self, handler: PdfHandler, stream, strict: bool, last_startxref):
+    def __init__(self, handler: PdfHandler, stream, strict: bool,
+                 last_startxref: int):
         self.handler = handler
         self.stream = stream
         self.strict = strict
@@ -522,16 +595,21 @@ class XRefBuilder:
         self.trailer.container_ref = generic.TrailerReference(self)
         self.has_xref_stream = False
 
-    def _read_xref_stream(self, declared_startxref: int):
+    def _read_xref_stream_object(self):
         stream = self.stream
-        start_location = stream.tell()
         idnum, generation = read_object_header(stream, strict=self.strict)
         xrefstream_ref = generic.Reference(idnum, generation, pdf=self.handler)
         xrefstream = generic.StreamObject.read_from_stream(
             stream, xrefstream_ref
         )
         xrefstream.container_ref = xrefstream_ref
-        assert xrefstream["/Type"] == "/XRef"
+        assert xrefstream.raw_get("/Type") == "/XRef"
+        return xrefstream_ref, xrefstream
+
+    def _read_xref_stream(self, declared_startxref: int):
+        stream = self.stream
+        start_location = stream.tell()
+        xrefstream_ref, xrefstream = self._read_xref_stream_object()
 
         xref_section_data = XRefSectionData()
         xref_section_data.process_entries(
@@ -541,7 +619,7 @@ class XRefBuilder:
             xref_section_type=XRefSectionType.STREAM,
             # in a stream, the number of entries is enforced, so we don't need
             # to check it explicitly
-            size=int(xrefstream['/Size']),
+            size=int(xrefstream.raw_get('/Size')),
             declared_startxref=declared_startxref,
             start_location=start_location,
             end_location=stream.tell(),
@@ -559,12 +637,11 @@ class XRefBuilder:
         highest = xref_section_data.process_entries(parse_xref_table(stream))
         xref_end = stream.tell()
 
-        # TODO check for hybrid XRef in the trailer
         new_trailer = generic.DictionaryObject.read_from_stream(
             stream, generic.TrailerReference(self.handler)
         )
         assert isinstance(new_trailer, generic.DictionaryObject)
-        declared_size = int(new_trailer['/Size'])
+        declared_size = int(new_trailer.raw_get('/Size'))
 
         if self.strict and highest >= declared_size:
             raise misc.PdfReadError(
@@ -573,13 +650,45 @@ class XRefBuilder:
                 f"is the maximal allowed object id."
             )
 
+        try:
+            hybrid_xref_stm_loc = int(new_trailer.raw_get('/XRefStm'))
+        except (KeyError, ValueError):
+            hybrid_xref_stm_loc = None
+
+        if hybrid_xref_stm_loc is not None:
+            stream_pos = stream.tell()
+
+            # TODO: employ similar off-by-n tolerances for hybrid xref sections
+            #  as for regular ones? Probably YAGNI, but putting it out there
+            #  for future review.
+            stream.seek(hybrid_xref_stm_loc)
+            stream_ref, xrefstream = self._read_xref_stream_object()
+
+            # we'll treat those as regular XRef streams in terms of metadata
+            hybrid_stream_meta = XRefSectionMetaInfo(
+                xref_section_type=XRefSectionType.HYBRID_STREAM,
+                size=int(xrefstream.raw_get('/Size')),
+                declared_startxref=hybrid_xref_stm_loc,
+                start_location=hybrid_xref_stm_loc,
+                end_location=stream.tell(),
+                stream_ref=stream_ref
+            )
+            xref_section_data.process_hybrid_entries(
+                parse_xref_stream(xrefstream), hybrid_stream_meta
+            )
+            stream.seek(stream_pos)
+            xref_type = XRefSectionType.HYBRID_MAIN
+        else:
+            stream_ref = None
+            xref_type = XRefType.STANDARD
+
         xref_meta_info = XRefSectionMetaInfo(
-            xref_section_type=XRefSectionType.STANDARD,
+            xref_section_type=xref_type,
             size=declared_size,
             declared_startxref=declared_startxref,
             start_location=xref_start,
             end_location=xref_end,
-            stream_ref=None,
+            stream_ref=stream_ref,
         )
         self.sections.append(XRefSection(xref_meta_info, xref_section_data))
 
