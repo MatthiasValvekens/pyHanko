@@ -762,3 +762,10 @@ def test_hybrid_xref(fname):
         assert r.trailer['/Info']['/Title'] == 'TestTest'
         container_info = r.xrefs.get_xref_container_info(1)
         assert container_info.xref_section_type == XRefSectionType.HYBRID_MAIN
+
+
+def test_xref_size_nondecreasing():
+    fname = 'minimal-broken-xref-size.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match='nondecreasing'):
+            PdfFileReader(inf, strict=True)

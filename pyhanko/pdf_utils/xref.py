@@ -515,8 +515,6 @@ def _with_hybrids(sections: List[XRefSection]):
 
 
 def _check_xref_consistency(all_sections: List[XRefSection]):
-    # TODO add a check to make sure the xref sizes only increase
-
     # expand out the hybrid sections as separate sections for the purposes
     # of the xref consistency check (try_resolve takes hybrids into account,
     # but
@@ -527,9 +525,14 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
         _check_freed_refs(ix, section, all_sections)
 
     expanded_sections = list(_with_hybrids(all_sections))
+    prev_size = 0
     for ix, section in enumerate(expanded_sections):
         # collect all higher-generation refs
         higher_gen = set(section.xref_data.higher_generation_refs())
+        sz = section.meta_info.size
+        if sz < prev_size:
+            raise misc.PdfReadError("XRef section sizes must be nondecreasing")
+        prev_size = sz
 
         # Verify that all such higher-generation refs are
         # preceded by an appropriate free instruction of the previous generation
