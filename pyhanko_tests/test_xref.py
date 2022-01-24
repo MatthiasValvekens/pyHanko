@@ -742,3 +742,20 @@ def test_xref_stream_trailing_data():
 
     with pytest.raises(misc.PdfReadError, match='Trailing'):
         list(parse_xref_stream(stream_obj))
+
+
+@pytest.mark.parametrize('fname', [
+    # A very simple example of a hybrid reference file
+    #  (constructed by hand, so doesn't actually use any object streams)
+    # Object "6 0 R" is only defined in an xref stream and "hidden"
+    # in the standard xref table(s)
+    'minimal-hybrid-xref.pdf',
+    # Same file as above, but the "hidden object" is given a generation
+    # number of 1 to exercise the exemption on requiring generation-specific
+    # freeing instructions for hybrid reference files
+    'minimal-hybrid-xref-weirdgen.pdf',
+])
+def test_hybrid_xref(fname):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        r = PdfFileReader(inf, strict=True)
+        assert r.trailer['/Info']['/Title'] == 'TestTest'
