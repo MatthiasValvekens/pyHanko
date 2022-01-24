@@ -437,11 +437,6 @@ def _check_freed_refs(ix, section, all_sections):
                     "mode."
                 )
 
-    hybrid: Optional[XRefSectionData] = (
-        section.xref_data.hybrid.xref_data
-        if section.xref_data.hybrid is not None else None
-    )
-
     # For all free refs, check that _if_ redefined, they're
     # redefined with a proper generation number
     for idnum, expected_next_generation in section.xref_data.freed.items():
@@ -471,6 +466,26 @@ def _check_freed_refs(ix, section, all_sections):
                 "In strict mode, a free xref with next generation 0 is only"
                 "permitted in an initial revision due to unclear semantics."
             )
+
+        # We have to exempt free refs in sections preceding a HYBRID_MAIN
+        #  section from conflicting with later overrides in HYBRID_STREAM
+        #  sections. But also this provision is interpreted more strictly in
+        #  pyHanko:
+        #   we only allow the hybrid stream associated with the next section
+        #   to be used to lift the restriction.
+        # This is sufficient to enable the subset of uses of hybrid references
+        # that I've seen in the wild.
+
+        if ix < len(all_sections) - 1:
+            next_section = all_sections[ix + 1]
+            hybrid: Optional[XRefSectionData] = (
+                next_section.xref_data.hybrid.xref_data
+                if next_section.xref_data.hybrid is not None else None
+            )
+            if idnum in hybrid.standard_xrefs \
+                    or idnum in hybrid.xrefs_in_objstm:
+                # exemption!
+                continue
 
         improper_generation = None
         for succ in all_sections[ix + 1:]:
