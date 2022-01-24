@@ -446,20 +446,6 @@ def _check_freed_refs(ix, section, all_sections):
     # redefined with a proper generation number
     for idnum, expected_next_generation in section.xref_data.freed.items():
 
-        # We have to exempt free refs in HYBRID_MAIN sections
-        #  from conflicting with later overrides in HYBRID_STREAM sections.
-        #  But also this provision is interpreted more strictly in pyHanko:
-        #   we only allow the hybrid stream associated with _that specific_
-        #   section to be used.
-
-        if hybrid is not None:
-            # don't enforce generations here, conflicts with common usage
-            # and examples in the spec.
-            if idnum in hybrid.standard_xrefs \
-                    or idnum in hybrid.xrefs_in_objstm:
-                # exemption!
-                continue
-
         # When rewriting files & removing dead objects, Acrobat will
         # enter the deleted reference into the Xref table/stream with
         # a 'next generation' ID of 0. It doesn't contradict the spec
@@ -547,15 +533,16 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
 
         # Verify that all such higher-generation refs are
         # preceded by an appropriate free instruction of the previous generation
-        # HOWEVER: the generation match is disabled for matching pairs
-        #  of HYBRID_MAIN <> HYBRID_STREAM (see corresponding part of
-        # _check_freed_refs())
+        # HOWEVER: the generation match is disabled when matching against
+        #  freeings in the previous revision, to allow room for the way
+        #  the free placeholders are commonly declared in hybrid reference
+        #  files (i.e. as xxxxxxxxx 65535 f)
         is_hybrid_stream = \
             section.meta_info.xref_section_type == XRefSectionType.HYBRID_STREAM
         for idnum, generation in higher_gen:
             preceding = reversed(expanded_sections[:ix])
 
-            # this is the matched pair special case
+            # this is the hybrid stream special case (see above)
             if is_hybrid_stream:
                 prec = next(preceding)
                 # don't apply generation check, just verify whether a free

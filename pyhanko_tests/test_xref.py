@@ -10,6 +10,7 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.xref import (
     ObjStreamRef,
     XRefEntry,
+    XRefSectionType,
     XRefType,
     parse_xref_stream,
     read_object_header,
@@ -759,3 +760,5 @@ def test_hybrid_xref(fname):
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
         r = PdfFileReader(inf, strict=True)
         assert r.trailer['/Info']['/Title'] == 'TestTest'
+        container_info = r.xrefs.get_xref_container_info(1)
+        assert container_info.xref_section_type == XRefSectionType.HYBRID_MAIN
