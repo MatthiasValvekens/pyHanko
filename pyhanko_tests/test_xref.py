@@ -799,6 +799,18 @@ def test_update_hybrid(fname):
     assert container_info.xref_section_type == XRefSectionType.STANDARD
 
 
+def test_count_refs_in_hybrid():
+    fname = 'minimal-hybrid-xref-mswordstyle.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        r = PdfFileReader(inf)
+        container_info = r.xrefs.get_xref_container_info(1)
+        assert container_info.xref_section_type == XRefSectionType.HYBRID_MAIN
+        # xref table is empty
+        assert len(r.xrefs.get_xref_data(1).explicit_refs_in_revision) == 0
+        # ...but the stream content should be counted as well
+        assert len(r.xrefs.explicit_refs_in_revision(1)) == 6
+
+
 @pytest.mark.parametrize('fname', [
     'minimal-hybrid-xref.pdf',
     'minimal-hybrid-xref-mswordstyle.pdf'

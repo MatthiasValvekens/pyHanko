@@ -1024,10 +1024,18 @@ class XRefCache:
             A set of Reference objects.
         """
         section = self._xref_sections[revision]
-        return {
+        result = {
             generic.Reference(*ref, pdf=self.reader)
             for ref in section.xref_data.explicit_refs_in_revision
         }
+        hybrid = section.xref_data.hybrid
+        if hybrid is not None:
+            # make sure we also account for refs in hybrid sections
+            result |= {
+                generic.Reference(*ref, pdf=self.reader)
+                for ref in hybrid.xref_data.explicit_refs_in_revision
+            }
+        return result
 
     def refs_freed_in_revision(self, revision) -> Set[generic.Reference]:
         """
