@@ -257,8 +257,7 @@ async def async_validate_pdf_ltv_signature(
                force_revinfo=False,
                diff_policy: Optional[DiffPolicy] = None,
                key_usage_settings: Optional[KeyUsageConstraints] = None,
-               skip_diff: bool = False,
-               permit_hybrid_xrefs: bool = False) -> PdfSignatureStatus:
+               skip_diff: bool = False) -> PdfSignatureStatus:
     """
     .. versionadded:: 0.9.0
 
@@ -295,13 +294,9 @@ async def async_validate_pdf_ltv_signature(
         must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
-    :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files in strict mode.
-        The default is ``False``.
     :return:
         The status of the signature.
     """
-    embedded_sig.enforce_hybrid_xref_policy(permit_hybrid_xrefs)
 
     # create a fresh copy of the validation_kwargs
     validation_context_kwargs: dict = dict(validation_context_kwargs or {})

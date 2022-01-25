@@ -1110,22 +1110,18 @@ def test_disallow_hybrid_sign():
 def test_allow_hybrid_sign():
     fname = 'minimal-hybrid-xref.pdf'
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        w = IncrementalPdfFileWriter(inf)
+        w = IncrementalPdfFileWriter(inf, strict=False)
         meta = signers.PdfSignatureMetadata(field_name='Sig1')
-        signers.PdfSigner(
-            signature_meta=meta, signer=SELF_SIGN, permit_hybrid_xrefs=True
-        ).sign_pdf(w)
+        signers.PdfSigner(signature_meta=meta, signer=SELF_SIGN).sign_pdf(w)
 
 
 @freeze_time('2020-11-01')
 def test_allow_hybrid_sign_validate_fail():
     fname = 'minimal-hybrid-xref.pdf'
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        w = IncrementalPdfFileWriter(inf)
+        w = IncrementalPdfFileWriter(inf, strict=False)
         meta = signers.PdfSignatureMetadata(field_name='Sig1')
-        out = signers.PdfSigner(
-            signature_meta=meta, signer=FROM_CA, permit_hybrid_xrefs=True
-        ).sign_pdf(w)
+        out = signers.PdfSigner(signature_meta=meta, signer=FROM_CA).sign_pdf(w)
 
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1137,15 +1133,13 @@ def test_allow_hybrid_sign_validate_fail():
 def test_allow_hybrid_sign_validate_allow():
     fname = 'minimal-hybrid-xref.pdf'
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
-        w = IncrementalPdfFileWriter(inf)
+        w = IncrementalPdfFileWriter(inf, strict=False)
         meta = signers.PdfSignatureMetadata(field_name='Sig1')
-        out = signers.PdfSigner(
-            signature_meta=meta, signer=FROM_CA, permit_hybrid_xrefs=True
-        ).sign_pdf(w)
+        out = signers.PdfSigner(signature_meta=meta, signer=FROM_CA).sign_pdf(w)
 
-    r = PdfFileReader(out)
+    r = PdfFileReader(out, strict=False)
     s = r.embedded_signatures[0]
 
     vc = SIMPLE_V_CONTEXT()
-    val_status = validate_pdf_signature(s, vc, permit_hybrid_xrefs=True)
+    val_status = validate_pdf_signature(s, vc)
     assert val_status.bottom_line

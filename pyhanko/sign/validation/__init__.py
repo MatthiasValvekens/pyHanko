@@ -184,9 +184,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
                            ts_validation_context: ValidationContext = None,
                            diff_policy: DiffPolicy = None,
                            key_usage_settings: KeyUsageConstraints = None,
-                           skip_diff: bool = False,
-                           permit_hybrid_xrefs: bool = False) \
-        -> PdfSignatureStatus:
+                           skip_diff: bool = False) -> PdfSignatureStatus:
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`~.pdf_embedded.async_validate_pdf_signature`.
@@ -210,9 +208,6 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
-    :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files in strict mode.
-        The default is ``False``.
     :return:
         The status of the PDF signature in question.
     """
@@ -221,7 +216,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         signer_validation_context=signer_validation_context,
         ts_validation_context=ts_validation_context,
         diff_policy=diff_policy, key_usage_settings=key_usage_settings,
-        skip_diff=skip_diff, permit_hybrid_xrefs=permit_hybrid_xrefs
+        skip_diff=skip_diff
     )
     return asyncio.run(coro)
 
@@ -229,9 +224,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
 def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
                            validation_context: ValidationContext = None,
                            diff_policy: DiffPolicy = None,
-                           skip_diff: bool = False,
-                           permit_hybrid_xrefs: bool = False) \
-        -> DocumentTimestampStatus:
+                           skip_diff: bool = False) -> DocumentTimestampStatus:
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`~.pdf_embedded.async_validate_pdf_timestamp`.
@@ -249,9 +242,6 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
         :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
-    :param permit_hybrid_xrefs:
-        Whether to allow timestamps in hybrid-reference files in strict mode.
-        The default is ``False``.
     :return:
         The status of the PDF timestamp in question.
     """
@@ -259,7 +249,6 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
         embedded_sig=embedded_sig,
         validation_context=validation_context,
         diff_policy=diff_policy, skip_diff=skip_diff,
-        permit_hybrid_xrefs=permit_hybrid_xrefs
     )
     return asyncio.run(coro)
 
@@ -320,9 +309,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
                                force_revinfo=False,
                                diff_policy: DiffPolicy = None,
                                key_usage_settings: KeyUsageConstraints = None,
-                               skip_diff: bool = False,
-                               permit_hybrid_xrefs: bool = False) \
-        -> PdfSignatureStatus:
+                               skip_diff: bool = False) -> PdfSignatureStatus:
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`async_validate_pdf_ltv_signature`.
@@ -352,9 +339,6 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
-    :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files in strict mode.
-        The default is ``False``.
     :return:
         The status of the signature.
     """
@@ -367,6 +351,5 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
         diff_policy=diff_policy,
         key_usage_settings=key_usage_settings,
         skip_diff=skip_diff,
-        permit_hybrid_xrefs=permit_hybrid_xrefs
     )
     return asyncio.run(coro)

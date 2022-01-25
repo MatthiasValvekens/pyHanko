@@ -29,16 +29,18 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
 
     :param input_stream:
         Input stream to read current revision from.
+    :param strict:
+        Ingest the source file in strict mode. The default is ``True``.
     :param prev:
         Explicitly pass in a PDF reader. This parameter is internal API.
     """
 
     IO_CHUNK_SIZE = 4096
 
-    def __init__(self, input_stream, prev: PdfFileReader = None):
+    def __init__(self, input_stream, prev: PdfFileReader = None, strict=True):
         self.input_stream = input_stream
         if prev is None:
-            prev = PdfFileReader(input_stream)
+            prev = PdfFileReader(input_stream, strict=strict)
         self.prev = prev
         self.trailer = trailer = prev.trailer
         root_ref = trailer.raw_get('/Root')

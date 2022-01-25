@@ -275,6 +275,7 @@ class EmbeddedPdfSignature:
         :param skip_diff:
             If ``True``, skip the difference analysis step entirely.
         """
+        self._enforce_hybrid_xref_policy()
         self.compute_digest()
         self.compute_tst_digest()
 
@@ -518,10 +519,9 @@ class EmbeddedPdfSignature:
 
         return SignatureCoverageLevel.ENTIRE_REVISION
 
-    def enforce_hybrid_xref_policy(self, permit_hybrid_xrefs: bool):
+    def _enforce_hybrid_xref_policy(self):
         reader = self.reader
-        if not permit_hybrid_xrefs and reader.strict \
-                and reader.xrefs.hybrid_xrefs_present:
+        if reader.strict and reader.xrefs.hybrid_xrefs_present:
             raise SignatureValidationError(
                 "Settings do not permit validation of signatures in "
                 "hybrid-reference files."
@@ -784,9 +784,7 @@ async def async_validate_pdf_signature(
                            ac_validation_context: ValidationContext = None,
                            diff_policy: DiffPolicy = None,
                            key_usage_settings: KeyUsageConstraints = None,
-                           skip_diff: bool = False,
-                           permit_hybrid_xrefs: bool = False)\
-        -> PdfSignatureStatus:
+                           skip_diff: bool = False) -> PdfSignatureStatus:
     """
     .. versionadded:: 0.9.0
 
@@ -820,13 +818,9 @@ async def async_validate_pdf_signature(
         must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
-    :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files in strict mode.
-        The default is ``False``.
     :return:
         The status of the PDF signature in question.
     """
-    embedded_sig.enforce_hybrid_xref_policy(permit_hybrid_xrefs)
 
     sig_object = embedded_sig.sig_object
     if embedded_sig.sig_object_type != '/Sig':
@@ -894,8 +888,7 @@ async def async_validate_pdf_timestamp(
                            validation_context: ValidationContext = None,
                            diff_policy: DiffPolicy = None,
                            skip_diff: bool = False,
-                           permit_hybrid_xrefs: bool = False) \
-        -> DocumentTimestampStatus:
+                           ) -> DocumentTimestampStatus:
     """
     .. versionadded:: 0.9.0
 
@@ -912,13 +905,9 @@ async def async_validate_pdf_timestamp(
         :const:`~pyhanko.sign.diff_analysis.DEFAULT_DIFF_POLICY`.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
-    :param permit_hybrid_xrefs:
-        Whether to allow timestamps in hybrid-reference files in strict mode.
-        The default is ``False``.
     :return:
         The status of the PDF timestamp in question.
     """
-    embedded_sig.enforce_hybrid_xref_policy(permit_hybrid_xrefs)
 
     if embedded_sig.sig_object_type != '/DocTimeStamp':
         raise SignatureValidationError(
