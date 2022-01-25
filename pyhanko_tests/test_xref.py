@@ -755,6 +755,9 @@ def test_xref_stream_trailing_data():
     # number of 1 to exercise the exemption on requiring generation-specific
     # freeing instructions for hybrid reference files
     'minimal-hybrid-xref-weirdgen.pdf',
+    # Same principle, but in "MS Word style" with all xrefs mirrored in the
+    # hybrid stream.
+    'minimal-hybrid-xref-mswordstyle.pdf'
 ])
 def test_hybrid_xref(fname):
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
@@ -771,8 +774,11 @@ def test_xref_size_nondecreasing():
             PdfFileReader(inf, strict=True)
 
 
-def test_update_hybrid():
-    fname = 'minimal-hybrid-xref.pdf'
+@pytest.mark.parametrize('fname', [
+    'minimal-hybrid-xref.pdf',
+    'minimal-hybrid-xref-mswordstyle.pdf'
+])
+def test_update_hybrid(fname):
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         t_obj = w.trailer['/Info'].raw_get('/Title')
@@ -793,8 +799,11 @@ def test_update_hybrid():
     assert container_info.xref_section_type == XRefSectionType.STANDARD
 
 
-def test_update_hybrid_twice():
-    fname = 'minimal-hybrid-xref.pdf'
+@pytest.mark.parametrize('fname', [
+    'minimal-hybrid-xref.pdf',
+    'minimal-hybrid-xref-mswordstyle.pdf'
+])
+def test_update_hybrid_twice(fname):
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         t_obj = w.trailer['/Info'].raw_get('/Title')

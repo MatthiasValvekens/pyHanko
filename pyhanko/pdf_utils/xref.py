@@ -544,9 +544,18 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
         # collect all higher-generation refs
         higher_gen = set(section.xref_data.higher_generation_refs())
         sz = section.meta_info.size
-        if sz < prev_size:
-            raise misc.PdfReadError("XRef section sizes must be nondecreasing")
-        prev_size = sz
+        xref_type = section.meta_info.xref_section_type
+        if sz < prev_size and xref_type != XRefSectionType.HYBRID_STREAM:
+            # We allow stream sections in hybrid files to declare a smaller
+            # xref size. I've seen this happen in cases where the xref stream
+            # in a hybrid file doesn't contain itself.
+            # Since this is common (*cough*MS Word*cough*) and not explicitly
+            # prohibited by the standard, we let that slide.
+            raise misc.PdfReadError(
+                f"XRef section sizes must be nondecreasing; found XRef section "
+                f"of size {sz} after section of size {prev_size}."
+            )
+        prev_size = max(sz, prev_size)
 
         # Verify that all such higher-generation refs are
         # preceded by an appropriate free instruction of the previous generation
