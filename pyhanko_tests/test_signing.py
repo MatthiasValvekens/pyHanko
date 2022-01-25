@@ -1115,3 +1115,37 @@ def test_allow_hybrid_sign():
         signers.PdfSigner(
             signature_meta=meta, signer=SELF_SIGN, permit_hybrid_xrefs=True
         ).sign_pdf(w)
+
+
+@freeze_time('2020-11-01')
+def test_allow_hybrid_sign_validate_fail():
+    fname = 'minimal-hybrid-xref.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        meta = signers.PdfSignatureMetadata(field_name='Sig1')
+        out = signers.PdfSigner(
+            signature_meta=meta, signer=FROM_CA, permit_hybrid_xrefs=True
+        ).sign_pdf(w)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    with pytest.raises(SignatureValidationError, match="do not permit.*hybrid"):
+        val_trusted(s)
+
+
+@freeze_time('2020-11-01')
+def test_allow_hybrid_sign_validate_allow():
+    fname = 'minimal-hybrid-xref.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        meta = signers.PdfSignatureMetadata(field_name='Sig1')
+        out = signers.PdfSigner(
+            signature_meta=meta, signer=FROM_CA, permit_hybrid_xrefs=True
+        ).sign_pdf(w)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+
+    vc = SIMPLE_V_CONTEXT()
+    val_status = validate_pdf_signature(s, vc, permit_hybrid_xrefs=True)
+    assert val_status.bottom_line
