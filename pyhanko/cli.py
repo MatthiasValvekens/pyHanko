@@ -112,6 +112,7 @@ class Ctx(Enum):
     NEW_FIELD_SPEC = auto()
     PREFER_PSS = auto()
     DETACH_PEM = auto()
+    LENIENT = auto()
 
 
 @click.group()
@@ -452,6 +453,7 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
 )
 @click.option('--no-strict-syntax',
               help='Attempt to ignore syntactical problems in the input file '
+                   'and enable signature validation in hybrid-reference files.'
                    '(warning: this may affect validation results in unexpected '
                    'ways.)',
               type=bool, is_flag=True, default=False, show_default=True)
@@ -686,12 +688,17 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
               help='Treat revocation info as retroactively valid '
                    '(i.e. ignore thisUpdate timestamp)',
               type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--no-strict-syntax',
+              help='Attempt to ignore syntactical problems in the input file '
+                   'and enable signature creation in hybrid-reference files.'
+                   '(warning: such documents may behave in unexpected ways)',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
 def addsig(ctx, field, name, reason, location, certify, existing_only,
            timestamp_url, use_pades, use_pades_lta, with_validation_info,
            validation_context, trust_replace, trust, other_certs,
            style_name, stamp_url, prefer_pss, retroactive_revinfo,
-           detach, detach_pem):
+           detach, detach_pem, no_strict_syntax):
     ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
     ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
     ctx.obj[Ctx.PREFER_PSS] = prefer_pss
@@ -731,11 +738,12 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
     ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
     ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)
     ctx.obj[Ctx.STAMP_URL] = stamp_url
+    ctx.obj[Ctx.LENIENT] = no_strict_syntax
 
 
-def _open_for_signing(infile_path, signer_cert=None, signer_key=None):
+def _open_for_signing(infile_path, lenient, signer_cert=None, signer_key=None):
     infile = open(infile_path, 'rb')
-    writer = IncrementalPdfFileWriter(infile)
+    writer = IncrementalPdfFileWriter(infile, strict=not lenient)
 
     # TODO make this an option higher up the tree
     # TODO mention filename in prompt
@@ -814,7 +822,7 @@ async def async_detached_sig(signer: signers.Signer, infile_path, outfile,
 
 def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
                          timestamp_url, signature_meta, existing_fields_only,
-                         style, text_params, new_field_spec):
+                         style, text_params, new_field_spec, lenient):
     with pyhanko_exception_manager():
         if timestamp_url is not None:
             timestamper = HTTPTimeStamper(timestamp_url)
@@ -822,7 +830,7 @@ def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
             timestamper = None
         writer = _open_for_signing(
             infile_path, signer_cert=signer.signing_cert,
-            signer_key=signer.signing_key
+            signer_key=signer.signing_key, lenient=lenient
         )
 
         generic_sign_pdf(
@@ -930,7 +938,8 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup, passfile
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
         style=ctx.obj[Ctx.STAMP_STYLE], text_params=get_text_params(ctx),
-        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
+        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+        lenient=ctx.obj.get(Ctx.LENIENT, False)
     )
 
 
@@ -1003,7 +1012,8 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile, p12_setup):
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
         style=ctx.obj[Ctx.STAMP_STYLE], text_params=get_text_params(ctx),
-        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC]
+        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+        lenient=ctx.obj.get(Ctx.LENIENT, False)
     )
 
 
@@ -1022,7 +1032,9 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
 
         with open(infile, 'rb') as inf:
             generic_sign_pdf(
-                writer=IncrementalPdfFileWriter(inf),
+                writer=IncrementalPdfFileWriter(
+                    inf, strict=not ctx.obj.get(Ctx.LENIENT, False)
+                ),
                 outfile=outfile,
                 signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
                 timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
