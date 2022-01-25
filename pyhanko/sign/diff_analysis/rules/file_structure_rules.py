@@ -83,7 +83,26 @@ class XrefStreamRule(WhitelistRule):
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
             -> Iterable[Reference]:
-        xref_meta = new.reader.xrefs.get_xref_container_info(new.revision)
+        xrefs = new.reader.xrefs
+        xref_meta = xrefs.get_xref_container_info(new.revision)
         xref_stm = xref_meta.stream_ref
         if xref_stm is not None and old.is_ref_available(xref_stm):
             yield ReferenceUpdate(xref_stm)
+
+        # If this revision is followed by a hybrid one, then we must
+        #  clear the ref to the hybrid stream as well. Let's take care of that.
+
+        # Note: this check is only relevant in nonstrict mode because
+        #  hybrid-reference docs are banned otherwise.
+        if new.reader.strict:
+            return
+
+        try:
+            next_rev_data = xrefs.get_xref_data(new.revision + 1)
+        except IndexError:
+            return
+
+        if next_rev_data.hybrid is not None:
+            hyb_xref_stm = next_rev_data.hybrid.meta_info.stream_ref
+            if old.is_ref_available(hyb_xref_stm):
+                yield ReferenceUpdate(hyb_xref_stm)

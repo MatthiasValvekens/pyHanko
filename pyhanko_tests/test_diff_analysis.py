@@ -9,7 +9,7 @@ from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
-from pyhanko.pdf_utils.generic import pdf_name
+from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.reader import (
@@ -1982,3 +1982,88 @@ def test_double_sig_different_pages_delete_old_annot():
     s = r.embedded_signatures[1]
     assert s.field_name == 'SigNew'
     val_trusted(s)
+
+
+# test difference analysis on hybrid reference files
+# by including a dummy xref stream with only a free entry for the 0 object
+class LazyPdfLiteral(generic.PdfObject):
+
+    def __init__(self, fun):
+        self.fun = fun
+
+    def write_to_stream(self, stream, handler=None,
+                        container_ref: Reference = None):
+        stream.write(self.fun())
+
+
+class DummyXrefStream(generic.StreamObject):
+    def __init__(self):
+        super().__init__(stream_data=b'\x00\x00\x00\x00\xff\xff')
+        self['/Type'] = generic.pdf_name('/XRef')
+        self['/W'] = generic.ArrayObject([
+            generic.NumberObject(1), generic.NumberObject(3),
+            generic.NumberObject(2)
+        ])
+        self['/Index'] = generic.ArrayObject([
+            generic.NumberObject(0), generic.NumberObject(1)
+        ])
+        self.w = None
+        self._loc = None
+        self._ref = None
+
+    def register(self, w: IncrementalPdfFileWriter):
+        self.w = w
+        self._ref = w.add_object(self)
+        return LazyPdfLiteral(lambda: self._loc)
+
+    def write_to_stream(self, stream, handler=None, container_ref=None):
+        self['/Size'] = generic.NumberObject(self.w._lastobj_id + 1)
+        ref = self._ref
+        header = (b'%d %d obj\n' % (ref.idnum, ref.generation))
+        self._loc = str(stream.tell() - len(header)).encode('ascii')
+        super().write_to_stream(
+            stream, handler=handler, container_ref=container_ref
+        )
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_hybrid():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA, timestamper=DUMMY_TS
+    )
+
+    # Do an info update that also contains a dummy xref
+    w = IncrementalPdfFileWriter(out)
+    w.set_info(generic.DictionaryObject({
+        pdf_name('/Title'): generic.pdf_string('Hello')
+    }))
+    dummy = DummyXrefStream()
+    lazy_ref = dummy.register(w)
+    w.write_in_place()
+
+    # Append a fake hybrid update
+    w = IncrementalPdfFileWriter(out)
+    w._force_write_when_empty = True
+    w.trailer.non_trailer_keys = {
+        k for k in w.trailer.non_trailer_keys
+        if k != '/XRefStm'
+    }
+    w.trailer['/XRefStm'] = lazy_ref
+    w.write_in_place()
+
+    r = PdfFileReader(out, strict=False)
+    s = r.embedded_signatures[0]
+
+    # turn off orphan detection to make sure the xref rule is actually called
+    status = validate_pdf_signature(
+        s, SIMPLE_V_CONTEXT(),
+        diff_policy=StandardDiffPolicy(
+            DEFAULT_DIFF_POLICY.global_rules,
+            DEFAULT_DIFF_POLICY.form_rule,
+            ignore_orphaned_objects=False
+        )
+    )
+    assert status.modification_level == ModificationLevel.LTA_UPDATES

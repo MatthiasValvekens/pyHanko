@@ -1009,6 +1009,10 @@ class XRefCache:
         section = self._xref_sections[revision]
         return section.meta_info
 
+    def get_xref_data(self, revision) -> XRefSectionData:
+        section = self._xref_sections[revision]
+        return section.xref_data
+
     def explicit_refs_in_revision(self, revision) -> Set[generic.Reference]:
         """
         Look up the object refs for all objects explicitly added or overwritten
