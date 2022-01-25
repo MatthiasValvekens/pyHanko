@@ -3,6 +3,52 @@ Release history
 ***************
 
 
+.. _release-0.12.0:
+
+0.12.0
+======
+
+*Release date:* 2022-01-26
+
+Note
+----
+
+This is largely a maintenance release, and contains no new high-level features or public
+API changes. As such, upgrading is strongly recommended.
+
+The most significant change is the (rather minimalistic) support for hybrid reference files.
+Since working with hybrid reference files means dealing with potential ambiguity (which is dangerous
+when dealing with signatures), creation and validation of signatures in hybrid reference documents
+is only enabled in nonstrict mode. Hybrid reference files are relatively rare these days, but the
+internals need to be able to cope with them either way, in order to be able to update such files
+safely.
+
+
+New features and enhancements
+-----------------------------
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Significant refactor of cross-reference parsing internals. This doesn't affect any public API
+   entrypoints, but read the reference documentation for :mod:`pyhanko.pdf_utils.xref` if you happen
+   to have code that directly relies on that internal logic.
+ * Minimal support for hybrid reference files.
+ * Add ``strict`` flag to :class:`~pyhanko.pdf_utils.incremental_writer.IncrementalPdfFileWriter`.
+ * Expose ``--no-strict-syntax`` CLI flag in the ``addsig`` subcommand.
+
+
+Bugs fixed
+----------
+
+ * Ensure that signature appearance bounding boxes are rounded to a reasonable precision.
+   Failure to do so caused issues with some viewers.
+ * To be consistent with the purpose of the strictness flag, non-essential xref consistency
+   checking is now only enabled when running in strict mode (which is the default).
+ * The hybrid reference support indirectly fixes some potential silent file corruption issues
+   that could arise when working on particularly ill-behaved hybrid reference files.
+
+
 .. _release-0.11.0:
 
 0.11.0
