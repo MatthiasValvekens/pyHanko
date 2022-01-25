@@ -1,4 +1,5 @@
 import os
+import struct
 from datetime import datetime
 from io import BytesIO
 from itertools import product
@@ -1997,8 +1998,9 @@ class LazyPdfLiteral(generic.PdfObject):
 
 
 class DummyXrefStream(generic.StreamObject):
-    def __init__(self):
-        super().__init__(stream_data=b'\x00\x00\x00\x00\xff\xff')
+    def __init__(self, suffix=b''):
+        data = b'\x00\x00\x00\x00\xff\xff' + suffix
+        super().__init__(stream_data=data)
         self['/Type'] = generic.pdf_name('/XRef')
         self['/W'] = generic.ArrayObject([
             generic.NumberObject(1), generic.NumberObject(3),
@@ -2067,3 +2069,53 @@ def test_sign_with_hybrid():
         )
     )
     assert status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_hybrid_sneaky_edit():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    w.root['/Bleh'] = bleh_ref = w.add_object(pdf_name('/Bleh'))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA, timestamper=DUMMY_TS
+    )
+
+    # Do an info update that also contains a dummy xref stream
+    w = IncrementalPdfFileWriter(out)
+    w.set_info(generic.DictionaryObject({
+        pdf_name('/Title'): generic.pdf_string('Hello')
+    }))
+    # modify our dummy object in said stream, make it point to something else
+    #  (location that makes syntactic sense, but with the wrong ID, which is OK
+    #   for the purposes of the test as long as we don't actually try to read
+    #   the object)
+    dummy = DummyXrefStream(suffix=b'\x01\x00\x00\x12\x00\x00')
+    dummy['/Index'].append(generic.NumberObject(bleh_ref.idnum))
+    dummy['/Index'].append(generic.NumberObject(1))
+    lazy_ref = dummy.register(w)
+    w.write_in_place()
+
+    # Append a fake hybrid update
+    w = IncrementalPdfFileWriter(out)
+    w._force_write_when_empty = True
+    w.trailer.non_trailer_keys = {
+        k for k in w.trailer.non_trailer_keys
+        if k != '/XRefStm'
+    }
+    w.trailer['/XRefStm'] = lazy_ref
+    w.write_in_place()
+
+    r = PdfFileReader(out, strict=False)
+    s = r.embedded_signatures[0]
+
+    # turn off orphan detection to make sure the xref rule is actually called
+    status = validate_pdf_signature(
+        s, SIMPLE_V_CONTEXT(),
+        diff_policy=StandardDiffPolicy(
+            DEFAULT_DIFF_POLICY.global_rules,
+            DEFAULT_DIFF_POLICY.form_rule,
+            ignore_orphaned_objects=False
+        )
+    )
+    assert status.modification_level == ModificationLevel.OTHER
