@@ -5,7 +5,6 @@ from datetime import datetime
 from io import BytesIO
 
 import pytest
-from asn1crypto import cms
 from asn1crypto.algos import SignedDigestAlgorithm
 from freezegun import freeze_time
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
@@ -1097,3 +1096,22 @@ def test_simple_sign_legacy_signer_upgrade():
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_untrusted(emb)
+
+
+def test_disallow_hybrid_sign():
+    fname = 'minimal-hybrid-xref.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        meta = signers.PdfSignatureMetadata(field_name='Sig1')
+        with pytest.raises(SigningError, match='hybrid xrefs are disabled'):
+            signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+
+def test_allow_hybrid_sign():
+    fname = 'minimal-hybrid-xref.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        meta = signers.PdfSignatureMetadata(field_name='Sig1')
+        signers.PdfSigner(
+            signature_meta=meta, signer=SELF_SIGN, permit_hybrid_xrefs=True
+        ).sign_pdf(w)

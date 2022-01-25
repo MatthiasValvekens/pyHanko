@@ -1077,3 +1077,16 @@ class XRefCache:
         # No need to make this more efficient, since the reader caches
         # objects for us.
         return self.get_historical_ref(ref, len(self._xref_sections) - 1)
+
+    @property
+    def hybrid_xrefs_present(self) -> bool:
+        """
+        Determine if a file uses hybrid references anywhere.
+
+        :return:
+            ``True`` if hybrid references were detected, ``False`` otherwise.
+        """
+        return any(
+            section.meta_info.xref_section_type == XRefSectionType.HYBRID_MAIN
+            for section in self._xref_sections
+        )

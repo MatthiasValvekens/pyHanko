@@ -848,6 +848,9 @@ class PdfSigner:
         to specify the field's properties in the form of a
         :class:`.SigFieldSpec`. This parameter is only meaningful if
         ``existing_fields_only`` is ``False``.
+    :param permit_hybrid_xrefs:
+        Whether to permit signing hybrid-reference files.
+        The default is ``False``.
     """
     _ignore_sv = False
 
@@ -855,7 +858,8 @@ class PdfSigner:
                  signer: Signer, *,
                  timestamper: TimeStamper = None,
                  stamp_style: Optional[BaseStampStyle] = None,
-                 new_field_spec: Optional[SigFieldSpec] = None):
+                 new_field_spec: Optional[SigFieldSpec] = None,
+                 permit_hybrid_xrefs: bool = False):
         self.signature_meta = signature_meta
         if new_field_spec is not None and \
                 new_field_spec.sig_field_name != signature_meta.field_name:
@@ -875,6 +879,7 @@ class PdfSigner:
 
         self.new_field_spec = new_field_spec
         self.default_timestamper = timestamper
+        self.permit_hybrid_xrefs = permit_hybrid_xrefs
 
     @property
     def default_md_for_signer(self) -> Optional[str]:
@@ -979,6 +984,15 @@ class PdfSigner:
             A :class:`.PdfSigningSession` object modelling the signing session
             in its post-setup stage.
         """
+
+        if not self.permit_hybrid_xrefs \
+                and isinstance(pdf_out, IncrementalPdfFileWriter):
+            # ensure we're not signing a hybrid reference doc
+            if pdf_out.prev.xrefs.hybrid_xrefs_present:
+                raise SigningError(
+                    "Attempting to sign document with hybrid cross-reference "
+                    "sections while hybrid xrefs are disabled"
+                )
 
         timestamper = self.default_timestamper
 
