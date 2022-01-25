@@ -849,7 +849,7 @@ class PdfSigner:
         :class:`.SigFieldSpec`. This parameter is only meaningful if
         ``existing_fields_only`` is ``False``.
     :param permit_hybrid_xrefs:
-        Whether to permit signing hybrid-reference files.
+        Whether to permit signing hybrid-reference files in strict mode.
         The default is ``False``.
     """
     _ignore_sv = False
@@ -988,7 +988,8 @@ class PdfSigner:
         if not self.permit_hybrid_xrefs \
                 and isinstance(pdf_out, IncrementalPdfFileWriter):
             # ensure we're not signing a hybrid reference doc
-            if pdf_out.prev.xrefs.hybrid_xrefs_present:
+            prev = pdf_out.prev
+            if prev.strict and prev.xrefs.hybrid_xrefs_present:
                 raise SigningError(
                     "Attempting to sign document with hybrid cross-reference "
                     "sections while hybrid xrefs are disabled"

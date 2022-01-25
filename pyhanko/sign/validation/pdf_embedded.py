@@ -519,7 +519,9 @@ class EmbeddedPdfSignature:
         return SignatureCoverageLevel.ENTIRE_REVISION
 
     def enforce_hybrid_xref_policy(self, permit_hybrid_xrefs: bool):
-        if not permit_hybrid_xrefs and self.reader.xrefs.hybrid_xrefs_present:
+        reader = self.reader
+        if not permit_hybrid_xrefs and reader.strict \
+                and reader.xrefs.hybrid_xrefs_present:
             raise SignatureValidationError(
                 "Settings do not permit validation of signatures in "
                 "hybrid-reference files."
@@ -819,7 +821,7 @@ async def async_validate_pdf_signature(
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files.
+        Whether to allow signatures in hybrid-reference files in strict mode.
         The default is ``False``.
     :return:
         The status of the PDF signature in question.
@@ -911,7 +913,7 @@ async def async_validate_pdf_timestamp(
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :param permit_hybrid_xrefs:
-        Whether to allow timestamps in hybrid-reference files.
+        Whether to allow timestamps in hybrid-reference files in strict mode.
         The default is ``False``.
     :return:
         The status of the PDF timestamp in question.

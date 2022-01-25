@@ -296,7 +296,7 @@ async def async_validate_pdf_ltv_signature(
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files.
+        Whether to allow signatures in hybrid-reference files in strict mode.
         The default is ``False``.
     :return:
         The status of the signature.

@@ -211,7 +211,7 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files.
+        Whether to allow signatures in hybrid-reference files in strict mode.
         The default is ``False``.
     :return:
         The status of the PDF signature in question.
@@ -250,7 +250,7 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :param permit_hybrid_xrefs:
-        Whether to allow timestamps in hybrid-reference files.
+        Whether to allow timestamps in hybrid-reference files in strict mode.
         The default is ``False``.
     :return:
         The status of the PDF timestamp in question.
@@ -353,7 +353,7 @@ def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
     :param permit_hybrid_xrefs:
-        Whether to allow signatures in hybrid-reference files.
+        Whether to allow signatures in hybrid-reference files in strict mode.
         The default is ``False``.
     :return:
         The status of the signature.
