@@ -529,10 +529,11 @@ def test_duplicate_content_type():
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
 
-    with pytest.raises(SignatureValidationError):
+    with pytest.raises(SignatureValidationError) as exc_info:
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
         )
+        assert exc_info.value.ades_status == AdESStatus.FAILED
 
 
 def test_no_content_type():

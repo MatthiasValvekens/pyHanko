@@ -23,7 +23,7 @@ from pyhanko.sign.general import (
 )
 
 from ...pdf_utils import misc
-from ..ades.report import AdESIndeterminate
+from ..ades.report import AdESFailure, AdESIndeterminate
 from .errors import SignatureValidationError, WeakHashAlgorithmError
 from .settings import KeyUsageConstraints
 from .status import (
@@ -151,7 +151,8 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
             cms_algid_protection = None
         except MultivaluedAttributeError:
             raise SignatureValidationError(
-                'Multiple CMS protection attributes present'
+                'Multiple CMS protection attributes present',
+                ades_subindication=AdESFailure.FORMAT_FAILURE
             )
         if cms_algid_protection is not None:
             signed_digest_algorithm = \
@@ -159,19 +160,25 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
             if signed_digest_algorithm != digest_algorithm_obj.native:
                 raise SignatureValidationError(
                     "Digest algorithm does not match CMS algorithm protection "
-                    "attribute."
+                    "attribute.",
+                    # these are conceptually failures, but AdES doesn't have
+                    # them in its validation model, so 'GENERIC' it is.
+                    #  (same applies to other such cases)
+                    ades_subindication=AdESIndeterminate.GENERIC
                 )
             signed_sig_algorithm = \
                 cms_algid_protection['signature_algorithm'].native
             if signed_sig_algorithm is None:
                 raise SignatureValidationError(
                     "CMS algorithm protection attribute not valid for signed "
-                    "data"
+                    "data",
+                    ades_subindication=AdESIndeterminate.GENERIC
                 )
             elif signed_sig_algorithm != signature_algorithm.native:
                 raise SignatureValidationError(
                     "Signature mechanism does not match CMS algorithm "
-                    "protection attribute."
+                    "protection attribute.",
+                    ades_subindication=AdESIndeterminate.GENERIC
                 )
 
         # check the signing-certificate or signing-certificate-v2 attr
@@ -189,13 +196,15 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         except (NonexistentAttributeError, MultivaluedAttributeError):
             raise SignatureValidationError(
                 'Content type not found in signature, or multiple content-type '
-                'attributes present.'
+                'attributes present.',
+                ades_subindication=AdESFailure.FORMAT_FAILURE
             )
         content_type = content_type.native
         if content_type != expected_content_type:
             raise SignatureValidationError(
                 f'Content type {content_type} did not match expected value '
-                f'{expected_content_type}'
+                f'{expected_content_type}',
+                ades_subindication=AdESFailure.FORMAT_FAILURE
             )
 
         embedded_digest = extract_message_digest(signer_info)
