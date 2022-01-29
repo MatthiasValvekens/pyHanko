@@ -127,10 +127,10 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         return cert
 
     def test_revocation_mode_soft(self):
-        cert = self._load_cert_object('global-root-ca-revoked.chain-demos.digicert.com.crt')
-        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+        cert = self._load_cert_object('digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt')
+        ca_certs = [self._load_cert_object('digicert-root-g5.crt')]
         other_certs = [
-            self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
+            self._load_cert_object('digicert-g5-ecc-sha384-2021-ca1.crt'),
         ]
 
         context = ValidationContext(
@@ -148,10 +148,10 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         validate_path(context, path)
 
     def test_revocation_mode_hard(self):
-        cert = self._load_cert_object('global-root-ca-revoked.chain-demos.digicert.com.crt')
-        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+        cert = self._load_cert_object('digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt')
+        ca_certs = [self._load_cert_object('digicert-root-g5.crt')]
         other_certs = [
-            self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
+            self._load_cert_object('digicert-g5-ecc-sha384-2021-ca1.crt'),
         ]
 
         context = ValidationContext(
@@ -171,18 +171,16 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
         expected = (
             '(CRL|OCSP response) indicates the end-entity certificate was '
-            'revoked at 23:32:01 on 2020-01-14, due to an unspecified reason'
+            'revoked at 22:42:35 on 2021-08-17, due to an unspecified reason'
         )
         with self.assertRaisesRegex(RevokedError, expected):
             validate_path(context, path)
 
     async def test_revocation_mode_hard_async(self):
-        cert = self._load_cert_object(
-            'global-root-ca-revoked.chain-demos.digicert.com.crt'
-        )
-        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+        cert = self._load_cert_object('digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt')
+        ca_certs = [self._load_cert_object('digicert-root-g5.crt')]
         other_certs = [
-            self._load_cert_object('digicert-sha2-secure-server-ca.crt'),
+            self._load_cert_object('digicert-g5-ecc-sha384-2021-ca1.crt'),
         ]
         fb = aiohttp_fetchers.AIOHttpFetcherBackend(
             per_request_timeout=TEST_REQUEST_TIMEOUT
@@ -203,17 +201,15 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
             expected = (
                 '(CRL|OCSP response) indicates the end-entity certificate was '
-                'revoked at 23:32:01 on 2020-01-14, due to an unspecified '
+                'revoked at 22:42:35 on 2021-08-17, due to an unspecified '
                 'reason'
             )
             with self.assertRaisesRegex(RevokedError, expected):
                 await async_validate_path(context, path)
 
     async def test_revocation_mode_hard_aiohttp_autofetch(self):
-        cert = self._load_cert_object(
-            'global-root-ca-revoked.chain-demos.digicert.com.crt'
-        )
-        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+        cert = self._load_cert_object('digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt')
+        ca_certs = [self._load_cert_object('digicert-root-g5.crt')]
 
         fb = aiohttp_fetchers.AIOHttpFetcherBackend(
             per_request_timeout=TEST_REQUEST_TIMEOUT
@@ -233,17 +229,15 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
             expected = (
                 '(CRL|OCSP response) indicates the end-entity certificate was '
-                'revoked at 23:32:01 on 2020-01-14, due to an unspecified '
+                'revoked at 22:42:35 on 2021-08-17, due to an unspecified '
                 'reason'
             )
             with self.assertRaisesRegex(RevokedError, expected):
                 await async_validate_path(context, path)
 
     async def test_revocation_mode_hard_requests_autofetch(self):
-        cert = self._load_cert_object(
-            'global-root-ca-revoked.chain-demos.digicert.com.crt'
-        )
-        ca_certs = [self._load_cert_object('digicert-global-root-ca.crt')]
+        cert = self._load_cert_object('digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt')
+        ca_certs = [self._load_cert_object('digicert-root-g5.crt')]
 
         fb = requests_fetchers.RequestsFetcherBackend(
             per_request_timeout=TEST_REQUEST_TIMEOUT
@@ -263,7 +257,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
             expected = (
                 '(CRL|OCSP response) indicates the end-entity certificate was '
-                'revoked at 23:32:01 on 2020-01-14, due to an unspecified '
+                'revoked at 22:42:35 on 2021-08-17, due to an unspecified '
                 'reason'
             )
             with self.assertRaisesRegex(RevokedError, expected):
