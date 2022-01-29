@@ -1066,6 +1066,47 @@ async def test_no_certificates(delete):
         )
 
 
+async def test_two_signer_infos():
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+    md_algorithm = 'sha256'
+
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+    sig_obj = signers.SignatureObject(bytes_reserved=8192)
+
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
+
+    prep_digest, output = cms_writer.send(
+        cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    signer: signers.SimpleSigner = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=SimpleCertificateStore(),
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    cms_obj = await signer.async_sign(
+        data_digest=prep_digest.document_digest,
+        digest_algorithm=md_algorithm,
+    )
+    sd = cms_obj['content']
+    si = sd['signer_infos'][0]
+    sd['signer_infos'] = [si, si]
+    cms_writer.send(cms_obj)
+
+    r = PdfFileReader(output)
+    with pytest.raises(CMSExtractionError, match='exactly one'):
+        emb = r.embedded_signatures[0]
+        await collect_validation_info(
+            embedded_sig=emb, validation_context=ValidationContext()
+        )
+
+
 def get_ac_aware_signer(actual_signer='signer1'):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
