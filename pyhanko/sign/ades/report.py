@@ -1,8 +1,14 @@
+"""
+Module for AdES reporting data.
+
+Defines enums for all AdES validation statuses defined in ETSI EN 319 102-1,
+clause 5.1.3.
+"""
+
 import enum
 
 __all__ = ['AdESStatus', 'AdESSubIndic', 'AdESFailure', 'AdESIndeterminate']
 
-# ETSI EN 319 102-1, clause 5.1.3
 # TODO document these
 
 
