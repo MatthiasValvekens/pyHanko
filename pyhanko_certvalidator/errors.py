@@ -80,3 +80,7 @@ class RevokedError(PathValidationError):
 class InvalidCertificateError(PathValidationError):
 
     pass
+
+
+class InvalidAttrCertificateError(InvalidCertificateError):
+    pass

@@ -42,7 +42,7 @@ from .errors import (
     ValidationError,
     PathValidationError,
     RevokedError,
-    PathBuildingError,
+    PathBuildingError, InvalidAttrCertificateError,
 )
 from .path import ValidationPath, QualifiedPolicy
 
@@ -310,7 +310,7 @@ def _validate_ac_targeting(attr_cert: cms.AttributeCertificateV2,
                 return
 
     # TODO log audit identity
-    raise InvalidCertificateError("AC targeting check failed")
+    raise InvalidAttrCertificateError("AC targeting check failed")
 
 
 SUPPORTED_AC_EXTENSIONS = frozenset([
@@ -393,7 +393,7 @@ def _candidate_ac_issuers(attr_cert: cms.AttributeCertificateV2,
         aki, aa_issuer, aki_aa_iss_serial = _process_aki_ext(aki_ext)
         if aki_aa_iss_serial is not None:
             if aa_iss_serial is not None and aa_iss_serial != aki_aa_iss_serial:
-                raise InvalidCertificateError(
+                raise InvalidAttrCertificateError(
                     "AC's AKI extension and issuer include conflicting "
                     "identifying information for the issuing AA"
                 )
@@ -429,7 +429,7 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
     sd_algo = attr_cert['signature_algorithm']
     embedded_sd_algo = attr_cert['ac_info']['signature']
     if sd_algo.native != embedded_sd_algo.native:
-        raise InvalidCertificateError(pretty_message(
+        raise InvalidAttrCertificateError(pretty_message(
             '''
             Signature algorithm declaration in signed portion of AC does not
             match the signature algorithm declaration on the envelope.
@@ -606,7 +606,7 @@ async def async_validate_ac(
     if 'target_information' in extensions_present:
         targ_desc = validation_context.acceptable_ac_targets
         if targ_desc is None:
-            raise InvalidCertificateError(pretty_message(
+            raise InvalidAttrCertificateError(pretty_message(
                 '''
                 The attribute certificate is targeted, but no targeting
                 information is available in the validation context.
@@ -627,12 +627,12 @@ async def async_validate_ac(
 
     ac_holder = attr_cert['ac_info']['holder']
     if len(ac_holder) == 0:
-        raise InvalidCertificateError("AC holder entry is empty")
+        raise InvalidAttrCertificateError("AC holder entry is empty")
 
     if holder_cert is not None:
         mismatches = check_ac_holder_match(holder_cert, ac_holder)
         if mismatches:
-            raise InvalidCertificateError(
+            raise InvalidAttrCertificateError(
                 f"Could not match AC holder entry against supplied holder "
                 f"certificate; mismatched entries: {', '.join(mismatches)}"
             )
@@ -645,7 +645,7 @@ async def async_validate_ac(
     for aa_candidate in aa_candidates:
         try:
             validate_aa_usage(validation_context, aa_candidate)
-        except InvalidCertificateError as e:
+        except InvalidAttrCertificateError as e:
             exceptions.append(e)
             continue
         try:
