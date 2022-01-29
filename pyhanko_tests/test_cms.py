@@ -533,7 +533,7 @@ def test_duplicate_content_type():
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
         )
-        assert exc_info.value.ades_status == AdESStatus.FAILED
+    assert exc_info.value.ades_status == AdESStatus.FAILED
 
 
 def test_no_content_type():
@@ -1065,6 +1065,9 @@ async def test_no_certificates(delete):
         await collect_validation_info(
             embedded_sig=emb, validation_context=ValidationContext()
         )
+    with pytest.raises(SignatureValidationError,
+                       match='signer cert.*includ'):
+        r.embedded_signatures[0].signer_cert.dump()
 
 
 async def test_two_signer_infos():
