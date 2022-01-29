@@ -33,9 +33,14 @@ __all__ = [
     'optimal_pss_params', 'process_pss_params', 'as_signing_certificate',
     'as_signing_certificate_v2', 'match_issuer_serial',
     'check_ess_certid',
+    'CMSExtractionError'
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class CMSExtractionError(ValueError):
+    pass
 
 
 def simple_cms_attribute(attr_type, value):
@@ -486,7 +491,7 @@ def _partition_certs(certs, signer_info):
         else:
             other_certs.append(c)
     if cert is None:
-        raise ValueError('signer certificate not included in signature')
+        raise CMSExtractionError('signer certificate not included in signature')
     return cert, other_certs
 
 
@@ -505,8 +510,8 @@ def extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
     try:
         signer_info, = signed_data['signer_infos']
         return signer_info
-    except ValueError:  # pragma: nocover
-        raise ValueError(
+    except ValueError:
+        raise CMSExtractionError(
             'signer_infos should contain exactly one entry'
         )
 

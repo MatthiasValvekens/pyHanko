@@ -11,8 +11,10 @@ from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
+    CMSExtractionError,
     MultivaluedAttributeError,
     NonexistentAttributeError,
+    SignedDataCerts,
     check_ess_certid,
     extract_certificate_info,
     extract_signer_info,
@@ -21,6 +23,7 @@ from pyhanko.sign.general import (
 )
 
 from ...pdf_utils import misc
+from ..ades.report import AdESIndeterminate
 from .errors import SignatureValidationError, WeakHashAlgorithmError
 from .settings import KeyUsageConstraints
 from .status import (
@@ -42,7 +45,7 @@ __all__ = [
     'collect_timing_info', 'validate_tst_signed_data',
     'async_validate_detached_cms', 'cms_basic_validation',
     'compute_signature_tst_digest', 'extract_tst_data',
-    'extract_self_reported_ts',
+    'extract_self_reported_ts', 'extract_certs_for_validation',
     'collect_signer_attr_status',
 ]
 
@@ -71,12 +74,19 @@ def _check_signing_certificate(cert: x509.Certificate,
 
     if attr is None:
         # if neither attr is present -> no constraints
-        return True
+        return
 
     # we only care about the first value, the others limit the set of applicable
     # CA certs
     certid = attr['certs'][0]
-    return check_ess_certid(cert, certid)
+
+    if not check_ess_certid(cert, certid):
+        raise SignatureValidationError(
+            f"Signing certificate attribute does not match selected "
+            f"signer's certificate for subject"
+            f"\"{cert.subject.human_friendly}\".",
+            ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+        )
 
 
 def validate_sig_integrity(signer_info: cms.SignerInfo,
@@ -165,12 +175,12 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
                 )
 
         # check the signing-certificate or signing-certificate-v2 attr
-        if not _check_signing_certificate(cert, signed_attrs):
-            raise SignatureValidationError(
-                f"Signing certificate attribute does not match selected "
-                f"signer's certificate for subject"
-                f"\"{cert.subject.human_friendly}\"."
-            )
+        # Note: Through the usual "full validation" call path, this check is
+        #   performed twice. AdES requires the check to be performed when
+        #   selecting the signer's certificate (which happens elsewhere), but
+        #   we keep this check for compatibility for those cases where
+        #   validate_sig_integrity is used standalone.
+        _check_signing_certificate(cert, signed_attrs)
 
         try:
             content_type = find_unique_cms_attribute(
@@ -208,6 +218,36 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
     return intact, valid
 
 
+def extract_certs_for_validation(signed_data: cms.SignedData) \
+        -> SignedDataCerts:
+    """
+    Extract certificates from a CMS signed data object for validation purposes,
+    identifying the signer's certificate in accordance with ETSI EN 319 102-1,
+    5.2.3.4.
+
+    :param signed_data:
+        The CMS payload.
+    :return:
+        The extracted certificates.
+    """
+
+    # TODO allow signer certificate to be obtained from elsewhere?
+
+    try:
+        cert_info = extract_certificate_info(signed_data)
+        cert = cert_info.signer_cert
+    except CMSExtractionError:
+        raise SignatureValidationError(
+            'signer certificate not included in signature',
+            ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+        )
+    signer_info = extract_signer_info(signed_data)
+    signed_attrs = signer_info['signed_attrs']
+    # check the signing-certificate or signing-certificate-v2 attr
+    _check_signing_certificate(cert, signed_attrs)
+    return cert_info
+
+
 async def cms_basic_validation(
         signed_data: cms.SignedData,
         status_cls: Type[StatusType] = SignatureStatus,
@@ -224,7 +264,7 @@ async def cms_basic_validation(
     Internal API.
     """
     signer_info = extract_signer_info(signed_data)
-    cert_info = extract_certificate_info(signed_data)
+    cert_info = extract_certs_for_validation(signed_data)
     cert = cert_info.signer_cert
     other_certs = cert_info.other_certs
 

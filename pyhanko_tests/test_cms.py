@@ -23,8 +23,10 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
+from pyhanko.sign.ades.report import AdESIndeterminate, AdESStatus
 from pyhanko.sign.attributes import CMSAttributeProvider, TSTProvider
 from pyhanko.sign.general import (
+    CMSExtractionError,
     SigningError,
     as_signing_certificate,
     as_signing_certificate_v2,
@@ -688,12 +690,17 @@ def test_old_style_signing_cert_attr_mismatch(with_issser):
             'serial_number': alt_cert.serial_number
         })
     }
-    with pytest.raises(SignatureValidationError,
-                       match="Signing certificate attribute does not match "):
+    with pytest.raises(
+            SignatureValidationError,
+            match="Signing certificate attribute does not match ") as exc_info:
         validate_sig_integrity(
             signer_info, alt_cert, expected_content_type='data',
             actual_digest=digest
         )
+
+    assert exc_info.value.ades_status == AdESStatus.INDETERMINATE
+    assert exc_info.value.ades_subindication \
+           == AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
 
 
 def test_old_style_signing_cert_attr_get():
@@ -718,11 +725,15 @@ def test_signing_cert_attr_malformed_issuer():
     r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
-    with pytest.raises(SignatureValidationError,
-                       match="Signing certificate attribute does not match "):
+    with pytest.raises(
+            SignatureValidationError,
+            match="Signing certificate attribute does not match ") as exc_info:
         validate_sig_integrity(
             emb.signer_info, emb.signer_cert, 'data', digest
         )
+    assert exc_info.value.ades_status == AdESStatus.INDETERMINATE
+    assert exc_info.value.ades_subindication \
+           == AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
 
 
 def test_signing_cert_attr_duplicated():
@@ -1048,7 +1059,7 @@ async def test_no_certificates(delete):
     cms_writer.send(cms_obj)
 
     r = PdfFileReader(output)
-    with pytest.raises(ValueError, match='signer cert.*includ'):
+    with pytest.raises(CMSExtractionError, match='signer cert.*includ'):
         emb = r.embedded_signatures[0]
         await collect_validation_info(
             embedded_sig=emb, validation_context=ValidationContext()

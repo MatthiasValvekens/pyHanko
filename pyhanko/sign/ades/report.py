@@ -1,6 +1,6 @@
 import enum
 
-__all__ = ['AdESStatus', 'AdESFailure', 'AdESIndeterminate']
+__all__ = ['AdESStatus', 'AdESSubIndic', 'AdESFailure', 'AdESIndeterminate']
 
 # ETSI EN 319 102-1, clause 5.1.3
 # TODO document these
@@ -12,14 +12,24 @@ class AdESStatus(enum.Enum):
     FAILED = enum.auto()
 
 
-class AdESFailure(enum.Enum):
+class AdESSubIndic:
+    @property
+    def status(self) -> AdESStatus:
+        raise NotImplementedError
+
+
+class AdESFailure(AdESSubIndic, enum.Enum):
     FORMAT_FAILURE = enum.auto()
     HASH_FAILURE = enum.auto()
     SIG_CRYPTO_FAILURE = enum.auto()
     REVOKED = enum.auto()
 
+    @property
+    def status(self):
+        return AdESStatus.FAILED
 
-class AdESIndeterminate(enum.Enum):
+
+class AdESIndeterminate(AdESSubIndic, enum.Enum):
     SIG_CONSTRAINTS_FAILURE = enum.auto()
     CHAIN_CONSTRAINTS_FAILURE = enum.auto()
     CERTIFICATE_CHAIN_GENERAL_FAILURE = enum.auto()
@@ -39,3 +49,7 @@ class AdESIndeterminate(enum.Enum):
     TRY_LATER = enum.auto()
     SIGNED_DATA_NOT_FOUND = enum.auto()
     GENERIC = enum.auto()
+
+    @property
+    def status(self):
+        return AdESStatus.INDETERMINATE

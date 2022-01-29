@@ -1,3 +1,7 @@
+from typing import Optional
+
+from ..ades.report import AdESStatus, AdESSubIndic
+
 __all__ = [
     'SignatureValidationError', 'WeakHashAlgorithmError',
     'ValidationInfoReadingError', 'NoDSSFoundError',
@@ -17,7 +21,17 @@ class NoDSSFoundError(ValidationInfoReadingError):
 
 class SignatureValidationError(ValueError):
     """Error validating a signature."""
-    pass
+    def __init__(self, failure_message,
+                 ades_subindication: Optional[AdESSubIndic] = None):
+        self.failure_message = str(failure_message)
+        self.ades_subindication = ades_subindication
+        super().__init__(failure_message)
+
+    @property
+    def ades_status(self) -> Optional[AdESStatus]:
+        if self.ades_subindication is not None:
+            return self.ades_subindication.status
+        return None
 
 
 class WeakHashAlgorithmError(SignatureValidationError):
@@ -29,7 +43,4 @@ class SigSeedValueValidationError(SignatureValidationError):
 
     # TODO perhaps we can encode some more metadata here, such as the
     #  seed value that tripped the failure.
-
-    def __init__(self, failure_message):
-        self.failure_message = str(failure_message)
-        super().__init__(failure_message)
+    pass

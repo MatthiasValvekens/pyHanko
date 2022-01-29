@@ -30,7 +30,6 @@ from pyhanko.sign.fields import (
 )
 from pyhanko.sign.general import (
     UnacceptableSignerError,
-    extract_certificate_info,
     extract_signer_info,
     get_pyca_cryptography_hash,
 )
@@ -45,6 +44,7 @@ from .generic_cms import (
     collect_signer_attr_status,
     collect_timing_info,
     compute_signature_tst_digest,
+    extract_certs_for_validation,
     extract_self_reported_ts,
     extract_tst_data,
     validate_tst_signed_data,
@@ -148,7 +148,7 @@ class EmbeddedPdfSignature:
         self.signed_data: cms.SignedData = signed_data
 
         self.signer_info = extract_signer_info(signed_data)
-        self._sd_cert_info = extract_certificate_info(signed_data)
+        self._sd_cert_info = None
 
         # The PDF standard does not define a way to specify the digest algorithm
         # used other than this one.
@@ -196,11 +196,16 @@ class EmbeddedPdfSignature:
         self._integrity_checked = False
         self.fq_name = fq_name
 
+    def _init_cert_info(self):
+        if self._sd_cert_info is None:
+            self._sd_cert_info = extract_certs_for_validation(self.signed_data)
+
     @property
     def embedded_attr_certs(self) -> List[cms.AttributeCertificateV2]:
         """
         Embedded attribute certificates.
         """
+        self._init_cert_info()
         return list(self._sd_cert_info.attribute_certs)
 
     @property
@@ -208,6 +213,7 @@ class EmbeddedPdfSignature:
         """
         Embedded X.509 certificates, excluding than that of the signer.
         """
+        self._init_cert_info()
         return list(self._sd_cert_info.other_certs)
 
     @property
@@ -215,6 +221,7 @@ class EmbeddedPdfSignature:
         """
         Certificate of the signer.
         """
+        self._init_cert_info()
         return self._sd_cert_info.signer_cert
 
     @property
