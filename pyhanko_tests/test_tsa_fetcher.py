@@ -3,13 +3,14 @@ from io import BytesIO
 
 import aiohttp
 import pytest
-from asn1crypto import cms, tsp
+from asn1crypto import tsp
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
+from pyhanko.sign.ades.report import AdESIndeterminate
 from pyhanko.sign.timestamps import HTTPTimeStamper, TimestampRequestError
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.timestamps.common_utils import handle_tsp_response
@@ -43,7 +44,8 @@ async def test_ts_fetch_aiohttp():
         )
         assert result['valid'] and result['intact']
         # empty trust root list
-        assert not result['trusted']
+        assert result['trust_problem_indic'] \
+               == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
 
 
 async def test_ts_fetch_aiohttp_error():
@@ -68,7 +70,8 @@ async def test_ts_fetch_requests():
     )
     assert result['valid'] and result['intact']
     # empty trust root list
-    assert not result['trusted']
+    assert result['trust_problem_indic'] \
+           == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
 
 
 async def test_ts_fetch_requests_error():

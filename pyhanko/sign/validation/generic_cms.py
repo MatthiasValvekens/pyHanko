@@ -309,14 +309,13 @@ async def cms_basic_validation(
     valid &= intact
 
     # next, validate trust
-    trusted = revoked = False
-    path = None
+    ades_status = path = None
     if valid:
         validator = CertificateValidator(
             cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
-        trusted, revoked, path = await status_cls.validate_cert_usage(
+        ades_status, path = await status_cls.validate_cert_usage(
             validator, key_usage_settings=key_usage_settings
         )
 
@@ -324,8 +323,7 @@ async def cms_basic_validation(
     status_kwargs.update(
         intact=intact, valid=valid, signing_cert=cert,
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-        revoked=revoked, trusted=trusted,
-        validation_path=path
+        trust_problem_indic=ades_status, validation_path=path
     )
     return status_kwargs
 

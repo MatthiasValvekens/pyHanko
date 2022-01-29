@@ -17,6 +17,7 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.validate import ACValidationResult
 
 from ...pdf_utils.misc import OrderedEnum
+from ..ades.report import AdESFailure, AdESIndeterminate, AdESSubIndic
 from ..diff_analysis import (
     DiffResult,
     ModificationLevel,
@@ -57,18 +58,10 @@ class SignatureStatus:
     actually validates.
     """
 
-    trusted: bool
+    trust_problem_indic: Optional[AdESSubIndic]
     """
-    Reports whether the signer's certificate is trusted w.r.t. the currently
-    relevant validation context and key usage requirements.
-    """
-
-    # TODO add a separate expired flag
-
-    revoked: bool
-    """
-    Reports whether the signer's certificate has been revoked or not.
-    If this field is ``True``, then obviously :attr:`trusted` will be ``False``.
+    If not ``None``, provides the AdES subindication indication what went
+    wrong when validating the signer's certificate.
     """
 
     signing_cert: x509.Certificate
@@ -118,6 +111,27 @@ class SignatureStatus:
             cert_status = 'UNTRUSTED'
         yield cert_status
 
+    @property
+    def revoked(self) -> bool:
+        """
+        Reports whether the signer's certificate has been revoked or not.
+        If this field is ``True``, then obviously :attr:`trusted` will be
+        ``False``.
+        """
+        return self.trust_problem_indic in (
+            AdESFailure.REVOKED,
+            AdESIndeterminate.REVOKED_CA_NO_POE,
+            AdESIndeterminate.REVOKED_NO_POE
+        )
+
+    @property
+    def trusted(self) -> bool:
+        """
+        Reports whether the signer's certificate is trusted w.r.t. the currently
+        relevant validation context and key usage requirements.
+        """
+        return self.valid and self.trust_problem_indic is None
+
     # TODO explain in more detail.
     def summary(self, delimiter=','):
         """
@@ -145,25 +159,35 @@ class SignatureStatus:
         )
         cert: x509.Certificate = validator._certificate
 
-        revoked = trusted = False
         path = None
-
         try:
             # validate usage without going through pyhanko_certvalidator
             key_usage_settings.validate(cert)
             path = await validator.async_validate_usage(key_usage=set())
-            trusted = True
+            ades_status = None
         except InvalidCertificateError as e:
-            # TODO accumulate these somewhere
+            # TODO accumulate these somewhere?
             logger.warning(e)
+            ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
         except RevokedError:
-            revoked = True
-        except (PathValidationError, PathBuildingError) as e:
+            # TODO have certvalidator report with which of the three
+            #  revocation cases under AdES we're dealing with.
+            # (For now, assume the worst.)
+            ades_status = AdESFailure.REVOKED
+        except PathBuildingError as e:
             logger.warning(e)
-        if not trusted:
+            ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+        except PathValidationError as e:
+            logger.warning(e)
+            # TODO make error reporting in certvalidator more granular
+            #  so we can actually set proper AdES values
+            #  (e.g. expiration-related ones, distinguish between CA and EE,
+            #   revinfo freshness...)
+            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+        if ades_status is not None:
             subj = cert.subject.human_friendly
             logger.warning(f"Chain of trust validation for {subj} failed.")
-        return trusted, revoked, path
+        return ades_status, path
 
     @property
     def _trust_anchor(self):
