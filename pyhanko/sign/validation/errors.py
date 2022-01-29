@@ -1,6 +1,6 @@
 from typing import Optional
 
-from ..ades.report import AdESStatus, AdESSubIndic
+from ..ades.report import AdESIndeterminate, AdESStatus, AdESSubIndic
 
 __all__ = [
     'SignatureValidationError', 'WeakHashAlgorithmError',
@@ -34,7 +34,11 @@ class SignatureValidationError(ValueError):
 
 
 class WeakHashAlgorithmError(SignatureValidationError):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args, **kwargs,
+            ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+        )
 
 
 class SigSeedValueValidationError(SignatureValidationError):
