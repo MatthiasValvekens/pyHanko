@@ -13,7 +13,7 @@ jobs:
       matrix:
         os:
           - ubuntu-18.04
-          - macOS-latest
+          #- macOS-latest # excluded for now due to libcrypto issues in the image
           - windows-2019
         python:
           - '3.7'
