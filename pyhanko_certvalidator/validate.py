@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import (
 from . import asn1_types
 from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
+from ._state import ValProcState
 from .asn1_types import AAControls
 from .context import (
     ValidationContext, PKIXValidationParams,
@@ -42,7 +43,8 @@ from .errors import (
     ValidationError,
     PathValidationError,
     RevokedError,
-    PathBuildingError, InvalidAttrCertificateError,
+    PathBuildingError, InvalidAttrCertificateError, NotYetValidError,
+    ExpiredError,
 )
 from .path import ValidationPath, QualifiedPolicy
 
@@ -126,7 +128,13 @@ async def async_validate_path(validation_context, path,
         asn1crypto.x509.Certificate
     """
 
-    return await _validate_path(validation_context, path, parameters=parameters)
+    proc_state = ValProcState(
+        index=0, path_len=len(path) - 1, is_side_validation=False
+    )
+    return await _validate_path(
+        validation_context, path, parameters=parameters,
+        proc_state=proc_state
+    )
 
 
 def validate_tls_hostname(validation_context: ValidationContext,
@@ -440,7 +448,7 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
     hash_algo = attr_cert['signature_algorithm'].hash_algo
 
     if hash_algo in validation_context.weak_hash_algos:
-        raise PathValidationError(pretty_message(
+        raise InvalidAttrCertificateError(pretty_message(
             '''
             The attribute certificate could not be validated because 
             the signature uses the weak hash algorithm %s
@@ -461,14 +469,14 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
             parameters=attr_cert['signature_algorithm']['parameters']
         )
     except PSSParameterMismatch:
-        raise PathValidationError(pretty_message(
+        raise InvalidAttrCertificateError(pretty_message(
             '''
             The signature parameters for the attribute certificate
             do not match the constraints on the public key.
             '''
         ))
     except InvalidSignature:
-        raise PathValidationError(pretty_message(
+        raise InvalidAttrCertificateError(pretty_message(
             '''
             The attribute certificate could not be validated because the
             signature could not be verified.
@@ -602,7 +610,7 @@ async def async_validate_ac(
             ''',
             's' if len(unsupported_critical_extensions) != 1 else '',
             ', '.join(sorted(unsupported_critical_extensions)),
-        ))
+        ), is_ee_cert=True, is_side_validation=False)
     if 'target_information' in extensions_present:
         targ_desc = validation_context.acceptable_ac_targets
         if targ_desc is None:
@@ -622,7 +630,10 @@ async def async_validate_ac(
         }),
         moment=validation_context.moment,
         tolerance=validation_context.time_tolerance,
-        describe_current_cert='the attribute certificate'
+        proc_state=ValProcState(
+            path_len=0, is_side_validation=False,
+            ee_name_override="the attribute certificate",
+        )
     )
 
     ac_holder = attr_cert['ac_info']['holder']
@@ -658,8 +669,12 @@ async def async_validate_ac(
             try:
                 await _validate_path(
                     validation_context, candidate_path,
-                    end_entity_name_override="AA certificate",
-                    parameters=aa_pkix_params
+                    parameters=aa_pkix_params,
+                    proc_state=ValProcState(
+                        path_len=len(candidate_path) - 1,
+                        is_side_validation=False,
+                        ee_name_override="AA certificate"
+                    )
                 )
                 aa_path = candidate_path
                 break
@@ -680,11 +695,14 @@ async def async_validate_ac(
     _check_ac_signature(attr_cert, aa_cert, validation_context)
 
     if 'no_rev_avail' not in extensions_present:
+        path_len = len(aa_path)  # len(aa_path) - 1 + the AC itself
         await _check_revocation(
             attr_cert, validation_context, aa_path,
-            end_entity_name_override="attribute certificate",
-            is_ee_cert=True,
-            describe_current_cert=_describe_cert(0, 0, "attribute certificate")
+            proc_state=ValProcState(
+                path_len=path_len, index=path_len,
+                is_side_validation=False,
+                ee_name_override="attribute certificate"
+            ),
         )
 
     ok_attrs = {
@@ -758,7 +776,7 @@ class _PathValidationState:
 
     def process_policies(self, index: int,
                          certificate_policies, any_policy_uninhibited,
-                         describe_current_cert):
+                         proc_state: ValProcState):
 
         if certificate_policies and self.valid_policy_tree is not None:
             self.valid_policy_tree = _update_policy_tree(
@@ -773,54 +791,54 @@ class _PathValidationState:
 
         # Step 2 f
         if self.valid_policy_tree is None and self.explicit_policy <= 0:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because there is no valid set
                 of policies for %s
                 ''',
-                describe_current_cert(definite=True)
-            ))
+                proc_state.describe_cert()
+            ), proc_state)
 
-    def check_name_constraints(self, cert, describe_current_cert):
+    def check_name_constraints(self, cert, proc_state: ValProcState):
         # name constraint processing
         whitelist_result = self.permitted_subtrees.accept_cert(cert)
         if not whitelist_result:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because not all names of
-                the %s are in the permitted namespace of the issuing
+                %s are in the permitted namespace of the issuing
                 authority. %s
                 ''',
-                describe_current_cert(),
+                proc_state.describe_cert(),
                 whitelist_result.error_message
-            ))
+            ), proc_state)
         blacklist_result = self.excluded_subtrees.accept_cert(cert)
         if not blacklist_result:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because some names of
-                the %s are excluded from the namespace of the issuing
+                %s are excluded from the namespace of the issuing
                 authority. %s
                 ''',
-                describe_current_cert(),
+                proc_state.describe_cert(),
                 blacklist_result.error_message
-            ))
+            ), proc_state)
 
     def check_certificate_signature(self, cert, weak_hash_algos,
-                                    describe_current_cert):
+                                    proc_state: ValProcState):
 
         signature_algo = cert['signature_algorithm'].signature_algo
         hash_algo = cert['signature_algorithm'].hash_algo
 
         if hash_algo in weak_hash_algos:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because the signature of %s
                 uses the weak hash algorithm %s
                 ''',
-                describe_current_cert(definite=True),
+                proc_state.describe_cert(),
                 hash_algo
-            ))
+            ), proc_state)
 
         try:
             _validate_sig(
@@ -831,21 +849,21 @@ class _PathValidationState:
                 parameters=cert['signature_algorithm']['parameters']
             )
         except PSSParameterMismatch:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The signature parameters for %s do not match the constraints
                 on the public key.
                 ''',
-                describe_current_cert(definite=True)
-            ))
+                proc_state.describe_cert()
+            ), proc_state)
         except InvalidSignature:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because the signature of %s
                 could not be verified
                 ''',
-                describe_current_cert(definite=True)
-            ))
+                proc_state.describe_cert()
+            ), proc_state)
 
 
 def _update_policy_tree(certificate_policies,
@@ -939,7 +957,7 @@ SUPPORTED_EXTENSIONS = frozenset([
 
 async def _validate_path(validation_context: ValidationContext,
                          path: ValidationPath,
-                         end_entity_name_override: Optional[str] = None,
+                         proc_state: ValProcState,
                          parameters: PKIXValidationParams = None):
     """
     Internal copy of validate_path() that allows overriding the name of the
@@ -954,10 +972,8 @@ async def _validate_path(validation_context: ValidationContext,
     :param path:
         A pyhanko_certvalidator.path.ValidationPath object of the path to validate
 
-    :param end_entity_name_override:
-        A unicode string of the name to use for the final certificate in the
-        path. This is necessary when dealing with indirect CRL issuers or
-        OCSP responder certificates.
+    :param proc_state:
+        Internal state for error reporting and policy application decisions.
 
     :param parameters:
         Additional input parameters to the PKIX validation algorithm.
@@ -1034,12 +1050,10 @@ async def _validate_path(validation_context: ValidationContext,
     for index in range(1, path_length + 1):
         cert = path[index]
 
-        describe_current_cert = _describe_cert(
-            index, path_length, end_entity_name_override
-        )
+        proc_state.index += 1
         # Step 2 a 1
         state.check_certificate_signature(
-            cert, validation_context.weak_hash_algos, describe_current_cert
+            cert, validation_context.weak_hash_algos, proc_state
         )
 
         # Step 2 a 2
@@ -1048,30 +1062,28 @@ async def _validate_path(validation_context: ValidationContext,
             validity = cert['tbs_certificate']['validity']
             _check_validity(
                 validity=validity, moment=moment, tolerance=tolerance,
-                describe_current_cert=describe_current_cert
+                proc_state=proc_state
             )
 
         # Step 2 a 3 - CRL/OCSP
         await _check_revocation(
             cert=cert, validation_context=validation_context, path=path,
-            end_entity_name_override=end_entity_name_override,
-            describe_current_cert=describe_current_cert,
-            is_ee_cert=index == path_length
+            proc_state=proc_state
         )
 
         # Step 2 a 4
         if cert.issuer != state.working_issuer_name:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
-                The path could not be validated because the %s issuer name
+                The path could not be validated because %s issuer name
                 could not be matched
                 ''',
-                describe_current_cert(),
-            ))
+                proc_state.describe_cert(),
+            ), proc_state)
 
         # Steps 2 b-c
         if index == path_length or not cert.self_issued:
-            state.check_name_constraints(cert, describe_current_cert)
+            state.check_name_constraints(cert, proc_state=proc_state)
 
         # Steps 2 d
         state.process_policies(
@@ -1082,32 +1094,29 @@ async def _validate_path(validation_context: ValidationContext,
                 state.inhibit_any_policy > 0 or
                 (index < path_length and cert.self_issued)
             ),
-            describe_current_cert=describe_current_cert
+            proc_state=proc_state
         )
 
         if index < path_length:
             # Step 3: prepare for certificate index+1
-            _prepare_next_step(
-                index, cert, state,
-                describe_current_cert=describe_current_cert
-            )
+            _prepare_next_step(index, cert, state, proc_state=proc_state)
 
-        _check_aa_controls(cert, state, index, describe_current_cert)
+        _check_aa_controls(cert, state, index, proc_state=proc_state)
 
         # Step 3 o / 4 f
         # Check for critical unsupported extensions
         unsupported_critical_extensions = \
             cert.critical_extensions - SUPPORTED_EXTENSIONS
         if unsupported_critical_extensions:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because %s contains the
                 following unsupported critical extension%s: %s
                 ''',
-                describe_current_cert(definite=True),
+                proc_state.describe_cert(),
                 's' if len(unsupported_critical_extensions) != 1 else '',
                 ', '.join(sorted(unsupported_critical_extensions)),
-            ))
+            ), proc_state)
 
         if validation_context:
             # TODO I left this in from the original code,
@@ -1127,9 +1136,7 @@ async def _validate_path(validation_context: ValidationContext,
         state=state, cert=cert,
         acceptable_policies=parameters.user_initial_policy_set,
         path_length=path_length,
-        cert_description=_describe_cert(
-            path_length, path_length, end_entity_name_override
-        )(definite=True)
+        proc_state=proc_state
     )
     path._set_qualified_policies(qualified_policies)
     # TODO cache valid policies on intermediate certs too?
@@ -1139,28 +1146,28 @@ async def _validate_path(validation_context: ValidationContext,
 
 
 def _check_validity(validity: Validity, moment, tolerance,
-                    describe_current_cert):
+                    proc_state: ValProcState):
     if moment < validity['not_before'].native - tolerance:
-        raise PathValidationError(pretty_message(
+        raise NotYetValidError.from_state(pretty_message(
             '''
             The path could not be validated because %s is not valid
             until %s
             ''',
-            describe_current_cert(definite=True),
+            proc_state.describe_cert(),
             validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ')
-        ))
+        ), proc_state)
     if moment > validity['not_after'].native + tolerance:
-        raise PathValidationError(pretty_message(
+        raise ExpiredError.from_state(pretty_message(
             '''
             The path could not be validated because %s expired %s
             ''',
-            describe_current_cert(definite=True),
+            proc_state.describe_cert(),
             validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ')
-        ))
+        ), proc_state)
 
 
 def _finish_policy_processing(state, cert, acceptable_policies, path_length,
-                              cert_description):
+                              proc_state: ValProcState):
     # Step 4 a
     if state.explicit_policy != 0:
         state.explicit_policy -= 1
@@ -1214,19 +1221,18 @@ def _finish_policy_processing(state, cert, acceptable_policies, path_length,
 
         qualified_policies = frozenset(_enum_policies())
     elif state.explicit_policy == 0:
-        raise PathValidationError(pretty_message(
+        raise PathValidationError.from_state(pretty_message(
             '''
             The path could not be validated because there is no valid set of
             policies for %s
             ''',
-            cert_description
-        ))
+            proc_state.describe_cert()
+        ), proc_state)
     return qualified_policies
 
 
 async def _check_revocation(cert, validation_context: ValidationContext, path,
-                            end_entity_name_override, describe_current_cert,
-                            is_ee_cert):
+                            proc_state: ValProcState):
     ocsp_status_good = False
     revocation_check_failed = False
     ocsp_matched = False
@@ -1237,7 +1243,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
     revinfo_declared = cert_has_crl or cert_has_ocsp
     rev_check_policy = \
         validation_context.revinfo_policy.revocation_checking_policy
-    rev_rule = rev_check_policy.ee_certificate_rule if is_ee_cert \
+    rev_rule = rev_check_policy.ee_certificate_rule if proc_state.is_ee_cert \
         else rev_check_policy.intermediate_ca_cert_rule
 
     # for OCSP, we don't bother if there's nothing in the certificate's AIA
@@ -1247,8 +1253,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
                 cert,
                 path,
                 validation_context,
-                cert_description=describe_current_cert(definite=True),
-                end_entity_name_override=end_entity_name_override
+                proc_state=proc_state
             )
             ocsp_status_good = True
             ocsp_matched = True
@@ -1270,14 +1275,14 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
             err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable OCSP response could not be found'
-        raise PathValidationError(pretty_message(
+        raise PathValidationError.from_state(pretty_message(
             '''
             The path could not be validated because the mandatory OCSP
             check(s) for %s failed: %s
             ''',
-            describe_current_cert(definite=True),
+            proc_state.describe_cert(),
             err_str
-        ))
+        ), proc_state)
     status_good = (
         ocsp_status_good and
         rev_rule != RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
@@ -1293,12 +1298,9 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
     crl_fetchable = rev_rule.crl_relevant and cert_has_crl
     if crl_required_by_policy or (crl_fetchable and not status_good):
         try:
-            cert_description = describe_current_cert(definite=True)
             await verify_crl(
-                cert, path,
-                validation_context,
-                cert_description=cert_description,
-                end_entity_name_override=end_entity_name_override
+                cert, path, validation_context,
+                proc_state=proc_state
             )
             revocation_check_failed = False
             crl_status_good = True
@@ -1322,14 +1324,14 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
             err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable CRL could not be found'
-        raise PathValidationError(pretty_message(
+        raise PathValidationError.from_state(pretty_message(
             '''
             The path could not be validated because the mandatory CRL
             check(s) for %s failed: %s
             ''',
-            describe_current_cert(definite=True),
+            proc_state.describe_cert(),
             err_str
-        ))
+        ), proc_state)
 
     # If we still didn't find a match, the certificate has CRL/OCSP entries
     # but we couldn't query any of them. Let's check if this is disqualifying.
@@ -1345,36 +1347,36 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
     expected_revinfo_not_found = not matched and expected_revinfo
     if not soft_fail:
         if not status_good and matched and revocation_check_failed:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
-                The path could not be validated because the %s revocation
+                The path could not be validated because %s revocation
                 checks failed: %s
                 ''',
-                describe_current_cert(),
+                proc_state.describe_cert(def_interm=True),
                 '; '.join(failures)
-            ))
+            ), proc_state)
         if expected_revinfo_not_found:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because no revocation
                 information could be found for %s
                 ''',
-                describe_current_cert(definite=True)
-            ))
+                proc_state.describe_cert()
+            ), proc_state)
 
 
 def _check_aa_controls(cert: x509.Certificate, state: _PathValidationState,
-                       index, describe_current_cert):
+                       index, proc_state: ValProcState):
     aa_controls = AAControls.read_extension_value(cert)
     if aa_controls is not None:
         if not state.aa_controls_used and index > 1:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 AA controls extension only present on part of the certificate
                 chain: %s has AA controls while preceding certificates do not.
                 ''',
-                describe_current_cert(definite=True)
-            ))
+                proc_state.describe_cert()
+            ), proc_state)
         state.aa_controls_used = True
         # deal with path length
         new_max_aa_path_length = aa_controls['path_len_constraint'].native
@@ -1382,22 +1384,22 @@ def _check_aa_controls(cert: x509.Certificate, state: _PathValidationState,
                 and new_max_aa_path_length < state.max_aa_path_length:
             state.max_aa_path_length = new_max_aa_path_length
     elif state.aa_controls_used:
-        raise PathValidationError(pretty_message(
+        raise PathValidationError.from_state(pretty_message(
             '''
             AA controls extension only present on part of the certificate chain:
             %s has no AA controls
             ''',
-            describe_current_cert(definite=True)
-        ))
+            proc_state.describe_cert(),
+        ), proc_state)
 
 
 def _prepare_next_step(index, cert: x509.Certificate,
                        state: _PathValidationState,
-                       describe_current_cert):
+                       proc_state: ValProcState):
     if cert.policy_mappings_value:
         policy_map = _enumerate_policy_mappings(
             cert.policy_mappings_value,
-            describe_current_cert=describe_current_cert
+            proc_state=proc_state
         )
 
         # Step 3 b
@@ -1450,30 +1452,30 @@ def _prepare_next_step(index, cert: x509.Certificate,
 
     # Step 3 k
     if not cert.ca:
-        raise PathValidationError(pretty_message(
+        raise PathValidationError.from_state(pretty_message(
             '''
             The path could not be validated because %s is not a CA
             ''',
-            describe_current_cert(definite=True)
-        ))
+            proc_state.describe_cert()
+        ), proc_state)
 
     # Step 3 l
     if not cert.self_issued:
         if state.max_path_length == 0:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because it exceeds the
                 maximum path length
                 '''
-            ))
+            ), proc_state)
         state.max_path_length -= 1
         if state.max_aa_path_length == 0:
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because it exceeds the
                 maximum path length for an AA certificate
                 '''
-            ))
+            ), proc_state)
         state.max_aa_path_length -= 1
 
     # Step 3 m
@@ -1484,17 +1486,17 @@ def _prepare_next_step(index, cert: x509.Certificate,
     # Step 3 n
     if cert.key_usage_value \
             and 'key_cert_sign' not in cert.key_usage_value.native:
-        raise PathValidationError(pretty_message(
+        raise PathValidationError.from_state(pretty_message(
             '''
             The path could not be validated because %s is not allowed
             to sign certificates
             ''',
-            describe_current_cert(definite=True)
-        ))
+            proc_state.describe_cert()
+        ), proc_state)
 
 
 def _enumerate_policy_mappings(mappings: Iterable[x509.PolicyMapping],
-                               describe_current_cert):
+                               proc_state: ValProcState):
     policy_map = defaultdict(set)
     for mapping in mappings:
         issuer_domain_policy = mapping['issuer_domain_policy'].native
@@ -1505,13 +1507,13 @@ def _enumerate_policy_mappings(mappings: Iterable[x509.PolicyMapping],
         # Step 3 a
         if issuer_domain_policy == 'any_policy' \
                 or subject_domain_policy == 'any_policy':
-            raise PathValidationError(pretty_message(
+            raise PathValidationError.from_state(pretty_message(
                 '''
                 The path could not be validated because %s contains
                 a policy mapping for the "any policy"
                 ''',
-                describe_current_cert(definite=True)
-            ))
+                proc_state.describe_cert(),
+            ), proc_state)
 
     return policy_map
 
@@ -1603,36 +1605,6 @@ def _prune_unacceptable_policies(path_length, valid_policy_tree,
     return _prune_policy_tree(valid_policy_tree, path_length - 1)
 
 
-def _describe_cert(index, last_index, end_entity_name_override):
-    """
-    :param index:
-        An integer of the index of the certificate in the path
-
-    :param last_index:
-        An integer of the last index in the path
-
-    :param end_entity_name_override:
-        None or a unicode string of the name to use for the final certificate
-        in the path. Used for indirect CRL issuer and OCSP responder
-        certificates.
-
-    :return:
-        A unicode string describing the position of a certificate in the chain
-    """
-
-    def _describe(definite=False):
-        if index != last_index:
-            return 'intermediate certificate %s' % index
-
-        prefix = 'the ' if definite else ''
-
-        if end_entity_name_override is not None:
-            return prefix + end_entity_name_override
-
-        return prefix + 'end-entity certificate'
-    return _describe
-
-
 OCSP_PROVENANCE_ERR = (
     "Unable to verify OCSP response since response signing "
     "certificate could not be validated"
@@ -1644,15 +1616,12 @@ async def _validate_delegated_ocsp_provenance(
         issuer: x509.Certificate,
         validation_context: ValidationContext,
         ee_path: ValidationPath,
-        end_entity_name_override,
-        cert_description):
+        proc_state: ValProcState):
     # OCSP responder certs must be issued directly by the CA on behalf of
     # which they act.
     # Moreover, RFC 6960 says that we don't have to accept OCSP responses signed
     # with a different key than the one used to sign subscriber certificates.
-
-    if end_entity_name_override is None:
-        end_entity_name_override = cert_description + ' OCSP responder'
+    ocsp_ee_name_override = proc_state.describe_cert() + ' OCSP responder'
 
     issuer_chain = ee_path.copy().truncate_to(issuer)
     responder_chain = issuer_chain.append(responder_cert)
@@ -1674,11 +1643,15 @@ async def _validate_delegated_ocsp_provenance(
             time_tolerance=validation_context.time_tolerance
         )
 
+        ocsp_trunc_path = ValidationPath(issuer).append(responder_cert)
+        ocsp_trunc_proc_state = ValProcState(
+            path_len=1, is_side_validation=True,
+            ee_name_override=ocsp_ee_name_override
+        )
         try:
             # verify the truncated path
             await _validate_path(
-                vc, path=ValidationPath(issuer).append(responder_cert),
-                end_entity_name_override=end_entity_name_override
+                vc, path=ocsp_trunc_path, proc_state=ocsp_trunc_proc_state
             )
         except PathValidationError as e:
             raise OCSPValidationError(OCSP_PROVENANCE_ERR) from e
@@ -1688,10 +1661,14 @@ async def _validate_delegated_ocsp_provenance(
         #  probably somewhat incorrect
         validation_context.record_validation(responder_cert, responder_chain)
     else:
+        ocsp_proc_state = ValProcState(
+            path_len=len(responder_chain) - 1,
+            is_side_validation=True, ee_name_override=ocsp_ee_name_override
+        )
         try:
             await _validate_path(
                 validation_context, path=responder_chain,
-                end_entity_name_override=end_entity_name_override
+                proc_state=ocsp_proc_state
             )
         except PathValidationError as e:
             raise OCSPValidationError(OCSP_PROVENANCE_ERR) from e
@@ -1718,8 +1695,7 @@ async def _handle_single_ocsp_resp(
         ocsp_response: ocsp.OCSPResponse,
         validation_context: ValidationContext,
         moment: datetime.datetime,
-        errs: _OCSPErrs, cert_description=None,
-        end_entity_name_override=None) -> bool:
+        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
     certificate_registry = validation_context.certificate_registry
     # Make sure that we get a valid response back from the OCSP responder
@@ -1858,8 +1834,7 @@ async def _handle_single_ocsp_resp(
             await _validate_delegated_ocsp_provenance(
                 responder_cert=responder_cert, issuer=issuer,
                 validation_context=validation_context, ee_path=path,
-                end_entity_name_override=end_entity_name_override,
-                cert_description=cert_description
+                proc_state=proc_state
             )
             authorized = True
         except OCSPValidationError as e:
@@ -1916,23 +1891,22 @@ async def _handle_single_ocsp_resp(
             reason = revocation_info['revocation_reason'].human_friendly
         date = revocation_info['revocation_time'].native.strftime('%Y-%m-%d')
         time = revocation_info['revocation_time'].native.strftime('%H:%M:%S')
-        raise RevokedError(pretty_message(
+        raise RevokedError.from_state(pretty_message(
             '''
             OCSP response indicates %s was revoked at %s on %s, due to %s
             ''',
-            cert_description,
+            proc_state.describe_cert(),
             time,
             date,
             reason
-        ))
+        ), proc_state)
 
 
 async def verify_ocsp_response(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath,
         validation_context: ValidationContext,
-        cert_description: Optional[str] = None,
-        end_entity_name_override: Optional[str] = None):
+        proc_state: Optional[ValProcState] = None):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
     been revoked. Fulfills the requirements of
@@ -1951,13 +1925,8 @@ async def verify_ocsp_response(
         A pyhanko_certvalidator.context.ValidationContext object to use for
         caching validation information
 
-    :param cert_description:
-        None or a unicode string containing a description of the certificate to
-        be used in exception messages
-
-    :param end_entity_name_override:
-        None or a unicode string of the name to use for the end-entity
-        certificate when including in exception messages
+    :param proc_state:
+        Internal state for error reporting and policy application decisions.
 
     :raises:
         pyhanko_certvalidator.errors.OCSPNoMatchesError - when none of the OCSP responses match the certificate
@@ -1965,9 +1934,11 @@ async def verify_ocsp_response(
         pyhanko_certvalidator.errors.RevokedError - when the OCSP response indicates the certificate has been revoked
     """
 
-    if cert_description is None:
-        cert_description = 'the certificate'
+    proc_state = proc_state or ValProcState(
+        path_len=len(path) - 1, is_side_validation=False
+    )
 
+    cert_description = proc_state.describe_cert()
     moment = validation_context.moment
 
     if isinstance(cert, x509.Certificate):
@@ -1994,8 +1965,7 @@ async def verify_ocsp_response(
                 cert=cert, issuer=cert_issuer, path=path,
                 ocsp_response=ocsp_response,
                 validation_context=validation_context, moment=moment,
-                errs=errs, cert_description=cert_description,
-                end_entity_name_override=end_entity_name_override
+                errs=errs, proc_state=proc_state
             )
             if ocsp_good:
                 return
@@ -2061,8 +2031,7 @@ async def _find_crl_issuer(
         cert_path: ValidationPath,
         validation_context: ValidationContext,
         is_indirect: bool,
-        end_entity_name_override,
-        cert_description):
+        proc_state: ValProcState):
 
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
     candidates_skipped = 0
@@ -2110,13 +2079,17 @@ async def _find_crl_issuer(
                         candidate_crl_issuer, candidate_crl_issuer_path
                     )
 
-                temp_override = end_entity_name_override
-                if temp_override is None and candidate_crl_issuer.sha256 != cert_issuer.sha256:
-                    temp_override = cert_description + ' CRL issuer'
+                temp_override = proc_state.ee_name_override
+                if candidate_crl_issuer.sha256 != cert_issuer.sha256:
+                    temp_override = proc_state.describe_cert() + ' CRL issuer'
                 await _validate_path(
                     validation_context,
                     candidate_crl_issuer_path,
-                    end_entity_name_override=temp_override
+                    proc_state=ValProcState(
+                        path_len=len(candidate_crl_issuer_path) - 1,
+                        is_side_validation=True,
+                        ee_name_override=temp_override
+                    )
                 )
 
             except PathValidationError as e:
@@ -2398,8 +2371,7 @@ async def _handle_single_crl(
         validation_context: ValidationContext,
         delta_lists_by_issuer,
         use_deltas: bool, errs: _CRLErrs,
-        cert_description=None,
-        end_entity_name_override=None):
+        proc_state: ValProcState):
 
     moment = validation_context.moment
     certificate_registry = validation_context.certificate_registry
@@ -2447,8 +2419,7 @@ async def _handle_single_crl(
                 cert_path=path,
                 validation_context=validation_context,
                 is_indirect=is_indirect,
-                end_entity_name_override=end_entity_name_override,
-                cert_description=cert_description
+                proc_state=proc_state
             )
         except CRLNoMatchesError:
             # this no-match issue will be dealt with at a higher level later
@@ -2643,27 +2614,24 @@ async def _handle_single_crl(
         reason = revoked_reason.human_friendly
         date = revoked_date.native.strftime('%Y-%m-%d')
         time = revoked_date.native.strftime('%H:%M:%S')
-        raise RevokedError(pretty_message(
+        raise RevokedError.from_state(pretty_message(
             '''
             CRL indicates %s was revoked at %s on %s, due to %s
             ''',
-            cert_description,
+            proc_state.describe_cert(),
             time,
             date,
             reason
-        ))
+        ), proc_state)
 
     return interim_reasons
-
-
 
 
 async def verify_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath,
         validation_context: ValidationContext, use_deltas=True,
-        cert_description: Optional[str] = None,
-        end_entity_name_override: Optional[str] = None):
+        proc_state: Optional[ValProcState] = None):
     """
     Verifies a certificate against a list of CRLs, checking to make sure the
     certificate has not been revoked. Uses the algorithm from
@@ -2685,13 +2653,8 @@ async def verify_crl(
     :param use_deltas:
         A boolean indicating if delta CRLs should be used
 
-    :param cert_description:
-        A unicode string containing a description of the certificate to be used
-        in exception messages
-
-    :param end_entity_name_override:
-        None or a unicode string of the name to use for the end-entity
-        certificate when including in exception messages
+    :param proc_state:
+        Internal state for error reporting and policy application decisions.
 
     :raises:
         pyhanko_certvalidator.errors.CRLNoMatchesError - when none of the CRLs match the certificate
@@ -2700,8 +2663,10 @@ async def verify_crl(
     """
 
     is_pkc = isinstance(cert, x509.Certificate)
-    if cert_description is None:
-        cert_description = f'the {"" if is_pkc else "attribute "}certificate'
+    proc_state = proc_state or ValProcState(
+        path_len=len(path) - 1, is_side_validation=False,
+        ee_name_override="attribute certificate" if not is_pkc else None
+    )
 
     certificate_lists = await validation_context.async_retrieve_crls(cert)
 
@@ -2713,7 +2678,7 @@ async def verify_crl(
                 '''
                 Could not determine issuer certificate for %s in path.
                 ''',
-                cert_description
+                proc_state.describe_cert()
             ))
     else:
         cert_issuer = path.last
@@ -2774,8 +2739,7 @@ async def verify_crl(
                 validation_context=validation_context,
                 delta_lists_by_issuer=delta_lists_by_issuer,
                 use_deltas=use_deltas, errs=errs,
-                cert_description=cert_description,
-                end_entity_name_override=end_entity_name_override
+                proc_state=proc_state
             )
             if interim_reasons is not None:
                 # Step l
@@ -2796,7 +2760,7 @@ async def verify_crl(
                 No CRLs were issued by the issuer of %s, or any indirect CRL
                 issuer
                 ''',
-                cert_description
+                proc_state.describe_cert()
             ))
 
         if not errs.failures:
@@ -2810,7 +2774,7 @@ async def verify_crl(
                 Unable to determine if %s is revoked due to insufficient
                 information from known CRLs
                 ''',
-                cert_description
+                proc_state.describe_cert()
             ),
             errs.failures
         )
