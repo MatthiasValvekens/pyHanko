@@ -10,13 +10,13 @@ from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.context import (
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
+from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
     RevocationCheckingPolicy,
     RevocationCheckingRule,
-)
-from pyhanko_certvalidator.fetchers.requests_fetchers import (
-    RequestsFetcherBackend,
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 

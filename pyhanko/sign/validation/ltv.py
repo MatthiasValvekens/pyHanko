@@ -6,7 +6,7 @@ from typing import Iterator, Optional, TypeVar
 from asn1crypto import cms
 from asn1crypto import pdf as asn1_pdf
 from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.context import (
+from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
     RevocationCheckingPolicy,
     RevocationCheckingRule,
