@@ -23,9 +23,14 @@ from ._errors import pretty_message
 from ._state import ValProcState
 from .asn1_types import AAControls
 from .context import (
-    ValidationContext, PKIXValidationParams,
-    RevocationCheckingRule, CertRevTrustPolicy, RevocationCheckingPolicy,
+    ValidationContext,
     ACTargetDescription
+)
+from .policy_decl import (
+    CertRevTrustPolicy,
+    PKIXValidationParams,
+    RevocationCheckingRule,
+    RevocationCheckingPolicy,
 )
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
     process_general_subtrees

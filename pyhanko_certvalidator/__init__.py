@@ -4,7 +4,8 @@ from typing import Optional, Iterable
 
 from asn1crypto import x509
 
-from .context import ValidationContext, PKIXValidationParams
+from .context import ValidationContext
+from .policy_decl import PKIXValidationParams
 from .errors import ValidationError, PathBuildingError, InvalidCertificateError
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
