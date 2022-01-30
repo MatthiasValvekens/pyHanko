@@ -77,7 +77,7 @@ class CertificateValidatorTests(unittest.IsolatedAsyncioTestCase):
         validator = CertificateValidator(cert, other_certs, context)
 
         with self.assertRaisesRegex(PathValidationError, 'for the purpose'):
-            await validator.async_validate_usage(set(['crl_sign']))
+            await validator.async_validate_usage({'crl_sign'})
 
     async def test_basic_certificate_validator_tls_whitelist(self):
         cert = self._load_cert_object('mozilla.org.crt')
