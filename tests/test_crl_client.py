@@ -13,20 +13,28 @@ tests_root = os.path.dirname(__file__)
 fixtures_dir = os.path.join(tests_root, 'fixtures')
 
 
+def _read(fname):
+    cert_file = os.path.join(
+        fixtures_dir, fname
+    )
+    with open(cert_file, 'rb') as f:
+        file_bytes = f.read()
+        if pem.detect(file_bytes):
+            _, _, file_bytes = pem.unarmor(file_bytes)
+        return x509.Certificate.load(file_bytes)
+
+
 class CRLClientTests(unittest.IsolatedAsyncioTestCase):
 
     async def _test_with_fetchers(self, fetchers):
-        cert_file = os.path.join(
-            fixtures_dir, 'digicert-sha2-secure-server-ca.crt'
-        )
-        with open(cert_file, 'rb') as f:
-            file_bytes = f.read()
-            if pem.detect(file_bytes):
-                _, _, file_bytes = pem.unarmor(file_bytes)
-            intermediate = x509.Certificate.load(file_bytes)
+        intermediate = _read('digicert-g5-ecc-sha384-2021-ca1.crt')
+        root = _read('digicert-root-g5.crt')
 
         crls = await fetchers.crl_fetcher.fetch(intermediate)
-        context = ValidationContext(crls=crls, fetchers=fetchers)
+        context = ValidationContext(
+            trust_roots=[root],
+            crls=crls, fetchers=fetchers
+        )
         registry = context.certificate_registry
         paths = await registry.async_build_paths(intermediate)
         path = paths[0]

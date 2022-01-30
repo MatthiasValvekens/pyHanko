@@ -27,17 +27,25 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
 
     async def _test_with_fetchers(self, fetchers):
         cert_file = os.path.join(
-            fixtures_dir, 'digicert-sha2-secure-server-ca.crt'
+            fixtures_dir, 'digicert-g5-ecc-sha384-2021-ca1.crt'
         )
         intermediate = self._get_cert(cert_file)
 
-        registry = CertificateRegistry(cert_fetcher=fetchers.cert_fetcher)
+        trust_roots = [self._get_cert(
+            os.path.join(fixtures_dir, 'digicert-root-g5.crt')
+        )]
+        registry = CertificateRegistry(
+            trust_roots=trust_roots, cert_fetcher=fetchers.cert_fetcher
+        )
         paths = await registry.async_build_paths(intermediate)
         path = paths[0]
         issuer = path.find_issuer(intermediate)
 
         ocsp_response = await fetchers.ocsp_fetcher.fetch(intermediate, issuer)
-        context = ValidationContext(ocsps=[ocsp_response], fetchers=fetchers)
+        context = ValidationContext(
+            trust_roots=trust_roots,
+            ocsps=[ocsp_response], fetchers=fetchers
+        )
         await verify_ocsp_response(intermediate, path, context)
 
     async def _test_fetch_error(self, fetchers):
