@@ -111,5 +111,9 @@ class InvalidCertificateError(PathValidationError):
         )
 
 
+class WeakAlgorithmError(PathValidationError):
+    pass
+
+
 class InvalidAttrCertificateError(InvalidCertificateError):
     pass

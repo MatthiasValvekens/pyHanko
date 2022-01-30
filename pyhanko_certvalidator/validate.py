@@ -44,7 +44,7 @@ from .errors import (
     PathValidationError,
     RevokedError,
     PathBuildingError, InvalidAttrCertificateError, NotYetValidError,
-    ExpiredError,
+    ExpiredError, WeakAlgorithmError,
 )
 from .path import ValidationPath, QualifiedPolicy
 
@@ -448,13 +448,13 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
     hash_algo = attr_cert['signature_algorithm'].hash_algo
 
     if hash_algo in validation_context.weak_hash_algos:
-        raise InvalidAttrCertificateError(pretty_message(
+        raise WeakAlgorithmError(pretty_message(
             '''
             The attribute certificate could not be validated because 
             the signature uses the weak hash algorithm %s
             ''',
             hash_algo
-        ))
+        ), is_ee_cert=True, is_side_validation=False)
 
     try:
         _validate_sig(
@@ -831,7 +831,7 @@ class _PathValidationState:
         hash_algo = cert['signature_algorithm'].hash_algo
 
         if hash_algo in weak_hash_algos:
-            raise PathValidationError.from_state(pretty_message(
+            raise WeakAlgorithmError.from_state(pretty_message(
                 '''
                 The path could not be validated because the signature of %s
                 uses the weak hash algorithm %s
