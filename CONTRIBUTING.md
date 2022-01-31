@@ -19,7 +19,7 @@ allowed and encouraged, but be civil, play nice, share your toys; the usual.
 
 ### Questions about pyHanko
 
-**Do not ask for support on the issue tracker.** The issue tracker is for bug
+**Please do not ask for support on the issue tracker.** The issue tracker is for bug
 reports and actionable feature requests. Questions related to pyHanko usage
 and development should be asked in the discussion forum instead.
 

@@ -29,7 +29,27 @@ OpenType/TrueType support.
 PyHanko requires Python 3.7 or later.
 
 
-### Overview
+### Contributing
+
+Do you have a question about pyHanko?
+[Post it on the discussion forum][discussion-forum]!
+
+This project welcomes community contributions. If there's a feature you'd like
+to have implemented, a bug you want to report, or if you're keen on
+contributing in some other way: that's great! However, please make sure to
+review the [contribution guidelines](CONTRIBUTING.md) before making your
+contribution. When in doubt, [ask for help on the discussion board][discussion-forum].
+
+**Please do not ask for support on the issue tracker.** The issue tracker is for bug
+reports and actionable feature requests. Questions related to pyHanko usage
+and development should be asked in the [discussion forum][discussion-forum] instead.
+
+
+[discussion-forum]: https://github.com/MatthiasValvekens/pyHanko/discussions
+
+
+### Features
+
 The code in this repository functions both as a library and as a command-line tool.
 It's nowhere near complete, but here is a short overview of the features.
 Note that not all of these are necessarily exposed through the CLI.
