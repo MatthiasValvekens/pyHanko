@@ -130,12 +130,7 @@ class OCSPWithPOE(WithPOE):
         # TODO move these two functions into this class once I start
         #  reworking the actual revinfo processing logic
 
-        from pyhanko_certvalidator.validate import extract_basic_ocsp_response
-        response = extract_basic_ocsp_response(self.ocsp_response_data)
-        if response is None:
-            return RevinfoUsabilityRating.UNCLEAR
-        from pyhanko_certvalidator.validate import _extract_unique_response
-        cert_response = _extract_unique_response(response)
+        cert_response = self._extract_unique_response()
         if cert_response is None:
             return RevinfoUsabilityRating.UNCLEAR
 
@@ -147,6 +142,33 @@ class OCSPWithPOE(WithPOE):
             time_tolerance=time_tolerance,
             signature_poe_time=signature_poe_time
         )
+
+    def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
+
+        # Make sure that we get a valid response back from the OCSP responder
+        status = self.ocsp_response_data['response_status'].native
+        if status != 'successful':
+            return None
+
+        response_bytes = self.ocsp_response_data['response_bytes']
+        if response_bytes['response_type'].native != 'basic_ocsp_response':
+            return None
+
+        return response_bytes['response'].parsed
+
+    # TODO work with multi-response packets as well?
+
+    def _extract_unique_response(self) -> Optional[ocsp.SingleResponse]:
+        basic_ocsp_response = self.extract_basic_ocsp_response()
+        if basic_ocsp_response:
+            return None
+        tbs_response = basic_ocsp_response['tbs_response_data']
+
+        if len(tbs_response['responses']) != 1:
+            return None
+        cert_response = tbs_response['responses'][0]
+
+        return cert_response
 
 
 @dataclass(frozen=True)

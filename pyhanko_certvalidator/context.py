@@ -107,6 +107,7 @@ class ValidationContext:
             other_certs: Optional[Iterable[x509.Certificate]] = None,
             whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
             moment: Optional[datetime] = None,
+            use_moment: Optional[datetime] = None,
             allow_fetching: bool = False,
             crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
             ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
@@ -154,6 +155,15 @@ class ValidationContext:
             value. If this parameter is specified, then the only way to check
             OCSP and CRL responses is to pass them via the crls and ocsps
             parameters. Can not be combined with allow_fetching=True.
+
+        :param use_moment:
+            The presumptive time at which the certificate was used.
+            Assumed equal to :class:`moment` if unspecified.
+
+            .. note::
+                The difference is significant in some point-in-time validation
+                models, where the signature is validated after a
+                "cooldown period" of sorts.
 
         :param crls:
             None or a list/tuple of asn1crypto.crl.CertificateList objects of
@@ -265,10 +275,23 @@ class ValidationContext:
 
         if moment is None:
             moment = datetime.now(timezone.utc)
+            self.point_in_time_validation = False
         elif moment.utcoffset() is None:
             raise ValueError(pretty_message(
                 '''
                 moment is a naive datetime object, meaning the tzinfo
+                attribute is not set to a valid timezone
+                '''
+            ))
+        else:
+            self.point_in_time_validation = True
+
+        if use_moment is None:
+            use_moment = moment
+        elif use_moment.utcoffset() is None:
+            raise ValueError(pretty_message(
+                '''
+                use_moment is a naive datetime object, meaning the tzinfo
                 attribute is not set to a valid timezone
                 '''
             ))
@@ -312,6 +335,7 @@ class ValidationContext:
         )
 
         self.moment = moment
+        self.use_moment = use_moment
 
         self._validate_map = {}
         self._crl_issuer_map = {}

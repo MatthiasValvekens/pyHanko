@@ -6,9 +6,9 @@ import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Set, Dict, Union
+from typing import Iterable, Optional, Set, Dict, Union, List
 
-from asn1crypto import x509, crl, ocsp, algos, cms, core
+from asn1crypto import x509, crl, algos, cms, core
 from asn1crypto.keys import PublicKeyInfo
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
@@ -55,6 +55,7 @@ from .path import ValidationPath, QualifiedPolicy
 
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
+from .revinfo_archival import OCSPWithPOE, RevinfoUsabilityRating, CRLWithPOE
 from .util import extract_dir_name, extract_ac_issuer_dir_name, \
     get_ac_extension_value, get_relevant_crl_dps, get_declared_revinfo
 
@@ -1693,52 +1694,17 @@ class _OCSPErrs:
     mismatch_failures: int = 0
 
 
-def extract_basic_ocsp_response(ocsp_response: ocsp.OCSPResponse) \
-        -> Optional[ocsp.BasicOCSPResponse]:
-
-    # Make sure that we get a valid response back from the OCSP responder
-    status = ocsp_response['response_status'].native
-    if status != 'successful':
-        return None
-
-    response_bytes = ocsp_response['response_bytes']
-    if response_bytes['response_type'].native != 'basic_ocsp_response':
-        return None
-
-    return response_bytes['response'].parsed
-
-
-# TODO work with multi-response packets as well?
-
-def _extract_unique_response(basic_ocsp_response) \
-        -> Optional[ocsp.SingleResponse]:
-    tbs_response = basic_ocsp_response['tbs_response_data']
-
-    # With a valid response, now a check is performed to see if the response is
-    # applicable for the cert and moment requested
-    if len(tbs_response['responses']) != 1:
-        return None
-    cert_response = tbs_response['responses'][0]
-
-    return cert_response
-
-
 async def _handle_single_ocsp_resp(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: x509.Certificate,
         path: ValidationPath,
-        ocsp_response: ocsp.OCSPResponse,
+        ocsp_response: OCSPWithPOE,  # FIXME fix call sites
         validation_context: ValidationContext,
         moment: datetime.datetime,
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
     certificate_registry = validation_context.certificate_registry
-    response = extract_basic_ocsp_response(ocsp_response)
-    if response is None:
-        errs.mismatch_failures += 1
-        return False
-
-    cert_response = _extract_unique_response(response)
+    cert_response = ocsp_response._extract_unique_response()
     if cert_response is None:
         errs.mismatch_failures += 1
         return False
@@ -1790,31 +1756,29 @@ async def _handle_single_ocsp_resp(
         ))
         return False
 
-    retroactive = validation_context.retroactive_revinfo
-    tolerance = validation_context.time_tolerance
-
-    # FIXME call freshness checker instead
-    this_update = cert_response['this_update'].native
-    if this_update is not None and not retroactive \
-            and moment < this_update - tolerance:
-        errs.failures.append((
-            'OCSP response is from after the validation time',
-            ocsp_response
-        ))
-        return False
-
-    next_update = cert_response['next_update'].native
-    if next_update is not None and moment > next_update + tolerance:
-        errs.failures.append((
-            'OCSP response is from before the validation time',
-            ocsp_response
-        ))
+    freshness_result = ocsp_response.usable_at(
+        validation_time=moment, policy=validation_context.revinfo_policy,
+        time_tolerance=validation_context.time_tolerance,
+        signature_poe_time=validation_context.use_moment
+    )
+    if freshness_result != RevinfoUsabilityRating.OK:
+        if freshness_result == RevinfoUsabilityRating.STALE:
+            msg = 'OCSP response is stale'
+        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+            msg = 'OCSP response is too recent'
+        else:
+            msg = 'OCSP response freshness could not be established'
+        errs.failures.append((msg, ocsp_response))
         return False
 
     # To verify the response as legitimate, the responder cert must be located
     cert_store: CertificateCollection = certificate_registry
     # prioritise the certificates included with the response, if there
     # are any
+
+    response = ocsp_response.extract_basic_ocsp_response()
+    # should be ensured by successful extraction earlier
+    assert response is not None
     if response['certs']:
         cert_store = LayeredCertificateStore([
             SimpleCertificateStore.from_certs(response['certs']),
@@ -2187,10 +2151,12 @@ class _CRLErrs:
     issuer_failures: int = 0
 
 
-def _find_matching_delta_crl(delta_lists, crl_issuer_name: x509.Name,
-                                   crl_idp: crl.IssuingDistributionPoint,
-                                   parent_crl_aki: Optional[bytes]):
-    for candidate_delta_cl in delta_lists:
+def _find_matching_delta_crl(delta_lists: List[CRLWithPOE],
+                             crl_issuer_name: x509.Name,
+                             crl_idp: crl.IssuingDistributionPoint,
+                             parent_crl_aki: Optional[bytes]) -> CRLWithPOE:
+    for candidate_delta_cl_with_poe in delta_lists:
+        candidate_delta_cl = candidate_delta_cl_with_poe.crl_data
         # Step c 1
         if candidate_delta_cl.issuer != crl_issuer_name:
             continue
@@ -2209,7 +2175,7 @@ def _find_matching_delta_crl(delta_lists, crl_issuer_name: x509.Name,
         if parent_crl_aki != candidate_delta_cl.authority_key_identifier:
             continue
 
-        return candidate_delta_cl
+        return candidate_delta_cl_with_poe
 
 
 def _match_dps_idp_names(crl_idp: crl.IssuingDistributionPoint,
@@ -2396,18 +2362,18 @@ def _handle_attr_cert_crl_idp_ext_constraints(
 async def _handle_single_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer: x509.Certificate,
-        certificate_list: crl.CertificateList,
+        certificate_list_with_poe: CRLWithPOE,  # TODO fix call sites
         path: ValidationPath,
         validation_context: ValidationContext,
-        delta_lists_by_issuer,
+        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],  # TODO fix call sites
         use_deltas: bool, errs: _CRLErrs,
         proc_state: ValProcState):
 
     moment = validation_context.moment
     certificate_registry = validation_context.certificate_registry
+    certificate_list = certificate_list_with_poe.crl_data
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
-    delta_certificate_list = None
 
     is_pkc = isinstance(cert, x509.Certificate)
 
@@ -2432,7 +2398,7 @@ async def _handle_single_crl(
             errs.failures.append((
                 'CRL is marked as an indirect CRL, but provides no '
                 'mechanism for locating the CRL issuer certificate',
-                certificate_list
+                certificate_list_with_poe
             ))
             return None
     else:
@@ -2488,23 +2454,21 @@ async def _handle_single_crl(
         errs.issuer_failures += 1
         return None
 
-    # Check to make sure the CRL is valid for the moment specified
-    tolerance = validation_context.time_tolerance
-    retroactive = validation_context.retroactive_revinfo
-    crl_this_update = certificate_list['tbs_cert_list']['this_update'].native
-    if not retroactive and moment < crl_this_update - tolerance:
-        errs.failures.append((
-            'CRL is from after the validation time',
-            certificate_list
-        ))
-        return None
-    crl_next_update = certificate_list['tbs_cert_list']['next_update'].native
-    if moment > crl_next_update + tolerance:
-        errs.failures.append((
-            'CRL should have been regenerated by the validation time',
-            certificate_list
-        ))
-        return None
+    freshness_result = certificate_list_with_poe.usable_at(
+        validation_context.moment,
+        policy=validation_context.revinfo_policy,
+        time_tolerance=validation_context.time_tolerance,
+        signature_poe_time=validation_context.use_moment
+    )
+    if freshness_result != RevinfoUsabilityRating.OK:
+        if freshness_result == RevinfoUsabilityRating.STALE:
+            msg = 'CRL response is stale'
+        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+            msg = 'CRL response is too recent'
+        else:
+            msg = 'CRL freshness could not be established'
+        errs.failures.append((msg, certificate_list_with_poe))
+        return False
 
     # Step b 2
 
@@ -2526,15 +2490,19 @@ async def _handle_single_crl(
             return None
 
     # Step c
+    delta_certificate_list_with_poe = delta_certificate_list = None
     if use_deltas and certificate_list.freshest_crl_value \
             and len(certificate_list.freshest_crl_value) > 0:
         candidate_delta_lists = \
             delta_lists_by_issuer.get(crl_issuer_name.hashable, [])
-        delta_certificate_list = _find_matching_delta_crl(
+        # FIXME ensure the most recent version applicable for the validation
+        #  time is used!!
+        delta_certificate_list_with_poe = _find_matching_delta_crl(
             delta_lists=candidate_delta_lists,
             crl_issuer_name=crl_issuer_name, crl_idp=crl_idp,
             parent_crl_aki=certificate_list.authority_key_identifier
         )
+        delta_certificate_list = delta_certificate_list_with_poe.crl_data
 
     # Step d
     idp_reasons = None
@@ -2559,7 +2527,7 @@ async def _handle_single_crl(
         errs.failures.append((
             'One or more unrecognized critical extensions are present in '
             'the CRL',
-            certificate_list
+            certificate_list_with_poe
         ))
         return None
 
@@ -2568,7 +2536,7 @@ async def _handle_single_crl(
         errs.failures.append((
             'One or more unrecognized critical extensions are present in '
             'the delta CRL',
-            delta_certificate_list
+            delta_certificate_list_with_poe
         ))
         return None
 
@@ -2579,30 +2547,25 @@ async def _handle_single_crl(
         except CRLValidationError:
             errs.failures.append((
                 'Delta CRL signature could not be verified',
-                certificate_list,
-                delta_certificate_list
+                delta_certificate_list_with_poe
             ))
             return None
 
-        retroactive = validation_context.retroactive_revinfo
-        crl_this_update = \
-            delta_certificate_list['tbs_cert_list']['this_update'].native
-        if not retroactive and moment < crl_this_update - tolerance:
-            errs.failures.append((
-                'Delta CRL is from after the validation time',
-                certificate_list,
-                delta_certificate_list
-            ))
-            return None
-        crl_next_update = \
-            delta_certificate_list['tbs_cert_list']['next_update'].native
-        if moment > crl_next_update + tolerance:
-            errs.failures.append((
-                'Delta CRL is from before the validation time',
-                certificate_list,
-                delta_certificate_list
-            ))
-            return None
+        freshness_result = delta_certificate_list_with_poe.usable_at(
+            validation_context.moment,
+            policy=validation_context.revinfo_policy,
+            time_tolerance=validation_context.time_tolerance,
+            signature_poe_time=validation_context.use_moment
+        )
+        if freshness_result != RevinfoUsabilityRating.OK:
+            if freshness_result == RevinfoUsabilityRating.STALE:
+                msg = 'Delta CRL response is stale'
+            elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+                msg = 'Delta CRL response is too recent'
+            else:
+                msg = 'Delta CRL freshness could not be established'
+            errs.failures.append((msg, delta_certificate_list_with_poe))
+            return False
 
     # Step i
     revoked_reason = None
