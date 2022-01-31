@@ -163,6 +163,7 @@ LEGACY_POLICY_MAP = {
 
 @enum.unique
 class FreshnessReqType(enum.Enum):
+    DEFAULT = enum.auto()
     MAX_DIFF_REVOCATION_VALIDATION = enum.auto()
     TIME_AFTER_SIGNATURE = enum.auto()
 
@@ -184,8 +185,8 @@ class CertRevTrustPolicy:
     Freshness requirements.
     """
 
-    freshness_req_type: FreshnessReqType = \
-        FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION
+    # TODO update docs
+    freshness_req_type: FreshnessReqType = FreshnessReqType.DEFAULT
     """
     Controls whether the freshness requirement applies relatively to the
     signing time or to the validation time.
@@ -195,6 +196,20 @@ class CertRevTrustPolicy:
     """
     Duration for which the issuing CA is expected to supply status information
     after a certificate expires.
+    """
+
+    retroactive_revinfo: bool = False
+    """
+    Treat revocation info as retroactively valid, i.e. ignore the
+    ``this_update`` field in CRLs and OCSP responses.
+    This parameter is not taken into account for freshness policies other than
+    :attr:`FreshnessReqType.DEFAULT`, and is ``False`` by default in those
+    cases.
+
+    .. warning::
+        Be careful with this option, since it will cause incorrect
+        behaviour for CAs that make use of certificate holds or other
+        reversible revocation methods.
     """
 
 

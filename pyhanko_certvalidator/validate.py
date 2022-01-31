@@ -1693,6 +1693,36 @@ class _OCSPErrs:
     mismatch_failures: int = 0
 
 
+def extract_basic_ocsp_response(ocsp_response: ocsp.OCSPResponse) \
+        -> Optional[ocsp.BasicOCSPResponse]:
+
+    # Make sure that we get a valid response back from the OCSP responder
+    status = ocsp_response['response_status'].native
+    if status != 'successful':
+        return None
+
+    response_bytes = ocsp_response['response_bytes']
+    if response_bytes['response_type'].native != 'basic_ocsp_response':
+        return None
+
+    return response_bytes['response'].parsed
+
+
+# TODO work with multi-response packets as well?
+
+def _extract_unique_response(basic_ocsp_response) \
+        -> Optional[ocsp.SingleResponse]:
+    tbs_response = basic_ocsp_response['tbs_response_data']
+
+    # With a valid response, now a check is performed to see if the response is
+    # applicable for the cert and moment requested
+    if len(tbs_response['responses']) != 1:
+        return None
+    cert_response = tbs_response['responses'][0]
+
+    return cert_response
+
+
 async def _handle_single_ocsp_resp(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: x509.Certificate,
@@ -1703,23 +1733,15 @@ async def _handle_single_ocsp_resp(
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
     certificate_registry = validation_context.certificate_registry
-    # Make sure that we get a valid response back from the OCSP responder
-    status = ocsp_response['response_status'].native
-    if status != 'successful':
+    response = extract_basic_ocsp_response(ocsp_response)
+    if response is None:
         errs.mismatch_failures += 1
         return False
 
-    response_bytes = ocsp_response['response_bytes']
-    if response_bytes['response_type'].native != 'basic_ocsp_response':
+    cert_response = _extract_unique_response(response)
+    if cert_response is None:
         errs.mismatch_failures += 1
         return False
-
-    response = response_bytes['response'].parsed
-    tbs_response = response['tbs_response_data']
-
-    # With a valid response, now a check is performed to see if the response is
-    # applicable for the cert and moment requested
-    cert_response = tbs_response['responses'][0]
 
     response_cert_id = cert_response['cert_id']
 
@@ -1771,6 +1793,7 @@ async def _handle_single_ocsp_resp(
     retroactive = validation_context.retroactive_revinfo
     tolerance = validation_context.time_tolerance
 
+    # FIXME call freshness checker instead
     this_update = cert_response['this_update'].native
     if this_update is not None and not retroactive \
             and moment < this_update - tolerance:
@@ -1797,6 +1820,8 @@ async def _handle_single_ocsp_resp(
             SimpleCertificateStore.from_certs(response['certs']),
             certificate_registry
         ])
+
+    tbs_response = response['tbs_response_data']
     if tbs_response['responder_id'].name == 'by_key':
         key_identifier = tbs_response['responder_id'].native
         responder_cert = cert_store.retrieve_by_key_identifier(key_identifier)
