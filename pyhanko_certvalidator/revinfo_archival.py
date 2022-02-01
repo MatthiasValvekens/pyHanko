@@ -20,6 +20,14 @@ class RevinfoFreshnessPOE:
     poe_type: RevinfoFreshnessPOEType
     archive_timestamp: Optional[datetime] = None
 
+    @classmethod
+    def unknown(cls):
+        return RevinfoFreshnessPOE(RevinfoFreshnessPOEType.UNKNOWN)
+
+    @classmethod
+    def fresh(cls):
+        return RevinfoFreshnessPOE(RevinfoFreshnessPOEType.FRESHLY_FETCHED)
+
 
 class RevinfoUsabilityRating(enum.Enum):
     OK = enum.auto()
@@ -156,9 +164,6 @@ class OCSPWithPOE(WithPOE):
                   policy: CertRevTrustPolicy, time_tolerance: timedelta,
                   signature_poe_time: Optional[datetime] = None) \
             -> RevinfoUsabilityRating:
-        # TODO move these two functions into this class once I start
-        #  reworking the actual revinfo processing logic
-
         cert_response = self.extract_single_response()
         if cert_response is None:
             return RevinfoUsabilityRating.UNCLEAR

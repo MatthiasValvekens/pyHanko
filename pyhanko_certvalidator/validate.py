@@ -1949,7 +1949,7 @@ async def verify_ocsp_response(
         cert_issuer = path.last
 
     errs = _OCSPErrs()
-    ocsp_responses = await validation_context.async_retrieve_ocsps(
+    ocsp_responses = await validation_context.async_retrieve_ocsps_with_poe(
         cert, cert_issuer
     )
 
@@ -2369,7 +2369,6 @@ async def _handle_single_crl(
         use_deltas: bool, errs: _CRLErrs,
         proc_state: ValProcState):
 
-    moment = validation_context.moment
     certificate_registry = validation_context.certificate_registry
     certificate_list = certificate_list_with_poe.crl_data
     crl_idp: crl.IssuingDistributionPoint \
@@ -2661,7 +2660,9 @@ async def verify_crl(
         ee_name_override="attribute certificate" if not is_pkc else None
     )
 
-    certificate_lists = await validation_context.async_retrieve_crls(cert)
+    certificate_lists = await validation_context.async_retrieve_crls_with_poe(
+        cert
+    )
 
     if is_pkc:
         try:
@@ -2680,14 +2681,18 @@ async def verify_crl(
 
     complete_lists_by_issuer = defaultdict(list)
     delta_lists_by_issuer = defaultdict(list)
-    for certificate_list in certificate_lists:
+    for certificate_list_with_poe in certificate_lists:
+        certificate_list = certificate_list_with_poe.crl_data
         try:
+            # FIXME ensure these are ordered by recency
             issuer_hashable = certificate_list.issuer.hashable
             if certificate_list.delta_crl_indicator_value is None:
                 complete_lists_by_issuer[issuer_hashable]\
-                    .append(certificate_list)
+                    .append(certificate_list_with_poe)
             else:
-                delta_lists_by_issuer[issuer_hashable].append(certificate_list)
+                delta_lists_by_issuer[issuer_hashable].append(
+                    certificate_list_with_poe
+                )
         except ValueError as e:
             msg = "Generic processing error while classifying CRL."
             logging.debug(msg, exc_info=e)
@@ -2724,12 +2729,12 @@ async def verify_crl(
     checked_reasons = set()
 
     while len(crls_to_process) > 0:
-        certificate_list = crls_to_process.pop(0)
+        certificate_list_with_poe = crls_to_process.pop(0)
         try:
             interim_reasons = await _handle_single_crl(
                 cert=cert, cert_issuer=cert_issuer,
-                certificate_list=certificate_list, path=path,
-                validation_context=validation_context,
+                certificate_list_with_poe=certificate_list_with_poe,
+                path=path, validation_context=validation_context,
                 delta_lists_by_issuer=delta_lists_by_issuer,
                 use_deltas=use_deltas, errs=errs,
                 proc_state=proc_state
@@ -2740,7 +2745,7 @@ async def verify_crl(
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list))
+            errs.failures.append((msg, certificate_list_with_poe))
 
     # CRLs should not include this value, but at least one of the examples
     # from the NIST test suite does

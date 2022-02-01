@@ -15,6 +15,7 @@ from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry
+from .revinfo_archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE
 
 
 @dataclass(frozen=True)
@@ -71,10 +72,8 @@ class ValidationContext:
     # If CRLs or OCSP responses can be fetched from the network
     _allow_fetching = False
 
-    # A list of asn1crypto.crl.CertificateList objects
     _crls = None
 
-    # A list of asn1crypto.ocsp.OCSPResponse objects
     _ocsps = None
 
     # A dict with keys being an asn1crypto.x509.Certificate.issuer_serial byte
@@ -224,37 +223,46 @@ class ValidationContext:
         if crls is not None:
             new_crls = []
             for crl_ in crls:
-                if not isinstance(crl_, crl.CertificateList):
-                    if not isinstance(crl_, bytes):
-                        raise TypeError(pretty_message(
-                            '''
-                            crls must be a list of byte strings or
-                            asn1crypto.crl.CertificateList objects, not %s
-                            ''',
-                            type_name(crl_)
-                        ))
+                if isinstance(crl_, bytes):
                     crl_ = crl.CertificateList.load(crl_)
-                new_crls.append(crl_)
+                if isinstance(crl_, crl.CertificateList):
+                    crl_ = CRLWithPOE(RevinfoFreshnessPOE.unknown(), crl_)
+                if isinstance(crl_, CRLWithPOE):
+                    new_crls.append(crl_)
+                else:
+                    # TODO update error messages
+                    raise TypeError(pretty_message(
+                        '''
+                        crls must be a list of byte strings or
+                        asn1crypto.crl.CertificateList objects, not %s
+                        ''',
+                        type_name(crl_)
+                    ))
             crls = new_crls
 
         if ocsps is not None:
             new_ocsps = []
             for ocsp_ in ocsps:
-                if not isinstance(ocsp_, ocsp.OCSPResponse):
-                    if not isinstance(ocsp_, bytes):
-                        raise TypeError(pretty_message(
-                            '''
-                            ocsps must be a list of byte strings or
-                            asn1crypto.ocsp.OCSPResponse objects, not %s
-                            ''',
-                            type_name(ocsp_)
-                        ))
+                if isinstance(ocsp_, bytes):
                     ocsp_ = ocsp.OCSPResponse.load(ocsp_)
-                new_ocsps.append(ocsp_)
+                if isinstance(ocsp_, ocsp.OCSPResponse):
+                    extr = OCSPWithPOE.load_multi(
+                        RevinfoFreshnessPOE.unknown(), ocsp_
+                    )
+                    new_ocsps.extend(extr)
+                elif isinstance(ocsp_, OCSPWithPOE):
+                    new_ocsps.append(ocsp_)
+                else:
+                    raise TypeError(pretty_message(
+                        '''
+                        ocsps must be a list of byte strings or
+                        asn1crypto.ocsp.OCSPResponse objects, not %s
+                        ''',
+                        type_name(ocsp_)
+                    ))
             ocsps = new_ocsps
 
-        rev_essential = \
-            revinfo_policy.revocation_checking_policy.essential
+        rev_essential = revinfo_policy.revocation_checking_policy.essential
         if moment is not None:
             if allow_fetching:
                 raise ValueError(pretty_message(
@@ -427,6 +435,17 @@ class ValidationContext:
         :return:
             A list of asn1crypto.crl.CertificateList objects
         """
+        results = await self.async_retrieve_crls_with_poe(cert)
+        return [res.crl_data for res in results]
+
+    async def async_retrieve_crls_with_poe(self, cert):
+        """
+        :param cert:
+            An asn1crypto.x509.Certificate object
+
+        :return:
+            A list of :class:`CRLWithPOE` objects
+        """
         if not self._allow_fetching:
             return self._crls
 
@@ -435,7 +454,11 @@ class ValidationContext:
             crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
         except KeyError:
             crls = await fetchers.crl_fetcher.fetch(cert)
-        return crls
+        with_poe = [
+            CRLWithPOE(RevinfoFreshnessPOE.fresh(), crl_data)
+            for crl_data in crls
+        ]
+        return self._crls + with_poe
 
     def retrieve_crls(self, cert):
         """
@@ -468,6 +491,20 @@ class ValidationContext:
         :return:
             A list of asn1crypto.ocsp.OCSPResponse objects
         """
+        results = await self.async_retrieve_ocsps_with_poe(cert, issuer)
+        return [res.ocsp_response_data for res in results]
+
+    async def async_retrieve_ocsps_with_poe(self, cert, issuer):
+        """
+        :param cert:
+            An asn1crypto.x509.Certificate object
+
+        :param issuer:
+            An asn1crypto.x509.Certificate object of cert's issuer
+
+        :return:
+            A list of :class:`OCSPWithPOE` objects
+        """
 
         if not self._allow_fetching:
             return self._ocsps
@@ -475,19 +512,25 @@ class ValidationContext:
         fetchers = self._fetchers
         ocsps = fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
         if not ocsps:
-            ocsp_response = await fetchers.ocsp_fetcher.fetch(cert, issuer)
+            ocsp_response_data \
+                = await fetchers.ocsp_fetcher.fetch(cert, issuer)
+            ocsps = OCSPWithPOE.load_multi(
+                RevinfoFreshnessPOE.fresh(), ocsp_response_data
+            )
+
             # Responses can contain certificates that are useful in
             # validating the response itself. We can use these since they
             # will be validated using the local trust roots.
-            try:
-                self._extract_ocsp_certs(ocsp_response)
-            except ValueError:
-                raise OCSPFetchError(
-                    "Failed to extract certificates from fetched OCSP response"
-                )
-            ocsps = [ocsp_response]
+            for resp in ocsps:
+                try:
+                    self._extract_ocsp_certs(resp)
+                except ValueError:
+                    raise OCSPFetchError(
+                        "Failed to extract certificates from "
+                        "fetched OCSP response"
+                    )
 
-        return ocsps
+        return self._ocsps + ocsps
 
     def retrieve_ocsps(self, cert, issuer):
         """
@@ -514,7 +557,7 @@ class ValidationContext:
             return self._ocsps
         return asyncio.run(self.async_retrieve_ocsps(cert, issuer))
 
-    def _extract_ocsp_certs(self, ocsp_response):
+    def _extract_ocsp_certs(self, ocsp_response: OCSPWithPOE):
         """
         Extracts any certificates included with an OCSP response and adds them
         to the certificate registry
@@ -523,15 +566,11 @@ class ValidationContext:
             An asn1crypto.ocsp.OCSPResponse object to look for certs inside of
         """
 
-        status = ocsp_response['response_status'].native
-        if status == 'successful':
-            response_bytes = ocsp_response['response_bytes']
-            if response_bytes['response_type'].native == 'basic_ocsp_response':
-                response = response_bytes['response'].parsed
-                if response['certs']:
-                    for other_cert in response['certs']:
-                        if self.certificate_registry.add_other_cert(other_cert):
-                            self._revocation_certs[other_cert.issuer_serial] = other_cert
+        basic = ocsp_response.extract_basic_ocsp_response()
+        if basic['certs']:
+            for other_cert in basic['certs']:
+                if self.certificate_registry.add_other_cert(other_cert):
+                    self._revocation_certs[other_cert.issuer_serial] = other_cert
 
     def record_validation(self, cert, path):
         """
