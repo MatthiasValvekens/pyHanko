@@ -1,7 +1,7 @@
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from asn1crypto import ocsp, crl
 
@@ -115,10 +115,39 @@ def _judge_revinfo(this_update: Optional[datetime],
     return RevinfoUsabilityRating.OK
 
 
+def _extract_basic_ocsp_response(ocsp_response) \
+        -> Optional[ocsp.BasicOCSPResponse]:
+
+    # Make sure that we get a valid response back from the OCSP responder
+    status = ocsp_response['response_status'].native
+    if status != 'successful':
+        return None
+
+    response_bytes = ocsp_response['response_bytes']
+    if response_bytes['response_type'].native != 'basic_ocsp_response':
+        return None
+
+    return response_bytes['response'].parsed
+
+
 @dataclass(frozen=True)
 class OCSPWithPOE(WithPOE):
     poe: RevinfoFreshnessPOE
     ocsp_response_data: ocsp.OCSPResponse
+    index: int = 0
+
+    @classmethod
+    def load_multi(cls, poe: RevinfoFreshnessPOE,
+                   ocsp_response: ocsp.OCSPResponse) -> List['OCSPWithPOE']:
+        basic_ocsp_response = _extract_basic_ocsp_response(ocsp_response)
+        if basic_ocsp_response is None:
+            return []
+        tbs_response = basic_ocsp_response['tbs_response_data']
+
+        return [
+            OCSPWithPOE(poe=poe, ocsp_response_data=ocsp_response, index=ix)
+            for ix in range(len(tbs_response['responses']))
+        ]
 
     def retrieve_poe(self) -> RevinfoFreshnessPOE:
         return self.poe
@@ -130,7 +159,7 @@ class OCSPWithPOE(WithPOE):
         # TODO move these two functions into this class once I start
         #  reworking the actual revinfo processing logic
 
-        cert_response = self._extract_unique_response()
+        cert_response = self.extract_single_response()
         if cert_response is None:
             return RevinfoUsabilityRating.UNCLEAR
 
@@ -144,31 +173,17 @@ class OCSPWithPOE(WithPOE):
         )
 
     def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
+        return _extract_basic_ocsp_response(self.ocsp_response_data)
 
-        # Make sure that we get a valid response back from the OCSP responder
-        status = self.ocsp_response_data['response_status'].native
-        if status != 'successful':
-            return None
-
-        response_bytes = self.ocsp_response_data['response_bytes']
-        if response_bytes['response_type'].native != 'basic_ocsp_response':
-            return None
-
-        return response_bytes['response'].parsed
-
-    # TODO work with multi-response packets as well?
-
-    def _extract_unique_response(self) -> Optional[ocsp.SingleResponse]:
+    def extract_single_response(self) -> Optional[ocsp.SingleResponse]:
         basic_ocsp_response = self.extract_basic_ocsp_response()
         if basic_ocsp_response:
             return None
         tbs_response = basic_ocsp_response['tbs_response_data']
 
-        if len(tbs_response['responses']) != 1:
+        if len(tbs_response['responses']) <= self.index:
             return None
-        cert_response = tbs_response['responses'][0]
-
-        return cert_response
+        return tbs_response['responses'][self.index]
 
 
 @dataclass(frozen=True)

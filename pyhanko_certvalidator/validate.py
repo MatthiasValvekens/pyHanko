@@ -1704,7 +1704,7 @@ async def _handle_single_ocsp_resp(
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
     certificate_registry = validation_context.certificate_registry
-    cert_response = ocsp_response._extract_unique_response()
+    cert_response = ocsp_response.extract_single_response()
     if cert_response is None:
         errs.mismatch_failures += 1
         return False
