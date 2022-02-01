@@ -103,7 +103,7 @@ stop accepting certain parameters without a major version bump, but
 may _gain_ additional optional parameters, unless the method is designed to be
 overridden in subclasses. In other words, the default position is to honour
 API compatibility for _calling_ code only, not for _extending_ code.
-Exceptions are documented explicitly.
+Exceptions to this rule are documented explicitly.
 
 
 Any relaxation of this compatibility policy (after `1.0.0`) is also cause for
