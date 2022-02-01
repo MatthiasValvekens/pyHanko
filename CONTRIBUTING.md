@@ -62,18 +62,63 @@ or ask on the discussion forum.
 
 ## Compatibility
 
+
+### General policy
+
 Currently, pyHanko aims to remain compatible with Python versions 3.7 and up,
 and this is expected of new contributions as well (for the time being).
 
 PyHanko follows [SemVer](https://semver.org/), but has not yet reached `1.0.0`.
-As such, breaking changes in the public API between releases are permitted,
-but they must be well-documented and motivated. Documentation for such changes
-must be supplied in a format suitable for inclusion in the release notes.
+**As such, breaking changes in the public API may still occur.**
 
-Breaking changes in internal APIs (this includes all undocumented
-functionality and all code that is not yet part of any release tag) are fair
-game, but PRs proposing such changes must include a summary describing what
-breaks in which way.
+
+Unlike some other projects, pyHanko's philosophy distinguishes the public and
+internal elements of its API through the documentation, rather than through
+any particular language features. For compatibility purposes, the public API
+is defined as follows:
+
+ 1. A module is public by default if its name does not start with an underscore,
+    unless otherwise specified in the module documentation.
+ 2. Documented members (classes, functions and constants) of public modules
+    listed in `__all__` are considered public API, unless the documentation
+    says otherwise. The same applies to members of classes that qualify as
+    public.
+ 3. In public classes, exact method signatures that are designed to be
+    overridden (indicated by a `raise NotImplementedError` or by documentation)
+    are also considered part of the public API.
+
+
+Everything else is considered internal API and subject to change without notice,
+even after pyHanko reaches version `1.0.0`. In particular, the following
+are specifically _not_ covered by any API guarantees:
+
+ - Non-public modules and their members.
+ - _All_ undocumented functionality.
+ - If the documentation says something is internal, then it is.
+ - Signatures of public methods on classes, unless covered under item 3 of
+   the previous paragraph.
+
+The last point should be interpreted carefully: public methods will never
+stop accepting certain parameters without a major version bump, but
+may _gain_ additional optional parameters, unless the method is designed to be
+overridden in subclasses. In other words, the default position is to honour
+API compatibility for _calling_ code only, not for _extending_ code.
+Exceptions are documented explicitly.
+
+
+Any relaxation of this compatibility policy (after `1.0.0`) is also cause for
+a major version bump.
+
+
+### For contributors
+
+While breaking changes between releases are still permitted, they must be
+well-documented and motivated. Documentation for such changes must be supplied
+in a format suitable for inclusion in the release notes.
+
+Changes in internal APIs and new code (this includes all code that is not yet
+part of any release tag) are fair game, but PRs proposing such changes must
+include a summary describing what breaks in which way.
 
 Dependency changes (both version changes and new dependencies) must always be
 motivated. Besides issues of technical compatibility, also consider the
