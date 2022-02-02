@@ -394,9 +394,10 @@ class ValidationContext:
         A list of all cached asn1crypto.crl.CertificateList objects
         """
 
+        raw_crls = [with_poe.crl_data for with_poe in self._crls]
         if not self._allow_fetching:
-            return self._crls
-        return list(self._fetchers.crl_fetcher.fetched_crls())
+            return raw_crls
+        return list(self._fetchers.crl_fetcher.fetched_crls()) + raw_crls
 
     @property
     def ocsps(self):
@@ -404,10 +405,11 @@ class ValidationContext:
         A list of all cached asn1crypto.ocsp.OCSPResponse objects
         """
 
+        raw_ocsps = [with_poe.ocsp_response_data for with_poe in self._ocsps]
         if not self._allow_fetching:
-            return self._ocsps
+            return raw_ocsps
 
-        return list(self._fetchers.ocsp_fetcher.fetched_responses())
+        return list(self._fetchers.ocsp_fetcher.fetched_responses()) + raw_ocsps
 
     @property
     def new_revocation_certs(self):
@@ -529,7 +531,10 @@ class ValidationContext:
             return self._ocsps
 
         fetchers = self._fetchers
-        ocsps = fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
+        ocsps = [
+            OCSPWithPOE(RevinfoFreshnessPOE.fresh(), resp)
+            for resp in fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
+        ]
         if not ocsps:
             ocsp_response_data \
                 = await fetchers.ocsp_fetcher.fetch(cert, issuer)
