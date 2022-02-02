@@ -364,9 +364,12 @@ class ValidationContext:
             time_tolerance=time_tolerance,
             point_in_time_validation=point_in_time_validation
         )
-        self.retroactive_revinfo = retroactive_revinfo
 
         self._acceptable_ac_targets = acceptable_ac_targets
+
+    @property
+    def retroactive_revinfo(self) -> bool:
+        return self.revinfo_policy.retroactive_revinfo
 
     @property
     def time_tolerance(self) -> timedelta:
