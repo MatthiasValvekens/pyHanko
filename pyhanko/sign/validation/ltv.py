@@ -191,7 +191,7 @@ class _TimestampTrustData:
     latest_dts: EmbeddedPdfSignature
     earliest_ts_status: TimestampSignatureStatus
     ts_chain_length: int
-    current_signature_vc: ValidationContext
+    current_signature_vc_kwargs: dict
 
 
 def _instantiate_ltv_vc(emb_timestamp: EmbeddedPdfSignature,
@@ -237,7 +237,8 @@ async def _establish_timestamp_trust_lta(
 
     return _TimestampTrustData(
         latest_dts=emb_timestamp, earliest_ts_status=ts_status,
-        ts_chain_length=ts_count + 1, current_signature_vc=current_vc,
+        ts_chain_length=ts_count + 1,
+        current_signature_vc_kwargs=validation_context_kwargs
     )
 
 
@@ -324,6 +325,7 @@ async def async_validate_pdf_ltv_signature(
                 DEFAULT_LTV_INTERNAL_REVO_POLICY
             )
 
+    current_vc: ValidationContext
     reader = embedded_sig.reader
     if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
         dss = None
@@ -362,7 +364,12 @@ async def async_validate_pdf_ltv_signature(
             validation_context_kwargs=validation_context_kwargs,
             until_revision=embedded_sig.signed_revision
         )
-        current_vc = ts_trust_data.current_signature_vc
+        validation_context_kwargs = ts_trust_data.current_signature_vc_kwargs
+        # if we found a timestamp, use it to pass to the next VC iteration
+        if ts_trust_data.latest_dts:
+            current_vc = _instantiate_ltv_vc(
+                ts_trust_data.latest_dts, validation_context_kwargs
+            )
         # In PAdES-LTA, we should only rely on DSS information that is covered
         # by an appropriate document timestamp.
         # If the validation profile is PAdES-LTA, then we must have seen
@@ -387,6 +394,11 @@ async def async_validate_pdf_ltv_signature(
         earliest_good_timestamp_st = await establish_timestamp_trust(
             tst_signed_data, current_vc, embedded_sig.tst_signature_digest
         )
+        # update validation context moments to the new signature POE
+        signature_poe = earliest_good_timestamp_st.timestamp
+        validation_context_kwargs['moment'] = signature_poe
+        if ac_validation_context_kwargs is not None:
+            ac_validation_context_kwargs['moment'] = signature_poe
     elif validation_type == RevocationInfoValidationType.PADES_LTA \
             and ts_trust_data.ts_chain_length == 1:
         # TODO Pretty sure that this is the spirit of the LTA profile,
@@ -434,14 +446,16 @@ async def async_validate_pdf_ltv_signature(
             )
     else:
         # in the LTA profile, we should use only DSS information covered
-        # by the last relevant timestamp, so the correct VC is current_vc
-        current_vc.moment = earliest_good_timestamp_st.timestamp
-        stored_vc = current_vc
+        # by the last relevant timestamp, so the correct VC is encoded
+        # by the current validation context kwargs retrieved by the lta helper
+        # logic (note that we updated the POE timestamps further up)
+        stored_vc = _instantiate_ltv_vc(
+            ts_trust_data.latest_dts, validation_context_kwargs
+        )
         if ac_validation_context_kwargs is not None:
             stored_ac_vc = _instantiate_ltv_vc(
                 ts_trust_data.latest_dts, ac_validation_context_kwargs
             )
-            stored_ac_vc.moment = earliest_good_timestamp_st.timestamp
 
     # Now, we evaluate the validity of the timestamp guaranteeing the signature
     #  *within* the LTV context.
