@@ -1,3 +1,7 @@
+"""
+.. versionadded:: 0.20.0
+"""
+
 import enum
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -182,10 +186,11 @@ class CertRevTrustPolicy:
 
     freshness: Optional[timedelta] = None
     """
-    Freshness requirements.
+    Freshness interval. If not specified, this defaults to the distance
+    between ``thisUpdate`` and ``nextUpdate`` for the given piece of revocation
+    information.
     """
 
-    # TODO update docs
     freshness_req_type: FreshnessReqType = FreshnessReqType.DEFAULT
     """
     Controls whether the freshness requirement applies relatively to the
