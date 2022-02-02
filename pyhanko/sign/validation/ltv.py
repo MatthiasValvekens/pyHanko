@@ -82,19 +82,30 @@ class RevocationInfoValidationType(Enum):
         return tuple(m.value for m in cls)
 
 
-DEFAULT_LTV_INTERNAL_REVO_POLICY = CertRevTrustPolicy(
-    RevocationCheckingPolicy(
-        ee_certificate_rule=RevocationCheckingRule.CHECK_IF_DECLARED,
-        intermediate_ca_cert_rule=RevocationCheckingRule.CHECK_IF_DECLARED,
-    )
+DEFAULT_LTV_INTERNAL_REVO_CHECK_POLICY = RevocationCheckingPolicy(
+    ee_certificate_rule=RevocationCheckingRule.CHECK_IF_DECLARED,
+    intermediate_ca_cert_rule=RevocationCheckingRule.CHECK_IF_DECLARED,
 )
 
-STRICT_LTV_INTERNAL_REVO_POLICY = CertRevTrustPolicy(
-    RevocationCheckingPolicy(
-        ee_certificate_rule=RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
-        intermediate_ca_cert_rule=RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
-    ),
+
+def _default_ltv_internal_revo_policy(**kwargs):
+    return CertRevTrustPolicy(
+        revocation_checking_policy=DEFAULT_LTV_INTERNAL_REVO_CHECK_POLICY,
+        **kwargs
+    )
+
+
+STRICT_LTV_INTERNAL_REVO_CHECK_POLICY = RevocationCheckingPolicy(
+    ee_certificate_rule=RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+    intermediate_ca_cert_rule=RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
 )
+
+
+def _strict_ltv_internal_revo_policy(**kwargs):
+    return CertRevTrustPolicy(
+        revocation_checking_policy=STRICT_LTV_INTERNAL_REVO_CHECK_POLICY,
+        **kwargs
+    )
 
 
 def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
@@ -109,6 +120,7 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
 
     revinfo_policy: CertRevTrustPolicy \
         = validation_context_kwargs.get('revinfo_policy', None)
+    retroactive = validation_context_kwargs.get('retroactive_revinfo', False)
     if revinfo_policy is None:
         # handle legacy revocation mode
         legacy_rm = validation_context_kwargs.pop('revocation_mode', None)
@@ -118,10 +130,14 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
             )
         elif legacy_rm == 'soft-fail':
             # fall back to the default
-            revinfo_policy = DEFAULT_LTV_INTERNAL_REVO_POLICY
+            revinfo_policy = _default_ltv_internal_revo_policy(
+                retroactive_revinfo=retroactive
+            )
     elif not revinfo_policy.revocation_checking_policy.essential:
         # also in this case, we sub in the default
-        revinfo_policy = DEFAULT_LTV_INTERNAL_REVO_POLICY
+        revinfo_policy = _strict_ltv_internal_revo_policy(
+            retroactive_revinfo=retroactive
+        )
 
     validation_context_kwargs['revinfo_policy'] = revinfo_policy
 
@@ -305,24 +321,28 @@ async def async_validate_pdf_ltv_signature(
     # To validate the first timestamp, allow fetching by default
     # we'll turn it off later
     validation_context_kwargs.setdefault('allow_fetching', True)
+    validation_context_kwargs.setdefault('retroactive_revinfo', False)
     # same for revocation_mode: if force_revinfo is false, we simply turn on
     # hard-fail by default for now. Once the timestamp is validated,
     # we switch to hard-fail forcibly.
+    retroactive = validation_context_kwargs['retroactive_revinfo']
     if force_revinfo:
         validation_context_kwargs['revinfo_policy'] \
-            = STRICT_LTV_INTERNAL_REVO_POLICY
+            = _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
         if ac_validation_context_kwargs is not None:
             ac_validation_context_kwargs['revinfo_policy'] \
-                = STRICT_LTV_INTERNAL_REVO_POLICY
+                = _strict_ltv_internal_revo_policy(
+                    retroactive_revinfo=retroactive
+                )
     elif 'revocation_mode' not in validation_context_kwargs:
         validation_context_kwargs.setdefault(
             'revinfo_policy',
-            DEFAULT_LTV_INTERNAL_REVO_POLICY
+            _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
         )
         if ac_validation_context_kwargs is not None:
             ac_validation_context_kwargs.setdefault(
                 'revinfo_policy',
-                DEFAULT_LTV_INTERNAL_REVO_POLICY
+                _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
             )
 
     current_vc: ValidationContext
