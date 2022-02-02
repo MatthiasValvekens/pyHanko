@@ -1,7 +1,7 @@
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Iterable
 
 from asn1crypto import ocsp, crl
 
@@ -57,6 +57,23 @@ class WithPOE:
                   policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         raise NotImplementedError
+
+    @property
+    def issuance_date(self) -> Optional[datetime]:
+        raise NotImplementedError
+
+
+def sort_freshest_first(lst: Iterable[WithPOE]):
+    def _key(with_poe: WithPOE):
+        dt = with_poe.issuance_date
+        # if dt is None ---> (0, None)
+        # else ---> (1, dt)
+        # This ensures that None is never compared to anything (which would
+        #  cause a TypeError), and that (0, None) gets sorted before everything
+        #  else. Since we sort reversed, the "unknown issuance date" ones
+        #  are dumped at the end of the list.
+        return dt is not None, dt
+    return sorted(lst, key=_key, reverse=True)
 
 
 def _freshness_delta(policy, this_update, next_update, time_tolerance):
@@ -167,6 +184,14 @@ class OCSPWithPOE(WithPOE):
     def retrieve_poe(self) -> RevinfoFreshnessPOE:
         return self.poe
 
+    @property
+    def issuance_date(self) -> Optional[datetime]:
+        cert_response = self.extract_single_response()
+        if cert_response is None:
+            return None
+
+        return cert_response['this_update'].native
+
     def usable_at(self, validation_time: datetime,
                   policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
@@ -214,3 +239,8 @@ class CRLWithPOE(WithPOE):
             this_update, next_update,  policy=policy,
             timing_info=timing_info
         )
+
+    @property
+    def issuance_date(self) -> Optional[datetime]:
+        tbs_cert_list = self.crl_data['tbs_cert_list']
+        return tbs_cert_list['this_update'].native

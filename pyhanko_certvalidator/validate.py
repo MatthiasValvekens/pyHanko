@@ -55,7 +55,11 @@ from .path import ValidationPath, QualifiedPolicy
 
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
-from .revinfo_archival import OCSPWithPOE, RevinfoUsabilityRating, CRLWithPOE
+from .revinfo_archival import (
+    OCSPWithPOE,
+    RevinfoUsabilityRating,
+    CRLWithPOE,
+)
 from .util import extract_dir_name, extract_ac_issuer_dir_name, \
     get_ac_extension_value, get_relevant_crl_dps, get_declared_revinfo
 
@@ -2492,8 +2496,6 @@ async def _handle_single_crl(
             and len(certificate_list.freshest_crl_value) > 0:
         candidate_delta_lists = \
             delta_lists_by_issuer.get(crl_issuer_name.hashable, [])
-        # FIXME ensure the most recent version applicable for the validation
-        #  time is used!!
         delta_certificate_list_with_poe = _find_matching_delta_crl(
             delta_lists=candidate_delta_lists,
             crl_issuer_name=crl_issuer_name, crl_idp=crl_idp,
@@ -2681,7 +2683,6 @@ async def verify_crl(
     for certificate_list_with_poe in certificate_lists:
         certificate_list = certificate_list_with_poe.crl_data
         try:
-            # FIXME ensure these are ordered by recency
             issuer_hashable = certificate_list.issuer.hashable
             if certificate_list.delta_crl_indicator_value is None:
                 complete_lists_by_issuer[issuer_hashable]\

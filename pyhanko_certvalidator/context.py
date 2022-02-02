@@ -15,7 +15,8 @@ from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry
-from .revinfo_archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, ValidationTimingInfo
+from .revinfo_archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, \
+    ValidationTimingInfo, sort_freshest_first
 
 
 @dataclass(frozen=True)
@@ -235,7 +236,7 @@ class ValidationContext:
                         ''',
                         type_name(crl_)
                     ))
-            crls = new_crls
+            crls = sort_freshest_first(new_crls)
 
         if ocsps is not None:
             new_ocsps = []
@@ -257,7 +258,7 @@ class ValidationContext:
                         ''',
                         type_name(ocsp_)
                     ))
-            ocsps = new_ocsps
+            ocsps = sort_freshest_first(new_ocsps)
 
         rev_essential = revinfo_policy.revocation_checking_policy.essential
         if moment is not None:
@@ -454,6 +455,8 @@ class ValidationContext:
 
     async def async_retrieve_crls_with_poe(self, cert):
         """
+        .. versionadded:: 0.20.0
+
         :param cert:
             An asn1crypto.x509.Certificate object
 
@@ -472,7 +475,7 @@ class ValidationContext:
             CRLWithPOE(RevinfoFreshnessPOE.fresh(), crl_data)
             for crl_data in crls
         ]
-        return self._crls + with_poe
+        return with_poe + self._crls
 
     def retrieve_crls(self, cert):
         """
@@ -510,6 +513,8 @@ class ValidationContext:
 
     async def async_retrieve_ocsps_with_poe(self, cert, issuer):
         """
+        .. versionadded:: 0.20.0
+
         :param cert:
             An asn1crypto.x509.Certificate object
 
@@ -544,7 +549,7 @@ class ValidationContext:
                         "fetched OCSP response"
                     )
 
-        return self._ocsps + ocsps
+        return ocsps + self._ocsps
 
     def retrieve_ocsps(self, cert, issuer):
         """
