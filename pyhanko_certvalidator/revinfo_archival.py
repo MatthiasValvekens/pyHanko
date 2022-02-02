@@ -9,6 +9,14 @@ from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
     FreshnessReqType
 
 
+@dataclass(frozen=True)
+class ValidationTimingInfo:
+    validation_time: datetime
+    use_poe_time: datetime
+    time_tolerance: timedelta
+    point_in_time_validation: bool
+
+
 class RevinfoFreshnessPOEType(enum.Enum):
     UNKNOWN = enum.auto()
     TIMESTAMPED = enum.auto()
@@ -46,9 +54,8 @@ class WithPOE:
         raise NotImplementedError
 
     def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy, time_tolerance: timedelta,
-                  signature_poe_time: Optional[datetime] = None) \
-            -> RevinfoUsabilityRating:
+                  policy: CertRevTrustPolicy,
+                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         raise NotImplementedError
 
 
@@ -65,15 +72,15 @@ def _freshness_delta(policy, this_update, next_update, time_tolerance):
 
 def _judge_revinfo(this_update: Optional[datetime],
                    next_update: Optional[datetime],
-                   validation_time: datetime,
                    policy: CertRevTrustPolicy,
-                   time_tolerance: timedelta,
-                   signature_poe_time: Optional[datetime] = None) \
+                   timing_info: ValidationTimingInfo) \
         -> RevinfoUsabilityRating:
 
     if this_update is None:
         return RevinfoUsabilityRating.UNCLEAR
 
+    validation_time = timing_info.validation_time
+    time_tolerance = timing_info.time_tolerance
     # see 5.2.5.4 in ETSI EN 319 102-1
     if policy.freshness_req_type == FreshnessReqType.TIME_AFTER_SIGNATURE:
         # check whether the revinfo was generated sufficiently long _after_
@@ -83,7 +90,7 @@ def _judge_revinfo(this_update: Optional[datetime],
         )
         if freshness_delta is None:
             return RevinfoUsabilityRating.UNCLEAR
-        signature_poe_time = signature_poe_time or validation_time
+        signature_poe_time = timing_info.use_poe_time
         if this_update - signature_poe_time < freshness_delta:
             return RevinfoUsabilityRating.STALE
     elif policy.freshness_req_type \
@@ -161,9 +168,9 @@ class OCSPWithPOE(WithPOE):
         return self.poe
 
     def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy, time_tolerance: timedelta,
-                  signature_poe_time: Optional[datetime] = None) \
-            -> RevinfoUsabilityRating:
+                  policy: CertRevTrustPolicy,
+                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
+
         cert_response = self.extract_single_response()
         if cert_response is None:
             return RevinfoUsabilityRating.UNCLEAR
@@ -172,9 +179,7 @@ class OCSPWithPOE(WithPOE):
         next_update = cert_response['next_update'].native
         return _judge_revinfo(
             this_update, next_update,
-            validation_time=validation_time, policy=policy,
-            time_tolerance=time_tolerance,
-            signature_poe_time=signature_poe_time
+            policy=policy, timing_info=timing_info,
         )
 
     def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
@@ -182,7 +187,7 @@ class OCSPWithPOE(WithPOE):
 
     def extract_single_response(self) -> Optional[ocsp.SingleResponse]:
         basic_ocsp_response = self.extract_basic_ocsp_response()
-        if basic_ocsp_response:
+        if basic_ocsp_response is None:
             return None
         tbs_response = basic_ocsp_response['tbs_response_data']
 
@@ -200,15 +205,12 @@ class CRLWithPOE(WithPOE):
         return self.poe
 
     def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy, time_tolerance: timedelta,
-                  signature_poe_time: Optional[datetime] = None) \
-            -> RevinfoUsabilityRating:
+                  policy: CertRevTrustPolicy,
+                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         this_update = tbs_cert_list['this_update'].native
         next_update = tbs_cert_list['next_update'].native
         return _judge_revinfo(
-            this_update, next_update,
-            validation_time=validation_time, policy=policy,
-            time_tolerance=time_tolerance,
-            signature_poe_time=signature_poe_time
+            this_update, next_update,  policy=policy,
+            timing_info=timing_info
         )

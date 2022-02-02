@@ -102,4 +102,4 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
             per_request_timeout=TEST_REQUEST_TIMEOUT
         )
         fetchers = fb.get_fetchers()
-        await self._test_with_fetchers(fetchers)
+        await self._test_fetch_error(fetchers)

@@ -1698,7 +1698,7 @@ async def _handle_single_ocsp_resp(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: x509.Certificate,
         path: ValidationPath,
-        ocsp_response: OCSPWithPOE,  # FIXME fix call sites
+        ocsp_response: OCSPWithPOE,
         validation_context: ValidationContext,
         moment: datetime.datetime,
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
@@ -1758,8 +1758,7 @@ async def _handle_single_ocsp_resp(
 
     freshness_result = ocsp_response.usable_at(
         validation_time=moment, policy=validation_context.revinfo_policy,
-        time_tolerance=validation_context.time_tolerance,
-        signature_poe_time=validation_context.use_moment
+        timing_info=validation_context.timing_info,
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:
@@ -2362,10 +2361,10 @@ def _handle_attr_cert_crl_idp_ext_constraints(
 async def _handle_single_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer: x509.Certificate,
-        certificate_list_with_poe: CRLWithPOE,  # TODO fix call sites
+        certificate_list_with_poe: CRLWithPOE,
         path: ValidationPath,
         validation_context: ValidationContext,
-        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],  # TODO fix call sites
+        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
         use_deltas: bool, errs: _CRLErrs,
         proc_state: ValProcState):
 
@@ -2456,18 +2455,17 @@ async def _handle_single_crl(
     freshness_result = certificate_list_with_poe.usable_at(
         validation_context.moment,
         policy=validation_context.revinfo_policy,
-        time_tolerance=validation_context.time_tolerance,
-        signature_poe_time=validation_context.use_moment
+        timing_info=validation_context.timing_info
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:
-            msg = 'CRL response is stale'
+            msg = 'CRL is stale'
         elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
-            msg = 'CRL response is too recent'
+            msg = 'CRL is too recent'
         else:
             msg = 'CRL freshness could not be established'
         errs.failures.append((msg, certificate_list_with_poe))
-        return False
+        return None
 
     # Step b 2
 
@@ -2553,8 +2551,7 @@ async def _handle_single_crl(
         freshness_result = delta_certificate_list_with_poe.usable_at(
             validation_context.moment,
             policy=validation_context.revinfo_policy,
-            time_tolerance=validation_context.time_tolerance,
-            signature_poe_time=validation_context.use_moment
+            timing_info=validation_context.timing_info
         )
         if freshness_result != RevinfoUsabilityRating.OK:
             if freshness_result == RevinfoUsabilityRating.STALE:
@@ -2564,7 +2561,7 @@ async def _handle_single_crl(
             else:
                 msg = 'Delta CRL freshness could not be established'
             errs.failures.append((msg, delta_certificate_list_with_poe))
-            return False
+            return None
 
     # Step i
     revoked_reason = None

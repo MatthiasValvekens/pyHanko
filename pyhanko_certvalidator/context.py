@@ -15,7 +15,7 @@ from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry
-from .revinfo_archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE
+from .revinfo_archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, ValidationTimingInfo
 
 
 @dataclass(frozen=True)
@@ -86,10 +86,6 @@ class ValidationContext:
     # Any exceptions that were ignored while the revocation_mode is "soft-fail"
     _soft_fail_exceptions = None
 
-    # A datetime.datetime object to use when checking the validity
-    # period of certificates
-    moment = None
-
     # By default, any CRLs or OCSP responses that are passed to the constructor
     # are chccked. If _allow_fetching is True, any CRLs or OCSP responses that
     # can be downloaded will also be checked. The next two attributes change
@@ -106,7 +102,7 @@ class ValidationContext:
             other_certs: Optional[Iterable[x509.Certificate]] = None,
             whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
             moment: Optional[datetime] = None,
-            use_moment: Optional[datetime] = None,
+            use_poe_time: Optional[datetime] = None,
             allow_fetching: bool = False,
             crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
             ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
@@ -155,7 +151,7 @@ class ValidationContext:
             OCSP and CRL responses is to pass them via the crls and ocsps
             parameters. Can not be combined with allow_fetching=True.
 
-        :param use_moment:
+        :param use_poe_time:
             The presumptive time at which the certificate was used.
             Assumed equal to :class:`moment` if unspecified.
 
@@ -210,6 +206,7 @@ class ValidationContext:
         if revinfo_policy is None:
             revinfo_policy = CertRevTrustPolicy(
                 RevocationCheckingPolicy.from_legacy(revocation_mode),
+                retroactive_revinfo=retroactive_revinfo
             )
         elif revinfo_policy.freshness is not None:
             raise NotImplementedError("Freshness has not been implemented yet.")
@@ -283,7 +280,7 @@ class ValidationContext:
 
         if moment is None:
             moment = datetime.now(timezone.utc)
-            self.point_in_time_validation = False
+            point_in_time_validation = False
         elif moment.utcoffset() is None:
             raise ValueError(pretty_message(
                 '''
@@ -292,14 +289,14 @@ class ValidationContext:
                 '''
             ))
         else:
-            self.point_in_time_validation = True
+            point_in_time_validation = True
 
-        if use_moment is None:
-            use_moment = moment
-        elif use_moment.utcoffset() is None:
+        if use_poe_time is None:
+            use_poe_time = moment
+        elif use_poe_time.utcoffset() is None:
             raise ValueError(pretty_message(
                 '''
-                use_moment is a naive datetime object, meaning the tzinfo
+                use_poe_time is a naive datetime object, meaning the tzinfo
                 attribute is not set to a valid timezone
                 '''
             ))
@@ -342,9 +339,6 @@ class ValidationContext:
             cert_fetcher=cert_fetcher
         )
 
-        self.moment = moment
-        self.use_moment = use_moment
-
         self._validate_map = {}
         self._crl_issuer_map = {}
 
@@ -362,12 +356,29 @@ class ValidationContext:
 
         self._allow_fetching = bool(allow_fetching)
         self._soft_fail_exceptions = []
-        self.time_tolerance = (
+        time_tolerance = (
             abs(time_tolerance) if time_tolerance else timedelta(0)
+        )
+        self.timing_info = ValidationTimingInfo(
+            validation_time=moment, use_poe_time=use_poe_time,
+            time_tolerance=time_tolerance,
+            point_in_time_validation=point_in_time_validation
         )
         self.retroactive_revinfo = retroactive_revinfo
 
         self._acceptable_ac_targets = acceptable_ac_targets
+
+    @property
+    def time_tolerance(self) -> timedelta:
+        return self.timing_info.time_tolerance
+
+    @property
+    def moment(self) -> datetime:
+        return self.timing_info.validation_time
+
+    @property
+    def use_poe_time(self) -> datetime:
+        return self.timing_info.use_poe_time
 
     @property
     def fetching_allowed(self) -> bool:
