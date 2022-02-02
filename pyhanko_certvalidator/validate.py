@@ -2557,9 +2557,9 @@ async def _handle_single_crl(
         )
         if freshness_result != RevinfoUsabilityRating.OK:
             if freshness_result == RevinfoUsabilityRating.STALE:
-                msg = 'Delta CRL response is stale'
+                msg = 'Delta CRL is stale'
             elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
-                msg = 'Delta CRL response is too recent'
+                msg = 'Delta CRL is too recent'
             else:
                 msg = 'Delta CRL freshness could not be established'
             errs.failures.append((msg, delta_certificate_list_with_poe))
