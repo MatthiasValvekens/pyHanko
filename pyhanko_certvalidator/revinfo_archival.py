@@ -121,15 +121,12 @@ def _judge_revinfo(this_update: Optional[datetime],
         )
         if freshness_delta is None:
             return RevinfoUsabilityRating.UNCLEAR
-        true_delta = validation_time - this_update
 
-        # perform the check on the absolute value, and use the sign
-        # in the error result if necessary
-        if abs(true_delta) > freshness_delta:
-            return (
-                RevinfoUsabilityRating.STALE if true_delta > timedelta(0)
-                else RevinfoUsabilityRating.TOO_NEW
-            )
+        # See ETSI EN 319 102-1, § 5.2.5.4, item 2)
+        #  in particular, "too recent" doesn't seem to apply;
+        #  the result is pass/fail
+        if this_update < validation_time - freshness_delta:
+            return RevinfoUsabilityRating.STALE
     elif policy.freshness_req_type == FreshnessReqType.DEFAULT:
         # check whether the validation time falls within the
         # thisUpdate-nextUpdate window (non-AdES!!)
