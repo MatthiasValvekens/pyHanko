@@ -108,7 +108,6 @@ async def _grab_certs(url, *, user_agent, session: aiohttp.ClientSession,
     async with session.get(url=url, headers=headers, timeout=cl_timeout,
                            raise_for_status=True) as response:
         response_data = await response.read()
-        ct_err = None
         try:
             content_type = response.headers['Content-Type'].strip()
             if content_type not in acceptable_cts:
@@ -117,17 +116,11 @@ async def _grab_certs(url, *, user_agent, session: aiohttp.ClientSession,
                     f"when fetching issuer certificate for {url_origin_type} "
                     f"from URL {url}."
                 )
+                raise aiohttp.ContentTypeError(
+                    response.request_info, response.history,
+                    message=ct_err, headers=response.headers,
+                )
         except KeyError:
-            ct_err = (
-                f"Unclear content type when fetching issuer "
-                f"certificate for {url_origin_type} from URL "
-                f"{url}."
-            )
-
-        if ct_err is not None:
-            raise aiohttp.ContentTypeError(
-                response.request_info, response.history,
-                message=ct_err, headers=response.headers,
-            )
+            content_type = None
     certs = unpack_cert_content(response_data, content_type, url, permit_pem)
     return list(certs)
