@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 
-from typing import Union
+from typing import Union, Optional
 
 from .. import errors
 from ..util import extract_ac_issuer_dir_name, get_ac_extension_value
@@ -35,10 +35,17 @@ ACCEPTABLE_CERT_PEM_ALIASES = (
 )
 
 
-def unpack_cert_content(response_data: bytes, content_type: str,
+def unpack_cert_content(response_data: bytes, content_type: Optional[str],
                         url: str, permit_pem: bool):
 
-    if content_type in ('application/pkix-cert', 'application/x-x509-ca-cert'):
+    der_types = ('application/pkix-cert', 'application/x-x509-ca-cert')
+    if content_type is None or content_type in der_types:
+        if content_type is None:
+            logger.warning(
+                f"Response to certificate fetch request to {url} did not "
+                f"include a content type, assuming response body is a single "
+                f"DER-encoded X.509 certificate."
+            )
         yield x509.Certificate.load(response_data)
     elif permit_pem and (content_type in ACCEPTABLE_CERT_PEM_ALIASES):
         # technically, PEM is not allowed here, but of course some people don't

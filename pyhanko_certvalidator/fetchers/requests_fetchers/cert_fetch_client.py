@@ -100,8 +100,6 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
             acceptable_cts += ACCEPTABLE_CERT_PEM_ALIASES
 
         response = await self._get(url, acceptable_content_types=acceptable_cts)
-        content_type = response.headers['Content-Type'].strip()
-        ct_err = None
         try:
             content_type = response.headers['Content-Type'].strip()
             if content_type not in acceptable_cts:
@@ -110,14 +108,9 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
                     f"when fetching issuer certificate for {url_origin_type} "
                     f"from URL {url}."
                 )
+                raise requests.RequestException(ct_err)
         except KeyError:
-            ct_err = (
-                f"Unclear content type when fetching issuer "
-                f"certificate for {url_origin_type} from URL "
-                f"{url}."
-            )
-        if ct_err is not None:
-            raise requests.RequestException(ct_err)
+            content_type = None
         certs = unpack_cert_content(
             response.content, content_type, url, permit_pem
         )
