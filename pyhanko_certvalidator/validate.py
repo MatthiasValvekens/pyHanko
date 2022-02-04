@@ -49,7 +49,8 @@ from .errors import (
     PathValidationError,
     RevokedError,
     PathBuildingError, InvalidAttrCertificateError, NotYetValidError,
-    ExpiredError, WeakAlgorithmError,
+    ExpiredError, WeakAlgorithmError, PSSParameterMismatch,
+    DSAParametersUnavailable,
 )
 from .path import ValidationPath, QualifiedPolicy
 
@@ -3021,20 +3022,6 @@ class PolicyTreeNode(PolicyTreeRoot):
         while node is not None:
             yield node
             node = node.parent
-
-
-class PSSParameterMismatch(InvalidSignature):
-    pass
-
-
-class DSAParametersUnavailable(InvalidSignature):
-    # TODO Technically, such a signature isn't _really_ invalid
-    #  (we merely couldn't validate it).
-    # However, this is only an issue for CRLs and OCSP responses that
-    # make use of DSA parameter inheritance, which is pretty much a
-    # completely irrelevant problem in this day and age, so treating those
-    # signatures as invalid as a matter of course seems pretty much OK.
-    pass
 
 
 def _validate_sig(signature: bytes, signed_data: bytes,
