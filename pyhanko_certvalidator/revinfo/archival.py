@@ -96,6 +96,16 @@ def _judge_revinfo(this_update: Optional[datetime],
     if this_update is None:
         return RevinfoUsabilityRating.UNCLEAR
 
+    # Revinfo issued after the validation time doesn't make any sense
+    # to consider, except in the case of the (legacy) default policy
+    # with retroactive_revinfo active.
+    # AdES-derived policies are supposed to use proper POE handling in lieu
+    # of this alternative system.
+    if timing_info.validation_time < this_update:
+        if not policy.retroactive_revinfo or \
+                policy.freshness_req_type != FreshnessReqType.DEFAULT:
+            return RevinfoUsabilityRating.TOO_NEW
+
     validation_time = timing_info.validation_time
     time_tolerance = timing_info.time_tolerance
     # see 5.2.5.4 in ETSI EN 319 102-1
