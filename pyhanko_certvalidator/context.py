@@ -209,8 +209,6 @@ class ValidationContext:
                 RevocationCheckingPolicy.from_legacy(revocation_mode),
                 retroactive_revinfo=retroactive_revinfo
             )
-        elif revinfo_policy.freshness is not None:
-            raise NotImplementedError("Freshness has not been implemented yet.")
         elif revinfo_policy.expected_post_expiry_revinfo_time is not None:
             raise NotImplementedError(
                 "Dealing with post-expiry revocation info has not been "
