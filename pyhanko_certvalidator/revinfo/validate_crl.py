@@ -9,7 +9,6 @@ from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator._state import ValProcState
-from pyhanko_certvalidator._errors import pretty_message
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
     CRLValidationError, CRLNoMatchesError, CertificateFetchError, \
     CRLValidationIndeterminateError, PSSParameterMismatch
@@ -20,7 +19,8 @@ from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, \
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.util import get_ac_extension_value, \
-    get_relevant_crl_dps, extract_ac_issuer_dir_name, validate_sig
+    get_relevant_crl_dps, extract_ac_issuer_dir_name, validate_sig, \
+    pretty_message
 
 
 async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,

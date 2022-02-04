@@ -8,7 +8,6 @@ from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator._state import ValProcState
-from pyhanko_certvalidator._errors import pretty_message
 from pyhanko_certvalidator.errors import PathValidationError, \
     OCSPValidationError, PSSParameterMismatch, RevokedError, \
     OCSPNoMatchesError, OCSPValidationIndeterminateError
@@ -19,7 +18,9 @@ from pyhanko_certvalidator.registry import CertificateCollection, \
     LayeredCertificateStore, SimpleCertificateStore
 from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
     RevinfoUsabilityRating
-from pyhanko_certvalidator.util import extract_ac_issuer_dir_name, validate_sig
+from pyhanko_certvalidator.util import (
+    pretty_message, extract_ac_issuer_dir_name, validate_sig
+)
 
 OCSP_PROVENANCE_ERR = (
     "Unable to verify OCSP response since response signing "

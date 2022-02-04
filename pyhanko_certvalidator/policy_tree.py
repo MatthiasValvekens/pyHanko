@@ -3,9 +3,9 @@ from typing import Optional, Iterable
 
 from asn1crypto import x509
 
-from pyhanko_certvalidator._errors import pretty_message
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.util import pretty_message
 
 
 def update_policy_tree(certificate_policies,

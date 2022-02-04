@@ -9,7 +9,7 @@ from .policy_decl import PKIXValidationParams
 from .errors import ValidationError, PathBuildingError, InvalidCertificateError
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
-from ._errors import pretty_message
+from .util import pretty_message
 from ._types import type_name
 
 

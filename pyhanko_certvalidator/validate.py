@@ -9,11 +9,9 @@ from asn1crypto import x509, cms, core
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
 
-from . import asn1_types
 from ._eddsa_oids import register_eddsa_oids
-from ._errors import pretty_message
 from ._state import ValProcState
-from .asn1_types import AAControls
+from .asn1_types import AAControls, Target as Target
 from .context import (
     ValidationContext,
     ACTargetDescription
@@ -51,7 +49,8 @@ from .util import (
     extract_dir_name,
     get_ac_extension_value,
     get_declared_revinfo,
-    validate_sig
+    validate_sig,
+    pretty_message
 )
 
 logger = logging.getLogger(__name__)
@@ -292,7 +291,7 @@ def _validate_ac_targeting(attr_cert: cms.AttributeCertificateV2,
     if target_info is None:
         return
 
-    target: asn1_types.Target
+    target: Target
     for targets in target_info:
         for target in targets:
             if target.name == 'target_name':

@@ -8,7 +8,7 @@ from typing import Optional, Iterable, Union, List
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
-from ._errors import pretty_message
+from .util import pretty_message
 from ._types import type_name
 from .errors import OCSPFetchError
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend

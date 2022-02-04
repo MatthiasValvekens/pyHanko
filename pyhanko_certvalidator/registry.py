@@ -8,7 +8,7 @@ import asyncio
 from asn1crypto import x509
 from oscrypto import trust_list
 
-from ._errors import pretty_message
+from .util import pretty_message
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
