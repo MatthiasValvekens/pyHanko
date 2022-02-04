@@ -48,7 +48,7 @@ class RevinfoUsabilityRating(enum.Enum):
         return self == RevinfoUsabilityRating.OK
 
 
-class WithPOE:
+class RevinfoWithPOE:
 
     def retrieve_poe(self) -> RevinfoFreshnessPOE:
         raise NotImplementedError
@@ -63,8 +63,8 @@ class WithPOE:
         raise NotImplementedError
 
 
-def sort_freshest_first(lst: Iterable[WithPOE]):
-    def _key(with_poe: WithPOE):
+def sort_freshest_first(lst: Iterable[RevinfoWithPOE]):
+    def _key(with_poe: RevinfoWithPOE):
         dt = with_poe.issuance_date
         # if dt is None ---> (0, None)
         # else ---> (1, dt)
@@ -160,7 +160,7 @@ def _extract_basic_ocsp_response(ocsp_response) \
 
 
 @dataclass(frozen=True)
-class OCSPWithPOE(WithPOE):
+class OCSPWithPOE(RevinfoWithPOE):
     poe: RevinfoFreshnessPOE
     ocsp_response_data: ocsp.OCSPResponse
     index: int = 0
@@ -219,7 +219,7 @@ class OCSPWithPOE(WithPOE):
 
 
 @dataclass(frozen=True)
-class CRLWithPOE(WithPOE):
+class CRLWithPOE(RevinfoWithPOE):
     poe: RevinfoFreshnessPOE
     crl_data: crl.CertificateList
 
