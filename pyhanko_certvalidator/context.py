@@ -15,7 +15,7 @@ from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry
-from .revinfo_archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, \
+from .revinfo.archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, \
     ValidationTimingInfo, sort_freshest_first
 
 
@@ -674,5 +674,3 @@ class ValidationContext:
     @property
     def acceptable_ac_targets(self) -> ACTargetDescription:
         return self._acceptable_ac_targets
-
-

@@ -58,7 +58,7 @@ from .policy_tree import (
 
 from .registry import CertificateCollection, LayeredCertificateStore, \
     SimpleCertificateStore, CertificateRegistry
-from .revinfo_archival import (
+from .revinfo.archival import (
     OCSPWithPOE,
     RevinfoUsabilityRating,
     CRLWithPOE,
@@ -1934,7 +1934,7 @@ async def _find_crl_issuer(
 
         try:
             # Step g
-            _verify_signature(certificate_list, candidate_crl_issuer.public_key)
+            _verify_crl_signature(certificate_list, candidate_crl_issuer.public_key)
 
             crl_issuer = candidate_crl_issuer
             break
@@ -2368,7 +2368,7 @@ async def _handle_single_crl(
     # Step h
     if use_deltas and delta_certificate_list:
         try:
-            _verify_signature(delta_certificate_list, crl_issuer.public_key)
+            _verify_crl_signature(delta_certificate_list, crl_issuer.public_key)
         except CRLValidationError:
             errs.failures.append((
                 'Delta CRL signature could not be verified',
@@ -2602,7 +2602,7 @@ async def verify_crl(
         )
 
 
-def _verify_signature(certificate_list, public_key):
+def _verify_crl_signature(certificate_list, public_key):
     """
     Verifies the digital signature on an asn1crypto.crl.CertificateList object
 
@@ -2610,7 +2610,8 @@ def _verify_signature(certificate_list, public_key):
         An asn1crypto.crl.CertificateList object
 
     :raises:
-        pyhanko_certvalidator.errors.CRLValidationError - when the signature is invalid or uses an unsupported algorithm
+        pyhanko_certvalidator.errors.CRLValidationError - when the signature is
+        invalid or uses an unsupported algorithm
     """
 
     signature_algo = certificate_list['signature_algorithm'].signature_algo
@@ -2629,7 +2630,9 @@ def _verify_signature(certificate_list, public_key):
             'Invalid signature parameters on CertificateList'
         ) from e
     except InvalidSignature:
-        raise CRLValidationError('Unable to verify the signature of the CertificateList')
+        raise CRLValidationError(
+            'Unable to verify the signature of the CertificateList'
+        )
 
 
 KNOWN_CRL_ENTRY_EXTENSIONS = {
