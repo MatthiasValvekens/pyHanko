@@ -8,14 +8,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional, Set, Dict, Union, List
 
-from asn1crypto import x509, crl, algos, cms, core
-from asn1crypto.keys import PublicKeyInfo
+from asn1crypto import x509, crl, cms, core
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import (
-    padding, rsa, ec, dsa, ed25519, ed448
-)
 
 from . import asn1_types
 from ._eddsa_oids import register_eddsa_oids
@@ -50,7 +45,6 @@ from .errors import (
     RevokedError,
     PathBuildingError, InvalidAttrCertificateError, NotYetValidError,
     ExpiredError, WeakAlgorithmError, PSSParameterMismatch,
-    DSAParametersUnavailable,
 )
 from .path import ValidationPath, QualifiedPolicy
 from .policy_tree import (
@@ -70,7 +64,8 @@ from .revinfo_archival import (
     CRLWithPOE,
 )
 from .util import extract_dir_name, extract_ac_issuer_dir_name, \
-    get_ac_extension_value, get_relevant_crl_dps, get_declared_revinfo
+    get_ac_extension_value, get_relevant_crl_dps, get_declared_revinfo, \
+    validate_sig
 
 logger = logging.getLogger(__name__)
 
@@ -476,7 +471,7 @@ def _check_ac_signature(attr_cert: cms.AttributeCertificateV2,
         ), is_ee_cert=True, is_side_validation=False)
 
     try:
-        _validate_sig(
+        validate_sig(
             signature=attr_cert['signature'].native,
             signed_data=attr_cert['ac_info'].dump(),
             # TODO support PK parameter inheritance?
@@ -860,7 +855,7 @@ class _PathValidationState:
             ), proc_state)
 
         try:
-            _validate_sig(
+            validate_sig(
                 signature=cert['signature_value'].native,
                 signed_data=cert['tbs_certificate'].dump(),
                 public_key_info=self.working_public_key,
@@ -1686,7 +1681,7 @@ async def _handle_single_ocsp_resp(
 
     # Verify that the response was properly signed by the validated certificate
     try:
-        _validate_sig(
+        validate_sig(
             signature=response['signature'].native,
             signed_data=tbs_response.dump(),
             public_key_info=responder_cert.public_key,
@@ -2622,7 +2617,7 @@ def _verify_signature(certificate_list, public_key):
     hash_algo = certificate_list['signature_algorithm'].hash_algo
 
     try:
-        _validate_sig(
+        validate_sig(
             signature=certificate_list['signature'].native,
             signed_data=certificate_list['tbs_cert_list'].dump(),
             public_key_info=public_key,
@@ -2704,70 +2699,3 @@ def _find_cert_in_list(
         return revoked_cert['revocation_date'], crl_reason
 
     return None, None
-
-
-def _validate_sig(signature: bytes, signed_data: bytes,
-                  public_key_info: PublicKeyInfo,
-                  sig_algo: str, hash_algo: str, parameters=None):
-
-    if sig_algo == 'dsa' and \
-            public_key_info['algorithm']['parameters'].native is None:
-        raise DSAParametersUnavailable(
-            "DSA public key parameters were not provided."
-        )
-
-    # pyca/cryptography can't load PSS-exclusive keys without some help:
-    if public_key_info.algorithm == 'rsassa_pss':
-        public_key_info = public_key_info.copy()
-        assert isinstance(parameters, algos.RSASSAPSSParams)
-        pss_key_params = public_key_info['algorithm']['parameters'].native
-        if pss_key_params is not None and pss_key_params != parameters.native:
-            raise PSSParameterMismatch(
-                "Public key info includes PSS parameters that do not match "
-                "those on the signature"
-            )
-        # set key type to generic RSA, discard parameters
-        public_key_info['algorithm'] = {'algorithm': 'rsa'}
-
-    pub_key = serialization.load_der_public_key(public_key_info.dump())
-
-    if sig_algo == 'rsassa_pkcs1v15':
-        assert isinstance(pub_key, rsa.RSAPublicKey)
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, padding.PKCS1v15(), hash_algo)
-    elif sig_algo == 'rsassa_pss':
-        assert isinstance(pub_key, rsa.RSAPublicKey)
-        assert isinstance(parameters, algos.RSASSAPSSParams)
-        mga: algos.MaskGenAlgorithm = parameters['mask_gen_algorithm']
-        if not mga['algorithm'].native == 'mgf1':
-            raise NotImplementedError("Only MFG1 is supported")
-
-        mgf_md_name = mga['parameters']['algorithm'].native
-
-        salt_len: int = parameters['salt_length'].native
-
-        mgf_md = getattr(hashes, mgf_md_name.upper())()
-        pss_padding = padding.PSS(
-            mgf=padding.MGF1(algorithm=mgf_md),
-            salt_length=salt_len
-        )
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, pss_padding, hash_algo)
-    elif sig_algo == 'dsa':
-        assert isinstance(pub_key, dsa.DSAPublicKey)
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, hash_algo)
-    elif sig_algo == 'ecdsa':
-        assert isinstance(pub_key, ec.EllipticCurvePublicKey)
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, ec.ECDSA(hash_algo))
-    elif sig_algo == 'ed25519':
-        assert isinstance(pub_key, ed25519.Ed25519PublicKey)
-        pub_key.verify(signature, signed_data)
-    elif sig_algo == 'ed448':
-        assert isinstance(pub_key, ed448.Ed448PublicKey)
-        pub_key.verify(signature, signed_data)
-    else:  # pragma: nocover
-        raise NotImplementedError(
-            f"Signature mechanism {sig_algo} is not supported."
-        )

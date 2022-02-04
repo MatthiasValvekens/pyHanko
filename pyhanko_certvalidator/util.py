@@ -1,6 +1,13 @@
 from typing import Union, Optional, List
 
-from asn1crypto import x509, cms, core
+from asn1crypto import x509, cms, core, algos
+from asn1crypto.keys import PublicKeyInfo
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding, dsa, ec, \
+    ed25519, ed448
+
+from pyhanko_certvalidator.errors import DSAParametersUnavailable, \
+    PSSParameterMismatch
 
 
 def extract_dir_name(names: x509.GeneralNames,
@@ -157,3 +164,70 @@ def get_declared_revinfo(
         has_ocsp = False
 
     return has_crl, has_ocsp
+
+
+def validate_sig(signature: bytes, signed_data: bytes,
+                 public_key_info: PublicKeyInfo,
+                 sig_algo: str, hash_algo: str, parameters=None):
+
+    if sig_algo == 'dsa' and \
+            public_key_info['algorithm']['parameters'].native is None:
+        raise DSAParametersUnavailable(
+            "DSA public key parameters were not provided."
+        )
+
+    # pyca/cryptography can't load PSS-exclusive keys without some help:
+    if public_key_info.algorithm == 'rsassa_pss':
+        public_key_info = public_key_info.copy()
+        assert isinstance(parameters, algos.RSASSAPSSParams)
+        pss_key_params = public_key_info['algorithm']['parameters'].native
+        if pss_key_params is not None and pss_key_params != parameters.native:
+            raise PSSParameterMismatch(
+                "Public key info includes PSS parameters that do not match "
+                "those on the signature"
+            )
+        # set key type to generic RSA, discard parameters
+        public_key_info['algorithm'] = {'algorithm': 'rsa'}
+
+    pub_key = serialization.load_der_public_key(public_key_info.dump())
+
+    if sig_algo == 'rsassa_pkcs1v15':
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        hash_algo = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, padding.PKCS1v15(), hash_algo)
+    elif sig_algo == 'rsassa_pss':
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        assert isinstance(parameters, algos.RSASSAPSSParams)
+        mga: algos.MaskGenAlgorithm = parameters['mask_gen_algorithm']
+        if not mga['algorithm'].native == 'mgf1':
+            raise NotImplementedError("Only MFG1 is supported")
+
+        mgf_md_name = mga['parameters']['algorithm'].native
+
+        salt_len: int = parameters['salt_length'].native
+
+        mgf_md = getattr(hashes, mgf_md_name.upper())()
+        pss_padding = padding.PSS(
+            mgf=padding.MGF1(algorithm=mgf_md),
+            salt_length=salt_len
+        )
+        hash_algo = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, pss_padding, hash_algo)
+    elif sig_algo == 'dsa':
+        assert isinstance(pub_key, dsa.DSAPublicKey)
+        hash_algo = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, hash_algo)
+    elif sig_algo == 'ecdsa':
+        assert isinstance(pub_key, ec.EllipticCurvePublicKey)
+        hash_algo = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, ec.ECDSA(hash_algo))
+    elif sig_algo == 'ed25519':
+        assert isinstance(pub_key, ed25519.Ed25519PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo == 'ed448':
+        assert isinstance(pub_key, ed448.Ed448PublicKey)
+        pub_key.verify(signature, signed_data)
+    else:  # pragma: nocover
+        raise NotImplementedError(
+            f"Signature mechanism {sig_algo} is not supported."
+        )
