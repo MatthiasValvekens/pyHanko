@@ -9,7 +9,7 @@ from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.context import ValidationContext
-from pyhanko_certvalidator.validate import verify_ocsp_response
+from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
 from.constants import TEST_REQUEST_TIMEOUT
 
 tests_root = os.path.dirname(__file__)

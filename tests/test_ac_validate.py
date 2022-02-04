@@ -4,6 +4,8 @@ import unittest
 
 from asn1crypto import cms, x509, crl, ocsp
 
+import pyhanko_certvalidator.revinfo.validate_crl
+import pyhanko_certvalidator.revinfo.validate_ocsp
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
@@ -340,7 +342,7 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
         aa_path.append(role_aa)
 
         with self.assertRaises(RevokedError):
-            await validate.verify_crl(ac, aa_path, vc)
+            await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
 
     async def test_ac_unrevoked(self):
         ac = load_attr_cert(
@@ -371,7 +373,7 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
         aa_path.append(interm)
         aa_path.append(role_aa)
 
-        await validate.verify_crl(ac, aa_path, vc)
+        await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
 
     async def test_ac_revoked_full_path_validation(self):
         ac = load_attr_cert(
@@ -460,7 +462,7 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         aa_path.append(role_aa)
 
         with self.assertRaises(RevokedError):
-            await validate.verify_ocsp_response(ac, aa_path, vc)
+            await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
 
     async def test_ac_unrevoked(self):
         ac = load_attr_cert(
@@ -491,7 +493,7 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         aa_path.append(interm)
         aa_path.append(role_aa)
 
-        await validate.verify_ocsp_response(ac, aa_path, vc)
+        await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
 
     async def test_ac_revoked_full_path_validation(self):
         ac = load_attr_cert(

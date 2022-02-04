@@ -6,7 +6,7 @@ import os
 from asn1crypto import x509, pem
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
 from pyhanko_certvalidator.context import ValidationContext
-from pyhanko_certvalidator.validate import verify_crl
+from pyhanko_certvalidator.revinfo.validate_crl import verify_crl
 from .constants import TEST_REQUEST_TIMEOUT
 
 tests_root = os.path.dirname(__file__)
