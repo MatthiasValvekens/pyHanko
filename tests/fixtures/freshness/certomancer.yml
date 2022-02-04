@@ -1,0 +1,110 @@
+external-url-prefix: "http://ca.example.com"
+keysets:
+  testing-ca:
+    path-prefix: keys
+    keys:
+      root:
+        path: root.key.pem
+      interm:
+        path: interm.key.pem
+      interm-ocsp:
+        path: interm-ocsp.key.pem
+      alice:
+        path: alice.key.pem
+      bob:
+        path: bob.key.pem
+
+pki-architectures:
+  freshness-ca:
+    keyset: testing-ca
+    entity-defaults:
+      country-name: XX
+      organization-name: Testing Authority
+    entities:
+      root:
+        common-name: Root CA
+      interm:
+        common-name: Intermediate CA
+      interm-ocsp:
+        common-name: Intermediate CA OCSP Responder
+      alice:
+        organizational-unit-name: People
+        common-name: Alice
+      bob:
+        organizational-unit-name: People
+        common-name: Bob
+    certs:
+      root:
+        subject: root
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2500-01-01T00:00:00+0000"
+        profiles:
+          - id: simple-ca
+            params:
+              crl-repo: root
+      interm:
+        subject: interm
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        profiles:
+          - id: simple-ca
+            params:
+              crl-repo: interm
+              ocsp-service: interm
+              max-path-len: 0
+      interm-revoked:
+        subject: interm
+        issuer: root
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        revocation:
+          revoked-since: "2020-12-01T00:00:00+0000"
+          reason: key_compromise
+        profiles:
+          - simple-ca
+      interm-ocsp:
+        issuer: interm
+        issuer-cert: interm
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        profiles:
+          - ocsp-responder
+      alice:
+        subject: alice
+        issuer: interm
+        issuer-cert: interm
+        validity:
+          valid-from: "2000-01-01T00:00:00+0000"
+          valid-to: "2100-01-01T00:00:00+0000"
+        revocation:
+          revoked-since: "2020-12-01T00:00:00+0000"
+          reason: key_compromise
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [digital_signature]
+    services:
+      ocsp:
+        interm:
+          for-issuer: interm
+          issuer-cert: interm
+          responder-cert: interm-ocsp
+          signing-key: interm-ocsp
+      crl-repo:
+        root:
+          for-issuer: root
+          signing-key: root
+          simulated-update-schedule: "P10D"
+        interm:
+          for-issuer: interm
+          signing-key: interm
+          issuer-cert: interm
+          simulated-update-schedule: "P10D"
