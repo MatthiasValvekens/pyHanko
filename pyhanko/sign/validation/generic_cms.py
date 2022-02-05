@@ -391,7 +391,7 @@ async def validate_cert_usage(
     Internal API.
     """
 
-    cert: x509.Certificate = validator._certificate
+    cert: x509.Certificate = validator.certificate
 
     path = None
     try:
