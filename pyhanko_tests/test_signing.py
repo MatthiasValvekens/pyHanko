@@ -139,7 +139,7 @@ def test_simple_sign_tamper():
     emb = r.embedded_signatures[0]
     tampered = validate_pdf_signature(emb, SIMPLE_V_CONTEXT())
     assert not tampered.intact
-    assert not tampered.valid
+    assert tampered.valid
     assert tampered.summary() == 'INVALID'
 
 

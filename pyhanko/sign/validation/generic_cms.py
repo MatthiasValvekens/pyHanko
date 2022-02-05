@@ -311,8 +311,7 @@ async def cms_basic_validation(
         raw_digest: bytes = None,
         validation_context: ValidationContext = None,
         status_kwargs: dict = None,
-        key_usage_settings: KeyUsageConstraints = None,
-        encap_data_invalid=False):
+        key_usage_settings: KeyUsageConstraints = None):
 
     """
     Perform basic validation of CMS and PKCS#7 signatures in isolation
@@ -356,11 +355,6 @@ async def cms_basic_validation(
             "CMS structural error: " + e.failure_message
         ) from e
 
-    # if the data being encapsulated by the signature is itself invalid,
-    #  this flag is set
-    intact &= not encap_data_invalid
-    valid &= intact
-
     # next, validate trust
     ades_status = path = None
     if valid:
@@ -391,8 +385,7 @@ async def async_validate_cms_signature(
                            raw_digest: bytes = None,
                            validation_context: ValidationContext = None,
                            status_kwargs: dict = None,
-                           key_usage_settings: KeyUsageConstraints = None,
-                           encap_data_invalid=False):
+                           key_usage_settings: KeyUsageConstraints = None):
     """
     Validate a CMS signature (i.e. a ``SignedData`` object).
 
@@ -410,20 +403,12 @@ async def async_validate_cms_signature(
     :param key_usage_settings:
         A :class:`.KeyUsageConstraints` object specifying which key usages
         must or must not be present in the signer's certificate.
-    :param encap_data_invalid:
-        If ``True``, the encapsulated data inside the CMS is invalid,
-        but the remaining validation logic still has to be run (e.g. a
-        timestamp token, which requires validation of the embedded message
-        imprint).
-
-        This option is considered internal API, the semantics of which may
-        change without notice in the future.
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
     status_kwargs = await cms_basic_validation(
         signed_data, status_cls, raw_digest, validation_context,
-        status_kwargs, key_usage_settings, encap_data_invalid
+        status_kwargs, key_usage_settings
     )
     return status_cls(**status_kwargs)
 
@@ -581,6 +566,12 @@ async def validate_tst_signed_data(
         raise errors.SignatureValidationError(
             "SignedData does not encapsulate TSTInfo"
         )
+    timestamp = tst_info['gen_time'].native
+    status_kwargs = await cms_basic_validation(
+        tst_signed_data, status_cls=TimestampSignatureStatus,
+        validation_context=validation_context,
+        status_kwargs={'timestamp': timestamp},
+    )
     # compare the expected TST digest against the message imprint
     # inside the signed data
     tst_imprint = tst_info['message_imprint']['hashed_message'].native
@@ -589,16 +580,8 @@ async def validate_tst_signed_data(
             f"Timestamp token imprint is {tst_imprint.hex()}, but expected "
             f"{expected_tst_imprint.hex()}."
         )
-        encap_data_invalid = True
-    else:
-        encap_data_invalid = False
-    timestamp = tst_info['gen_time'].native
-    return await cms_basic_validation(
-        tst_signed_data, status_cls=TimestampSignatureStatus,
-        validation_context=validation_context,
-        status_kwargs={'timestamp': timestamp},
-        encap_data_invalid=encap_data_invalid
-    )
+        status_kwargs['intact'] = False
+    return status_kwargs
 
 
 async def process_certified_attrs(

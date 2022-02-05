@@ -614,7 +614,7 @@ def test_standalone_document_timestamp(requests_mock):
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
     tampered = validate_pdf_timestamp(embedded_sig=s, validation_context=vc)
-    assert not tampered.intact and not tampered.valid
+    assert not tampered.intact and tampered.valid
 
 
 @pytest.mark.parametrize('with_vri', [True, False])
@@ -869,7 +869,7 @@ async def test_sign_with_wrong_content_sig():
     assert status.intact
     assert status.trusted
     assert not status.content_timestamp_validity.intact
-    assert not status.content_timestamp_validity.valid
+    assert status.content_timestamp_validity.valid
     assert not status.content_timestamp_validity.trusted
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid

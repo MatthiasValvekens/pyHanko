@@ -50,12 +50,15 @@ class SignatureStatus:
     Reports whether the signature is *intact*, i.e. whether the hash of the
     message content (which may or may not be embedded inside the CMS object
     itself) matches the hash value that was signed.
+
+    If there are no signed attributes, this is equal to :attr:`valid`.
     """
 
     valid: bool
     """
-    Reports whether the signature is *valid*, i.e. whether the hash's signature
-    actually validates.
+    Reports whether the signature is *valid*, i.e. whether the signature
+    in the CMS object itself (usually computed over a hash of the signed
+    attributes) is cryptographically valid.
     """
 
     trust_problem_indic: Optional[AdESSubIndic]
@@ -130,7 +133,7 @@ class SignatureStatus:
         Reports whether the signer's certificate is trusted w.r.t. the currently
         relevant validation context and key usage requirements.
         """
-        return self.valid and self.trust_problem_indic is None
+        return self.valid and self.intact and self.trust_problem_indic is None
 
     # TODO explain in more detail.
     def summary(self, delimiter=','):
@@ -512,13 +515,14 @@ class StandardCMSSignatureStatus(SignatureStatus):
         if ts is None:
             timestamp_ok = True
         else:
-            timestamp_ok = ts.valid and ts.trusted
+            timestamp_ok = ts.valid and ts.intact and ts.trusted
 
         content_ts = self.content_timestamp_validity
         if content_ts is None:
             content_timestamp_ok = True
         else:
-            content_timestamp_ok = content_ts.valid and content_ts.trusted
+            content_timestamp_ok = \
+                content_ts.valid and content_ts.intact and content_ts.trusted
 
         return (
                 self.intact and self.valid and self.trusted and timestamp_ok

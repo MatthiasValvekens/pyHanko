@@ -114,7 +114,6 @@ def validate_cms_signature(signed_data: cms.SignedData,
         signed_data=signed_data, status_cls=status_cls, raw_digest=raw_digest,
         validation_context=validation_context, status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,
-        encap_data_invalid=encap_data_invalid
     )
     return asyncio.run(coro)
 
