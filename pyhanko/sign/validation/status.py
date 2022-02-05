@@ -6,13 +6,7 @@ from enum import unique
 from typing import ClassVar, Collection, Dict, Iterable, Optional, Set, Union
 
 from asn1crypto import cms, core, keys, x509
-from pyhanko_certvalidator import CertificateValidator
-from pyhanko_certvalidator.errors import (
-    InvalidCertificateError,
-    PathBuildingError,
-    PathValidationError,
-    RevokedError,
-)
+from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.validate import ACValidationResult
 
@@ -146,9 +140,10 @@ class SignatureStatus:
             return 'INVALID'
 
     @classmethod
-    async def validate_cert_usage(
-            cls, validator: CertificateValidator,
-            key_usage_settings: KeyUsageConstraints = None):
+    def default_usage_constraints(
+                cls, key_usage_settings: Optional[KeyUsageConstraints] = None) \
+            -> KeyUsageConstraints:
+
         key_usage_settings = key_usage_settings or KeyUsageConstraints()
         key_usage_settings = KeyUsageConstraints(
             key_usage=(
@@ -160,37 +155,7 @@ class SignatureStatus:
                 else key_usage_settings.extd_key_usage
             )
         )
-        cert: x509.Certificate = validator._certificate
-
-        path = None
-        try:
-            # validate usage without going through pyhanko_certvalidator
-            key_usage_settings.validate(cert)
-            path = await validator.async_validate_usage(key_usage=set())
-            ades_status = None
-        except InvalidCertificateError as e:
-            # TODO accumulate these somewhere?
-            logger.warning(e)
-            ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
-        except RevokedError:
-            # TODO have certvalidator report with which of the three
-            #  revocation cases under AdES we're dealing with.
-            # (For now, assume the worst.)
-            ades_status = AdESFailure.REVOKED
-        except PathBuildingError as e:
-            logger.warning(e)
-            ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
-        except PathValidationError as e:
-            logger.warning(e)
-            # TODO make error reporting in certvalidator more granular
-            #  so we can actually set proper AdES values
-            #  (e.g. expiration-related ones, distinguish between CA and EE,
-            #   revinfo freshness...)
-            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
-        if ades_status is not None:
-            subj = cert.subject.human_friendly
-            logger.warning(f"Chain of trust validation for {subj} failed.")
-        return ades_status, path
+        return key_usage_settings
 
     @property
     def _trust_anchor(self):

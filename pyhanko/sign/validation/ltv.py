@@ -516,8 +516,10 @@ async def async_validate_pdf_ltv_signature(
         'signer_reported_dt': earliest_good_timestamp_st.timestamp,
         'timestamp_validity': timestamp_status
     })
+    key_usage_settings = \
+        PdfSignatureStatus.default_usage_constraints(key_usage_settings)
     status_kwargs = await cms_basic_validation(
-        embedded_sig.signed_data, status_cls=PdfSignatureStatus,
+        embedded_sig.signed_data,
         raw_digest=embedded_sig.external_digest,
         validation_context=stored_vc, status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings

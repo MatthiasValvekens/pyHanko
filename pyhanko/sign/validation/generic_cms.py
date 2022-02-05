@@ -7,7 +7,12 @@ from asn1crypto import cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
-from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
+from pyhanko_certvalidator.errors import (
+    InvalidCertificateError,
+    PathBuildingError,
+    PathValidationError,
+    RevokedError,
+)
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
@@ -307,12 +312,10 @@ def extract_certs_for_validation(signed_data: cms.SignedData) \
 
 async def cms_basic_validation(
         signed_data: cms.SignedData,
-        status_cls: Type[StatusType] = SignatureStatus,
         raw_digest: bytes = None,
         validation_context: ValidationContext = None,
         status_kwargs: dict = None,
-        key_usage_settings: KeyUsageConstraints = None):
-
+        *, key_usage_settings: KeyUsageConstraints):
     """
     Perform basic validation of CMS and PKCS#7 signatures in isolation
     (i.e. integrity and trust checks).
@@ -363,7 +366,7 @@ async def cms_basic_validation(
                 cert, intermediate_certs=other_certs,
                 validation_context=validation_context
             )
-            ades_status, path = await status_cls.validate_cert_usage(
+            ades_status, path = await validate_cert_usage(
                 validator, key_usage_settings=key_usage_settings
             )
         except ValueError as e:
@@ -377,6 +380,47 @@ async def cms_basic_validation(
         trust_problem_indic=ades_status, validation_path=path
     )
     return status_kwargs
+
+
+async def validate_cert_usage(
+        validator: CertificateValidator,
+        key_usage_settings: KeyUsageConstraints):
+    """
+    Low-level certificate validation routine.
+    Internal API.
+    """
+
+    cert: x509.Certificate = validator._certificate
+
+    path = None
+    try:
+        # validate usage without going through pyhanko_certvalidator
+        key_usage_settings.validate(cert)
+        path = await validator.async_validate_usage(key_usage=set())
+        ades_status = None
+    except InvalidCertificateError as e:
+        # TODO accumulate these somewhere?
+        logger.warning(e)
+        ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
+    except RevokedError:
+        # TODO have certvalidator report with which of the three
+        #  revocation cases under AdES we're dealing with.
+        # (For now, assume the worst.)
+        ades_status = AdESFailure.REVOKED
+    except PathBuildingError as e:
+        logger.warning(e)
+        ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+    except PathValidationError as e:
+        logger.warning(e)
+        # TODO make error reporting in certvalidator more granular
+        #  so we can actually set proper AdES values
+        #  (e.g. expiration-related ones, distinguish between CA and EE,
+        #   revinfo freshness...)
+        ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+    if ades_status is not None:
+        subj = cert.subject.human_friendly
+        logger.warning(f"Chain of trust validation for {subj} failed.")
+    return ades_status, path
 
 
 async def async_validate_cms_signature(
@@ -406,9 +450,11 @@ async def async_validate_cms_signature(
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
+    key_usage_settings = \
+        status_cls.default_usage_constraints(key_usage_settings)
     status_kwargs = await cms_basic_validation(
-        signed_data, status_cls, raw_digest, validation_context,
-        status_kwargs, key_usage_settings
+        signed_data, raw_digest, validation_context,
+        status_kwargs, key_usage_settings=key_usage_settings
     )
     return status_cls(**status_kwargs)
 
@@ -567,10 +613,12 @@ async def validate_tst_signed_data(
             "SignedData does not encapsulate TSTInfo"
         )
     timestamp = tst_info['gen_time'].native
+
+    ku_settings = TimestampSignatureStatus.default_usage_constraints()
     status_kwargs = await cms_basic_validation(
-        tst_signed_data, status_cls=TimestampSignatureStatus,
-        validation_context=validation_context,
+        tst_signed_data, validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
+        key_usage_settings=ku_settings
     )
     # compare the expected TST digest against the message imprint
     # inside the signed data
@@ -764,9 +812,10 @@ async def async_validate_detached_cms(
         signer_info, ts_validation_context=ts_validation_context,
         raw_digest=digest_bytes
     )
+    key_usage_settings = \
+        StandardCMSSignatureStatus.default_usage_constraints(key_usage_settings)
     status_kwargs = await cms_basic_validation(
-        signed_data, status_cls=StandardCMSSignatureStatus,
-        raw_digest=digest_bytes,
+        signed_data, raw_digest=digest_bytes,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings

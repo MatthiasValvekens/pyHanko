@@ -858,9 +858,10 @@ async def async_validate_pdf_signature(
         if signer_reported_dt is not None:
             status_kwargs['signer_reported_dt'] = signer_reported_dt
 
+    key_usage_settings = PdfSignatureStatus.\
+        default_usage_constraints(key_usage_settings)
     status_kwargs = await cms_basic_validation(
-        embedded_sig.signed_data, status_cls=PdfSignatureStatus,
-        raw_digest=embedded_sig.external_digest,
+        embedded_sig.signed_data, raw_digest=embedded_sig.external_digest,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs, key_usage_settings=key_usage_settings
     )
