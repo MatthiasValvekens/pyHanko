@@ -18,7 +18,8 @@ from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
 from pyhanko_certvalidator.validate import validate_path, async_validate_path
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
-    OCSPFetchError, CRLFetchError, CertificateFetchError
+    OCSPFetchError, CRLFetchError, CertificateFetchError, \
+    InsufficientRevinfoError
 
 from ._unittest_compat import patch
 from .constants import TEST_REQUEST_TIMEOUT
@@ -485,7 +486,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -505,7 +506,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the intermediate '
                     'certificate 1 revocation checks failed: Unable to verify '
@@ -522,7 +523,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -541,7 +542,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 10, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -558,7 +559,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 10, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -578,7 +579,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -599,7 +600,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the intermediate '
                     'certificate 1 revocation checks failed: Unable to verify '
@@ -617,7 +618,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -637,7 +638,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -655,7 +656,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -676,7 +677,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -696,7 +697,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the intermediate '
                     'certificate 1 revocation checks failed: OCSP response '
@@ -713,7 +714,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -732,7 +733,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -749,7 +750,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -769,7 +770,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -789,7 +790,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the intermediate '
                     'certificate 1 revocation checks failed: OCSP response '
@@ -806,7 +807,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 12, 0, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -825,7 +826,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -842,7 +843,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: OCSP response '
@@ -861,7 +862,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -879,7 +880,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -899,7 +900,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -917,7 +918,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 2,
                 datetime(2012, 10, 11, 14, 0, 0, tzinfo=timezone.utc),
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
@@ -1549,7 +1550,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -1602,7 +1603,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL signature could not '
@@ -1620,7 +1621,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -1637,7 +1638,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -1669,7 +1670,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: One or more '
@@ -1688,7 +1689,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: One or more unrecognized '
@@ -1706,7 +1707,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: One or more unrecognized '
@@ -1724,7 +1725,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL is stale'
@@ -1741,7 +1742,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL is stale'
@@ -2397,7 +2398,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: The CRL issuer is not '
@@ -2415,7 +2416,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: The CRL issuer is not '
@@ -4547,7 +4548,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -4623,7 +4624,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -4640,7 +4641,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -4671,7 +4672,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL only contains '
@@ -4689,7 +4690,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL only contains '
@@ -4721,7 +4722,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL only contains attribute '
@@ -4776,7 +4777,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: The available CRLs do not '
@@ -4922,7 +4923,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -4940,7 +4941,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -5072,7 +5073,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -5089,7 +5090,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because no revocation information '
                     'could be found for the end-entity certificate'
@@ -5239,7 +5240,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                PathValidationError,
+                InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: CRL is stale'

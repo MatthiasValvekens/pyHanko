@@ -93,7 +93,10 @@ class PathValidationError(ValidationError):
 
 
 class RevokedError(PathValidationError):
+    pass
 
+
+class InsufficientRevinfoError(PathValidationError):
     pass
 
 

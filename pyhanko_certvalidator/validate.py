@@ -31,6 +31,7 @@ from .errors import (
     PathValidationError,
     PathBuildingError, InvalidAttrCertificateError, NotYetValidError,
     ExpiredError, WeakAlgorithmError, PSSParameterMismatch,
+    InsufficientRevinfoError,
 )
 from .path import ValidationPath, QualifiedPolicy
 from .policy_tree import (
@@ -1256,7 +1257,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
             err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable CRL could not be found'
-        raise PathValidationError.from_state(pretty_message(
+        raise InsufficientRevinfoError.from_state(pretty_message(
             '''
             The path could not be validated because the mandatory CRL
             check(s) for %s failed: %s
@@ -1279,7 +1280,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
     expected_revinfo_not_found = not matched and expected_revinfo
     if not soft_fail:
         if not status_good and matched and revocation_check_failed:
-            raise PathValidationError.from_state(pretty_message(
+            raise InsufficientRevinfoError.from_state(pretty_message(
                 '''
                 The path could not be validated because %s revocation
                 checks failed: %s
@@ -1288,7 +1289,7 @@ async def _check_revocation(cert, validation_context: ValidationContext, path,
                 '; '.join(failures)
             ), proc_state)
         if expected_revinfo_not_found:
-            raise PathValidationError.from_state(pretty_message(
+            raise InsufficientRevinfoError.from_state(pretty_message(
                 '''
                 The path could not be validated because no revocation
                 information could be found for %s
