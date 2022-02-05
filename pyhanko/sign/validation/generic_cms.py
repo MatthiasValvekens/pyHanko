@@ -8,6 +8,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import (
+    ExpiredError,
     InvalidCertificateError,
     PathBuildingError,
     PathValidationError,
@@ -402,20 +403,25 @@ async def validate_cert_usage(
         # TODO accumulate these somewhere?
         logger.warning(e)
         ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
-    except RevokedError:
-        # TODO have certvalidator report with which of the three
-        #  revocation cases under AdES we're dealing with.
-        # (For now, assume the worst.)
-        ades_status = AdESFailure.REVOKED
+    except RevokedError as e:
+        logger.warning(e)
+        if e.is_side_validation:
+            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+        elif e.is_ee_cert:
+            ades_status = AdESIndeterminate.REVOKED_NO_POE
+        else:
+            ades_status = AdESIndeterminate.REVOKED_CA_NO_POE
     except PathBuildingError as e:
         logger.warning(e)
         ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+    except ExpiredError as e:
+        logger.warning(e)
+        if not e.is_side_validation and e.is_ee_cert:
+            ades_status = AdESIndeterminate.OUT_OF_BOUNDS_NO_POE
+        else:
+            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     except PathValidationError as e:
         logger.warning(e)
-        # TODO make error reporting in certvalidator more granular
-        #  so we can actually set proper AdES values
-        #  (e.g. expiration-related ones, distinguish between CA and EE,
-        #   revinfo freshness...)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     if ades_status is not None:
         subj = cert.subject.human_friendly
