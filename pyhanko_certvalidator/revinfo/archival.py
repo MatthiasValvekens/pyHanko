@@ -101,6 +101,9 @@ def _judge_revinfo(this_update: Optional[datetime],
     # with retroactive_revinfo active.
     # AdES-derived policies are supposed to use proper POE handling in lieu
     # of this alternative system.
+    #  TODO revisit this when we actually implement AdES point-in-time
+    #   validation. Maybe this needs to be dealt with at a higher level, to
+    #   accept future revinfo as evidence of non-revocation or somesuch
     if timing_info.validation_time < this_update:
         if not policy.retroactive_revinfo or \
                 policy.freshness_req_type != FreshnessReqType.DEFAULT:

@@ -103,6 +103,9 @@ class ValidationContext:
             other_certs: Optional[Iterable[x509.Certificate]] = None,
             whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
             moment: Optional[datetime] = None,
+            # FIXME before releasing the AdES stuff,
+            #  check if this still makes sense to include, or we should stick
+            #  to `moment` only at this level of the API
             use_poe_time: Optional[datetime] = None,
             allow_fetching: bool = False,
             crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
