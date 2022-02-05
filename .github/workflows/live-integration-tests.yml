@@ -24,6 +24,15 @@ jobs:
               'pytest-aiohttp~=1.0.4' dist/*.whl \
                requests-mock~=1.8.0 freezegun~=1.1.0 certomancer-csc-dummy==0.2.1 \
                pyhanko-certvalidator~=0.19.8
+      - name: Install pyhanko-certvalidator dev build (feature branches only)
+        if: ${{ startsWith(github.ref, 'refs/heads/feature') }}
+        run: |
+          pip install build
+          git clone --depth 1 https://github.com/MatthiasValvekens/certvalidator
+          cd certvalidator
+          python -m build
+          pip install dist/*.whl
+          cd ..
       - name: Start Certomancer Animator daemon
         run: |
           certomancer --service-url-prefix http://localhost:9000 \

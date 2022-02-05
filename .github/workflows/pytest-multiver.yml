@@ -27,6 +27,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install --upgrade pytest
+    - name: Install pyhanko-certvalidator dev build (feature branches only)
+      if: ${{ startsWith(github.ref, 'refs/heads/feature') }}
+      run: |
+        pip install build
+        git clone --depth 1 https://github.com/MatthiasValvekens/certvalidator
+        cd certvalidator
+        python -m build
+        pip install dist/*.whl
+        cd ..
     - name: Initialise SoftHSM tokens
       run: |
         mkdir softhsm_tokens
