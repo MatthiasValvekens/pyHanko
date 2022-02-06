@@ -1728,7 +1728,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
-                    'certificate revocation checks failed: CRL is stale'
+                    'certificate revocation checks failed: CRL is not recent '
+                    'enough'
                 )
             ),
             (
@@ -1745,7 +1746,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
-                    'certificate revocation checks failed: CRL is stale'
+                    'certificate revocation checks failed: CRL is not recent '
+                    'enough'
                 )
             ),
             (
@@ -5243,7 +5245,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
-                    'certificate revocation checks failed: CRL is stale'
+                    'certificate revocation checks failed: CRL is not recent '
+                    'enough'
                 ),
             ),
             (

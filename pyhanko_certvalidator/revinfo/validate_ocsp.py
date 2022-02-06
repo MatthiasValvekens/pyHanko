@@ -177,7 +177,7 @@ async def _handle_single_ocsp_resp(
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:
-            msg = 'OCSP response is stale'
+            msg = 'OCSP response is not recent enough'
         elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
             msg = 'OCSP response is too recent'
         else:

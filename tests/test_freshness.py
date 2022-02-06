@@ -86,7 +86,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             use_poe_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
         )
         path, = await vc.certificate_registry.async_build_paths(alice)
-        with self.assertRaisesRegex(PathValidationError, "CRL.*stale"):
+        with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
             await async_validate_path(vc, path)
 
     async def test_use_delta_ok(self):
@@ -141,7 +141,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
         )
         path, = await vc.certificate_registry.async_build_paths(alice)
-        with self.assertRaisesRegex(PathValidationError, "CRL.*stale"):
+        with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
             await async_validate_path(vc, path)
 
     async def test_use_most_recent(self):

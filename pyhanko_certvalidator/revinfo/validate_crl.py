@@ -485,7 +485,7 @@ async def _handle_single_crl(
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:
-            msg = 'CRL is stale'
+            msg = 'CRL is not recent enough'
         elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
             msg = 'CRL is too recent'
         else:
