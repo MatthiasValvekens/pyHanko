@@ -1,4 +1,5 @@
 import enum
+import logging
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address
 from typing import Union, Callable, Optional, Set, Dict, List, Iterable
@@ -6,7 +7,12 @@ from typing import Union, Callable, Optional, Set, Dict, List, Iterable
 from asn1crypto import x509
 from uritools import urisplit
 
-from pyhanko_certvalidator.errors import PathValidationError
+
+logger = logging.getLogger(__name__)
+
+
+class NameConstraintError(ValueError):
+    pass
 
 
 def host_tree_contains(base_host: str, other_host: str) -> bool:
@@ -25,19 +31,18 @@ def _host_regname(cand_uri):
         host_err = f'has host {cand_host}.' if cand_host is not None else (
             'is not a well-formed URI.'
         )
-        raise ValueError(
+        msg = (
             "URI constraints require URIs with a host specified as a FQDN; "
             f"URI '{cand_uri}' {host_err}."
         )
+        logger.warning(msg)
+        raise NameConstraintError(msg)
     return cand_host
 
 
 def uri_tree_contains(base: str, other: str) -> bool:
     # The constraint applies to the host part
-    try:
-        other_host: str = _host_regname(other)
-    except ValueError as e:
-        raise PathValidationError(e)
+    other_host: str = _host_regname(other)
     return host_tree_contains(base, other_host)
 
 
@@ -278,10 +283,13 @@ class PermittedSubtrees:
         # filters we accumulated.
         # Run through the list in reverse order (newest first) to apply the
         #  (generally) strictest conditions first
-        return all(
-            any(name in tree for tree in trees_in_generation)
-            for trees_in_generation in reversed(self._trees[name_type])
-        )
+        try:
+            return all(
+                any(name in tree for tree in trees_in_generation)
+                for trees_in_generation in reversed(self._trees[name_type])
+            )
+        except NameConstraintError:
+            return False
 
     def accept_cert(self, cert: x509.Certificate) \
             -> NameConstraintValidationResult:
@@ -317,7 +325,10 @@ class ExcludedSubtrees:
             self._trees[name_type].update(new_excluded)
 
     def reject_name(self, name_type: GeneralNameType, name) -> bool:
-        return any(name in tree for tree in self._trees[name_type])
+        try:
+            return any(name in tree for tree in self._trees[name_type])
+        except NameConstraintError:
+            return True
 
     def accept_cert(self, cert: x509.Certificate) \
             -> NameConstraintValidationResult:
