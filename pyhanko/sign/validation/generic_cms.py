@@ -360,6 +360,9 @@ async def cms_basic_validation(
         raw_digest = md.finalize()
 
     # first, do the cryptographic identity checks
+    # TODO theoretically (e.g. DSA with param inheritance) this requires
+    #  doing the X.509 validation step first. Since nobody cares about DSA
+    #  (let alone DSA with inherited parameters), that's just a "nice to have".
     try:
         intact, valid = validate_sig_integrity(
             signer_info, cert, expected_content_type=expected_content_type,
