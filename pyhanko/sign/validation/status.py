@@ -27,7 +27,8 @@ __all__ = [
     'CAdESSignerAttributeAssertions',
     'StandardCMSSignatureStatus',
     'SignatureCoverageLevel', 'ModificationInfo',
-    'PdfSignatureStatus', 'DocumentTimestampStatus'
+    'PdfSignatureStatus', 'DocumentTimestampStatus',
+    'RevocationDetails'
 ]
 
 logger = logging.getLogger(__name__)
@@ -35,13 +36,25 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class RevocationDetails:
-    # TODO document this
+    """
+    Contains details about a certificate revocation related to a signature.
+    """
 
     ca_revoked: bool
+    """
+    If ``False``, the revoked certificate is the signer's. If ``True``, there's
+    a revoked CA certificate higher up the chain.
+    """
 
     revocation_date: datetime
+    """
+    The date and time of revocation.
+    """
 
     revocation_reason: crl.CRLReason
+    """
+    The reason why the certificate was revoked.
+    """
 
 
 @dataclass(frozen=True)
