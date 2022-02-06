@@ -1,6 +1,8 @@
 # coding: utf-8
+from datetime import datetime
 from typing import TypeVar
 
+from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator._state import ValProcState
@@ -93,7 +95,15 @@ class PathValidationError(ValidationError):
 
 
 class RevokedError(PathValidationError):
-    pass
+
+    def __init__(self, msg, reason: CRLReason, revocation_dt: datetime,
+                 proc_state: ValProcState):
+        self.reason = reason
+        self.revocation_dt = revocation_dt
+        super().__init__(
+            msg, is_ee_cert=proc_state.is_ee_cert,
+            is_side_validation=proc_state.is_side_validation
+        )
 
 
 class InsufficientRevinfoError(PathValidationError):

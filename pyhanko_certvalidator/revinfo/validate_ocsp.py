@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Union, Optional
 
 from asn1crypto import x509, cms, crl
+from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator.context import ValidationContext
@@ -292,21 +293,22 @@ async def _handle_single_ocsp_resp(
 
     if status == 'revoked':
         revocation_info = cert_response['cert_status'].chosen
-        if revocation_info['revocation_reason'].native is None:
-            reason = crl.CRLReason('unspecified').human_friendly
-        else:
-            reason = revocation_info['revocation_reason'].human_friendly
-        date = revocation_info['revocation_time'].native.strftime('%Y-%m-%d')
-        time = revocation_info['revocation_time'].native.strftime('%H:%M:%S')
-        raise RevokedError.from_state(pretty_message(
+        reason: CRLReason = revocation_info['revocation_reason']
+        if reason.native is None:
+            reason = crl.CRLReason('unspecified')
+        reason_str = reason.human_friendly
+        revocation_dt: datetime = revocation_info['revocation_time'].native
+        date = revocation_dt.strftime('%Y-%m-%d')
+        time = revocation_dt.strftime('%H:%M:%S')
+        raise RevokedError(pretty_message(
             '''
             OCSP response indicates %s was revoked at %s on %s, due to %s
             ''',
             proc_state.describe_cert(),
             time,
             date,
-            reason
-        ), proc_state)
+            reason_str
+        ), reason, revocation_dt, proc_state)
 
 
 async def verify_ocsp_response(

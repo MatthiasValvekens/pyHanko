@@ -624,18 +624,18 @@ async def _handle_single_crl(
         revoked_date = None
 
     if revoked_reason:
-        reason = revoked_reason.human_friendly
+        reason_str = revoked_reason.human_friendly
         date = revoked_date.native.strftime('%Y-%m-%d')
         time = revoked_date.native.strftime('%H:%M:%S')
-        raise RevokedError.from_state(pretty_message(
+        raise RevokedError(pretty_message(
             '''
             CRL indicates %s was revoked at %s on %s, due to %s
             ''',
             proc_state.describe_cert(),
             time,
             date,
-            reason
-        ), proc_state)
+            reason_str
+        ), revoked_reason, revoked_date, proc_state)
 
     return interim_reasons
 
