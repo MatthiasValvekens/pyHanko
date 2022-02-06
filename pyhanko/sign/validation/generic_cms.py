@@ -61,42 +61,52 @@ logger = logging.getLogger(__name__)
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 
+def _grab_signing_cert_attr(signed_attrs, v2: bool):
+    # TODO check certificate policies, enforce restrictions on chain of trust
+    # TODO document and/or mark as internal API explicitly
+    attr_name = 'signing_certificate_v2' if v2 else 'signing_certificate'
+    cls = tsp.SigningCertificateV2 if v2 else tsp.SigningCertificate
+    try:
+        value = find_unique_cms_attribute(signed_attrs, attr_name)
+        # reencode the attribute to avoid accidentally tripping the
+        # _is_mutated logic on the parent object (is important to preserve
+        # the state of the signed attributes)
+        return cls.load(value.dump())
+    except NonexistentAttributeError:
+        return None
+    except MultivaluedAttributeError as e:
+        # Banned by RFCs -> error
+        err = AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+        raise errors.SignatureValidationError(
+            "Wrong cardinality for signing certificate attribute",
+            ades_subindication=err
+        ) from e
+
+
 def _check_signing_certificate(cert: x509.Certificate,
                                signed_attrs: cms.CMSAttributes):
     # TODO check certificate policies, enforce restrictions on chain of trust
     # TODO document and/or mark as internal API explicitly
-    def _grab(attr_name, cls):
-        try:
-            value = find_unique_cms_attribute(signed_attrs, attr_name)
-            # reencode the attribute to avoid accidentally tripping the
-            # _is_mutated logic on the parent object (is important to preserve
-            # the state of the signed attributes)
-            return cls.load(value.dump())
-        except NonexistentAttributeError:
-            return None
-        except MultivaluedAttributeError as e:
-            raise errors.SignatureValidationError(
-                "Wrong cardinality for signing certificate attribute"
-            ) from e
 
-    attr = _grab('signing_certificate_v2', tsp.SigningCertificateV2)
+    attr = _grab_signing_cert_attr(signed_attrs, v2=True)
     if attr is None:
-        attr = _grab('signing_certificate', tsp.SigningCertificate)
+        attr = _grab_signing_cert_attr(signed_attrs, v2=False)
 
     if attr is None:
         # if neither attr is present -> no constraints
         return
 
-    # we only care about the first value, the others limit the set of applicable
-    # CA certs
+    # For the main signer cert, we only care about the first value, the others
+    # limit the set of applicable CA certs
     certid = attr['certs'][0]
 
     if not check_ess_certid(cert, certid):
+        err = AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
         raise errors.SignatureValidationError(
             f"Signing certificate attribute does not match selected "
             f"signer's certificate for subject"
             f"\"{cert.subject.human_friendly}\".",
-            ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+            ades_subindication=err
         )
 
 
@@ -356,7 +366,8 @@ async def cms_basic_validation(
         )
     except CMSStructuralError as e:
         raise errors.SignatureValidationError(
-            "CMS structural error: " + e.failure_message
+            "CMS structural error: " + e.failure_message,
+            ades_subindication=AdESFailure.FORMAT_FAILURE
         ) from e
 
     # next, validate trust
@@ -391,6 +402,8 @@ async def validate_cert_usage(
     Internal API.
     """
 
+    # TODO use path building & validation API directly and filter candidate
+    #  paths based on criteria in the signature container.
     cert: x509.Certificate = validator.certificate
 
     path = None
@@ -616,7 +629,8 @@ async def validate_tst_signed_data(
         tst_info = tst_info_bytes.parsed
     if not isinstance(tst_info, tsp.TSTInfo):
         raise errors.SignatureValidationError(
-            "SignedData does not encapsulate TSTInfo"
+            "SignedData does not encapsulate TSTInfo",
+            ades_subindication=AdESFailure.FORMAT_FAILURE
         )
     timestamp = tst_info['gen_time'].native
 
@@ -669,7 +683,10 @@ async def collect_signer_attr_status(
     except NonexistentAttributeError:
         signer_attrs = None
     except MultivaluedAttributeError as e:
-        raise errors.SignatureValidationError(str(e)) from e
+        # TODO downgrade to a warning?
+        raise errors.SignatureValidationError(
+            str(e), ades_subindication=AdESFailure.FORMAT_FAILURE
+        ) from e
 
     result = {}
     cades_ac_results = None
