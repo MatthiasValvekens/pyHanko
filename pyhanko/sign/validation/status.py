@@ -5,13 +5,13 @@ from datetime import datetime
 from enum import unique
 from typing import ClassVar, Collection, Dict, Iterable, Optional, Set, Union
 
-from asn1crypto import cms, core, keys, x509
+from asn1crypto import cms, core, crl, keys, x509
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.validate import ACValidationResult
 
 from ...pdf_utils.misc import OrderedEnum
-from ..ades.report import AdESFailure, AdESIndeterminate, AdESSubIndic
+from ..ades.report import AdESFailure, AdESSubIndic
 from ..diff_analysis import (
     DiffResult,
     ModificationLevel,
@@ -31,6 +31,17 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RevocationDetails:
+    # TODO document this
+
+    ca_revoked: bool
+
+    revocation_date: datetime
+
+    revocation_reason: crl.CRLReason
 
 
 @dataclass(frozen=True)
@@ -83,6 +94,12 @@ class SignatureStatus:
     certificate to a trusted root certificate.
     """
 
+    revocation_details: Optional[RevocationDetails]
+    """
+    Details on why and when the signer's certificate (or another certificate
+    in the chain) was revoked.
+    """
+
     # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
     #  (probably legacy behaviour)
     key_usage: ClassVar[Set[str]] = {'non_repudiation'}
@@ -115,11 +132,7 @@ class SignatureStatus:
         If this field is ``True``, then obviously :attr:`trusted` will be
         ``False``.
         """
-        return self.trust_problem_indic in (
-            AdESFailure.REVOKED,
-            AdESIndeterminate.REVOKED_CA_NO_POE,
-            AdESIndeterminate.REVOKED_NO_POE
-        )
+        return self.revocation_details is not None
 
     @property
     def trusted(self) -> bool:

@@ -37,6 +37,7 @@ from .status import (
     CAdESSignerAttributeAssertions,
     CertifiedAttributes,
     ClaimedAttributes,
+    RevocationDetails,
     SignatureStatus,
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
@@ -371,14 +372,14 @@ async def cms_basic_validation(
         ) from e
 
     # next, validate trust
-    ades_status = path = None
+    ades_status = path = revo_details = None
     if valid:
         try:
             validator = CertificateValidator(
                 cert, intermediate_certs=other_certs,
                 validation_context=validation_context
             )
-            ades_status, path = await validate_cert_usage(
+            ades_status, revo_details, path = await validate_cert_usage(
                 validator, key_usage_settings=key_usage_settings
             )
         except ValueError as e:
@@ -389,7 +390,8 @@ async def cms_basic_validation(
     status_kwargs.update(
         intact=intact, valid=valid, signing_cert=cert,
         md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-        trust_problem_indic=ades_status, validation_path=path
+        trust_problem_indic=ades_status, validation_path=path,
+        revocation_details=revo_details
     )
     return status_kwargs
 
@@ -406,7 +408,7 @@ async def validate_cert_usage(
     #  paths based on criteria in the signature container.
     cert: x509.Certificate = validator.certificate
 
-    path = None
+    path = revo_details = None
     try:
         # validate usage without going through pyhanko_certvalidator
         key_usage_settings.validate(cert)
@@ -419,11 +421,20 @@ async def validate_cert_usage(
     except RevokedError as e:
         logger.warning(e)
         if e.is_side_validation:
+            # don't report this as a revocation event
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
         elif e.is_ee_cert:
             ades_status = AdESIndeterminate.REVOKED_NO_POE
+            revo_details = RevocationDetails(
+                ca_revoked=False, revocation_date=e.revocation_dt,
+                revocation_reason=e.reason
+            )
         else:
             ades_status = AdESIndeterminate.REVOKED_CA_NO_POE
+            revo_details = RevocationDetails(
+                ca_revoked=True, revocation_date=e.revocation_dt,
+                revocation_reason=e.reason
+            )
     except PathBuildingError as e:
         logger.warning(e)
         ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
@@ -439,7 +450,7 @@ async def validate_cert_usage(
     if ades_status is not None:
         subj = cert.subject.human_friendly
         logger.warning(f"Chain of trust validation for {subj} failed.")
-    return ades_status, path
+    return ades_status, revo_details, path
 
 
 async def async_validate_cms_signature(

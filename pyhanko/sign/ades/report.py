@@ -24,6 +24,14 @@ class AdESSubIndic:
         raise NotImplementedError
 
 
+class AdESPassed(AdESSubIndic, enum.Enum):
+    OK = enum.auto()
+
+    @property
+    def status(self) -> AdESStatus:
+        return AdESStatus.PASSED
+
+
 class AdESFailure(AdESSubIndic, enum.Enum):
     FORMAT_FAILURE = enum.auto()
     HASH_FAILURE = enum.auto()
