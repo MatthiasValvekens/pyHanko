@@ -2,13 +2,14 @@
 
 import abc
 from collections import defaultdict
-from typing import List, Optional, Iterable
+from typing import List, Optional, Iterable, Union
 import asyncio
 
 from asn1crypto import x509
 from oscrypto import trust_list
 
-from .util import pretty_message
+from .policy_decl import TrustAnchor
+from .util import pretty_message, cert_for_trust_anchor_lookup
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError, DuplicateCertificateError
 from .path import ValidationPath
@@ -168,12 +169,9 @@ class CertificateRegistry(SimpleCertificateStore):
     Contains certificate lists used to build validation paths
     """
 
-    # A dict with keys being asn1crypto.x509.Certificate.signature byte string.
-    # Each value is a bool - if the certificate is a CA cert.
-    _ca_lookup = None
-
     def __init__(self,
-                 trust_roots: Optional[Iterable[x509.Certificate]] = None,
+                 trust_roots: Optional[Iterable[Union[x509.Certificate,
+                                                      TrustAnchor]]] = None,
                  extra_trust_roots: Optional[Iterable[x509.Certificate]] = None,
                  other_certs: Optional[Iterable[x509.Certificate]] = None,
                  *, cert_fetcher: CertificateFetcher = None):
@@ -200,7 +198,7 @@ class CertificateRegistry(SimpleCertificateStore):
 
         super().__init__()
 
-        self._ca_lookup = set()
+        self._trust_anchor_ids = trust_anchor_ids = set()
 
         if other_certs is None:
             other_certs = []
@@ -216,8 +214,11 @@ class CertificateRegistry(SimpleCertificateStore):
             trust_roots.extend(extra_trust_roots)
 
         for trust_root in trust_roots:
-            self.register(trust_root)
-            self._ca_lookup.add(trust_root.signature)
+            if isinstance(trust_root, TrustAnchor):
+                trust_anchor_ids.add(trust_root.hashable)
+            else:
+                self.register(trust_root)
+                trust_anchor_ids.add(cert_for_trust_anchor_lookup(trust_root))
 
         for other_cert in other_certs:
             self.register(other_cert)
@@ -235,7 +236,7 @@ class CertificateRegistry(SimpleCertificateStore):
             A boolean - if the certificate is in the CA list
         """
 
-        return cert.signature in self._ca_lookup
+        return cert_for_trust_anchor_lookup(cert) in self._trust_anchor_ids
 
     def add_other_cert(self, cert):
         """
@@ -356,7 +357,7 @@ class CertificateRegistry(SimpleCertificateStore):
             certs list
         """
 
-        if path.first.signature in self._ca_lookup:
+        if cert_for_trust_anchor_lookup(path.first) in self._trust_anchor_ids:
             paths.append(path)
             return
 

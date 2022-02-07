@@ -265,3 +265,14 @@ def validate_sig(signature: bytes, signed_data: bytes,
         raise NotImplementedError(
             f"Signature mechanism {sig_algo} is not supported."
         )
+
+
+def cert_for_trust_anchor_lookup(cert: x509.Certificate):
+    """
+    Extract the subject name and public key bytes out of a certificate, for
+    use when comparing and identifying trust roots.
+
+    We use this data to identify trust anchors, since according to PKIX, a
+    trust anchor is defined by a key associated with a name.
+    """
+    return cert.subject.hashable, cert.public_key.dump()

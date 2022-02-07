@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Optional
 
+from asn1crypto import x509
+
 from pyhanko_certvalidator.name_trees import PKIXSubtrees, \
     default_permitted_subtrees, default_excluded_subtrees
+from pyhanko_certvalidator.util import cert_for_trust_anchor_lookup
 
 
 @enum.unique
@@ -292,3 +295,38 @@ class PKIXValidationParams:
     This behaviour can be modified by name constraints on intermediate CA
     certificates.
     """
+
+
+class TrustAnchor:
+    """
+    Trust root.
+    """
+
+    # This class is largely a placeholder for later functionality.
+
+    # TODO: allow non-certificate trust roots (name + key)
+    # TODO: allow specific policy restrictions per trust root.
+
+    def __init__(self, cert: x509.Certificate):
+        self._cert = cert
+
+    @property
+    def name(self) -> x509.Name:
+        return self._cert.subject
+
+    @property
+    def public_key(self):
+        return self._cert.public_key
+
+    @property
+    def hashable(self):
+        return cert_for_trust_anchor_lookup(self._cert)
+
+    def __hash__(self):
+        return hash(self.hashable)
+
+    def __eq__(self, other):
+        if not isinstance(other, TrustAnchor):
+            return False
+
+        return self.hashable == other.hashable
