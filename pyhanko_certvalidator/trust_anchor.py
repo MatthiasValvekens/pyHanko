@@ -93,12 +93,23 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
 
 class CertTrustAnchor(TrustAnchor):
     """
-    Trust anchor provisioned as a certificate
+    Trust anchor provisioned as a certificate.
+
+    :param cert:
+        The certificate, usually self-signed.
+    :param quals:
+        Explicit trust qualifiers.
+    :param derive_default_quals_from_cert:
+        Flag indicating to derive default trust qualifiers from the certificate
+        content if explicit ones are not provided. Defaults to ``False``.
     """
 
-    def __init__(self, cert: x509.Certificate):
+    def __init__(self, cert: x509.Certificate,
+                 quals: Optional[TrustQualifiers] = None,
+                 derive_default_quals_from_cert: bool = False):
         self._cert = cert
-        self._quals = derive_quals_from_cert(cert)
+        self._derive = derive_default_quals_from_cert
+        self._quals = quals
 
     @property
     def name(self) -> x509.Name:
@@ -123,7 +134,13 @@ class CertTrustAnchor(TrustAnchor):
 
     @property
     def trust_qualifiers(self) -> TrustQualifiers:
-        return self._quals
+        if self._quals is not None:
+            return self._quals
+        elif self._derive:
+            self._quals = quals = derive_quals_from_cert(self._cert)
+            return quals
+        else:
+            return TrustQualifiers()
 
     def is_potential_issuer_of(self, cert: x509.Certificate):
         if not super().is_potential_issuer_of(cert):
