@@ -19,6 +19,7 @@ from pyhanko_certvalidator.registry import CertificateCollection, \
     LayeredCertificateStore, SimpleCertificateStore
 from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
     RevinfoUsabilityRating
+from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
 from pyhanko_certvalidator.util import (
     pretty_message, extract_ac_issuer_dir_name, validate_sig
 )
@@ -44,8 +45,8 @@ async def _validate_delegated_ocsp_provenance(
     # with a different key than the one used to sign subscriber certificates.
     ocsp_ee_name_override = proc_state.describe_cert() + ' OCSP responder'
 
-    issuer_chain = ee_path.copy().truncate_to(issuer)
-    responder_chain = issuer_chain.append(responder_cert)
+    issuer_chain = ee_path.truncate_to(issuer)
+    responder_chain = issuer_chain.copy_and_append(responder_cert)
     if responder_cert.ocsp_no_check_value is not None:
         # we don't have to check the revocation of the OCSP responder,
         # so do a simplified check
@@ -64,7 +65,9 @@ async def _validate_delegated_ocsp_provenance(
             time_tolerance=validation_context.time_tolerance
         )
 
-        ocsp_trunc_path = ValidationPath(issuer).append(responder_cert)
+        ocsp_trunc_path = ValidationPath(
+            trust_anchor=CertTrustAnchor(issuer), certs=[responder_cert]
+        )
         ocsp_trunc_proc_state = ValProcState(
             path_len=1, is_side_validation=True,
             ee_name_override=ocsp_ee_name_override
@@ -344,7 +347,7 @@ async def verify_ocsp_response(
     """
 
     proc_state = proc_state or ValProcState(
-        path_len=len(path) - 1, is_side_validation=False
+        path_len=path.pkix_len, is_side_validation=False
     )
 
     cert_description = proc_state.describe_cert()

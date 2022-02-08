@@ -22,11 +22,6 @@ class CertificateFetchError(PathBuildingError):
     pass
 
 
-class DuplicateCertificateError(PathError):
-
-    pass
-
-
 class CRLValidationError(Exception):
 
     pass

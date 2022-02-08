@@ -1,5 +1,6 @@
 import re
 import textwrap
+from dataclasses import dataclass
 from typing import Union, Optional, List
 
 from asn1crypto import x509, cms, core, algos
@@ -267,12 +268,27 @@ def validate_sig(signature: bytes, signed_data: bytes,
         )
 
 
-def cert_for_trust_anchor_lookup(cert: x509.Certificate):
-    """
-    Extract the subject name and public key bytes out of a certificate, for
-    use when comparing and identifying trust roots.
+@dataclass(frozen=True)
+class ConsList:
+    head: object
+    tail: 'ConsList' = None
 
-    We use this data to identify trust anchors, since according to PKIX, a
-    trust anchor is defined by a key associated with a name.
-    """
-    return cert.subject.hashable, cert.public_key.dump()
+    @staticmethod
+    def empty() -> 'ConsList':
+        return ConsList(head=None)
+
+    @staticmethod
+    def sing(value) -> 'ConsList':
+        return ConsList(value, ConsList.empty())
+
+    def __iter__(self):
+        cur = self
+        while cur.head is not None:
+            yield cur.head
+            cur = cur.tail
+
+    def cons(self, head):
+        return ConsList(head, self)
+
+    def __repr__(self):  # pragma: nocover
+        return f"ConsList({list(reversed(list(self)))})"

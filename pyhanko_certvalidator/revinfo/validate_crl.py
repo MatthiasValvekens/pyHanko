@@ -98,9 +98,9 @@ async def _find_crl_issuer(
                 validation_context.check_validation(candidate_crl_issuer)
 
         if candidate_crl_issuer_path is None:
-            candidate_crl_issuer_path = cert_path.copy()\
-                .truncate_to_issuer(candidate_crl_issuer)
-            candidate_crl_issuer_path.append(candidate_crl_issuer)
+            candidate_crl_issuer_path = cert_path \
+                .truncate_to_issuer(candidate_crl_issuer) \
+                .copy_and_append(candidate_crl_issuer)
             try:
                 # Pre-emptively mark a path as validated to prevent recursion
                 if validation_context:
@@ -116,7 +116,7 @@ async def _find_crl_issuer(
                     validation_context,
                     candidate_crl_issuer_path,
                     proc_state=ValProcState(
-                        path_len=len(candidate_crl_issuer_path) - 1,
+                        path_len=candidate_crl_issuer_path.pkix_len,
                         is_side_validation=True,
                         ee_name_override=temp_override
                     )
@@ -677,7 +677,7 @@ async def verify_crl(
 
     is_pkc = isinstance(cert, x509.Certificate)
     proc_state = proc_state or ValProcState(
-        path_len=len(path) - 1, is_side_validation=False,
+        path_len=path.pkix_len, is_side_validation=False,
         ee_name_override="attribute certificate" if not is_pkc else None
     )
 

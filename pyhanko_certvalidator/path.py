@@ -1,12 +1,12 @@
 # coding: utf-8
-
-from typing import FrozenSet
+import itertools
+from typing import FrozenSet, Optional, Iterable
 from dataclasses import dataclass
 
 from asn1crypto import x509, cms
 
 from .asn1_types import AAControls
-from .errors import DuplicateCertificateError
+from .trust_anchor import TrustAnchor, CertTrustAnchor
 
 
 @dataclass(frozen=True)
@@ -36,24 +36,19 @@ class ValidationPath:
     # and chaining to an end-entity certificate
     _certs = None
 
-    # A set of asn1crypto.x509.Certificate.issuer_serial byte strings of
-    # certificates that are already in ._certs
-    _cert_hashes = None
-
     _qualified_policies = None
 
     _path_aa_controls = None
 
-    def __init__(self, end_entity_cert=None):
-        """
-        :param end_entity_cert:
-            An asn1crypto.x509.Certificate object for the end-entity certificate
-        """
+    def __init__(self, trust_anchor: TrustAnchor,
+                 certs: Optional[Iterable[x509.Certificate]] = None):
 
-        self._certs = []
-        self._cert_hashes = set()
-        if end_entity_cert:
-            self.prepend(end_entity_cert)
+        self._certs = list(certs) if certs is not None else []
+        self._root = trust_anchor
+
+    @property
+    def trust_anchor(self) -> TrustAnchor:
+        return self._root
 
     @property
     def first(self):
@@ -61,11 +56,19 @@ class ValidationPath:
         Returns the current beginning of the path - for a path to be complete,
         this certificate should be a trust root
 
+        .. warning::
+            This is a compatibility property, and will return the first non-root
+            certificate if the trust root is not provisioned as a certificate.
+            If you want the trust root itself (even when it doesn't have a
+            certificate), use :attr:`trust_anchor`.
+
         :return:
             The first asn1crypto.x509.Certificate object in the path
         """
-
-        return self._certs[0]
+        if isinstance(self._root, CertTrustAnchor):
+            return self._root.certificate
+        else:
+            return self._certs[0]
 
     @property
     def last(self):
@@ -75,8 +78,12 @@ class ValidationPath:
         :return:
             The last asn1crypto.x509.Certificate object in the path
         """
-
-        return self._certs[len(self._certs) - 1]
+        if self._certs:
+            return self._certs[len(self._certs) - 1]
+        elif isinstance(self._root, CertTrustAnchor):
+            return self._root.certificate
+        else:
+            raise LookupError("No certificates in path")
 
     def find_issuer(self, cert):
         """
@@ -102,9 +109,10 @@ class ValidationPath:
 
         raise LookupError('Unable to find the issuer of the certificate specified')
 
-    def truncate_to(self, cert):
+    def truncate_to(self, cert: x509.Certificate):
         """
-        Remove all certificates in the path after the cert specified
+        Remove all certificates in the path after the cert specified and return
+        them in a new path.
 
         :param cert:
             An asn1crypto.x509.Certificate object to find
@@ -116,19 +124,20 @@ class ValidationPath:
             The current ValidationPath object, for chaining
         """
 
+        if isinstance(self._root, CertTrustAnchor):
+            if self._root.certificate.issuer_serial == cert.issuer_serial:
+                return ValidationPath(self._root, [])
+
+        certs = self._certs
         cert_index = None
-        for index, entry in enumerate(self):
+        for index, entry in enumerate(certs):
             if entry.issuer_serial == cert.issuer_serial:
                 cert_index = index
                 break
 
         if cert_index is None:
             raise LookupError('Unable to find the certificate specified')
-
-        while len(self) > cert_index + 1:
-            self.pop()
-
-        return self
+        return ValidationPath(self._root, certs[:cert_index + 1])
 
     def truncate_to_issuer(self, cert):
         """
@@ -146,7 +155,15 @@ class ValidationPath:
         """
 
         issuer_index = None
-        for index, entry in enumerate(self):
+
+        # check the trust root separately
+        if self.trust_anchor.is_potential_issuer_of(cert):
+            # in case of a match, truncate everything
+            return ValidationPath(self._root, [])
+
+        # now run through the rest of the path
+        certs = self._certs
+        for index, entry in enumerate(certs):
             if entry.subject == cert.issuer:
                 if entry.key_identifier and cert.authority_key_identifier:
                     if entry.key_identifier == cert.authority_key_identifier:
@@ -159,10 +176,12 @@ class ValidationPath:
         if issuer_index is None:
             raise LookupError('Unable to find the issuer of the certificate specified')
 
-        while len(self) > issuer_index + 1:
-            self.pop()
+        return ValidationPath(self._root, certs[:issuer_index + 1])
 
-        return self
+    def copy_and_append(self, cert: x509.Certificate):
+        new_certs = self._certs[:]
+        new_certs.append(cert)
+        return ValidationPath(trust_anchor=self._root, certs=new_certs)
 
     def copy(self):
         """
@@ -172,10 +191,7 @@ class ValidationPath:
             A ValidationPath object
         """
 
-        copy = self.__class__()
-        copy._certs = self._certs[:]
-        copy._cert_hashes = self._cert_hashes.copy()
-        return copy
+        return ValidationPath(trust_anchor=self._root, certs=self._certs[:])
 
     def pop(self):
         """
@@ -185,47 +201,7 @@ class ValidationPath:
             The current ValidationPath object, for chaining
         """
 
-        last_cert = self._certs.pop()
-        self._cert_hashes.remove(last_cert.issuer_serial)
-
-        return self
-
-    def _prepare_addition(self, cert: x509.Certificate) \
-            -> x509.Certificate:
-        if cert.issuer_serial in self._cert_hashes:
-            raise DuplicateCertificateError()
-
-        self._cert_hashes.add(cert.issuer_serial)
-        return cert
-
-    def append(self, cert: x509.Certificate):
-        """
-        Appends a cert to the path. This should be a cert issued by the last
-        cert in the path.
-
-        :param cert:
-            An asn1crypto.x509.Certificate object
-
-        :return:
-            The current ValidationPath object, for chaining
-        """
-
-        self._certs.append(self._prepare_addition(cert))
-        return self
-
-    def prepend(self, cert: x509.Certificate):
-        """
-        Prepends a cert to the path. This should be the issuer of the previously
-        prepended cert.
-
-        :param cert:
-            An asn1crypto.x509.Certificate object or a byte string
-
-        :return:
-            The current ValidationPath object, for chaining
-        """
-
-        self._certs.insert(0, self._prepare_addition(cert))
+        self._certs.pop()
         return self
 
     def _set_qualified_policies(self, policies):
@@ -255,14 +231,37 @@ class ValidationPath:
                 if ctrl is not None
             )
 
-    def __len__(self):
+    @property
+    def pkix_len(self):
         return len(self._certs)
 
+    def __len__(self):
+        # backwards compat
+        return 1 + len(self._certs)
+
     def __getitem__(self, key):
-        return self._certs[key]
+        if key > 0:
+            return self._certs[key - 1]
+        elif isinstance(self._root, CertTrustAnchor):
+            # backwards compat
+            return self._root.certificate
+        else:
+            # Throw an error instead of returning None, because we want this
+            # to fail loudly.
+            raise LookupError("Root has no certificate")
 
     def __iter__(self):
-        return iter(self._certs)
+        # backwards compat, we iterate over all certs _including_ the root
+        # if it is supplied as a cert
+        if isinstance(self._root, CertTrustAnchor):
+            return itertools.chain((self._root.certificate,), self._certs)
+        else:
+            return iter(self._certs)
 
     def __eq__(self, other):
-        return self._certs == other._certs
+        if not isinstance(other, ValidationPath):
+            return False
+        return (
+            self.trust_anchor == other.trust_anchor
+            and self._certs == other._certs
+        )

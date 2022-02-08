@@ -8,10 +8,10 @@ import asyncio
 from asn1crypto import x509
 from oscrypto import trust_list
 
-from .policy_decl import TrustAnchor
-from .util import pretty_message, cert_for_trust_anchor_lookup
+from .util import pretty_message, ConsList
+from .trust_anchor import TrustAnchor, CertTrustAnchor
 from .fetchers import CertificateFetcher
-from .errors import PathBuildingError, DuplicateCertificateError
+from .errors import PathBuildingError
 from .path import ValidationPath
 
 
@@ -198,7 +198,8 @@ class CertificateRegistry(SimpleCertificateStore):
 
         super().__init__()
 
-        self._trust_anchor_ids = trust_anchor_ids = set()
+        self._roots = set()
+        self._root_subject_map = defaultdict(list)
 
         if other_certs is None:
             other_certs = []
@@ -215,15 +216,21 @@ class CertificateRegistry(SimpleCertificateStore):
 
         for trust_root in trust_roots:
             if isinstance(trust_root, TrustAnchor):
-                trust_anchor_ids.add(trust_root.hashable)
+                self._register_ca(trust_root)
             else:
-                self.register(trust_root)
-                trust_anchor_ids.add(cert_for_trust_anchor_lookup(trust_root))
+                self._register_ca(CertTrustAnchor(trust_root))
 
         for other_cert in other_certs:
             self.register(other_cert)
 
         self.fetcher = cert_fetcher
+
+    def _register_ca(self, anchor: TrustAnchor):
+        if anchor not in self._roots:
+            if isinstance(anchor, CertTrustAnchor):
+                self.register(anchor.certificate)
+            self._roots.add(anchor)
+            self._root_subject_map[anchor.name.hashable].append(anchor)
 
     def is_ca(self, cert):
         """
@@ -236,7 +243,7 @@ class CertificateRegistry(SimpleCertificateStore):
             A boolean - if the certificate is in the CA list
         """
 
-        return cert_for_trust_anchor_lookup(cert) in self._trust_anchor_ids
+        return CertTrustAnchor(cert) in self._roots
 
     def add_other_cert(self, cert):
         """
@@ -316,16 +323,20 @@ class CertificateRegistry(SimpleCertificateStore):
             represent the possible paths from the end-entity certificate to one
             of the CA certs.
         """
+        if self.is_ca(end_entity_cert):
+            result = ValidationPath(CertTrustAnchor(end_entity_cert))
+            return [result]
 
-        path = ValidationPath(end_entity_cert)
+        path = ConsList.sing(end_entity_cert)
+        certs_seen = ConsList.sing(end_entity_cert.issuer_serial)
         paths = []
         failed_paths = []
 
-        await self._walk_issuers(path, paths, failed_paths)
+        await self._walk_issuers(path, certs_seen, paths, failed_paths)
 
         if len(paths) == 0:
             cert_name = end_entity_cert.subject.human_friendly
-            missing_issuer_name = failed_paths[0].first.issuer.human_friendly
+            missing_issuer_name = failed_paths[0].head.issuer.human_friendly
             raise PathBuildingError(pretty_message(
                 '''
                 Unable to build a validation path for the certificate "%s" - no
@@ -337,7 +348,8 @@ class CertificateRegistry(SimpleCertificateStore):
 
         return paths
 
-    async def _walk_issuers(self, path, paths, failed_paths):
+    async def _walk_issuers(self, path: ConsList, certs_seen: ConsList,
+                            paths: List[ValidationPath], failed_paths):
         """
         Recursively looks through the list of known certificates for the issuer
         of the certificate specified, stopping once the certificate in question
@@ -357,32 +369,42 @@ class CertificateRegistry(SimpleCertificateStore):
             certs list
         """
 
-        if cert_for_trust_anchor_lookup(path.first) in self._trust_anchor_ids:
-            paths.append(path)
+        if isinstance(path.head, TrustAnchor):
+            paths.append(ValidationPath(path.head, path.tail))
             return
 
+        cert = path.head
+        assert isinstance(cert, x509.Certificate)
         new_branches = 0
-        for issuer in self._possible_issuers(path.first):
-            try:
-                await self._walk_issuers(
-                    path.copy().prepend(issuer), paths, failed_paths
-                )
-                new_branches += 1
-            except DuplicateCertificateError:
-                pass
+        for issuer in self._possible_issuers(cert):
+            if isinstance(issuer, x509.Certificate):
+                cert_id = issuer.issuer_serial
+                if cert_id in certs_seen:  # no duplicates
+                    continue
+                new_certs_seen = certs_seen.cons(cert_id)
+            else:
+                new_certs_seen = certs_seen
+            await self._walk_issuers(
+                path.cons(issuer), new_certs_seen, paths, failed_paths
+            )
+            new_branches += 1
 
         if not new_branches and self.fetcher is not None:
             # attempt to download certs if there's nothing in the context
-            async for issuer in self.fetcher.fetch_cert_issuers(path.first):
-                # register the cert for future reference
-                self.add_other_cert(issuer)
-                try:
-                    await self._walk_issuers(
-                        path.copy().prepend(issuer), paths, failed_paths
-                    )
-                    new_branches += 1
-                except DuplicateCertificateError:
-                    pass
+            async for issuer in self.fetcher.fetch_cert_issuers(cert):
+                if isinstance(issuer, x509.Certificate):
+                    # register the cert for future reference
+                    self.add_other_cert(issuer)
+                    cert_id = issuer.issuer_serial
+                    if cert_id in certs_seen:
+                        continue
+                    new_certs_seen = certs_seen.cons(cert_id)
+                else:
+                    new_certs_seen = certs_seen
+                await self._walk_issuers(
+                    path.cons(issuer), new_certs_seen, paths, failed_paths
+                )
+                new_branches += 1
         if not new_branches:
             failed_paths.append(path)
 
@@ -395,10 +417,20 @@ class CertificateRegistry(SimpleCertificateStore):
         """
 
         issuer_hashable = cert.issuer.hashable
+
+        # Info from the authority key identifier extension can be used to
+        # eliminate possible options when multiple keys with the same
+        # subject exist, such as during a transition, or with cross-signing.
+
+        # go through matching trust roots first
+        root: TrustAnchor
+        for root in self._root_subject_map[issuer_hashable]:
+            if root.is_potential_issuer_of(cert):
+                yield root
+
         for issuer in self._subject_map[issuer_hashable]:
-            # Info from the authority key identifier extension can be used to
-            # eliminate possible options when multiple keys with the same
-            # subject exist, such as during a transition, or with cross-signing.
+            if self.is_ca(issuer):
+                continue  # skip, we've had these in the previous step
             if cert.authority_key_identifier and issuer.key_identifier:
                 if cert.authority_key_identifier != issuer.key_identifier:
                     continue

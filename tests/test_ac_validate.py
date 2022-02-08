@@ -10,6 +10,7 @@ from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
 from .test_validate import fixtures_dir
 
 attr_cert_dir = os.path.join(fixtures_dir, 'attribute-certs')
@@ -336,10 +337,7 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath()
-        aa_path.append(root)
-        aa_path.append(interm)
-        aa_path.append(role_aa)
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
 
         with self.assertRaises(RevokedError):
             await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
@@ -368,10 +366,7 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath()
-        aa_path.append(root)
-        aa_path.append(interm)
-        aa_path.append(role_aa)
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
 
         await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
 
@@ -456,10 +451,7 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath()
-        aa_path.append(root)
-        aa_path.append(interm)
-        aa_path.append(role_aa)
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
 
         with self.assertRaises(RevokedError):
             await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
@@ -488,10 +480,7 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath()
-        aa_path.append(root)
-        aa_path.append(interm)
-        aa_path.append(role_aa)
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
 
         await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
 

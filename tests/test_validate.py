@@ -16,6 +16,7 @@ from pyhanko_certvalidator.fetchers import (
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
+from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
 from pyhanko_certvalidator.validate import validate_path, async_validate_path
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
     OCSPFetchError, CRLFetchError, CertificateFetchError, \
@@ -941,9 +942,9 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
         # Hand build the path since we are testing an issuer mismatch that
         # will result in a path building error
-        path = ValidationPath(cert)
-        path.prepend(other_certs[0])
-        path.prepend(ca_certs[0])
+        path = ValidationPath(
+            CertTrustAnchor(ca_certs[0]), [other_certs[0], cert]
+        )
 
         self.assertEqual(3, len(path))
 
@@ -974,9 +975,9 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
         # Hand build the path since we are testing an issuer mismatch that
         # will result in a path building error
-        path = ValidationPath(cert)
-        path.prepend(other_certs[0])
-        path.prepend(ca_certs[0])
+        path = ValidationPath(
+            CertTrustAnchor(ca_certs[0]), [other_certs[0], cert]
+        )
 
         self.assertEqual(3, len(path))
 

@@ -46,6 +46,7 @@ from .policy_tree import (
 from .registry import CertificateCollection
 from .revinfo.validate_crl import verify_crl
 from .revinfo.validate_ocsp import verify_ocsp_response
+from .trust_anchor import CertTrustAnchor
 from .util import (
     extract_dir_name,
     get_ac_extension_value,
@@ -100,7 +101,7 @@ def validate_path(validation_context, path,
     return result
 
 
-async def async_validate_path(validation_context, path,
+async def async_validate_path(validation_context, path: ValidationPath,
                               parameters: PKIXValidationParams = None):
     """
     Validates the path using the algorithm from
@@ -130,7 +131,7 @@ async def async_validate_path(validation_context, path,
     """
 
     proc_state = ValProcState(
-        index=0, path_len=len(path) - 1, is_side_validation=False
+        index=0, path_len=path.pkix_len, is_side_validation=False
     )
     return await intl_validate_path(
         validation_context, path, parameters=parameters,
@@ -921,14 +922,15 @@ async def intl_validate_path(validation_context: ValidationContext,
 
     # Inputs
 
-    trust_anchor = path.first
+    trust_anchor = path.trust_anchor
 
-    # We skip the trust anchor when measuring the path since technically
-    # the trust anchor is not part of the path
+    if not isinstance(trust_anchor, CertTrustAnchor):
+        raise NotImplementedError  # FIXME implement the alternative
+
     # TODO If the trust anchor has NameConstraints etc., we might want to
     #  intersect those with the parameters that were passed in, and make that
     #  behaviour togglable.
-    path_length = len(path) - 1
+    path_length = path.pkix_len
 
     # Step 1: initialization
     parameters = parameters or PKIXValidationParams()
@@ -960,11 +962,11 @@ async def intl_validate_path(validation_context: ValidationContext,
         ),
         # Steps 1 g-j
         working_public_key=trust_anchor.public_key,
-        working_issuer_name=trust_anchor.subject,
+        working_issuer_name=trust_anchor.certificate.subject,
         # Step 1 k
         max_path_length=(
-            path_length if trust_anchor.max_path_length is None
-            else trust_anchor.max_path_length
+            path_length if trust_anchor.certificate.max_path_length is None
+            else trust_anchor.certificate.max_path_length
         ),
         # NOTE: the algorithm (for now) assumes that the AA CA of RFC 5755 is
         # trusted by fiat, and does not require chaining up to a distinct CA.
@@ -975,11 +977,13 @@ async def intl_validate_path(validation_context: ValidationContext,
     )
 
     # Step 2: basic processing
-    completed_path = ValidationPath(trust_anchor)
-    validation_context.record_validation(trust_anchor, completed_path)
+    completed_path: ValidationPath = ValidationPath(trust_anchor)
+    validation_context.record_validation(
+        trust_anchor.certificate, completed_path
+    )
 
     cert: x509.Certificate
-    cert = trust_anchor
+    cert = trust_anchor.certificate
     for index in range(1, path_length + 1):
         cert = path[index]
 
@@ -1056,7 +1060,7 @@ async def intl_validate_path(validation_context: ValidationContext,
             #  but caching intermediate results might not be appropriate at all
             #  times. For example, handling for self-issued certs is different
             #  depending on whether they're treated as an end-entity or not.
-            completed_path = completed_path.copy().append(cert)
+            completed_path = completed_path.copy_and_append(cert)
             validation_context.record_validation(cert, completed_path)
 
     # Step 4: wrap-up procedure
