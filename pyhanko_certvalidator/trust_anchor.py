@@ -1,9 +1,39 @@
 import abc
+from dataclasses import dataclass
 from typing import Optional
 
 from asn1crypto import x509, keys
 
 # TODO document properties
+
+from .policy_decl import PKIXValidationParams
+
+
+# TODO add support for roots that are limited in time?
+
+@dataclass(frozen=True)
+class TrustQualifiers:
+    """
+    Parameters that allow a trust root to be qualified.
+    """
+
+    standard_parameters: Optional['PKIXValidationParams'] = None
+    """
+    Standard validation parameters that will apply when initialising
+    the PKIX validation process.
+    """
+
+    max_path_length: Optional[int] = None
+    """
+    Maximal allowed path length for this trust root, excluding self-issued
+    intermediate CA certificates. If ``None``, any path length will be accepted.
+    """
+
+    max_aa_path_length: Optional[int] = None
+    """
+    Maximal allowed path length for this trust root for the purposes of
+    AAControls. If ``None``, any path length will be accepted.
+    """
 
 
 class TrustAnchor(abc.ABC):
@@ -23,6 +53,10 @@ class TrustAnchor(abc.ABC):
 
     @property
     def hashable(self):
+        raise NotImplementedError
+
+    @property
+    def trust_qualifiers(self) -> TrustQualifiers:
         raise NotImplementedError
 
     @property
@@ -52,6 +86,11 @@ class TrustAnchor(abc.ABC):
         return True
 
 
+def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
+    # TODO extract things like name constraints, policy constraints, etc.
+    return TrustQualifiers(max_path_length=cert.max_path_length)
+
+
 class CertTrustAnchor(TrustAnchor):
     """
     Trust anchor provisioned as a certificate
@@ -59,6 +98,7 @@ class CertTrustAnchor(TrustAnchor):
 
     def __init__(self, cert: x509.Certificate):
         self._cert = cert
+        self._quals = derive_quals_from_cert(cert)
 
     @property
     def name(self) -> x509.Name:
@@ -81,6 +121,10 @@ class CertTrustAnchor(TrustAnchor):
     def certificate(self) -> x509.Certificate:
         return self._cert
 
+    @property
+    def trust_qualifiers(self) -> TrustQualifiers:
+        return self._quals
+
     def is_potential_issuer_of(self, cert: x509.Certificate):
         if not super().is_potential_issuer_of(cert):
             return False
@@ -95,9 +139,11 @@ class NamedKeyTrustAnchor(TrustAnchor):
     Trust anchor provisioned as a named key.
     """
 
-    def __init__(self, entity_name: x509.Name, public_key: keys.PublicKeyInfo):
+    def __init__(self, entity_name: x509.Name, public_key: keys.PublicKeyInfo,
+                 quals: Optional[TrustQualifiers] = None):
         self._name = entity_name
         self._public_key = public_key
+        self._quals = quals or TrustQualifiers()
 
     @property
     def name(self) -> x509.Name:
@@ -114,3 +160,7 @@ class NamedKeyTrustAnchor(TrustAnchor):
     @property
     def hashable(self):
         return self._name.hashable, self._public_key.dump()
+
+    @property
+    def trust_qualifiers(self) -> TrustQualifiers:
+        return self._quals

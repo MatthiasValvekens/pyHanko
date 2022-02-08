@@ -16,9 +16,11 @@ from .context import (
     ValidationContext,
     ACTargetDescription
 )
-from .policy_decl import PKIXValidationParams, RevocationCheckingRule
+from .policy_decl import PKIXValidationParams, RevocationCheckingRule, \
+    intersect_policy_sets
 from .name_trees import PermittedSubtrees, ExcludedSubtrees, \
-    process_general_subtrees
+    process_general_subtrees, default_permitted_subtrees, \
+    default_excluded_subtrees
 from .errors import (
     CRLNoMatchesError,
     CRLValidationIndeterminateError,
@@ -46,7 +48,7 @@ from .policy_tree import (
 from .registry import CertificateCollection
 from .revinfo.validate_crl import verify_crl
 from .revinfo.validate_ocsp import verify_ocsp_response
-from .trust_anchor import CertTrustAnchor
+from .trust_anchor import CertTrustAnchor, TrustAnchor
 from .util import (
     extract_dir_name,
     get_ac_extension_value,
@@ -738,6 +740,106 @@ class _PathValidationState:
     excluded_subtrees: ExcludedSubtrees
     aa_controls_used: bool = False
 
+    @staticmethod
+    def init_pkix_validation_state(
+            path_length,
+            trust_anchor: TrustAnchor,
+            parameters: Optional[PKIXValidationParams]):
+
+        trust_anchor_quals = trust_anchor.trust_qualifiers
+        max_path_length = max_aa_path_length = path_length
+        if trust_anchor_quals.max_path_length is not None:
+            max_path_length = trust_anchor_quals.max_path_length
+        if trust_anchor_quals.max_path_length is not None:
+            max_aa_path_length = trust_anchor_quals.max_aa_path_length
+        trust_anchor_params = trust_anchor_quals.standard_parameters
+
+        if parameters is not None and trust_anchor_params is not None:
+            # need to make sure both sets of parameters are respected
+            acceptable_policies = intersect_policy_sets(
+                parameters.user_initial_policy_set,
+                trust_anchor_params.user_initial_policy_set
+            )
+            initial_any_policy_inhibit = \
+                parameters.initial_any_policy_inhibit \
+                and parameters.initial_any_policy_inhibit
+
+            initial_explicit_policy = \
+                parameters.initial_explicit_policy \
+                and parameters.initial_explicit_policy
+
+            initial_policy_mapping_inhibit = (
+                parameters.initial_policy_mapping_inhibit
+                and parameters.initial_policy_mapping_inhibit
+            )
+            initial_permitted_subtrees = PermittedSubtrees(
+                parameters.initial_permitted_subtrees
+                or default_permitted_subtrees()
+            )
+            if trust_anchor_params.initial_permitted_subtrees is not None:
+                initial_permitted_subtrees.intersect_with(
+                    trust_anchor_params.initial_permitted_subtrees
+                )
+            initial_excluded_subtrees = ExcludedSubtrees(
+                parameters.initial_excluded_subtrees
+                or default_excluded_subtrees()
+            )
+            if trust_anchor_params.initial_excluded_subtrees is not None:
+                initial_excluded_subtrees.union_with(
+                    trust_anchor_params.initial_excluded_subtrees
+                )
+        else:
+            parameters = parameters or trust_anchor_params \
+                         or PKIXValidationParams()
+            acceptable_policies = parameters.user_initial_policy_set
+            initial_explicit_policy = parameters.initial_explicit_policy
+            initial_any_policy_inhibit = parameters.initial_any_policy_inhibit
+            initial_policy_mapping_inhibit = \
+                parameters.initial_policy_mapping_inhibit
+            initial_permitted_subtrees = PermittedSubtrees(
+                parameters.initial_permitted_subtrees
+                or default_permitted_subtrees()
+            )
+            initial_excluded_subtrees = ExcludedSubtrees(
+                parameters.initial_excluded_subtrees
+                or default_excluded_subtrees()
+            )
+
+        state = _PathValidationState(
+            # Step 1 a
+            valid_policy_tree=PolicyTreeRoot.init_policy_tree(
+                'any_policy', set(), {'any_policy'}
+            ),
+            # Steps 1 b-c
+            permitted_subtrees=initial_permitted_subtrees,
+            excluded_subtrees=initial_excluded_subtrees,
+            # Steps 1 d-f
+            explicit_policy=(
+                0 if initial_explicit_policy
+                else path_length + 1
+            ),
+            inhibit_any_policy=(
+                0 if initial_any_policy_inhibit
+                else path_length + 1
+            ),
+            policy_mapping=(
+                0 if initial_policy_mapping_inhibit
+                else path_length + 1
+            ),
+            # Steps 1 g-j
+            working_public_key=trust_anchor.public_key,
+            working_issuer_name=trust_anchor.name,
+            # Step 1 k
+            max_path_length=max_path_length,
+            # NOTE: the algorithm (for now) assumes that the AA CA of RFC 5755
+            # is trusted by fiat, and does not require chaining up to a distinct
+            # CA. In particular, we assume that the AA CA is the trust anchor in
+            # the path. This matches the validation model used in signature
+            # policies (where there are separate trust trees for attributes)
+            max_aa_path_length=max_aa_path_length
+        )
+        return state, acceptable_policies
+
     def update_policy_restrictions(self, cert: x509.Certificate):
         # Step 3 h
         if not cert.self_issued:
@@ -924,63 +1026,23 @@ async def intl_validate_path(validation_context: ValidationContext,
 
     trust_anchor = path.trust_anchor
 
-    if not isinstance(trust_anchor, CertTrustAnchor):
-        raise NotImplementedError  # FIXME implement the alternative
-
     # TODO If the trust anchor has NameConstraints etc., we might want to
     #  intersect those with the parameters that were passed in, and make that
     #  behaviour togglable.
     path_length = path.pkix_len
 
     # Step 1: initialization
-    parameters = parameters or PKIXValidationParams()
-
-    state = _PathValidationState(
-        # Step 1 a
-        valid_policy_tree=PolicyTreeRoot.init_policy_tree(
-            'any_policy', set(), {'any_policy'}
-        ),
-        # Steps 1 b-c
-        permitted_subtrees=PermittedSubtrees(
-            parameters.initial_permitted_subtrees
-        ),
-        excluded_subtrees=ExcludedSubtrees(
-            parameters.initial_excluded_subtrees
-        ),
-        # Steps 1 d-f
-        explicit_policy=(
-            0 if parameters.initial_explicit_policy
-            else path_length + 1
-        ),
-        inhibit_any_policy=(
-            0 if parameters.initial_any_policy_inhibit
-            else path_length + 1
-        ),
-        policy_mapping=(
-            0 if parameters.initial_policy_mapping_inhibit
-            else path_length + 1
-        ),
-        # Steps 1 g-j
-        working_public_key=trust_anchor.public_key,
-        working_issuer_name=trust_anchor.certificate.subject,
-        # Step 1 k
-        max_path_length=(
-            path_length if trust_anchor.certificate.max_path_length is None
-            else trust_anchor.certificate.max_path_length
-        ),
-        # NOTE: the algorithm (for now) assumes that the AA CA of RFC 5755 is
-        # trusted by fiat, and does not require chaining up to a distinct CA.
-        # In particular, we assume that the AA CA is the trust anchor in the
-        # path. This matches the validation model used in signature policies
-        # (where there are separate trust trees for attributes)
-        max_aa_path_length=path_length
-    )
+    state, acceptable_policies = _PathValidationState\
+        .init_pkix_validation_state(path_length, trust_anchor, parameters)
 
     # Step 2: basic processing
     completed_path: ValidationPath = ValidationPath(trust_anchor)
-    validation_context.record_validation(
-        trust_anchor.certificate, completed_path
-    )
+
+    if isinstance(trust_anchor, CertTrustAnchor):
+        # if the trust root has a cert, record it as validated.
+        validation_context.record_validation(
+            trust_anchor.certificate, completed_path
+        )
 
     cert: x509.Certificate
     cert = trust_anchor.certificate
@@ -1071,7 +1133,7 @@ async def intl_validate_path(validation_context: ValidationContext,
 
     qualified_policies = _finish_policy_processing(
         state=state, cert=cert,
-        acceptable_policies=parameters.user_initial_policy_set,
+        acceptable_policies=acceptable_policies,
         path_length=path_length,
         proc_state=proc_state
     )

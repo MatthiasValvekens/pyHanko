@@ -2,12 +2,11 @@
 .. versionadded:: 0.20.0
 """
 import enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, FrozenSet
 
-from pyhanko_certvalidator.name_trees import PKIXSubtrees, \
-    default_permitted_subtrees, default_excluded_subtrees
+from pyhanko_certvalidator.name_trees import PKIXSubtrees
 
 
 @enum.unique
@@ -217,6 +216,33 @@ class CertRevTrustPolicy:
     """
 
 
+def intersect_policy_sets(a_pols: FrozenSet[str], b_pols: FrozenSet[str]) \
+        -> FrozenSet[str]:
+    """
+    Intersect two sets of policies, taking into account the special
+    'any_policy'.
+
+    :param a_pols:
+        A set of policies.
+    :param b_pols:
+        Another set of policies.
+    :return:
+        The intersection of both.
+    """
+
+    a_any = 'any_policy' in a_pols
+    b_any = 'any_policy' in b_pols
+
+    if a_any and b_any:
+        return frozenset(['any_policy'])
+    elif a_any:
+        return b_pols
+    elif b_any:
+        return b_pols
+    else:
+        return b_pols & a_pols
+
+
 @dataclass(frozen=True)
 class PKIXValidationParams:
     user_initial_policy_set: frozenset = frozenset(['any_policy'])
@@ -267,8 +293,7 @@ class PKIXValidationParams:
     when it appears.
     """
 
-    initial_permitted_subtrees: PKIXSubtrees = \
-        field(default_factory=default_permitted_subtrees)
+    initial_permitted_subtrees: Optional[PKIXSubtrees] = None
     """
     Set of permitted subtrees for each name type, indicating restrictions
     to impose on subject names (and alternative names) in the certification
@@ -279,9 +304,7 @@ class PKIXValidationParams:
     certificates.
     """
 
-    initial_excluded_subtrees: PKIXSubtrees = field(
-        default_factory=default_excluded_subtrees
-    )
+    initial_excluded_subtrees: Optional[PKIXSubtrees] = None
     """
     Set of excluded subtrees for each name type, indicating restrictions
     to impose on subject names (and alternative names) in the certification
@@ -291,3 +314,38 @@ class PKIXValidationParams:
     This behaviour can be modified by name constraints on intermediate CA
     certificates.
     """
+
+    def merge(self, other: 'PKIXValidationParams') -> 'PKIXValidationParams':
+        """
+        Combine the conditions of these PKIX validation params with another
+        set of parameters, producing the most lenient set of parameters that
+        is stricter than both inputs.
+
+        :param other:
+            Another set of PKIX validation parameters.
+        :return:
+            A combined set of PKIX validation parameters.
+        """
+
+        if 'any_policy' in self.user_initial_policy_set:
+            init_policy_set = other.user_initial_policy_set
+        elif 'any_policy' in other.user_initial_policy_set:
+            init_policy_set = self.user_initial_policy_set
+        else:
+            init_policy_set = \
+                other.user_initial_policy_set & self.user_initial_policy_set
+
+        initial_any_policy_inhibit = \
+            self.initial_any_policy_inhibit and other.initial_any_policy_inhibit
+        initial_explicit_policy = \
+            self.initial_explicit_policy and other.initial_explicit_policy
+        initial_policy_mapping_inhibit = (
+            self.initial_policy_mapping_inhibit
+            and other.initial_policy_mapping_inhibit
+        )
+        return PKIXValidationParams(
+            user_initial_policy_set=init_policy_set,
+            initial_any_policy_inhibit=initial_any_policy_inhibit,
+            initial_explicit_policy=initial_explicit_policy,
+            initial_policy_mapping_inhibit=initial_policy_mapping_inhibit
+        )
