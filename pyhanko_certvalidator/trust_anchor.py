@@ -4,8 +4,7 @@ from typing import Optional
 
 from asn1crypto import x509, keys
 
-# TODO document properties
-
+from .name_trees import process_general_subtrees
 from .policy_decl import PKIXValidationParams
 
 
@@ -41,7 +40,7 @@ class TrustAnchor(abc.ABC):
     Abstract trust root.
     """
 
-    # TODO: allow specific policy restrictions per trust root.
+    # TODO document properties
 
     @property
     def name(self) -> x509.Name:
@@ -87,8 +86,43 @@ class TrustAnchor(abc.ABC):
 
 
 def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
-    # TODO extract things like name constraints, policy constraints, etc.
-    return TrustQualifiers(max_path_length=cert.max_path_length)
+    # TODO align with RFC 5937?
+    ext_found = False
+    permitted_subtrees = excluded_subtrees = None
+    if cert.name_constraints_value is not None:
+        ext_found = True
+        nc_ext: x509.NameConstraints = cert.name_constraints_value
+        permitted_val = nc_ext['permitted_subtrees']
+        if isinstance(permitted_val, x509.GeneralSubtrees):
+            permitted_subtrees = process_general_subtrees(permitted_val)
+        excluded_val = nc_ext['excluded_subtrees']
+        if isinstance(excluded_val, x509.GeneralSubtrees):
+            excluded_subtrees = process_general_subtrees(excluded_val)
+
+    acceptable_policies = None
+    if cert.certificate_policies_value is not None:
+        ext_found = True
+        policies_val: x509.CertificatePolicies = cert.certificate_policies_value
+        acceptable_policies = frozenset([
+            pol_info['policy_identifier'].dotted for pol_info in policies_val
+        ])
+
+    params = None
+    if ext_found:
+        params = PKIXValidationParams(
+            user_initial_policy_set=(
+                acceptable_policies or frozenset(['any_policy'])
+            ),
+            # For trust roots where the user asked for this derivation,
+            #  let's assume that they want the policies to be enforced.
+            initial_explicit_policy=acceptable_policies is not None,
+            initial_permitted_subtrees=permitted_subtrees,
+            initial_excluded_subtrees=excluded_subtrees
+        )
+
+    return TrustQualifiers(
+        max_path_length=cert.max_path_length, standard_parameters=params
+    )
 
 
 class CertTrustAnchor(TrustAnchor):
