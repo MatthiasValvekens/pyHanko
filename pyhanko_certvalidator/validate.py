@@ -1436,12 +1436,12 @@ def _prepare_next_step(index, cert: x509.Certificate,
     nc_value: x509.NameConstraints = cert.name_constraints_value
     if nc_value is not None:
         new_permitted_subtrees = nc_value['permitted_subtrees']
-        if new_permitted_subtrees is not None:
+        if isinstance(new_permitted_subtrees, x509.GeneralSubtrees):
             state.permitted_subtrees.intersect_with(
                 process_general_subtrees(new_permitted_subtrees)
             )
         new_excluded_subtrees = nc_value['excluded_subtrees']
-        if new_excluded_subtrees is not None:
+        if isinstance(new_excluded_subtrees, x509.GeneralSubtrees):
             state.excluded_subtrees.union_with(
                 process_general_subtrees(new_excluded_subtrees)
             )

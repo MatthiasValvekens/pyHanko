@@ -14,7 +14,7 @@ from .errors import OCSPFetchError
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
-from .registry import CertificateRegistry
+from .registry import CertificateRegistry, TrustRootList
 from .revinfo.archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, \
     ValidationTimingInfo, sort_freshest_first
 
@@ -98,8 +98,8 @@ class ValidationContext:
 
     def __init__(
             self,
-            trust_roots: Optional[Iterable[x509.Certificate]] = None,
-            extra_trust_roots: Optional[Iterable[x509.Certificate]] = None,
+            trust_roots: Optional[TrustRootList] = None,
+            extra_trust_roots: Optional[TrustRootList] = None,
             other_certs: Optional[Iterable[x509.Certificate]] = None,
             whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
             moment: Optional[datetime] = None,

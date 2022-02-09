@@ -164,15 +164,17 @@ class SimpleCertificateStore(CertificateStore):
             return None
 
 
+TrustRootList = Iterable[Union[x509.Certificate, TrustAnchor]]
+
+
 class CertificateRegistry(SimpleCertificateStore):
     """
     Contains certificate lists used to build validation paths
     """
 
     def __init__(self,
-                 trust_roots: Optional[Iterable[Union[x509.Certificate,
-                                                      TrustAnchor]]] = None,
-                 extra_trust_roots: Optional[Iterable[x509.Certificate]] = None,
+                 trust_roots: Optional[TrustRootList] = None,
+                 extra_trust_roots: Optional[TrustRootList] = None,
                  other_certs: Optional[Iterable[x509.Certificate]] = None,
                  *, cert_fetcher: CertificateFetcher = None):
         """
