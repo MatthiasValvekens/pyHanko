@@ -1038,14 +1038,16 @@ async def intl_validate_path(validation_context: ValidationContext,
     # Step 2: basic processing
     completed_path: ValidationPath = ValidationPath(trust_anchor)
 
+    cert: Optional[x509.Certificate]
     if isinstance(trust_anchor, CertTrustAnchor):
         # if the trust root has a cert, record it as validated.
         validation_context.record_validation(
             trust_anchor.certificate, completed_path
         )
+        cert = trust_anchor.certificate
+    else:
+        cert = None
 
-    cert: x509.Certificate
-    cert = trust_anchor.certificate
     for index in range(1, path_length + 1):
         cert = path[index]
 
@@ -1131,15 +1133,16 @@ async def intl_validate_path(validation_context: ValidationContext,
     # Step 4 f skipped since this method defers that to the calling application
     # --> only policy processing remains
 
-    qualified_policies = _finish_policy_processing(
-        state=state, cert=cert,
-        acceptable_policies=acceptable_policies,
-        path_length=path_length,
-        proc_state=proc_state
-    )
-    path._set_qualified_policies(qualified_policies)
-    # TODO cache valid policies on intermediate certs too?
-    completed_path._set_qualified_policies(qualified_policies)
+    if cert is not None:
+        qualified_policies = _finish_policy_processing(
+            state=state, cert=cert,
+            acceptable_policies=acceptable_policies,
+            path_length=path_length,
+            proc_state=proc_state
+        )
+        path._set_qualified_policies(qualified_policies)
+        # TODO cache valid policies on intermediate certs too?
+        completed_path._set_qualified_policies(qualified_policies)
 
     return cert
 
