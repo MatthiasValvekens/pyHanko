@@ -189,6 +189,12 @@ class NameSubtree:
         return self.name_type.check_membership(self.tree_base.value, item)
 
     @classmethod
+    def from_name(cls, name_type: GeneralNameType, name: Union[str, x509.Name]):
+        return NameSubtree(
+            name_type=name_type, tree_base=_StringOrName(name)
+        )
+
+    @classmethod
     def from_general_subtree(cls, subtree) -> 'NameSubtree':
         gname = subtree['base']
         name_type, name_obj = _interpret_general_name(gname)
@@ -210,6 +216,16 @@ class NameSubtree:
 
 # a subtree collection as used in the PKIX validation algorithm
 PKIXSubtrees = Dict[GeneralNameType, Set[NameSubtree]]
+
+
+def x509_names_to_subtrees(names: Iterable[x509.Name]) -> PKIXSubtrees:
+    def _subtree(name: x509.Name):
+        return NameSubtree.from_name(
+            name_type=GeneralNameType.DIRECTORY_NAME, name=name
+        )
+
+    return {GeneralNameType.DIRECTORY_NAME: {_subtree(n) for n in names}}
+
 
 
 def _group_subtrees(trees: Iterable[NameSubtree]) -> PKIXSubtrees:
