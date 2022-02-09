@@ -1,6 +1,8 @@
 # certvalidator
 Forked from [wbond/certvalidator](https://github.com/wbond/certvalidator), with patches for [pyHanko](https://github.com/MatthiasValvekens/pyHanko).
 
+Bugs and questions regarding this library should be asked in the [pyHanko repository](https://github.com/MatthiasValvekens/pyHanko/discussions) rather than here.
+
 A Python library for validating X.509 certificates or paths. Supports various
 options, including: validation at a specific moment in time, whitelisting and
 revocation checks.
