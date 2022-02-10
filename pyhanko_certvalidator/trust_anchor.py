@@ -40,22 +40,33 @@ class TrustAnchor(abc.ABC):
     Abstract trust root.
     """
 
-    # TODO document properties
-
     @property
     def name(self) -> x509.Name:
+        """
+        The trust anchor's name.
+        """
         raise NotImplementedError
 
     @property
-    def public_key(self):
+    def public_key(self) -> keys.PublicKeyInfo:
+        """
+        The trust anchor's public key.
+        """
         raise NotImplementedError
 
     @property
     def hashable(self):
+        """
+        A hashable unique identifier of the trust root, used in ``__eq__``
+        and ``__hash__``.
+        """
         raise NotImplementedError
 
     @property
     def trust_qualifiers(self) -> TrustQualifiers:
+        """
+        Qualifiers for the trust root.
+        """
         raise NotImplementedError
 
     @property
@@ -76,7 +87,15 @@ class TrustAnchor(abc.ABC):
 
         return self.hashable == other.hashable
 
-    def is_potential_issuer_of(self, cert: x509.Certificate):
+    def is_potential_issuer_of(self, cert: x509.Certificate) -> bool:
+        """
+        Function to determine whether this trust root could potentially be an
+        issuer of a given certificate.
+        This function is used during path building.
+
+        :param cert:
+            The certificate to evaluate.
+        """
         if cert.issuer != self.name:
             return False
         if cert.authority_key_identifier and self.key_id:
@@ -86,6 +105,23 @@ class TrustAnchor(abc.ABC):
 
 
 def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
+    """
+    Extract trust qualifiers from data and extensions of a certificate.
+
+    .. note::
+        Recall that any property of a trust root other than its name and public
+        key are in principle irrelevant to the PKIX validation algorithm
+        itself.
+        This function is merely a helper function that allows the certificate's
+        other data to be conveniently gathered to populate the default
+        validation parameters for paths deriving from that trust root.
+
+    :param cert:
+        The certificate from which to extract qualifiers (usually a
+        self-signed one)
+    :return:
+        A :class:`TrustQualifiers` object with the extracted qualifiers.
+    """
     # TODO align with RFC 5937?
     ext_found = False
     permitted_subtrees = excluded_subtrees = None
@@ -188,6 +224,13 @@ class CertTrustAnchor(TrustAnchor):
 class NamedKeyTrustAnchor(TrustAnchor):
     """
     Trust anchor provisioned as a named key.
+
+    :param entity_name:
+        The name of the entity that controls the private key of the trust root.
+    :param public_key:
+        The trust root's public key.
+    :param quals:
+        Explicit trust qualifiers.
     """
 
     def __init__(self, entity_name: x509.Name, public_key: keys.PublicKeyInfo,
