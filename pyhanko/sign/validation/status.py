@@ -320,16 +320,15 @@ class ClaimedAttributes:
     @classmethod
     def from_iterable(cls, attrs: Iterable[cms.AttCertAttribute]):
         infos = ClaimedAttributes()
-        by_type = defaultdict(lambda: ([], []))
+        by_type = defaultdict(list)
         for attr in attrs:
-            type_values, type_results = by_type[attr['type'].native]
+            type_values = by_type[attr['type'].native]
             type_values.extend(attr['values'])
-        for attr_type, (type_values, type_results) in by_type.items():
-            infos._attrs[attr_type] = CertifiedAttributeInfo(
+        for attr_type, type_values in by_type.items():
+            infos._attrs[attr_type] = X509AttributeInfo(
                 attr_type=cms.AttCertAttributeType(attr_type),
                 # (shallow) immutability
                 attr_values=tuple(type_values),
-                validation_results=tuple(type_results)
             )
         return infos
 
