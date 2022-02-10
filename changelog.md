@@ -1,5 +1,10 @@
 # changelog
 
+## 0.19.3
+
+ - Correct and improve behaviour of certificate fetcher when the 
+   server does not supply a Content-Type header.
+ 
 ## 0.19.2
 
  - Patch `asn1crypto` to work around tagging issue in AC issuer field

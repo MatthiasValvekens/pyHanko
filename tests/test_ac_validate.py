@@ -80,6 +80,27 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc)
 
+    async def test_ac_validation_expired(self):
+        ac = load_attr_cert(
+            os.path.join(basic_aa_dir, 'aa', 'alice-role-norev.attr.crt')
+        )
+
+        root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
+        interm = load_cert(os.path.join(
+            basic_aa_dir, 'root', 'interm-role.crt')
+        )
+        role_aa = load_cert(
+            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
+        )
+
+        vc = ValidationContext(
+            trust_roots=[root], other_certs=[interm, role_aa],
+            moment=datetime.datetime(3000, 1, 1, tzinfo=datetime.timezone.utc)
+        )
+        msg = 'the attribute certificate expired'
+        with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
+            await validate.async_validate_ac(ac, vc)
+
     async def test_basic_ac_validation_sig_algo_mismatch(self):
         ac = load_attr_cert(
             os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt')
