@@ -585,6 +585,8 @@ async def collect_signer_attr_status(
         # process claimed attributes (no verification possible/required,
         # so this is independent of whether we have a validation context
         # available)
+        # TODO offer a strict mode where all attributes must be recognised
+        #  and/or at least parseable?
         claimed = ClaimedAttributes.from_iterable(
             claimed_asn1 if not isinstance(claimed_asn1, core.Void) else ()
         )
@@ -610,6 +612,8 @@ async def collect_signer_attr_status(
         # If we were able to validate AC's from the signers-attrs-v2 attribute,
         # compile the validation results
         if cades_ac_results is not None:
+            # TODO offer a strict mode where all attributes must be recognised
+            #  and/or at least parseable?
             certified = CertifiedAttributes.from_results(cades_ac_results)
         else:
             certified = None

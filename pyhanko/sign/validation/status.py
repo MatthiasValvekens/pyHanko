@@ -23,7 +23,7 @@ from ..diff_analysis import (
     ModificationLevel,
     SuspiciousModification,
 )
-from .errors import SigSeedValueValidationError
+from .errors import SignatureValidationError, SigSeedValueValidationError
 from .settings import KeyUsageConstraints
 
 __all__ = [
@@ -266,21 +266,45 @@ class CertifiedAttributeInfo(X509AttributeInfo):
     """
 
 
+def _handle_attr_err(attr_type: Optional[str], attr_kind: str,
+                     err: ValueError, fatal: bool):
+    attr_type_str = "unknown type" if not attr_type else f"type '{attr_type}'"
+    msg = (
+        f"Failed to parse {attr_kind} of {attr_type_str}: {err.args[0]}"
+    )
+    if fatal:
+        raise SignatureValidationError(
+            msg, ades_subindication=AdESFailure.FORMAT_FAILURE
+        ) from err
+    else:
+        logger.warning(msg, exc_info=err)
+
+
 class CertifiedAttributes:
     """
     Container class for extracted attribute certificate information.
     """
 
     @classmethod
-    def from_results(cls, results: Iterable[ACValidationResult]):
+    def from_results(cls, results: Iterable[ACValidationResult],
+                     parse_error_fatal=False):
         # first, classify the attributes and results by type
         by_type = defaultdict(lambda: ([], []))
         for result in results:
             for attr_type, attr in result.approved_attributes.items():
+                attr_type = None
+                try:
+                    attr_type = attr['type'].native
+                    values = list(attr['values'])  # force a surface-level parse
+                except ValueError as e:
+                    _handle_attr_err(
+                        attr_type, "certified attribute", e,
+                        fatal=parse_error_fatal
+                    )
+                    continue
                 type_values, type_results = by_type[attr_type]
-                type_values.extend(attr['values'])
+                type_values.extend(values)
                 type_results.append(result)
-
         # then, for each type, we package 'em up in a CertifiedAttributeInfo
         infos = CertifiedAttributes()
         for attr_type, (type_values, type_results) in by_type.items():
@@ -318,12 +342,23 @@ class ClaimedAttributes:
     """
 
     @classmethod
-    def from_iterable(cls, attrs: Iterable[cms.AttCertAttribute]):
+    def from_iterable(cls, attrs: Iterable[cms.AttCertAttribute],
+                      parse_error_fatal=False):
         infos = ClaimedAttributes()
         by_type = defaultdict(list)
         for attr in attrs:
-            type_values = by_type[attr['type'].native]
-            type_values.extend(attr['values'])
+            attr_type = None
+            try:
+                attr_type = attr['type'].native
+                values = list(attr['values'])  # force a surface-level parse
+            except ValueError as e:
+                _handle_attr_err(
+                    attr_type, "claimed attribute", e,
+                    fatal=parse_error_fatal
+                )
+                continue
+            by_type[attr_type].extend(values)
+
         for attr_type, type_values in by_type.items():
             infos._attrs[attr_type] = X509AttributeInfo(
                 attr_type=cms.AttCertAttributeType(attr_type),

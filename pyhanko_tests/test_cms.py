@@ -7,6 +7,7 @@ from io import BytesIO
 import pytest
 import pytz
 import tzlocal
+import yaml
 from asn1crypto import cms, core
 from asn1crypto.algos import (
     DigestAlgorithm,
@@ -14,6 +15,7 @@ from asn1crypto.algos import (
     RSASSAPSSParams,
     SignedDigestAlgorithm,
 )
+from certomancer import PKIArchitecture
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
@@ -22,7 +24,7 @@ from pyhanko_certvalidator.registry import SimpleCertificateStore
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers, timestamps
-from pyhanko.sign.ades.api import CAdESSignedAttrSpec
+from pyhanko.sign.ades.api import CAdESSignedAttrSpec, SignerAttrSpec
 from pyhanko.sign.ades.report import AdESIndeterminate, AdESStatus
 from pyhanko.sign.attributes import CMSAttributeProvider, TSTProvider
 from pyhanko.sign.general import (
@@ -36,6 +38,7 @@ from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
+    StandardCMSSignatureStatus,
     async_validate_cms_signature,
     async_validate_detached_cms,
     async_validate_pdf_ltv_signature,
@@ -48,11 +51,13 @@ from pyhanko.sign.validation.errors import (
     WeakHashAlgorithmError,
 )
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
+from pyhanko.sign.validation.status import ClaimedAttributes
 from pyhanko_tests.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
     MINIMAL,
     PDF_DATA_DIR,
+    SAMPLE_GROUP_ATTR,
     TESTING_CA,
     TESTING_CA_DSA,
     TESTING_CA_ECDSA,
@@ -74,6 +79,7 @@ from pyhanko_tests.signing_commons import (
     SIMPLE_V_CONTEXT,
     async_val_trusted,
     live_ac_vcs,
+    live_testing_vc,
     val_trusted,
     val_untrusted,
 )
@@ -1286,3 +1292,177 @@ async def test_detached_cades_cms_with_tst():
     assert 'The TSA certificate is untrusted' in status.pretty_print_details()
     assert status.valid
     assert status.intact
+
+
+class GenericOpenTypePair(core.Sequence):
+    _fields = [('f1', core.Any), ('f2', core.Any)]
+
+
+NONSENSICAL_ATTR = cms.AttCertAttribute.load(
+    GenericOpenTypePair({
+        'f1': core.ObjectIdentifier('2.5.4.72'),  # 'role'
+        'f2': cms.SetOfOctetString([
+            core.OctetString(b'This makes no sense')
+        ])
+    }).dump()
+)
+
+UNTYPABLE_ATTR = cms.AttCertAttribute.load(
+    GenericOpenTypePair({
+        'f1': core.OctetString(b'This makes even less sense'),
+        'f2': cms.SetOfOctetString([
+            core.OctetString(b'This makes no sense')
+        ])
+    }).dump()
+)
+
+
+@pytest.mark.parametrize(
+    'data,fatal',
+    list(itertools.product(
+        [
+            (NONSENSICAL_ATTR, 'Failed to parse claimed.*role'),
+            (UNTYPABLE_ATTR, 'Failed to parse.*unknown type')
+        ],
+        [True, False]
+    ))
+)
+async def test_parse_malformed_claimed_attrs(data, fatal):
+    # This should parse up to the first level and be reencoded by asn1crypto
+    #  without asking any questions.
+    nonsensical_attr, msg = data
+    claimed_attrs = [nonsensical_attr, SAMPLE_GROUP_ATTR]
+    if fatal:
+        with pytest.raises(SignatureValidationError, match=msg):
+            ClaimedAttributes.from_iterable(
+                claimed_attrs, parse_error_fatal=True
+            )
+    else:
+        claimed = ClaimedAttributes.from_iterable(
+            claimed_attrs, parse_error_fatal=False
+        )
+        # The malformed attribute shouldn't have been processed,
+        # but the other attrs should've
+        assert len(claimed) == 1
+
+
+@pytest.mark.parametrize('bad_attr', [NONSENSICAL_ATTR, UNTYPABLE_ATTR])
+async def test_validate_with_malformed_claimed_attrs(bad_attr, requests_mock):
+    # This should parse up to the first level and be reencoded by asn1crypto
+    #  without asking any questions.
+    cms_sig = await FROM_CA.async_sign_general_data(
+        b'Hello world', digest_algorithm='sha256',
+        signed_attr_settings=PdfCMSSignedAttributes(
+            cades_signed_attrs=CAdESSignedAttrSpec(
+                signer_attributes=SignerAttrSpec(
+                    claimed_attrs=[bad_attr, SAMPLE_GROUP_ATTR],
+                    certified_attrs=[]
+                )
+            )
+        )
+    )
+    status = await async_validate_detached_cms(
+        input_data=b'Hello world', signed_data=cms_sig['content'],
+        signer_validation_context=live_testing_vc(requests_mock)
+    )
+    assert isinstance(status, StandardCMSSignatureStatus)
+    # The malformed attribute shouldn't have been processed,
+    # but the other attrs should've
+    assert len(status.cades_signer_attrs.claimed_attrs) == 1
+
+
+BASIC_AC_ISSUER_SETUP = '''
+  ac-issuer:
+    subject: root
+    issuer: root
+    validity:
+      valid-from: "2000-01-01T00:00:00+0000"
+      valid-to: "2500-01-01T00:00:00+0000"
+    extensions:
+      - id: key_usage
+        critical: true
+        smart-value:
+          schema: key-usage
+          params: [digital_signature]
+  signer1:
+    subject: signer1
+    issuer: root
+    validity:
+      valid-from: "2000-01-01T00:00:00+0000"
+      valid-to: "2100-01-01T00:00:00+0000"
+    extensions:
+      - id: key_usage
+        critical: true
+        smart-value:
+          schema: key-usage
+          params: [digital_signature]
+'''
+
+
+async def test_parse_ac_with_malformed_attribute(requests_mock):
+    attr_cert_cfg = f'''
+    test-ac:
+      holder:
+          name: signer1
+          # this needs to match against something from a totally different PKI
+          # arch, so make the coupling as loose as possible
+          include-base-cert-id: false
+          include-entity-name: true
+      issuer: root
+      attributes:
+          - id: charging_identity
+            smart-value:
+                schema: ietf-attribute
+                params: ["Big Corp Inc."]
+      validity:
+        valid-from: "2000-01-01T00:00:00+0000"
+        valid-to: "2100-01-01T00:00:00+0000"
+    '''
+
+    pki_arch = PKIArchitecture(
+        arch_label=ArchLabel('test'),
+        key_set=TESTING_CA.key_set, entities=TESTING_CA.entities,
+        cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
+        ac_spec_config=yaml.safe_load(attr_cert_cfg),
+        service_config={},
+        external_url_prefix='http://test.test',
+    )
+    spec = pki_arch.get_attr_cert_spec(CertLabel('test-ac'))
+
+    # we have to get a bit creative to get Certomancer to output invalid asn1
+    #  in exactly the way we want
+    class FakeAttrSpec:
+        # noinspection PyUnusedLocal
+        def to_asn1(self, arch):
+            return NONSENSICAL_ATTR
+
+    # noinspection PyTypeChecker
+    spec.attributes.append(FakeAttrSpec())
+
+    cms_sig = await FROM_CA.async_sign_general_data(
+        b'Hello world', digest_algorithm='sha256',
+        signed_attr_settings=PdfCMSSignedAttributes(
+            cades_signed_attrs=CAdESSignedAttrSpec(
+                signer_attributes=SignerAttrSpec(
+                    certified_attrs=[
+                        pki_arch.get_attr_cert(CertLabel('test-ac'))
+                    ],
+                    claimed_attrs=[]
+                )
+            )
+        )
+    )
+    vc = live_testing_vc(requests_mock)
+    ac_vc = ValidationContext(
+        trust_roots=[pki_arch.get_cert(CertLabel('ac-issuer'))],
+        allow_fetching=False,
+    )
+    status = await async_validate_detached_cms(
+        input_data=b'Hello world', signed_data=cms_sig['content'],
+        signer_validation_context=vc,
+        ac_validation_context=ac_vc
+    )
+    assert isinstance(status, StandardCMSSignatureStatus)
+    # The malformed attribute shouldn't have been processed,
+    # but the other attrs should've
+    assert len(status.cades_signer_attrs.certified_attrs) == 1
