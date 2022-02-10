@@ -1,5 +1,10 @@
 # changelog
 
+## 0.19.4
+
+ - Fix improper error handling when dealing with expired or not-yet-valid
+   attribute certificates.
+
 ## 0.19.3
 
  - Correct and improve behaviour of certificate fetcher when the 
