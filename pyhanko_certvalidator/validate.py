@@ -615,6 +615,10 @@ async def async_validate_ac(
         _validate_ac_targeting(attr_cert, targ_desc)
 
     validity = attr_cert['ac_info']['att_cert_validity_period']
+
+    def _describe(**_kwargs):
+        return 'the attribute certificate'
+
     _check_validity(
         validity=Validity({
             'not_before': validity['not_before_time'],
@@ -622,7 +626,7 @@ async def async_validate_ac(
         }),
         moment=validation_context.moment,
         tolerance=validation_context.time_tolerance,
-        describe_current_cert='the attribute certificate'
+        describe_current_cert=_describe
     )
 
     ac_holder = attr_cert['ac_info']['holder']
