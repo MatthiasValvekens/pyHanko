@@ -98,6 +98,31 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
                                     'not all names.*permitted'):
             await async_validate_path(context, path, parameters=extra_params)
 
+    async def test_validate_with_merged_excluded_subtrees(self):
+        crt = _load_nist_cert('nameConstraintsDN3CACert.crt')
+        anchor = CertTrustAnchor(crt, derive_default_quals_from_cert=True)
+        ee = _load_nist_cert('ValidDNnameConstraintsTest6EE.crt')
+        context = ValidationContext(
+            trust_roots=[anchor], revocation_mode='soft-fail',
+        )
+        path, = await context.certificate_registry.async_build_paths(ee)
+        self.assertEqual(path.pkix_len, 1)
+
+        # this should be OK
+        await async_validate_path(context, path)
+        # merge in an extra name constraint
+        extra_name = x509.Name.build({
+            'organizational_unit_name': 'permittedSubtree1',
+            'organization_name': 'Test Certificates 2011',
+            'country_name': 'US'
+        })
+        extra_params = PKIXValidationParams(
+            initial_excluded_subtrees=x509_names_to_subtrees([extra_name])
+        )
+        with self.assertRaisesRegex(PathValidationError,
+                                    'some names.*excluded'):
+            await async_validate_path(context, path, parameters=extra_params)
+
     async def test_validate_with_certless_root(self):
         crt = _load_nist_cert('nameConstraintsDN1CACert.crt')
         # manually build params
