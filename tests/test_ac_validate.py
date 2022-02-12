@@ -97,7 +97,7 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
             trust_roots=[root], other_certs=[interm, role_aa],
             moment=datetime.datetime(3000, 1, 1, tzinfo=datetime.timezone.utc)
         )
-        msg = 'the attribute certificate expired'
+        msg = 'intermediate certificate 1 expired'
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc)
 

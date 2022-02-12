@@ -54,7 +54,7 @@ from .util import (
     get_ac_extension_value,
     get_declared_revinfo,
     validate_sig,
-    pretty_message
+    pretty_message, ConsList
 )
 
 logger = logging.getLogger(__name__)
@@ -132,9 +132,7 @@ async def async_validate_path(validation_context, path: ValidationPath,
         asn1crypto.x509.Certificate
     """
 
-    proc_state = ValProcState(
-        index=0, path_len=path.pkix_len, is_side_validation=False
-    )
+    proc_state = ValProcState(cert_path_stack=ConsList.sing(path))
     return await intl_validate_path(
         validation_context, path, parameters=parameters,
         proc_state=proc_state
@@ -626,20 +624,6 @@ async def async_validate_ac(
             ))
         _validate_ac_targeting(attr_cert, targ_desc)
 
-    validity = attr_cert['ac_info']['att_cert_validity_period']
-    _check_validity(
-        validity=Validity({
-            'not_before': validity['not_before_time'],
-            'not_after': validity['not_after_time'],
-        }),
-        moment=validation_context.moment,
-        tolerance=validation_context.time_tolerance,
-        proc_state=ValProcState(
-            path_len=0, is_side_validation=False,
-            ee_name_override="the attribute certificate",
-        )
-    )
-
     ac_holder = attr_cert['ac_info']['holder']
     if len(ac_holder) == 0:
         raise InvalidAttrCertificateError("AC holder entry is empty")
@@ -675,8 +659,7 @@ async def async_validate_ac(
                     validation_context, candidate_path,
                     parameters=aa_pkix_params,
                     proc_state=ValProcState(
-                        path_len=len(candidate_path) - 1,
-                        is_side_validation=False,
+                        cert_path_stack=ConsList.sing(candidate_path),
                         ee_name_override="AA certificate"
                     )
                 )
@@ -698,15 +681,32 @@ async def async_validate_ac(
     aa_cert = aa_path.last
     _check_ac_signature(attr_cert, aa_cert, validation_context)
 
+    validity = attr_cert['ac_info']['att_cert_validity_period']
+    # NOTE: this is a bit of a hack, and the path in question is only used
+    #  for error reporting
+    # TODO make paths with ACs at the end easier to handle
+    dummy_ac_path = ValidationPath(
+        trust_anchor=aa_path.trust_anchor,
+        certs=aa_path.get_raw() + [attr_cert]
+    )
+    proc_state = ValProcState(
+        cert_path_stack=ConsList.sing(dummy_ac_path),
+        is_side_validation=False,
+        ee_name_override="the attribute certificate"
+    )
+    _check_validity(
+        validity=Validity({
+            'not_before': validity['not_before_time'],
+            'not_after': validity['not_after_time'],
+        }),
+        moment=validation_context.moment,
+        tolerance=validation_context.time_tolerance,
+        proc_state=proc_state,
+    )
     if 'no_rev_avail' not in extensions_present:
-        path_len = len(aa_path)  # len(aa_path) - 1 + the AC itself
         await _check_revocation(
             attr_cert, validation_context, aa_path,
-            proc_state=ValProcState(
-                path_len=path_len, index=path_len,
-                is_side_validation=False,
-                ee_name_override="attribute certificate"
-            ),
+            proc_state=proc_state
         )
 
     ok_attrs = {

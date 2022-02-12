@@ -70,18 +70,28 @@ class ValidationPath:
         else:
             return self._certs[0]
 
+    def get_ee_cert_safe(self) -> Optional[x509.Certificate]:
+        result = None
+        if self._certs:
+            result = self._certs[len(self._certs) - 1]
+        elif isinstance(self._root, CertTrustAnchor):
+            result = self._root.certificate
+        if isinstance(result, x509.Certificate):
+            return result
+        else:
+            return None
+
     @property
-    def last(self):
+    def last(self) -> x509.Certificate:
         """
-        Returns the current end of the path - the end entity certificate
+        Returns the end of the path - the end entity certificate
 
         :return:
             The last asn1crypto.x509.Certificate object in the path
         """
-        if self._certs:
-            return self._certs[len(self._certs) - 1]
-        elif isinstance(self._root, CertTrustAnchor):
-            return self._root.certificate
+        cert = self.get_ee_cert_safe()
+        if cert:
+            return cert
         else:
             raise LookupError("No certificates in path")
 
@@ -265,3 +275,6 @@ class ValidationPath:
             self.trust_anchor == other.trust_anchor
             and self._certs == other._certs
         )
+
+    def get_raw(self):
+        return list(self._certs)

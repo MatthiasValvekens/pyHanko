@@ -20,8 +20,9 @@ from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.util import get_ac_extension_value, \
     get_relevant_crl_dps, extract_ac_issuer_dir_name, validate_sig, \
-    pretty_message
+    pretty_message, ConsList
 
+logger = logging.getLogger(__name__)
 
 async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
                                       certificate_list: crl.CertificateList,
@@ -52,6 +53,53 @@ async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
     return candidates
 
 
+@dataclass
+class _CRLIssuerSearchErrs:
+    candidates_skipped = 0
+    signatures_failed = 0
+    unauthorized_certs = 0
+
+
+async def _validate_crl_issuer_path(
+        *, candidate_crl_issuer_path: ValidationPath,
+        validation_context: ValidationContext,
+        is_indirect: bool,
+        proc_state: ValProcState):
+    # If we have a validation cached (from before, or because the CRL issuer
+    #  appears further up in the path) use it.
+    # This is not just for efficiency, it also makes for clearer errors when
+    #  validation fails due to revocation info issues further up in the path
+    if validation_context.check_validation(candidate_crl_issuer_path.last):
+        return
+    try:
+        temp_override = proc_state.ee_name_override
+        if is_indirect:
+            temp_override = proc_state.describe_cert() + ' CRL issuer'
+        from pyhanko_certvalidator.validate import intl_validate_path
+        new_stack = proc_state.cert_path_stack.cons(candidate_crl_issuer_path)
+        await intl_validate_path(
+            validation_context,
+            candidate_crl_issuer_path,
+            proc_state=ValProcState(
+                ee_name_override=temp_override,
+                cert_path_stack=new_stack
+            )
+        )
+
+    except PathValidationError as e:
+        iss_cert = candidate_crl_issuer_path.last
+        logger.warning(
+            f"Path for CRL issuer {iss_cert.subject.human_friendly} could not "
+            f"be validated.", exc_info=e
+        )
+        # We let a revoked error fall through since step k will catch
+        # it with a correct error message
+        if isinstance(e, RevokedError):
+            raise
+        raise CRLValidationError(
+            'CRL issuer certificate path could not be validated')
+
+
 async def _find_crl_issuer(
         crl_issuer_name: x509.Name,
         certificate_list: crl.CertificateList,
@@ -62,10 +110,8 @@ async def _find_crl_issuer(
         is_indirect: bool,
         proc_state: ValProcState):
 
+    errs = _CRLIssuerSearchErrs()
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
-    candidates_skipped = 0
-    signatures_failed = 0
-    unauthorized_certs = 0
 
     candidate_crl_issuers = await _find_candidate_crl_issuers(
         crl_issuer_name, certificate_list, cert_issuer=cert_issuer,
@@ -87,81 +133,55 @@ async def _find_crl_issuer(
         )
 
         if not direct_issuer and not indirect_issuer and not is_indirect:
-            candidates_skipped += 1
+            errs.candidates_skipped += 1
             continue
 
         # Step f
-        candidate_crl_issuer_path = None
-
-        if validation_context:
-            candidate_crl_issuer_path = \
-                validation_context.check_validation(candidate_crl_issuer)
+        candidate_crl_issuer_path = proc_state\
+            .check_path_verif_recursion(candidate_crl_issuer)
 
         if candidate_crl_issuer_path is None:
+            # Note: this is not the same as .truncate_to() if
+            # candidate_crl_issuer doesn't appear in the path!
             candidate_crl_issuer_path = cert_path \
                 .truncate_to_issuer(candidate_crl_issuer) \
                 .copy_and_append(candidate_crl_issuer)
-            try:
-                # Pre-emptively mark a path as validated to prevent recursion
-                if validation_context:
-                    validation_context.record_validation(
-                        candidate_crl_issuer, candidate_crl_issuer_path
-                    )
-
-                temp_override = proc_state.ee_name_override
-                if candidate_crl_issuer.sha256 != cert_issuer.sha256:
-                    temp_override = proc_state.describe_cert() + ' CRL issuer'
-                from pyhanko_certvalidator.validate import intl_validate_path
-                await intl_validate_path(
-                    validation_context,
-                    candidate_crl_issuer_path,
-                    proc_state=ValProcState(
-                        path_len=candidate_crl_issuer_path.pkix_len,
-                        is_side_validation=True,
-                        ee_name_override=temp_override
-                    )
-                )
-
-            except PathValidationError as e:
-                # If the validation did not work out, clear it
-                if validation_context:
-                    validation_context.clear_validation(candidate_crl_issuer)
-
-                # We let a revoked error fall through since step k will catch
-                # it with a correct error message
-                if isinstance(e, RevokedError):
-                    raise
-                raise CRLValidationError(
-                    'CRL issuer certificate path could not be validated')
+            await _validate_crl_issuer_path(
+                candidate_crl_issuer_path=candidate_crl_issuer_path,
+                validation_context=validation_context,
+                is_indirect=candidate_crl_issuer.sha256 != cert_issuer.sha256,
+                proc_state=proc_state
+            )
 
         key_usage_value = candidate_crl_issuer.key_usage_value
         if key_usage_value and 'crl_sign' not in key_usage_value.native:
-            unauthorized_certs += 1
+            errs.unauthorized_certs += 1
             continue
 
         try:
             # Step g
-            _verify_crl_signature(certificate_list, candidate_crl_issuer.public_key)
+            _verify_crl_signature(certificate_list,
+                                  candidate_crl_issuer.public_key)
 
             crl_issuer = candidate_crl_issuer
             break
 
         except CRLValidationError:
-            signatures_failed += 1
+            errs.signatures_failed += 1
             continue
 
     if crl_issuer is not None:
         validation_context.revinfo_manager\
             .record_crl_issuer(certificate_list, crl_issuer)
         return crl_issuer
-    elif candidates_skipped == len(candidate_crl_issuers):
+    elif errs.candidates_skipped == len(candidate_crl_issuers):
         raise CRLNoMatchesError()
     else:
-        if signatures_failed == len(candidate_crl_issuers):
+        if errs.signatures_failed == len(candidate_crl_issuers):
             raise CRLValidationError(
                 'CRL signature could not be verified'
             )
-        elif unauthorized_certs == len(candidate_crl_issuers):
+        elif errs.unauthorized_certs == len(candidate_crl_issuers):
             raise CRLValidationError(
                 'The CRL issuer is not authorized to sign CRLs',
             )
@@ -679,7 +699,7 @@ async def verify_crl(
 
     is_pkc = isinstance(cert, x509.Certificate)
     proc_state = proc_state or ValProcState(
-        path_len=path.pkix_len, is_side_validation=False,
+        cert_path_stack=ConsList.sing(path),
         ee_name_override="attribute certificate" if not is_pkc else None
     )
 

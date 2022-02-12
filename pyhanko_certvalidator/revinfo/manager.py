@@ -37,6 +37,10 @@ class RevinfoManager:
         self._fetchers = fetchers
 
     @property
+    def certificate_registry(self) -> CertificateRegistry:
+        return self._certificate_registry
+
+    @property
     def fetching_allowed(self) -> bool:
         return self._allow_fetching
 

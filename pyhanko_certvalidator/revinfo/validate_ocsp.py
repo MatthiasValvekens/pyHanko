@@ -21,7 +21,7 @@ from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
     RevinfoUsabilityRating
 from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
 from pyhanko_certvalidator.util import (
-    pretty_message, extract_ac_issuer_dir_name, validate_sig
+    pretty_message, extract_ac_issuer_dir_name, validate_sig, ConsList
 )
 
 OCSP_PROVENANCE_ERR = (
@@ -36,6 +36,16 @@ async def _validate_delegated_ocsp_provenance(
         validation_context: ValidationContext,
         ee_path: ValidationPath,
         proc_state: ValProcState):
+
+    if proc_state.check_path_verif_recursion(responder_cert):
+        # we permit this for CRLs for historical reasons, but there's no
+        # sane reason why this would make sense for OCSP responders, so
+        # throw an error
+        raise PathValidationError.from_state(
+            "Recursion detected in OCSP responder authorisation check for "
+            "responder certificate %s." % responder_cert.subject.human_friendly,
+            proc_state
+        )
 
     from pyhanko_certvalidator.validate import intl_validate_path
 
@@ -69,7 +79,7 @@ async def _validate_delegated_ocsp_provenance(
             trust_anchor=CertTrustAnchor(issuer), certs=[responder_cert]
         )
         ocsp_trunc_proc_state = ValProcState(
-            path_len=1, is_side_validation=True,
+            cert_path_stack=proc_state.cert_path_stack.cons(ocsp_trunc_path),
             ee_name_override=ocsp_ee_name_override
         )
         try:
@@ -86,8 +96,8 @@ async def _validate_delegated_ocsp_provenance(
         validation_context.record_validation(responder_cert, responder_chain)
     else:
         ocsp_proc_state = ValProcState(
-            path_len=len(responder_chain) - 1,
-            is_side_validation=True, ee_name_override=ocsp_ee_name_override
+            cert_path_stack=proc_state.cert_path_stack.cons(responder_chain),
+            ee_name_override=ocsp_ee_name_override
         )
         try:
             await intl_validate_path(
@@ -346,9 +356,7 @@ async def verify_ocsp_response(
         pyhanko_certvalidator.errors.RevokedError - when the OCSP response indicates the certificate has been revoked
     """
 
-    proc_state = proc_state or ValProcState(
-        path_len=path.pkix_len, is_side_validation=False
-    )
+    proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
 
     cert_description = proc_state.describe_cert()
     moment = validation_context.moment

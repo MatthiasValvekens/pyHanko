@@ -9,8 +9,6 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding, dsa, ec, \
     ed25519, ed448
 
-from .errors import DSAParametersUnavailable, PSSParameterMismatch
-
 
 def pretty_message(string, *params):
     """
@@ -204,6 +202,7 @@ def get_declared_revinfo(
 def validate_sig(signature: bytes, signed_data: bytes,
                  public_key_info: PublicKeyInfo,
                  sig_algo: str, hash_algo: str, parameters=None):
+    from .errors import DSAParametersUnavailable, PSSParameterMismatch
 
     if sig_algo == 'dsa' and \
             public_key_info['algorithm']['parameters'].native is None:
@@ -292,3 +291,6 @@ class ConsList:
 
     def __repr__(self):  # pragma: nocover
         return f"ConsList({list(reversed(list(self)))})"
+
+    def __bool__(self):
+        return self.head is not None
