@@ -15,7 +15,7 @@ from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry, TrustRootList
-from .revinfo.archival import OCSPWithPOE, RevinfoFreshnessPOE, CRLWithPOE, \
+from .revinfo.archival import OCSPWithPOE, POE, CRLWithPOE, \
     ValidationTimingInfo, sort_freshest_first
 
 
@@ -225,7 +225,7 @@ class ValidationContext:
                 if isinstance(crl_, bytes):
                     crl_ = crl.CertificateList.load(crl_)
                 if isinstance(crl_, crl.CertificateList):
-                    crl_ = CRLWithPOE(RevinfoFreshnessPOE.unknown(), crl_)
+                    crl_ = CRLWithPOE(POE.unknown(), crl_)
                 if isinstance(crl_, CRLWithPOE):
                     new_crls.append(crl_)
                 else:
@@ -246,7 +246,7 @@ class ValidationContext:
                     ocsp_ = ocsp.OCSPResponse.load(ocsp_)
                 if isinstance(ocsp_, ocsp.OCSPResponse):
                     extr = OCSPWithPOE.load_multi(
-                        RevinfoFreshnessPOE.unknown(), ocsp_
+                        POE.unknown(), ocsp_
                     )
                     new_ocsps.extend(extr)
                 elif isinstance(ocsp_, OCSPWithPOE):
@@ -475,7 +475,7 @@ class ValidationContext:
         except KeyError:
             crls = await fetchers.crl_fetcher.fetch(cert)
         with_poe = [
-            CRLWithPOE(RevinfoFreshnessPOE.fresh(), crl_data)
+            CRLWithPOE(POE.fresh(), crl_data)
             for crl_data in crls
         ]
         return with_poe + self._crls
@@ -533,14 +533,14 @@ class ValidationContext:
 
         fetchers = self._fetchers
         ocsps = [
-            OCSPWithPOE(RevinfoFreshnessPOE.fresh(), resp)
+            OCSPWithPOE(POE.fresh(), resp)
             for resp in fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
         ]
         if not ocsps:
             ocsp_response_data \
                 = await fetchers.ocsp_fetcher.fetch(cert, issuer)
             ocsps = OCSPWithPOE.load_multi(
-                RevinfoFreshnessPOE.fresh(), ocsp_response_data
+                POE.fresh(), ocsp_response_data
             )
 
             # Responses can contain certificates that are useful in

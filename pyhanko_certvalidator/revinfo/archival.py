@@ -1,3 +1,4 @@
+import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -17,24 +18,24 @@ class ValidationTimingInfo:
     point_in_time_validation: bool
 
 
-class RevinfoFreshnessPOEType(enum.Enum):
+class POEType(enum.Enum):
     UNKNOWN = enum.auto()
     TIMESTAMPED = enum.auto()
     FRESHLY_FETCHED = enum.auto()
 
 
 @dataclass(frozen=True)
-class RevinfoFreshnessPOE:
-    poe_type: RevinfoFreshnessPOEType
+class POE:
+    poe_type: POEType
     archive_timestamp: Optional[datetime] = None
 
     @classmethod
     def unknown(cls):
-        return RevinfoFreshnessPOE(RevinfoFreshnessPOEType.UNKNOWN)
+        return POE(POEType.UNKNOWN)
 
     @classmethod
     def fresh(cls):
-        return RevinfoFreshnessPOE(RevinfoFreshnessPOEType.FRESHLY_FETCHED)
+        return POE(POEType.FRESHLY_FETCHED)
 
 
 class RevinfoUsabilityRating(enum.Enum):
@@ -48,18 +49,20 @@ class RevinfoUsabilityRating(enum.Enum):
         return self == RevinfoUsabilityRating.OK
 
 
-class RevinfoWithPOE:
-
-    def retrieve_poe(self) -> RevinfoFreshnessPOE:
-        raise NotImplementedError
-
-    def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy,
-                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
+class IssuedItemWithPOE(abc.ABC):
+    def retrieve_poe(self) -> POE:
         raise NotImplementedError
 
     @property
     def issuance_date(self) -> Optional[datetime]:
+        raise NotImplementedError
+
+
+class RevinfoWithPOE(IssuedItemWithPOE, abc.ABC):
+
+    def usable_at(self, validation_time: datetime,
+                  policy: CertRevTrustPolicy,
+                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         raise NotImplementedError
 
 
@@ -174,12 +177,12 @@ def _extract_basic_ocsp_response(ocsp_response) \
 
 @dataclass(frozen=True)
 class OCSPWithPOE(RevinfoWithPOE):
-    poe: RevinfoFreshnessPOE
+    poe: POE
     ocsp_response_data: ocsp.OCSPResponse
     index: int = 0
 
     @classmethod
-    def load_multi(cls, poe: RevinfoFreshnessPOE,
+    def load_multi(cls, poe: POE,
                    ocsp_response: ocsp.OCSPResponse) -> List['OCSPWithPOE']:
         basic_ocsp_response = _extract_basic_ocsp_response(ocsp_response)
         if basic_ocsp_response is None:
@@ -191,7 +194,7 @@ class OCSPWithPOE(RevinfoWithPOE):
             for ix in range(len(tbs_response['responses']))
         ]
 
-    def retrieve_poe(self) -> RevinfoFreshnessPOE:
+    def retrieve_poe(self) -> POE:
         return self.poe
 
     @property
@@ -233,10 +236,10 @@ class OCSPWithPOE(RevinfoWithPOE):
 
 @dataclass(frozen=True)
 class CRLWithPOE(RevinfoWithPOE):
-    poe: RevinfoFreshnessPOE
+    poe: POE
     crl_data: crl.CertificateList
 
-    def retrieve_poe(self) -> RevinfoFreshnessPOE:
+    def retrieve_poe(self) -> POE:
         return self.poe
 
     def usable_at(self, validation_time: datetime,
