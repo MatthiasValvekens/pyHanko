@@ -8,15 +8,15 @@ from typing import Optional, Iterable, Union, List
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
+from .revinfo.manager import RevinfoManager
 from .util import pretty_message
-from ._types import type_name
-from .errors import OCSPFetchError
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry, TrustRootList
-from .revinfo.archival import OCSPWithPOE, POE, CRLWithPOE, \
-    ValidationTimingInfo, sort_freshest_first
+from .revinfo.archival import \
+    ValidationTimingInfo, process_legacy_crl_input, \
+    process_legacy_ocsp_input
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,8 @@ class ValidationContext:
     # options include: "md2", "md5", "sha1"
     weak_hash_algos = None
 
-    # A set of byte strings of the SHA-1 hashes of certificates that are whitelisted
+    # A set of byte strings of the SHA-1 hashes of certificates that
+    # are whitelisted
     _whitelisted_certs = None
 
     # A dict with keys being an asn1crypto.x509.Certificate.signature byte
@@ -65,25 +66,6 @@ class ValidationContext:
     # for that certificate.
     _validate_map = None
 
-    # A dict with keys being an asn1crypto.crl.CertificateList.signature byte
-    # string of a CRL. Each value is an asn1crypto.x509.Certificate object of
-    # the validated issuer of the CRL.
-    _crl_issuer_map = None
-
-    # If CRLs or OCSP responses can be fetched from the network
-    _allow_fetching = False
-
-    _crls = None
-
-    _ocsps = None
-
-    # A dict with keys being an asn1crypto.x509.Certificate.issuer_serial byte
-    # string of the certificate, and the value being an
-    # asn1crypto.x509.Certificate object containing a certificate from a CRL
-    # or OCSP response that was fetched. Only certificates not already part of
-    # the .certificate_registry are added to this dict.
-    _revocation_certs = None
-
     # Any exceptions that were ignored while the revocation_mode is "soft-fail"
     _soft_fail_exceptions = None
 
@@ -91,8 +73,6 @@ class ValidationContext:
     # are chccked. If _allow_fetching is True, any CRLs or OCSP responses that
     # can be downloaded will also be checked. The next two attributes change
     # that behavior.
-
-    _fetchers: Fetchers = None
 
     _acceptable_ac_targets = None
 
@@ -217,49 +197,6 @@ class ValidationContext:
                 "Dealing with post-expiry revocation info has not been "
                 "implemented yet."
             )
-        self.revinfo_policy = revinfo_policy
-
-        if crls is not None:
-            new_crls = []
-            for crl_ in crls:
-                if isinstance(crl_, bytes):
-                    crl_ = crl.CertificateList.load(crl_)
-                if isinstance(crl_, crl.CertificateList):
-                    crl_ = CRLWithPOE(POE.unknown(), crl_)
-                if isinstance(crl_, CRLWithPOE):
-                    new_crls.append(crl_)
-                else:
-                    # TODO update error messages
-                    raise TypeError(pretty_message(
-                        '''
-                        crls must be a list of byte strings or
-                        asn1crypto.crl.CertificateList objects, not %s
-                        ''',
-                        type_name(crl_)
-                    ))
-            crls = sort_freshest_first(new_crls)
-
-        if ocsps is not None:
-            new_ocsps = []
-            for ocsp_ in ocsps:
-                if isinstance(ocsp_, bytes):
-                    ocsp_ = ocsp.OCSPResponse.load(ocsp_)
-                if isinstance(ocsp_, ocsp.OCSPResponse):
-                    extr = OCSPWithPOE.load_multi(
-                        POE.unknown(), ocsp_
-                    )
-                    new_ocsps.extend(extr)
-                elif isinstance(ocsp_, OCSPWithPOE):
-                    new_ocsps.append(ocsp_)
-                else:
-                    raise TypeError(pretty_message(
-                        '''
-                        ocsps must be a list of byte strings or
-                        asn1crypto.ocsp.OCSPResponse objects, not %s
-                        ''',
-                        type_name(ocsp_)
-                    ))
-            ocsps = sort_freshest_first(new_ocsps)
 
         rev_essential = revinfo_policy.revocation_checking_policy.essential
         if moment is not None:
@@ -315,6 +252,10 @@ class ValidationContext:
                     binascii.unhexlify(whitelisted_cert.encode('ascii'))
                 )
 
+        # TODO factor this out into a separate class that can deprecate
+        #  algorithms at specific times (in accordance with AdES).
+        #  For now, we consider all weak algorithms broken forever for all
+        #  validation purposes.
         if weak_hash_algos is not None:
             self.weak_hash_algos = set(weak_hash_algos)
         else:
@@ -322,10 +263,8 @@ class ValidationContext:
 
         cert_fetcher = None
         if allow_fetching:
-            # externally managed fetchers
-            if fetchers is not None:
-                self._fetchers = fetchers
-            else:
+            # not None -> externally managed fetchers
+            if fetchers is None:
                 # fetcher managed by this validation context,
                 # but backend possibly managed externally
                 if fetcher_backend is None:
@@ -333,30 +272,23 @@ class ValidationContext:
                     # backend, since the caller doesn't do any resource
                     # management
                     fetcher_backend = default_fetcher_backend()
-                self._fetchers = fetchers = fetcher_backend.get_fetchers()
+                fetchers = fetcher_backend.get_fetchers()
             cert_fetcher = fetchers.cert_fetcher
 
-        self.certificate_registry = CertificateRegistry(
+        self.certificate_registry = certificate_registry = CertificateRegistry(
             trust_roots, extra_trust_roots, other_certs,
             cert_fetcher=cert_fetcher
         )
+        crls = process_legacy_crl_input(crls) if crls else ()
+        ocsps = process_legacy_ocsp_input(ocsps) if ocsps else ()
+        self._revinfo_manager = RevinfoManager(
+            certificate_registry=certificate_registry,
+            revinfo_policy=revinfo_policy, crls=crls, ocsps=ocsps,
+            allow_fetching=allow_fetching, fetchers=fetchers
+        )
 
         self._validate_map = {}
-        self._crl_issuer_map = {}
 
-        self._revocation_certs = {}
-
-        self._crls = []
-        if crls:
-            self._crls = crls
-
-        self._ocsps = []
-        if ocsps:
-            self._ocsps = ocsps
-            for ocsp_response in ocsps:
-                self._extract_ocsp_certs(ocsp_response)
-
-        self._allow_fetching = bool(allow_fetching)
         self._soft_fail_exceptions = []
         time_tolerance = (
             abs(time_tolerance) if time_tolerance else timedelta(0)
@@ -368,6 +300,14 @@ class ValidationContext:
         )
 
         self._acceptable_ac_targets = acceptable_ac_targets
+
+    @property
+    def revinfo_manager(self) -> RevinfoManager:
+        return self._revinfo_manager
+
+    @property
+    def revinfo_policy(self) -> CertRevTrustPolicy:
+        return self._revinfo_manager.revinfo_policy
 
     @property
     def retroactive_revinfo(self) -> bool:
@@ -387,39 +327,22 @@ class ValidationContext:
 
     @property
     def fetching_allowed(self) -> bool:
-        return self._allow_fetching
+        return self.revinfo_manager.fetching_allowed
 
     @property
-    def crls(self):
+    def crls(self) -> List[crl.CertificateList]:
         """
-        A list of all cached asn1crypto.crl.CertificateList objects
+        A list of all cached :class:`crl.CertificateList` objects
         """
-
-        raw_crls = [with_poe.crl_data for with_poe in self._crls]
-        if not self._allow_fetching:
-            return raw_crls
-        return list(self._fetchers.crl_fetcher.fetched_crls()) + raw_crls
+        return self._revinfo_manager.crls
 
     @property
-    def ocsps(self):
+    def ocsps(self) -> List[ocsp.OCSPResponse]:
         """
-        A list of all cached asn1crypto.ocsp.OCSPResponse objects
-        """
-
-        raw_ocsps = [with_poe.ocsp_response_data for with_poe in self._ocsps]
-        if not self._allow_fetching:
-            return raw_ocsps
-
-        return list(self._fetchers.ocsp_fetcher.fetched_responses()) + raw_ocsps
-
-    @property
-    def new_revocation_certs(self):
-        """
-        A list of newly-fetched asn1crypto.x509.Certificate objects that were
-        obtained from OCSP responses and CRLs
+        A list of all cached :class:`ocsp.OCSPResponse` objects
         """
 
-        return list(self._revocation_certs.values())
+        return self._revinfo_manager.ocsps
 
     @property
     def soft_fail_exceptions(self):
@@ -453,32 +376,8 @@ class ValidationContext:
         :return:
             A list of asn1crypto.crl.CertificateList objects
         """
-        results = await self.async_retrieve_crls_with_poe(cert)
+        results = await self._revinfo_manager.async_retrieve_crls_with_poe(cert)
         return [res.crl_data for res in results]
-
-    async def async_retrieve_crls_with_poe(self, cert):
-        """
-        .. versionadded:: 0.20.0
-
-        :param cert:
-            An asn1crypto.x509.Certificate object
-
-        :return:
-            A list of :class:`CRLWithPOE` objects
-        """
-        if not self._allow_fetching:
-            return self._crls
-
-        fetchers = self._fetchers
-        try:
-            crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
-        except KeyError:
-            crls = await fetchers.crl_fetcher.fetch(cert)
-        with_poe = [
-            CRLWithPOE(POE.fresh(), crl_data)
-            for crl_data in crls
-        ]
-        return with_poe + self._crls
 
     def retrieve_crls(self, cert):
         """
@@ -496,8 +395,8 @@ class ValidationContext:
             "'retrieve_crls' is deprecated, use 'async_retrieve_crls' instead",
             DeprecationWarning
         )
-        if not self._allow_fetching:
-            return self._crls
+        if not self.revinfo_manager.fetching_allowed:
+            return self.revinfo_manager.crls
         return asyncio.run(self.async_retrieve_crls(cert))
 
     async def async_retrieve_ocsps(self, cert, issuer):
@@ -511,51 +410,9 @@ class ValidationContext:
         :return:
             A list of asn1crypto.ocsp.OCSPResponse objects
         """
-        results = await self.async_retrieve_ocsps_with_poe(cert, issuer)
+        results = await self._revinfo_manager\
+            .async_retrieve_ocsps_with_poe(cert, issuer)
         return [res.ocsp_response_data for res in results]
-
-    async def async_retrieve_ocsps_with_poe(self, cert, issuer):
-        """
-        .. versionadded:: 0.20.0
-
-        :param cert:
-            An asn1crypto.x509.Certificate object
-
-        :param issuer:
-            An asn1crypto.x509.Certificate object of cert's issuer
-
-        :return:
-            A list of :class:`OCSPWithPOE` objects
-        """
-
-        if not self._allow_fetching:
-            return self._ocsps
-
-        fetchers = self._fetchers
-        ocsps = [
-            OCSPWithPOE(POE.fresh(), resp)
-            for resp in fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
-        ]
-        if not ocsps:
-            ocsp_response_data \
-                = await fetchers.ocsp_fetcher.fetch(cert, issuer)
-            ocsps = OCSPWithPOE.load_multi(
-                POE.fresh(), ocsp_response_data
-            )
-
-            # Responses can contain certificates that are useful in
-            # validating the response itself. We can use these since they
-            # will be validated using the local trust roots.
-            for resp in ocsps:
-                try:
-                    self._extract_ocsp_certs(resp)
-                except ValueError:
-                    raise OCSPFetchError(
-                        "Failed to extract certificates from "
-                        "fetched OCSP response"
-                    )
-
-        return ocsps + self._ocsps
 
     def retrieve_ocsps(self, cert, issuer):
         """
@@ -578,24 +435,9 @@ class ValidationContext:
             DeprecationWarning
         )
 
-        if not self._allow_fetching:
-            return self._ocsps
+        if not self.revinfo_manager.fetching_allowed:
+            return self.revinfo_manager.ocsps
         return asyncio.run(self.async_retrieve_ocsps(cert, issuer))
-
-    def _extract_ocsp_certs(self, ocsp_response: OCSPWithPOE):
-        """
-        Extracts any certificates included with an OCSP response and adds them
-        to the certificate registry
-
-        :param ocsp_response:
-            An asn1crypto.ocsp.OCSPResponse object to look for certs inside of
-        """
-
-        basic = ocsp_response.extract_basic_ocsp_response()
-        if basic['certs']:
-            for other_cert in basic['certs']:
-                if self.certificate_registry.add_other_cert(other_cert):
-                    self._revocation_certs[other_cert.issuer_serial] = other_cert
 
     def record_validation(self, cert, path):
         """
@@ -626,7 +468,8 @@ class ValidationContext:
         """
 
         # CA certs are automatically trusted since they are from the trust list
-        if self.certificate_registry.is_ca(cert) and cert.signature not in self._validate_map:
+        if self.certificate_registry.is_ca(cert) and \
+                cert.signature not in self._validate_map:
             self._validate_map[cert.signature] = ValidationPath(cert)
 
         return self._validate_map.get(cert.signature)
@@ -641,36 +484,6 @@ class ValidationContext:
 
         if cert.signature in self._validate_map:
             del self._validate_map[cert.signature]
-
-    def record_crl_issuer(self, certificate_list, cert):
-        """
-        Records the certificate that issued a certificate list. Used to reduce
-        processing code when dealing with self-issued certificates and multiple
-        CRLs.
-
-        :param certificate_list:
-            An ans1crypto.crl.CertificateList object
-
-        :param cert:
-            An ans1crypto.x509.Certificate object
-        """
-
-        self._crl_issuer_map[certificate_list.signature] = cert
-
-    def check_crl_issuer(self, certificate_list):
-        """
-        Checks to see if the certificate that signed a certificate list has
-        been found
-
-        :param certificate_list:
-            An ans1crypto.crl.CertificateList object
-
-        :return:
-            None if not found, or an asn1crypto.x509.Certificate object of the
-            issuer
-        """
-
-        return self._crl_issuer_map.get(certificate_list.signature)
 
     @property
     def acceptable_ac_targets(self) -> ACTargetDescription:

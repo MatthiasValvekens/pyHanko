@@ -2,10 +2,12 @@ import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, List, Iterable
+from typing import Optional, List, Iterable, Union
 
 from asn1crypto import ocsp, crl
 
+from pyhanko_certvalidator._types import type_name
+from pyhanko_certvalidator.util import pretty_message
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
     FreshnessReqType
 
@@ -257,3 +259,54 @@ class CRLWithPOE(RevinfoWithPOE):
     def issuance_date(self) -> Optional[datetime]:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         return tbs_cert_list['this_update'].native
+
+
+LegacyCompatCRL = Union[bytes, crl.CertificateList, CRLWithPOE]
+LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPWithPOE]
+
+
+def process_legacy_crl_input(crls: Iterable[LegacyCompatCRL]) \
+        -> List[CRLWithPOE]:
+    new_crls = []
+    for crl_ in crls:
+        if isinstance(crl_, bytes):
+            crl_ = crl.CertificateList.load(crl_)
+        if isinstance(crl_, crl.CertificateList):
+            crl_ = CRLWithPOE(POE.unknown(), crl_)
+        if isinstance(crl_, CRLWithPOE):
+            new_crls.append(crl_)
+        else:
+            # TODO update error messages
+            raise TypeError(pretty_message(
+                '''
+                crls must be a list of byte strings or
+                asn1crypto.crl.CertificateList objects, not %s
+                ''',
+                type_name(crl_)
+            ))
+    return new_crls
+
+
+def process_legacy_ocsp_input(ocsps: Iterable[LegacyCompatOCSP]) \
+        -> List[OCSPWithPOE]:
+    new_ocsps = []
+    for ocsp_ in ocsps:
+        if isinstance(ocsp_, bytes):
+            ocsp_ = ocsp.OCSPResponse.load(ocsp_)
+        if isinstance(ocsp_, ocsp.OCSPResponse):
+            extr = OCSPWithPOE.load_multi(
+                POE.unknown(), ocsp_
+            )
+            new_ocsps.extend(extr)
+        elif isinstance(ocsp_, OCSPWithPOE):
+            new_ocsps.append(ocsp_)
+        else:
+            # TODO update error messages
+            raise TypeError(pretty_message(
+                '''
+                ocsps must be a list of byte strings or
+                asn1crypto.ocsp.OCSPResponse objects, not %s
+                ''',
+                type_name(ocsp_)
+            ))
+    return new_ocsps

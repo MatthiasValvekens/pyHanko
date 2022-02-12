@@ -151,7 +151,8 @@ async def _find_crl_issuer(
             continue
 
     if crl_issuer is not None:
-        validation_context.record_crl_issuer(certificate_list, crl_issuer)
+        validation_context.revinfo_manager\
+            .record_crl_issuer(certificate_list, crl_issuer)
         return crl_issuer
     elif candidates_skipped == len(candidate_crl_issuers):
         raise CRLNoMatchesError()
@@ -429,7 +430,8 @@ async def _handle_single_crl(
         crl_issuer_name = certificate_list.issuer
 
     # check if we already know the issuer of this CRL
-    crl_issuer = validation_context.check_crl_issuer(certificate_list)
+    crl_issuer = validation_context\
+        .revinfo_manager.check_crl_issuer(certificate_list)
     # if not, attempt to determine it
     if not crl_issuer:
         try:
@@ -681,7 +683,8 @@ async def verify_crl(
         ee_name_override="attribute certificate" if not is_pkc else None
     )
 
-    certificate_lists = await validation_context.async_retrieve_crls_with_poe(
+    revinfo_manager = validation_context.revinfo_manager
+    certificate_lists = await revinfo_manager.async_retrieve_crls_with_poe(
         cert
     )
 

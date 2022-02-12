@@ -367,9 +367,8 @@ async def verify_ocsp_response(
         cert_issuer = path.last
 
     errs = _OCSPErrs()
-    ocsp_responses = await validation_context.async_retrieve_ocsps_with_poe(
-        cert, cert_issuer
-    )
+    ocsp_responses = await validation_context.revinfo_manager\
+        .async_retrieve_ocsps_with_poe(cert, cert_issuer)
 
     for ocsp_response in ocsp_responses:
         try:
