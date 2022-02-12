@@ -52,23 +52,27 @@ class ValProcState:
                 return path
         return None
 
-    def describe_cert(self, def_interm=False):
+    def describe_cert(self, def_interm=False, never_def=False):
         """
         :return:
             A unicode string describing the position of a certificate
             in the chain
         """
 
+        prefix = not never_def
         if self.index < 1 and self.ee_name_override is None:
             # catchall default
-            return "the certificate"
+            result = "certificate"
         elif not self.is_ee_cert:
-            return (
-                f'{"the " if def_interm else ""}intermediate '
-                f'certificate {self.index}'
+            prefix &= def_interm
+            result = (
+                f'intermediate certificate {self.index}'
             )
-
-        if self.ee_name_override is not None:
-            return 'the ' + self.ee_name_override
-
-        return 'the end-entity certificate'
+        elif self.ee_name_override is not None:
+            result = self.ee_name_override
+        else:
+            result = 'end-entity certificate'
+        if prefix:
+            return "the " + result
+        else:
+            return result

@@ -53,7 +53,9 @@ async def _validate_delegated_ocsp_provenance(
     # which they act.
     # Moreover, RFC 6960 says that we don't have to accept OCSP responses signed
     # with a different key than the one used to sign subscriber certificates.
-    ocsp_ee_name_override = proc_state.describe_cert() + ' OCSP responder'
+    ocsp_ee_name_override = (
+        proc_state.describe_cert(never_def=True) + ' OCSP responder'
+    )
 
     issuer_chain = ee_path.truncate_to(issuer)
     responder_chain = issuer_chain.copy_and_append(responder_cert)

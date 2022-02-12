@@ -1886,9 +1886,12 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 3,
                 True,
-                RevokedError,
+                InsufficientRevinfoError,
                 (
-                    'CRL indicates the intermediate certificate 1 CRL issuer was '
+                    'The path could not be validated because the end-entity '
+                    'certificate revocation checks failed: '
+                    'The CRL issuer certificate path could not be validated. '
+                    'CRL indicates the end-entity certificate CRL issuer was '
                     'revoked at 08:30:00 on 2010-01-01, due to a compromised key'
                 )
             ),

@@ -60,25 +60,39 @@ class _CRLIssuerSearchErrs:
     candidates_skipped: int = 0
     signatures_failed: int = 0
     unauthorized_certs: int = 0
-    path_validation_failures: int = 0
+    path_building_failures: int = 0
+    explicit_errors: List[CRLValidationError] = field(default_factory=list)
 
-    def throw(self):
+    def get_exc(self):
+        plural = self.candidate_issuers > 1
         if not self.candidate_issuers \
                 or self.candidates_skipped == self.candidate_issuers:
-            raise CRLNoMatchesError()
+            return CRLNoMatchesError()
         elif self.signatures_failed == self.candidate_issuers:
-            raise CRLValidationError('CRL signature could not be verified')
+            return CRLValidationError('CRL signature could not be verified')
         elif self.unauthorized_certs == self.candidate_issuers:
-            plural = self.candidate_issuers > 1
-            raise CRLValidationError(
+            return CRLValidationError(
                 'The CRL issuers that were identified are not authorized '
                 'to sign CRLs'
                 if plural else
                 'The CRL issuer that was identified is '
                 'not authorized to sign CRLs'
             )
+        elif self.path_building_failures == self.candidate_issuers:
+            return CRLValidationError(
+                'The chain of trust for the CRL issuers that were identified '
+                'could not be determined'
+                if plural else
+                'The chain of trust for the CRL issuer that was identified '
+                'could not be determined'
+            )
+        elif self.explicit_errors and len(self.explicit_errors) == 1:
+            # if there's only one error, throw it
+            return self.explicit_errors[0]
         else:
-            raise CRLValidationError('Unable to determine CRL trust status')
+            msg = 'Unable to determine CRL trust status. '
+            msg += '; '.join(str(e) for e in self.explicit_errors)
+            return CRLValidationError(msg)
 
 
 async def _validate_crl_issuer_path(
@@ -95,7 +109,9 @@ async def _validate_crl_issuer_path(
     try:
         temp_override = proc_state.ee_name_override
         if is_indirect:
-            temp_override = proc_state.describe_cert() + ' CRL issuer'
+            temp_override = (
+                proc_state.describe_cert(never_def=True) + ' CRL issuer'
+            )
         from pyhanko_certvalidator.validate import intl_validate_path
         new_stack = proc_state.cert_path_stack.cons(candidate_crl_issuer_path)
         await intl_validate_path(
@@ -113,12 +129,9 @@ async def _validate_crl_issuer_path(
             f"Path for CRL issuer {iss_cert.subject.human_friendly} could not "
             f"be validated.", exc_info=e
         )
-        # We let a revoked error fall through since step k will catch
-        # it with a correct error message
-        if isinstance(e, RevokedError):
-            raise
         raise CRLValidationError(
-            'CRL issuer certificate path could not be validated')
+            f'The CRL issuer certificate path could not be validated. {e}'
+        )
 
 
 async def _find_candidate_crl_paths(
@@ -184,7 +197,7 @@ async def _find_candidate_crl_paths(
                     .truncate_to_issuer(candidate_crl_issuer) \
                     .copy_and_append(candidate_crl_issuer)
             except LookupError:
-                errs.path_validation_failures += 1
+                errs.path_building_failures += 1
                 continue
         candidate_paths.append(cand_path)
     return candidate_paths, errs
@@ -208,7 +221,6 @@ async def _find_crl_issuer(
         is_indirect=is_indirect, proc_state=proc_state
     )
 
-    crl_issuer = None
     for candidate_crl_issuer_path in candidate_paths:
 
         candidate_crl_issuer = candidate_crl_issuer_path.last
@@ -219,31 +231,30 @@ async def _find_crl_issuer(
         #   specific wrinkle, and it's not contradicted by anything in RFC 5280,
         #   so it's probably allowed in theory)
         if proc_state.check_path_verif_recursion(candidate_crl_issuer):
-            crl_issuer = candidate_crl_issuer
-            break
+            validation_context.revinfo_manager \
+                .record_crl_issuer(certificate_list, candidate_crl_issuer)
+            return candidate_crl_issuer
         # Step f
         # Note: this is not the same as .truncate_to() if
         # candidate_crl_issuer doesn't appear in the path!
         candidate_crl_issuer_path = cert_path \
             .truncate_to_issuer(candidate_crl_issuer) \
             .copy_and_append(candidate_crl_issuer)
-        await _validate_crl_issuer_path(
-            candidate_crl_issuer_path=candidate_crl_issuer_path,
-            validation_context=validation_context,
-            is_indirect=
-            candidate_crl_issuer.sha256 != cert_issuer.sha256,
-            proc_state=proc_state
-        )
-        # TODO collect error statistics and continue instead of failing outright
-        crl_issuer = candidate_crl_issuer
-        break
-
-    if crl_issuer is not None:
-        validation_context.revinfo_manager\
-            .record_crl_issuer(certificate_list, crl_issuer)
-        return crl_issuer
-    else:
-        errs.throw()
+        try:
+            await _validate_crl_issuer_path(
+                candidate_crl_issuer_path=candidate_crl_issuer_path,
+                validation_context=validation_context,
+                is_indirect=
+                candidate_crl_issuer.sha256 != cert_issuer.sha256,
+                proc_state=proc_state
+            )
+            validation_context.revinfo_manager \
+                .record_crl_issuer(certificate_list, candidate_crl_issuer)
+            return candidate_crl_issuer
+        except CRLValidationError as e:
+            errs.explicit_errors.append(e)
+            continue
+    raise errs.get_exc()
 
 
 @dataclass
