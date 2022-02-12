@@ -2404,8 +2404,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
-                    'certificate revocation checks failed: The CRL issuer is not '
-                    'authorized to sign CRLs'
+                    'certificate revocation checks failed: The CRL issuer '
+                    'that was identified is not authorized to sign CRLs'
                 )
             ),
             (
@@ -2422,8 +2422,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 InsufficientRevinfoError,
                 (
                     'The path could not be validated because the end-entity '
-                    'certificate revocation checks failed: The CRL issuer is not '
-                    'authorized to sign CRLs'
+                    'certificate revocation checks failed: The CRL issuer that '
+                    'was identified is not authorized to sign CRLs'
                 )
             ),
             (

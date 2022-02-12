@@ -2,7 +2,7 @@ import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Union, List, Optional, Dict
+from typing import Union, List, Optional, Dict, Tuple
 
 from asn1crypto import x509, crl, cms
 from cryptography.exceptions import InvalidSignature
@@ -23,6 +23,7 @@ from pyhanko_certvalidator.util import get_ac_extension_value, \
     pretty_message, ConsList
 
 logger = logging.getLogger(__name__)
+
 
 async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
                                       certificate_list: crl.CertificateList,
@@ -55,9 +56,29 @@ async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
 
 @dataclass
 class _CRLIssuerSearchErrs:
-    candidates_skipped = 0
-    signatures_failed = 0
-    unauthorized_certs = 0
+    candidate_issuers: int
+    candidates_skipped: int = 0
+    signatures_failed: int = 0
+    unauthorized_certs: int = 0
+    path_validation_failures: int = 0
+
+    def throw(self):
+        if not self.candidate_issuers \
+                or self.candidates_skipped == self.candidate_issuers:
+            raise CRLNoMatchesError()
+        elif self.signatures_failed == self.candidate_issuers:
+            raise CRLValidationError('CRL signature could not be verified')
+        elif self.unauthorized_certs == self.candidate_issuers:
+            plural = self.candidate_issuers > 1
+            raise CRLValidationError(
+                'The CRL issuers that were identified are not authorized '
+                'to sign CRLs'
+                if plural else
+                'The CRL issuer that was identified is '
+                'not authorized to sign CRLs'
+            )
+        else:
+            raise CRLValidationError('Unable to determine CRL trust status')
 
 
 async def _validate_crl_issuer_path(
@@ -100,6 +121,75 @@ async def _validate_crl_issuer_path(
             'CRL issuer certificate path could not be validated')
 
 
+async def _find_candidate_crl_paths(
+        crl_issuer_name: x509.Name,
+        certificate_list: crl.CertificateList,
+        *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert_issuer: x509.Certificate,
+        cert_path: ValidationPath,
+        certificate_registry: CertificateRegistry,
+        is_indirect: bool, proc_state: ValProcState) \
+        -> Tuple[List[ValidationPath], _CRLIssuerSearchErrs]:
+
+    cert_sha256 = hashlib.sha256(cert.dump()).digest()
+
+    candidate_crl_issuers = await _find_candidate_crl_issuers(
+        crl_issuer_name, certificate_list, cert_issuer=cert_issuer,
+        cert_registry=certificate_registry
+    )
+
+    errs = _CRLIssuerSearchErrs(candidate_issuers=len(candidate_crl_issuers))
+    candidate_paths = []
+    for candidate_crl_issuer in candidate_crl_issuers:
+        direct_issuer = candidate_crl_issuer.subject == cert_issuer.subject
+
+        # In some cases an indirect CRL issuer is a certificate issued
+        # by the certificate issuer. However, we need to ensure that
+        # the candidate CRL issuer is not the certificate being checked,
+        # otherwise we may be checking an incorrect CRL and produce
+        # incorrect results.
+        indirect_issuer = (
+                candidate_crl_issuer.issuer == cert_issuer.subject
+                and candidate_crl_issuer.sha256 != cert_sha256
+        )
+
+        if not direct_issuer and not indirect_issuer and not is_indirect:
+            errs.candidates_skipped += 1
+            continue
+
+        key_usage_value = candidate_crl_issuer.key_usage_value
+        if key_usage_value and 'crl_sign' not in key_usage_value.native:
+            errs.unauthorized_certs += 1
+            continue
+
+        try:
+            # Step g
+            # NOTE: Theoretically this can only be done after full X.509
+            # path validation (step f), but that only matters for DSA key
+            # inheritance which we don't support anyhow when doing revocation
+            # checks.
+            _verify_crl_signature(
+                certificate_list, candidate_crl_issuer.public_key
+            )
+        except CRLValidationError:
+            errs.signatures_failed += 1
+            continue
+
+        cand_path = proc_state.check_path_verif_recursion(candidate_crl_issuer)
+        if not cand_path:
+            # Note: this is not the same as .truncate_to() if
+            # candidate_crl_issuer doesn't appear in the path!
+            try:
+                cand_path = cert_path \
+                    .truncate_to_issuer(candidate_crl_issuer) \
+                    .copy_and_append(candidate_crl_issuer)
+            except LookupError:
+                errs.path_validation_failures += 1
+                continue
+        candidate_paths.append(cand_path)
+    return candidate_paths, errs
+
+
 async def _find_crl_issuer(
         crl_issuer_name: x509.Name,
         certificate_list: crl.CertificateList,
@@ -110,85 +200,50 @@ async def _find_crl_issuer(
         is_indirect: bool,
         proc_state: ValProcState):
 
-    errs = _CRLIssuerSearchErrs()
-    cert_sha256 = hashlib.sha256(cert.dump()).digest()
-
-    candidate_crl_issuers = await _find_candidate_crl_issuers(
-        crl_issuer_name, certificate_list, cert_issuer=cert_issuer,
-        cert_registry=validation_context.certificate_registry
+    candidate_paths, errs = await _find_candidate_crl_paths(
+        crl_issuer_name, certificate_list,
+        cert=cert, cert_issuer=cert_issuer,
+        cert_path=cert_path,
+        certificate_registry=validation_context.certificate_registry,
+        is_indirect=is_indirect, proc_state=proc_state
     )
 
     crl_issuer = None
-    for candidate_crl_issuer in candidate_crl_issuers:
-        direct_issuer = candidate_crl_issuer.subject == cert_issuer.subject
+    for candidate_crl_issuer_path in candidate_paths:
 
-        # In some cases an indirect CRL issuer is a certificate issued
-        # by the certificate issuer. However, we need to ensure that
-        # the candidate CRL issuer is not the certificate being checked,
-        # otherwise we may be checking an incorrect CRL and produce
-        # incorrect results.
-        indirect_issuer = (
-            candidate_crl_issuer.issuer == cert_issuer.subject
-            and candidate_crl_issuer.sha256 != cert_sha256
-        )
+        candidate_crl_issuer = candidate_crl_issuer_path.last
 
-        if not direct_issuer and not indirect_issuer and not is_indirect:
-            errs.candidates_skipped += 1
-            continue
-
-        # Step f
-        candidate_crl_issuer_path = proc_state\
-            .check_path_verif_recursion(candidate_crl_issuer)
-
-        if candidate_crl_issuer_path is None:
-            # Note: this is not the same as .truncate_to() if
-            # candidate_crl_issuer doesn't appear in the path!
-            candidate_crl_issuer_path = cert_path \
-                .truncate_to_issuer(candidate_crl_issuer) \
-                .copy_and_append(candidate_crl_issuer)
-            await _validate_crl_issuer_path(
-                candidate_crl_issuer_path=candidate_crl_issuer_path,
-                validation_context=validation_context,
-                is_indirect=candidate_crl_issuer.sha256 != cert_issuer.sha256,
-                proc_state=proc_state
-            )
-
-        key_usage_value = candidate_crl_issuer.key_usage_value
-        if key_usage_value and 'crl_sign' not in key_usage_value.native:
-            errs.unauthorized_certs += 1
-            continue
-
-        try:
-            # Step g
-            _verify_crl_signature(certificate_list,
-                                  candidate_crl_issuer.public_key)
-
+        # Skip path validation step if we're recursing
+        #  (necessary to process CRLs that have their own certificate in-scope,
+        #   which is questionable practice, but PKITS has a test case for this
+        #   specific wrinkle, and it's not contradicted by anything in RFC 5280,
+        #   so it's probably allowed in theory)
+        if proc_state.check_path_verif_recursion(candidate_crl_issuer):
             crl_issuer = candidate_crl_issuer
             break
-
-        except CRLValidationError:
-            errs.signatures_failed += 1
-            continue
+        # Step f
+        # Note: this is not the same as .truncate_to() if
+        # candidate_crl_issuer doesn't appear in the path!
+        candidate_crl_issuer_path = cert_path \
+            .truncate_to_issuer(candidate_crl_issuer) \
+            .copy_and_append(candidate_crl_issuer)
+        await _validate_crl_issuer_path(
+            candidate_crl_issuer_path=candidate_crl_issuer_path,
+            validation_context=validation_context,
+            is_indirect=
+            candidate_crl_issuer.sha256 != cert_issuer.sha256,
+            proc_state=proc_state
+        )
+        # TODO collect error statistics and continue instead of failing outright
+        crl_issuer = candidate_crl_issuer
+        break
 
     if crl_issuer is not None:
         validation_context.revinfo_manager\
             .record_crl_issuer(certificate_list, crl_issuer)
         return crl_issuer
-    elif errs.candidates_skipped == len(candidate_crl_issuers):
-        raise CRLNoMatchesError()
     else:
-        if errs.signatures_failed == len(candidate_crl_issuers):
-            raise CRLValidationError(
-                'CRL signature could not be verified'
-            )
-        elif errs.unauthorized_certs == len(candidate_crl_issuers):
-            raise CRLValidationError(
-                'The CRL issuer is not authorized to sign CRLs',
-            )
-        else:
-            raise CRLValidationError(
-                'Unable to locate CRL issuer certificate',
-            )
+        errs.throw()
 
 
 @dataclass
