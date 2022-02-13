@@ -35,25 +35,23 @@ class CRLWithPaths:
     paths: List[ValidationPath]
 
 
-async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
-                                      certificate_list: crl.CertificateList,
-                                      *, cert_issuer: x509.Certificate,
-                                      cert_registry: CertificateRegistry):
-    # first, look in the cache for certs issued by the issuer named
-    # in the issuing distribution point
-    candidates = cert_registry.retrieve_by_name(
-        crl_issuer_name, cert_issuer
-    )
-    issuing_authority = certificate_list.issuer
-    if not candidates and crl_issuer_name != certificate_list.issuer:
-        # next, look for certs issued by the issuer named as the issuing
-        # authority of the CRL
+async def _find_candidate_crl_issuer_certs(
+        crl_authority_name: x509.Name, certificate_list: crl.CertificateList,
+        *, cert_issuer: x509.Certificate,
+        cert_registry: CertificateRegistry) -> List[x509.Certificate]:
+    # first, look in the cache for certs issued to the entity named
+    # in the issuing distribution point (i.e. the issuing authority)
+    candidates = cert_registry.retrieve_by_name(crl_authority_name, cert_issuer)
+    delegated_issuer = certificate_list.issuer
+    if not candidates and crl_authority_name != certificate_list.issuer:
+        # next, look for certs issued to the issuer named as the entity
+        # that signed the CRL
         candidates = cert_registry.retrieve_by_name(
-            issuing_authority, cert_issuer
+            delegated_issuer, cert_issuer
         )
     if not candidates and cert_registry.fetcher is not None:
         candidates = []
-        valid_names = {crl_issuer_name, issuing_authority}
+        valid_names = {crl_authority_name, delegated_issuer}
         # Try to download certificates from URLs in the AIA extension,
         # if there is one
         async for cert in \
@@ -145,7 +143,7 @@ async def _validate_crl_issuer_path(
 
 
 async def _find_candidate_crl_paths(
-        crl_issuer_name: x509.Name,
+        crl_authority_name: x509.Name,
         certificate_list: crl.CertificateList,
         *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer: x509.Certificate,
@@ -156,8 +154,8 @@ async def _find_candidate_crl_paths(
 
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
 
-    candidate_crl_issuers = await _find_candidate_crl_issuers(
-        crl_issuer_name, certificate_list, cert_issuer=cert_issuer,
+    candidate_crl_issuers = await _find_candidate_crl_issuer_certs(
+        crl_authority_name, certificate_list, cert_issuer=cert_issuer,
         cert_registry=certificate_registry
     )
 
@@ -214,7 +212,7 @@ async def _find_candidate_crl_paths(
 
 
 async def _find_crl_issuer(
-        crl_issuer_name: x509.Name,
+        crl_authority_name: x509.Name,
         certificate_list: crl.CertificateList,
         *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer: x509.Certificate,
@@ -224,7 +222,7 @@ async def _find_crl_issuer(
         proc_state: ValProcState) -> ValidationPath:
 
     candidate_paths, errs = await _find_candidate_crl_paths(
-        crl_issuer_name, certificate_list,
+        crl_authority_name, certificate_list,
         cert=cert, cert_issuer=cert_issuer,
         cert_path=cert_path,
         certificate_registry=validation_context.certificate_registry,
@@ -274,13 +272,13 @@ class _CRLErrs:
 
 
 def _find_matching_delta_crl(delta_lists: List[CRLWithPOE],
-                             crl_issuer_name: x509.Name,
+                             crl_authority_name: x509.Name,
                              crl_idp: crl.IssuingDistributionPoint,
                              parent_crl_aki: Optional[bytes]) -> CRLWithPOE:
     for candidate_delta_cl_with_poe in delta_lists:
         candidate_delta_cl = candidate_delta_cl_with_poe.crl_data
         # Step c 1
-        if candidate_delta_cl.issuer != crl_issuer_name:
+        if candidate_delta_cl.issuer != crl_authority_name:
             continue
 
         # Step c 2
@@ -303,7 +301,7 @@ def _find_matching_delta_crl(delta_lists: List[CRLWithPOE],
 def _match_dps_idp_names(crl_idp: crl.IssuingDistributionPoint,
                          crl_dps: Optional[x509.CRLDistributionPoints],
                          crl_issuer: x509.Certificate,
-                         crl_issuer_name: x509.Name) -> bool:
+                         crl_authority_name: x509.Name) -> bool:
 
     # Step b 2 i
     has_idp_name = False
@@ -352,8 +350,8 @@ def _match_dps_idp_names(crl_idp: crl.IssuingDistributionPoint,
 
             elif dp['crl_issuer']:
                 has_dp_name = True
-                for dp_crl_issuer_name in dp['crl_issuer']:
-                    if dp_crl_issuer_name in idp_general_names:
+                for dp_crl_authority_name in dp['crl_issuer']:
+                    if dp_crl_authority_name in idp_general_names:
                         idp_dp_match = True
                         break
     else:
@@ -361,7 +359,7 @@ def _match_dps_idp_names(crl_idp: crl.IssuingDistributionPoint,
         has_dp_name = True
         general_name = x509.GeneralName(
             name='directory_name',
-            value=crl_issuer_name
+            value=crl_authority_name
         )
         if general_name in idp_general_names:
             idp_dp_match = True
@@ -373,12 +371,12 @@ def _handle_crl_idp_ext_constraints(cert: x509.Certificate,
                                     certificate_list: crl.CertificateList,
                                     crl_issuer: x509.Certificate,
                                     crl_idp: crl.IssuingDistributionPoint,
-                                    crl_issuer_name: x509.Name,
+                                    crl_authority_name: x509.Name,
                                     errs: _CRLErrs) -> bool:
     match = _match_dps_idp_names(
         crl_idp=crl_idp, crl_dps=cert.crl_distribution_points_value,
         crl_issuer=crl_issuer,
-        crl_issuer_name=crl_issuer_name,
+        crl_authority_name=crl_authority_name,
     )
     if not match:
         errs.failures.append((
@@ -440,12 +438,12 @@ def _handle_attr_cert_crl_idp_ext_constraints(
         crl_dps: Optional[x509.CRLDistributionPoints],
         crl_issuer: x509.Certificate,
         crl_idp: crl.IssuingDistributionPoint,
-        crl_issuer_name: x509.Name,
+        crl_authority_name: x509.Name,
         errs: _CRLErrs) -> bool:
 
     match = _match_dps_idp_names(
         crl_idp=crl_idp, crl_dps=crl_dps,
-        crl_issuer=crl_issuer, crl_issuer_name=crl_issuer_name,
+        crl_issuer=crl_issuer, crl_authority_name=crl_authority_name,
     )
     if not match:
         errs.failures.append((
@@ -489,39 +487,19 @@ async def _handle_single_crl(
         validation_context: ValidationContext,
         delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
         use_deltas: bool, errs: _CRLErrs,
-        proc_state: ValProcState):
+        proc_state: ValProcState) -> Optional[Set[str]]:
 
-    certificate_registry = validation_context.certificate_registry
     certificate_list = certificate_list_with_poe.crl_data
-    crl_idp: crl.IssuingDistributionPoint \
-        = certificate_list.issuing_distribution_point_value
 
-    is_indirect = False
-
-    if crl_idp and crl_idp['indirect_crl'].native:
-        is_indirect = True
-        crl_idp_name = crl_idp['distribution_point']
-        if crl_idp_name:
-            if crl_idp_name.name == 'full_name':
-                crl_issuer_name = crl_idp_name.chosen[0].chosen
-            else:
-                crl_issuer_name = cert_issuer.subject.copy().chosen.append(
-                    crl_idp_name.chosen
-                )
-        elif certificate_list.authority_key_identifier:
-            tmp_crl_issuer = certificate_registry.retrieve_by_key_identifier(
-                certificate_list.authority_key_identifier
-            )
-            crl_issuer_name = tmp_crl_issuer.subject
-        else:
-            errs.failures.append((
-                'CRL is marked as an indirect CRL, but provides no '
-                'mechanism for locating the CRL issuer certificate',
-                certificate_list_with_poe
-            ))
-            return None
-    else:
-        crl_issuer_name = certificate_list.issuer
+    try:
+        is_indirect, crl_authority_name = _get_crl_authority_name(
+            certificate_list_with_poe, cert_issuer,
+            certificate_registry=validation_context.certificate_registry,
+            errs=errs
+        )
+    except LookupError:
+        # already logged by _get_crl_authority_name
+        return None
 
     # check if we already know the issuer of this CRL
     crl_issuer = validation_context\
@@ -530,7 +508,7 @@ async def _handle_single_crl(
     if not crl_issuer:
         try:
             crl_issuer_path = await _find_crl_issuer(
-                crl_issuer_name, certificate_list,
+                crl_authority_name, certificate_list,
                 cert=cert, cert_issuer=cert_issuer,
                 cert_path=path,
                 validation_context=validation_context,
@@ -546,7 +524,7 @@ async def _handle_single_crl(
             errs.failures.append((e.args[0], certificate_list))
             return None
 
-    interim_reasons = _get_crl_scope_assuming_issuer(
+    interim_reasons = _get_crl_scope_assuming_authority(
         crl_issuer=crl_issuer,
         cert=cert, cert_issuer=cert_issuer,
         certificate_list_with_poe=certificate_list_with_poe,
@@ -601,6 +579,46 @@ async def _handle_single_crl(
     return interim_reasons
 
 
+def _get_crl_authority_name(
+        certificate_list_with_poe: CRLWithPOE,
+        cert_issuer: x509.Certificate,
+        certificate_registry: CertificateRegistry,
+        errs: _CRLErrs) -> Tuple[bool, x509.Name]:
+    """
+    Figure out the name of the entity on behalf of which the CRL was issued.
+    """
+
+    certificate_list = certificate_list_with_poe.crl_data
+
+    crl_idp: crl.IssuingDistributionPoint \
+        = certificate_list.issuing_distribution_point_value
+    is_indirect = crl_idp and crl_idp['indirect_crl'].native
+    if not is_indirect:
+        crl_authority_name = certificate_list.issuer
+    else:
+        crl_idp_name = crl_idp['distribution_point']
+        if crl_idp_name:
+            if crl_idp_name.name == 'full_name':
+                crl_authority_name = crl_idp_name.chosen[0].chosen
+            else:
+                crl_authority_name = cert_issuer.subject.copy().chosen.append(
+                    crl_idp_name.chosen
+                )
+        elif certificate_list.authority_key_identifier:
+            tmp_crl_issuer = certificate_registry.retrieve_by_key_identifier(
+                certificate_list.authority_key_identifier
+            )
+            crl_authority_name = tmp_crl_issuer.subject
+        else:
+            errs.failures.append((
+                'CRL is marked as an indirect CRL, but provides no '
+                'mechanism for locating the CRL issuer certificate',
+                certificate_list_with_poe
+            ))
+            raise LookupError
+    return is_indirect, crl_authority_name
+
+
 def _maybe_get_delta_crl(
         certificate_list: crl.CertificateList,
         crl_issuer: x509.Certificate,
@@ -613,15 +631,15 @@ def _maybe_get_delta_crl(
         # nothing to do, return
         return None
 
-    crl_issuer_name = crl_issuer.subject
+    crl_authority_name = crl_issuer.subject
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
 
     candidate_delta_lists = \
-        delta_lists_by_issuer.get(crl_issuer_name.hashable, [])
+        delta_lists_by_issuer.get(crl_authority_name.hashable, [])
     delta_certificate_list_with_poe = _find_matching_delta_crl(
         delta_lists=candidate_delta_lists,
-        crl_issuer_name=crl_issuer_name, crl_idp=crl_idp,
+        crl_authority_name=crl_authority_name, crl_idp=crl_idp,
         parent_crl_aki=certificate_list.authority_key_identifier
     )
     if not delta_certificate_list_with_poe:
@@ -664,7 +682,7 @@ def _maybe_get_delta_crl(
     return delta_certificate_list_with_poe
 
 
-def _get_crl_scope_assuming_issuer(
+def _get_crl_scope_assuming_authority(
         crl_issuer: x509.Certificate,
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer: x509.Certificate,
@@ -696,8 +714,8 @@ def _get_crl_scope_assuming_issuer(
                 if crl_issuer_general_name in dp['crl_issuer']:
                     dp_match = True
 
-    crl_issuer_name = crl_issuer.subject
-    same_issuer = crl_issuer_name == cert_issuer.subject
+    crl_authority_name = crl_issuer.subject
+    same_issuer = crl_authority_name == cert_issuer.subject
     indirect_match = has_dp_crl_issuer and dp_match and is_indirect
     missing_idp = has_dp_crl_issuer and (not dp_match or not is_indirect)
     indirect_crl_issuer = crl_issuer.issuer == cert_issuer.subject
@@ -714,13 +732,13 @@ def _get_crl_scope_assuming_issuer(
             crl_idp_match = _handle_crl_idp_ext_constraints(
                 cert=cert, certificate_list=certificate_list,
                 crl_issuer=crl_issuer, crl_idp=crl_idp,
-                crl_issuer_name=crl_issuer_name, errs=errs
+                crl_authority_name=crl_authority_name, errs=errs
             )
         else:
             crl_idp_match = _handle_attr_cert_crl_idp_ext_constraints(
                 crl_dps=crl_dps, certificate_list=certificate_list,
                 crl_issuer=crl_issuer, crl_idp=crl_idp,
-                crl_issuer_name=crl_issuer_name, errs=errs
+                crl_authority_name=crl_authority_name, errs=errs
             )
         # error reporting is taken care of in the delegated method
         if not crl_idp_match:
