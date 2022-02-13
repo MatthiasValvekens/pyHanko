@@ -16,7 +16,7 @@ from pyhanko_certvalidator.fetchers import (
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
-from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
+from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.validate import validate_path, async_validate_path
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
     OCSPFetchError, CRLFetchError, CertificateFetchError, \

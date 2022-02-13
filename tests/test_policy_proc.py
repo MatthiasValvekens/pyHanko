@@ -10,7 +10,7 @@ from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError
 from pyhanko_certvalidator.name_trees import GeneralNameType, \
     x509_names_to_subtrees
-from pyhanko_certvalidator.trust_anchor import CertTrustAnchor, \
+from pyhanko_certvalidator.authority import CertTrustAnchor, \
     NamedKeyAuthority, TrustQualifiers, TrustAnchor
 
 tests_root = os.path.dirname(__file__)

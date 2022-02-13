@@ -19,7 +19,7 @@ from pyhanko_certvalidator.registry import CertificateCollection, \
     LayeredCertificateStore, SimpleCertificateStore
 from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
     RevinfoUsabilityRating
-from pyhanko_certvalidator.trust_anchor import Authority, \
+from pyhanko_certvalidator.authority import Authority, \
     AuthorityWithCert, TrustAnchor
 from pyhanko_certvalidator.util import (
     pretty_message, extract_ac_issuer_dir_name, validate_sig, ConsList

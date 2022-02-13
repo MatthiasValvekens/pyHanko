@@ -10,7 +10,7 @@ from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
+from pyhanko_certvalidator.authority import CertTrustAnchor
 from .test_validate import fixtures_dir
 
 attr_cert_dir = os.path.join(fixtures_dir, 'attribute-certs')

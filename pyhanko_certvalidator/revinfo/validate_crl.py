@@ -19,7 +19,7 @@ from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, \
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
-from pyhanko_certvalidator.trust_anchor import Authority, AuthorityWithCert
+from pyhanko_certvalidator.authority import Authority, AuthorityWithCert
 from pyhanko_certvalidator.util import get_ac_extension_value, \
     validate_sig, pretty_message, ConsList, get_issuer_dn
 

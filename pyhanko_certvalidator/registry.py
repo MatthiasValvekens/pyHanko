@@ -9,7 +9,7 @@ from asn1crypto import x509
 from oscrypto import trust_list
 
 from .util import pretty_message, ConsList
-from .trust_anchor import TrustAnchor, CertTrustAnchor, AuthorityWithCert
+from .authority import TrustAnchor, CertTrustAnchor, AuthorityWithCert
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError
 from .path import ValidationPath

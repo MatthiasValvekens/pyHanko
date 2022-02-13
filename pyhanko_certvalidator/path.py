@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from asn1crypto import x509, cms
 
 from .asn1_types import AAControls
-from .trust_anchor import TrustAnchor, CertTrustAnchor, Authority, \
+from .authority import TrustAnchor, CertTrustAnchor, Authority, \
     AuthorityWithCert
 
 

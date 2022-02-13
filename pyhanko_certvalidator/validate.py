@@ -48,7 +48,7 @@ from .policy_tree import (
 from .registry import CertificateCollection
 from .revinfo.validate_crl import verify_crl
 from .revinfo.validate_ocsp import verify_ocsp_response
-from .trust_anchor import CertTrustAnchor, TrustAnchor
+from .authority import CertTrustAnchor, TrustAnchor
 from .util import (
     extract_dir_name,
     get_ac_extension_value,
