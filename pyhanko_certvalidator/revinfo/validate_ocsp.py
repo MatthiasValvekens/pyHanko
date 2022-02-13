@@ -19,7 +19,8 @@ from pyhanko_certvalidator.registry import CertificateCollection, \
     LayeredCertificateStore, SimpleCertificateStore
 from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
     RevinfoUsabilityRating
-from pyhanko_certvalidator.trust_anchor import CertTrustAnchor
+from pyhanko_certvalidator.trust_anchor import Authority, \
+    AuthorityWithCert, TrustAnchor
 from pyhanko_certvalidator.util import (
     pretty_message, extract_ac_issuer_dir_name, validate_sig, ConsList
 )
@@ -32,7 +33,7 @@ OCSP_PROVENANCE_ERR = (
 
 async def _validate_delegated_ocsp_provenance(
         responder_cert: x509.Certificate,
-        issuer: x509.Certificate,
+        issuer: Authority,
         validation_context: ValidationContext,
         ee_path: ValidationPath,
         proc_state: ValProcState):
@@ -57,9 +58,15 @@ async def _validate_delegated_ocsp_provenance(
         proc_state.describe_cert(never_def=True) + ' OCSP responder'
     )
 
-    responder_chain = ee_path\
-        .truncate_to(issuer)\
-        .copy_and_append(responder_cert)
+    if isinstance(issuer, AuthorityWithCert):
+        responder_chain = ee_path\
+            .truncate_to(issuer.certificate)\
+            .copy_and_append(responder_cert)
+    else:
+        responder_chain = ValidationPath(
+            trust_anchor=TrustAnchor(issuer),
+            certs=[responder_cert]
+        )
     if responder_cert.ocsp_no_check_value is not None:
         # we don't have to check the revocation of the OCSP responder,
         # so do a simplified check
@@ -71,7 +78,7 @@ async def _validate_delegated_ocsp_provenance(
             )
         )
         vc = ValidationContext(
-            trust_roots=[issuer],
+            trust_roots=[TrustAnchor(issuer)],
             allow_fetching=False, revinfo_policy=revinfo_policy,
             moment=validation_context.moment,
             weak_hash_algos=validation_context.weak_hash_algos,
@@ -79,7 +86,7 @@ async def _validate_delegated_ocsp_provenance(
         )
 
         ocsp_trunc_path = ValidationPath(
-            trust_anchor=CertTrustAnchor(issuer), certs=[responder_cert]
+            trust_anchor=TrustAnchor(issuer), certs=[responder_cert]
         )
         ocsp_trunc_proc_state = ValProcState(
             cert_path_stack=proc_state.cert_path_stack.cons(ocsp_trunc_path),
@@ -127,7 +134,7 @@ class _OCSPErrs:
 
 async def _handle_single_ocsp_resp(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        issuer: x509.Certificate,
+        issuer: Authority,
         path: ValidationPath,
         ocsp_response: OCSPWithPOE,
         validation_context: ValidationContext,
@@ -238,11 +245,18 @@ async def _handle_single_ocsp_resp(
         return False
 
     # If the cert signing the OCSP response is not the issuer, it must be
-    # issued by the cert issuer and be valid for OCSP responses
-    if issuer.issuer_serial == responder_cert.issuer_serial:
+    # issued by the cert issuer and be valid for OCSP responses.
+    # We currently do _not_ allow naked trust anchor keys to be used in OCSP
+    # validation (but that may change in the future). This decision is based on
+    # a conservative reading of RFC 6960.
+    # First, check whether the certs are the same.
+    if isinstance(issuer, AuthorityWithCert) and \
+            issuer.certificate.issuer_serial == responder_cert.issuer_serial:
+        issuer_cert = issuer.certificate
         # let's check whether the certs are actually the same
         # (by comparing the signatures as a proxy)
-        issuer_sig = bytes(issuer['signature_value'])
+        # -> literal interpretation of 4.2.2.2 in RFC 6960
+        issuer_sig = bytes(issuer_cert['signature_value'])
         responder_sig = bytes(responder_cert['signature_value'])
         authorized = issuer_sig == responder_sig
     # If OCSP is being delegated
@@ -319,6 +333,33 @@ async def _handle_single_ocsp_resp(
         )
 
 
+def _get_issuing_authority(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        path: ValidationPath, proc_state: ValProcState) -> Authority:
+
+    # FIXME copied from CRL validation module, pending fix in path.py
+
+    if isinstance(cert, x509.Certificate):
+        try:
+            cert_issuer = path.find_issuing_authority(cert)
+        except LookupError:
+            raise OCSPNoMatchesError(pretty_message(
+                '''
+                Could not determine issuer certificate for %s in path.
+                ''',
+                proc_state.describe_cert()
+            ))
+    else:
+        # FIXME should uniformise this by allowing ACs in validation paths.
+        #  Right now we simply assume that the last path element is the AA cert,
+        #  which is wrong for all sorts of reasons
+        if path.pkix_len == 0:
+            cert_issuer = path.trust_anchor.authority
+        else:
+            cert_issuer = AuthorityWithCert(path.last)
+    return cert_issuer
+
+
 async def verify_ocsp_response(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath,
@@ -356,22 +397,14 @@ async def verify_ocsp_response(
     cert_description = proc_state.describe_cert()
     moment = validation_context.moment
 
-    if isinstance(cert, x509.Certificate):
-        try:
-            cert_issuer = path.find_issuer(cert)
-        except LookupError:
-            raise OCSPNoMatchesError(pretty_message(
-                '''
-                Could not determine issuer certificate for %s in path.
-                ''',
-                cert_description
-            ))
-    else:
-        cert_issuer = path.last
+    cert_issuer = _get_issuing_authority(cert, path, proc_state)
+    if not isinstance(cert_issuer, AuthorityWithCert):
+        # FIXME standardise on Authority in the OCSP fetching API as well.
+        raise NotImplementedError
 
     errs = _OCSPErrs()
     ocsp_responses = await validation_context.revinfo_manager\
-        .async_retrieve_ocsps_with_poe(cert, cert_issuer)
+        .async_retrieve_ocsps_with_poe(cert, cert_issuer.certificate)
 
     for ocsp_response in ocsp_responses:
         try:

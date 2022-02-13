@@ -10,6 +10,7 @@ from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
+from pyhanko_certvalidator.trust_anchor import AuthorityWithCert
 from.constants import TEST_REQUEST_TIMEOUT
 
 tests_root = os.path.dirname(__file__)
@@ -39,7 +40,12 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
         )
         paths = await registry.async_build_paths(intermediate)
         path = paths[0]
-        issuer = path.find_issuer(intermediate)
+        authority = path.find_issuing_authority(intermediate)
+
+        if not isinstance(authority, AuthorityWithCert):
+            # FIXME standardise on Authority in the OCSP fetching API as well.
+            raise NotImplementedError
+        issuer = authority.certificate
 
         ocsp_response = await fetchers.ocsp_fetcher.fetch(intermediate, issuer)
         context = ValidationContext(
@@ -66,7 +72,12 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
         )
         paths = await registry.async_build_paths(intermediate)
         path = paths[0]
-        issuer = path.find_issuer(intermediate)
+        authority = path.find_issuing_authority(intermediate)
+
+        if not isinstance(authority, AuthorityWithCert):
+            # FIXME standardise on Authority in the OCSP fetching API as well.
+            raise NotImplementedError
+        issuer = authority.certificate
 
         async def fetch_err():
             with self.assertRaises(OCSPFetchError):

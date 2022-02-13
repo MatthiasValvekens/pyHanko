@@ -19,6 +19,7 @@ from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, \
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
+from pyhanko_certvalidator.trust_anchor import Authority, AuthorityWithCert
 from pyhanko_certvalidator.util import get_ac_extension_value, \
     validate_sig, pretty_message, ConsList, get_issuer_dn
 
@@ -38,13 +39,16 @@ class CRLWithPaths:
 async def _find_candidate_crl_issuer_certs(
         crl_authority_name: x509.Name, certificate_list: crl.CertificateList,
         *,
-        cert_issuer_cert: Optional[x509.Certificate],
+        cert_issuer_auth: Authority,
         cert_registry: CertificateRegistry) -> List[x509.Certificate]:
     # first, look for certs issued to the issuer named as the entity
     # that signed the CRL.
     # In both cases, we prioritise the next-level issuer in the main path
     # if it matches the criteria.
     delegated_issuer = certificate_list.issuer
+    cert_issuer_cert = None
+    if isinstance(cert_issuer_auth, AuthorityWithCert):
+        cert_issuer_cert = cert_issuer_auth.certificate
     candidates = cert_registry.retrieve_by_name(
         delegated_issuer, cert_issuer_cert
     )
@@ -150,7 +154,7 @@ async def _find_candidate_crl_paths(
         crl_authority_name: x509.Name,
         certificate_list: crl.CertificateList,
         *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer_cert: Optional[x509.Certificate],
+        cert_issuer_auth: Authority,
         cert_path: ValidationPath,
         certificate_registry: CertificateRegistry,
         is_indirect: bool, proc_state: ValProcState) \
@@ -160,10 +164,10 @@ async def _find_candidate_crl_paths(
 
     candidate_crl_issuers = await _find_candidate_crl_issuer_certs(
         crl_authority_name, certificate_list,
-        cert_issuer_cert=cert_issuer_cert,
+        cert_issuer_auth=cert_issuer_auth,
         cert_registry=certificate_registry
     )
-    cert_issuer_name = get_issuer_dn(cert)
+    cert_issuer_name = cert_issuer_auth.name
 
     errs = _CRLIssuerSearchErrs(candidate_issuers=len(candidate_crl_issuers))
     candidate_paths = []
@@ -221,7 +225,7 @@ async def _find_crl_issuer(
         crl_authority_name: x509.Name,
         certificate_list: crl.CertificateList,
         *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer_cert: Optional[x509.Certificate],
+        cert_issuer_auth: Authority,
         cert_path: ValidationPath,
         validation_context: ValidationContext,
         is_indirect: bool,
@@ -229,7 +233,7 @@ async def _find_crl_issuer(
 
     candidate_paths, errs = await _find_candidate_crl_paths(
         crl_authority_name, certificate_list,
-        cert=cert, cert_issuer_cert=cert_issuer_cert,
+        cert=cert, cert_issuer_auth=cert_issuer_auth,
         cert_path=cert_path,
         certificate_registry=validation_context.certificate_registry,
         is_indirect=is_indirect, proc_state=proc_state
@@ -261,8 +265,8 @@ async def _find_crl_issuer(
             # (Scenario: CA with separate keys for CRL signing and for
             # certificate issuance, but with the same name on both certs)
             issuing_authority_identical = not is_indirect and (
-                cert_issuer_cert is not None
-                and cert_issuer_cert.public_key.dump()
+                cert_issuer_auth is not None
+                and cert_issuer_auth.public_key.dump()
                 == candidate_crl_issuer.public_key.dump()
             )
             await _validate_crl_issuer_path(
@@ -496,7 +500,7 @@ def _handle_attr_cert_crl_idp_ext_constraints(
 
 async def _handle_single_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer_cert: Optional[x509.Certificate],
+        cert_issuer_auth: Authority,
         certificate_list_with_poe: CRLWithPOE,
         path: ValidationPath,
         validation_context: ValidationContext,
@@ -506,11 +510,9 @@ async def _handle_single_crl(
 
     certificate_list = certificate_list_with_poe.crl_data
 
-    cert_issuer_name = get_issuer_dn(cert)
-
     try:
         is_indirect, crl_authority_name = _get_crl_authority_name(
-            certificate_list_with_poe, cert_issuer_name,
+            certificate_list_with_poe, cert_issuer_auth.name,
             certificate_registry=validation_context.certificate_registry,
             errs=errs
         )
@@ -526,7 +528,7 @@ async def _handle_single_crl(
         try:
             crl_issuer_path = await _find_crl_issuer(
                 crl_authority_name, certificate_list,
-                cert=cert, cert_issuer_cert=cert_issuer_cert,
+                cert=cert, cert_issuer_auth=cert_issuer_auth,
                 cert_path=path,
                 validation_context=validation_context,
                 is_indirect=is_indirect,
@@ -839,17 +841,12 @@ def _check_cert_on_crl_and_delta(
     return revoked_date, revoked_reason
 
 
-def _maybe_get_issuer_cert(
+def _get_issuing_authority(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath, proc_state: ValProcState):
-    # FIXME should uniformise this by allowing ACs in validation paths.
-    #  Right now we simply assume that the last path element is the AA cert,
-    #  which is wrong for all sorts of reasons (the issuer cert could be
-    #  a trust root!)
-    # FIXME this also doesn't deal with trust anchors without certs correctly
+        path: ValidationPath, proc_state: ValProcState) -> Authority:
     if isinstance(cert, x509.Certificate):
         try:
-            cert_issuer = path.find_issuer(cert)
+            cert_issuer = path.find_issuing_authority(cert)
         except LookupError:
             raise CRLNoMatchesError(pretty_message(
                 '''
@@ -858,7 +855,13 @@ def _maybe_get_issuer_cert(
                 proc_state.describe_cert()
             ))
     else:
-        cert_issuer = path.get_ee_cert_safe()
+        # FIXME should uniformise this by allowing ACs in validation paths.
+        #  Right now we simply assume that the last path element is the AA cert,
+        #  which is wrong for all sorts of reasons
+        if path.pkix_len == 0:
+            cert_issuer = path.trust_anchor.authority
+        else:
+            cert_issuer = AuthorityWithCert(path.last)
     return cert_issuer
 
 
@@ -968,7 +971,7 @@ async def verify_crl(
     complete_lists_by_issuer, delta_lists_by_issuer = \
         await _classify_relevant_crls(revinfo_manager, cert, errs)
 
-    cert_issuer_cert = _maybe_get_issuer_cert(cert, path, proc_state)
+    cert_issuer_auth = _get_issuing_authority(cert, path, proc_state)
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
     crls_to_process = []
@@ -982,8 +985,7 @@ async def verify_crl(
         certificate_list_with_poe = crls_to_process.pop(0)
         try:
             interim_reasons = await _handle_single_crl(
-                cert=cert,
-                cert_issuer_cert=cert_issuer_cert,
+                cert=cert, cert_issuer_auth=cert_issuer_auth,
                 certificate_list_with_poe=certificate_list_with_poe,
                 path=path, validation_context=validation_context,
                 delta_lists_by_issuer=delta_lists_by_issuer,

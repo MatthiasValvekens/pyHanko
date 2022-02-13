@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from asn1crypto import x509, cms
 
 from .asn1_types import AAControls
-from .trust_anchor import TrustAnchor, CertTrustAnchor
+from .trust_anchor import TrustAnchor, CertTrustAnchor, Authority, \
+    AuthorityWithCert
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,12 @@ class ValidationPath:
         else:
             raise LookupError("No certificates in path")
 
-    def find_issuer(self, cert):
+    def _iter_authorities(self) -> Iterable[Authority]:
+        yield self._root.authority
+        for cert in self._certs[:-1]:
+            yield AuthorityWithCert(cert)
+
+    def find_issuing_authority(self, cert: x509.Certificate):
         """
         Return the issuer of the cert specified, as defined by this path
 
@@ -109,13 +115,15 @@ class ValidationPath:
             An asn1crypto.x509.Certificate object of the issuer
         """
 
-        for entry in self:
-            if entry.subject == cert.issuer:
-                if entry.key_identifier and cert.authority_key_identifier:
-                    if entry.key_identifier == cert.authority_key_identifier:
-                        return entry
-                else:
-                    return entry
+        issuer_name = cert.issuer
+        aki = cert.authority_key_identifier
+
+        for authority in self._iter_authorities():
+            if authority.name == issuer_name:
+                keyid = authority.key_id
+                if keyid and aki and keyid != aki:
+                    continue
+                return authority
 
         raise LookupError('Unable to find the issuer of the certificate specified')
 
