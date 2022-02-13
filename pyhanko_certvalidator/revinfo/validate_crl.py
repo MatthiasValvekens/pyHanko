@@ -556,19 +556,6 @@ async def _handle_single_crl(
     if interim_reasons is None:
         return None
 
-    # Step c
-    delta_certificate_list_with_poe = delta_certificate_list = None
-    if use_deltas and certificate_list.freshest_crl_value \
-            and len(certificate_list.freshest_crl_value) > 0:
-        candidate_delta_lists = \
-            delta_lists_by_issuer.get(crl_issuer_name.hashable, [])
-        delta_certificate_list_with_poe = _find_matching_delta_crl(
-            delta_lists=candidate_delta_lists,
-            crl_issuer_name=crl_issuer_name, crl_idp=crl_idp,
-            parent_crl_aki=certificate_list.authority_key_identifier
-        )
-        delta_certificate_list = delta_certificate_list_with_poe.crl_data
-
     freshness_result = certificate_list_with_poe.usable_at(
         validation_context.moment,
         policy=validation_context.revinfo_policy,
@@ -584,40 +571,15 @@ async def _handle_single_crl(
         errs.failures.append((msg, certificate_list_with_poe))
         return None
 
-    if use_deltas and delta_certificate_list and \
-            delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-        errs.failures.append((
-            'One or more unrecognized critical extensions are present in '
-            'the delta CRL',
-            delta_certificate_list_with_poe
-        ))
-        return None
-
-    # Step h
-    if use_deltas and delta_certificate_list:
-        try:
-            _verify_crl_signature(delta_certificate_list, crl_issuer.public_key)
-        except CRLValidationError:
-            errs.failures.append((
-                'Delta CRL signature could not be verified',
-                delta_certificate_list_with_poe
-            ))
-            return None
-
-        freshness_result = delta_certificate_list_with_poe.usable_at(
-            validation_context.moment,
-            policy=validation_context.revinfo_policy,
-            timing_info=validation_context.timing_info
+    # Step c
+    if use_deltas:
+        delta_certificate_list_with_poe = _maybe_get_delta_crl(
+            certificate_list=certificate_list, crl_issuer=crl_issuer,
+            validation_context=validation_context,
+            delta_lists_by_issuer=delta_lists_by_issuer, errs=errs
         )
-        if freshness_result != RevinfoUsabilityRating.OK:
-            if freshness_result == RevinfoUsabilityRating.STALE:
-                msg = 'Delta CRL is stale'
-            elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
-                msg = 'Delta CRL is too recent'
-            else:
-                msg = 'Delta CRL freshness could not be established'
-            errs.failures.append((msg, delta_certificate_list_with_poe))
-            return None
+    else:
+        delta_certificate_list_with_poe = None
 
     try:
         revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
@@ -637,6 +599,69 @@ async def _handle_single_crl(
             revinfo_type='CRL', proc_state=proc_state,
         )
     return interim_reasons
+
+
+def _maybe_get_delta_crl(
+        certificate_list: crl.CertificateList,
+        crl_issuer: x509.Certificate,
+        validation_context: ValidationContext,
+        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
+        errs: _CRLErrs) -> Optional[CRLWithPOE]:
+
+    if not certificate_list.freshest_crl_value \
+            or len(certificate_list.freshest_crl_value) == 0:
+        # nothing to do, return
+        return None
+
+    crl_issuer_name = crl_issuer.subject
+    crl_idp: crl.IssuingDistributionPoint \
+        = certificate_list.issuing_distribution_point_value
+
+    candidate_delta_lists = \
+        delta_lists_by_issuer.get(crl_issuer_name.hashable, [])
+    delta_certificate_list_with_poe = _find_matching_delta_crl(
+        delta_lists=candidate_delta_lists,
+        crl_issuer_name=crl_issuer_name, crl_idp=crl_idp,
+        parent_crl_aki=certificate_list.authority_key_identifier
+    )
+    if not delta_certificate_list_with_poe:
+        return None
+
+    delta_certificate_list = delta_certificate_list_with_poe.crl_data
+
+    if delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
+        errs.failures.append((
+            'One or more unrecognized critical extensions are present in '
+            'the delta CRL',
+            delta_certificate_list_with_poe
+        ))
+        return None
+
+    # Step h
+    try:
+        _verify_crl_signature(delta_certificate_list, crl_issuer.public_key)
+    except CRLValidationError:
+        errs.failures.append((
+            'Delta CRL signature could not be verified',
+            delta_certificate_list_with_poe
+        ))
+        return None
+
+    freshness_result = delta_certificate_list_with_poe.usable_at(
+        validation_context.moment,
+        policy=validation_context.revinfo_policy,
+        timing_info=validation_context.timing_info
+    )
+    if freshness_result != RevinfoUsabilityRating.OK:
+        if freshness_result == RevinfoUsabilityRating.STALE:
+            msg = 'Delta CRL is stale'
+        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+            msg = 'Delta CRL is too recent'
+        else:
+            msg = 'Delta CRL freshness could not be established'
+        errs.failures.append((msg, delta_certificate_list_with_poe))
+        return None
+    return delta_certificate_list_with_poe
 
 
 def _get_crl_scope_assuming_issuer(
