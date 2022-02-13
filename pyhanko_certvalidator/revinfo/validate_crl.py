@@ -39,16 +39,17 @@ async def _find_candidate_crl_issuer_certs(
         crl_authority_name: x509.Name, certificate_list: crl.CertificateList,
         *, cert_issuer: x509.Certificate,
         cert_registry: CertificateRegistry) -> List[x509.Certificate]:
-    # first, look in the cache for certs issued to the entity named
-    # in the issuing distribution point (i.e. the issuing authority)
-    candidates = cert_registry.retrieve_by_name(crl_authority_name, cert_issuer)
+    # first, look for certs issued to the issuer named as the entity
+    # that signed the CRL.
+    # In both cases, we prioritise the next-level issuer in the main path
+    # if it matches the criteria.
     delegated_issuer = certificate_list.issuer
+    candidates = cert_registry.retrieve_by_name(delegated_issuer, cert_issuer)
     if not candidates and crl_authority_name != certificate_list.issuer:
-        # next, look for certs issued to the issuer named as the entity
-        # that signed the CRL
-        candidates = cert_registry.retrieve_by_name(
-            delegated_issuer, cert_issuer
-        )
+        # next, look in the cache for certs issued to the entity named
+        # in the issuing distribution point (i.e. the issuing authority)
+        candidates = cert_registry\
+            .retrieve_by_name(crl_authority_name, cert_issuer)
     if not candidates and cert_registry.fetcher is not None:
         candidates = []
         valid_names = {crl_authority_name, delegated_issuer}
