@@ -2,6 +2,7 @@ from typing import Iterable, Optional, List
 
 from asn1crypto import crl, ocsp, x509
 
+from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
@@ -152,7 +153,7 @@ class RevinfoManager:
         ]
         return with_poe + self._crls
 
-    async def async_retrieve_ocsps_with_poe(self, cert, issuer) \
+    async def async_retrieve_ocsps_with_poe(self, cert, authority: Authority) \
             -> List[OCSPWithPOE]:
         """
         .. versionadded:: 0.20.0
@@ -160,8 +161,8 @@ class RevinfoManager:
         :param cert:
             An asn1crypto.x509.Certificate object
 
-        :param issuer:
-            An asn1crypto.x509.Certificate object of cert's issuer
+        :param authority:
+            The issuing authority for the certificate
 
         :return:
             A list of :class:`OCSPWithPOE` objects
@@ -177,7 +178,7 @@ class RevinfoManager:
         ]
         if not ocsps:
             ocsp_response_data \
-                = await fetchers.ocsp_fetcher.fetch(cert, issuer)
+                = await fetchers.ocsp_fetcher.fetch(cert, authority)
             ocsps = OCSPWithPOE.load_multi(
                 POE.fresh(), ocsp_response_data
             )

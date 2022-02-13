@@ -9,6 +9,7 @@ import os
 from typing import Union, Optional
 
 from .. import errors
+from ..authority import Authority
 from ..util import extract_ac_issuer_dir_name, get_ac_extension_value
 from asn1crypto import x509, pem, cms, ocsp, algos, core
 
@@ -75,30 +76,28 @@ def unpack_cert_content(response_data: bytes, content_type: Optional[str],
 
 
 def get_certid(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-               issuer: x509.Certificate, *, certid_hash_algo) -> ocsp.CertId:
+               authority: Authority, *, certid_hash_algo) -> ocsp.CertId:
 
     if isinstance(cert, x509.Certificate):
-        iss_name = cert.issuer
         serial_number = cert.serial_number
     else:
-        iss_name = extract_ac_issuer_dir_name(cert)
         serial_number = cert['ac_info']['serial_number'].native
 
-    iss_name_hash = getattr(iss_name, certid_hash_algo)
+    iss_name_hash = getattr(authority.name, certid_hash_algo)
     cert_id = ocsp.CertId({
         'hash_algorithm': algos.DigestAlgorithm(
             {'algorithm': certid_hash_algo}
         ),
         'issuer_name_hash': iss_name_hash,
-        'issuer_key_hash': getattr(issuer.public_key, certid_hash_algo),
+        'issuer_key_hash': getattr(authority.public_key, certid_hash_algo),
         'serial_number': serial_number,
     })
     return cert_id
 
 
-def format_ocsp_request(cert: x509.Certificate, issuer: x509.Certificate,
+def format_ocsp_request(cert: x509.Certificate, authority: Authority,
                         *, certid_hash_algo: str, request_nonces: bool):
-    cert_id = get_certid(cert, issuer, certid_hash_algo=certid_hash_algo)
+    cert_id = get_certid(cert, authority, certid_hash_algo=certid_hash_algo)
 
     request = ocsp.Request({
         'req_cert': cert_id,

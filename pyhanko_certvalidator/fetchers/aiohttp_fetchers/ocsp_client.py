@@ -11,6 +11,7 @@ from .util import AIOHttpMixin, LazySession
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
+from ...authority import Authority
 from ...util import issuer_serial, get_ocsp_urls
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,9 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
 
     async def fetch(self,
                     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                    issuer: x509.Certificate) -> ocsp.OCSPResponse:
+                    authority: Authority) -> ocsp.OCSPResponse:
 
-        tag = (issuer_serial(cert), issuer.issuer_serial)
+        tag = (issuer_serial(cert), authority.hashable)
         if isinstance(cert, x509.Certificate):
             target = cert.subject.human_friendly
         else:
@@ -43,15 +44,15 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         logger.info(f"About to queue OCSP fetch for {target}...")
 
         async def task():
-            return await self._fetch(cert, issuer)
+            return await self._fetch(cert, authority)
 
         return await self._post_fetch_task(tag, task)
 
     async def _fetch(self,
                      cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                     issuer: x509.Certificate):
+                     authority: Authority):
         ocsp_request = format_ocsp_request(
-            cert, issuer, certid_hash_algo=self.certid_hash_algo,
+            cert, authority, certid_hash_algo=self.certid_hash_algo,
             request_nonces=self.request_nonces
         )
         # Try the OCSP responders in arbitrary order, and process the responses

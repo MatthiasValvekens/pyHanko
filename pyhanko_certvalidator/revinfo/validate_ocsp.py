@@ -398,13 +398,10 @@ async def verify_ocsp_response(
     moment = validation_context.moment
 
     cert_issuer = _get_issuing_authority(cert, path, proc_state)
-    if not isinstance(cert_issuer, AuthorityWithCert):
-        # FIXME standardise on Authority in the OCSP fetching API as well.
-        raise NotImplementedError
 
     errs = _OCSPErrs()
     ocsp_responses = await validation_context.revinfo_manager\
-        .async_retrieve_ocsps_with_poe(cert, cert_issuer.certificate)
+        .async_retrieve_ocsps_with_poe(cert, cert_issuer)
 
     for ocsp_response in ocsp_responses:
         try:

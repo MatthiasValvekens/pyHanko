@@ -10,6 +10,7 @@ from .util import RequestsFetcherMixin
 from ..common_utils import (
     process_ocsp_response_data, format_ocsp_request, ocsp_job_get_earliest
 )
+from ...authority import Authority
 from ...util import issuer_serial, get_ocsp_urls
 
 logger = logging.getLogger(__name__)
@@ -30,10 +31,12 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
 
     async def fetch(self,
                     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                    issuer: x509.Certificate) -> ocsp.OCSPResponse:
+                    authority: Authority) -> ocsp.OCSPResponse:
 
-        tag = (issuer_serial(cert), issuer.issuer_serial)
-        return await self._perform_fetch(tag, lambda: self._fetch(cert, issuer))
+        tag = (issuer_serial(cert), authority.hashable)
+        return await self._perform_fetch(
+            tag, lambda: self._fetch(cert, authority)
+        )
 
     async def _fetch_single(self, ocsp_url, ocsp_request):
         try:
@@ -54,9 +57,9 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
 
     async def _fetch(self,
                      cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                     issuer: x509.Certificate):
+                     authority: Authority):
         ocsp_request = format_ocsp_request(
-            cert, issuer, certid_hash_algo=self.certid_hash_algo,
+            cert, authority, certid_hash_algo=self.certid_hash_algo,
             request_nonces=self.request_nonces
         )
         ocsp_urls = get_ocsp_urls(cert)

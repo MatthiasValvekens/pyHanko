@@ -8,6 +8,7 @@ from typing import Optional, Iterable, Union, List
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
+from .authority import AuthorityWithCert
 from .revinfo.manager import RevinfoManager
 from .util import pretty_message
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
@@ -411,7 +412,7 @@ class ValidationContext:
             A list of asn1crypto.ocsp.OCSPResponse objects
         """
         results = await self._revinfo_manager\
-            .async_retrieve_ocsps_with_poe(cert, issuer)
+            .async_retrieve_ocsps_with_poe(cert, AuthorityWithCert(issuer))
         return [res.ocsp_response_data for res in results]
 
     def retrieve_ocsps(self, cert, issuer):

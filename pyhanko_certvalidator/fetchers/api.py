@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import AsyncGenerator, Iterable, Union
 
 from asn1crypto import x509, ocsp, crl, cms
+
+from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.version import __version__
 
 __all__ = [
@@ -22,18 +24,14 @@ class OCSPFetcher(abc.ABC):
 
     async def fetch(self,
                     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                    issuer: x509.Certificate) -> ocsp.OCSPResponse:
+                    authority: Authority) -> ocsp.OCSPResponse:
         """
         Fetch an OCSP response for a certificate.
 
         :param cert:
             The certificate for which an OCSP response has to be fetched.
-        :param issuer:
-            The relevant issuer's certificate.
-
-            .. note::
-                This parameter is used to compute the hash of the issuer's
-                public key that is sent with the OCSP request.
+        :param authority:
+            The issuing authority.
         :raises:
             OCSPFetchError - Raised if an OCSP response could not be obtained.
         :return:

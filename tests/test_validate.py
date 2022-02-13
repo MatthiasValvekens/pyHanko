@@ -16,7 +16,7 @@ from pyhanko_certvalidator.fetchers import (
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator import PKIXValidationParams
 from pyhanko_certvalidator.path import ValidationPath, QualifiedPolicy
-from pyhanko_certvalidator.authority import CertTrustAnchor
+from pyhanko_certvalidator.authority import CertTrustAnchor, Authority
 from pyhanko_certvalidator.validate import validate_path, async_validate_path
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
     OCSPFetchError, CRLFetchError, CertificateFetchError, \
@@ -69,7 +69,7 @@ class MockOCSPFetcher(OCSPFetcher):
             -> Iterable[ocsp.OCSPResponse]:
         return ()
 
-    async def fetch(self, cert: x509.Certificate, issuer: x509.Certificate):
+    async def fetch(self, cert: x509.Certificate, authority: Authority):
         raise OCSPFetchError("No connection")
 
 
