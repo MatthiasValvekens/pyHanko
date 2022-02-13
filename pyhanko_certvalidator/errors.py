@@ -91,6 +91,18 @@ class PathValidationError(ValidationError):
 
 class RevokedError(PathValidationError):
 
+    @classmethod
+    def format(cls, reason: CRLReason, revocation_dt: datetime,
+               revinfo_type: str, proc_state: ValProcState):
+        reason_str = reason.human_friendly
+        date = revocation_dt.strftime('%Y-%m-%d')
+        time = revocation_dt.strftime('%H:%M:%S')
+        msg = (
+            f'{revinfo_type} indicates {proc_state.describe_cert()} '
+            f'was revoked at {time} on {date}, due to {reason_str}.'
+        )
+        return RevokedError(msg, reason, revocation_dt, proc_state)
+
     def __init__(self, msg, reason: CRLReason, revocation_dt: datetime,
                  proc_state: ValProcState):
         self.reason = reason

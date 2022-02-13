@@ -57,8 +57,9 @@ async def _validate_delegated_ocsp_provenance(
         proc_state.describe_cert(never_def=True) + ' OCSP responder'
     )
 
-    issuer_chain = ee_path.truncate_to(issuer)
-    responder_chain = issuer_chain.copy_and_append(responder_cert)
+    responder_chain = ee_path\
+        .truncate_to(issuer)\
+        .copy_and_append(responder_cert)
     if responder_cert.ocsp_no_check_value is not None:
         # we don't have to check the revocation of the OCSP responder,
         # so do a simplified check
@@ -311,19 +312,11 @@ async def _handle_single_ocsp_resp(
         reason: CRLReason = revocation_info['revocation_reason']
         if reason.native is None:
             reason = crl.CRLReason('unspecified')
-        reason_str = reason.human_friendly
         revocation_dt: datetime = revocation_info['revocation_time'].native
-        date = revocation_dt.strftime('%Y-%m-%d')
-        time = revocation_dt.strftime('%H:%M:%S')
-        raise RevokedError(pretty_message(
-            '''
-            OCSP response indicates %s was revoked at %s on %s, due to %s
-            ''',
-            proc_state.describe_cert(),
-            time,
-            date,
-            reason_str
-        ), reason, revocation_dt, proc_state)
+        raise RevokedError.format(
+            reason=reason, revocation_dt=revocation_dt,
+            revinfo_type='OCSP response', proc_state=proc_state
+        )
 
 
 async def verify_ocsp_response(

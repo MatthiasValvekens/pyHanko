@@ -2,7 +2,7 @@ import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Union, List, Optional, Dict, Tuple
+from typing import Union, List, Optional, Dict, Tuple, Set
 
 from asn1crypto import x509, crl, cms
 from cryptography.exceptions import InvalidSignature
@@ -23,6 +23,16 @@ from pyhanko_certvalidator.util import get_ac_extension_value, \
     pretty_message, ConsList
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CRLWithPaths:
+    """
+    A CRL with a number of candidate paths
+    """
+
+    crl: CRLWithPOE
+    paths: List[ValidationPath]
 
 
 async def _find_candidate_crl_issuers(crl_issuer_name: x509.Name,
@@ -211,7 +221,7 @@ async def _find_crl_issuer(
         cert_path: ValidationPath,
         validation_context: ValidationContext,
         is_indirect: bool,
-        proc_state: ValProcState):
+        proc_state: ValProcState) -> ValidationPath:
 
     candidate_paths, errs = await _find_candidate_crl_paths(
         crl_issuer_name, certificate_list,
@@ -233,7 +243,7 @@ async def _find_crl_issuer(
         if proc_state.check_path_verif_recursion(candidate_crl_issuer):
             validation_context.revinfo_manager \
                 .record_crl_issuer(certificate_list, candidate_crl_issuer)
-            return candidate_crl_issuer
+            return candidate_crl_issuer_path
         # Step f
         # Note: this is not the same as .truncate_to() if
         # candidate_crl_issuer doesn't appear in the path!
@@ -250,7 +260,7 @@ async def _find_crl_issuer(
             )
             validation_context.revinfo_manager \
                 .record_crl_issuer(certificate_list, candidate_crl_issuer)
-            return candidate_crl_issuer
+            return candidate_crl_issuer_path
         except CRLValidationError as e:
             errs.explicit_errors.append(e)
             continue
@@ -486,8 +496,6 @@ async def _handle_single_crl(
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
 
-    is_pkc = isinstance(cert, x509.Certificate)
-
     is_indirect = False
 
     if crl_idp and crl_idp['indirect_crl'].native:
@@ -521,7 +529,7 @@ async def _handle_single_crl(
     # if not, attempt to determine it
     if not crl_issuer:
         try:
-            crl_issuer = await _find_crl_issuer(
+            crl_issuer_path = await _find_crl_issuer(
                 crl_issuer_name, certificate_list,
                 cert=cert, cert_issuer=cert_issuer,
                 cert_path=path,
@@ -529,6 +537,7 @@ async def _handle_single_crl(
                 is_indirect=is_indirect,
                 proc_state=proc_state
             )
+            crl_issuer = crl_issuer_path.last
         except CRLNoMatchesError:
             # this no-match issue will be dealt with at a higher level later
             errs.issuer_failures += 1
@@ -537,68 +546,15 @@ async def _handle_single_crl(
             errs.failures.append((e.args[0], certificate_list))
             return None
 
-    # Step b 1
-    has_dp_crl_issuer = False
-    dp_match = False
-
-    if is_pkc:
-        crl_dps = cert.crl_distribution_points_value
-    else:
-        crl_dps = get_ac_extension_value(cert, 'crl_distribution_points')
-    if crl_dps:
-        crl_issuer_general_name = x509.GeneralName(
-            name='directory_name',
-            value=crl_issuer.subject
-        )
-        for dp in crl_dps:
-            if dp['crl_issuer']:
-                has_dp_crl_issuer = True
-                if crl_issuer_general_name in dp['crl_issuer']:
-                    dp_match = True
-
-    same_issuer = crl_issuer.subject == cert_issuer.subject
-    indirect_match = has_dp_crl_issuer and dp_match and is_indirect
-    missing_idp = has_dp_crl_issuer and (not dp_match or not is_indirect)
-    indirect_crl_issuer = crl_issuer.issuer == cert_issuer.subject
-
-    if (not same_issuer and not indirect_match and not indirect_crl_issuer) \
-            or missing_idp:
-        errs.issuer_failures += 1
-        return None
-
-    freshness_result = certificate_list_with_poe.usable_at(
-        validation_context.moment,
-        policy=validation_context.revinfo_policy,
-        timing_info=validation_context.timing_info
+    interim_reasons = _get_crl_scope_assuming_issuer(
+        crl_issuer=crl_issuer,
+        cert=cert, cert_issuer=cert_issuer,
+        certificate_list_with_poe=certificate_list_with_poe,
+        is_indirect=is_indirect, errs=errs
     )
-    if freshness_result != RevinfoUsabilityRating.OK:
-        if freshness_result == RevinfoUsabilityRating.STALE:
-            msg = 'CRL is not recent enough'
-        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
-            msg = 'CRL is too recent'
-        else:
-            msg = 'CRL freshness could not be established'
-        errs.failures.append((msg, certificate_list_with_poe))
+
+    if interim_reasons is None:
         return None
-
-    # Step b 2
-
-    if crl_idp is not None:
-        if is_pkc:
-            crl_idp_match = _handle_crl_idp_ext_constraints(
-                cert=cert, certificate_list=certificate_list,
-                crl_issuer=crl_issuer, crl_idp=crl_idp,
-                crl_issuer_name=crl_issuer_name, errs=errs
-            )
-        else:
-            crl_idp_match = _handle_attr_cert_crl_idp_ext_constraints(
-                crl_dps=crl_dps, certificate_list=certificate_list,
-                crl_issuer=crl_issuer, crl_idp=crl_idp,
-                crl_issuer_name=crl_issuer_name, errs=errs
-            )
-        # error reporting is taken care of in the delegated method
-        if not crl_idp_match:
-            return None
 
     # Step c
     delta_certificate_list_with_poe = delta_certificate_list = None
@@ -613,31 +569,19 @@ async def _handle_single_crl(
         )
         delta_certificate_list = delta_certificate_list_with_poe.crl_data
 
-    # Step d
-    idp_reasons = None
-
-    if crl_idp and crl_idp['only_some_reasons'].native is not None:
-        idp_reasons = crl_idp['only_some_reasons'].native
-
-    reason_keys = None
-    if idp_reasons:
-        reason_keys = idp_reasons
-
-    if reason_keys is None:
-        interim_reasons = VALID_REVOCATION_REASONS.copy()
-    else:
-        interim_reasons = reason_keys
-
-    # Step e
-    # We don't skip a CRL if it only contains reasons already checked since
-    # a certificate issuer can self-issue a new cert that is used for CRLs
-
-    if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-        errs.failures.append((
-            'One or more unrecognized critical extensions are present in '
-            'the CRL',
-            certificate_list_with_poe
-        ))
+    freshness_result = certificate_list_with_poe.usable_at(
+        validation_context.moment,
+        policy=validation_context.revinfo_policy,
+        timing_info=validation_context.timing_info
+    )
+    if freshness_result != RevinfoUsabilityRating.OK:
+        if freshness_result == RevinfoUsabilityRating.STALE:
+            msg = 'CRL is not recent enough'
+        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+            msg = 'CRL is too recent'
+        else:
+            msg = 'CRL freshness could not be established'
+        errs.failures.append((msg, certificate_list_with_poe))
         return None
 
     if use_deltas and delta_certificate_list and \
@@ -675,11 +619,133 @@ async def _handle_single_crl(
             errs.failures.append((msg, delta_certificate_list_with_poe))
             return None
 
+    try:
+        revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
+            crl_issuer=crl_issuer, cert=cert,
+            cert_issuer=cert_issuer,
+            certificate_list_with_poe=certificate_list_with_poe,
+            delta_certificate_list_with_poe=delta_certificate_list_with_poe,
+            errs=errs,
+        )
+    except NotImplementedError:
+        # the subroutine already registered the failure, so just bail
+        return None
+
+    if revoked_reason:
+        raise RevokedError.format(
+            reason=revoked_reason, revocation_dt=revoked_date,
+            revinfo_type='CRL', proc_state=proc_state,
+        )
+    return interim_reasons
+
+
+def _get_crl_scope_assuming_issuer(
+        crl_issuer: x509.Certificate,
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert_issuer: x509.Certificate,
+        certificate_list_with_poe: CRLWithPOE,
+        is_indirect: bool,
+        errs: _CRLErrs) -> Optional[Set[str]]:
+
+    certificate_list = certificate_list_with_poe.crl_data
+    crl_idp: crl.IssuingDistributionPoint \
+        = certificate_list.issuing_distribution_point_value
+
+    is_pkc = isinstance(cert, x509.Certificate)
+    # Step b 1
+    has_dp_crl_issuer = False
+    dp_match = False
+
+    if is_pkc:
+        crl_dps = cert.crl_distribution_points_value
+    else:
+        crl_dps = get_ac_extension_value(cert, 'crl_distribution_points')
+    if crl_dps:
+        crl_issuer_general_name = x509.GeneralName(
+            name='directory_name',
+            value=crl_issuer.subject
+        )
+        for dp in crl_dps:
+            if dp['crl_issuer']:
+                has_dp_crl_issuer = True
+                if crl_issuer_general_name in dp['crl_issuer']:
+                    dp_match = True
+
+    crl_issuer_name = crl_issuer.subject
+    same_issuer = crl_issuer_name == cert_issuer.subject
+    indirect_match = has_dp_crl_issuer and dp_match and is_indirect
+    missing_idp = has_dp_crl_issuer and (not dp_match or not is_indirect)
+    indirect_crl_issuer = crl_issuer.issuer == cert_issuer.subject
+
+    if (not same_issuer and not indirect_match and not indirect_crl_issuer) \
+            or missing_idp:
+        errs.issuer_failures += 1
+        return None
+
+    # Step b 2
+
+    if crl_idp is not None:
+        if is_pkc:
+            crl_idp_match = _handle_crl_idp_ext_constraints(
+                cert=cert, certificate_list=certificate_list,
+                crl_issuer=crl_issuer, crl_idp=crl_idp,
+                crl_issuer_name=crl_issuer_name, errs=errs
+            )
+        else:
+            crl_idp_match = _handle_attr_cert_crl_idp_ext_constraints(
+                crl_dps=crl_dps, certificate_list=certificate_list,
+                crl_issuer=crl_issuer, crl_idp=crl_idp,
+                crl_issuer_name=crl_issuer_name, errs=errs
+            )
+        # error reporting is taken care of in the delegated method
+        if not crl_idp_match:
+            return None
+
+    # Step d
+    idp_reasons = None
+
+    if crl_idp and crl_idp['only_some_reasons'].native is not None:
+        idp_reasons = crl_idp['only_some_reasons'].native
+
+    reason_keys = None
+    if idp_reasons:
+        reason_keys = idp_reasons
+
+    if reason_keys is None:
+        interim_reasons = VALID_REVOCATION_REASONS.copy()
+    else:
+        interim_reasons = reason_keys
+
+    # Step e
+    # We don't skip a CRL if it only contains reasons already checked since
+    # a certificate issuer can self-issue a new cert that is used for CRLs
+
+    if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
+        errs.failures.append((
+            'One or more unrecognized critical extensions are present in '
+            'the CRL',
+            certificate_list_with_poe
+        ))
+        return None
+
+    return interim_reasons
+
+
+def _check_cert_on_crl_and_delta(
+        crl_issuer: x509.Certificate,
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert_issuer: x509.Certificate,
+        certificate_list_with_poe: CRLWithPOE,
+        delta_certificate_list_with_poe: Optional[CRLWithPOE],
+        errs: _CRLErrs):
+
+    certificate_list = certificate_list_with_poe.crl_data
     # Step i
     revoked_reason = None
     revoked_date = None
 
-    if use_deltas and delta_certificate_list:
+    if delta_certificate_list_with_poe:
+        delta_certificate_list = delta_certificate_list_with_poe.crl_data
         try:
             revoked_date, revoked_reason = \
                 _find_cert_in_list(cert, cert_issuer,
@@ -688,9 +754,9 @@ async def _handle_single_crl(
             errs.failures.append((
                 'One or more unrecognized critical extensions are present in '
                 'the CRL entry for the certificate',
-                delta_certificate_list
+                delta_certificate_list_with_poe
             ))
-            return None
+            raise
 
     # Step j
     if revoked_reason is None:
@@ -702,30 +768,16 @@ async def _handle_single_crl(
             errs.failures.append((
                 'One or more unrecognized critical extensions are present in '
                 'the CRL entry for the certificate',
-                certificate_list
+                certificate_list_with_poe
             ))
-            return None
+            raise
 
     # Step k
     if revoked_reason and revoked_reason.native == 'remove_from_crl':
         revoked_reason = None
         revoked_date = None
 
-    if revoked_reason:
-        reason_str = revoked_reason.human_friendly
-        date = revoked_date.native.strftime('%Y-%m-%d')
-        time = revoked_date.native.strftime('%H:%M:%S')
-        raise RevokedError(pretty_message(
-            '''
-            CRL indicates %s was revoked at %s on %s, due to %s
-            ''',
-            proc_state.describe_cert(),
-            time,
-            date,
-            reason_str
-        ), revoked_reason, revoked_date, proc_state)
-
-    return interim_reasons
+    return revoked_date, revoked_reason
 
 
 async def verify_crl(
@@ -978,6 +1030,6 @@ def _find_cert_in_list(
         else:
             crl_reason = revoked_cert.crl_reason_value
 
-        return revoked_cert['revocation_date'], crl_reason
+        return revoked_cert['revocation_date'].native, crl_reason
 
     return None, None
