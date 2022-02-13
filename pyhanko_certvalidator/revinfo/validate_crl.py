@@ -18,9 +18,9 @@ from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, \
     RevinfoUsabilityRating
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
+from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.util import get_ac_extension_value, \
-    get_relevant_crl_dps, extract_ac_issuer_dir_name, validate_sig, \
-    pretty_message, ConsList
+    validate_sig, pretty_message, ConsList
 
 logger = logging.getLogger(__name__)
 
@@ -824,6 +824,88 @@ def _check_cert_on_crl_and_delta(
     return revoked_date, revoked_reason
 
 
+def _get_issuer(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+                path: ValidationPath, proc_state: ValProcState):
+    # FIXME should uniformise this by allowing ACs in validation paths.
+    #  Right now we simply assume that the last path element is the AA cert,
+    #  which is wrong for all sorts of reasons (the issuer cert could be
+    #  a trust root!)
+    if isinstance(cert, x509.Certificate):
+        try:
+            cert_issuer = path.find_issuer(cert)
+        except LookupError:
+            raise CRLNoMatchesError(pretty_message(
+                '''
+                Could not determine issuer certificate for %s in path.
+                ''',
+                proc_state.describe_cert()
+            ))
+    else:
+        cert_issuer = path.last
+    return cert_issuer
+
+
+async def _classify_relevant_crls(
+        revinfo_manager: RevinfoManager,
+        cert: x509.Certificate,
+        errs: _CRLErrs):
+
+    certificate_lists = await revinfo_manager.async_retrieve_crls_with_poe(cert)
+
+    complete_lists_by_issuer = defaultdict(list)
+    delta_lists_by_issuer = defaultdict(list)
+    for certificate_list_with_poe in certificate_lists:
+        certificate_list = certificate_list_with_poe.crl_data
+        try:
+            issuer_hashable = certificate_list.issuer.hashable
+            if certificate_list.delta_crl_indicator_value is None:
+                complete_lists_by_issuer[issuer_hashable] \
+                    .append(certificate_list_with_poe)
+            else:
+                delta_lists_by_issuer[issuer_hashable].append(
+                    certificate_list_with_poe
+                )
+        except ValueError as e:
+            msg = "Generic processing error while classifying CRL."
+            logging.debug(msg, exc_info=e)
+            errs.failures.append((msg, certificate_list))
+    return complete_lists_by_issuer, delta_lists_by_issuer
+
+
+def _process_crl_completeness(checked_reasons: Set[str], total_crls: int,
+                              errs: _CRLErrs, proc_state: ValProcState):
+
+    # CRLs should not include this value, but at least one of the examples
+    # from the NIST test suite does
+    checked_reasons -= {'unused'}
+
+    if checked_reasons != VALID_REVOCATION_REASONS:
+        if total_crls == errs.issuer_failures:
+            return CRLNoMatchesError(pretty_message(
+                '''
+                No CRLs were issued by the issuer of %s, or any indirect CRL
+                issuer
+                ''',
+                proc_state.describe_cert()
+            ))
+
+        if not errs.failures:
+            errs.failures.append((
+                'The available CRLs do not cover all revocation reasons',
+            ))
+
+        return CRLValidationIndeterminateError(
+            pretty_message(
+                '''
+                Unable to determine if %s is revoked due to insufficient
+                information from known CRLs
+                ''',
+                proc_state.describe_cert()
+            ),
+            errs.failures
+        )
+
+
 async def verify_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath,
@@ -866,70 +948,17 @@ async def verify_crl(
     )
 
     revinfo_manager = validation_context.revinfo_manager
-    certificate_lists = await revinfo_manager.async_retrieve_crls_with_poe(
-        cert
-    )
-
-    if is_pkc:
-        try:
-            cert_issuer = path.find_issuer(cert)
-        except LookupError:
-            raise CRLNoMatchesError(pretty_message(
-                '''
-                Could not determine issuer certificate for %s in path.
-                ''',
-                proc_state.describe_cert()
-            ))
-    else:
-        cert_issuer = path.last
-
     errs = _CRLErrs()
+    complete_lists_by_issuer, delta_lists_by_issuer = \
+        await _classify_relevant_crls(revinfo_manager, cert, errs)
 
-    complete_lists_by_issuer = defaultdict(list)
-    delta_lists_by_issuer = defaultdict(list)
-    for certificate_list_with_poe in certificate_lists:
-        certificate_list = certificate_list_with_poe.crl_data
-        try:
-            issuer_hashable = certificate_list.issuer.hashable
-            if certificate_list.delta_crl_indicator_value is None:
-                complete_lists_by_issuer[issuer_hashable]\
-                    .append(certificate_list_with_poe)
-            else:
-                delta_lists_by_issuer[issuer_hashable].append(
-                    certificate_list_with_poe
-                )
-        except ValueError as e:
-            msg = "Generic processing error while classifying CRL."
-            logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list))
-
+    cert_issuer = _get_issuer(cert, path, proc_state)
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
     crls_to_process = []
     for issuer_crls in complete_lists_by_issuer.values():
         crls_to_process.extend(issuer_crls)
     total_crls = len(crls_to_process)
-
-    # Build a lookup table for the Distribution point objects associated with
-    # an issuer name hashable
-    distribution_point_map = {}
-
-    sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
-    for distribution_point in sources:
-        if isinstance(distribution_point['crl_issuer'], x509.GeneralNames):
-            dp_name_hashes = []
-            for general_name in distribution_point['crl_issuer']:
-                if general_name.name == 'directory_name':
-                    dp_name_hashes.append(general_name.chosen.hashable)
-        elif is_pkc:
-            dp_name_hashes = [cert.issuer.hashable]
-        else:
-            iss_dir_name = extract_ac_issuer_dir_name(cert)
-            dp_name_hashes = [iss_dir_name.hashable]
-        for dp_name_hash in dp_name_hashes:
-            if dp_name_hash not in distribution_point_map:
-                distribution_point_map[dp_name_hash] = []
-            distribution_point_map[dp_name_hash].append(distribution_point)
 
     checked_reasons = set()
 
@@ -952,35 +981,11 @@ async def verify_crl(
             logging.debug(msg, exc_info=e)
             errs.failures.append((msg, certificate_list_with_poe))
 
-    # CRLs should not include this value, but at least one of the examples
-    # from the NIST test suite does
-    checked_reasons -= {'unused'}
-
-    if checked_reasons != VALID_REVOCATION_REASONS:
-        if total_crls == errs.issuer_failures:
-            raise CRLNoMatchesError(pretty_message(
-                '''
-                No CRLs were issued by the issuer of %s, or any indirect CRL
-                issuer
-                ''',
-                proc_state.describe_cert()
-            ))
-
-        if not errs.failures:
-            errs.failures.append((
-                'The available CRLs do not cover all revocation reasons',
-            ))
-
-        raise CRLValidationIndeterminateError(
-            pretty_message(
-                '''
-                Unable to determine if %s is revoked due to insufficient
-                information from known CRLs
-                ''',
-                proc_state.describe_cert()
-            ),
-            errs.failures
-        )
+    exc = _process_crl_completeness(
+        checked_reasons, total_crls, errs, proc_state
+    )
+    if exc is not None:
+        raise exc
 
 
 def _verify_crl_signature(certificate_list, public_key):
