@@ -702,7 +702,7 @@ async def async_validate_ac(
     )
     if 'no_rev_avail' not in extensions_present:
         await _check_revocation(
-            attr_cert, validation_context, aa_path,
+            attr_cert, validation_context, ac_path,
             proc_state=proc_state
         )
 
@@ -1232,7 +1232,8 @@ def _finish_policy_processing(state, cert, acceptable_policies, path_length,
     return qualified_policies
 
 
-async def _check_revocation(cert, validation_context: ValidationContext, path,
+async def _check_revocation(cert, validation_context: ValidationContext,
+                            path: ValidationPath,
                             proc_state: ValProcState):
     ocsp_status_good = False
     revocation_check_failed = False

@@ -333,33 +333,6 @@ async def _handle_single_ocsp_resp(
         )
 
 
-def _get_issuing_authority(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath, proc_state: ValProcState) -> Authority:
-
-    # FIXME copied from CRL validation module, pending fix in path.py
-
-    if isinstance(cert, x509.Certificate):
-        try:
-            cert_issuer = path.find_issuing_authority(cert)
-        except LookupError:
-            raise OCSPNoMatchesError(pretty_message(
-                '''
-                Could not determine issuer certificate for %s in path.
-                ''',
-                proc_state.describe_cert()
-            ))
-    else:
-        # FIXME should uniformise this by allowing ACs in validation paths.
-        #  Right now we simply assume that the last path element is the AA cert,
-        #  which is wrong for all sorts of reasons
-        if path.pkix_len == 0:
-            cert_issuer = path.trust_anchor.authority
-        else:
-            cert_issuer = AuthorityWithCert(path.last)
-    return cert_issuer
-
-
 async def verify_ocsp_response(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath,
@@ -397,7 +370,15 @@ async def verify_ocsp_response(
     cert_description = proc_state.describe_cert()
     moment = validation_context.moment
 
-    cert_issuer = _get_issuing_authority(cert, path, proc_state)
+    try:
+        cert_issuer = path.find_issuing_authority(cert)
+    except LookupError:
+        raise OCSPNoMatchesError(pretty_message(
+            '''
+            Could not determine issuer certificate for %s in path.
+            ''',
+            proc_state.describe_cert()
+        ))
 
     errs = _OCSPErrs()
     ocsp_responses = await validation_context.revinfo_manager\

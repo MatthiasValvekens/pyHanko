@@ -4,9 +4,9 @@ import unittest
 
 from asn1crypto import cms, x509, crl, ocsp
 
-import pyhanko_certvalidator.revinfo.validate_crl
-import pyhanko_certvalidator.revinfo.validate_ocsp
 from pyhanko_certvalidator import validate
+from pyhanko_certvalidator.revinfo.validate_crl import verify_crl
+from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
 from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 from pyhanko_certvalidator.path import ValidationPath
@@ -358,10 +358,12 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
+        ac_path = ValidationPath(
+            CertTrustAnchor(root), [interm, role_aa], ac
+        )
 
         with self.assertRaises(RevokedError):
-            await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
+            await verify_crl(ac, ac_path, vc)
 
     async def test_ac_unrevoked(self):
         ac = load_attr_cert(
@@ -387,9 +389,11 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
+        ac_path = ValidationPath(
+            CertTrustAnchor(root), [interm, role_aa], ac
+        )
 
-        await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
+        await verify_crl(ac, ac_path, vc)
 
     async def test_ac_revoked_full_path_validation(self):
         ac = load_attr_cert(
@@ -472,10 +476,10 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
+        ac_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa], ac)
 
         with self.assertRaises(RevokedError):
-            await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
+            await verify_ocsp_response(ac, ac_path, vc)
 
     async def test_ac_unrevoked(self):
         ac = load_attr_cert(
@@ -501,9 +505,8 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
-
-        await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
+        ac_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa], ac)
+        await verify_ocsp_response(ac, ac_path, vc)
 
     async def test_ac_revoked_full_path_validation(self):
         ac = load_attr_cert(

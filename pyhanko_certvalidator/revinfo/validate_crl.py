@@ -837,30 +837,6 @@ def _check_cert_on_crl_and_delta(
     return revoked_date, revoked_reason
 
 
-def _get_issuing_authority(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath, proc_state: ValProcState) -> Authority:
-    if isinstance(cert, x509.Certificate):
-        try:
-            cert_issuer = path.find_issuing_authority(cert)
-        except LookupError:
-            raise CRLNoMatchesError(pretty_message(
-                '''
-                Could not determine issuer certificate for %s in path.
-                ''',
-                proc_state.describe_cert()
-            ))
-    else:
-        # FIXME should uniformise this by allowing ACs in validation paths.
-        #  Right now we simply assume that the last path element is the AA cert,
-        #  which is wrong for all sorts of reasons
-        if path.pkix_len == 0:
-            cert_issuer = path.trust_anchor.authority
-        else:
-            cert_issuer = AuthorityWithCert(path.last)
-    return cert_issuer
-
-
 async def _classify_relevant_crls(
         revinfo_manager: RevinfoManager,
         cert: x509.Certificate, errs: _CRLErrs):
@@ -967,7 +943,16 @@ async def verify_crl(
     complete_lists_by_issuer, delta_lists_by_issuer = \
         await _classify_relevant_crls(revinfo_manager, cert, errs)
 
-    cert_issuer_auth = _get_issuing_authority(cert, path, proc_state)
+    try:
+        cert_issuer_auth = path.find_issuing_authority(cert)
+    except LookupError:
+        raise CRLNoMatchesError(pretty_message(
+            '''
+            Could not determine issuer certificate for %s in path.
+            ''',
+            proc_state.describe_cert()
+        ))
+
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
     crls_to_process = []
