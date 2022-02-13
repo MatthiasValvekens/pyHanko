@@ -35,39 +35,41 @@ class TrustQualifiers:
     """
 
 
-class TrustAnchor(abc.ABC):
+class Authority(abc.ABC):
     """
-    Abstract trust root.
+    Abstract authority, i.e. a named key.
     """
 
     @property
     def name(self) -> x509.Name:
         """
-        The trust anchor's name.
+        The authority's name.
         """
         raise NotImplementedError
 
     @property
     def public_key(self) -> keys.PublicKeyInfo:
         """
-        The trust anchor's public key.
+        The authority's public key.
         """
         raise NotImplementedError
 
     @property
     def hashable(self):
         """
-        A hashable unique identifier of the trust root, used in ``__eq__``
+        A hashable unique identifier of the authority, used in ``__eq__``
         and ``__hash__``.
         """
         raise NotImplementedError
 
-    @property
-    def trust_qualifiers(self) -> TrustQualifiers:
-        """
-        Qualifiers for the trust root.
-        """
-        raise NotImplementedError
+    def __hash__(self):
+        return hash(self.hashable)
+
+    def __eq__(self, other):
+        if not isinstance(other, Authority):
+            return False
+
+        return self.hashable == other.hashable
 
     @property
     def key_id(self) -> Optional[bytes]:
@@ -77,15 +79,6 @@ class TrustAnchor(abc.ABC):
         never to retrieve keys or to definitively identify trust anchors.
         """
         raise NotImplementedError
-
-    def __hash__(self):
-        return hash(self.hashable)
-
-    def __eq__(self, other):
-        if not isinstance(other, TrustAnchor):
-            return False
-
-        return self.hashable == other.hashable
 
     def is_potential_issuer_of(self, cert: x509.Certificate) -> bool:
         """
@@ -102,6 +95,36 @@ class TrustAnchor(abc.ABC):
             if cert.authority_key_identifier != self.key_id:
                 return False
         return True
+
+
+class TrustAnchor:
+    """
+    Abstract trust root. A trust root is an authority with trust qualifiers.
+    interface. Equality of trust roots reduces to equality of authorities.
+    """
+
+    def __init__(self, authority: Authority,
+                 quals: Optional[TrustQualifiers] = None):
+        self._authority = authority
+        self._quals = quals
+
+    @property
+    def authority(self) -> Authority:
+        return self._authority
+
+    @property
+    def trust_qualifiers(self) -> TrustQualifiers:
+        """
+        Qualifiers for the trust root.
+        """
+        return self._quals or TrustQualifiers()
+
+    def __eq__(self, other):
+        return isinstance(other, TrustAnchor) \
+               and other._authority == self._authority
+
+    def __hash__(self):
+        return hash(self._authority)
 
 
 def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
@@ -161,25 +184,15 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
     )
 
 
-class CertTrustAnchor(TrustAnchor):
+class AuthorityWithCert(Authority):
     """
-    Trust anchor provisioned as a certificate.
+    Authority provisioned as a certificate.
 
     :param cert:
-        The certificate, usually self-signed.
-    :param quals:
-        Explicit trust qualifiers.
-    :param derive_default_quals_from_cert:
-        Flag indicating to derive default trust qualifiers from the certificate
-        content if explicit ones are not provided. Defaults to ``False``.
+        The certificate.
     """
-
-    def __init__(self, cert: x509.Certificate,
-                 quals: Optional[TrustQualifiers] = None,
-                 derive_default_quals_from_cert: bool = False):
+    def __init__(self, cert: x509.Certificate):
         self._cert = cert
-        self._derive = derive_default_quals_from_cert
-        self._quals = quals
 
     @property
     def name(self) -> x509.Name:
@@ -202,6 +215,40 @@ class CertTrustAnchor(TrustAnchor):
     def certificate(self) -> x509.Certificate:
         return self._cert
 
+    def is_potential_issuer_of(self, cert: x509.Certificate):
+        if not super().is_potential_issuer_of(cert):
+            return False
+        if cert.authority_issuer_serial:
+            if cert.authority_issuer_serial != self._cert.issuer_serial:
+                return False
+        return True
+
+
+class CertTrustAnchor(TrustAnchor):
+    """
+    Trust anchor provisioned as a certificate.
+
+    :param cert:
+        The certificate, usually self-signed.
+    :param quals:
+        Explicit trust qualifiers.
+    :param derive_default_quals_from_cert:
+        Flag indicating to derive default trust qualifiers from the certificate
+        content if explicit ones are not provided. Defaults to ``False``.
+    """
+
+    def __init__(self, cert: x509.Certificate,
+                 quals: Optional[TrustQualifiers] = None,
+                 derive_default_quals_from_cert: bool = False):
+        authority = AuthorityWithCert(cert)
+        self._cert = cert
+        super().__init__(authority, quals)
+        self._derive = derive_default_quals_from_cert
+
+    @property
+    def certificate(self) -> x509.Certificate:
+        return self._cert
+
     @property
     def trust_qualifiers(self) -> TrustQualifiers:
         if self._quals is not None:
@@ -212,32 +259,20 @@ class CertTrustAnchor(TrustAnchor):
         else:
             return TrustQualifiers()
 
-    def is_potential_issuer_of(self, cert: x509.Certificate):
-        if not super().is_potential_issuer_of(cert):
-            return False
-        if cert.authority_issuer_serial:
-            if cert.authority_issuer_serial != self._cert.issuer_serial:
-                return False
-        return True
 
-
-class NamedKeyTrustAnchor(TrustAnchor):
+class NamedKeyAuthority(Authority):
     """
-    Trust anchor provisioned as a named key.
+    Authority provisioned as a named key.
 
     :param entity_name:
         The name of the entity that controls the private key of the trust root.
     :param public_key:
         The trust root's public key.
-    :param quals:
-        Explicit trust qualifiers.
     """
 
-    def __init__(self, entity_name: x509.Name, public_key: keys.PublicKeyInfo,
-                 quals: Optional[TrustQualifiers] = None):
+    def __init__(self, entity_name: x509.Name, public_key: keys.PublicKeyInfo):
         self._name = entity_name
         self._public_key = public_key
-        self._quals = quals or TrustQualifiers()
 
     @property
     def name(self) -> x509.Name:
@@ -254,7 +289,3 @@ class NamedKeyTrustAnchor(TrustAnchor):
     @property
     def hashable(self):
         return self._name.hashable, self._public_key.dump()
-
-    @property
-    def trust_qualifiers(self) -> TrustQualifiers:
-        return self._quals

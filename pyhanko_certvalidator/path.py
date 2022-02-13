@@ -167,7 +167,7 @@ class ValidationPath:
         issuer_index = None
 
         # check the trust root separately
-        if self.trust_anchor.is_potential_issuer_of(cert):
+        if self.trust_anchor.authority.is_potential_issuer_of(cert):
             # in case of a match, truncate everything
             return ValidationPath(self._root, [])
 

@@ -827,8 +827,8 @@ class _PathValidationState:
                 else path_length + 1
             ),
             # Steps 1 g-j
-            working_public_key=trust_anchor.public_key,
-            working_issuer_name=trust_anchor.name,
+            working_public_key=trust_anchor.authority.public_key,
+            working_issuer_name=trust_anchor.authority.name,
             # Step 1 k
             max_path_length=max_path_length,
             # NOTE: the algorithm (for now) assumes that the AA CA of RFC 5755

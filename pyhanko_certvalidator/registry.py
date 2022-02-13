@@ -9,7 +9,7 @@ from asn1crypto import x509
 from oscrypto import trust_list
 
 from .util import pretty_message, ConsList
-from .trust_anchor import TrustAnchor, CertTrustAnchor
+from .trust_anchor import TrustAnchor, CertTrustAnchor, AuthorityWithCert
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError
 from .path import ValidationPath
@@ -229,10 +229,11 @@ class CertificateRegistry(SimpleCertificateStore):
 
     def _register_ca(self, anchor: TrustAnchor):
         if anchor not in self._roots:
-            if isinstance(anchor, CertTrustAnchor):
-                self.register(anchor.certificate)
+            authority = anchor.authority
+            if isinstance(authority, AuthorityWithCert):
+                self.register(authority.certificate)
             self._roots.add(anchor)
-            self._root_subject_map[anchor.name.hashable].append(anchor)
+            self._root_subject_map[authority.name.hashable].append(anchor)
 
     def is_ca(self, cert):
         """
@@ -427,7 +428,7 @@ class CertificateRegistry(SimpleCertificateStore):
         # go through matching trust roots first
         root: TrustAnchor
         for root in self._root_subject_map[issuer_hashable]:
-            if root.is_potential_issuer_of(cert):
+            if root.authority.is_potential_issuer_of(cert):
                 yield root
 
         for issuer in self._subject_map[issuer_hashable]:

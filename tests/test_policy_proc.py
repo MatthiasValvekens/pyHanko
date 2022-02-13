@@ -11,7 +11,7 @@ from pyhanko_certvalidator.errors import PathValidationError
 from pyhanko_certvalidator.name_trees import GeneralNameType, \
     x509_names_to_subtrees
 from pyhanko_certvalidator.trust_anchor import CertTrustAnchor, \
-    NamedKeyTrustAnchor, TrustQualifiers
+    NamedKeyAuthority, TrustQualifiers, TrustAnchor
 
 tests_root = os.path.dirname(__file__)
 fixtures_dir = os.path.join(tests_root, 'fixtures')
@@ -134,8 +134,8 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         extra_params = PKIXValidationParams(
             initial_permitted_subtrees=x509_names_to_subtrees([permitted])
         )
-        anchor = NamedKeyTrustAnchor(
-            entity_name=crt.subject, public_key=crt.public_key,
+        anchor = TrustAnchor(
+            NamedKeyAuthority(crt.subject, crt.public_key),
             quals=TrustQualifiers(standard_parameters=extra_params)
         )
         ee = _load_nist_cert('ValidDNnameConstraintsTest1EE.crt')
@@ -161,8 +161,8 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         extra_params = PKIXValidationParams(
             initial_permitted_subtrees=x509_names_to_subtrees([permitted])
         )
-        anchor = NamedKeyTrustAnchor(
-            entity_name=crt.subject, public_key=crt.public_key,
+        anchor = TrustAnchor(
+            NamedKeyAuthority(crt.subject, crt.public_key),
             quals=TrustQualifiers(standard_parameters=extra_params)
         )
         ee = _load_nist_cert('ValidDNnameConstraintsTest1EE.crt')
@@ -180,8 +180,8 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_validate_empty_path_certless_root(self):
         crt = _load_nist_cert('nameConstraintsDN1CACert.crt')
-        anchor = NamedKeyTrustAnchor(
-            entity_name=crt.subject, public_key=crt.public_key,
+        anchor = TrustAnchor(
+            NamedKeyAuthority(crt.subject, crt.public_key),
         )
         context = ValidationContext(
             trust_roots=[anchor], revocation_mode='soft-fail',
