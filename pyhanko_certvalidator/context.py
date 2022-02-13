@@ -8,7 +8,7 @@ from typing import Optional, Iterable, Union, List
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
-from .authority import AuthorityWithCert
+from .authority import AuthorityWithCert, CertTrustAnchor
 from .revinfo.manager import RevinfoManager
 from .util import pretty_message
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
@@ -471,7 +471,10 @@ class ValidationContext:
         # CA certs are automatically trusted since they are from the trust list
         if self.certificate_registry.is_ca(cert) and \
                 cert.signature not in self._validate_map:
-            self._validate_map[cert.signature] = ValidationPath(cert)
+            self._validate_map[cert.signature] = ValidationPath(
+                trust_anchor=CertTrustAnchor(cert),
+                interm=[], leaf=None
+            )
 
         return self._validate_map.get(cert.signature)
 

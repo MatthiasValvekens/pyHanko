@@ -60,12 +60,11 @@ async def _validate_delegated_ocsp_provenance(
 
     if isinstance(issuer, AuthorityWithCert):
         responder_chain = ee_path\
-            .truncate_to(issuer.certificate)\
-            .copy_and_append(responder_cert)
+            .truncate_to_and_append(issuer.certificate, responder_cert)
     else:
         responder_chain = ValidationPath(
             trust_anchor=TrustAnchor(issuer),
-            certs=[responder_cert]
+            interm=[], leaf=responder_cert
         )
     if responder_cert.ocsp_no_check_value is not None:
         # we don't have to check the revocation of the OCSP responder,
@@ -86,7 +85,8 @@ async def _validate_delegated_ocsp_provenance(
         )
 
         ocsp_trunc_path = ValidationPath(
-            trust_anchor=TrustAnchor(issuer), certs=[responder_cert]
+            trust_anchor=TrustAnchor(issuer), interm=[],
+            leaf=responder_cert
         )
         ocsp_trunc_proc_state = ValProcState(
             cert_path_stack=proc_state.cert_path_stack.cons(ocsp_trunc_path),

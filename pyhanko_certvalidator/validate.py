@@ -685,12 +685,9 @@ async def async_validate_ac(
     # NOTE: this is a bit of a hack, and the path in question is only used
     #  for error reporting
     # TODO make paths with ACs at the end easier to handle
-    dummy_ac_path = ValidationPath(
-        trust_anchor=aa_path.trust_anchor,
-        certs=aa_path.get_raw() + [attr_cert]
-    )
+    ac_path = aa_path.copy_and_append(attr_cert)
     proc_state = ValProcState(
-        cert_path_stack=ConsList.sing(dummy_ac_path),
+        cert_path_stack=ConsList.sing(ac_path),
         is_side_validation=False,
         ee_name_override="the attribute certificate"
     )
@@ -1036,7 +1033,9 @@ async def intl_validate_path(validation_context: ValidationContext,
         .init_pkix_validation_state(path_length, trust_anchor, parameters)
 
     # Step 2: basic processing
-    completed_path: ValidationPath = ValidationPath(trust_anchor)
+    completed_path: ValidationPath = ValidationPath(
+        trust_anchor, interm=[], leaf=None
+    )
 
     cert: Optional[x509.Certificate]
     if isinstance(trust_anchor, CertTrustAnchor):

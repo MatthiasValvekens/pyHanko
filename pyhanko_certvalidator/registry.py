@@ -327,7 +327,7 @@ class CertificateRegistry(SimpleCertificateStore):
             of the CA certs.
         """
         if self.is_ca(end_entity_cert):
-            result = ValidationPath(CertTrustAnchor(end_entity_cert))
+            result = ValidationPath(CertTrustAnchor(end_entity_cert), [], None)
             return [result]
 
         path = ConsList.sing(end_entity_cert)
@@ -373,7 +373,8 @@ class CertificateRegistry(SimpleCertificateStore):
         """
 
         if isinstance(path.head, TrustAnchor):
-            paths.append(ValidationPath(path.head, path.tail))
+            certs = list(path.tail)
+            paths.append(ValidationPath(path.head, certs[:-1], certs[-1]))
             return
 
         cert = path.head

@@ -943,7 +943,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         # Hand build the path since we are testing an issuer mismatch that
         # will result in a path building error
         path = ValidationPath(
-            CertTrustAnchor(ca_certs[0]), [other_certs[0], cert]
+            CertTrustAnchor(ca_certs[0]), [other_certs[0]], cert
         )
 
         self.assertEqual(3, len(path))
@@ -976,7 +976,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         # Hand build the path since we are testing an issuer mismatch that
         # will result in a path building error
         path = ValidationPath(
-            CertTrustAnchor(ca_certs[0]), [other_certs[0], cert]
+            CertTrustAnchor(ca_certs[0]), [other_certs[0]], cert
         )
 
         self.assertEqual(3, len(path))

@@ -187,5 +187,7 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
             trust_roots=[anchor], revocation_mode='soft-fail',
         )
 
-        trivial_path = ValidationPath(trust_anchor=anchor, certs=[])
+        trivial_path = ValidationPath(
+            trust_anchor=anchor, interm=[], leaf=None
+        )
         await async_validate_path(context, trivial_path)

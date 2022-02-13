@@ -1,6 +1,6 @@
 # coding: utf-8
 import itertools
-from typing import FrozenSet, Optional, Iterable
+from typing import FrozenSet, Optional, Iterable, Union
 from dataclasses import dataclass
 
 from asn1crypto import x509, cms
@@ -28,24 +28,27 @@ class QualifiedPolicy:
     """
 
 
+Leaf = Union[x509.Certificate, cms.AttributeCertificateV2]
+
+
 class ValidationPath:
     """
-    Represents a path going towards an end-entity certificate
+    Represents a path going towards an end-entity certificate or attribute
+    certificate.
     """
-
-    # A list of asn1crypto.x509.Certificate objects, starting with a trust root
-    # and chaining to an end-entity certificate
-    _certs = None
 
     _qualified_policies = None
 
     _path_aa_controls = None
 
     def __init__(self, trust_anchor: TrustAnchor,
-                 certs: Optional[Iterable[x509.Certificate]] = None):
+                 interm: Iterable[x509.Certificate], leaf: Optional[Leaf]):
 
-        self._certs = list(certs) if certs is not None else []
+        if interm and not leaf:
+            raise ValueError("Leafless paths cannot have intermediate certs")
+        self._interm = list(interm)
         self._root = trust_anchor
+        self._leaf = leaf
 
     @property
     def trust_anchor(self) -> TrustAnchor:
@@ -66,26 +69,47 @@ class ValidationPath:
         :return:
             The first asn1crypto.x509.Certificate object in the path
         """
-        if isinstance(self._root, CertTrustAnchor):
+        root = self._root.authority
+        if isinstance(root, AuthorityWithCert):
+            return root.certificate
+        elif self._interm:
+            return self._interm[0]
+        elif isinstance(self._leaf, x509.Certificate):
+            return self._leaf
+
+    @property
+    def leaf(self) -> Optional[Leaf]:
+        """
+        Returns the current leaf certificate (AC or public-key).
+        The trust root's certificate will be returned if there is one and
+        there are no other certificates in the path.
+
+        If the trust root is certificate-less and there are no certificates,
+        the result will be ``None``.
+        """
+        if self._leaf is not None:
+            return self._leaf
+        elif not self._interm and isinstance(self._root, CertTrustAnchor):
             return self._root.certificate
-        else:
-            return self._certs[0]
+        # __init__ ensures that leaf None -> there are no intermediate certs
+        return None
 
     def get_ee_cert_safe(self) -> Optional[x509.Certificate]:
-        result = None
-        if self._certs:
-            result = self._certs[len(self._certs) - 1]
-        elif isinstance(self._root, CertTrustAnchor):
-            result = self._root.certificate
-        if isinstance(result, x509.Certificate):
-            return result
-        else:
-            return None
+        """
+        Returns the current leaf certificate if it is an X.509 public-key
+        certificate, and ``None`` otherwise.
+        :return:
+        """
+
+        leaf = self.leaf
+        if isinstance(leaf, x509.Certificate):
+            return leaf
 
     @property
     def last(self) -> x509.Certificate:
         """
-        Returns the end of the path - the end entity certificate
+        Returns the last certificate in the path if it is an X.509 public-key
+        certificate, and throws an error otherwise.
 
         :return:
             The last asn1crypto.x509.Certificate object in the path
@@ -94,11 +118,11 @@ class ValidationPath:
         if cert:
             return cert
         else:
-            raise LookupError("No certificates in path")
+            raise LookupError
 
-    def _iter_authorities(self) -> Iterable[Authority]:
+    def iter_authorities(self) -> Iterable[Authority]:
         yield self._root.authority
-        for cert in self._certs[:-1]:
+        for cert in self._interm:
             yield AuthorityWithCert(cert)
 
     def find_issuing_authority(self, cert: x509.Certificate):
@@ -118,7 +142,7 @@ class ValidationPath:
         issuer_name = cert.issuer
         aki = cert.authority_key_identifier
 
-        for authority in self._iter_authorities():
+        for authority in self.iter_authorities():
             if authority.name == issuer_name:
                 keyid = authority.key_id
                 if keyid and aki and keyid != aki:
@@ -127,13 +151,18 @@ class ValidationPath:
 
         raise LookupError('Unable to find the issuer of the certificate specified')
 
-    def truncate_to(self, cert: x509.Certificate):
+    def truncate_to_and_append(self, cert: x509.Certificate, new_leaf: Leaf):
         """
         Remove all certificates in the path after the cert specified and return
         them in a new path.
 
+        Internal API.
+
         :param cert:
             An asn1crypto.x509.Certificate object to find
+
+        :param new_leaf:
+            A new leaf certificate to append.
 
         :raises:
             LookupError - when the certificate could not be found
@@ -144,9 +173,9 @@ class ValidationPath:
 
         if isinstance(self._root, CertTrustAnchor):
             if self._root.certificate.issuer_serial == cert.issuer_serial:
-                return ValidationPath(self._root, [])
+                return ValidationPath(self._root, interm=[], leaf=new_leaf)
 
-        certs = self._certs
+        certs = self._interm
         cert_index = None
         for index, entry in enumerate(certs):
             if entry.issuer_serial == cert.issuer_serial:
@@ -155,15 +184,20 @@ class ValidationPath:
 
         if cert_index is None:
             raise LookupError('Unable to find the certificate specified')
-        return ValidationPath(self._root, certs[:cert_index + 1])
+        return ValidationPath(
+            self._root, interm=certs[:cert_index + 1], leaf=new_leaf
+        )
 
-    def truncate_to_issuer(self, cert):
+    # TODO generalise this to ACs as well?
+    def truncate_to_issuer_and_append(self, cert: x509.Certificate):
         """
         Remove all certificates in the path after the issuer of the cert
-        specified, as defined by this path
+        specified, as defined by this path, and append a new one.
+
+        Internal API.
 
         :param cert:
-            An asn1crypto.x509.Certificate object to find the issuer of
+            A new leaf certificate to append.
 
         :raises:
             LookupError - when the issuer of the certificate could not be found
@@ -177,10 +211,10 @@ class ValidationPath:
         # check the trust root separately
         if self.trust_anchor.authority.is_potential_issuer_of(cert):
             # in case of a match, truncate everything
-            return ValidationPath(self._root, [])
+            return ValidationPath(self._root, interm=[], leaf=cert)
 
         # now run through the rest of the path
-        certs = self._certs
+        certs = self._interm
         for index, entry in enumerate(certs):
             if entry.subject == cert.issuer:
                 if entry.key_identifier and cert.authority_key_identifier:
@@ -194,33 +228,18 @@ class ValidationPath:
         if issuer_index is None:
             raise LookupError('Unable to find the issuer of the certificate specified')
 
-        return ValidationPath(self._root, certs[:issuer_index + 1])
+        return ValidationPath(
+            self._root, certs[:issuer_index + 1], leaf=cert
+        )
 
-    def copy_and_append(self, cert: x509.Certificate):
-        new_certs = self._certs[:]
-        new_certs.append(cert)
-        return ValidationPath(trust_anchor=self._root, certs=new_certs)
-
-    def copy(self):
-        """
-        Creates a copy of this path
-
-        :return:
-            A ValidationPath object
-        """
-
-        return ValidationPath(trust_anchor=self._root, certs=self._certs[:])
-
-    def pop(self):
-        """
-        Removes the last certificate from the path
-
-        :return:
-            The current ValidationPath object, for chaining
-        """
-
-        self._certs.pop()
-        return self
+    def copy_and_append(self, cert: Leaf):
+        new_certs = self._interm[:]
+        if self._leaf:
+            new_certs.append(self._leaf)
+        return ValidationPath(
+            trust_anchor=self._root,
+            interm=new_certs, leaf=cert
+        )
 
     def _set_qualified_policies(self, policies):
         self._qualified_policies = policies
@@ -251,15 +270,19 @@ class ValidationPath:
 
     @property
     def pkix_len(self):
-        return len(self._certs)
+        return len(self._interm) + (1 if self._leaf else 0)
 
     def __len__(self):
         # backwards compat
-        return 1 + len(self._certs)
+        return 1 + self.pkix_len
 
     def __getitem__(self, key):
+        # convoluted because of compatibility issues...
         if key > 0:
-            return self._certs[key - 1]
+            leaf_ix = len(self._interm) + 1
+            if key == leaf_ix and self._leaf is not None:
+                return self._leaf
+            return self._interm[key - 1]
         elif isinstance(self._root, CertTrustAnchor):
             # backwards compat
             return self._root.certificate
@@ -271,18 +294,20 @@ class ValidationPath:
     def __iter__(self):
         # backwards compat, we iterate over all certs _including_ the root
         # if it is supplied as a cert
-        if isinstance(self._root, CertTrustAnchor):
-            return itertools.chain((self._root.certificate,), self._certs)
-        else:
-            return iter(self._certs)
+        root = self._root.authority
+        from_root = (
+            (root.certificate,)
+            if isinstance(root, AuthorityWithCert) else ()
+        )
+        leaf = self._leaf
+        from_leaf = (leaf,) if isinstance(leaf, x509.Certificate) else ()
+        return itertools.chain(from_root, self._interm, from_leaf)
 
     def __eq__(self, other):
         if not isinstance(other, ValidationPath):
             return False
         return (
             self.trust_anchor == other.trust_anchor
-            and self._certs == other._certs
+            and self._interm == other._interm
+            and self._leaf == other._leaf
         )
-
-    def get_raw(self):
-        return list(self._certs)

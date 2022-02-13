@@ -358,7 +358,7 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
 
         with self.assertRaises(RevokedError):
             await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
@@ -387,7 +387,7 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
 
         await pyhanko_certvalidator.revinfo.validate_crl.verify_crl(ac, aa_path, vc)
 
@@ -472,7 +472,7 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
 
         with self.assertRaises(RevokedError):
             await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
@@ -501,7 +501,7 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
             )
         )
-        aa_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa])
+        aa_path = ValidationPath(CertTrustAnchor(root), [interm], role_aa)
 
         await pyhanko_certvalidator.revinfo.validate_ocsp.verify_ocsp_response(ac, aa_path, vc)
 

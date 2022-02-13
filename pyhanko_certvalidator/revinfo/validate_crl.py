@@ -208,12 +208,9 @@ async def _find_candidate_crl_paths(
 
         cand_path = proc_state.check_path_verif_recursion(candidate_crl_issuer)
         if not cand_path:
-            # Note: this is not the same as .truncate_to() if
-            # candidate_crl_issuer doesn't appear in the path!
             try:
                 cand_path = cert_path \
-                    .truncate_to_issuer(candidate_crl_issuer) \
-                    .copy_and_append(candidate_crl_issuer)
+                    .truncate_to_issuer_and_append(candidate_crl_issuer)
             except LookupError:
                 errs.path_building_failures += 1
                 continue
@@ -256,8 +253,7 @@ async def _find_crl_issuer(
         # Note: this is not the same as .truncate_to() if
         # candidate_crl_issuer doesn't appear in the path!
         candidate_crl_issuer_path = cert_path \
-            .truncate_to_issuer(candidate_crl_issuer) \
-            .copy_and_append(candidate_crl_issuer)
+            .truncate_to_issuer_and_append(candidate_crl_issuer)
         try:
             # This check needs to know not only whether the names agree,
             # but also whether the keys are the same, in order to yield
