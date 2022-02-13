@@ -8,6 +8,7 @@ from asn1crypto import x509, cms
 from .asn1_types import AAControls
 from .authority import TrustAnchor, CertTrustAnchor, Authority, \
     AuthorityWithCert
+from .util import get_issuer_dn, get_ac_extension_value
 
 
 @dataclass(frozen=True)
@@ -125,12 +126,12 @@ class ValidationPath:
         for cert in self._interm:
             yield AuthorityWithCert(cert)
 
-    def find_issuing_authority(self, cert: x509.Certificate):
+    def find_issuing_authority(self, cert: Leaf):
         """
         Return the issuer of the cert specified, as defined by this path
 
         :param cert:
-            An asn1crypto.x509.Certificate object to get the issuer of
+            A certificate to get the issuer of
 
         :raises:
             LookupError - when the issuer of the certificate could not be found
@@ -139,8 +140,12 @@ class ValidationPath:
             An asn1crypto.x509.Certificate object of the issuer
         """
 
-        issuer_name = cert.issuer
-        aki = cert.authority_key_identifier
+        issuer_name = get_issuer_dn(cert)
+        if isinstance(cert, x509.Certificate):
+            aki = cert.authority_key_identifier
+        else:
+            aki_ext = get_ac_extension_value(cert, 'authority_key_identifier')
+            aki = aki_ext['key_identifier'].native if aki_ext else None
 
         for authority in self.iter_authorities():
             if authority.name == issuer_name:
