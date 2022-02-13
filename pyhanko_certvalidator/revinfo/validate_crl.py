@@ -20,7 +20,7 @@ from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.util import get_ac_extension_value, \
-    validate_sig, pretty_message, ConsList
+    validate_sig, pretty_message, ConsList, get_issuer_dn
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +37,22 @@ class CRLWithPaths:
 
 async def _find_candidate_crl_issuer_certs(
         crl_authority_name: x509.Name, certificate_list: crl.CertificateList,
-        *, cert_issuer: x509.Certificate,
+        *,
+        cert_issuer_cert: Optional[x509.Certificate],
         cert_registry: CertificateRegistry) -> List[x509.Certificate]:
     # first, look for certs issued to the issuer named as the entity
     # that signed the CRL.
     # In both cases, we prioritise the next-level issuer in the main path
     # if it matches the criteria.
     delegated_issuer = certificate_list.issuer
-    candidates = cert_registry.retrieve_by_name(delegated_issuer, cert_issuer)
+    candidates = cert_registry.retrieve_by_name(
+        delegated_issuer, cert_issuer_cert
+    )
     if not candidates and crl_authority_name != certificate_list.issuer:
         # next, look in the cache for certs issued to the entity named
         # in the issuing distribution point (i.e. the issuing authority)
         candidates = cert_registry\
-            .retrieve_by_name(crl_authority_name, cert_issuer)
+            .retrieve_by_name(crl_authority_name, cert_issuer_cert)
     if not candidates and cert_registry.fetcher is not None:
         candidates = []
         valid_names = {crl_authority_name, delegated_issuer}
@@ -107,7 +110,7 @@ class _CRLIssuerSearchErrs:
 async def _validate_crl_issuer_path(
         *, candidate_crl_issuer_path: ValidationPath,
         validation_context: ValidationContext,
-        is_indirect: bool,
+        issuing_authority_identical: bool,
         proc_state: ValProcState):
     # If we have a validation cached (from before, or because the CRL issuer
     #  appears further up in the path) use it.
@@ -117,7 +120,7 @@ async def _validate_crl_issuer_path(
         return
     try:
         temp_override = proc_state.ee_name_override
-        if is_indirect:
+        if not issuing_authority_identical:
             temp_override = (
                 proc_state.describe_cert(never_def=True) + ' CRL issuer'
             )
@@ -147,7 +150,7 @@ async def _find_candidate_crl_paths(
         crl_authority_name: x509.Name,
         certificate_list: crl.CertificateList,
         *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer: x509.Certificate,
+        cert_issuer_cert: Optional[x509.Certificate],
         cert_path: ValidationPath,
         certificate_registry: CertificateRegistry,
         is_indirect: bool, proc_state: ValProcState) \
@@ -156,14 +159,16 @@ async def _find_candidate_crl_paths(
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
 
     candidate_crl_issuers = await _find_candidate_crl_issuer_certs(
-        crl_authority_name, certificate_list, cert_issuer=cert_issuer,
+        crl_authority_name, certificate_list,
+        cert_issuer_cert=cert_issuer_cert,
         cert_registry=certificate_registry
     )
+    cert_issuer_name = get_issuer_dn(cert)
 
     errs = _CRLIssuerSearchErrs(candidate_issuers=len(candidate_crl_issuers))
     candidate_paths = []
     for candidate_crl_issuer in candidate_crl_issuers:
-        direct_issuer = candidate_crl_issuer.subject == cert_issuer.subject
+        direct_issuer = candidate_crl_issuer.subject == cert_issuer_name
 
         # In some cases an indirect CRL issuer is a certificate issued
         # by the certificate issuer. However, we need to ensure that
@@ -171,8 +176,8 @@ async def _find_candidate_crl_paths(
         # otherwise we may be checking an incorrect CRL and produce
         # incorrect results.
         indirect_issuer = (
-                candidate_crl_issuer.issuer == cert_issuer.subject
-                and candidate_crl_issuer.sha256 != cert_sha256
+            candidate_crl_issuer.issuer == cert_issuer_name
+            and candidate_crl_issuer.sha256 != cert_sha256
         )
 
         if not direct_issuer and not indirect_issuer and not is_indirect:
@@ -216,7 +221,7 @@ async def _find_crl_issuer(
         crl_authority_name: x509.Name,
         certificate_list: crl.CertificateList,
         *, cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer: x509.Certificate,
+        cert_issuer_cert: Optional[x509.Certificate],
         cert_path: ValidationPath,
         validation_context: ValidationContext,
         is_indirect: bool,
@@ -224,7 +229,7 @@ async def _find_crl_issuer(
 
     candidate_paths, errs = await _find_candidate_crl_paths(
         crl_authority_name, certificate_list,
-        cert=cert, cert_issuer=cert_issuer,
+        cert=cert, cert_issuer_cert=cert_issuer_cert,
         cert_path=cert_path,
         certificate_registry=validation_context.certificate_registry,
         is_indirect=is_indirect, proc_state=proc_state
@@ -250,11 +255,20 @@ async def _find_crl_issuer(
             .truncate_to_issuer(candidate_crl_issuer) \
             .copy_and_append(candidate_crl_issuer)
         try:
+            # This check needs to know not only whether the names agree,
+            # but also whether the keys are the same, in order to yield
+            # the correct error message on failure.
+            # (Scenario: CA with separate keys for CRL signing and for
+            # certificate issuance, but with the same name on both certs)
+            issuing_authority_identical = not is_indirect and (
+                cert_issuer_cert is not None
+                and cert_issuer_cert.public_key.dump()
+                == candidate_crl_issuer.public_key.dump()
+            )
             await _validate_crl_issuer_path(
                 candidate_crl_issuer_path=candidate_crl_issuer_path,
                 validation_context=validation_context,
-                is_indirect=
-                candidate_crl_issuer.sha256 != cert_issuer.sha256,
+                issuing_authority_identical=issuing_authority_identical,
                 proc_state=proc_state
             )
             validation_context.revinfo_manager \
@@ -482,7 +496,7 @@ def _handle_attr_cert_crl_idp_ext_constraints(
 
 async def _handle_single_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer: x509.Certificate,
+        cert_issuer_cert: Optional[x509.Certificate],
         certificate_list_with_poe: CRLWithPOE,
         path: ValidationPath,
         validation_context: ValidationContext,
@@ -492,9 +506,11 @@ async def _handle_single_crl(
 
     certificate_list = certificate_list_with_poe.crl_data
 
+    cert_issuer_name = get_issuer_dn(cert)
+
     try:
         is_indirect, crl_authority_name = _get_crl_authority_name(
-            certificate_list_with_poe, cert_issuer,
+            certificate_list_with_poe, cert_issuer_name,
             certificate_registry=validation_context.certificate_registry,
             errs=errs
         )
@@ -510,7 +526,7 @@ async def _handle_single_crl(
         try:
             crl_issuer_path = await _find_crl_issuer(
                 crl_authority_name, certificate_list,
-                cert=cert, cert_issuer=cert_issuer,
+                cert=cert, cert_issuer_cert=cert_issuer_cert,
                 cert_path=path,
                 validation_context=validation_context,
                 is_indirect=is_indirect,
@@ -527,8 +543,7 @@ async def _handle_single_crl(
 
     interim_reasons = _get_crl_scope_assuming_authority(
         crl_issuer=crl_issuer,
-        cert=cert, cert_issuer=cert_issuer,
-        certificate_list_with_poe=certificate_list_with_poe,
+        cert=cert, certificate_list_with_poe=certificate_list_with_poe,
         is_indirect=is_indirect, errs=errs
     )
 
@@ -563,7 +578,6 @@ async def _handle_single_crl(
     try:
         revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
             crl_issuer=crl_issuer, cert=cert,
-            cert_issuer=cert_issuer,
             certificate_list_with_poe=certificate_list_with_poe,
             delta_certificate_list_with_poe=delta_certificate_list_with_poe,
             errs=errs,
@@ -582,7 +596,7 @@ async def _handle_single_crl(
 
 def _get_crl_authority_name(
         certificate_list_with_poe: CRLWithPOE,
-        cert_issuer: x509.Certificate,
+        cert_issuer_name: x509.Name,
         certificate_registry: CertificateRegistry,
         errs: _CRLErrs) -> Tuple[bool, x509.Name]:
     """
@@ -593,7 +607,7 @@ def _get_crl_authority_name(
 
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
-    is_indirect = crl_idp and crl_idp['indirect_crl'].native
+    is_indirect = bool(crl_idp and crl_idp['indirect_crl'].native)
     if not is_indirect:
         crl_authority_name = certificate_list.issuer
     else:
@@ -602,7 +616,7 @@ def _get_crl_authority_name(
             if crl_idp_name.name == 'full_name':
                 crl_authority_name = crl_idp_name.chosen[0].chosen
             else:
-                crl_authority_name = cert_issuer.subject.copy().chosen.append(
+                crl_authority_name = cert_issuer_name.copy().chosen.append(
                     crl_idp_name.chosen
                 )
         elif certificate_list.authority_key_identifier:
@@ -686,7 +700,6 @@ def _maybe_get_delta_crl(
 def _get_crl_scope_assuming_authority(
         crl_issuer: x509.Certificate,
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer: x509.Certificate,
         certificate_list_with_poe: CRLWithPOE,
         is_indirect: bool,
         errs: _CRLErrs) -> Optional[Set[str]]:
@@ -716,10 +729,11 @@ def _get_crl_scope_assuming_authority(
                     dp_match = True
 
     crl_authority_name = crl_issuer.subject
-    same_issuer = crl_authority_name == cert_issuer.subject
+    cert_issuer_name = get_issuer_dn(cert)
+    same_issuer = crl_authority_name == cert_issuer_name
     indirect_match = has_dp_crl_issuer and dp_match and is_indirect
     missing_idp = has_dp_crl_issuer and (not dp_match or not is_indirect)
-    indirect_crl_issuer = crl_issuer.issuer == cert_issuer.subject
+    indirect_crl_issuer = crl_issuer.issuer == cert_issuer_name
 
     if (not same_issuer and not indirect_match and not indirect_crl_issuer) \
             or missing_idp:
@@ -778,7 +792,6 @@ def _get_crl_scope_assuming_authority(
 def _check_cert_on_crl_and_delta(
         crl_issuer: x509.Certificate,
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer: x509.Certificate,
         certificate_list_with_poe: CRLWithPOE,
         delta_certificate_list_with_poe: Optional[CRLWithPOE],
         errs: _CRLErrs):
@@ -788,11 +801,13 @@ def _check_cert_on_crl_and_delta(
     revoked_reason = None
     revoked_date = None
 
+    cert_issuer_name = get_issuer_dn(cert)
+
     if delta_certificate_list_with_poe:
         delta_certificate_list = delta_certificate_list_with_poe.crl_data
         try:
             revoked_date, revoked_reason = \
-                _find_cert_in_list(cert, cert_issuer,
+                _find_cert_in_list(cert, cert_issuer_name,
                                    delta_certificate_list, crl_issuer)
         except NotImplementedError:
             errs.failures.append((
@@ -806,7 +821,7 @@ def _check_cert_on_crl_and_delta(
     if revoked_reason is None:
         try:
             revoked_date, revoked_reason = \
-                _find_cert_in_list(cert, cert_issuer,
+                _find_cert_in_list(cert, cert_issuer_name,
                                    certificate_list, crl_issuer)
         except NotImplementedError:
             errs.failures.append((
@@ -824,12 +839,14 @@ def _check_cert_on_crl_and_delta(
     return revoked_date, revoked_reason
 
 
-def _get_issuer(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                path: ValidationPath, proc_state: ValProcState):
+def _maybe_get_issuer_cert(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        path: ValidationPath, proc_state: ValProcState):
     # FIXME should uniformise this by allowing ACs in validation paths.
     #  Right now we simply assume that the last path element is the AA cert,
     #  which is wrong for all sorts of reasons (the issuer cert could be
     #  a trust root!)
+    # FIXME this also doesn't deal with trust anchors without certs correctly
     if isinstance(cert, x509.Certificate):
         try:
             cert_issuer = path.find_issuer(cert)
@@ -841,14 +858,13 @@ def _get_issuer(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
                 proc_state.describe_cert()
             ))
     else:
-        cert_issuer = path.last
+        cert_issuer = path.get_ee_cert_safe()
     return cert_issuer
 
 
 async def _classify_relevant_crls(
         revinfo_manager: RevinfoManager,
-        cert: x509.Certificate,
-        errs: _CRLErrs):
+        cert: x509.Certificate, errs: _CRLErrs):
 
     certificate_lists = await revinfo_manager.async_retrieve_crls_with_poe(cert)
 
@@ -952,7 +968,7 @@ async def verify_crl(
     complete_lists_by_issuer, delta_lists_by_issuer = \
         await _classify_relevant_crls(revinfo_manager, cert, errs)
 
-    cert_issuer = _get_issuer(cert, path, proc_state)
+    cert_issuer_cert = _maybe_get_issuer_cert(cert, path, proc_state)
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
     crls_to_process = []
@@ -966,7 +982,8 @@ async def verify_crl(
         certificate_list_with_poe = crls_to_process.pop(0)
         try:
             interim_reasons = await _handle_single_crl(
-                cert=cert, cert_issuer=cert_issuer,
+                cert=cert,
+                cert_issuer_cert=cert_issuer_cert,
                 certificate_list_with_poe=certificate_list_with_poe,
                 path=path, validation_context=validation_context,
                 delta_lists_by_issuer=delta_lists_by_issuer,
@@ -1023,7 +1040,7 @@ def _verify_crl_signature(certificate_list, public_key):
 
 def _find_cert_in_list(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        issuer: x509.Certificate,
+        cert_issuer_name: x509.Name,
         certificate_list: crl.CertificateList,
         crl_issuer: x509.Certificate):
     """
@@ -1034,8 +1051,8 @@ def _find_cert_in_list(
         or an asn1crypto.cms.AttributeCertificateV2 object in the case
         of an attribute certificate.
 
-    :param issuer:
-        An asn1crypto.x509.Certificate object of the cert issuer
+    :param cert_issuer_name:
+        The certificate issuer's distinguished name
 
     :param certificate_list:
         An ans1crypto.crl.CertificateList object to look in for the cert
@@ -1057,8 +1074,6 @@ def _find_cert_in_list(
     else:
         cert_serial = cert['ac_info']['serial_number'].native
 
-    issuer_name = issuer.subject
-
     last_issuer_name = crl_issuer.subject
     for revoked_cert in revoked_certificates:
         # If any unknown critical extensions, the entry can not be used
@@ -1068,7 +1083,7 @@ def _find_cert_in_list(
         if revoked_cert.issuer_name and \
                 revoked_cert.issuer_name != last_issuer_name:
             last_issuer_name = revoked_cert.issuer_name
-        if last_issuer_name != issuer_name:
+        if last_issuer_name != cert_issuer_name:
             continue
 
         if revoked_cert['user_certificate'].native != cert_serial:

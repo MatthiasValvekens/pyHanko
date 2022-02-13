@@ -72,6 +72,14 @@ def extract_ac_issuer_dir_name(attr_cert: cms.AttributeCertificateV2) \
     return extract_dir_name(aa_names, "Could not extract AC issuer name")
 
 
+def get_issuer_dn(cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
+        -> x509.Name:
+    if isinstance(cert, x509.Certificate):
+        return cert.issuer
+    else:
+        return extract_ac_issuer_dir_name(cert)
+
+
 def issuer_serial(cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
         -> bytes:
     if isinstance(cert, x509.Certificate):
