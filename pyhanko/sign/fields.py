@@ -8,6 +8,7 @@ from typing import List, Optional, Set, Union
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
+from pyhanko_certvalidator.authority import AuthorityWithCert
 from pyhanko_certvalidator.errors import InvalidCertificateError
 from pyhanko_certvalidator.path import ValidationPath
 
@@ -580,7 +581,9 @@ class SigCertConstraints:
             # To do so, we collect all issuer_serial identifiers in the chain
             # for all certificates except the last one (i.e. the current signer)
             path_iss_serials = {
-                entry.issuer_serial for entry in validation_path.copy().pop()
+                authority.certificate.issuer_serial for authority
+                in validation_path.iter_authorities()
+                if isinstance(authority, AuthorityWithCert)
             }
             for issuer in self.issuers:
                 if issuer.issuer_serial in path_iss_serials:
