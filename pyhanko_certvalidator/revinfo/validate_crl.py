@@ -2,6 +2,7 @@ import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Union, List, Optional, Dict, Tuple, Set
 
 from asn1crypto import x509, crl, cms
@@ -840,13 +841,22 @@ def _check_cert_on_crl_and_delta(
 
 async def _classify_relevant_crls(
         revinfo_manager: RevinfoManager,
-        cert: x509.Certificate, errs: _CRLErrs):
+        cert: x509.Certificate, errs: _CRLErrs,
+        control_time: Optional[datetime] = None):
+
+    # NOTE: the control_time parameter is only used in the time sliding
+    # algorithm code path for AdES validation
 
     certificate_lists = await revinfo_manager.async_retrieve_crls_with_poe(cert)
 
     complete_lists_by_issuer = defaultdict(list)
     delta_lists_by_issuer = defaultdict(list)
     for certificate_list_with_poe in certificate_lists:
+        if control_time is not None:
+            issued = certificate_list_with_poe.issuance_date
+            if issued is None or issued > control_time:
+                # We don't care about stuff issued after control_time
+                continue
         certificate_list = certificate_list_with_poe.crl_data
         try:
             issuer_hashable = certificate_list.issuer.hashable
@@ -1065,12 +1075,14 @@ async def _assess_crl_relevance(
 
 async def collect_relevant_crls_with_paths(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath,
+        path: ValidationPath, control_time: datetime,
         revinfo_manager: RevinfoManager, use_deltas=True,
         proc_state: Optional[ValProcState] = None) -> List[CRLOfInterest]:
     errs = _CRLErrs()
-    complete_lists_by_issuer, delta_lists_by_issuer = \
-        await _classify_relevant_crls(revinfo_manager, cert, errs)
+    classify_job = _classify_relevant_crls(
+        revinfo_manager, cert, errs, control_time=control_time
+    )
+    complete_lists_by_issuer, delta_lists_by_issuer = await classify_job
 
     # In the main loop, only complete CRLs are processed, so delta CRLs are
     # weeded out of the to-do list
