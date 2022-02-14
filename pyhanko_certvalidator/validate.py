@@ -1023,9 +1023,6 @@ async def intl_validate_path(validation_context: ValidationContext,
 
     trust_anchor = path.trust_anchor
 
-    # TODO If the trust anchor has NameConstraints etc., we might want to
-    #  intersect those with the parameters that were passed in, and make that
-    #  behaviour togglable.
     path_length = path.pkix_len
 
     # Step 1: initialization
