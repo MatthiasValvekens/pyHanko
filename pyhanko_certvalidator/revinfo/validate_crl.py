@@ -638,8 +638,8 @@ def _maybe_get_delta_crl(
         crl_issuer: x509.Certificate,
         delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
         errs: _CRLErrs,
-        timing_info: Optional[ValidationTimingInfo],
-        policy: CertRevTrustPolicy) -> Optional[CRLWithPOE]:
+        timing_info: Optional[ValidationTimingInfo] = None,
+        policy: Optional[CertRevTrustPolicy] = None) -> Optional[CRLWithPOE]:
 
     if not certificate_list.freshest_crl_value \
             or len(certificate_list.freshest_crl_value) == 0:
@@ -680,19 +680,20 @@ def _maybe_get_delta_crl(
         ))
         return None
 
-    freshness_result = delta_certificate_list_with_poe.usable_at(
-        policy=policy, timing_info=timing_info
-    )
-    if freshness_result != RevinfoUsabilityRating.OK:
-        if freshness_result == RevinfoUsabilityRating.STALE:
-            msg = 'Delta CRL is stale'
-        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
-            msg = 'Delta CRL is too recent'
-        else:
-            msg = 'Delta CRL freshness could not be established'
-        errs.failures.append((msg, delta_certificate_list_with_poe))
-        return None
-    return delta_certificate_list_with_poe
+    if policy and timing_info:
+        freshness_result = delta_certificate_list_with_poe.usable_at(
+            policy=policy, timing_info=timing_info
+        )
+        if freshness_result != RevinfoUsabilityRating.OK:
+            if freshness_result == RevinfoUsabilityRating.STALE:
+                msg = 'Delta CRL is stale'
+            elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+                msg = 'Delta CRL is too recent'
+            else:
+                msg = 'Delta CRL freshness could not be established'
+            errs.failures.append((msg, delta_certificate_list_with_poe))
+            return None
+        return delta_certificate_list_with_poe
 
 
 def _get_crl_scope_assuming_authority(
@@ -962,8 +963,7 @@ async def verify_crl(
 
     checked_reasons = set()
 
-    while len(crls_to_process) > 0:
-        certificate_list_with_poe = crls_to_process.pop(0)
+    for certificate_list_with_poe in crls_to_process:
         try:
             interim_reasons = await _handle_single_crl(
                 cert=cert, cert_issuer_auth=cert_issuer_auth,
