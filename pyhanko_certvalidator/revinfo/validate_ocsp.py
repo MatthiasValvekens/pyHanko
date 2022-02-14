@@ -132,15 +132,12 @@ class _OCSPErrs:
     mismatch_failures: int = 0
 
 
-async def _handle_single_ocsp_resp(
+def _match_ocsp_certid(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: Authority,
-        path: ValidationPath,
         ocsp_response: OCSPWithPOE,
-        validation_context: ValidationContext,
-        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
+        errs: _OCSPErrs) -> bool:
 
-    certificate_registry = validation_context.certificate_registry
     cert_response = ocsp_response.extract_single_response()
     if cert_response is None:
         errs.mismatch_failures += 1
@@ -192,33 +189,23 @@ async def _handle_single_ocsp_resp(
             ocsp_response
         ))
         return False
+    return True
 
-    freshness_result = ocsp_response.usable_at(
-        policy=validation_context.revinfo_policy,
-        timing_info=validation_context.timing_info,
-    )
-    if freshness_result != RevinfoUsabilityRating.OK:
-        if freshness_result == RevinfoUsabilityRating.STALE:
-            msg = 'OCSP response is not recent enough'
-        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
-            msg = 'OCSP response is too recent'
-        else:
-            msg = 'OCSP response freshness could not be established'
-        errs.failures.append((msg, ocsp_response))
-        return False
 
+def _identify_responder_cert(
+        ocsp_response: OCSPWithPOE, cert_store: CertificateCollection,
+        errs: _OCSPErrs) -> Optional[x509.Certificate]:
     # To verify the response as legitimate, the responder cert must be located
-    cert_store: CertificateCollection = certificate_registry
+
     # prioritise the certificates included with the response, if there
     # are any
-
     response = ocsp_response.extract_basic_ocsp_response()
     # should be ensured by successful extraction earlier
     assert response is not None
     if response['certs']:
         cert_store = LayeredCertificateStore([
             SimpleCertificateStore.from_certs(response['certs']),
-            certificate_registry
+            cert_store
         ])
 
     tbs_response = response['tbs_response_data']
@@ -241,7 +228,17 @@ async def _handle_single_ocsp_resp(
             ),
             ocsp_response
         ))
-        return False
+    return responder_cert
+
+
+async def _check_ocsp_authorisation(
+        responder_cert: x509.Certificate,
+        issuer: Authority,
+        cert_path: ValidationPath,
+        ocsp_response: OCSPWithPOE,
+        validation_context: ValidationContext,
+        is_pkc: bool,
+        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
     # If the cert signing the OCSP response is not the issuer, it must be
     # issued by the cert issuer and be valid for OCSP responses.
@@ -270,13 +267,13 @@ async def _handle_single_ocsp_resp(
         try:
             await _validate_delegated_ocsp_provenance(
                 responder_cert=responder_cert, issuer=issuer,
-                validation_context=validation_context, ee_path=path,
+                validation_context=validation_context, ee_path=cert_path,
                 proc_state=proc_state
             )
             authorized = True
         except OCSPValidationError as e:
             errs.failures.append((e.args[0], ocsp_response))
-            return False
+            authorized = False
     if not authorized:
         errs.failures.append((
             pretty_message(
@@ -287,13 +284,82 @@ async def _handle_single_ocsp_resp(
             ),
             ocsp_response
         ))
+    return authorized
+
+
+def _check_ocsp_status(ocsp_response: OCSPWithPOE, proc_state: ValProcState):
+    cert_response = ocsp_response.extract_single_response()
+
+    # Finally check to see if the certificate has been revoked
+    status = cert_response['cert_status'].name
+    if status == 'good':
+        return True
+
+    if status == 'revoked':
+        revocation_info = cert_response['cert_status'].chosen
+        reason: CRLReason = revocation_info['revocation_reason']
+        if reason.native is None:
+            reason = crl.CRLReason('unspecified')
+        revocation_dt: datetime = revocation_info['revocation_time'].native
+        raise RevokedError.format(
+            reason=reason, revocation_dt=revocation_dt,
+            revinfo_type='OCSP response', proc_state=proc_state
+        )
+    return False
+
+
+async def _handle_single_ocsp_resp(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        issuer: Authority,
+        path: ValidationPath,
+        ocsp_response: OCSPWithPOE,
+        validation_context: ValidationContext,
+        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
+
+    matched = _match_ocsp_certid(
+        cert, issuer=issuer, ocsp_response=ocsp_response, errs=errs
+    )
+    if not matched:
         return False
 
+    freshness_result = ocsp_response.usable_at(
+        policy=validation_context.revinfo_policy,
+        timing_info=validation_context.timing_info,
+    )
+    if freshness_result != RevinfoUsabilityRating.OK:
+        if freshness_result == RevinfoUsabilityRating.STALE:
+            msg = 'OCSP response is not recent enough'
+        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+            msg = 'OCSP response is too recent'
+        else:
+            msg = 'OCSP response freshness could not be established'
+        errs.failures.append((msg, ocsp_response))
+        return False
+
+    responder_cert = _identify_responder_cert(
+        ocsp_response, cert_store=validation_context.certificate_registry,
+        errs=errs
+    )
+    if not responder_cert:
+        return False
+
+    # check whether the responder cert is authorised
+    authorised = await _check_ocsp_authorisation(
+        responder_cert, issuer=issuer, cert_path=path,
+        ocsp_response=ocsp_response, validation_context=validation_context,
+        is_pkc=isinstance(cert, x509.Certificate),
+        errs=errs, proc_state=proc_state
+    )
+    if not authorised:
+        return False
+
+    response = ocsp_response.extract_basic_ocsp_response()
     # Determine what algorithm was used to sign the response
     signature_algo = response['signature_algorithm'].signature_algo
     hash_algo = response['signature_algorithm'].hash_algo
 
     # Verify that the response was properly signed by the validated certificate
+    tbs_response = response['tbs_response_data']
     try:
         validate_sig(
             signature=response['signature'].native,
@@ -315,21 +381,7 @@ async def _handle_single_ocsp_resp(
         ))
         return False
 
-    # Finally check to see if the certificate has been revoked
-    status = cert_response['cert_status'].name
-    if status == 'good':
-        return True
-
-    if status == 'revoked':
-        revocation_info = cert_response['cert_status'].chosen
-        reason: CRLReason = revocation_info['revocation_reason']
-        if reason.native is None:
-            reason = crl.CRLReason('unspecified')
-        revocation_dt: datetime = revocation_info['revocation_time'].native
-        raise RevokedError.format(
-            reason=reason, revocation_dt=revocation_dt,
-            revinfo_type='OCSP response', proc_state=proc_state
-        )
+    return _check_ocsp_status(ocsp_response, proc_state)
 
 
 async def verify_ocsp_response(
