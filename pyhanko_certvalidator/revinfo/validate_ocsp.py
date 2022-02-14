@@ -5,6 +5,7 @@ from typing import Union, Optional
 
 from asn1crypto import x509, cms, crl
 from asn1crypto.crl import CRLReason
+from asn1crypto.keys import PublicKeyInfo
 from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator.context import ValidationContext
@@ -29,6 +30,21 @@ OCSP_PROVENANCE_ERR = (
     "Unable to verify OCSP response since response signing "
     "certificate could not be validated"
 )
+
+
+def _delegated_ocsp_response_path(
+        responder_cert: x509.Certificate,
+        issuer: Authority, ee_path: ValidationPath):
+
+    if isinstance(issuer, AuthorityWithCert):
+        responder_chain = ee_path \
+            .truncate_to_and_append(issuer.certificate, responder_cert)
+    else:
+        responder_chain = ValidationPath(
+            trust_anchor=TrustAnchor(issuer),
+            interm=[], leaf=responder_cert
+        )
+    return responder_chain
 
 
 async def _validate_delegated_ocsp_provenance(
@@ -58,14 +74,6 @@ async def _validate_delegated_ocsp_provenance(
         proc_state.describe_cert(never_def=True) + ' OCSP responder'
     )
 
-    if isinstance(issuer, AuthorityWithCert):
-        responder_chain = ee_path\
-            .truncate_to_and_append(issuer.certificate, responder_cert)
-    else:
-        responder_chain = ValidationPath(
-            trust_anchor=TrustAnchor(issuer),
-            interm=[], leaf=responder_cert
-        )
     if responder_cert.ocsp_no_check_value is not None:
         # we don't have to check the revocation of the OCSP responder,
         # so do a simplified check
@@ -103,8 +111,14 @@ async def _validate_delegated_ocsp_provenance(
         # TODO maybe have an (issuer, [verified_responder]) cache?
         #  caching OCSP responder validation results with everything else is
         #  probably somewhat incorrect
+
+        responder_chain = \
+            _delegated_ocsp_response_path(responder_cert, issuer, ee_path)
         validation_context.record_validation(responder_cert, responder_chain)
     else:
+        responder_chain = \
+            _delegated_ocsp_response_path(responder_cert, issuer, ee_path)
+
         ocsp_proc_state = ValProcState(
             cert_path_stack=proc_state.cert_path_stack.cons(responder_chain),
             ee_name_override=ocsp_ee_name_override
@@ -231,14 +245,13 @@ def _identify_responder_cert(
     return responder_cert
 
 
-async def _check_ocsp_authorisation(
+def _precheck_ocsp_responder_auth(
         responder_cert: x509.Certificate,
-        issuer: Authority,
-        cert_path: ValidationPath,
-        ocsp_response: OCSPWithPOE,
-        validation_context: ValidationContext,
-        is_pkc: bool,
-        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
+        issuer: Authority, is_pkc: bool) -> Optional[bool]:
+    """
+    This function checks OCSP conditions that don't require path validation
+    to pass. If ``None`` is returned, path validation is necessary to proceed.
+    """
 
     # If the cert signing the OCSP response is not the issuer, it must be
     # issued by the cert issuer and be valid for OCSP responses.
@@ -254,7 +267,7 @@ async def _check_ocsp_authorisation(
         # -> literal interpretation of 4.2.2.2 in RFC 6960
         issuer_sig = bytes(issuer_cert['signature_value'])
         responder_sig = bytes(responder_cert['signature_value'])
-        authorized = issuer_sig == responder_sig
+        return issuer_sig == responder_sig
     # If OCSP is being delegated
     # check whether the relevant OCSP-related extensions are present.
     # Also, explicitly disallow delegation for attribute authorities
@@ -262,7 +275,24 @@ async def _check_ocsp_authorisation(
     # This would otherwise be detected during path validation or while checking
     # the basicConstraints on the AA certificate, but this is more explicit.
     elif not _ocsp_allowed(responder_cert) or not is_pkc:
-        authorized = False
+        return False
+    return None
+
+
+async def _check_ocsp_authorisation(
+        responder_cert: x509.Certificate,
+        issuer: Authority,
+        cert_path: ValidationPath,
+        ocsp_response: OCSPWithPOE,
+        validation_context: ValidationContext,
+        is_pkc: bool,
+        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
+
+    simple_check = _precheck_ocsp_responder_auth(responder_cert, issuer, is_pkc)
+
+    # we can take an early out in this case
+    if simple_check is not None:
+        auth_ok = simple_check
     else:
         try:
             await _validate_delegated_ocsp_provenance(
@@ -270,11 +300,11 @@ async def _check_ocsp_authorisation(
                 validation_context=validation_context, ee_path=cert_path,
                 proc_state=proc_state
             )
-            authorized = True
+            auth_ok = True
         except OCSPValidationError as e:
             errs.failures.append((e.args[0], ocsp_response))
-            authorized = False
-    if not authorized:
+            auth_ok = False
+    if not auth_ok:
         errs.failures.append((
             pretty_message(
                 '''
@@ -284,7 +314,7 @@ async def _check_ocsp_authorisation(
             ),
             ocsp_response
         ))
-    return authorized
+    return auth_ok
 
 
 def _check_ocsp_status(ocsp_response: OCSPWithPOE, proc_state: ValProcState):
@@ -308,6 +338,69 @@ def _check_ocsp_status(ocsp_response: OCSPWithPOE, proc_state: ValProcState):
     return False
 
 
+def _verify_ocsp_signature(
+        responder_key: PublicKeyInfo,
+        ocsp_response: OCSPWithPOE,
+        errs: _OCSPErrs) -> bool:
+
+    response = ocsp_response.extract_basic_ocsp_response()
+    # Determine what algorithm was used to sign the response
+    signature_algo = response['signature_algorithm'].signature_algo
+    hash_algo = response['signature_algorithm'].hash_algo
+
+    # Verify that the response was properly signed by the validated certificate
+    tbs_response = response['tbs_response_data']
+    try:
+        validate_sig(
+            signature=response['signature'].native,
+            signed_data=tbs_response.dump(),
+            public_key_info=responder_key,
+            sig_algo=signature_algo, hash_algo=hash_algo,
+            parameters=response['signature_algorithm']['parameters']
+        )
+        return True
+    except PSSParameterMismatch:
+        errs.failures.append((
+            'The signature parameters on the OCSP response do not match '
+            'the constraints on the public key',
+            ocsp_response
+        ))
+    except InvalidSignature:
+        errs.failures.append((
+            'Unable to verify OCSP response signature',
+            ocsp_response
+        ))
+    return False
+
+
+def _assess_ocsp_relevance(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        issuer: Authority,
+        ocsp_response: OCSPWithPOE,
+        cert_store: CertificateCollection,
+        errs: _OCSPErrs) -> Optional[x509.Certificate]:
+
+    matched = _match_ocsp_certid(
+        cert, issuer=issuer, ocsp_response=ocsp_response, errs=errs
+    )
+    if not matched:
+        return None
+
+    responder_cert = _identify_responder_cert(
+        ocsp_response, cert_store=cert_store, errs=errs
+    )
+    if not responder_cert:
+        return None
+
+    signature_ok = _verify_ocsp_signature(
+        responder_key=responder_cert.public_key, ocsp_response=ocsp_response,
+        errs=errs
+    )
+    if not signature_ok:
+        return None
+    return responder_cert
+
+
 async def _handle_single_ocsp_resp(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: Authority,
@@ -316,10 +409,12 @@ async def _handle_single_ocsp_resp(
         validation_context: ValidationContext,
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
-    matched = _match_ocsp_certid(
-        cert, issuer=issuer, ocsp_response=ocsp_response, errs=errs
+    responder_cert = _assess_ocsp_relevance(
+        cert=cert, issuer=issuer,
+        ocsp_response=ocsp_response,
+        cert_store=validation_context.certificate_registry, errs=errs,
     )
-    if not matched:
+    if responder_cert is None:
         return False
 
     freshness_result = ocsp_response.usable_at(
@@ -336,13 +431,6 @@ async def _handle_single_ocsp_resp(
         errs.failures.append((msg, ocsp_response))
         return False
 
-    responder_cert = _identify_responder_cert(
-        ocsp_response, cert_store=validation_context.certificate_registry,
-        errs=errs
-    )
-    if not responder_cert:
-        return False
-
     # check whether the responder cert is authorised
     authorised = await _check_ocsp_authorisation(
         responder_cert, issuer=issuer, cert_path=path,
@@ -351,34 +439,6 @@ async def _handle_single_ocsp_resp(
         errs=errs, proc_state=proc_state
     )
     if not authorised:
-        return False
-
-    response = ocsp_response.extract_basic_ocsp_response()
-    # Determine what algorithm was used to sign the response
-    signature_algo = response['signature_algorithm'].signature_algo
-    hash_algo = response['signature_algorithm'].hash_algo
-
-    # Verify that the response was properly signed by the validated certificate
-    tbs_response = response['tbs_response_data']
-    try:
-        validate_sig(
-            signature=response['signature'].native,
-            signed_data=tbs_response.dump(),
-            public_key_info=responder_cert.public_key,
-            sig_algo=signature_algo, hash_algo=hash_algo,
-            parameters=response['signature_algorithm']['parameters']
-        )
-    except PSSParameterMismatch:
-        errs.failures.append((
-            'The signature parameters on the OCSP response do not match '
-            'the constraints on the public key',
-            ocsp_response
-        ))
-    except InvalidSignature:
-        errs.failures.append((
-            'Unable to verify OCSP response signature',
-            ocsp_response
-        ))
         return False
 
     return _check_ocsp_status(ocsp_response, proc_state)

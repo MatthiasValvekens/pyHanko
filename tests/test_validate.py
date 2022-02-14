@@ -867,8 +867,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
-                    'OCSP response since response signing certificate could '
-                    'not be validated'
+                    'OCSP response signature'
                 ),
             ),
             (
@@ -885,8 +884,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 (
                     'The path could not be validated because the end-entity '
                     'certificate revocation checks failed: Unable to verify '
-                    'OCSP response since response signing certificate could '
-                    'not be validated'
+                    'OCSP response signature'
                 ),
             ),
             (
