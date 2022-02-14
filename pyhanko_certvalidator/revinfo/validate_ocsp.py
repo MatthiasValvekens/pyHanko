@@ -1,7 +1,7 @@
 import datetime
 import logging
 from dataclasses import dataclass, field
-from typing import Union, Optional
+from typing import Union, Optional, List
 
 from asn1crypto import x509, cms, crl
 from asn1crypto.crl import CRLReason
@@ -22,6 +22,7 @@ from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
     RevinfoUsabilityRating
 from pyhanko_certvalidator.authority import Authority, \
     AuthorityWithCert, TrustAnchor
+from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.util import (
     pretty_message, extract_ac_issuer_dir_name, validate_sig, ConsList
 )
@@ -527,3 +528,61 @@ async def verify_ocsp_response(
         ),
         errs.failures
     )
+
+
+@dataclass(frozen=True)
+class OCSPResponseOfInterest:
+    ocsp_response: OCSPWithPOE
+    prov_path: ValidationPath
+
+
+async def collect_relevant_responses_with_paths(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        path: ValidationPath, revinfo_manager: RevinfoManager,
+        control_time: datetime, proc_state: Optional[ValProcState] = None) \
+        -> List[OCSPResponseOfInterest]:
+
+    proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
+    try:
+        cert_issuer_auth = path.find_issuing_authority(cert)
+    except LookupError:
+        raise OCSPNoMatchesError(pretty_message(
+            '''
+            Could not determine issuer certificate for %s in path.
+            ''',
+            proc_state.describe_cert()
+        ))
+
+    relevant = []
+
+    ocsp_responses = await revinfo_manager \
+        .async_retrieve_ocsps_with_poe(cert, cert_issuer_auth)
+
+    errs = _OCSPErrs()
+    for ocsp_response_with_poe in ocsp_responses:
+        issued = ocsp_response_with_poe.issuance_date
+        if issued is None or issued > control_time:
+            # We don't care about responses issued after control_time
+            continue
+        try:
+            responder_cert = _assess_ocsp_relevance(
+                cert=cert, issuer=cert_issuer_auth,
+                ocsp_response=ocsp_response_with_poe,
+                cert_store=revinfo_manager.certificate_registry,
+                errs=errs
+            )
+            if responder_cert is None:
+                continue
+            path = _delegated_ocsp_response_path(
+                responder_cert, cert_issuer_auth, ee_path=path
+            )
+            result = OCSPResponseOfInterest(
+                ocsp_response=ocsp_response_with_poe,
+                prov_path=path
+            )
+            relevant.append(result)
+        except ValueError as e:
+            msg = "Generic processing error while validating OCSP response."
+            logging.debug(msg, exc_info=e)
+            errs.failures.append((msg, ocsp_response_with_poe))
+    return relevant
