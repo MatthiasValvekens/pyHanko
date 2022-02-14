@@ -13,9 +13,10 @@ from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
     CRLValidationError, CRLNoMatchesError, CertificateFetchError, \
     CRLValidationIndeterminateError, PSSParameterMismatch
 from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, \
-    RevinfoUsabilityRating
+    RevinfoUsabilityRating, ValidationTimingInfo
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
@@ -549,7 +550,6 @@ async def _handle_single_crl(
         return None
 
     freshness_result = certificate_list_with_poe.usable_at(
-        validation_context.moment,
         policy=validation_context.revinfo_policy,
         timing_info=validation_context.timing_info
     )
@@ -567,7 +567,8 @@ async def _handle_single_crl(
     if use_deltas:
         delta_certificate_list_with_poe = _maybe_get_delta_crl(
             certificate_list=certificate_list, crl_issuer=crl_issuer,
-            validation_context=validation_context,
+            policy=validation_context.revinfo_policy,
+            timing_info=validation_context.timing_info,
             delta_lists_by_issuer=delta_lists_by_issuer, errs=errs
         )
     else:
@@ -635,9 +636,10 @@ def _get_crl_authority_name(
 def _maybe_get_delta_crl(
         certificate_list: crl.CertificateList,
         crl_issuer: x509.Certificate,
-        validation_context: ValidationContext,
         delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
-        errs: _CRLErrs) -> Optional[CRLWithPOE]:
+        errs: _CRLErrs,
+        timing_info: Optional[ValidationTimingInfo],
+        policy: CertRevTrustPolicy) -> Optional[CRLWithPOE]:
 
     if not certificate_list.freshest_crl_value \
             or len(certificate_list.freshest_crl_value) == 0:
@@ -679,9 +681,7 @@ def _maybe_get_delta_crl(
         return None
 
     freshness_result = delta_certificate_list_with_poe.usable_at(
-        validation_context.moment,
-        policy=validation_context.revinfo_policy,
-        timing_info=validation_context.timing_info
+        policy=policy, timing_info=timing_info
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:

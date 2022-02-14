@@ -62,8 +62,7 @@ class IssuedItemWithPOE(abc.ABC):
 
 class RevinfoWithPOE(IssuedItemWithPOE, abc.ABC):
 
-    def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy,
+    def usable_at(self, policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         raise NotImplementedError
 
@@ -207,8 +206,7 @@ class OCSPWithPOE(RevinfoWithPOE):
 
         return cert_response['this_update'].native
 
-    def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy,
+    def usable_at(self, policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
 
         cert_response = self.extract_single_response()
@@ -244,8 +242,7 @@ class CRLWithPOE(RevinfoWithPOE):
     def retrieve_poe(self) -> POE:
         return self.poe
 
-    def usable_at(self, validation_time: datetime,
-                  policy: CertRevTrustPolicy,
+    def usable_at(self, policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         this_update = tbs_cert_list['this_update'].native

@@ -138,7 +138,6 @@ async def _handle_single_ocsp_resp(
         path: ValidationPath,
         ocsp_response: OCSPWithPOE,
         validation_context: ValidationContext,
-        moment: datetime.datetime,
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
     certificate_registry = validation_context.certificate_registry
@@ -195,7 +194,7 @@ async def _handle_single_ocsp_resp(
         return False
 
     freshness_result = ocsp_response.usable_at(
-        validation_time=moment, policy=validation_context.revinfo_policy,
+        policy=validation_context.revinfo_policy,
         timing_info=validation_context.timing_info,
     )
     if freshness_result != RevinfoUsabilityRating.OK:
@@ -368,7 +367,6 @@ async def verify_ocsp_response(
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
 
     cert_description = proc_state.describe_cert()
-    moment = validation_context.moment
 
     try:
         cert_issuer = path.find_issuing_authority(cert)
@@ -389,7 +387,7 @@ async def verify_ocsp_response(
             ocsp_good = await _handle_single_ocsp_resp(
                 cert=cert, issuer=cert_issuer, path=path,
                 ocsp_response=ocsp_response,
-                validation_context=validation_context, moment=moment,
+                validation_context=validation_context,
                 errs=errs, proc_state=proc_state
             )
             if ocsp_good:
