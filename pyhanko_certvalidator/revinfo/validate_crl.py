@@ -988,6 +988,126 @@ async def verify_crl(
         raise exc
 
 
+@dataclass(frozen=True)
+class ProvisionalCRLTrust:
+    path: ValidationPath
+    delta: Optional[CRLWithPOE]
+
+
+@dataclass(frozen=True)
+class CRLOfInterest:
+    crl: CRLWithPOE
+    prov_paths: List[ProvisionalCRLTrust]
+
+
+async def _assess_crl_relevance(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        cert_issuer_auth: Authority, certificate_list_with_poe: CRLWithPOE,
+        path: ValidationPath, revinfo_manager: RevinfoManager,
+        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
+        use_deltas: bool, errs: _CRLErrs,
+        proc_state: ValProcState) -> Optional[CRLOfInterest]:
+
+    certificate_list = certificate_list_with_poe.crl_data
+    registry = revinfo_manager.certificate_registry
+    try:
+        is_indirect, crl_authority_name = _get_crl_authority_name(
+            certificate_list_with_poe, cert_issuer_auth.name,
+            certificate_registry=registry, errs=errs
+        )
+    except LookupError:
+        # already logged by _get_crl_authority_name
+        return None
+
+    try:
+        candidate_paths, _ = await _find_candidate_crl_paths(
+            crl_authority_name, certificate_list, cert=cert,
+            cert_issuer_auth=cert_issuer_auth, cert_path=path,
+            certificate_registry=registry,
+            is_indirect=is_indirect, proc_state=proc_state
+        )
+    except CRLNoMatchesError:
+        # this no-match issue will be dealt with at a higher level later
+        errs.issuer_failures += 1
+        return None
+    except (CertificateFetchError, CRLValidationError) as e:
+        errs.failures.append((e.args[0], certificate_list))
+        return None
+
+    provisional_results = []
+    for cand_path in candidate_paths:
+        putative_issuer = cand_path.last
+        interim_reasons = _get_crl_scope_assuming_authority(
+            crl_issuer=putative_issuer, cert=cert,
+            certificate_list_with_poe=certificate_list_with_poe,
+            is_indirect=is_indirect, errs=errs
+        )
+        if interim_reasons is None:
+            continue
+
+        if use_deltas:
+            delta = _maybe_get_delta_crl(
+                certificate_list=certificate_list, crl_issuer=putative_issuer,
+                delta_lists_by_issuer=delta_lists_by_issuer, errs=errs
+            )
+        else:
+            delta = None
+
+        prov = ProvisionalCRLTrust(path=cand_path, delta=delta)
+        provisional_results.append(prov)
+
+    if not provisional_results:
+        return None
+    return CRLOfInterest(
+        crl=certificate_list_with_poe, prov_paths=provisional_results
+    )
+
+
+async def collect_relevant_crls_with_paths(
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        path: ValidationPath,
+        revinfo_manager: RevinfoManager, use_deltas=True,
+        proc_state: Optional[ValProcState] = None) -> List[CRLOfInterest]:
+    errs = _CRLErrs()
+    complete_lists_by_issuer, delta_lists_by_issuer = \
+        await _classify_relevant_crls(revinfo_manager, cert, errs)
+
+    # In the main loop, only complete CRLs are processed, so delta CRLs are
+    # weeded out of the to-do list
+    crls_to_process = []
+    for issuer_crls in complete_lists_by_issuer.values():
+        crls_to_process.extend(issuer_crls)
+
+    try:
+        cert_issuer_auth = path.find_issuing_authority(cert)
+    except LookupError:
+        raise CRLNoMatchesError(pretty_message(
+            '''
+            Could not determine issuer certificate for %s in path.
+            ''',
+            proc_state.describe_cert()
+        ))
+
+    relevant_crls = []
+
+    for certificate_list_with_poe in crls_to_process:
+        try:
+            result = await _assess_crl_relevance(
+                cert=cert, cert_issuer_auth=cert_issuer_auth,
+                certificate_list_with_poe=certificate_list_with_poe,
+                path=path, delta_lists_by_issuer=delta_lists_by_issuer,
+                use_deltas=use_deltas, revinfo_manager=revinfo_manager,
+                errs=errs, proc_state=proc_state,
+            )
+            if result is not None:
+                relevant_crls.append(result)
+        except ValueError as e:
+            msg = "Generic processing error while validating CRL."
+            logging.debug(msg, exc_info=e)
+            errs.failures.append((msg, certificate_list_with_poe))
+    return relevant_crls
+
+
 def _verify_crl_signature(certificate_list, public_key):
     """
     Verifies the digital signature on an asn1crypto.crl.CertificateList object
