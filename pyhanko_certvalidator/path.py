@@ -122,6 +122,9 @@ class ValidationPath:
             raise LookupError
 
     def iter_authorities(self) -> Iterable[Authority]:
+        """
+        Iterate over all authorities in the path, including the trust root.
+        """
         yield self._root.authority
         for cert in self._interm:
             yield AuthorityWithCert(cert)

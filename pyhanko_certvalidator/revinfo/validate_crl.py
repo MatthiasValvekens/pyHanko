@@ -854,8 +854,10 @@ async def _classify_relevant_crls(
     for certificate_list_with_poe in certificate_lists:
         if control_time is not None:
             issued = certificate_list_with_poe.issuance_date
-            if issued is None or issued > control_time:
+            if issued is None or issued > control_time or \
+                    not certificate_list_with_poe.poe.before(control_time):
                 # We don't care about stuff issued after control_time
+                # or without the right POE
                 continue
         certificate_list = certificate_list_with_poe.crl_data
         try:

@@ -39,6 +39,12 @@ class POE:
     def fresh(cls):
         return POE(POEType.FRESHLY_FETCHED)
 
+    def before(self, dt: datetime) -> bool:
+        if self.archive_timestamp is None:
+            return False
+        else:
+            return self.archive_timestamp <= dt
+
 
 class RevinfoUsabilityRating(enum.Enum):
     OK = enum.auto()
