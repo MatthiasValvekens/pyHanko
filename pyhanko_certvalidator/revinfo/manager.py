@@ -7,19 +7,21 @@ from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
-from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, OCSPWithPOE, \
-    sort_freshest_first, POE
+from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer,\
+    sort_freshest_first, POEManager
 
 
 class RevinfoManager:
 
     def __init__(self, certificate_registry: CertificateRegistry,
+                 poe_manager: POEManager,
                  revinfo_policy: CertRevTrustPolicy,
-                 crls: Iterable[CRLWithPOE], ocsps: Iterable[OCSPWithPOE],
+                 crls: Iterable[CRLContainer], ocsps: Iterable[OCSPContainer],
                  allow_fetching: bool = False,
                  fetchers: Optional[Fetchers] = None):
         self._certificate_registry = certificate_registry
         self._revinfo_policy = revinfo_policy
+        self._poe_manager = poe_manager
 
         self._revocation_certs = {}
         self._crl_issuer_map = {}
@@ -36,6 +38,10 @@ class RevinfoManager:
 
         self._allow_fetching = allow_fetching
         self._fetchers = fetchers
+
+    @property
+    def poe_manager(self) -> POEManager:
+        return self._poe_manager
 
     @property
     def certificate_registry(self) -> CertificateRegistry:
@@ -55,7 +61,7 @@ class RevinfoManager:
         A list of all cached :class:`crl.CertificateList` objects
         """
 
-        raw_crls = [with_poe.crl_data for with_poe in self._crls]
+        raw_crls = [cont.crl_data for cont in self._crls]
         if not self._allow_fetching:
             return raw_crls
         return list(self._fetchers.crl_fetcher.fetched_crls()) + raw_crls
@@ -66,7 +72,7 @@ class RevinfoManager:
         A list of all cached :class:`ocsp.OCSPResponse` objects
         """
 
-        raw_ocsps = [with_poe.ocsp_response_data for with_poe in self._ocsps]
+        raw_ocsps = [cont.ocsp_response_data for cont in self._ocsps]
         if not self._allow_fetching:
             return raw_ocsps
 
@@ -81,7 +87,7 @@ class RevinfoManager:
 
         return list(self._revocation_certs.values())
 
-    def _extract_ocsp_certs(self, ocsp_response: OCSPWithPOE):
+    def _extract_ocsp_certs(self, ocsp_response: OCSPContainer):
         """
         Extracts any certificates included with an OCSP response and adds them
         to the certificate registry
@@ -89,6 +95,9 @@ class RevinfoManager:
         :param ocsp_response:
             An asn1crypto.ocsp.OCSPResponse object to look for certs inside of
         """
+
+        poe_man = self._poe_manager
+        ocsp_poe_time = poe_man[ocsp_response.ocsp_response_data]
 
         registry = self._certificate_registry
         revo_certs = self._revocation_certs
@@ -98,6 +107,8 @@ class RevinfoManager:
             for other_cert in basic['certs']:
                 if registry.add_other_cert(other_cert):
                     revo_certs[other_cert.issuer_serial] = other_cert
+                    # register with the same POE as the OCSP response
+                    poe_man.register(other_cert, dt=ocsp_poe_time)
 
     def record_crl_issuer(self, certificate_list, cert):
         """
@@ -129,7 +140,7 @@ class RevinfoManager:
 
         return self._crl_issuer_map.get(certificate_list.signature)
 
-    async def async_retrieve_crls_with_poe(self, cert) -> List[CRLWithPOE]:
+    async def async_retrieve_crls(self, cert) -> List[CRLContainer]:
         """
         .. versionadded:: 0.20.0
 
@@ -147,14 +158,11 @@ class RevinfoManager:
             crls = fetchers.crl_fetcher.fetched_crls_for_cert(cert)
         except KeyError:
             crls = await fetchers.crl_fetcher.fetch(cert)
-        with_poe = [
-            CRLWithPOE(POE.fresh(), crl_data)
-            for crl_data in crls
-        ]
-        return with_poe + self._crls
+        conts = [CRLContainer(crl_data) for crl_data in crls]
+        return conts + self._crls
 
-    async def async_retrieve_ocsps_with_poe(self, cert, authority: Authority) \
-            -> List[OCSPWithPOE]:
+    async def async_retrieve_ocsps(self, cert, authority: Authority) \
+            -> List[OCSPContainer]:
         """
         .. versionadded:: 0.20.0
 
@@ -173,15 +181,13 @@ class RevinfoManager:
 
         fetchers = self._fetchers
         ocsps = [
-            OCSPWithPOE(POE.fresh(), resp)
+            OCSPContainer(resp)
             for resp in fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
         ]
         if not ocsps:
             ocsp_response_data \
                 = await fetchers.ocsp_fetcher.fetch(cert, authority)
-            ocsps = OCSPWithPOE.load_multi(
-                POE.fresh(), ocsp_response_data
-            )
+            ocsps = OCSPContainer.load_multi(ocsp_response_data)
 
             # Responses can contain certificates that are useful in
             # validating the response itself. We can use these since they

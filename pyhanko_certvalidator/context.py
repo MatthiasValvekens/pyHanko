@@ -17,7 +17,7 @@ from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry, TrustRootList
 from .revinfo.archival import \
     ValidationTimingInfo, process_legacy_crl_input, \
-    process_legacy_ocsp_input
+    process_legacy_ocsp_input, POEManager
 
 
 @dataclass(frozen=True)
@@ -98,6 +98,7 @@ class ValidationContext:
             retroactive_revinfo: bool = False,
             fetcher_backend: FetcherBackend = None,
             acceptable_ac_targets: Optional[ACTargetDescription] = None,
+            poe_manager: Optional[POEManager] = None,
             fetchers: Fetchers = None):
         """
         :param trust_roots:
@@ -284,6 +285,7 @@ class ValidationContext:
         ocsps = process_legacy_ocsp_input(ocsps) if ocsps else ()
         self._revinfo_manager = RevinfoManager(
             certificate_registry=certificate_registry,
+            poe_manager=poe_manager or POEManager(),
             revinfo_policy=revinfo_policy, crls=crls, ocsps=ocsps,
             allow_fetching=allow_fetching, fetchers=fetchers
         )
@@ -377,7 +379,7 @@ class ValidationContext:
         :return:
             A list of asn1crypto.crl.CertificateList objects
         """
-        results = await self._revinfo_manager.async_retrieve_crls_with_poe(cert)
+        results = await self._revinfo_manager.async_retrieve_crls(cert)
         return [res.crl_data for res in results]
 
     def retrieve_crls(self, cert):
@@ -412,7 +414,7 @@ class ValidationContext:
             A list of asn1crypto.ocsp.OCSPResponse objects
         """
         results = await self._revinfo_manager\
-            .async_retrieve_ocsps_with_poe(cert, AuthorityWithCert(issuer))
+            .async_retrieve_ocsps(cert, AuthorityWithCert(issuer))
         return [res.ocsp_response_data for res in results]
 
     def retrieve_ocsps(self, cert, issuer):

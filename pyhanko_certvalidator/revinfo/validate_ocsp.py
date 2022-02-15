@@ -18,7 +18,7 @@ from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
     RevocationCheckingPolicy, RevocationCheckingRule
 from pyhanko_certvalidator.registry import CertificateCollection, \
     LayeredCertificateStore, SimpleCertificateStore
-from pyhanko_certvalidator.revinfo.archival import OCSPWithPOE, \
+from pyhanko_certvalidator.revinfo.archival import OCSPContainer, \
     RevinfoUsabilityRating
 from pyhanko_certvalidator.authority import Authority, \
     AuthorityWithCert, TrustAnchor
@@ -150,7 +150,7 @@ class _OCSPErrs:
 def _match_ocsp_certid(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: Authority,
-        ocsp_response: OCSPWithPOE,
+        ocsp_response: OCSPContainer,
         errs: _OCSPErrs) -> bool:
 
     cert_response = ocsp_response.extract_single_response()
@@ -208,7 +208,7 @@ def _match_ocsp_certid(
 
 
 def _identify_responder_cert(
-        ocsp_response: OCSPWithPOE, cert_store: CertificateCollection,
+        ocsp_response: OCSPContainer, cert_store: CertificateCollection,
         errs: _OCSPErrs) -> Optional[x509.Certificate]:
     # To verify the response as legitimate, the responder cert must be located
 
@@ -284,7 +284,7 @@ async def _check_ocsp_authorisation(
         responder_cert: x509.Certificate,
         issuer: Authority,
         cert_path: ValidationPath,
-        ocsp_response: OCSPWithPOE,
+        ocsp_response: OCSPContainer,
         validation_context: ValidationContext,
         is_pkc: bool,
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
@@ -318,7 +318,7 @@ async def _check_ocsp_authorisation(
     return auth_ok
 
 
-def _check_ocsp_status(ocsp_response: OCSPWithPOE, proc_state: ValProcState):
+def _check_ocsp_status(ocsp_response: OCSPContainer, proc_state: ValProcState):
     cert_response = ocsp_response.extract_single_response()
 
     # Finally check to see if the certificate has been revoked
@@ -341,7 +341,7 @@ def _check_ocsp_status(ocsp_response: OCSPWithPOE, proc_state: ValProcState):
 
 def _verify_ocsp_signature(
         responder_key: PublicKeyInfo,
-        ocsp_response: OCSPWithPOE,
+        ocsp_response: OCSPContainer,
         errs: _OCSPErrs) -> bool:
 
     response = ocsp_response.extract_basic_ocsp_response()
@@ -377,7 +377,7 @@ def _verify_ocsp_signature(
 def _assess_ocsp_relevance(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: Authority,
-        ocsp_response: OCSPWithPOE,
+        ocsp_response: OCSPContainer,
         cert_store: CertificateCollection,
         errs: _OCSPErrs) -> Optional[x509.Certificate]:
 
@@ -406,7 +406,7 @@ async def _handle_single_ocsp_resp(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         issuer: Authority,
         path: ValidationPath,
-        ocsp_response: OCSPWithPOE,
+        ocsp_response: OCSPContainer,
         validation_context: ValidationContext,
         errs: _OCSPErrs, proc_state: ValProcState) -> bool:
 
@@ -493,7 +493,7 @@ async def verify_ocsp_response(
 
     errs = _OCSPErrs()
     ocsp_responses = await validation_context.revinfo_manager\
-        .async_retrieve_ocsps_with_poe(cert, cert_issuer)
+        .async_retrieve_ocsps(cert, cert_issuer)
 
     for ocsp_response in ocsp_responses:
         try:
@@ -532,7 +532,7 @@ async def verify_ocsp_response(
 
 @dataclass(frozen=True)
 class OCSPResponseOfInterest:
-    ocsp_response: OCSPWithPOE
+    ocsp_response: OCSPContainer
     prov_path: ValidationPath
 
 
@@ -556,19 +556,21 @@ async def collect_relevant_responses_with_paths(
     relevant = []
 
     ocsp_responses = await revinfo_manager \
-        .async_retrieve_ocsps_with_poe(cert, cert_issuer_auth)
+        .async_retrieve_ocsps(cert, cert_issuer_auth)
 
+    poe_manager = revinfo_manager.poe_manager
     errs = _OCSPErrs()
-    for ocsp_response_with_poe in ocsp_responses:
-        issued = ocsp_response_with_poe.issuance_date
+    for ocsp_response_cont in ocsp_responses:
+        issued = ocsp_response_cont.issuance_date
+        ocsp_resp_data = ocsp_response_cont.ocsp_response_data
         if issued is None or issued > control_time or \
-                not ocsp_response_with_poe.poe.before(control_time):
+                poe_manager[ocsp_resp_data] > control_time:
             # We don't care about responses issued after control_time
             continue
         try:
             responder_cert = _assess_ocsp_relevance(
                 cert=cert, issuer=cert_issuer_auth,
-                ocsp_response=ocsp_response_with_poe,
+                ocsp_response=ocsp_response_cont,
                 cert_store=revinfo_manager.certificate_registry,
                 errs=errs
             )
@@ -578,12 +580,12 @@ async def collect_relevant_responses_with_paths(
                 responder_cert, cert_issuer_auth, ee_path=path
             )
             result = OCSPResponseOfInterest(
-                ocsp_response=ocsp_response_with_poe,
+                ocsp_response=ocsp_response_cont,
                 prov_path=path
             )
             relevant.append(result)
         except ValueError as e:
             msg = "Generic processing error while validating OCSP response."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, ocsp_response_with_poe))
+            errs.failures.append((msg, ocsp_response_cont))
     return relevant

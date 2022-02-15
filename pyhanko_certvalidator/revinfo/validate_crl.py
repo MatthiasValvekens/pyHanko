@@ -16,7 +16,7 @@ from pyhanko_certvalidator.errors import PathValidationError, RevokedError, \
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
-from pyhanko_certvalidator.revinfo.archival import CRLWithPOE, \
+from pyhanko_certvalidator.revinfo.archival import CRLContainer, \
     RevinfoUsabilityRating, ValidationTimingInfo
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
@@ -34,7 +34,7 @@ class CRLWithPaths:
     A CRL with a number of candidate paths
     """
 
-    crl: CRLWithPOE
+    crl: CRLContainer
     paths: List[ValidationPath]
 
 
@@ -288,12 +288,12 @@ class _CRLErrs:
     issuer_failures: int = 0
 
 
-def _find_matching_delta_crl(delta_lists: List[CRLWithPOE],
+def _find_matching_delta_crl(delta_lists: List[CRLContainer],
                              crl_authority_name: x509.Name,
                              crl_idp: crl.IssuingDistributionPoint,
-                             parent_crl_aki: Optional[bytes]) -> CRLWithPOE:
-    for candidate_delta_cl_with_poe in delta_lists:
-        candidate_delta_cl = candidate_delta_cl_with_poe.crl_data
+                             parent_crl_aki: Optional[bytes]) -> CRLContainer:
+    for candidate_delta_cl_cont in delta_lists:
+        candidate_delta_cl = candidate_delta_cl_cont.crl_data
         # Step c 1
         if candidate_delta_cl.issuer != crl_authority_name:
             continue
@@ -312,7 +312,7 @@ def _find_matching_delta_crl(delta_lists: List[CRLWithPOE],
         if parent_crl_aki != candidate_delta_cl.authority_key_identifier:
             continue
 
-        return candidate_delta_cl_with_poe
+        return candidate_delta_cl_cont
 
 
 def _match_dps_idp_names(crl_idp: crl.IssuingDistributionPoint,
@@ -499,18 +499,18 @@ def _handle_attr_cert_crl_idp_ext_constraints(
 async def _handle_single_crl(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer_auth: Authority,
-        certificate_list_with_poe: CRLWithPOE,
+        certificate_list_cont: CRLContainer,
         path: ValidationPath,
         validation_context: ValidationContext,
-        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
+        delta_lists_by_issuer: Dict[str, List[CRLContainer]],
         use_deltas: bool, errs: _CRLErrs,
         proc_state: ValProcState) -> Optional[Set[str]]:
 
-    certificate_list = certificate_list_with_poe.crl_data
+    certificate_list = certificate_list_cont.crl_data
 
     try:
         is_indirect, crl_authority_name = _get_crl_authority_name(
-            certificate_list_with_poe, cert_issuer_auth.name,
+            certificate_list_cont, cert_issuer_auth.name,
             certificate_registry=validation_context.certificate_registry,
             errs=errs
         )
@@ -543,14 +543,14 @@ async def _handle_single_crl(
 
     interim_reasons = _get_crl_scope_assuming_authority(
         crl_issuer=crl_issuer,
-        cert=cert, certificate_list_with_poe=certificate_list_with_poe,
+        cert=cert, certificate_list_cont=certificate_list_cont,
         is_indirect=is_indirect, errs=errs
     )
 
     if interim_reasons is None:
         return None
 
-    freshness_result = certificate_list_with_poe.usable_at(
+    freshness_result = certificate_list_cont.usable_at(
         policy=validation_context.revinfo_policy,
         timing_info=validation_context.timing_info
     )
@@ -561,25 +561,25 @@ async def _handle_single_crl(
             msg = 'CRL is too recent'
         else:
             msg = 'CRL freshness could not be established'
-        errs.failures.append((msg, certificate_list_with_poe))
+        errs.failures.append((msg, certificate_list_cont))
         return None
 
     # Step c
     if use_deltas:
-        delta_certificate_list_with_poe = _maybe_get_delta_crl(
+        delta_certificate_list_cont = _maybe_get_delta_crl(
             certificate_list=certificate_list, crl_issuer=crl_issuer,
             policy=validation_context.revinfo_policy,
             timing_info=validation_context.timing_info,
             delta_lists_by_issuer=delta_lists_by_issuer, errs=errs
         )
     else:
-        delta_certificate_list_with_poe = None
+        delta_certificate_list_cont = None
 
     try:
         revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
             crl_issuer=crl_issuer, cert=cert,
-            certificate_list_with_poe=certificate_list_with_poe,
-            delta_certificate_list_with_poe=delta_certificate_list_with_poe,
+            certificate_list_cont=certificate_list_cont,
+            delta_certificate_list_cont=delta_certificate_list_cont,
             errs=errs,
         )
     except NotImplementedError:
@@ -595,7 +595,7 @@ async def _handle_single_crl(
 
 
 def _get_crl_authority_name(
-        certificate_list_with_poe: CRLWithPOE,
+        certificate_list_cont: CRLContainer,
         cert_issuer_name: x509.Name,
         certificate_registry: CertificateRegistry,
         errs: _CRLErrs) -> Tuple[bool, x509.Name]:
@@ -603,7 +603,7 @@ def _get_crl_authority_name(
     Figure out the name of the entity on behalf of which the CRL was issued.
     """
 
-    certificate_list = certificate_list_with_poe.crl_data
+    certificate_list = certificate_list_cont.crl_data
 
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
@@ -628,7 +628,7 @@ def _get_crl_authority_name(
             errs.failures.append((
                 'CRL is marked as an indirect CRL, but provides no '
                 'mechanism for locating the CRL issuer certificate',
-                certificate_list_with_poe
+                certificate_list_cont
             ))
             raise LookupError
     return is_indirect, crl_authority_name
@@ -637,10 +637,10 @@ def _get_crl_authority_name(
 def _maybe_get_delta_crl(
         certificate_list: crl.CertificateList,
         crl_issuer: x509.Certificate,
-        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
+        delta_lists_by_issuer: Dict[str, List[CRLContainer]],
         errs: _CRLErrs,
         timing_info: Optional[ValidationTimingInfo] = None,
-        policy: Optional[CertRevTrustPolicy] = None) -> Optional[CRLWithPOE]:
+        policy: Optional[CertRevTrustPolicy] = None) -> Optional[CRLContainer]:
 
     if not certificate_list.freshest_crl_value \
             or len(certificate_list.freshest_crl_value) == 0:
@@ -653,21 +653,21 @@ def _maybe_get_delta_crl(
 
     candidate_delta_lists = \
         delta_lists_by_issuer.get(crl_authority_name.hashable, [])
-    delta_certificate_list_with_poe = _find_matching_delta_crl(
+    delta_certificate_list_cont = _find_matching_delta_crl(
         delta_lists=candidate_delta_lists,
         crl_authority_name=crl_authority_name, crl_idp=crl_idp,
         parent_crl_aki=certificate_list.authority_key_identifier
     )
-    if not delta_certificate_list_with_poe:
+    if not delta_certificate_list_cont:
         return None
 
-    delta_certificate_list = delta_certificate_list_with_poe.crl_data
+    delta_certificate_list = delta_certificate_list_cont.crl_data
 
     if delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
         errs.failures.append((
             'One or more unrecognized critical extensions are present in '
             'the delta CRL',
-            delta_certificate_list_with_poe
+            delta_certificate_list_cont
         ))
         return None
 
@@ -677,12 +677,12 @@ def _maybe_get_delta_crl(
     except CRLValidationError:
         errs.failures.append((
             'Delta CRL signature could not be verified',
-            delta_certificate_list_with_poe
+            delta_certificate_list_cont
         ))
         return None
 
     if policy and timing_info:
-        freshness_result = delta_certificate_list_with_poe.usable_at(
+        freshness_result = delta_certificate_list_cont.usable_at(
             policy=policy, timing_info=timing_info
         )
         if freshness_result != RevinfoUsabilityRating.OK:
@@ -692,19 +692,19 @@ def _maybe_get_delta_crl(
                 msg = 'Delta CRL is too recent'
             else:
                 msg = 'Delta CRL freshness could not be established'
-            errs.failures.append((msg, delta_certificate_list_with_poe))
+            errs.failures.append((msg, delta_certificate_list_cont))
             return None
-        return delta_certificate_list_with_poe
+        return delta_certificate_list_cont
 
 
 def _get_crl_scope_assuming_authority(
         crl_issuer: x509.Certificate,
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        certificate_list_with_poe: CRLWithPOE,
+        certificate_list_cont: CRLContainer,
         is_indirect: bool,
         errs: _CRLErrs) -> Optional[Set[str]]:
 
-    certificate_list = certificate_list_with_poe.crl_data
+    certificate_list = certificate_list_cont.crl_data
     crl_idp: crl.IssuingDistributionPoint \
         = certificate_list.issuing_distribution_point_value
 
@@ -782,7 +782,7 @@ def _get_crl_scope_assuming_authority(
         errs.failures.append((
             'One or more unrecognized critical extensions are present in '
             'the CRL',
-            certificate_list_with_poe
+            certificate_list_cont
         ))
         return None
 
@@ -792,19 +792,19 @@ def _get_crl_scope_assuming_authority(
 def _check_cert_on_crl_and_delta(
         crl_issuer: x509.Certificate,
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        certificate_list_with_poe: CRLWithPOE,
-        delta_certificate_list_with_poe: Optional[CRLWithPOE],
+        certificate_list_cont: CRLContainer,
+        delta_certificate_list_cont: Optional[CRLContainer],
         errs: _CRLErrs):
 
-    certificate_list = certificate_list_with_poe.crl_data
+    certificate_list = certificate_list_cont.crl_data
     # Step i
     revoked_reason = None
     revoked_date = None
 
     cert_issuer_name = get_issuer_dn(cert)
 
-    if delta_certificate_list_with_poe:
-        delta_certificate_list = delta_certificate_list_with_poe.crl_data
+    if delta_certificate_list_cont:
+        delta_certificate_list = delta_certificate_list_cont.crl_data
         try:
             revoked_date, revoked_reason = \
                 _find_cert_in_list(cert, cert_issuer_name,
@@ -813,7 +813,7 @@ def _check_cert_on_crl_and_delta(
             errs.failures.append((
                 'One or more unrecognized critical extensions are present in '
                 'the CRL entry for the certificate',
-                delta_certificate_list_with_poe
+                delta_certificate_list_cont
             ))
             raise
 
@@ -827,7 +827,7 @@ def _check_cert_on_crl_and_delta(
             errs.failures.append((
                 'One or more unrecognized critical extensions are present in '
                 'the CRL entry for the certificate',
-                certificate_list_with_poe
+                certificate_list_cont
             ))
             raise
 
@@ -847,27 +847,28 @@ async def _classify_relevant_crls(
     # NOTE: the control_time parameter is only used in the time sliding
     # algorithm code path for AdES validation
 
-    certificate_lists = await revinfo_manager.async_retrieve_crls_with_poe(cert)
+    certificate_lists = await revinfo_manager.async_retrieve_crls(cert)
+    poe_manager = revinfo_manager.poe_manager
 
     complete_lists_by_issuer = defaultdict(list)
     delta_lists_by_issuer = defaultdict(list)
-    for certificate_list_with_poe in certificate_lists:
+    for certificate_list_cont in certificate_lists:
+        certificate_list = certificate_list_cont.crl_data
         if control_time is not None:
-            issued = certificate_list_with_poe.issuance_date
+            issued = certificate_list_cont.issuance_date
             if issued is None or issued > control_time or \
-                    not certificate_list_with_poe.poe.before(control_time):
+                    poe_manager[certificate_list] > control_time:
                 # We don't care about stuff issued after control_time
                 # or without the right POE
                 continue
-        certificate_list = certificate_list_with_poe.crl_data
         try:
             issuer_hashable = certificate_list.issuer.hashable
             if certificate_list.delta_crl_indicator_value is None:
                 complete_lists_by_issuer[issuer_hashable] \
-                    .append(certificate_list_with_poe)
+                    .append(certificate_list_cont)
             else:
                 delta_lists_by_issuer[issuer_hashable].append(
-                    certificate_list_with_poe
+                    certificate_list_cont
                 )
         except ValueError as e:
             msg = "Generic processing error while classifying CRL."
@@ -975,11 +976,11 @@ async def verify_crl(
 
     checked_reasons = set()
 
-    for certificate_list_with_poe in crls_to_process:
+    for certificate_list_cont in crls_to_process:
         try:
             interim_reasons = await _handle_single_crl(
                 cert=cert, cert_issuer_auth=cert_issuer_auth,
-                certificate_list_with_poe=certificate_list_with_poe,
+                certificate_list_cont=certificate_list_cont,
                 path=path, validation_context=validation_context,
                 delta_lists_by_issuer=delta_lists_by_issuer,
                 use_deltas=use_deltas, errs=errs,
@@ -991,7 +992,7 @@ async def verify_crl(
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list_with_poe))
+            errs.failures.append((msg, certificate_list_cont))
 
     exc = _process_crl_completeness(
         checked_reasons, total_crls, errs, proc_state
@@ -1003,28 +1004,28 @@ async def verify_crl(
 @dataclass(frozen=True)
 class ProvisionalCRLTrust:
     path: ValidationPath
-    delta: Optional[CRLWithPOE]
+    delta: Optional[CRLContainer]
 
 
 @dataclass(frozen=True)
 class CRLOfInterest:
-    crl: CRLWithPOE
+    crl: CRLContainer
     prov_paths: List[ProvisionalCRLTrust]
 
 
 async def _assess_crl_relevance(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        cert_issuer_auth: Authority, certificate_list_with_poe: CRLWithPOE,
+        cert_issuer_auth: Authority, certificate_list_cont: CRLContainer,
         path: ValidationPath, revinfo_manager: RevinfoManager,
-        delta_lists_by_issuer: Dict[str, List[CRLWithPOE]],
+        delta_lists_by_issuer: Dict[str, List[CRLContainer]],
         use_deltas: bool, errs: _CRLErrs,
         proc_state: ValProcState) -> Optional[CRLOfInterest]:
 
-    certificate_list = certificate_list_with_poe.crl_data
+    certificate_list = certificate_list_cont.crl_data
     registry = revinfo_manager.certificate_registry
     try:
         is_indirect, crl_authority_name = _get_crl_authority_name(
-            certificate_list_with_poe, cert_issuer_auth.name,
+            certificate_list_cont, cert_issuer_auth.name,
             certificate_registry=registry, errs=errs
         )
     except LookupError:
@@ -1051,7 +1052,7 @@ async def _assess_crl_relevance(
         putative_issuer = cand_path.last
         interim_reasons = _get_crl_scope_assuming_authority(
             crl_issuer=putative_issuer, cert=cert,
-            certificate_list_with_poe=certificate_list_with_poe,
+            certificate_list_cont=certificate_list_cont,
             is_indirect=is_indirect, errs=errs
         )
         if interim_reasons is None:
@@ -1071,7 +1072,7 @@ async def _assess_crl_relevance(
     if not provisional_results:
         return None
     return CRLOfInterest(
-        crl=certificate_list_with_poe, prov_paths=provisional_results
+        crl=certificate_list_cont, prov_paths=provisional_results
     )
 
 
@@ -1104,11 +1105,11 @@ async def collect_relevant_crls_with_paths(
 
     relevant_crls = []
 
-    for certificate_list_with_poe in crls_to_process:
+    for certificate_list_cont in crls_to_process:
         try:
             result = await _assess_crl_relevance(
                 cert=cert, cert_issuer_auth=cert_issuer_auth,
-                certificate_list_with_poe=certificate_list_with_poe,
+                certificate_list_cont=certificate_list_cont,
                 path=path, delta_lists_by_issuer=delta_lists_by_issuer,
                 use_deltas=use_deltas, revinfo_manager=revinfo_manager,
                 errs=errs, proc_state=proc_state,
@@ -1118,7 +1119,7 @@ async def collect_relevant_crls_with_paths(
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list_with_poe))
+            errs.failures.append((msg, certificate_list_cont))
     return relevant_crls
 
 

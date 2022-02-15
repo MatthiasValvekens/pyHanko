@@ -1,10 +1,11 @@
 import abc
 import enum
+import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Iterable, Union
 
-from asn1crypto import ocsp, crl
+from asn1crypto import ocsp, crl, core
 
 from pyhanko_certvalidator._types import type_name
 from pyhanko_certvalidator.util import pretty_message
@@ -20,30 +21,42 @@ class ValidationTimingInfo:
     point_in_time_validation: bool
 
 
-class POEType(enum.Enum):
-    UNKNOWN = enum.auto()
-    TIMESTAMPED = enum.auto()
-    FRESHLY_FETCHED = enum.auto()
+class POEManager:
 
+    def __init__(self, current_dt_override: Optional[datetime] = None):
+        self._poes = {}
+        self._current_dt_override = current_dt_override
 
-@dataclass(frozen=True)
-class POE:
-    poe_type: POEType
-    archive_timestamp: Optional[datetime] = None
+    def register(self, data: Union[bytes, core.Asn1Value],
+                 dt: Optional[datetime] = None) -> datetime:
+        if isinstance(data, core.Asn1Value):
+            data = data.dump()
+        digest = hashlib.sha256(data).digest()
+        return self.register_by_digest(digest, dt)
 
-    @classmethod
-    def unknown(cls):
-        return POE(POEType.UNKNOWN)
+    def register_by_digest(self, digest: bytes, dt: Optional[datetime] = None) \
+            -> datetime:
+        dt = dt or self._current_dt_override or datetime.now(timezone.utc)
+        try:
+            cur_poe = self._poes[digest]
+            if cur_poe <= dt:
+                return cur_poe
+        except KeyError:
+            pass
+        self._poes[digest] = dt
+        return dt
 
-    @classmethod
-    def fresh(cls):
-        return POE(POEType.FRESHLY_FETCHED)
+    def __iter__(self):
+        return iter(self._poes.items())
 
-    def before(self, dt: datetime) -> bool:
-        if self.archive_timestamp is None:
-            return False
-        else:
-            return self.archive_timestamp <= dt
+    def __getitem__(self, item: Union[bytes, core.Asn1Value]):
+        return self.register(item, dt=None)
+
+    def __ior__(self, other):
+        if not isinstance(other, POEManager):
+            raise TypeError
+        for digest, dt in iter(other):
+            self.register_by_digest(digest, dt)
 
 
 class RevinfoUsabilityRating(enum.Enum):
@@ -57,25 +70,22 @@ class RevinfoUsabilityRating(enum.Enum):
         return self == RevinfoUsabilityRating.OK
 
 
-class IssuedItemWithPOE(abc.ABC):
-    def retrieve_poe(self) -> POE:
-        raise NotImplementedError
-
+class IssuedItemContainer(abc.ABC):
     @property
     def issuance_date(self) -> Optional[datetime]:
         raise NotImplementedError
 
 
-class RevinfoWithPOE(IssuedItemWithPOE, abc.ABC):
+class RevinfoContainer(IssuedItemContainer, abc.ABC):
 
     def usable_at(self, policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
         raise NotImplementedError
 
 
-def sort_freshest_first(lst: Iterable[RevinfoWithPOE]):
-    def _key(with_poe: RevinfoWithPOE):
-        dt = with_poe.issuance_date
+def sort_freshest_first(lst: Iterable[RevinfoContainer]):
+    def _key(container: RevinfoContainer):
+        dt = container.issuance_date
         # if dt is None ---> (0, None)
         # else ---> (1, dt)
         # This ensures that None is never compared to anything (which would
@@ -183,26 +193,22 @@ def _extract_basic_ocsp_response(ocsp_response) \
 
 
 @dataclass(frozen=True)
-class OCSPWithPOE(RevinfoWithPOE):
-    poe: POE
+class OCSPContainer(RevinfoContainer):
     ocsp_response_data: ocsp.OCSPResponse
     index: int = 0
 
     @classmethod
-    def load_multi(cls, poe: POE,
-                   ocsp_response: ocsp.OCSPResponse) -> List['OCSPWithPOE']:
+    def load_multi(cls, ocsp_response: ocsp.OCSPResponse) \
+            -> List['OCSPContainer']:
         basic_ocsp_response = _extract_basic_ocsp_response(ocsp_response)
         if basic_ocsp_response is None:
             return []
         tbs_response = basic_ocsp_response['tbs_response_data']
 
         return [
-            OCSPWithPOE(poe=poe, ocsp_response_data=ocsp_response, index=ix)
+            OCSPContainer(ocsp_response_data=ocsp_response, index=ix)
             for ix in range(len(tbs_response['responses']))
         ]
-
-    def retrieve_poe(self) -> POE:
-        return self.poe
 
     @property
     def issuance_date(self) -> Optional[datetime]:
@@ -241,12 +247,8 @@ class OCSPWithPOE(RevinfoWithPOE):
 
 
 @dataclass(frozen=True)
-class CRLWithPOE(RevinfoWithPOE):
-    poe: POE
+class CRLContainer(RevinfoContainer):
     crl_data: crl.CertificateList
-
-    def retrieve_poe(self) -> POE:
-        return self.poe
 
     def usable_at(self, policy: CertRevTrustPolicy,
                   timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
@@ -264,19 +266,19 @@ class CRLWithPOE(RevinfoWithPOE):
         return tbs_cert_list['this_update'].native
 
 
-LegacyCompatCRL = Union[bytes, crl.CertificateList, CRLWithPOE]
-LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPWithPOE]
+LegacyCompatCRL = Union[bytes, crl.CertificateList, CRLContainer]
+LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPContainer]
 
 
 def process_legacy_crl_input(crls: Iterable[LegacyCompatCRL]) \
-        -> List[CRLWithPOE]:
+        -> List[CRLContainer]:
     new_crls = []
     for crl_ in crls:
         if isinstance(crl_, bytes):
             crl_ = crl.CertificateList.load(crl_)
         if isinstance(crl_, crl.CertificateList):
-            crl_ = CRLWithPOE(POE.unknown(), crl_)
-        if isinstance(crl_, CRLWithPOE):
+            crl_ = CRLContainer(crl_)
+        if isinstance(crl_, CRLContainer):
             new_crls.append(crl_)
         else:
             # TODO update error messages
@@ -291,17 +293,15 @@ def process_legacy_crl_input(crls: Iterable[LegacyCompatCRL]) \
 
 
 def process_legacy_ocsp_input(ocsps: Iterable[LegacyCompatOCSP]) \
-        -> List[OCSPWithPOE]:
+        -> List[OCSPContainer]:
     new_ocsps = []
     for ocsp_ in ocsps:
         if isinstance(ocsp_, bytes):
             ocsp_ = ocsp.OCSPResponse.load(ocsp_)
         if isinstance(ocsp_, ocsp.OCSPResponse):
-            extr = OCSPWithPOE.load_multi(
-                POE.unknown(), ocsp_
-            )
+            extr = OCSPContainer.load_multi(ocsp_)
             new_ocsps.extend(extr)
-        elif isinstance(ocsp_, OCSPWithPOE):
+        elif isinstance(ocsp_, OCSPContainer):
             new_ocsps.append(ocsp_)
         else:
             # TODO update error messages
