@@ -71,14 +71,8 @@ except errors.PathValidationError:
     pass
 ```
 
-The list of valid key usages can be found in the
-[`CertificateValidator.validate_usage()`](api.md#validate_usage-method)
-documentation.
-
 To check extended key usage, the second parameter, `extended_key_usage` may be
-passed containing a `set` of extended key usage purposes. Any pre-defined name
-from the [`CertificateValidator.validate_usage()`](api.md#validate_usage-method)
-documentation may be passed, or any dotted number OID string. If extended key
+passed containing a `set` of extended key usage purposes. If extended key
 usage should only be checked if the extension is present, pass `True` to the
 third parameter, `extended_optional`.
 

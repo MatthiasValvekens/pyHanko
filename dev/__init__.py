@@ -17,11 +17,4 @@ has_tests_package = False
 package_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 build_root = os.path.abspath(os.path.join(package_root, '..'))
 
-md_source_map = {
-    'docs/api.md': [
-        'pyhanko_certvalidator/__init__.py',
-        'pyhanko_certvalidator/context.py',
-    ],
-}
-
 definition_replacements = {}
