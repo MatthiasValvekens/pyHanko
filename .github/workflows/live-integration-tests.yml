@@ -20,7 +20,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python setup.py bdist_wheel
-          pip install certomancer[web-api,pkcs12]==0.8.0 'pytest>=6.1.1' 'aiohttp>=3.7.4' \
+          pip install certomancer[web-api,pkcs12]==0.8.1 'pytest>=6.1.1' 'aiohttp>=3.7.4' \
               'pytest-aiohttp~=0.3.0' dist/*.whl \
                requests-mock~=1.8.0 freezegun~=1.1.0 certomancer-csc-dummy==0.1.0 \
                pyhanko-certvalidator~=0.19.4
