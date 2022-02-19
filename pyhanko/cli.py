@@ -78,6 +78,12 @@ def pyhanko_exception_manager():
         yield
     except click.ClickException:
         raise
+    except misc.PdfStrictReadError as e:
+        exception = e
+        msg = (
+            "Failed to read PDF file in strict mode; rerun with "
+            "--no-strict-syntax to try again"
+        )
     except misc.PdfReadError as e:
         exception = e
         msg = "Failed to read PDF file."
