@@ -726,7 +726,13 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         ctx.obj[Ctx.SIG_META] = None
         return  # everything else doesn't apply
 
-    if use_pades or use_pades_lta:
+    if use_pades_lta:
+        use_pades = with_validation_info = True
+        if not timestamp_url:
+            raise click.ClickException(
+                "--timestamp-url is required for --use-pades-lta"
+            )
+    if use_pades:
         subfilter = fields.SigSeedSubFilter.PADES
     else:
         subfilter = fields.SigSeedSubFilter.ADOBE_PKCS7_DETACHED
