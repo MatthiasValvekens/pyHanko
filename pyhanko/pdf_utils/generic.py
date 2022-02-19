@@ -21,6 +21,7 @@ from .misc import (
     IndirectObjectExpected,
     PdfReadError,
     PdfStreamError,
+    PdfStrictReadError,
     PdfWriteError,
     is_regular_character,
     read_non_whitespace,
@@ -1042,7 +1043,7 @@ class DictionaryObject(dict, PdfObject):
                     "%s for key %s" % (hex(stream.tell()), key)
                 )
                 if handler.strict:
-                    raise PdfReadError(err)
+                    raise PdfStrictReadError(err)
                 else:
                     logger.warning(err)
 

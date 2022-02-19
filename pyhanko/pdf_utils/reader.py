@@ -23,7 +23,7 @@ from .crypt import (
     SecurityHandler,
     StandardSecurityHandler,
 )
-from .misc import PdfReadError
+from .misc import PdfReadError, PdfStrictReadError
 from .rw_common import PdfHandler
 from .xref import ObjStreamRef, XRefBuilder, XRefCache, read_object_header
 
@@ -180,7 +180,7 @@ class PdfFileReader(PdfHandler):
         # /N is the number of indirect objects in the stream
         if not (0 <= idx < stream['/N']):
             if self.strict:
-                raise PdfReadError("Object stream does not contain index")
+                raise PdfStrictReadError("Object stream does not contain index")
             else:
                 return generic.NullObject()
         stream_data = BytesIO(stream.data)
@@ -194,7 +194,7 @@ class PdfFileReader(PdfHandler):
                 misc.read_non_whitespace(stream_data, seek_back=True)
             except ValueError:
                 if self.strict:
-                    raise PdfReadError(
+                    raise PdfStrictReadError(
                         "Object stream header possibly corrupted"
                     )
                 else:
@@ -203,7 +203,7 @@ class PdfFileReader(PdfHandler):
                 # We're only interested in one object
                 continue
             if self.strict and idx != i:
-                raise PdfReadError("Object is in wrong index.")
+                raise PdfStrictReadError("Object is in wrong index.")
             obj_start = first_object + offset
             stream_data.seek(obj_start)
             try:
@@ -218,12 +218,12 @@ class PdfFileReader(PdfHandler):
                 )
 
                 if self.strict:
-                    raise PdfReadError("Can't read object stream: %s" % e)
+                    raise PdfStrictReadError("Can't read object stream: %s" % e)
                 # Replace with null. Hopefully it's nothing important.
                 obj = generic.NullObject()
             if isinstance(obj, (generic.StreamObject, generic.IndirectObject)):
                 if self.strict:
-                    raise PdfReadError(
+                    raise PdfStrictReadError(
                         "Encountered forbidden object type in object stream"
                     )
                 else:
@@ -235,7 +235,7 @@ class PdfFileReader(PdfHandler):
             return obj
 
         if self.strict:
-            raise PdfReadError(
+            raise PdfStrictReadError(
                 "Object not found in stream, "
                 "this is a fatal error in strict mode"
             )
@@ -346,7 +346,7 @@ class PdfFileReader(PdfHandler):
     def _read_object(self, ref, marker, never_decrypt=False):
         if marker is None:
             if self.strict:
-                raise PdfReadError(
+                raise PdfStrictReadError(
                     f"Object addressed by {ref} not found in the current "
                     f"context. This is an error in strict mode."
                 )
@@ -383,7 +383,7 @@ class PdfFileReader(PdfHandler):
             endobj = self.stream.read(6)
             if endobj != b'endobj':
                 if self.strict:  # pragma: nocover
-                    raise PdfReadError(
+                    raise PdfStrictReadError(
                         f'Expected endobj marker at position {obj_data_end} '
                         f'but found {repr(endobj)}'
                     )

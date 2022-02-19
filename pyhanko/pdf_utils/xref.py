@@ -16,7 +16,7 @@ from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Union
 
 from pyhanko.pdf_utils import generic, misc
-from pyhanko.pdf_utils.misc import PdfReadError
+from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 __all__ = [
@@ -197,7 +197,7 @@ def parse_xref_stream(xref_stream: generic.StreamObject,
             if len(d) >= entry_width:
                 return convert_to_int(d, entry_width)
             elif strict:
-                raise misc.PdfReadError(
+                raise misc.PdfStrictReadError(
                     "XRef stream ended prematurely; incomplete entry: "
                     f"expected to read {entry_width} bytes, but only got "
                     f"{len(d)}."
@@ -254,7 +254,7 @@ def parse_xref_stream(xref_stream: generic.StreamObject,
                 get_entry(2)
 
     if len(stream_data.read(1)) > 0 and strict:
-        raise misc.PdfReadError("Trailing data in cross-reference stream")
+        raise misc.PdfStrictReadError("Trailing data in cross-reference stream")
 
 
 @enum.unique
@@ -359,16 +359,19 @@ class XRefSectionData:
         else:
             raise KeyError(ref)
 
-    def process_entries(self, entries: Iterator[XRefEntry]):
+    def process_entries(self, entries: Iterator[XRefEntry], strict: bool):
         highest_id = 0
         for xref_entry in entries:
             idnum = xref_entry.idnum
             generation = xref_entry.generation
             highest_id = max(idnum, highest_id)
             if generation > 0xffff:
-                raise PdfReadError(
-                    f"Illegal generation {generation} for object ID {idnum}."
-                )
+                if strict:
+                    raise PdfStrictReadError(
+                        f"Illegal generation {generation} for "
+                        f"object ID {idnum}."
+                    )
+                continue
             if xref_entry.idnum == 0:
                 continue  # don't bother
             if xref_entry.xref_type == XRefType.STANDARD:
@@ -388,9 +391,10 @@ class XRefSectionData:
         return highest_id
 
     def process_hybrid_entries(self, entries: Iterator[XRefEntry],
-                               xref_meta_info: XRefSectionMetaInfo):
+                               xref_meta_info: XRefSectionMetaInfo,
+                               strict: bool):
         hybrid = XRefSectionData()
-        hybrid.process_entries(entries)
+        hybrid.process_entries(entries, strict=strict)
         self.hybrid = XRefSection(xref_meta_info, hybrid)
 
     def higher_generation_refs(self):
@@ -430,7 +434,7 @@ def _check_freed_refs(ix, section, all_sections):
         for section_ in all_sections[ix + 1:]:
             data = section_.xref_data
             if as_tuple in data.explicit_refs_in_revision:
-                raise misc.PdfReadError(
+                raise misc.PdfStrictReadError(
                     "XRef stream objects must not be clobbered in strict "
                     "mode."
                 )
@@ -460,7 +464,7 @@ def _check_freed_refs(ix, section, all_sections):
         #  we'll throw an error if this happens in a non-initial revision,
         #  until someone complains.
         if expected_next_generation == 0 and ix > 0:
-            raise misc.PdfReadError(
+            raise misc.PdfStrictReadError(
                 "In strict mode, a free xref with next generation 0 is only"
                 "permitted in an initial revision due to unclear semantics."
             )
@@ -508,13 +512,13 @@ def _check_freed_refs(ix, section, all_sections):
 
             if improper_generation is not None:
                 if expected_next_generation == 0:
-                    raise misc.PdfReadError(
+                    raise misc.PdfStrictReadError(
                         f"Object with id {idnum} was listed as dead, "
                         f"but is reused later, with generation "
                         f"number {improper_generation}."
                     )
                 else:
-                    raise misc.PdfReadError(
+                    raise misc.PdfStrictReadError(
                         f"Object with id {idnum} and generation "
                         f"{improper_generation} was found after "
                         f"{expected_next_generation - 1} was freed."
@@ -551,7 +555,7 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
             # in a hybrid file doesn't contain itself.
             # Since this is common (*cough*MS Word*cough*) and not explicitly
             # prohibited by the standard, we let that slide.
-            raise misc.PdfReadError(
+            raise misc.PdfStrictReadError(
                 f"XRef section sizes must be nondecreasing; found XRef section "
                 f"of size {sz} after section of size {prev_size}."
             )
@@ -584,7 +588,7 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
                 except KeyError:
                     continue
             else:
-                raise misc.PdfReadError(
+                raise misc.PdfStrictReadError(
                     f"Object with id {idnum} has an orphaned "
                     f"generation: generation {generation} was "
                     f"not preceded by a free instruction for "
@@ -626,7 +630,8 @@ class XRefBuilder:
 
         xref_section_data = XRefSectionData()
         xref_section_data.process_entries(
-            parse_xref_stream(xrefstream, strict=self.strict)
+            parse_xref_stream(xrefstream, strict=self.strict),
+            strict=self.strict
         )
         xref_meta_info = XRefSectionMetaInfo(
             xref_section_type=XRefSectionType.STREAM,
@@ -647,7 +652,9 @@ class XRefBuilder:
         stream = self.stream
         xref_start = stream.tell()
         xref_section_data = XRefSectionData()
-        highest = xref_section_data.process_entries(parse_xref_table(stream))
+        highest = xref_section_data.process_entries(
+            parse_xref_table(stream), strict=self.strict
+        )
         xref_end = stream.tell()
 
         new_trailer = generic.DictionaryObject.read_from_stream(
@@ -657,7 +664,7 @@ class XRefBuilder:
         declared_size = int(new_trailer.raw_get('/Size'))
 
         if self.strict and highest >= declared_size:
-            raise misc.PdfReadError(
+            raise misc.PdfStrictReadError(
                 f"Xref table size mismatch: table allocated object with id "
                 f"{highest}, but according to the trailer {declared_size - 1} "
                 f"is the maximal allowed object id."
@@ -687,7 +694,8 @@ class XRefBuilder:
                 stream_ref=stream_ref
             )
             xref_section_data.process_hybrid_entries(
-                parse_xref_stream(xrefstream), hybrid_stream_meta
+                parse_xref_stream(xrefstream), hybrid_stream_meta,
+                strict=self.strict
             )
             stream.seek(stream_pos)
             xref_type = XRefSectionType.HYBRID_MAIN
@@ -717,7 +725,7 @@ class XRefBuilder:
         err_count = 0
         while startxref is not None:
             if (self.strict and err_count) or err_count > self.err_limit:
-                raise PdfReadError("Failed to locate xref section")
+                raise PdfStrictReadError("Failed to locate xref section")
             if not err_count:
                 declared_startxref = startxref
             stream.seek(startxref)

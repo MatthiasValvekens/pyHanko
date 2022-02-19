@@ -184,6 +184,17 @@ def test_illegal_generation():
         PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)))
 
 
+def test_illegal_generation_nonstrict():
+    xrefs = [
+        [b'0 2',
+         b'0000000000 65535 f',
+         b'0000000100 99999 n'],
+    ]
+
+    r = PdfFileReader(BytesIO(fmt_dummy_xrefs(xrefs)), strict=False)
+    assert not r.xrefs.get_xref_data(0).explicit_refs_in_revision
+
+
 def test_xref_table_too_many_entries():
     xrefs = [
         [b'0 3',

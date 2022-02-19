@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 __all__ = [
-    'PdfError', 'PdfReadError', 'PdfWriteError', 'PdfStreamError',
-    'IndirectObjectExpected',
+    'PdfError', 'PdfReadError', 'PdfStrictReadError',
+    'PdfWriteError', 'PdfStreamError', 'IndirectObjectExpected',
     'get_and_apply', 'get_courier', 'OrderedEnum',
     'is_regular_character',
     'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
@@ -154,6 +154,10 @@ class PdfError(Exception):
 
 
 class PdfReadError(PdfError):
+    pass
+
+
+class PdfStrictReadError(PdfReadError):
     pass
 
 
