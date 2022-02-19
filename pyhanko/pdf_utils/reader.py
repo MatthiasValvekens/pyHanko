@@ -423,7 +423,7 @@ class PdfFileReader(PdfHandler):
         except (UnicodeDecodeError, ValueError):
             pass
         if input_version is None:
-            raise ValueError('Illegal PDF header')
+            raise PdfReadError('Illegal PDF header')
         self._header_version = input_version
 
         # start at the end:

@@ -7,7 +7,7 @@ from freezegun import freeze_time
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.misc import PdfReadError, PdfWriteError
+from pyhanko.pdf_utils.misc import PdfError, PdfReadError, PdfWriteError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
@@ -389,6 +389,8 @@ def test_append_sig_field_acro_update():
     fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 1
 
+
+def test_append_acroform_no_fields():
     w = PdfFileWriter()
     # Technically, this is not standards-compliant, but our routine
     # shouldn't care
@@ -400,7 +402,7 @@ def test_append_sig_field_acro_update():
 
     sp = fields.SigFieldSpec('InvisibleSig')
     w = IncrementalPdfFileWriter(out)
-    with pytest.raises(ValueError):
+    with pytest.raises(PdfError, match="has no /Fields"):
         fields.append_signature_field(w, sp)
 
 

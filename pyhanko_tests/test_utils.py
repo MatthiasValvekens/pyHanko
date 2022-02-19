@@ -35,6 +35,7 @@ from pyhanko.pdf_utils.crypt import (
 from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
+from pyhanko.pdf_utils.misc import PdfError
 from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import load_cert_from_pemder
@@ -67,9 +68,9 @@ def test_create_fresh(zip1, zip2):
     assert r.find_page_for_modification(-1)[0].idnum == p2_ref.idnum
     assert r.find_page_for_modification(-2)[0].idnum == p1_ref.idnum
 
-    with pytest.raises(ValueError):
+    with pytest.raises(PdfError):
         r.find_page_for_modification(2)
-    with pytest.raises(ValueError):
+    with pytest.raises(PdfError):
         r.find_page_for_modification(-3)
 
 

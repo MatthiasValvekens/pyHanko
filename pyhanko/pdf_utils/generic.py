@@ -258,7 +258,7 @@ class PdfObject:
         """
         ref = self.container_ref
         if ref is None:  # pragma: nocover
-            raise ValueError(
+            raise PdfReadError(
                 'No container reference available. This object probably '
                 'wasn\'t read from a file.'
             )
@@ -1313,7 +1313,7 @@ class StreamObject(DictionaryObject):
             filter_names, param_sets = zip(*cur_filters)
             if not allow_duplicates and filter_name in filter_names:
                 if allow_duplicates is False:
-                    raise ValueError(
+                    raise PdfWriteError(
                         f'Filter {filter_name} has already been applied to '
                         f'this stream.'
                     )

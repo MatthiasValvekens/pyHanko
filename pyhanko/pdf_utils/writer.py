@@ -23,6 +23,7 @@ from pyhanko.pdf_utils.crypt import (
 )
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.misc import (
+    PdfError,
     PdfReadError,
     PdfWriteError,
     instance_test,
@@ -660,7 +661,7 @@ class BasePdfFileWriter(PdfHandler):
 
     def get_object(self, ido):
         if ido.pdf not in self._resolves_objs_from:
-            raise ValueError(
+            raise PdfError(
                 f'Reference {ido} has no relation to this PDF writer.'
             )
         idnum = ido.idnum
@@ -898,9 +899,9 @@ class BasePdfFileWriter(PdfHandler):
             A reference to the newly inserted page.
         """
         if new_page['/Type'] != pdf_name('/Page'):
-            raise ValueError('Not a page object')
+            raise PdfWriteError('Not a page object')
         if '/Parent' in new_page:
-            raise ValueError('/Parent must not be set.')
+            raise PdfWriteError('/Parent must not be set.')
 
         page_tree_root_ref = self.root.raw_get('/Pages')
         if after is None:
@@ -918,7 +919,7 @@ class BasePdfFileWriter(PdfHandler):
         try:
             kids = pages_obj['/Kids']
         except KeyError:  # pragma: nocover
-            raise ValueError('/Pages must have /Kids')
+            raise PdfError('/Pages must have /Kids')
 
         # increase page count for all parents
         parent = pages_obj
@@ -1149,7 +1150,7 @@ class BasePdfFileWriter(PdfHandler):
                 # mark the page to be updated as well
                 self.mark_update(page_obj_ref)
             else:
-                raise ValueError('Unexpected type for page /Contents')
+                raise PdfError('Unexpected type for page /Contents')
         elif isinstance(contents_ref, generic.ArrayObject):
             # make /Contents an indirect array, and append our stream
             contents = contents_ref
@@ -1160,7 +1161,7 @@ class BasePdfFileWriter(PdfHandler):
             page_obj[pdf_name('/Contents')] = self.add_object(contents)
             self.mark_update(page_obj_ref)
         else:
-            raise ValueError('Unexpected type for page /Contents')
+            raise PdfError('Unexpected type for page /Contents')
 
         if resources is None:
             return
@@ -1240,7 +1241,7 @@ class BasePdfFileWriter(PdfHandler):
             elif isinstance(orig_value, generic.DictionaryObject):
                 for key_, value_ in value.items():
                     if key_ in orig_value:
-                        raise ValueError(
+                        raise PdfError(
                             'Naming conflict in resource of type %s: '
                             'key %s occurs in both.' % (key, key_)
                         )

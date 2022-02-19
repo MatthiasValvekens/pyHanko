@@ -18,6 +18,7 @@ from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.layout import BoxConstraints
 from pyhanko.pdf_utils.misc import (
     OrderedEnum,
+    PdfError,
     PdfReadError,
     PdfWriteError,
     get_and_apply,
@@ -453,7 +454,7 @@ class SigCertConstraints:
             pdf_dict = pdf_dict.get_object()
         try:
             if pdf_dict['/Type'] != '/SVCert':  # pragma: nocover
-                raise ValueError('Object /Type entry is not /SVCert')
+                raise PdfReadError('Object /Type entry is not /SVCert')
         except KeyError:  # pragma: nocover
             pass
         flags = SigCertConstraintFlags(pdf_dict.get('/Ff', 0))
@@ -894,7 +895,7 @@ class SigSeedValueSpec:
             pdf_dict = pdf_dict.get_object()
         try:
             if pdf_dict['/Type'] != '/SV':  # pragma: nocover
-                raise ValueError('Object /Type entry is not /SV')
+                raise PdfReadError('Object /Type entry is not /SV')
         except KeyError:  # pragma: nocover
             pass
 
@@ -1097,13 +1098,15 @@ class FieldMDPSpec:
         try:
             action = FieldMDPAction(pdf_dict['/Action'])
         except KeyError:  # pragma: nocover
-            raise ValueError("/Action is required.")
+            raise PdfReadError("/Action is required.")
 
         if action != FieldMDPAction.ALL:
             try:
                 fields = pdf_dict['/Fields']
             except KeyError:  # pragma: nocover
-                raise ValueError("/Fields is required when /Action is not /All")
+                raise PdfReadError(
+                    "/Fields is required when /Action is not /All"
+                )
         else:
             fields = None
         return cls(action=action, fields=fields)
@@ -1293,8 +1296,6 @@ def prepare_sig_field(sig_field_name, root,
     .. danger::
         This function is internal API.
     """
-    if sig_field_name is None:  # pragma: nocover
-        raise ValueError
 
     try:
         form = root['/AcroForm']
@@ -1302,7 +1303,7 @@ def prepare_sig_field(sig_field_name, root,
         try:
             fields = form['/Fields']
         except KeyError:
-            raise ValueError('/AcroForm has no /Fields')
+            raise PdfError('/AcroForm has no /Fields')
 
         candidates = enumerate_sig_fields_in(
             fields, with_name=sig_field_name, refs_seen=set()

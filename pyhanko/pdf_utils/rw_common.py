@@ -5,6 +5,8 @@ from . import generic, misc
 
 __all__ = ['PdfHandler']
 
+from .misc import PdfError
+
 
 class PdfHandler:
     """Abstract class providing a general interface for quering objects
@@ -75,7 +77,7 @@ class PdfHandler:
         if page_ix < 0:
             page_ix = page_count + page_ix
         if not (0 <= page_ix < page_count):
-            raise ValueError('Page index out of range')
+            raise PdfError('Page index out of range')
 
         def _recurse(first_page_ix, pages_obj_ref, last_rsrc_dict, refs_seen):
             pages_obj = pages_obj_ref.get_object()
@@ -123,7 +125,7 @@ class PdfHandler:
                     else:
                         cur_page_ix += 1
             # This means the PDF is not standards-compliant
-            raise ValueError('Page not found')
+            raise PdfError('Page not found')
 
         return _recurse(0, page_tree_root_ref, root_resources, set())
 
