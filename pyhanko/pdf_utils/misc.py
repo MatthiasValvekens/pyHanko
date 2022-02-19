@@ -86,13 +86,21 @@ def read_non_whitespace(stream, seek_back=False, allow_eof=False):
     Finds and reads the next non-whitespace character (ignores whitespace).
     """
     tok = PDF_WHITESPACE[0]
-    while tok in PDF_WHITESPACE:
-        if not tok:
-            if allow_eof:
-                return b''
-            else:
-                raise PdfStreamError('Stream ended prematurely')
-        tok = stream.read(1)
+    while True:
+        while tok in PDF_WHITESPACE:
+            if not tok:
+                if allow_eof:
+                    return b''
+                else:
+                    raise PdfStreamError('Stream ended prematurely')
+            tok = stream.read(1)
+        # Deal with comments
+        if tok != b'%':
+            break
+        else:
+            stream.seek(-1, os.SEEK_CUR)
+            skip_over_comment(stream)
+            tok = PDF_WHITESPACE[0]
     if seek_back:
         stream.seek(-1, os.SEEK_CUR)
     return tok

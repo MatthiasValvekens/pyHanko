@@ -1847,3 +1847,16 @@ def test_multi_def_dictionary_nonstrict():
         tst, container_ref=generic.Reference(1, 0, pdf=r)
     )
     assert res['/Bleh'] == pdf_name('/A')
+
+
+def test_compacted_syntax():
+    # rudimentary test to see if we can parse SafeDocs' compacted syntax file
+    path = os.path.join(PDF_DATA_DIR, "safedocs", "CompactedPDFSyntaxTest.pdf")
+    with open(path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        assert r.root['/MarkInfo']['/Marked']
+        page = r.root['/Pages']['/Kids'][0]
+        assert page['/MediaBox'] == [0, 0, 999, 999]
+        pgcontents = page['/Contents'][0].data
+        assert b'compacted syntax sequences' in pgcontents
+        assert r.trailer_view['/Info']['/Subject'] == 'Compacted Syntax v3.0'

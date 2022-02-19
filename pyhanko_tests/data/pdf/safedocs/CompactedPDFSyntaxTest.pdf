@@ -1,0 +1,79 @@
+%PDF-1.7
+%‚„œ”
+%
+% (c) PDF Association, 2020
+% Peter Wyatt, Principal Scientist - for SafeDocs
+%
+% This PDF has been hand-written to cover as many combinations of compacted PDF syntax as possible
+% (meaning not using whitespace between tokens and delimiters). This file will get RUINED if it gets
+% "repaired" by tools such as mutool clean!!!!
+%
+% Note also that this PDF file is NOT checked by rendering as many constructs are
+% necessarily artificial and will not relate to graphics. It is designed to check a parser's ability to 
+% read compacted syntax without error, such as with the Trail Of Bit's PolyTracker/PolyFile tools. 
+% However this is still a 100% valid PDF and should render in every viewer.
+%
+% See also the corresponding "Compacted PDF Syntax Matrix" document for the 121 possible combinations.
+%
+% This material is based upon work supported by the Defense Advanced
+% Research Projects Agency (DARPA) under Contract No. HR001119C0079.
+% Any opinions, findings and conclusions or recommendations expressed
+% in this material are those of the author(s) and do not necessarily
+% reflect the views of the Defense Advanced Research Projects Agency
+% (DARPA). Approved for public release.
+%
+1 0 obj
+<</Type/Catalog/MarkInfo<<%comment after dictionary start token
+/Marked true/Suspects true%comment after a boolean
+/UserProperties true>>/StructTreeRoot null/AA<</WP<</S/JavaScript/JS(//JavaScript comment
+app.alert\( "Document Will Print Action!!"\))>>>>/Pages 3 0 R>>%comment after dictionary close token
+endobj
+2 0 obj
+endobj
+3 0 obj
+<</FakeBigDataArray[true[[[]]]true<686931>null<686932>null[/Dummy](hi3)[(hi4)(hi5)true(hi6)null(hi7)12(hi8)]-1.<</ABC +.123/DEF +.0>>[](hi99)[]null[]<</DEF null>>true<</GHI/JKL>>[<</MNO +.0>>]<686933>1 0 R[1 2 3]6 0 R<686934>4 0 R(hi9)2 0 R<</QRS true>>[true]<</TUV true>><686935><</XYZ true>>3 0 R<</AAB true>>(hi10)<</AAC true>>null<686936>true(hi11)<686937>(hi12)+.0<686938>]
+/Type/Pages/Count 1/Kids[4 0 R%comment after indirect ref
+]>>endobj
+4 0 obj
+<</Type/Page/Parent 3 0 R/MediaBox[%comment after array start token
++0 .0 999 999.]%comment after array end token
+/CropBox[+0 .0 999%comment after an integer
+999.]/Contents[5 0 R]/UserUnit +0.88/Annots null%comment after null
+/Resources<</Pattern<<>>/ProcSet[null]/ExtGState<</ 6 0 R>>/Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Times-Bold/Encoding/WinAnsiEncoding>>>>>>>>
+endobj
+5 0 obj
+<</Length 809  >>
+stream
+/BreakMyParser <</FakeBigDataArray[true[[[]]]true<686931>null<686932>null[/Dummy](hi3)[(hi4)(hi5)true(hi6)null(hi7)12(hi8)]-1.<</ABC +.123/DEF +.0>>[](hi99)[]null[]<</DEF null>>true<</GHI/JKL>>[<</MNO +.0>>]<686933>[1 2 3]<686934>(hi9)<</QRS true>>[true]<</TUV true>><686935><</XYZ true>><</AAB true>>(hi10)<</AAC true>>null<686936>true(hi11)<686937>(hi12)+.0<686938>]>> DP
+% Visible file marker
+BT/F1 30 Tf 0 Tr 1 0 0 1 10 950 Tm(PDF compacted syntax sequences according to ISO 32000)Tj 1 0 0 1 10 900 Tm 
+(This file must NOT be resaved or modified by any tool!! v3.0) Tj ET
+% 3 colored vector graphic squares that are clipped
+/ gs q 40 w 75 75 400 400 re W S % stroke then clip a path with a wide black border
+1 0. .0 rg 75 75 200 200 re f 0 1 0 rg 275 75 200 200 re f .0 0 1 rg 275 275 200 200 re f Q
+endstream
+endobj
+6 0 obj
+<</Type/ExtGState/ca 0.33/CA 0.66%comment after a real
+>>endobj
+7 0 obj
+<</Subject(Compacted Syntax v3.0)%comment after literal string end
+/Title<436f6d7061637465642073796e746178>%comment after hex string end
+/Keywords(PDF,Compacted,Syntax,ISO 32000-2:2020)/CreationDate(D:20200317)/Author(Peter Wyatt)/Creator<48616e642d65646974>/Producer<48616e642d65646974>>>
+endobj
+xref
+0 8
+0000000000 65535 f
+0000001228 00000 n
+0000001555 00000 n
+0000001572 00000 n
+0000002031 00000 n
+0000002428 00000 n
+0000003294 00000 n
+0000003369 00000 n
+trailer
+<</Root 1 0 R/Info%comment after name
+7 0 R/ID[<18D6B641245C03FABE67D93AD879D6EC><6264992C92074533A46A019C7CF9BFB6>]/Size 8>>
+startxref
+3679  
+%%EOF
