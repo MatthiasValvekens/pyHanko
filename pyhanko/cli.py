@@ -52,7 +52,15 @@ except ImportError:
     pkcs11_available = False
 
 
-def logging_setup(log_configs):
+class NoStackTraceFormatter(logging.Formatter):
+    def formatException(self, ei) -> str:
+        return ""
+
+
+LOG_FORMAT_STRING = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+
+def logging_setup(log_configs, verbose: bool):
     log_config: LogConfig
     for module, log_config in log_configs.items():
         cur_logger = logging.getLogger(module)
@@ -62,11 +70,15 @@ def logging_setup(log_configs):
                 handler = logging.StreamHandler(sys.stdout)
             else:
                 handler = logging.StreamHandler()
+            # when logging to the console, don't output stack traces
+            # unless in verbose mode
+            if verbose:
+                formatter = logging.Formatter(LOG_FORMAT_STRING)
+            else:
+                formatter = NoStackTraceFormatter(LOG_FORMAT_STRING)
         else:
             handler = logging.FileHandler(log_config.output)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+            formatter = logging.Formatter(LOG_FORMAT_STRING)
         handler.setFormatter(formatter)
         cur_logger.addHandler(handler)
 
@@ -180,7 +192,7 @@ def cli(ctx, config, verbose):
                 level=logging.WARNING, output=log_output
             )
 
-    logging_setup(log_config)
+    logging_setup(log_config, verbose)
 
     if verbose:
         logging.debug("Running with --verbose")
