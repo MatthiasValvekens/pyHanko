@@ -35,7 +35,6 @@ from pyhanko.pdf_utils.crypt import (
 from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
-from pyhanko.pdf_utils.misc import PdfError
 from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils.rw_common import PdfHandler
 from pyhanko.sign.general import load_cert_from_pemder
@@ -68,9 +67,9 @@ def test_create_fresh(zip1, zip2):
     assert r.find_page_for_modification(-1)[0].idnum == p2_ref.idnum
     assert r.find_page_for_modification(-2)[0].idnum == p1_ref.idnum
 
-    with pytest.raises(PdfError):
+    with pytest.raises(misc.PdfError):
         r.find_page_for_modification(2)
-    with pytest.raises(PdfError):
+    with pytest.raises(misc.PdfError):
         r.find_page_for_modification(-3)
 
 
@@ -1828,3 +1827,23 @@ def test_fresh_producer_existing_info():
     r = PdfFileReader(outf2)
     proc = r.trailer['/Info']['/Producer']
     assert proc.startswith('pyHanko')
+
+
+def test_multi_def_dictionary():
+    # need a reader for context
+    r = PdfFileReader(BytesIO(MINIMAL))
+    tst = BytesIO(b"<</Bleh /A /Bluh /B /Bleh /C>>")
+    with pytest.raises(misc.PdfStrictReadError):
+        generic.DictionaryObject.read_from_stream(
+            tst, container_ref=generic.Reference(1, 0, pdf=r)
+        )
+
+
+def test_multi_def_dictionary_nonstrict():
+    # need a reader for context
+    r = PdfFileReader(BytesIO(MINIMAL), strict=False)
+    tst = BytesIO(b"<</Bleh /A /Bluh /B /Bleh /C>>")
+    res = generic.DictionaryObject.read_from_stream(
+        tst, container_ref=generic.Reference(1, 0, pdf=r)
+    )
+    assert res['/Bleh'] == pdf_name('/A')
