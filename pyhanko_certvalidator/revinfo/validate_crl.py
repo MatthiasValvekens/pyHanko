@@ -17,7 +17,8 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, \
-    RevinfoUsabilityRating, ValidationTimingInfo
+    RevinfoUsabilityRating
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager

@@ -8,7 +8,8 @@ from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer,\
-    sort_freshest_first, POEManager
+    sort_freshest_first
+from pyhanko_certvalidator.ltv.poe import POEManager
 
 
 class RevinfoManager:
@@ -202,4 +203,3 @@ class RevinfoManager:
                     )
 
         return ocsps + self._ocsps
-

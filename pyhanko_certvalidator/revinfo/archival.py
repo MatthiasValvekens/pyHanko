@@ -1,62 +1,17 @@
 import abc
 import enum
-import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional, List, Iterable, Union
 
-from asn1crypto import ocsp, crl, core
+from asn1crypto import ocsp, crl
 
 from pyhanko_certvalidator._types import type_name
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo, \
+    IssuedItemContainer
 from pyhanko_certvalidator.util import pretty_message
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
     FreshnessReqType
-
-
-@dataclass(frozen=True)
-class ValidationTimingInfo:
-    validation_time: datetime
-    use_poe_time: datetime
-    time_tolerance: timedelta
-    point_in_time_validation: bool
-
-
-class POEManager:
-
-    def __init__(self, current_dt_override: Optional[datetime] = None):
-        self._poes = {}
-        self._current_dt_override = current_dt_override
-
-    def register(self, data: Union[bytes, core.Asn1Value],
-                 dt: Optional[datetime] = None) -> datetime:
-        if isinstance(data, core.Asn1Value):
-            data = data.dump()
-        digest = hashlib.sha256(data).digest()
-        return self.register_by_digest(digest, dt)
-
-    def register_by_digest(self, digest: bytes, dt: Optional[datetime] = None) \
-            -> datetime:
-        dt = dt or self._current_dt_override or datetime.now(timezone.utc)
-        try:
-            cur_poe = self._poes[digest]
-            if cur_poe <= dt:
-                return cur_poe
-        except KeyError:
-            pass
-        self._poes[digest] = dt
-        return dt
-
-    def __iter__(self):
-        return iter(self._poes.items())
-
-    def __getitem__(self, item: Union[bytes, core.Asn1Value]):
-        return self.register(item, dt=None)
-
-    def __ior__(self, other):
-        if not isinstance(other, POEManager):
-            raise TypeError
-        for digest, dt in iter(other):
-            self.register_by_digest(digest, dt)
 
 
 class RevinfoUsabilityRating(enum.Enum):
@@ -68,12 +23,6 @@ class RevinfoUsabilityRating(enum.Enum):
     @property
     def usable(self) -> bool:
         return self == RevinfoUsabilityRating.OK
-
-
-class IssuedItemContainer(abc.ABC):
-    @property
-    def issuance_date(self) -> Optional[datetime]:
-        raise NotImplementedError
 
 
 class RevinfoContainer(IssuedItemContainer, abc.ABC):

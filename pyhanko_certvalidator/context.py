@@ -16,8 +16,10 @@ from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
 from .registry import CertificateRegistry, TrustRootList
 from .revinfo.archival import \
-    ValidationTimingInfo, process_legacy_crl_input, \
-    process_legacy_ocsp_input, POEManager
+    process_legacy_crl_input, \
+    process_legacy_ocsp_input
+from .ltv.types import ValidationTimingInfo
+from .ltv.poe import POEManager
 
 
 @dataclass(frozen=True)

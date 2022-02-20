@@ -135,7 +135,7 @@ setup(
     packages=[
         PYTHON_PACKAGE_NAME + subp for subp in
         ('', '.fetchers', '.fetchers.requests_fetchers',
-         '.fetchers.aiohttp_fetchers', '.revinfo')
+         '.fetchers.aiohttp_fetchers', '.revinfo', '.ltv')
     ],
     package_data=package_data,
 
