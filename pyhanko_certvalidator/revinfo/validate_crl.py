@@ -1079,9 +1079,11 @@ async def _assess_crl_relevance(
 
 async def collect_relevant_crls_with_paths(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath, control_time: datetime,
-        revinfo_manager: RevinfoManager, use_deltas=True,
+        path: ValidationPath, revinfo_manager: RevinfoManager,
+        control_time: datetime, use_deltas=True,
         proc_state: Optional[ValProcState] = None) -> List[CRLOfInterest]:
+
+    proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
     errs = _CRLErrs()
     classify_job = _classify_relevant_crls(
         revinfo_manager, cert, errs, control_time=control_time
