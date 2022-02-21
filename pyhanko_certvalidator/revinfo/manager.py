@@ -13,6 +13,23 @@ from pyhanko_certvalidator.ltv.poe import POEManager
 
 
 class RevinfoManager:
+    """
+    .. versionadded:: 0.20.0
+
+    Class to manage and potentially fetch revocation information.
+
+    :param certificate_registry:
+        The associated certificate registry.
+    :param poe_manager:
+        The proof-of-existence (POE) data manager.
+    :param crls:
+        CRL data.
+    :param ocsps:
+        OCSP response data.
+    :param fetchers:
+        Fetchers for collecting revocation information.
+        If ``None``, no fetching will be performed.
+    """
 
     def __init__(self, certificate_registry: CertificateRegistry,
                  poe_manager: POEManager,
@@ -41,18 +58,30 @@ class RevinfoManager:
 
     @property
     def poe_manager(self) -> POEManager:
+        """
+        The proof-of-existence (POE) data manager.
+        """
         return self._poe_manager
 
     @property
     def certificate_registry(self) -> CertificateRegistry:
+        """
+        The associated certificate registry.
+        """
         return self._certificate_registry
 
     @property
     def fetching_allowed(self) -> bool:
+        """
+        Boolean indicating whether fetching is allowed.
+        """
         return self._allow_fetching
 
     @property
     def revinfo_policy(self) -> CertRevTrustPolicy:
+        """
+        The applicable revocation trust policy.
+        """
         return self._revinfo_policy
 
     @property
