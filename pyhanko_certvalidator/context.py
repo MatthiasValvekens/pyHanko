@@ -278,6 +278,8 @@ class ValidationContext:
                     fetcher_backend = default_fetcher_backend()
                 fetchers = fetcher_backend.get_fetchers()
             cert_fetcher = fetchers.cert_fetcher
+        else:
+            fetchers = None
 
         self.certificate_registry = certificate_registry = CertificateRegistry(
             trust_roots, extra_trust_roots, other_certs,
@@ -289,7 +291,7 @@ class ValidationContext:
             certificate_registry=certificate_registry,
             poe_manager=poe_manager or POEManager(),
             revinfo_policy=revinfo_policy, crls=crls, ocsps=ocsps,
-            allow_fetching=allow_fetching, fetchers=fetchers
+            fetchers=fetchers
         )
 
         self._validate_map = {}

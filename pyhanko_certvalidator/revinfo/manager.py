@@ -18,7 +18,6 @@ class RevinfoManager:
                  poe_manager: POEManager,
                  revinfo_policy: CertRevTrustPolicy,
                  crls: Iterable[CRLContainer], ocsps: Iterable[OCSPContainer],
-                 allow_fetching: bool = False,
                  fetchers: Optional[Fetchers] = None):
         self._certificate_registry = certificate_registry
         self._revinfo_policy = revinfo_policy
@@ -37,7 +36,7 @@ class RevinfoManager:
             for ocsp_response in ocsps:
                 self._extract_ocsp_certs(ocsp_response)
 
-        self._allow_fetching = allow_fetching
+        self._allow_fetching = fetchers is not None
         self._fetchers = fetchers
 
     @property
