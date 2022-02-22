@@ -1082,6 +1082,26 @@ async def collect_relevant_crls_with_paths(
         path: ValidationPath, revinfo_manager: RevinfoManager,
         control_time: datetime, use_deltas=True,
         proc_state: Optional[ValProcState] = None) -> List[CRLOfInterest]:
+    """
+    Collect potentially relevant CRLs with the associated validation
+    paths. Will not perform actual path validation.
+
+    :param cert:
+        The certificate under scrutiny.
+    :param path:
+        The path currently being evaluated.
+    :param revinfo_manager:
+        The revocation info manager.
+    :param control_time:
+        The control time before which the validation info should have been
+        issued.
+    :param use_deltas:
+        Whether to include delta CRLs.
+    :param proc_state:
+        The state of any prior validation process.
+    :return:
+        A list of potentially relevant CRLs.
+    """
 
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
     errs = _CRLErrs()

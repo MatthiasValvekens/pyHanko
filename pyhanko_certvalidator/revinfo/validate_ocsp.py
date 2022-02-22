@@ -541,6 +541,24 @@ async def collect_relevant_responses_with_paths(
         path: ValidationPath, revinfo_manager: RevinfoManager,
         control_time: datetime, proc_state: Optional[ValProcState] = None) \
         -> List[OCSPResponseOfInterest]:
+    """
+    Collect potentially relevant OCSP responses with the associated validation
+    paths. Will not perform actual path validation.
+
+    :param cert:
+        The certificate under scrutiny.
+    :param path:
+        The path currently being evaluated.
+    :param revinfo_manager:
+        The revocation info manager.
+    :param control_time:
+        The control time before which the validation info should have been
+        issued.
+    :param proc_state:
+        The state of any prior validation process.
+    :return:
+        A list of potentially relevant OCSP responses.
+    """
 
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
     try:
