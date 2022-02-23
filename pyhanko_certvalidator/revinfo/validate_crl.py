@@ -1004,14 +1004,39 @@ async def verify_crl(
 
 @dataclass(frozen=True)
 class ProvisionalCRLTrust:
+    """
+    A provisional CRL path, together with an optional delta CRL that may be
+    relevant.
+    """
+
     path: ValidationPath
+    """
+    A provisional validation path for the CRL. Requires path validation.
+    """
+
     delta: Optional[CRLContainer]
+    """
+    A delta CRL that may be relevant to the parent CRL for which the path was
+    put together.
+    """
 
 
 @dataclass(frozen=True)
 class CRLOfInterest:
+    """
+    A CRL of interest.
+    """
+
     crl: CRLContainer
+    """
+    The CRL data, packaged in a revocation info container.
+    """
+
     prov_paths: List[ProvisionalCRLTrust]
+    """
+    Candidate validation paths for the CRL, together with relevant delta CRLs,
+    if appropriate.
+    """
 
 
 async def _assess_crl_relevance(
