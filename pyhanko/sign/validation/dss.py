@@ -314,20 +314,20 @@ class DocumentSecurityStore:
             raise NoDSSFoundError() from e
 
         cert_refs = {}
-        cert_ref_list = get_and_apply(dss_dict, '/Certs', list, default=())
+        cert_ref_list = get_and_apply(dss_dict, '/Certs', list, default=[])
         for cert_ref in cert_ref_list:
             cert_stream: generic.StreamObject = cert_ref.get_object()
             cert: Certificate = Certificate.load(cert_stream.data)
             cert_refs[cert.issuer_serial] = cert_ref
 
-        ocsp_refs = get_and_apply(dss_dict, '/OCSPs', list, default=())
+        ocsp_refs = get_and_apply(dss_dict, '/OCSPs', list, default=[])
         ocsps = []
         for ocsp_ref in ocsp_refs:
             ocsp_stream: generic.StreamObject = ocsp_ref.get_object()
             resp = asn1_ocsp.OCSPResponse.load(ocsp_stream.data)
             ocsps.append(resp)
 
-        crl_refs = get_and_apply(dss_dict, '/CRLs', list, default=())
+        crl_refs = get_and_apply(dss_dict, '/CRLs', list, default=[])
         crls = []
         for crl_ref in crl_refs:
             crl_stream: generic.StreamObject = crl_ref.get_object()
