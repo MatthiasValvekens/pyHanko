@@ -61,7 +61,7 @@ setup(
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
-        'pyhanko-certvalidator~=0.19.2',
+        'pyhanko-certvalidator~=0.19.4',
         'click>=7.1.2',
         'requests>=2.24.0',
         'pyyaml>=5.3.1',
@@ -72,7 +72,7 @@ setup(
     ],
     extras_require={
         'extra_pubkey_algs': ['oscrypto>=1.2.1'],
-        'opentype': ['fonttools>=4.28.2', 'uharfbuzz==0.16.1'],
+        'opentype': ['fonttools>=4.28.2', 'uharfbuzz==0.19.0'],
         'image-support': [
             # Only tested systematically on 8.x,
             # but we allow 7.2.x to support system PIL on Ubuntu
@@ -84,7 +84,7 @@ setup(
     },
     tests_require=[
         'pytest>=6.1.1', 'requests-mock>=1.8.0',
-        'freezegun>=1.1.0', 'certomancer~=0.7.1',
+        'freezegun>=1.1.0', 'certomancer~=0.8.1',
         'aiohttp~=3.8.0', 'pytest-aiohttp~=0.3.0',
         'python-pae==0.1.0'
     ],
