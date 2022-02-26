@@ -3,6 +3,29 @@ Release history
 ***************
 
 
+.. _release-0.12.1:
+
+0.12.1
+======
+
+*Release date:* 2022-02-26
+
+
+Dependency updates
+------------------
+
+ * ``uharfbuzz`` updated to ``0.19.0``
+ * ``pyhanko-certvalidator`` updated to ``0.19.4``
+ * ``certomancer`` updated to ``0.8.1``
+
+
+Bugs fixed
+----------
+
+ * Fix typing issue in DSS reading logic (see
+   `issue #81 <https://github.com/MatthiasValvekens/pyHanko/issues/81>`_)
+
+
 .. _release-0.12.0:
 
 0.12.0
