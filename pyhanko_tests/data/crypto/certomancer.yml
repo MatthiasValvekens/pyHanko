@@ -108,6 +108,8 @@ pki-architectures:
       signer2:
         common-name: Bob
         email-address: bob@example.com
+      invalid-cn:
+        common-name: "Invalidא"
     certs:
       root:
         subject: root
@@ -247,6 +249,21 @@ pki-architectures:
         validity:
           valid-from: "2020-01-01T00:00:00+0000"
           valid-to: "2030-01-01T00:00:00+0000"
+      signer-with-invalid-cn:
+        subject: invalid-cn
+        subject-key: signer2
+        template: signer1
+      ca-with-invalid-cn:
+        subject: invalid-cn
+        subject-key: interm
+        template: interm
+      issued-by-invalid-cn:
+        subject: signer2
+        subject-key: signer2
+        issuer: invalid-cn
+        issuer-cert: ca-with-invalid-cn
+        authority-key: interm
+        template: signer1
     services:
       ocsp:
         interm:

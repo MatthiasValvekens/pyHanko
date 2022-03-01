@@ -267,9 +267,13 @@ async def cms_basic_validation(
             cert, intermediate_certs=other_certs,
             validation_context=validation_context
         )
-        trusted, revoked, path = await status_cls.validate_cert_usage(
-            validator, key_usage_settings=key_usage_settings
-        )
+        try:
+            trusted, revoked, path = await status_cls.validate_cert_usage(
+                validator, key_usage_settings=key_usage_settings
+            )
+        except ValueError as e:
+            logger.error("Processing error in validation process", exc_info=e)
+            # proceed with trusted/revoked/path unset
 
     status_kwargs = status_kwargs or {}
     status_kwargs.update(

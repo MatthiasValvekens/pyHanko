@@ -1230,3 +1230,51 @@ async def test_detached_cades_cms_with_tst():
     assert 'The TSA certificate is untrusted' in status.pretty_print_details()
     assert status.valid
     assert status.intact
+
+
+@freeze_time('2020-11-01')
+async def test_detached_cms_with_invalid_cn():
+    cert = TESTING_CA.get_cert(CertLabel('signer-with-invalid-cn'))
+    sgn = signers.SimpleSigner(
+        signing_cert=cert,
+        signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [ROOT_CERT, INTERM_CERT]
+        )
+    )
+    signature = await sgn.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False,
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content'],
+        signer_validation_context=SIMPLE_V_CONTEXT()
+    )
+    assert status.valid
+    assert status.intact
+    assert status.trusted
+
+
+@freeze_time('2020-11-01')
+async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
+    cert = TESTING_CA.get_cert(CertLabel('issued-by-invalid-cn'))
+    sgn = signers.SimpleSigner(
+        signing_cert=cert,
+        signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            # this is the wrong intermediate cert, so it shouldn't match
+            # (the actual CA cert can't be added to a certificate store
+            #  because its subject isn't hashable)
+            [ROOT_CERT, INTERM_CERT]
+        )
+    )
+    signature = await sgn.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False,
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    with pytest.raises(SignatureValidationError,
+                       match="Signing certificate attribute does not match"):
+        await async_validate_detached_cms(
+            b'Hello world!', signature['content'],
+            signer_validation_context=SIMPLE_V_CONTEXT()
+        )

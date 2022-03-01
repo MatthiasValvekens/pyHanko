@@ -236,9 +236,22 @@ def match_issuer_serial(expected_issuer_serial:
                 expected_issuer[0].name != 'directory_name':
             return False
         expected_issuer = expected_issuer[0].chosen
+
+    # Some certificates contain name elements that can't be compared, e.g.
+    # because they violate the stringprep profile for directory strings.
+    # Instead of failing those outright, we attempt a byte-for-byte comparison
+    # first. If the encoding happens to match exactly, we're good. If not,
+    # we invoke (asn1crypto's implementation of) the directory name matching
+    # routine.
+    try:
+        issuer_match = (
+            expected_issuer.dump() == cert.issuer.dump()
+            or expected_issuer == cert.issuer
+        )
+    except ValueError:
+        issuer_match = False
     return (
-        expected_issuer == cert.issuer
-        and expected_issuer_serial['serial_number'] == serial_asn1
+        issuer_match and expected_issuer_serial['serial_number'] == serial_asn1
     )
 
 
