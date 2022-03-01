@@ -311,13 +311,17 @@ async def cms_basic_validation(
     # next, validate trust
     ades_status = path = None
     if valid:
-        validator = CertificateValidator(
-            cert, intermediate_certs=other_certs,
-            validation_context=validation_context
-        )
-        ades_status, path = await status_cls.validate_cert_usage(
-            validator, key_usage_settings=key_usage_settings
-        )
+        try:
+            validator = CertificateValidator(
+                cert, intermediate_certs=other_certs,
+                validation_context=validation_context
+            )
+            ades_status, path = await status_cls.validate_cert_usage(
+                validator, key_usage_settings=key_usage_settings
+            )
+        except ValueError as e:
+            logger.error("Processing error in validation process", exc_info=e)
+            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
     status_kwargs = status_kwargs or {}
     status_kwargs.update(
