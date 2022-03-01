@@ -263,11 +263,11 @@ async def cms_basic_validation(
     trusted = revoked = False
     path = None
     if valid:
-        validator = CertificateValidator(
-            cert, intermediate_certs=other_certs,
-            validation_context=validation_context
-        )
         try:
+            validator = CertificateValidator(
+                cert, intermediate_certs=other_certs,
+                validation_context=validation_context
+            )
             trusted, revoked, path = await status_cls.validate_cert_usage(
                 validator, key_usage_settings=key_usage_settings
             )

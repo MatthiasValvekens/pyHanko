@@ -1278,3 +1278,45 @@ async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
             b'Hello world!', signature['content'],
             signer_validation_context=SIMPLE_V_CONTEXT()
         )
+
+
+@freeze_time('2020-11-01')
+async def test_detached_cms_with_invalid_cn_in_ca():
+    cert = TESTING_CA.get_cert(CertLabel('issued-by-invalid-cn'))
+
+    class DummySigner(signers.SimpleSigner):
+        # make sure the signing cert attr is not included
+        def _signed_attr_providers(self, *args, **kwargs):
+            return ()
+
+    sgn = DummySigner(
+        signing_cert=cert,
+        signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            # the malformed intermediate CA can't be added to a certificate
+            # store, we'll do that later
+            [ROOT_CERT]
+        )
+    )
+    signature = await sgn.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False,
+    )
+
+    signature['content']['certificates'].append(
+        cms.CertificateChoices(
+            name='certificate',
+            value=TESTING_CA.get_cert(CertLabel('ca-with-invalid-cn'))
+        )
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content'],
+        signer_validation_context=SIMPLE_V_CONTEXT()
+    )
+    assert status.valid
+    assert status.intact
+    # Because the X.509 validation chokes on those intermediate certs
+    #  (already very early, when constructing the certificate registry)
+    # But that's something I'm willing to live with not supporting.
+    assert not status.trusted
