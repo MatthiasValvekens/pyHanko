@@ -912,8 +912,12 @@ def grab_certs(files):
 @click.option('--passfile', help='file containing the passphrase '
               'for the private key', required=False, type=click.File('r'),
               show_default='stdin')
+@click.option('--no-pass',
+              help='assume the private key file is unencrypted',
+              type=bool, is_flag=True, default=False, show_default=True)
 @click.pass_context
-def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup, passfile):
+def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup,
+                  passfile, no_pass):
     signature_meta = ctx.obj[Ctx.SIG_META]
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
@@ -946,7 +950,7 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup, passfile
     elif passfile is not None:
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
-    elif pemder_config.prompt_passphrase:
+    elif pemder_config.prompt_passphrase and not no_pass:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
     else:
         passphrase = None
@@ -1380,13 +1384,19 @@ def decrypt_with_password(infile, outfile, password, force):
 @click.option('--passfile', required=False, type=click.File('rb'),
               help='file containing the passphrase for the private key',
               show_default='stdin')
+@click.option('--no-pass',
+              help='assume the private key file is unencrypted',
+              type=bool, is_flag=True, default=False, show_default=True)
 @decrypt_force_flag
-def decrypt_with_pemder(infile, outfile, key, cert, passfile, force):
-    if passfile is None:
-        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
-    else:
+def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
+    if passfile is not None:
         passphrase = passfile.read()
         passfile.close()
+    elif not no_pass:
+        passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+    else:
+        passphrase = None
+
     sedk = crypt.SimpleEnvelopeKeyDecrypter.load(
         key, cert, key_passphrase=passphrase
     )
