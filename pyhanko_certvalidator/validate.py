@@ -9,9 +9,8 @@ from asn1crypto import x509, cms, core
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
 
-from ._eddsa_oids import register_eddsa_oids
 from ._state import ValProcState
-from .asn1_types import AAControls, Target as Target
+from .asn1_types import AAControls, Target
 from .context import (
     ValidationContext,
     ACTargetDescription
@@ -58,9 +57,6 @@ from .util import (
 )
 
 logger = logging.getLogger(__name__)
-
-# make sure EdDSA OIDs are known to asn1crypto
-register_eddsa_oids()
 
 
 def validate_path(validation_context, path,
