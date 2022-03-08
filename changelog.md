@@ -1,5 +1,11 @@
 # changelog
 
+
+## 0.19.5
+
+ - Maintenance update to bump `asn1crypto` to `1.5.0` and get rid of a number of
+   compatibility shims for fixes that were upstreamed to `asn1crypto`.
+
 ## 0.19.4
 
  - Fix improper error handling when dealing with expired or not-yet-valid
