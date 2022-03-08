@@ -18,7 +18,6 @@ from cryptography.hazmat.primitives.asymmetric import (
 )
 
 from . import asn1_types
-from ._eddsa_oids import register_eddsa_oids
 from ._errors import pretty_message
 from .asn1_types import AAControls
 from .context import (
@@ -52,9 +51,6 @@ from .util import extract_dir_name, extract_ac_issuer_dir_name, \
     get_ac_extension_value, get_relevant_crl_dps, get_declared_revinfo
 
 logger = logging.getLogger(__name__)
-
-# make sure EdDSA OIDs are known to asn1crypto
-register_eddsa_oids()
 
 
 def validate_path(validation_context, path,

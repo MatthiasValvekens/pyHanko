@@ -124,7 +124,7 @@ setup(
 
     install_requires=[
         'requests>=2.24.0',
-        'asn1crypto>=1.2.0',
+        'asn1crypto>=1.5.0',
         'oscrypto>=1.1.0',
         'cryptography>=3.3.1',
         'uritools>=3.0.1'
