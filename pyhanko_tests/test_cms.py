@@ -1628,7 +1628,9 @@ async def test_detached_cms_with_invalid_cn():
     )
     assert status.valid
     assert status.intact
-    assert status.trusted
+    # currently, pyhanko-certvalidator does not handle invalid cases like this
+    # gracefully.
+    assert not status.trusted
 
 
 @freeze_time('2020-11-01')
