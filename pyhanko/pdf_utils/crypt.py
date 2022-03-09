@@ -1052,7 +1052,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
     def derive_shared_encryption_key(self) -> bytes:
         if self._recp_key_seed is None:
             raise misc.PdfError("No seed available; authenticate first.")
-        if self._handler.version == SecurityHandlerVersion.AES256:
+        if self._handler.version >= SecurityHandlerVersion.AES256:
             md = sha256()
         else:
             md = sha1()
@@ -1801,7 +1801,7 @@ class StandardSecurityHandler(SecurityHandler):
                 crypt_filter_config = _std_rc4_config(5)
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
                 crypt_filter_config = _std_rc4_config(legacy_keylen)
-            elif version == SecurityHandlerVersion.AES256 \
+            elif version >= SecurityHandlerVersion.AES256 \
                     and crypt_filter_config is None:
                 # there's a reasonable default config that we can fall back
                 # to here
@@ -1813,7 +1813,7 @@ class StandardSecurityHandler(SecurityHandler):
         self.revision = revision
         self.perms = _as_signed(perm_flags)
         if revision >= StandardSecuritySettingsRevision.AES256:
-            StandardSecurityHandler._check_r6_values(
+            self.__class__._check_r6_values(
                 udata, odata, oeseed, ueseed, encrypted_perms
             )
             self.oeseed = oeseed
@@ -2530,7 +2530,7 @@ class PubKeySecurityHandler(SecurityHandler):
                     keylen=legacy_keylen, encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs
                 )
-            elif version == SecurityHandlerVersion.AES256:
+            elif version >= SecurityHandlerVersion.AES256:
                 # there's a reasonable default config that we can fall back to
                 # here
                 crypt_filter_config = _pubkey_aes_config(
