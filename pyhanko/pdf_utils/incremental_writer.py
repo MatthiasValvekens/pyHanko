@@ -61,6 +61,8 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.ensure_output_version(self.__class__.output_version)
 
         self.security_handler = prev.security_handler
+        if self.security_handler is not None:
+            self._encrypt = prev.trailer.raw_get("/Encrypt")
 
     @classmethod
     def from_reader(cls, reader: PdfFileReader) -> 'IncrementalPdfFileWriter':
@@ -175,12 +177,13 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         trailer[pdf_name('/Prev')] = generic.NumberObject(
             self.prev.last_startxref
         )
-        if self.prev.encrypted and self._encrypt is None:
+        if self.prev.encrypted and \
+                not self.security_handler.is_authenticated():
             # removing encryption in an incremental update is impossible
-            raise ValueError(
-                'Cannot save this document unencrypted. Please call '
-                'encrypt() with the password of the original file '
-                'before calling write().'
+            raise misc.PdfWriteError(
+                'Cannot update this document without encryption credentials '
+                'from the original. Please call encrypt() with the password '
+                'of the original file before calling write().'
             )
 
     def set_custom_trailer_entry(self, key: generic.NameObject,

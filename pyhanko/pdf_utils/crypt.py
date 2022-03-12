@@ -85,7 +85,8 @@ __all__ = [
     'StandardRC4CryptFilter', 'PubKeyAESCryptFilter', 'PubKeyRC4CryptFilter',
     'EnvelopeKeyDecrypter', 'SimpleEnvelopeKeyDecrypter',
     'STD_CF', 'DEFAULT_CRYPT_FILTER', 'IDENTITY', 'legacy_derive_object_key',
-    'CryptFilterBuilder', 'build_crypt_filter'
+    'CryptFilterBuilder', 'build_crypt_filter',
+    'PdfKeyNotAvailableError'
 ]
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,10 @@ ALL_PERMS = -4
 Dummy value that translates to "everything is allowed" in an
 encrypted PDF document.
 """
+
+
+class PdfKeyNotAvailableError(misc.PdfReadError):
+    pass
 
 
 def _as_signed(val: int):
@@ -626,6 +631,21 @@ class SecurityHandler:
         """
         raise NotImplementedError
 
+    def is_authenticated(self) -> bool:
+        """
+        Return ``True`` if the security handler has been successfully
+        authenticated against for document encryption purposes.
+
+        The default implementation just attempts to call
+        :meth:`get_file_encryption_key` and returns ``True`` if that doesn't
+        raise an error.
+        """
+        try:
+            self.get_file_encryption_key()
+            return True
+        except PdfKeyNotAvailableError:
+            return False
+
     def as_pdf_object(self) -> generic.DictionaryObject:
         """
         Serialise this security handler to a PDF encryption dictionary.
@@ -680,6 +700,13 @@ class SecurityHandler:
         return self.crypt_filter_config.get_for_embedded_file()
 
     def get_file_encryption_key(self) -> bytes:
+        """
+        Retrieve the global file encryption key (used for streams and/or
+        strings). If there is no such thing, or the key is not available,
+        an error should be raised.
+
+        :raise PdfKeyNotAvailableError: when the key is not available
+        """
         raise NotImplementedError
 
     @classmethod
@@ -918,7 +945,7 @@ class CryptFilter:
         key = self._shared_key
         if key is None:
             if self._auth_failed:
-                raise misc.PdfReadError("Authentication failed")
+                raise PdfKeyNotAvailableError("Authentication failed")
             key = self._shared_key = self.derive_shared_encryption_key()
         return key
 
@@ -2024,7 +2051,7 @@ class StandardSecurityHandler(SecurityHandler):
         """
         key = self._shared_key
         if key is None:
-            raise misc.PdfReadError(
+            raise PdfKeyNotAvailableError(
                 "Authentication failed." if self._auth_failed
                 else "No key available to decrypt, please authenticate first."
             )

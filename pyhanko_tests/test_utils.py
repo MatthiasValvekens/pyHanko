@@ -981,6 +981,38 @@ def test_custom_crypt_filter_errors():
         w.write(out)
 
 
+def test_continue_encrypted_file_without_auth():
+    w = writer.PdfFileWriter()
+    w.root["/Test"] = generic.TextStringObject("Blah blah")
+    w.encrypt("ownersecret", "usersecret")
+    out = BytesIO()
+    w.write(out)
+    incr_w = IncrementalPdfFileWriter(out)
+    incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
+    incr_w.update_root()
+    with pytest.raises(misc.PdfWriteError):
+        incr_w.write_in_place()
+
+
+def test_continue_encrypted_file_from_reader():
+    w = writer.PdfFileWriter()
+    w.root["/Test"] = generic.TextStringObject("Blah blah")
+    w.encrypt("ownersecret", "usersecret")
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    # first decrypt, then extend
+    r.decrypt("usersecret")
+    incr_w = IncrementalPdfFileWriter.from_reader(r)
+    incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
+    incr_w.update_root()
+    incr_w.write_in_place()
+
+    r = PdfFileReader(out)
+    r.decrypt("usersecret")
+    assert r.root['/Test'] == generic.TextStringObject("Bluh bluh")
+
+
 def test_copy_file():
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)
