@@ -71,7 +71,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             A :class:`.PdfFileReader` object with a PDF to extend.
         """
 
-        return IncrementalPdfFileWriter(reader.stream, prev=reader)
+        return cls(reader.stream, prev=reader)
 
     def ensure_output_version(self, version):
         # check header
