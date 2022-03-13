@@ -3,9 +3,14 @@ from io import BytesIO
 import pytest
 from freezegun import freeze_time
 
+from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
+from pyhanko.sign.signers.pdf_signer import (
+    DSSContentSettings,
+    SigDSSPlacementPreference,
+)
 from pyhanko_tests.samples import (
     MINIMAL_AES256,
     MINIMAL_ONE_FIELD_AES256,
@@ -15,7 +20,11 @@ from pyhanko_tests.samples import (
     MINIMAL_RC4,
     PUBKEY_SELFSIGNED_DECRYPTER,
 )
-from pyhanko_tests.signing_commons import FROM_CA, val_trusted
+from pyhanko_tests.signing_commons import FROM_CA, dummy_ocsp_vc, val_trusted
+from pyhanko_tests.test_pades import PADES
+
+sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
+sign_crypt_aes256_files = (MINIMAL_AES256, MINIMAL_ONE_FIELD_AES256)
 
 
 @pytest.mark.parametrize('password', [b'usersecret', b'ownersecret'])
@@ -80,13 +89,13 @@ def test_sign_crypt_pubkey_rc4():
     val_trusted(s)
 
 
-sign_crypt_rc4_new_params = [
+sign_crypt_new_params = [
     [b'usersecret', 0], [b'usersecret', 1],
     [b'ownersecret', 0], [b'ownersecret', 1]
 ]
 
 
-@pytest.mark.parametrize('password, file', sign_crypt_rc4_new_params)
+@pytest.mark.parametrize('password, file', sign_crypt_new_params)
 @freeze_time('2020-11-01')
 def test_sign_crypt_rc4_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_rc4_files[file]))
@@ -102,7 +111,7 @@ def test_sign_crypt_rc4_new(password, file):
     val_trusted(s)
 
 
-@pytest.mark.parametrize('password, file', sign_crypt_rc4_new_params)
+@pytest.mark.parametrize('password, file', sign_crypt_new_params)
 @freeze_time('2020-11-01')
 def test_sign_crypt_aes256_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_aes256_files[file]))
@@ -118,5 +127,23 @@ def test_sign_crypt_aes256_new(password, file):
     val_trusted(s)
 
 
-sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
-sign_crypt_aes256_files = (MINIMAL_AES256, MINIMAL_ONE_FIELD_AES256)
+# This test documents the fact that post-sign instructions for encrypted
+# documents currently don't work
+
+@pytest.mark.parametrize('password, file', sign_crypt_new_params)
+@freeze_time('2020-11-01')
+def test_sign_encrypted_with_post_sign_fail(password, file):
+    w = IncrementalPdfFileWriter(BytesIO(sign_crypt_aes256_files[file]))
+    w.encrypt(password)
+
+    with pytest.raises(misc.PdfWriteError,
+                       match='without encryption credentials'):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', validation_context=dummy_ocsp_vc(),
+                subfilter=PADES, embed_validation_info=True,
+                dss_settings=DSSContentSettings(
+                    placement=SigDSSPlacementPreference.SEPARATE_REVISION
+                )
+            ), signer=FROM_CA
+        )
