@@ -1974,3 +1974,9 @@ def test_decode_hex_invalid_token():
     stream.seek(0)
     with pytest.raises(misc.PdfReadError, match='Unexpected.*N'):
         generic.read_hex_string_from_stream(stream)
+
+
+def test_text_string_no_bytes_available():
+    with pytest.raises(misc.PdfError, match='No information'):
+        # noinspection PyStatementEffect
+        generic.TextStringObject('generic text string').original_bytes

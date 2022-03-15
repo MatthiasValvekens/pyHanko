@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterator, Optional, Tuple, Union
 from . import filters
 from .misc import (
     IndirectObjectExpected,
+    PdfError,
     PdfReadError,
     PdfStreamError,
     PdfStrictReadError,
@@ -851,7 +852,7 @@ class TextStringObject(str, PdfObject):
         if self.autodetected_encoding:
             return self.autodetected_encoding.encode(self)
         else:
-            raise PdfReadError("no information about original bytes")
+            raise PdfError("No information about original bytes")
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
         if self.force_output_encoding is not None:
