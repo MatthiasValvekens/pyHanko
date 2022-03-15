@@ -165,6 +165,22 @@ def test_whitespace_variants():
         assert r.root['/Pages']['/Count'] == 1
 
 
+@pytest.mark.parametrize('data', [
+    b'/Test\x00B',
+    b'/Test  B',
+    b'/Test\x00  B',
+    b'/Test\x00 [',
+    b'/Test/B',
+    b'/Tes#74/B',
+    b'/Tes#74\x00/B',
+    b'/Tes#74 /B',
+    b'/Tes#74 \x00 /B',
+])
+def test_name_delim(data):
+    res = generic.NameObject.read_from_stream(BytesIO(data))
+    assert res == '/Test'
+
+
 TEST_STRING = b'\x74\x77\x74\x84\x66'
 
 

@@ -845,7 +845,7 @@ def _decode_name(name_bytes: bytes) -> 'NameObject':
             elif not (0x21 <= cur_byte <= 0x7e) or \
                     not is_regular_character(cur_byte):
                 raise PdfReadError(
-                    f"Byte (0x{hex(cur_byte)}) must be escaped in a PDF name"
+                    f"Byte (0x{cur_byte:02x}) must be escaped in a PDF name"
                 )
             result.write(
                 bytes((cur_byte,))
@@ -882,7 +882,9 @@ class NameObject(str, PdfObject):
     required.
     """
 
-    DELIMITER_PATTERN = re.compile(r"\s+|[\(\)<>\[\]{}/%]".encode('ascii'))
+    DELIMITER_PATTERN = re.compile(
+        r"\s|[\(\)<>\[\]{}/%]".encode('ascii') + b'|\x00'
+    )
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
         byte_iter = iter(self.encode('utf8'))
