@@ -1960,3 +1960,17 @@ def test_decode_string_premature_end():
     stream.seek(0)
     with pytest.raises(misc.PdfReadError, match='ended unexpectedly'):
         generic.read_string_from_stream(stream)
+
+
+def test_decode_hex_premature_end():
+    stream = BytesIO(b'<deadbeef')
+    stream.seek(0)
+    with pytest.raises(misc.PdfReadError, match='ended prematurely'):
+        generic.read_hex_string_from_stream(stream)
+
+
+def test_decode_hex_invalid_token():
+    stream = BytesIO(b'<deadbeefNonsense>')
+    stream.seek(0)
+    with pytest.raises(misc.PdfReadError, match='Unexpected.*N'):
+        generic.read_hex_string_from_stream(stream)
