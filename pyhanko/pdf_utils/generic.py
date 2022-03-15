@@ -8,6 +8,7 @@ of the PyPDF2 project.
 import binascii
 import codecs
 import decimal
+import enum
 import logging
 import os
 import re
@@ -34,7 +35,8 @@ __all__ = [
     'PdfObject', 'IndirectObject', 'NullObject', 'BooleanObject', 'FloatObject',
     'NumberObject', 'ByteStringObject', 'TextStringObject', 'NameObject',
     'ArrayObject', 'DictionaryObject', 'StreamObject',
-    'read_object', 'pdf_name', 'pdf_string', 'pdf_date'
+    'read_object', 'pdf_name', 'pdf_string', 'pdf_date',
+    'TextStringEncoding'
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -579,7 +581,8 @@ class NumberObject(int, PdfObject):
 
 # TODO: not sure I like this behaviour of PyPDF2. Review.
 
-def pdf_string(string) -> Union['ByteStringObject', 'TextStringObject']:
+def pdf_string(string: Union[str, bytes, bytearray]) \
+        -> Union['ByteStringObject', 'TextStringObject']:
     """
     Encode a string as a :class:`.TextStringObject` if possible,
     or a :class:`.ByteStringObject` otherwise.
@@ -590,19 +593,11 @@ def pdf_string(string) -> Union['ByteStringObject', 'TextStringObject']:
     if isinstance(string, str):
         return TextStringObject(string)
     elif isinstance(string, (bytes, bytearray)):
+        guessed = _guess_enc_by_bom(string)
         try:
-            if string.startswith(codecs.BOM_UTF16_BE):
-                retval = TextStringObject(string.decode("utf-16"))
-                retval.autodetect_utf16 = True
-                return retval
-            else:
-                # This is probably a big performance hit here, but we need to
-                # convert string objects into the text/unicode-aware version if
-                # possible... and the only way to check if that's possible is
-                # to try.  Some strings are strings, some are just byte arrays.
-                retval = TextStringObject(decode_pdfdocencoding(string))
-                retval.autodetect_pdfdocencoding = True
-                return retval
+            retval = TextStringObject(guessed.decode(string))
+            retval.autodetected_encoding = guessed
+            return retval
         except UnicodeDecodeError:
             return ByteStringObject(string)
     else:
@@ -645,21 +640,10 @@ def read_hex_string_from_stream(stream) \
     return pdf_string(result)
 
 
-def read_string_from_stream(stream) -> Union['ByteStringObject',
-                                             'TextStringObject']:
-    """
-    Read a PDF string literal from a stream.
-
-    This method should in principle always return a :class:`TextStringObject`
-    instance if the underlying file is a valid PDF file.
-
-    :param stream:
-        An input stream.
-    """
-
+def _read_string_literal_bytes(stream) -> bytes:
     stream.read(1)
     parens = 1
-    txt = b""
+    txt = BytesIO()
     while True:
         tok = stream.read(1)
         if not tok:
@@ -696,6 +680,8 @@ def read_string_from_stream(stream) -> Union['ByteStringObject',
                     if ntok.isdigit():
                         tok += ntok
                     else:
+                        # premature end, seek back
+                        stream.seek(-1, os.SEEK_CUR)
                         break
                 octal = int(tok, base=8)
                 # interpret as byte
@@ -711,9 +697,23 @@ def read_string_from_stream(stream) -> Union['ByteStringObject',
                 # line break was escaped:
                 tok = b''
             else:
-                raise PdfReadError(r"Unexpected escaped string: %s" % tok)
-        txt += tok
-    return pdf_string(txt)
+                raise PdfReadError("Unexpected escaped string: " + repr(tok))
+        txt.write(tok)
+    return txt.getvalue()
+
+
+def read_string_from_stream(stream) -> Union['ByteStringObject',
+                                             'TextStringObject']:
+    """
+    Read a PDF string literal from a stream. Attempt to decode it into a text
+    string by autodetecting the encoding, or failing that, return it as a byte
+    string instead.
+
+    :param stream:
+        An input stream.
+    """
+
+    return pdf_string(_read_string_literal_bytes(stream))
 
 
 class ByteStringObject(bytes, PdfObject):
@@ -738,19 +738,100 @@ class ByteStringObject(bytes, PdfObject):
         stream.write(b">")
 
 
+class TextStringEncoding(enum.Enum):
+    """
+    Encodings for PDF text strings.
+    """
+
+    PDF_DOC = None
+    """
+    PDFDocEncoding (one-byte character codes; PDF-specific).
+    """
+
+    UTF16BE = (codecs.BOM_UTF16_BE, 'utf-16be')
+    """
+    UTF-16BE encoding.
+    """
+
+    UTF8 = (codecs.BOM_UTF8, 'utf-8')
+    """
+    UTF-8 encoding (PDF 2.0)
+    """
+
+    UTF16LE = (codecs.BOM_UTF16_LE, 'utf-16le')
+    """
+    UTF-16LE encoding.
+
+    .. note::
+        This is strictly speaking invalid in PDF 2.0, but some authoring tools
+        output such strings anyway (presumably due to the fact that it's the
+        default wide character encoding on Windows).
+    """
+
+    def encode(self, string: str) -> bytes:
+        """
+        Encode a string with BOM.
+
+        :param string:
+            The string to encode.
+        :return:
+            The encoded string.
+        """
+        if self == TextStringEncoding.PDF_DOC:
+            return encode_pdfdocencoding(string)
+        else:
+            bom, enc = self.value
+            return bom + string.encode(enc)
+
+    def decode(self, string: Union[bytes, bytearray]) -> str:
+        """
+        Decode a string with BOM.
+
+        :param string:
+            The string to encode.
+        :return:
+            The encoded string.
+        :raise UnicodeDecodeError:
+            Raised if decoding fails.
+        """
+        if self == TextStringEncoding.PDF_DOC:
+            return decode_pdfdocencoding(string)
+        elif self == TextStringEncoding.UTF8:
+            return string.decode('utf-8-sig')
+        else:
+            return string.decode('utf-16')
+
+
+def _guess_enc_by_bom(encoded: Union[bytes, bytearray]) \
+        -> TextStringEncoding:
+    if encoded.startswith(codecs.BOM_UTF16_BE):
+        return TextStringEncoding.UTF16BE
+    elif encoded.startswith(codecs.BOM_UTF16_LE):
+        return TextStringEncoding.UTF16LE
+    elif encoded.startswith(codecs.BOM_UTF8):
+        return TextStringEncoding.UTF8
+    else:
+        # This is probably a big performance hit here, but we need to
+        # convert string objects into the text/unicode-aware version if
+        # possible... and the only way to check if that's possible is
+        # to try.  Some strings are strings, some are just byte arrays.
+        return TextStringEncoding.PDF_DOC
+
+
 class TextStringObject(str, PdfObject):
     """
     PDF text string object.
     """
 
-    autodetect_pdfdocencoding = False
+    autodetected_encoding: Optional[TextStringEncoding] = None
     """
-    If ``True``, this string was determined to be encoded in PDFDoc encoding.
+    Autodetected encoding when parsing the file.
     """
 
-    autodetect_utf16 = False
+    force_output_encoding: Optional[TextStringEncoding] = None
     """
-    If ``True``, this string was determined to be encoded in UTF16-BE encoding.
+    Output encoding to use when serialising the string.
+    The default is to try PDFDocEncoding first, and fall back to UTF-16BE.
     """
 
     @property
@@ -767,22 +848,25 @@ class TextStringObject(str, PdfObject):
         # we were wrong.  It's pretty common.  Return the original bytes that
         # would have been used to create this object, based upon the autodetect
         # method.
-        if self.autodetect_utf16:
-            return codecs.BOM_UTF16_BE + self.encode("utf-16be")
-        elif self.autodetect_pdfdocencoding:
-            return encode_pdfdocencoding(self)
+        if self.autodetected_encoding:
+            return self.autodetected_encoding.encode(self)
         else:
-            raise Exception("no information about original bytes")
+            raise PdfReadError("no information about original bytes")
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
-        # Try to write the string out as a PDFDocEncoding encoded string.  It's
-        # nicer to look at in the PDF file.  Sadly, we take a performance hit
-        # here for trying...
-        bytearr: bytes
-        try:
-            bytearr = encode_pdfdocencoding(self)
-        except UnicodeEncodeError:
-            bytearr = codecs.BOM_UTF16_BE + self.encode("utf-16be")
+        if self.force_output_encoding is not None:
+            encoded = self.force_output_encoding.encode(self)
+        else:
+            # Try to write the string out as a PDFDocEncoding encoded string.
+            # It's nicer to look at in the PDF file.  Sadly, we take a
+            # performance hit here for trying...
+            encoded: bytes
+            try:
+                encoded = encode_pdfdocencoding(self)
+            except UnicodeEncodeError:
+                # fall back to UTF-16BE by default, since it's the only
+                # valid pre-2.0 Unicode encoding.
+                encoded = codecs.BOM_UTF16_BE + self.encode("utf-16be")
 
         cf = None
         if handler is not None and container_ref is not None:
@@ -794,12 +878,12 @@ class TextStringObject(str, PdfObject):
             local_key = cf.derive_object_key(
                 container_ref.idnum, container_ref.generation
             )
-            bytearr = cf.encrypt(local_key, bytearr)
-            obj = ByteStringObject(bytearr)
+            encoded = cf.encrypt(local_key, encoded)
+            obj = ByteStringObject(encoded)
             obj.write_to_stream(stream)
         else:
             stream.write(b"(")
-            for c in bytearr:
+            for c in encoded:
                 c_ = bytes([c])
                 if not c_.isalnum() and c != 0x20:
                     stream.write(b"\\%03o" % c)

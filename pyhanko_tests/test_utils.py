@@ -1892,3 +1892,71 @@ def test_compacted_syntax():
         pgcontents = page['/Contents'][0].data
         assert b'compacted syntax sequences' in pgcontents
         assert r.trailer_view['/Info']['/Subject'] == 'Compacted Syntax v3.0'
+
+
+SIMPLE_STRING_ENC_SAMPLES = [
+    (b'abcdef', generic.TextStringEncoding.PDF_DOC),
+    (b'\xfe\xff\x00a\x00b\x00c\x00d\x00e\x00f',
+     generic.TextStringEncoding.UTF16BE),
+    (b'\xff\xfea\x00b\x00c\x00d\x00e\x00f\x00',
+     generic.TextStringEncoding.UTF16LE),
+    (b'\xef\xbb\xbfabcdef', generic.TextStringEncoding.UTF8),
+]
+
+
+@pytest.mark.parametrize('encoded, expected_enc', SIMPLE_STRING_ENC_SAMPLES)
+def test_autodetect_string_encoding(encoded, expected_enc):
+    result = generic.pdf_string(encoded)
+    assert isinstance(result, generic.TextStringObject)
+
+    assert result.autodetected_encoding == expected_enc
+    assert result == 'abcdef'
+    assert result.original_bytes == encoded
+
+
+@pytest.mark.parametrize('encoded, expected_enc', SIMPLE_STRING_ENC_SAMPLES)
+def test_string_encode(encoded, expected_enc):
+    txt = generic.TextStringObject('abcdef')
+    txt.force_output_encoding = expected_enc
+    out = BytesIO()
+    txt.write_to_stream(out)
+    out.seek(0)
+    out_bytes = generic._read_string_literal_bytes(out)
+    assert out_bytes == encoded
+
+
+# FIXME these should work with PDFDocEncoding as well
+
+@pytest.mark.parametrize('encoded, decoded', [
+    (b'(\xef\xbb\xbfHello\\nWorld)', 'Hello\nWorld'),
+    (b'(\xef\xbb\xbfHello\\fWorld)', 'Hello\fWorld'),
+    (b'(\xef\xbb\xbfHello\\tWorld)', 'Hello\tWorld'),
+    (b'(\xef\xbb\xbfHello\\bWorld)', 'Hello\bWorld'),
+    (b'(\xef\xbb\xbfHello\\rWorld)', 'Hello\rWorld'),
+    (b'(\xef\xbb\xbfHello\\012World)', 'Hello\nWorld'),
+    (b'(\xef\xbb\xbfHello\\12World)', 'Hello\nWorld'),
+])
+def test_decode_string_escapes(encoded, decoded):
+    stream = BytesIO(encoded)
+    stream.seek(0)
+    read_back = generic._read_string_literal_bytes(stream)
+    assert read_back == decoded.encode('utf-8-sig')
+
+    stream.seek(0)
+    read_back = generic.read_string_from_stream(stream)
+    assert isinstance(read_back, generic.TextStringObject)
+    assert read_back == decoded
+
+
+def test_decode_string_illegal_escape_sequence():
+    stream = BytesIO(b'(Hello World\\z)')
+    stream.seek(0)
+    with pytest.raises(misc.PdfReadError, match='Unexpected escape.*z'):
+        generic.read_string_from_stream(stream)
+
+
+def test_decode_string_premature_end():
+    stream = BytesIO(b'(Hello World')
+    stream.seek(0)
+    with pytest.raises(misc.PdfReadError, match='ended unexpectedly'):
+        generic.read_string_from_stream(stream)
