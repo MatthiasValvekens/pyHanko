@@ -1,4 +1,5 @@
 import datetime
+import itertools
 import os
 from fractions import Fraction
 from io import BytesIO
@@ -1980,3 +1981,27 @@ def test_text_string_no_bytes_available():
     with pytest.raises(misc.PdfError, match='No information'):
         # noinspection PyStatementEffect
         generic.TextStringObject('generic text string').original_bytes
+
+
+COMMENT_TEST_PAIRS = [
+    (b'%Bleh<<>>\n<</A/B>>',
+     generic.DictionaryObject({pdf_name('/A'): pdf_name('/B')})),
+    (b'%Bleh\n[/A/B]',
+     generic.ArrayObject([pdf_name('/A'), pdf_name('/B')])),
+    (b'%Bleh\n/A', pdf_name('/A')),
+    (b'%Bleh\n.123', generic.FloatObject(0.123)),
+    (b'%Bleh\n1', generic.NumberObject(1)),
+    (b'%Bleh\n(ABC)', generic.TextStringObject("ABC")),
+]
+
+
+@pytest.mark.parametrize('data,exp_result,linesep', [
+    (x, y, z) for (x, y), z in
+    itertools.product(COMMENT_TEST_PAIRS, [b'\n', b'\r', b'\r\n'])
+])
+def test_read_object_comment(data, exp_result, linesep):
+    buf = BytesIO(data.replace(b'\n', linesep))
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    res = generic.read_object(buf, container_ref=generic.TrailerReference(r))
+    assert res == exp_result

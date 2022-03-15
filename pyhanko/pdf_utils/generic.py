@@ -573,7 +573,11 @@ class NumberObject(int, PdfObject):
 
     @staticmethod
     def read_from_stream(stream):
-        num = read_until_regex(stream, NumberObject.NumberPattern)
+        num = read_until_regex(
+            stream, regex=NumberObject.NumberPattern,
+            # for consistency with other read_object() output
+            ignore_eof=True
+        )
         if num.find(NumberObject.ByteDot) != -1:
             return FloatObject(num.decode('ascii'))
         else:
