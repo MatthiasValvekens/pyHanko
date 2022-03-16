@@ -2093,3 +2093,32 @@ def test_comment_in_hex_string(data, linesep, space):
     r = PdfFileReader(BytesIO(MINIMAL))
     res = generic.read_object(buf, container_ref=generic.TrailerReference(r))
     assert res == b'\xde\xad\xbe\xef'
+
+
+UNORTHODOX_STREAM_SYNTAX = [
+    b'\nstream\nabcdefg\nendstream',
+    b'\nstream \nabcdefg\nendstream',
+    b'\nstream\nabcdefg\nendstream ',
+    b'stream\nabcdefg\nendstream ',
+    b' \nstream\nabcdefg\nendstream ',
+    b'\nstream \nabcdefg\nendstream',
+    b'\nstream \nabcdefg\nendstream',
+]
+
+
+@pytest.mark.parametrize('data,linesep,space', list(
+    itertools.product(
+        UNORTHODOX_STREAM_SYNTAX, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
+    )
+))
+def test_unorthodox_stream_syntax(data, linesep, space):
+    dict_data_bytes = b'<</A/B/Length 7>>'
+    buf = BytesIO(
+        dict_data_bytes + data.replace(b'\n', linesep).replace(b' ', space)
+    )
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    res = generic.read_object(buf, container_ref=generic.TrailerReference(r))
+    assert isinstance(res, generic.StreamObject)
+    assert dict(res) == {'/A': '/B', '/Length': 7}
+    assert res.data == b'abcdefg'

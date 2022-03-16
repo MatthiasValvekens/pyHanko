@@ -28,6 +28,7 @@ from .misc import (
     is_regular_character,
     read_non_whitespace,
     read_until_regex,
+    skip_over_whitespace,
 )
 
 __all__ = [
@@ -1128,16 +1129,10 @@ class DictionaryObject(dict, PdfObject):
         s = read_non_whitespace(stream, allow_eof=True)
         stream_data = None
         if s == b's' and stream.read(5) == b'tream':
-            eol = stream.read(1)
             # odd PDF file output has spaces after 'stream' keyword
-            # but before EOL. patch provided by Danial Sandler
-            while eol == b' ':
-                eol = stream.read(1)
-            assert eol in (b"\n", b"\r")
-            if eol == b"\r":
-                # read \n after
-                if stream.read(1) != b'\n':
-                    stream.seek(-1, os.SEEK_CUR)
+            # but before EOL. Original PyPDF2 patch provided by Danial Sandler,
+            # modified by Matthias Valvekens
+            skip_over_whitespace(stream, stop_after_eol=True)
             # this is a stream object, not a dictionary
             length = data[pdf_name("/Length")]
             if isinstance(length, IndirectObject):
