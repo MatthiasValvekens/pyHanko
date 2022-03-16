@@ -2122,3 +2122,25 @@ def test_unorthodox_stream_syntax(data, linesep, space):
     assert isinstance(res, generic.StreamObject)
     assert dict(res) == {'/A': '/B', '/Length': 7}
     assert res.data == b'abcdefg'
+
+
+def test_stream_declared_length_too_long():
+    data = b'<</A/B/Length 9>>\nstream\nabcdefg\nendstream\n'
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    res = generic.read_object(
+        BytesIO(data), container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(res, generic.StreamObject)
+    assert dict(res) == {'/A': '/B', '/Length': 9}
+    assert res.data == b'abcdefg\n'
+
+
+def test_stream_declared_length_too_long_garbled():
+    data = b'<</A/B/Length 9>>\nstream\nabcdefg\nendstre@m\n'
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    with pytest.raises(misc.PdfReadError, match='Unable to find.*marker'):
+        generic.read_object(
+            BytesIO(data), container_ref=generic.TrailerReference(r)
+        )

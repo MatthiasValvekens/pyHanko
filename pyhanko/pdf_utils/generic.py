@@ -1149,17 +1149,16 @@ class DictionaryObject(dict, PdfObject):
                 # and Python users into PDF files tend to be our audience.
                 # we need to do this to correct the streamdata and chop off
                 # an extra character.
-                pos = stream.tell()
+                orig_endstream_pos = stream.tell()
                 stream.seek(-10, os.SEEK_CUR)
                 end = stream.read(9)
                 if end == b"endstream":
                     # we found it by looking back one character further.
                     stream_data = stream_data[:-1]
                 else:
-                    stream.seek(pos)
                     raise PdfReadError(
                         "Unable to find 'endstream' marker after "
-                        "stream at byte %s." % hex(stream.tell())
+                        "stream at byte %s." % hex(orig_endstream_pos)
                     )
         else:
             stream.seek(pos)
