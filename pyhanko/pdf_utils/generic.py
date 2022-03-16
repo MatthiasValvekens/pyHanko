@@ -28,7 +28,6 @@ from .misc import (
     is_regular_character,
     read_non_whitespace,
     read_until_regex,
-    skip_over_comment,
 )
 
 __all__ = [
