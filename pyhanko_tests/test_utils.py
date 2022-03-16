@@ -2021,3 +2021,61 @@ def test_read_object_comment(data, exp_result, linesep):
     r = PdfFileReader(BytesIO(MINIMAL))
     res = generic.read_object(buf, container_ref=generic.TrailerReference(r))
     assert res == exp_result
+
+
+COMMENT_IN_DICT_DATA = [
+    b'<<%Bleh\n/A/B>>',
+    b'<</A%Bleh\n/B>>',
+    b'<</A/B%Bleh\n>>',
+    b'<< %Bleh\n/A/B>>',
+    b'<</A %Bleh\n/B>>',
+    b'<</A/B %Bleh\n>>',
+    b'<<%Bleh\n /A/B>>',
+    b'<</A%Bleh\n /B>>',
+    b'<</A/B%Bleh\n >>',
+]
+
+
+@pytest.mark.parametrize('data,linesep,space', list(
+    itertools.product(
+        COMMENT_IN_DICT_DATA, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
+    )
+))
+def test_comment_in_dict(data, linesep, space):
+    buf = BytesIO(data.replace(b'\n', linesep).replace(b' ', space))
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    res = generic.read_object(buf, container_ref=generic.TrailerReference(r))
+    assert res == generic.DictionaryObject({pdf_name('/A'): pdf_name('/B')})
+
+
+COMMENT_IN_HEX_STRING_DATA = [
+    b'<%Bleh\ndeadbeef>',
+    b'<dead%Bleh\nbeef>',
+    b'<deadbeef%Bleh\n>',
+    b'<d%Bleh\neadbeef>',
+    b'<deadbee%Bleh\nf>',
+    b'< %Bleh\ndeadbeef>',
+    b'<dead %Bleh\nbeef>',
+    b'<deadbeef %Bleh\n>',
+    b'<d %Bleh\neadbeef>',
+    b'<deadbee%Bleh\nf>',
+    b'<%Bleh\n deadbeef>',
+    b'<dead%Bleh\n beef>',
+    b'<deadbeef%Bleh\n >',
+    b'<d%Bleh\n eadbeef>',
+    b'<deadbee%Bleh\n f>',
+]
+
+
+@pytest.mark.parametrize('data,linesep,space', list(
+    itertools.product(
+        COMMENT_IN_HEX_STRING_DATA, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
+    )
+))
+def test_comment_in_hex_string(data, linesep, space):
+    buf = BytesIO(data.replace(b'\n', linesep).replace(b' ', space))
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    res = generic.read_object(buf, container_ref=generic.TrailerReference(r))
+    assert res == b'\xde\xad\xbe\xef'

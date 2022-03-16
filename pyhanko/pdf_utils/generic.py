@@ -628,10 +628,7 @@ def read_hex_string_from_stream(stream) \
         nonlocal odd
         while True:
             tok = read_non_whitespace(stream)
-            if not tok:
-                # stream has truncated prematurely
-                raise PdfStreamError("Stream has ended unexpectedly")
-            elif tok == b">":
+            if tok == b">":
                 return
             elif tok not in HEX_DIGITS:
                 raise PdfStreamError(
@@ -1108,16 +1105,6 @@ class DictionaryObject(dict, PdfObject):
         handler = container_ref.get_pdf_handler()
         while True:
             tok = read_non_whitespace(stream)
-            if tok == b'\x00':
-                continue
-            elif tok == b'%':
-                stream.seek(-1, os.SEEK_CUR)
-                skip_over_comment(stream)
-                continue
-            if not tok:
-                # stream has truncated prematurely
-                raise PdfStreamError("Stream has ended unexpectedly")
-
             if tok == b">":
                 stream.read(1)
                 break
