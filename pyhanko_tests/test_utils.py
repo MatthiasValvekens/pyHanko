@@ -755,6 +755,86 @@ def test_pubkey_alternative_filter():
     assert isinstance(r.security_handler, PubKeySecurityHandler)
 
 
+SIMPLE_STREAM_WITH_FILTERS = (
+    b'<<\n/Filter [ /AHx /FlateDecode ]\n/Length 39\n>>\n'
+    b'stream\n'
+    b'789cf348cdc9c95728cf2fca49010018ab043d>\n'
+    b'endstream'
+)
+
+
+def test_wrong_decodeparms_length():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    s = generic.read_object(
+        BytesIO(SIMPLE_STREAM_WITH_FILTERS),
+        container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s, generic.StreamObject)
+    s['/DecodeParms'] = generic.ArrayObject()
+    out = BytesIO()
+    s.write_to_stream(out)
+    out.seek(0)
+
+    s_reread = generic.read_object(
+        out, container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s_reread, generic.StreamObject)
+    assert s_reread['/DecodeParms'] == []
+    assert s_reread.data == b'Hello world'
+
+
+def test_duplicate_filter_disregard():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    s = generic.read_object(
+        BytesIO(SIMPLE_STREAM_WITH_FILTERS),
+        container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s, generic.StreamObject)
+    s.apply_filter('/AHx', allow_duplicates=None)
+    out = BytesIO()
+    s.write_to_stream(out)
+    out.seek(0)
+
+    s_reread = generic.read_object(
+        out, container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s_reread, generic.StreamObject)
+    assert s_reread['/Filter'] == ['/AHx', '/FlateDecode']
+    assert s_reread.data == b'Hello world'
+    assert s.encoded_data == s_reread.encoded_data
+
+
+def test_duplicate_filter_permitted():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    s = generic.read_object(
+        BytesIO(SIMPLE_STREAM_WITH_FILTERS),
+        container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s, generic.StreamObject)
+    s.apply_filter('/AHx', allow_duplicates=True)
+    out = BytesIO()
+    s.write_to_stream(out)
+    out.seek(0)
+
+    s_reread = generic.read_object(
+        out, container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s_reread, generic.StreamObject)
+    assert s_reread['/Filter'] == ['/AHx', '/AHx', '/FlateDecode']
+    assert s_reread.data == b'Hello world'
+
+
+def test_duplicate_filter_error():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    s = generic.read_object(
+        BytesIO(SIMPLE_STREAM_WITH_FILTERS),
+        container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(s, generic.StreamObject)
+    with pytest.raises(misc.PdfWriteError, match='has already been applied'):
+        s.apply_filter('/AHx', allow_duplicates=False)
+
+
 @pytest.mark.parametrize('delete_subfilter', [True, False])
 def test_pubkey_unsupported_filter(delete_subfilter):
     w = writer.PdfFileWriter()

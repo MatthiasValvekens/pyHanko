@@ -1381,6 +1381,7 @@ class StreamObject(DictionaryObject):
             if params:
                 self[pdf_name('/DecodeParms')] = params
         else:
+            # FIXME deal with shortened names for standard filters
             # split cur_filters back into two pieces
             filter_names, param_sets = zip(*cur_filters)
             if not allow_duplicates and filter_name in filter_names:
