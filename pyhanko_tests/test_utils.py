@@ -167,6 +167,20 @@ def test_whitespace_variants():
 
 
 @pytest.mark.parametrize('data', [
+    b'   \n a',
+    b'   \r\n a',
+    b'   \r a',
+    b'   \r a',
+    b'   \r a',
+])
+def test_skip_ws_behaviour(data):
+    buf = BytesIO(data)
+    ws_read = misc.skip_over_whitespace(buf, stop_after_eol=True)
+    assert ws_read
+    assert buf.read(1) == b' '
+
+
+@pytest.mark.parametrize('data', [
     b'/Test\x00B',
     b'/Test  B',
     b'/Test\x00  B',

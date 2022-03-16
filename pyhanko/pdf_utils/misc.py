@@ -106,29 +106,42 @@ def read_non_whitespace(stream, seek_back=False, allow_eof=False):
     return tok
 
 
-def skip_over_whitespace(stream):
+def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
     """
     Similar to readNonWhitespace, but returns a Boolean if more than
     one whitespace character was read.
 
     Will return the cursor to before the first non-whitespace character
-    encountered.
+    encountered, or after the first end-of-line sequence if one is encountered.
     """
     tok = PDF_WHITESPACE[0]
     cnt = 0
     while tok in PDF_WHITESPACE:
         tok = stream.read(1)
         cnt += 1
+        if stop_after_eol:
+            if tok == b'\n':
+                return cnt > 1
+            elif tok == b'\r':
+                # read the next char and check if it's a LF
+                if stream.read(1) == b'\n':
+                    return cnt > 1
+                # if not, break here; we need to seek back one position
+                # (CR by itself also counts as an EOL sequence)
+                break
+
     stream.seek(-1, os.SEEK_CUR)
     return cnt > 1
 
 
-def skip_over_comment(stream):
+def skip_over_comment(stream) -> bool:
     tok = stream.read(1)
     stream.seek(-1, 1)
     if tok == b'%':
         while tok not in (b'\n', b'\r'):
             tok = stream.read(1)
+        return True
+    return False
 
 
 def read_until_regex(stream, regex, ignore_eof=False):
