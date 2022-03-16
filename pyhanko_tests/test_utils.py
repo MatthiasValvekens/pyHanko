@@ -2144,3 +2144,11 @@ def test_stream_declared_length_too_long_garbled():
         generic.read_object(
             BytesIO(data), container_ref=generic.TrailerReference(r)
         )
+
+
+def test_dictionary_setvalue_guard():
+    dict_obj = generic.DictionaryObject()
+    with pytest.raises(ValueError, match='must be PdfObject'):
+        dict_obj['/A'] = 1
+    with pytest.raises(ValueError, match='must be PdfObject'):
+        dict_obj.setdefault(pdf_name('/A'), 1)
