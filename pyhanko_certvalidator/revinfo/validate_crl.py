@@ -1046,7 +1046,7 @@ class CRLCollectionResult:
     validation purposes.
     """
 
-    responses: List[CRLOfInterest]
+    crls: List[CRLOfInterest]
     """
     List of potentially relevant CRLs.
     """
@@ -1188,7 +1188,7 @@ async def collect_relevant_crls_with_paths(
             errs.failures.append((msg, certificate_list_cont))
 
     return CRLCollectionResult(
-        responses=relevant_crls,
+        crls=relevant_crls,
         failure_msgs=[f[0] for f in errs.failures],
     )
 
