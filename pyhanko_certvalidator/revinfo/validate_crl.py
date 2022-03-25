@@ -1039,6 +1039,24 @@ class CRLOfInterest:
     """
 
 
+@dataclass(frozen=True)
+class CRLCollectionResult:
+    """
+    The result of a CRL collection operation for AdES point-in-time
+    validation purposes.
+    """
+
+    responses: List[CRLOfInterest]
+    """
+    List of potentially relevant CRLs.
+    """
+
+    failure_msgs: List[str]
+    """
+    List of failure messages, for error reporting purposes.
+    """
+
+
 async def _assess_crl_relevance(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer_auth: Authority, certificate_list_cont: CRLContainer,
@@ -1106,7 +1124,7 @@ async def collect_relevant_crls_with_paths(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath, revinfo_manager: RevinfoManager,
         control_time: datetime, use_deltas=True,
-        proc_state: Optional[ValProcState] = None) -> List[CRLOfInterest]:
+        proc_state: Optional[ValProcState] = None) -> CRLCollectionResult:
     """
     Collect potentially relevant CRLs with the associated validation
     paths. Will not perform actual path validation.
@@ -1125,7 +1143,7 @@ async def collect_relevant_crls_with_paths(
     :param proc_state:
         The state of any prior validation process.
     :return:
-        A list of potentially relevant CRLs.
+        A :class:`.CRLCollectionResult`.
     """
 
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
@@ -1168,7 +1186,11 @@ async def collect_relevant_crls_with_paths(
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
             errs.failures.append((msg, certificate_list_cont))
-    return relevant_crls
+
+    return CRLCollectionResult(
+        responses=relevant_crls,
+        failure_msgs=[f[0] for f in errs.failures],
+    )
 
 
 def _verify_crl_signature(certificate_list, public_key):

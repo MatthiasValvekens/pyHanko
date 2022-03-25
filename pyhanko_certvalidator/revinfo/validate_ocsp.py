@@ -536,11 +536,29 @@ class OCSPResponseOfInterest:
     prov_path: ValidationPath
 
 
+@dataclass(frozen=True)
+class OCSPCollectionResult:
+    """
+    The result of an OCSP collection operation for AdES point-in-time
+    validation purposes.
+    """
+
+    responses: List[OCSPResponseOfInterest]
+    """
+    List of potentially relevant OCSP responses.
+    """
+
+    failure_msgs: List[str]
+    """
+    List of failure messages, for error reporting purposes.
+    """
+
+
 async def collect_relevant_responses_with_paths(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         path: ValidationPath, revinfo_manager: RevinfoManager,
         control_time: datetime, proc_state: Optional[ValProcState] = None) \
-        -> List[OCSPResponseOfInterest]:
+        -> OCSPCollectionResult:
     """
     Collect potentially relevant OCSP responses with the associated validation
     paths. Will not perform actual path validation.
@@ -557,7 +575,7 @@ async def collect_relevant_responses_with_paths(
     :param proc_state:
         The state of any prior validation process.
     :return:
-        A list of potentially relevant OCSP responses.
+        A :class:`.OCSPCollectionResult`.
     """
 
     proc_state = proc_state or ValProcState(cert_path_stack=ConsList.sing(path))
@@ -606,4 +624,6 @@ async def collect_relevant_responses_with_paths(
             msg = "Generic processing error while validating OCSP response."
             logging.debug(msg, exc_info=e)
             errs.failures.append((msg, ocsp_response_cont))
-    return relevant
+    return OCSPCollectionResult(
+        responses=relevant, failure_msgs=[f[0] for f in errs.failures],
+    )
