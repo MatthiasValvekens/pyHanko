@@ -1270,7 +1270,7 @@ async def _check_revocation(cert, validation_context: ValidationContext,
             err_str = '; '.join(str(f) for f in failures)
         else:
             err_str = 'an applicable OCSP response could not be found'
-        raise PathValidationError.from_state(pretty_message(
+        raise InsufficientRevinfoError.from_state(pretty_message(
             '''
             The path could not be validated because the mandatory OCSP
             check(s) for %s failed: %s
