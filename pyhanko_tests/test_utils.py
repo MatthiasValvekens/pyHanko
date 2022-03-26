@@ -658,6 +658,24 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     assert the_stream.data == test_bytes
 
 
+def _produce_pubkey_encrypted_file(version, keylen, use_aes, use_crypt_filters):
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=keylen,
+        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
+        perms=-44
+    )
+    w.security_handler = sh
+    w._encrypt = w.add_object(sh.as_pdf_object())
+    new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+    return out
+
+
 @pytest.mark.parametrize("version, keylen, use_aes, use_crypt_filters", [
     (SecurityHandlerVersion.AES256, 32, True, True),
     (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
@@ -671,22 +689,9 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
 ])
 def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
-    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
-    w = writer.PdfFileWriter()
-
-    sh = PubKeySecurityHandler.build_from_certs(
-        [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=keylen,
-        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
-        perms=-44
+    out = _produce_pubkey_encrypted_file(
+        version, keylen, use_aes, use_crypt_filters
     )
-    w.security_handler = sh
-    w._encrypt = w.add_object(sh.as_pdf_object())
-    new_page_tree = w.import_object(
-        r.root.raw_get('/Pages'),
-    )
-    w.root['/Pages'] = new_page_tree
-    out = BytesIO()
-    w.write(out)
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
     assert result.status == AuthStatus.USER
@@ -2288,7 +2293,7 @@ def test_ser_deser_credential_standard_corrupted():
         r.security_handler.authenticate(cred_data)
 
 
-def test_ser_deser_credential_wrong_cred_type():
+def test_ser_deser_credential_unknown_cred_type():
     r = PdfFileReader(BytesIO(MINIMAL_AES256))
     r.decrypt("ownersecret")
     cred = r.security_handler.extract_credential()
@@ -2321,6 +2326,22 @@ def test_ser_deser_credential_standard_sh_legacy(pw):
     assert result.status == exp_status
 
 
+@pytest.mark.parametrize('pw', ['usersecret', 'ownersecret'])
+def test_ser_deser_credential_standard_sh_legacy_no_id1(pw):
+    out = _produce_legacy_encrypted_file(
+        StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True
+    )
+    r = PdfFileReader(out)
+    r.decrypt(pw)
+    cred = r.security_handler.extract_credential()
+    del cred['id1']
+    cred_data = cred.serialise()
+
+    r = PdfFileReader(out)
+    with pytest.raises(misc.PdfReadError, match="id1"):
+        r.security_handler.authenticate(cred_data)
+
+
 def test_ser_deser_credential_standard_legacy_sh_extract_from_builder():
     sh = StandardSecurityHandler.build_from_pw_legacy(
         desired_owner_pass=b'ownersecret', desired_user_pass=b'usersecret',
@@ -2330,3 +2351,104 @@ def test_ser_deser_credential_standard_legacy_sh_extract_from_builder():
     cred = sh.extract_credential()
     assert cred['pwd_bytes'].native == b'ownersecret'
     assert cred['id1'].native == b'\xde\xad\xbe\xef'
+
+
+def test_ser_deser_credential_pubkey():
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    cred_data = r.security_handler.extract_credential().serialise()
+
+    r = PdfFileReader(out)
+    result = r.security_handler.authenticate(cred_data)
+    assert result.status == AuthStatus.USER
+
+
+def test_ser_deser_credential_pubkey_sh_cannot_extract_from_builder():
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=16,
+        version=SecurityHandlerVersion.RC4_OR_AES128,
+        use_aes=True, use_crypt_filters=True,
+        perms=-44
+    )
+    assert sh.extract_credential() is None
+
+
+def test_ser_deser_credential_wrong_cred_type_pubkey():
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    r.decrypt("ownersecret")
+    cred_data = r.security_handler.extract_credential().serialise()
+
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+    with pytest.raises(misc.PdfReadError,
+                       match="must be an instance of"):
+        r.security_handler.authenticate(cred_data)
+
+
+def test_ser_deser_credential_wrong_cred_type_standard():
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    cred_data = r.security_handler.extract_credential().serialise()
+
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    with pytest.raises(misc.PdfReadError, match="Standard auth.*must be a"):
+        r.security_handler.authenticate(cred_data)
+
+
+def test_ser_deser_credential_pubkey_corrupted():
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    cred = r.security_handler.extract_credential()
+    cred_data = SerialisedCredential(
+        credential_type=cred.serialise().credential_type,
+        data=b'\xde\xad\xbe\xef'
+    )
+
+    r = PdfFileReader(out)
+    with pytest.raises(misc.PdfReadError,
+                       match="Failed to decode serialised pubkey credential"):
+        r.security_handler.authenticate(cred_data)
+
+
+def test_ser_deser_credential_wrong_cert():
+
+    wrong_cert_cred_data = SimpleEnvelopeKeyDecrypter(
+        cert=PUBKEY_SELFSIGNED_DECRYPTER.cert,
+        private_key=PUBKEY_TEST_DECRYPTER.private_key
+    ).serialise()
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+
+    result = r.security_handler.authenticate(wrong_cert_cred_data)
+    assert result.status == AuthStatus.FAILED
+
+
+def test_ser_deser_credential_wrong_key():
+
+    wrong_key_cred_data = SimpleEnvelopeKeyDecrypter(
+        cert=PUBKEY_TEST_DECRYPTER.cert,
+        private_key=PUBKEY_SELFSIGNED_DECRYPTER.private_key
+    ).serialise()
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+
+    # we're OK with this being an error, since a certificate match with a wrong
+    # key is almost certainly indicative of something that shouldn't happen
+    # in regular usage.
+    with pytest.raises(misc.PdfReadError, match="envelope key"):
+        r.security_handler.authenticate(wrong_key_cred_data)
