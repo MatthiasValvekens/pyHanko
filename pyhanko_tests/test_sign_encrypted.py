@@ -3,10 +3,10 @@ from io import BytesIO
 import pytest
 from freezegun import freeze_time
 
-from pyhanko.pdf_utils import misc
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
+from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.signers.pdf_signer import (
     DSSContentSettings,
     SigDSSPlacementPreference,
@@ -20,7 +20,12 @@ from pyhanko_tests.samples import (
     MINIMAL_RC4,
     PUBKEY_SELFSIGNED_DECRYPTER,
 )
-from pyhanko_tests.signing_commons import FROM_CA, dummy_ocsp_vc, val_trusted
+from pyhanko_tests.signing_commons import (
+    DUMMY_HTTP_TS,
+    FROM_CA,
+    live_testing_vc,
+    val_trusted,
+)
 from pyhanko_tests.test_pades import PADES
 
 sign_crypt_rc4_files = (MINIMAL_RC4, MINIMAL_ONE_FIELD_RC4)
@@ -127,23 +132,29 @@ def test_sign_crypt_aes256_new(password, file):
     val_trusted(s)
 
 
-# This test documents the fact that post-sign instructions for encrypted
-# documents currently don't work
-
 @pytest.mark.parametrize('password, file', sign_crypt_new_params)
 @freeze_time('2020-11-01')
-def test_sign_encrypted_with_post_sign_fail(password, file):
+def test_sign_encrypted_with_post_sign(requests_mock, password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_aes256_files[file]))
     w.encrypt(password)
 
-    with pytest.raises(misc.PdfWriteError,
-                       match='without encryption credentials'):
-        signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=dummy_ocsp_vc(),
-                subfilter=PADES, embed_validation_info=True,
-                dss_settings=DSSContentSettings(
-                    placement=SigDSSPlacementPreference.SEPARATE_REVISION
-                )
-            ), signer=FROM_CA
-        )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=live_testing_vc(requests_mock),
+            subfilter=PADES, embed_validation_info=True,
+            dss_settings=DSSContentSettings(
+                placement=SigDSSPlacementPreference.SEPARATE_REVISION
+            ),
+            use_pades_lta=True
+        ),
+        signer=FROM_CA, timestamper=DUMMY_HTTP_TS
+    )
+    r = PdfFileReader(out)
+    r.decrypt(password)
+
+    s = r.embedded_signatures[0]
+    status = val_trusted(s, extd=True)
+    assert status.modification_level == ModificationLevel.LTA_UPDATES
+    assert len(r.embedded_regular_signatures) == 1
+    assert len(r.embedded_timestamp_signatures) == 1

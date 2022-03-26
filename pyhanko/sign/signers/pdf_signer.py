@@ -63,6 +63,7 @@ __all__ = [
     'PreSignValidationStatus', 'PostSignInstructions'
 ]
 
+from ...pdf_utils.crypt import SerialisedCredential
 
 logger = logging.getLogger(__name__)
 
@@ -665,7 +666,14 @@ class PdfTimeStamper:
                 output_stream=res_output, sig_contents=sig_contents,
                 paths=validation_paths, validation_context=validation_context,
                 force_write=not dss_settings.skip_if_unneeded,
-                embed_roots=embed_roots
+                embed_roots=embed_roots,
+                # FIXME in this case, the ser/deser step is unnecessary
+                #  and inefficient; should probably rewrite
+                #  using supply_dss_in_writer
+                file_credential=(
+                    pdf_out.security_handler.extract_credential().serialise()
+                    if pdf_out.security_handler else None
+                )
             )
 
         return misc.finalise_output(output, res_output)
@@ -1894,6 +1902,12 @@ class PdfSigningSession:
         if self.use_pades and signature_meta.embed_validation_info:
             if signature_meta.use_pades_lta:
                 doc_timestamper = self.timestamper
+            # if necessary/supported, extract a file access credential
+            # to perform post-signing operations later
+            if self.pdf_out.security_handler is not None:
+                credential = self.pdf_out.security_handler.extract_credential()
+            else:
+                credential = None
             post_signing_instr = PostSignInstructions(
                 validation_info=validation_info,
                 # use the same algorithm
@@ -1906,7 +1920,8 @@ class PdfSigningSession:
                 timestamp_field_name=signature_meta.timestamp_field_name,
                 dss_settings=signature_meta.dss_settings,
                 tight_size_estimates=signature_meta.tight_size_estimates,
-                embed_roots=embed_roots
+                embed_roots=embed_roots,
+                file_credential=credential
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer, signer=pdf_signer.signer,
@@ -1987,6 +2002,13 @@ class PostSignInstructions:
         This setting is not part of :class:`.DSSContentSettings` because
         its value is taken from the corresponding property on the
         :class:`.Signer` involved, not from the initial configuration.
+    """
+
+    file_credential: Optional[SerialisedCredential] = None
+    """
+    .. versionadded:: 0.13.0
+
+    Serialised file credential, to update encrypted files.
     """
 
 
@@ -2283,11 +2305,18 @@ class PdfPostSignatureDocument:
             if not dss_settings.skip_if_unneeded:
                 dss_op_kwargs['force_write'] = True
             validation.DocumentSecurityStore.add_dss(
-                output_stream=output, **dss_op_kwargs
+                output_stream=output, **dss_op_kwargs,
+                file_credential=instr.file_credential
             )
         if timestamper is not None:
             # append a document timestamp after the DSS update
             w = IncrementalPdfFileWriter(output)
+            if w.security_handler is not None \
+                    and self.post_sign_instructions.file_credential is not None:
+                w.security_handler.authenticate(
+                    self.post_sign_instructions.file_credential
+                )
+                # we let the SH throw errors on access as necessary
             pdf_timestamper = PdfTimeStamper(
                 timestamper, field_name=instr.timestamp_field_name
             )

@@ -2,6 +2,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from dataclasses import field as data_field
+from typing import Optional
 
 from asn1crypto import crl as asn1_crl
 from asn1crypto import ocsp as asn1_ocsp
@@ -25,6 +26,7 @@ __all__ = [
     'collect_validation_info'
 ]
 
+from ...pdf_utils.crypt import SerialisedCredential
 from ...pdf_utils.reader import PdfFileReader
 
 logger = logging.getLogger(__name__)
@@ -456,7 +458,8 @@ class DocumentSecurityStore:
     @classmethod
     def add_dss(cls, output_stream, sig_contents, *, certs=None,
                 ocsps=None, crls=None, paths=None, validation_context=None,
-                force_write: bool = False, embed_roots: bool = True):
+                force_write: bool = False, embed_roots: bool = True,
+                file_credential: Optional[SerialisedCredential] = None):
         """
         Wrapper around :meth:`supply_dss_in_writer`.
 
@@ -497,9 +500,14 @@ class DocumentSecurityStore:
 
             .. warning::
                 This only applies to paths, not the ``certs`` parameter.
+        :param file_credential:
+            .. versionadded:: 0.13.0
 
+            Serialised file credential, to update encrypted files.
         """
         pdf_out = IncrementalPdfFileWriter(output_stream)
+        if pdf_out.security_handler is not None and file_credential is not None:
+            pdf_out.security_handler.authenticate(file_credential)
         dss = cls.supply_dss_in_writer(
             pdf_out, sig_contents, certs=certs, ocsps=ocsps,
             crls=crls, paths=paths, validation_context=validation_context,
