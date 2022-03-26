@@ -27,6 +27,7 @@ from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,
     SecurityHandler,
     SecurityHandlerVersion,
+    SerialisedCredential,
     StandardAESCryptFilter,
     StandardRC4CryptFilter,
     StandardSecurityHandler,
@@ -524,21 +525,7 @@ def test_info_delete():
         w.set_info(None)
 
 
-@pytest.mark.parametrize("use_owner_pass,rev,keylen_bytes,use_aes", [
-    (True, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
-    (False, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
-    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
-    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
-    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
-    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
-    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
-    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
-    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
-    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
-    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
-    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
-])
-def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
+def _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw_legacy(
@@ -554,6 +541,25 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
     w.write(out)
+    return out
+
+
+@pytest.mark.parametrize("use_owner_pass,rev,keylen_bytes,use_aes", [
+    (True, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
+    (False, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
+    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
+    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
+    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
+    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
+    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
+    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
+    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
+    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
+    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
+    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
+])
+def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
+    out = _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes)
     r = PdfFileReader(out)
     result = r.decrypt("ownersecret" if use_owner_pass else "usersecret")
     if use_owner_pass:
@@ -2232,3 +2238,95 @@ def test_dictionary_setvalue_guard():
         dict_obj['/A'] = 1
     with pytest.raises(ValueError, match='must be PdfObject'):
         dict_obj.setdefault(pdf_name('/A'), 1)
+
+
+@pytest.mark.parametrize('pw', ['usersecret', 'ownersecret'])
+def test_ser_deser_credential_standard_sh(pw):
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    r.decrypt(pw)
+    cred = r.security_handler.extract_credential()
+    assert cred['pwd_bytes'].native == pw.encode('utf8')
+    cred_data = cred.serialise()
+
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    result = r.security_handler.authenticate(cred_data)
+    exp_status = AuthStatus.USER if pw.startswith('user') else AuthStatus.OWNER
+    assert result.status == exp_status
+
+
+def test_ser_deser_credential_standard_sh_extract_from_builder():
+    sh = StandardSecurityHandler.build_from_pw("ownersecret", "usersecret")
+    cred = sh.extract_credential()
+    assert cred['pwd_bytes'].native == b'ownersecret'
+    assert cred['id1'].native is None
+
+
+def test_ser_deser_credential_wrong_pw():
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    r.decrypt("ownersecret")
+    cred = r.security_handler.extract_credential()
+    cred['pwd_bytes'] = b'This is the wrong password'
+    cred_data = cred.serialise()
+
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    result = r.security_handler.authenticate(cred_data)
+    assert result.status == AuthStatus.FAILED
+
+
+def test_ser_deser_credential_standard_corrupted():
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    r.decrypt("ownersecret")
+    cred = r.security_handler.extract_credential()
+    cred_data = SerialisedCredential(
+        credential_type=cred.serialise().credential_type,
+        data=b'\xde\xad\xbe\xef'
+    )
+
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    with pytest.raises(misc.PdfReadError,
+                       match="Failed to deserialise password"):
+        r.security_handler.authenticate(cred_data)
+
+
+def test_ser_deser_credential_wrong_cred_type():
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    r.decrypt("ownersecret")
+    cred = r.security_handler.extract_credential()
+    cred_data = SerialisedCredential(
+        credential_type='foobar',
+        data=cred.serialise().data
+    )
+
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    with pytest.raises(misc.PdfReadError,
+                       match="credential type 'foobar' not known"):
+        r.security_handler.authenticate(cred_data)
+
+
+@pytest.mark.parametrize('pw', ['usersecret', 'ownersecret'])
+def test_ser_deser_credential_standard_sh_legacy(pw):
+    out = _produce_legacy_encrypted_file(
+        StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True
+    )
+    r = PdfFileReader(out)
+    r.decrypt(pw)
+    cred = r.security_handler.extract_credential()
+    assert cred['pwd_bytes'].native == pw.encode('utf8')
+    assert cred['id1'].native is not None
+    cred_data = cred.serialise()
+
+    r = PdfFileReader(BytesIO(MINIMAL_AES256))
+    result = r.security_handler.authenticate(cred_data)
+    exp_status = AuthStatus.USER if pw.startswith('user') else AuthStatus.OWNER
+    assert result.status == exp_status
+
+
+def test_ser_deser_credential_standard_legacy_sh_extract_from_builder():
+    sh = StandardSecurityHandler.build_from_pw_legacy(
+        desired_owner_pass=b'ownersecret', desired_user_pass=b'usersecret',
+        rev=StandardSecuritySettingsRevision.RC4_OR_AES128, keylen_bytes=16,
+        id1=b'\xde\xad\xbe\xef'
+    )
+    cred = sh.extract_credential()
+    assert cred['pwd_bytes'].native == b'ownersecret'
+    assert cred['id1'].native == b'\xde\xad\xbe\xef'

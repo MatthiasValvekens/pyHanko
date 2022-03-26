@@ -18,6 +18,7 @@ from typing import Optional, Set, Tuple, Union
 
 from . import generic, misc
 from .crypt import (
+    AuthResult,
     EnvelopeKeyDecrypter,
     PubKeySecurityHandler,
     SecurityHandler,
@@ -444,7 +445,7 @@ class PdfFileReader(PdfHandler):
         self.has_xref_stream = xref_builder.has_xref_stream
         return xref_cache, xref_builder.trailer
 
-    def decrypt(self, password: Union[str, bytes]):
+    def decrypt(self, password: Union[str, bytes]) -> AuthResult:
         """
         When using an encrypted PDF file with the standard PDF encryption
         handler, this function will allow the file to be decrypted.
@@ -481,7 +482,7 @@ class PdfFileReader(PdfHandler):
 
         return sh.authenticate(password, id1=self.document_id[0])
 
-    def decrypt_pubkey(self, credential: EnvelopeKeyDecrypter):
+    def decrypt_pubkey(self, credential: EnvelopeKeyDecrypter) -> AuthResult:
         """
         Decrypt a PDF file encrypted using public-key encryption by providing
         a credential representing the private key of one of the recipients.
