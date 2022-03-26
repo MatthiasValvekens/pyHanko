@@ -62,7 +62,7 @@ from dataclasses import dataclass
 from hashlib import md5, sha1, sha256, sha384, sha512
 from typing import Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
-from asn1crypto import algos, cms, x509
+from asn1crypto import algos, cms, core, x509
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyAlgorithm
 from cryptography.hazmat.primitives import padding, serialization
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
@@ -470,6 +470,53 @@ class SecurityHandlerVersion(misc.VersionEnum):
         return key_length
 
 
+# TODO document these classes (explaining that they're for automatic credential
+#  management for post-signing operations)
+
+@dataclass(frozen=True)
+class SerialisedCredential:
+    credential_type: str
+    data: bytes
+
+
+class SerialisableCredential(abc.ABC):
+    __registered_subclasses: Dict[str, Type['SerialisableCredential']] = dict()
+
+    @classmethod
+    def get_name(cls) -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def register(cls: Type['SerialisableCredential']):
+        SerialisableCredential.__registered_subclasses[cls.get_name()] = cls
+        return cls
+
+    def _ser_value(self) -> bytes:
+        raise NotImplementedError
+
+    @classmethod
+    def _deser_value(cls, data: bytes):
+        raise NotImplementedError
+
+    @staticmethod
+    def deserialise(ser_value: SerialisedCredential) \
+            -> 'SerialisableCredential':
+        cred_type = ser_value.credential_type
+        try:
+            cls = SerialisableCredential.__registered_subclasses[cred_type]
+        except KeyError:
+            raise misc.PdfReadError(
+                f"Failed to deserialise credential: "
+                f"credential type '{cred_type}' not known."
+            )
+        return cls._deser_value(ser_value.data)
+
+    def serialise(self) -> SerialisedCredential:
+        return SerialisedCredential(
+            credential_type=self.__class__.get_name(), data=self._ser_value()
+        )
+
+
 class SecurityHandler:
     """
     Generic PDF security handler interface.
@@ -521,6 +568,7 @@ class SecurityHandler:
         self.crypt_filter_config = crypt_filter_config
         self.encrypt_metadata = encrypt_metadata
         self._compat_entries = compat_entries
+        self._credential = None
 
     def __init_subclass__(cls, **kwargs):
         # ensure that _known_crypt_filters is initialised to a fresh object
@@ -604,6 +652,21 @@ class SecurityHandler:
             The name of this security handler.
         """
         raise NotImplementedError
+
+    def extract_credential(self) -> Optional[SerialisableCredential]:
+        """
+        Extract a serialisable credential for later use, if the security handler
+        supports it. It should allow the security handler to be unlocked
+        with the same access level as the current one.
+
+        :return:
+            A serialisable credential, or ``None``.
+        """
+        return (
+            self._credential
+            if isinstance(self._credential, SerialisableCredential)
+            else None
+        )
 
     @classmethod
     def support_generic_subfilters(cls) -> Set[str]:
@@ -948,6 +1011,31 @@ class CryptFilter:
                 raise PdfKeyNotAvailableError("Authentication failed")
             key = self._shared_key = self.derive_shared_encryption_key()
         return key
+
+
+class _PasswordCredential(core.Sequence, SerialisableCredential):
+
+    _fields = [
+        ('pwd_bytes', core.OctetString),
+        ('id1', core.OctetString, {'optional': True})
+    ]
+
+    @classmethod
+    def get_name(cls) -> str:
+        return 'pwd_bytes'
+
+    def _ser_value(self) -> bytes:
+        return self.dump()
+
+    @classmethod
+    def _deser_value(cls, data: bytes):
+        try:
+            return _PasswordCredential.load(data)
+        except ValueError:
+            raise misc.PdfReadError("Failed to deserialise password credential")
+
+
+SerialisableCredential.register(_PasswordCredential)
 
 
 class StandardCryptFilter(CryptFilter, abc.ABC):
@@ -1718,6 +1806,9 @@ class StandardSecurityHandler(SecurityHandler):
             **kwargs
         )
         sh._shared_key = key
+        sh._credential = _PasswordCredential({
+            'pwd_bytes': desired_owner_pass, 'id1': id1
+        })
         return sh
 
     @classmethod
@@ -1794,6 +1885,7 @@ class StandardSecurityHandler(SecurityHandler):
             **kwargs
         )
         sh._shared_key = encryption_key
+        sh._credential = _PasswordCredential({'pwd_bytes': owner_pw_bytes})
         return sh
 
     @staticmethod
@@ -1945,7 +2037,12 @@ class StandardSecurityHandler(SecurityHandler):
 
     def _authenticate_legacy(self, id1: bytes, password):
         user_password, key = self._auth_user_password_legacy(id1, password)
+        cred = _PasswordCredential({
+            'pwd_bytes': password,
+            'id1': id1
+        })
         if user_password:
+            self._credential = cred
             return AuthStatus.USER, key
         else:
             rev = self.revision
@@ -1960,10 +2057,12 @@ class StandardSecurityHandler(SecurityHandler):
                 userpass = val
             owner_password, key = self._auth_user_password_legacy(id1, userpass)
             if owner_password:
+                self._credential = cred
                 return AuthStatus.OWNER, key
         return AuthStatus.FAILED, None
 
-    def authenticate(self, credential, id1: bytes = None) -> AuthResult:
+    def authenticate(self, credential, id1: Optional[bytes] = None) \
+            -> AuthResult:
         """
         Authenticate a user to this security handler.
 
@@ -1976,6 +2075,12 @@ class StandardSecurityHandler(SecurityHandler):
             An :class:`AuthResult` object indicating the level of access
             obtained.
         """
+        if isinstance(credential, SerialisedCredential):
+            credential = SerialisableCredential.deserialise(credential)
+
+        if isinstance(credential, _PasswordCredential):
+            id1 = credential['id1'].native
+            credential = credential['pwd_bytes'].native
         res: AuthStatus
         rev = self.revision
         if rev >= StandardSecuritySettingsRevision.AES256:
@@ -2037,6 +2142,7 @@ class StandardSecurityHandler(SecurityHandler):
                 "File decryption key didn't decrypt permission flags "
                 "correctly -- file permissions may have been tampered with."
             )
+        self._credential = _PasswordCredential({'pwd_bytes': pw_bytes})
         return result, key
 
     def get_file_encryption_key(self) -> bytes:
