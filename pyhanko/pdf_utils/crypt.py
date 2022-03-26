@@ -472,6 +472,9 @@ class SecurityHandlerVersion(misc.VersionEnum):
 
 # TODO document these classes (explaining that they're for automatic credential
 #  management for post-signing operations)
+# TODO Also consider maybe allowing a credential exporter that just dumps
+#  the file encryption key, and would be compatible with any of the "built-in"
+#  security handlers.
 
 @dataclass(frozen=True)
 class SerialisedCredential:
@@ -662,11 +665,15 @@ class SecurityHandler:
         :return:
             A serialisable credential, or ``None``.
         """
-        return (
-            self._credential
-            if isinstance(self._credential, SerialisableCredential)
-            else None
-        )
+        if isinstance(self._credential, SerialisableCredential):
+            return self._credential
+        else:
+            # This can mean several things: either the security handler doesn't
+            # support credential serialisation at all, the particular credential
+            # type can't be serialised, or the mode of operation doesn't permit
+            # credential serialisation (e.g. pubkey security handler when the
+            # private key is not available to the file writer)
+            return None
 
     @classmethod
     def support_generic_subfilters(cls) -> Set[str]:
@@ -2077,19 +2084,25 @@ class StandardSecurityHandler(SecurityHandler):
         """
         if isinstance(credential, SerialisedCredential):
             credential = SerialisableCredential.deserialise(credential)
-
+        if not isinstance(credential, (_PasswordCredential, str, bytes)):
+            raise misc.PdfReadError(
+                f"Standard authentication credential must be a "
+                f"string, byte string or _PasswordCredential, "
+                f"not {type(credential)}."
+            )
         if isinstance(credential, _PasswordCredential):
             id1 = credential['id1'].native
             credential = credential['pwd_bytes'].native
+
         res: AuthStatus
         rev = self.revision
         if rev >= StandardSecuritySettingsRevision.AES256:
             res, key = self._authenticate_r6(credential)
         else:
             if id1 is None:
-                raise ValueError(
+                raise misc.PdfReadError(
                     "id1 must be specified for legacy encryption"
-                )  # pragma: nocover
+                )
             credential = _legacy_normalise_pw(credential)
             res, key = self._authenticate_legacy(id1, credential)
         if key is not None:
@@ -2319,7 +2332,11 @@ class EnvelopeKeyDecrypter:
         raise NotImplementedError
 
 
-class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
+class _PrivKeyAndCert(core.Sequence):
+    _fields = [('key', PrivateKeyInfo), ('cert', x509.Certificate)]
+
+
+class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
     """
     Implementation of :class:`.EnvelopeKeyDecrypter` where the private key
     is an RSA key residing in memory.
@@ -2329,6 +2346,26 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
     :param private_key:
         The recipient's private key.
     """
+
+    @classmethod
+    def get_name(cls) -> str:
+        return 'raw_privkey'
+
+    def _ser_value(self) -> bytes:
+        values = {'key': self.private_key, 'cert': self.cert}
+        return _PrivKeyAndCert(values).dump()
+
+    @classmethod
+    def _deser_value(cls, data: bytes):
+        try:
+            decoded = _PrivKeyAndCert.load(data)
+            key = decoded['key']
+            cert = decoded['cert']
+        except ValueError as e:
+            raise misc.PdfReadError(
+                "Failed to decode serialised pubkey credential"
+            ) from e
+        return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=key)
 
     def __init__(self, cert: x509.Certificate, private_key: PrivateKeyInfo):
         super().__init__(cert)
@@ -2419,6 +2456,9 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter):
         return priv_key.decrypt(encrypted_key, padding=PKCS1v15())
 
 
+SerialisableCredential.register(SimpleEnvelopeKeyDecrypter)
+
+
 def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
                                  decrypter: EnvelopeKeyDecrypter) \
         -> Tuple[Optional[bytes], Optional[int]]:
@@ -2449,10 +2489,13 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
             # we have a match!
             # use the decrypter passed in to decrypt the envelope key
             # for this recipient.
-            envelope_key = decrypter.decrypt(
-                ktri['encrypted_key'].native,
-                ktri['key_encryption_algorithm']
-            )
+            try:
+                envelope_key = decrypter.decrypt(
+                    ktri['encrypted_key'].native,
+                    ktri['key_encryption_algorithm']
+                )
+            except Exception as e:
+                raise misc.PdfReadError("Failed to decrypt envelope key") from e
             break
     else:
         return None, None
@@ -2819,11 +2862,14 @@ class PubKeySecurityHandler(SecurityHandler):
             An :class:`AuthResult` object indicating the level of access
             obtained.
         """
+
+        if isinstance(credential, SerialisedCredential):
+            credential = SerialisableCredential.deserialise(credential)
         if not isinstance(credential, EnvelopeKeyDecrypter):
             raise misc.PdfReadError(
                 f"Pubkey authentication credential must be an instance of "
                 f"EnvelopeKeyDecrypter, not {type(credential)}."
-            )  # pragma: nocover
+            )
 
         perms = 0xffffffff
         for cf in self.crypt_filter_config.standard_filters():
@@ -2838,6 +2884,8 @@ class PubKeySecurityHandler(SecurityHandler):
             # course of action
             if result.permission_flags is not None:
                 perms &= result.permission_flags
+        if isinstance(credential, SerialisableCredential):
+            self._credential = credential
         return AuthResult(AuthStatus.USER, _as_signed(perms))
 
     def get_file_encryption_key(self) -> bytes:
