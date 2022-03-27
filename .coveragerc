@@ -3,7 +3,7 @@
            *test*
            *venv*
            setup.py
-           pyhanko/pdf_utils/_saslprep.py
+           pyhanko/pdf_utils/crypt/_saslprep.py
 
 [report]
 exclude_lines =
