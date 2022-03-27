@@ -1,5 +1,5 @@
-pyhanko.pdf\_utils.crypt module
-===============================
+pyhanko.pdf\_utils.crypt package
+================================
 
 .. automodule:: pyhanko.pdf_utils.crypt
    :members:
