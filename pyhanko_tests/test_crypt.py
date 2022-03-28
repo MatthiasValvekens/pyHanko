@@ -1,3 +1,4 @@
+import os
 from io import BytesIO
 
 import pytest
@@ -31,6 +32,7 @@ from pyhanko_tests.samples import (
     MINIMAL_AES256,
     MINIMAL_ONE_FIELD,
     MINIMAL_ONE_FIELD_AES256,
+    PDF_DATA_DIR,
     PUBKEY_SELFSIGNED_DECRYPTER,
     PUBKEY_TEST_DECRYPTER,
     TESTING_CA_DIR,
@@ -953,3 +955,30 @@ def test_ser_deser_credential_wrong_key():
     # in regular usage.
     with pytest.raises(misc.PdfReadError, match="envelope key"):
         r.security_handler.authenticate(wrong_key_cred_data)
+
+
+def test_encrypt_skipping_metadata():
+    # we need to manually flag the metadata streams, since
+    # pyHanko's PDF reader is (currently) not metadata-aware
+    from pyhanko.pdf_utils.writer import copy_into_new_writer
+    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
+            as inf:
+        w = copy_into_new_writer(PdfFileReader(inf))
+
+    w.encrypt("secret", "secret", encrypt_metadata=False)
+    w.root['/Metadata'].apply_filter(
+        "/Crypt", params={pdf_name("/Name"): pdf_name("/Identity")}
+    )
+
+    out = BytesIO()
+    w.write(out)
+
+    out.seek(0)
+    r = PdfFileReader(out)
+    mtd = r.root['/Metadata']
+    assert b'Test document' in mtd.encoded_data
+    assert b'Test document' in mtd.data
+    result = r.decrypt("secret")
+    assert result.status == AuthStatus.OWNER
+
+    assert r.trailer['/Info']['/Title'] == 'Test document'

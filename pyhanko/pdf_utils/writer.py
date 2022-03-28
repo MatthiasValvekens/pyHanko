@@ -1322,7 +1322,7 @@ class PdfFileWriter(BasePdfFileWriter):
         # as binary (see § 7.5.2 in ISO 32000-1)
         stream.write(b'%\xc2\xa5\xc2\xb1\xc3\xab\n')
 
-    def encrypt(self, owner_pass, user_pass=None):
+    def encrypt(self, owner_pass, user_pass=None, **kwargs):
         """
         Mark this document to be encrypted with PDF 2.0 encryption (AES-256).
 
@@ -1356,9 +1356,14 @@ class PdfFileWriter(BasePdfFileWriter):
         :param user_pass:
             The desired user password (defaults to the owner password
             if not specified)
+        :param kwargs:
+            Other keyword arguments to be passed to
+            :meth:`.StandardSecurityHandler.build_from_pw`.
         """
         self.output_version = (2, 0)
-        sh = StandardSecurityHandler.build_from_pw(owner_pass, user_pass)
+        sh = StandardSecurityHandler.build_from_pw(
+            owner_pass, user_pass, **kwargs
+        )
         self._assign_security_handler(sh)
 
     def encrypt_pubkey(self, recipients: List[x509.Certificate]):
