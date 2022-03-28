@@ -364,12 +364,14 @@ def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
     if main_unencrypted:
         # streams/strings are unencrypted by default
         cfc = CryptFilterConfiguration(crypt_filters=crypt_filters)
+        assert len(cfc.filters()) == 1
     else:
         crypt_filters[STD_CF] = StandardAESCryptFilter(keylen=16)
         cfc = CryptFilterConfiguration(
             crypt_filters=crypt_filters,
             default_string_filter=STD_CF, default_stream_filter=STD_CF
         )
+        assert len(cfc.filters()) == 2
     sh = StandardSecurityHandler.build_from_pw_legacy(
         rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
         id1=w.document_id[0], desired_user_pass="usersecret",
@@ -980,5 +982,32 @@ def test_encrypt_skipping_metadata():
     assert b'Test document' in mtd.data
     result = r.decrypt("secret")
     assert result.status == AuthStatus.OWNER
+
+    assert r.trailer['/Info']['/Title'] == 'Test document'
+
+
+def test_encrypt_skipping_metadata_pubkey():
+    # we need to manually flag the metadata streams, since
+    # pyHanko's PDF reader is (currently) not metadata-aware
+    from pyhanko.pdf_utils.writer import copy_into_new_writer
+    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
+            as inf:
+        w = copy_into_new_writer(PdfFileReader(inf))
+
+    w.encrypt_pubkey([PUBKEY_TEST_DECRYPTER.cert], encrypt_metadata=False)
+    w.root['/Metadata'].apply_filter(
+        "/Crypt", params={pdf_name("/Name"): pdf_name("/Identity")}
+    )
+
+    out = BytesIO()
+    w.write(out)
+
+    out.seek(0)
+    r = PdfFileReader(out)
+    mtd = r.root['/Metadata']
+    assert b'Test document' in mtd.encoded_data
+    assert b'Test document' in mtd.data
+    result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    assert result.status == AuthStatus.USER
 
     assert r.trailer['/Info']['/Title'] == 'Test document'

@@ -1366,7 +1366,7 @@ class PdfFileWriter(BasePdfFileWriter):
         )
         self._assign_security_handler(sh)
 
-    def encrypt_pubkey(self, recipients: List[x509.Certificate]):
+    def encrypt_pubkey(self, recipients: List[x509.Certificate], **kwargs):
         """
         Mark this document to be encrypted with PDF 2.0 public key encryption.
         The certificates passed in should be RSA certificates.
@@ -1383,9 +1383,12 @@ class PdfFileWriter(BasePdfFileWriter):
         :param recipients:
             Certificates of the recipients that should be able to decrypt
             the document.
+        :param kwargs:
+            Other keyword arguments to be passed to
+            :meth:`.PubKeySecurityHandler.build_from_certs`.
         """
         self.output_version = (2, 0)
-        sh = PubKeySecurityHandler.build_from_certs(recipients)
+        sh = PubKeySecurityHandler.build_from_certs(recipients, **kwargs)
         self._assign_security_handler(sh)
 
     def set_custom_trailer_entry(self, key: generic.NameObject,
