@@ -1011,3 +1011,22 @@ def test_encrypt_skipping_metadata_pubkey():
     assert result.status == AuthStatus.USER
 
     assert r.trailer['/Info']['/Title'] == 'Test document'
+
+
+def test_pubkey_rc4_envelope():
+    fname = os.path.join(PDF_DATA_DIR, "minimal-pubkey-rc4-envelope.pdf")
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+        assert result.status == AuthStatus.USER
+        assert b'Hello' in r.root['/Pages']['/Kids'][0]['/Contents'].data
+
+
+def test_unknown_envelope_enc_type():
+    fname = os.path.join(
+        PDF_DATA_DIR, "minimal-pubkey-unknown-envelope-alg.pdf"
+    )
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        with pytest.raises(misc.PdfError, match="Cipher.*not allowed"):
+            r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)

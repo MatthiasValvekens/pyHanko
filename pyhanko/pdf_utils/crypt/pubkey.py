@@ -561,7 +561,10 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
     # the spec says that we have to support rc4 (<=256 bits),
     # des, triple des, rc2 (<=128 bits)
     # and AES-CBC (128, 192, 256 bits)
-    cipher_name = algo.encryption_cipher
+    try:
+        cipher_name = algo.encryption_cipher
+    except (ValueError, KeyError):
+        cipher_name = algo['algorithm'].native
 
     with_iv = {'aes': aes_cbc_decrypt}
     try:
@@ -577,7 +580,7 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
             'tripledes': symmetric.tripledes_cbc_pkcs5_decrypt,
             'rc2': symmetric.rc2_cbc_pkcs5_decrypt
         })
-    except ImportError:
+    except ImportError:  # pragma: nocover
         if cipher_name in ('des', 'tripledes', 'rc2'):
             raise NotImplementedError(
                 "DES, 3DES and RC2 require oscrypto to be present"
@@ -594,7 +597,7 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
     else:
         raise misc.PdfReadError(
             f"Cipher {cipher_name} is not allowed in PDF 2.0."
-        )  # pragma: nocover
+        )
 
     seed = content[:20]
     perms: Optional[int] = None
