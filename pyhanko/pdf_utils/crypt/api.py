@@ -122,8 +122,6 @@ class SecurityHandler:
                  crypt_filter_config: 'CryptFilterConfiguration',
                  encrypt_metadata=True, compat_entries=True):
         self.version = version
-        if crypt_filter_config is None:
-            raise misc.PdfError("No crypt filter configuration")
         crypt_filter_config.set_security_handler(self)
 
         self.keylen = version.check_key_length(legacy_keylen)
