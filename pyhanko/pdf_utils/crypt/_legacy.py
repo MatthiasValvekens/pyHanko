@@ -13,7 +13,7 @@ _encryption_padding = (
 
 
 def derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
-                           id1_entry, metadata_encrypt=True):
+                           id1_entry, encrypt_metadata):
     """
     Implementation of algorithm 3.2 of the PDF standard security handler,
     section 3.5.2 of the PDF 1.6 reference.
@@ -41,7 +41,7 @@ def derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
     m.update(id1_entry)
     # 6. (Revision 4 or greater) If document metadata is not being encrypted,
     # pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
-    if rev >= 4 and not metadata_encrypt:
+    if rev >= 4 and not encrypt_metadata:
         m.update(b"\xff\xff\xff\xff")
     # 7. Finish the hash.
     md5_hash = m.digest()
@@ -130,7 +130,7 @@ def compute_u_value_r2(password, owner_entry, p_entry, id1_entry):
     # 1. Create an encryption key based on the user password string, as
     # described in algorithm 3.2.
     key = derive_legacy_file_key(password, 2, 5, owner_entry, p_entry,
-                                 id1_entry)
+                                 id1_entry, encrypt_metadata=True)
     # 2. Encrypt the 32-byte padding string shown in step 1 of algorithm 3.2,
     # using an RC4 encryption function with the encryption key from the
     # preceding step.
@@ -141,7 +141,7 @@ def compute_u_value_r2(password, owner_entry, p_entry, id1_entry):
 
 
 def compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
-                        id1_entry):
+                        id1_entry, encrypt_metadata: bool):
     """
     Implementation of algorithm 3.4 of the PDF standard security handler,
     section 3.5.2 of the PDF 1.6 reference.
@@ -150,7 +150,7 @@ def compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
     # 1. Create an encryption key based on the user password string, as
     # described in Algorithm 3.2.
     key = derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
-                                 id1_entry)
+                                 id1_entry, encrypt_metadata=encrypt_metadata)
     # 2. Initialize the MD5 hash function and pass the 32-byte padding string
     # shown in step 1 of Algorithm 3.2 as input to this function.
     m = md5()

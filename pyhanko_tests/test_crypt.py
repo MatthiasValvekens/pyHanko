@@ -959,7 +959,8 @@ def test_ser_deser_credential_wrong_key():
         r.security_handler.authenticate(wrong_key_cred_data)
 
 
-def test_encrypt_skipping_metadata():
+@pytest.mark.parametrize('legacy', [True, False])
+def test_encrypt_skipping_metadata(legacy):
     # we need to manually flag the metadata streams, since
     # pyHanko's PDF reader is (currently) not metadata-aware
     from pyhanko.pdf_utils.writer import copy_into_new_writer
@@ -967,7 +968,18 @@ def test_encrypt_skipping_metadata():
             as inf:
         w = copy_into_new_writer(PdfFileReader(inf))
 
-    w.encrypt("secret", "secret", encrypt_metadata=False)
+    if legacy:
+        sh = StandardSecurityHandler.build_from_pw_legacy(
+            StandardSecuritySettingsRevision.RC4_OR_AES128,
+            w._document_id[0].original_bytes,
+            desired_owner_pass="secret", desired_user_pass="secret",
+            keylen_bytes=16, use_aes128=True,
+            perms=-44,
+            encrypt_metadata=False
+        )
+        w._assign_security_handler(sh)
+    else:
+        w.encrypt("secret", "secret", encrypt_metadata=False)
     w.root['/Metadata'].apply_filter(
         "/Crypt", params={pdf_name("/Name"): pdf_name("/Identity")}
     )
@@ -978,6 +990,7 @@ def test_encrypt_skipping_metadata():
     out.seek(0)
     r = PdfFileReader(out)
     mtd = r.root['/Metadata']
+    assert not r.trailer['/Encrypt']['/EncryptMetadata']
     assert b'Test document' in mtd.encoded_data
     assert b'Test document' in mtd.data
     result = r.decrypt("secret")

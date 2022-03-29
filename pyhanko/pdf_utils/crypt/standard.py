@@ -257,7 +257,9 @@ class StandardSecurityHandler(SecurityHandler):
                              id1, desired_owner_pass, desired_user_pass=None,
                              keylen_bytes=16, use_aes128=True,
                              perms: int = ALL_PERMS,
-                             crypt_filter_config=None, **kwargs):
+                             crypt_filter_config=None,
+                             encrypt_metadata=True,
+                             **kwargs):
         """
         Initialise a legacy password-based security handler, to attach to a
         :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
@@ -317,7 +319,8 @@ class StandardSecurityHandler(SecurityHandler):
             )
         else:
             u_entry, key = compute_u_value_r34(
-                desired_user_pass, rev.value, keylen_bytes, o_entry, perms, id1
+                desired_user_pass, rev.value, keylen_bytes, o_entry, perms, id1,
+                encrypt_metadata
             )
 
         if rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
@@ -338,7 +341,7 @@ class StandardSecurityHandler(SecurityHandler):
             version=version, revision=rev, legacy_keylen=keylen_bytes,
             perm_flags=perms, odata=o_entry,
             udata=u_entry, crypt_filter_config=crypt_filter_config,
-            **kwargs
+            encrypt_metadata=encrypt_metadata, **kwargs
         )
         sh._shared_key = key
         sh._credential = _PasswordCredential({
@@ -563,7 +566,8 @@ class StandardSecurityHandler(SecurityHandler):
             )
         else:
             user_tok_supplied, key = compute_u_value_r34(
-                password, rev.value, self.keylen, self.odata, self.perms, id1
+                password, rev.value, self.keylen, self.odata, self.perms, id1,
+                self.encrypt_metadata
             )
             user_tok_supplied = user_tok_supplied[:16]
             user_token = user_token[:16]
