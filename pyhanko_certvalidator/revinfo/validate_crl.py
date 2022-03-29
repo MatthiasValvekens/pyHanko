@@ -1038,6 +1038,11 @@ class CRLOfInterest:
     if appropriate.
     """
 
+    is_indirect: bool
+    """
+    Boolean indicating whether the CRL is an indirect one.
+    """
+
 
 @dataclass(frozen=True)
 class CRLCollectionResult:
@@ -1116,7 +1121,8 @@ async def _assess_crl_relevance(
     if not provisional_results:
         return None
     return CRLOfInterest(
-        crl=certificate_list_cont, prov_paths=provisional_results
+        crl=certificate_list_cont, prov_paths=provisional_results,
+        is_indirect=is_indirect
     )
 
 
