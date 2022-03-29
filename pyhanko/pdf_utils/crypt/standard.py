@@ -571,29 +571,32 @@ class StandardSecurityHandler(SecurityHandler):
         return user_tok_supplied == user_token, key
 
     def _authenticate_legacy(self, id1: bytes, password):
-        user_password, key = self._auth_user_password_legacy(id1, password)
         cred = _PasswordCredential({
             'pwd_bytes': password,
             'id1': id1
         })
+
+        # check the owner password first
+        rev = self.revision
+        key = compute_o_value_legacy_prep(password, rev.value, self.keylen)
+        if rev == StandardSecuritySettingsRevision.RC4_BASIC:
+            prp_userpass = rc4_encrypt(key, self.odata)
+        else:
+            val = self.odata
+            for i in range(19, -1, -1):
+                new_key = bytes(b ^ i for b in key)
+                val = rc4_encrypt(new_key, val)
+            prp_userpass = val
+        owner_password, key = self._auth_user_password_legacy(id1, prp_userpass)
+        if owner_password:
+            self._credential = cred
+            return AuthStatus.OWNER, key
+
+        # next, check the user password
+        user_password, key = self._auth_user_password_legacy(id1, password)
         if user_password:
             self._credential = cred
             return AuthStatus.USER, key
-        else:
-            rev = self.revision
-            key = compute_o_value_legacy_prep(password, rev.value, self.keylen)
-            if rev == StandardSecuritySettingsRevision.RC4_BASIC:
-                userpass = rc4_encrypt(key, self.odata)
-            else:
-                val = self.odata
-                for i in range(19, -1, -1):
-                    new_key = bytes(b ^ i for b in key)
-                    val = rc4_encrypt(new_key, val)
-                userpass = val
-            owner_password, key = self._auth_user_password_legacy(id1, userpass)
-            if owner_password:
-                self._credential = cred
-                return AuthStatus.OWNER, key
         return AuthStatus.FAILED, None
 
     def authenticate(self, credential, id1: Optional[bytes] = None) \
