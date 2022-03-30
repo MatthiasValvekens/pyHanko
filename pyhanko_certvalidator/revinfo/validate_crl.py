@@ -808,8 +808,8 @@ def _check_cert_on_crl_and_delta(
         delta_certificate_list = delta_certificate_list_cont.crl_data
         try:
             revoked_date, revoked_reason = \
-                _find_cert_in_list(cert, cert_issuer_name,
-                                   delta_certificate_list, crl_issuer)
+                find_cert_in_list(cert, cert_issuer_name,
+                                  delta_certificate_list, crl_issuer.subject)
         except NotImplementedError:
             errs.failures.append((
                 'One or more unrecognized critical extensions are present in '
@@ -822,8 +822,8 @@ def _check_cert_on_crl_and_delta(
     if revoked_reason is None:
         try:
             revoked_date, revoked_reason = \
-                _find_cert_in_list(cert, cert_issuer_name,
-                                   certificate_list, crl_issuer)
+                find_cert_in_list(cert, cert_issuer_name,
+                                  certificate_list, crl_issuer.subject)
         except NotImplementedError:
             errs.failures.append((
                 'One or more unrecognized critical extensions are present in '
@@ -1043,6 +1043,11 @@ class CRLOfInterest:
     Boolean indicating whether the CRL is an indirect one.
     """
 
+    crl_authority_name: x509.Name
+    """
+    Distinguished name for the authority for which the CRL issues certificates.
+    """
+
 
 @dataclass(frozen=True)
 class CRLCollectionResult:
@@ -1122,7 +1127,7 @@ async def _assess_crl_relevance(
         return None
     return CRLOfInterest(
         crl=certificate_list_cont, prov_paths=provisional_results,
-        is_indirect=is_indirect
+        is_indirect=is_indirect, crl_authority_name=crl_authority_name
     )
 
 
@@ -1232,11 +1237,11 @@ def _verify_crl_signature(certificate_list, public_key):
         )
 
 
-def _find_cert_in_list(
+def find_cert_in_list(
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         cert_issuer_name: x509.Name,
         certificate_list: crl.CertificateList,
-        crl_issuer: x509.Certificate):
+        crl_authority_name: x509.Name):
     """
     Looks for a cert in the list of revoked certificates
 
@@ -1251,8 +1256,9 @@ def _find_cert_in_list(
     :param certificate_list:
         An ans1crypto.crl.CertificateList object to look in for the cert
 
-    :param crl_issuer:
-        An asn1crypto.x509.Certificate object of the CRL issuer
+    :param crl_authority_name:
+        The distinguished name of the default authority for which the CRL issues
+        certificates.
 
     :return:
         A tuple of (None, None) if not present, otherwise a tuple of
@@ -1268,7 +1274,7 @@ def _find_cert_in_list(
     else:
         cert_serial = cert['ac_info']['serial_number'].native
 
-    last_issuer_name = crl_issuer.subject
+    last_issuer_name = crl_authority_name
     for revoked_cert in revoked_certificates:
         # If any unknown critical extensions, the entry can not be used
         if revoked_cert.critical_extensions - KNOWN_CRL_ENTRY_EXTENSIONS:
