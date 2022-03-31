@@ -1102,7 +1102,6 @@ def test_r6_values(enc_entry, delete, err):
         del enc_dict[enc_entry]
     else:
         enc_dict[enc_entry] = generic.ByteStringObject(b'\xde\xad\xbe\xef')
-    enc_dict.update(enc_dict)
     with pytest.raises(misc.PdfError, match=err):
         StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
 
@@ -1110,6 +1109,13 @@ def test_r6_values(enc_entry, delete, err):
 def test_key_length_constraint():
     enc_dict = generic.DictionaryObject(BASIC_R6_ENC_DICT)
     enc_dict['/Length'] = generic.NumberObject(333)
-    enc_dict.update(enc_dict)
     with pytest.raises(misc.PdfError, match="must be a multiple of 8"):
         StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
+
+
+def test_perms_decrypt_bogus():
+    enc_dict = generic.DictionaryObject(BASIC_R6_ENC_DICT)
+    enc_dict['/Perms'] = generic.ByteStringObject(b'\xde\xad\xbe\xef' * 4)
+    sh = StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
+    with pytest.raises(misc.PdfError, match="tampered"):
+        sh.authenticate("usersecret")
