@@ -433,18 +433,18 @@ class StandardSecurityHandler(SecurityHandler):
             raise misc.PdfError(
                 "/U and /O entries must be 48 bytes long in a "
                 f"rev. {rev} security handler"
-            )  # pragma: nocover
+            )
         if not oeseed or not ueseed or \
                 not (len(oeseed) == len(ueseed) == 32):
             raise misc.PdfError(
                 "/UE and /OE must be present and be 32 bytes long in a "
                 f"rev. {rev} security handler"
-            )  # pragma: nocover
+            )
         if not encrypted_perms or len(encrypted_perms) != 16:
             raise misc.PdfError(
                 "/Perms must be present and be 16 bytes long in a "
                 f"rev. {rev} security handler"
-            )  # pragma: nocover
+            )
 
     def __init__(self, version: SecurityHandlerVersion,
                  revision: StandardSecuritySettingsRevision,
@@ -504,11 +504,16 @@ class StandardSecurityHandler(SecurityHandler):
         if (keylen_bits % 8) != 0:
             raise misc.PdfError("Key length must be a multiple of 8")
         keylen = keylen_bits // 8
+        try:
+            odata = encrypt_dict['/O']
+            udata = encrypt_dict['/U']
+        except KeyError:
+            raise misc.PdfError("/O and /U entries must be present")
         return dict(
             legacy_keylen=keylen,
             perm_flags=as_signed(encrypt_dict.get('/P', ALL_PERMS)),
-            odata=encrypt_dict['/O'].original_bytes[:48],
-            udata=encrypt_dict['/U'].original_bytes[:48],
+            odata=odata.original_bytes[:48],
+            udata=udata.original_bytes[:48],
             oeseed=encrypt_dict.get_and_apply(
                 '/OE', lambda x: x.original_bytes
             ),

@@ -1,3 +1,4 @@
+import binascii
 import os
 from io import BytesIO
 
@@ -1043,3 +1044,64 @@ def test_unknown_envelope_enc_type():
         r = PdfFileReader(inf)
         with pytest.raises(misc.PdfError, match="Cipher.*not allowed"):
             r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+
+
+BASIC_R6_ENC_DICT = generic.DictionaryObject({
+    pdf_name('/Filter'): pdf_name('/Standard'),
+    pdf_name('/O'): generic.ByteStringObject(binascii.unhexlify(
+        "047761f7f568bfacb096382f2fc7cc94ffd87f33dc472ca4"
+        "a3a3a78c739c77df26a794a7819aff59b3b85780c0fafe9f"
+    )),
+    pdf_name('/U'): generic.ByteStringObject(binascii.unhexlify(
+        "446ea469061c56060b56fa0296bfd32cc54fa9175e92ef5c"
+        "0b945f4c810e309a03af4a2ff103bbd4db065e036f78ac4c"
+    )),
+    pdf_name('/OE'): generic.ByteStringObject(binascii.unhexlify(
+        "65012afdd09b34431117b9fa5f557202"
+        "940dece9758d53c61fc5ff436cf2515c"
+    )),
+    pdf_name('/UE'): generic.ByteStringObject(binascii.unhexlify(
+        "71071c8c117abc19d26b5efc44a08066"
+        "7ef3c3665ad3bc8f5f5b58126a15d931"
+    )),
+    pdf_name('/Perms'): generic.ByteStringObject(binascii.unhexlify(
+        "b8729f735b0976d80f61d16bcfe09273"
+    )),
+    pdf_name('/P'): generic.NumberObject(-4),
+    pdf_name('/V'): generic.NumberObject(5),
+    pdf_name('/R'): generic.NumberObject(6),
+    pdf_name('/Length'): generic.NumberObject(256),
+    pdf_name('/EncryptMetadata'): generic.BooleanObject(True),
+    pdf_name('/StmF'): pdf_name('/StdCF'),
+    pdf_name('/StrF'): pdf_name('/StdCF'),
+    pdf_name('/CF'): generic.DictionaryObject({
+        pdf_name('/StdCF'): generic.DictionaryObject({
+            pdf_name('/AuthEvent'): pdf_name('/DocOpen'),
+            pdf_name('/CFM'): pdf_name('/AESV3'),
+            pdf_name('/Length'): generic.NumberObject(32)
+        })
+    })
+})
+
+
+@pytest.mark.parametrize('enc_entry,delete,err', [
+    ('/OE', False, "be 32 bytes long"),
+    ('/OE', True, "be 32 bytes long"),
+    ('/UE', False, "be 32 bytes long"),
+    ('/UE', True, "be 32 bytes long"),
+    ('/O', False, "be 48 bytes long"),
+    ('/O', True, "be present"),
+    ('/U', False, "be 48 bytes long"),
+    ('/U', True, "be present"),
+    ('/Perms', False, "be 16 bytes long"),
+    ('/Perms', True, "be 16 bytes long"),
+])
+def test_r6_values(enc_entry, delete, err):
+    enc_dict = generic.DictionaryObject(BASIC_R6_ENC_DICT)
+    if delete:
+        del enc_dict[enc_entry]
+    else:
+        enc_dict[enc_entry] = generic.ByteStringObject(b'\xde\xad\xbe\xef')
+    enc_dict.update(enc_dict)
+    with pytest.raises(misc.PdfError, match=err):
+        StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
