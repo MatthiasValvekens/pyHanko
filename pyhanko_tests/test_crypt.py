@@ -1105,3 +1105,11 @@ def test_r6_values(enc_entry, delete, err):
     enc_dict.update(enc_dict)
     with pytest.raises(misc.PdfError, match=err):
         StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
+
+
+def test_key_length_constraint():
+    enc_dict = generic.DictionaryObject(BASIC_R6_ENC_DICT)
+    enc_dict['/Length'] = generic.NumberObject(333)
+    enc_dict.update(enc_dict)
+    with pytest.raises(misc.PdfError, match="must be a multiple of 8"):
+        StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
