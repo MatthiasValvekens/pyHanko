@@ -1119,3 +1119,10 @@ def test_perms_decrypt_bogus():
     sh = StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
     with pytest.raises(misc.PdfError, match="tampered"):
         sh.authenticate("usersecret")
+
+
+def test_legacy_no_r6():
+    with pytest.raises(ValueError, match="not supported"):
+        _produce_legacy_encrypted_file(
+            StandardSecuritySettingsRevision.AES256, 32, True
+        )
