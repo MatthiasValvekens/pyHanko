@@ -636,6 +636,33 @@ def test_load_pkcs12():
     assert sedk.cert.subject == PUBKEY_SELFSIGNED_DECRYPTER.cert.subject
 
 
+def test_pubkey_wrong_content_type():
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_TEST_DECRYPTER.cert],
+        version=SecurityHandlerVersion.RC4_40,
+        keylen_bytes=16, use_aes=True, use_crypt_filters=False
+    )
+    w.security_handler = sh
+    enc_dict = sh.as_pdf_object()
+    from asn1crypto import cms
+    cms_bytes = cms.ContentInfo({
+        'content_type': cms.ContentType('data'),
+        'content': cms.OctetString(b"\xde\xad\xbe\xef")
+    }).dump()
+    enc_dict['/Recipients'][0] = generic.ByteStringObject(cms_bytes)
+    w._encrypt = w.add_object(enc_dict)
+    new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    with pytest.raises(misc.PdfReadError, match="must be enveloped"):
+        r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+
+
 def test_pubkey_wrong_cert():
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
@@ -1104,6 +1131,30 @@ def test_r6_values(enc_entry, delete, err):
         enc_dict[enc_entry] = generic.ByteStringObject(b'\xde\xad\xbe\xef')
     with pytest.raises(misc.PdfError, match=err):
         StandardSecurityHandler.instantiate_from_pdf_object(enc_dict)
+
+
+@pytest.mark.parametrize('entry', ["/U", "/O"])
+def test_legacy_o_u_values(entry):
+
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = writer.PdfFileWriter()
+    sh = StandardSecurityHandler.build_from_pw_legacy(
+        StandardSecuritySettingsRevision.RC4_OR_AES128,
+        w._document_id[0].original_bytes, "ownersecret", "usersecret",
+        keylen_bytes=True, use_aes128=True, perms=-44
+    )
+    w.security_handler = sh
+    enc_dict = sh.as_pdf_object()
+    enc_dict[entry] = generic.ByteStringObject(b"\xde\xad\xbe\xef")
+    w._encrypt = w.add_object(enc_dict)
+    new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
+    w.root['/Pages'] = new_page_tree
+    out = BytesIO()
+    w.write(out)
+
+    with pytest.raises(misc.PdfError, match="be 32 bytes long"):
+        PdfFileReader(out)
+
 
 
 def test_key_length_constraint():

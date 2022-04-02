@@ -567,7 +567,7 @@ class IdentityCryptFilter(CryptFilter, metaclass=misc.Singleton):
 
     def derive_shared_encryption_key(self) -> bytes:
         """Always returns an empty byte string."""
-        return b''  # pragma: nocover
+        return b''
 
     def derive_object_key(self, idnum, generation) -> bytes:
         """

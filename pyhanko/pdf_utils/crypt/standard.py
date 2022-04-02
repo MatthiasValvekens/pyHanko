@@ -481,7 +481,7 @@ class StandardSecurityHandler(SecurityHandler):
                 raise misc.PdfError(
                     "/U and /O entries must be 32 bytes long in a "
                     "legacy security handler"
-                )  # pragma: nocover
+                )
             self.oeseed = self.ueseed = self.encrypted_perms = None
         self.odata = odata
         self.udata = udata

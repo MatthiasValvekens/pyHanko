@@ -517,16 +517,16 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
         raise misc.PdfReadError(
             "Recipient CMS content type must be enveloped data, not "
             + content_type
-        )  # pragma: nocover
+        )
     ed: cms.EnvelopedData = recipient_cms['content']
     encrypted_content_info = ed['encrypted_content_info']
     rec_info: cms.RecipientInfo
     for rec_info in ed['recipient_infos']:
         ktri = rec_info.chosen
         if not isinstance(ktri, cms.KeyTransRecipientInfo):
-            raise misc.PdfReadError(
+            raise NotImplementedError(
                 "RecipientInfo must be of type KeyTransRecipientInfo."
-            )  # pragma: nocover
+            )
         issuer_and_serial = ktri['rid'].chosen
         if not isinstance(issuer_and_serial, cms.IssuerAndSerialNumber):
             raise NotImplementedError(
