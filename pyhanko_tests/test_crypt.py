@@ -1126,3 +1126,34 @@ def test_legacy_no_r6():
         _produce_legacy_encrypted_file(
             StandardSecuritySettingsRevision.AES256, 32, True
         )
+
+
+def test_legacy_cf_req():
+    with pytest.raises(misc.PdfError, match="s5 is required"):
+        PubKeySecurityHandler.build_from_certs(
+            [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=16,
+            version=SecurityHandlerVersion.RC4_OR_AES128, use_aes=True,
+            use_crypt_filters=False,
+        )
+
+
+def test_add_recp_before_auth_fail():
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+    cf = r.security_handler.get_stream_filter()
+    with pytest.raises(misc.PdfError, match="before authenticating"):
+        cf.add_recipients([PUBKEY_SELFSIGNED_DECRYPTER.cert])
+
+
+def test_add_recp_after_key_deriv():
+    out = _produce_pubkey_encrypted_file(
+        SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
+    )
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    cf = r.security_handler.get_stream_filter()
+    assert cf.shared_key is not None
+    with pytest.raises(misc.PdfError, match="after deriving.*shared key"):
+        cf.add_recipients([PUBKEY_SELFSIGNED_DECRYPTER.cert])
