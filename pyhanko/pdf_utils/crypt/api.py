@@ -354,8 +354,6 @@ class SecurityHandler:
             Raised when the crypt filter's ``/CFM`` entry indicates an unknown
             crypt filter method.
         """
-        # TODO does a V4 handler default to /Identity unless the /Encrypt
-        #  dictionary specifies a custom filter?
         return build_crypt_filter(
             cls._known_crypt_filters, cfdict, acts_as_default
         )
