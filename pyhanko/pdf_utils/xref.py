@@ -993,7 +993,7 @@ class XRefCache:
             except KeyError:
                 # nothing in this section
                 pass
-        raise KeyError
+        raise KeyError(ref)
 
     def object_streams_used_in(self, revision):
         section = self._xref_sections[revision]
@@ -1011,7 +1011,7 @@ class XRefCache:
             except KeyError:
                 # nothing in this section
                 pass
-        raise KeyError
+        raise KeyError(ref)
 
     def get_xref_container_info(self, revision) -> XRefSectionMetaInfo:
         section = self._xref_sections[revision]
