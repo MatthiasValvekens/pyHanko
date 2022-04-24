@@ -2,6 +2,71 @@
 Release history
 ***************
 
+.. _release-0.13.0:
+
+0.13.0
+======
+
+*Release date:* 2022-04-25
+
+
+Note
+----
+
+Like the previous two releases, this is largely a maintenance release.
+
+
+Dependency updates
+------------------
+
+ * ``asn1crypto`` updated to ``1.5.1``
+ * ``pyhanko-certvalidator`` updated to ``0.19.5``
+ * ``certomancer`` updated to ``0.8.2``
+ * Depend on ``certomancer-csc-dummy`` for tests;
+   get rid of ``python-pae`` test dependency.
+
+Bugs fixed
+----------
+
+ * Various parsing robustness improvements.
+ * Be consistent with security handler version bounds.
+ * Improve coverage of encryption code.
+ * Ensure owner password gets prioritised in the legacy security handler.
+
+
+New features and enhancements
+-----------------------------
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Replaced some ``ValueError`` usages with ``PdfError``
+ * Improvements to error handling in strict mode.
+ * Make CLI stack traces less noisy by default.
+
+Encryption
+^^^^^^^^^^
+
+ * Refactor internal ``crypt`` module into package.
+ * Add support for serialising credentials.
+ * Cleaner credential inheritance for incremental writers.
+
+Signing
+^^^^^^^
+
+ * Allow post-signing actions on encrypted files with serialised credentials.
+ * Improve ``--use-pades-lta`` ergonomics in CLI.
+ * Add ``--no-pass`` parameter to ``pemder`` CLI.
+
+
+Validation
+^^^^^^^^^^
+
+ * Preparatory scaffolding for AdES status reporting.
+ * Provide some tolerance against malformed ACs.
+ * Increase robustness against invalid DNs.
+
 
 .. _release-0.12.1:
 
