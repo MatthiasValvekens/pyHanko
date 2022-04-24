@@ -57,7 +57,7 @@ setup(
         ]
     },
     install_requires=[
-        'asn1crypto>=1.5.0',
+        'asn1crypto>=1.5.1',
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
