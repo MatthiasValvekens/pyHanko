@@ -24,6 +24,7 @@ setup(
     packages=[
         'pyhanko',
         'pyhanko.pdf_utils', 'pyhanko.pdf_utils.font',
+        'pyhanko.pdf_utils.crypt',
         'pyhanko.sign', 'pyhanko.sign.ades', 'pyhanko.sign.signers',
         'pyhanko.sign.diff_analysis', 'pyhanko.sign.diff_analysis.rules',
         'pyhanko.sign.timestamps', 'pyhanko.sign.validation'
