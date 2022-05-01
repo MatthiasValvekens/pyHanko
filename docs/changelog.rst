@@ -2,6 +2,27 @@
 Release history
 ***************
 
+.. _release-0.13.1:
+
+0.13.1
+======
+
+*Release date:* 2022-05-01
+
+Note
+----
+
+This is a patch release to update ``fontTools`` and ``uharfbuzz`` to address
+a conflict between the latest ``fontTools`` and older ``uharfbuzz`` versions.
+
+
+Dependency updates
+------------------
+
+ * ``fontTools`` updated to ``4.33.3``
+ * ``uharfbuzz`` updated to ``0.25.0``
+
+
 .. _release-0.13.0:
 
 0.13.0
