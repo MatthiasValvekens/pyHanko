@@ -1,6 +1,6 @@
 try:
     import barcode
-    from barcode.writer import BaseWriter
+    from barcode.writer import BaseWriter, mm2px
 except ImportError as e:  # pragma: nocover
     raise ImportError(
         "pyhanko.pdf_utils.barcodes requires pyHanko to be installed with "
@@ -53,7 +53,8 @@ class PdfStreamBarcodeWriter(BaseWriter):
         self._command_stream = None
 
     def _init(self, code):
-        self.size = self.calculate_size(len(code[0]), len(code), PDF_UUPI)
+        width, height = self.calculate_size(len(code[0]), len(code))
+        self.size = (int(mm2px(width, PDF_UUPI)), int(mm2px(height, PDF_UUPI)))
         self._command_stream = [b'q']
 
     def _paint_module(self, xpos, ypos, width, color):
@@ -73,10 +74,7 @@ class PdfStreamBarcodeWriter(BaseWriter):
     def command_stream(self) -> bytes:
         return b'\n'.join(self._command_stream)
 
-    # we only define these because python-barcode  demands it
-    def write(self, content, fp):
-        pass
-
+    # we only define this method because python-barcode  demands it
     def save(self, filename, output):  # pragma: nocover
         pass
 
