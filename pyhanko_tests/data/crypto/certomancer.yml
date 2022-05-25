@@ -110,6 +110,8 @@ pki-architectures:
         email-address: bob@example.com
       invalid-cn:
         common-name: "Invalidא"
+      signer-no-cn:
+        email-address: info@example.com
     certs:
       root:
         subject: root
@@ -243,6 +245,10 @@ pki-architectures:
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
+      signer-no-cn:
+        subject: signer-no-cn
+        subject-key: signer1
+        template: signer1
       signer1-long:
         subject: signer1
         template: signer1

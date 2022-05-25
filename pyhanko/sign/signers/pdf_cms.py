@@ -356,7 +356,10 @@ class Signer:
             :attr:`signing_cert`.
         """
         name: x509.Name = self.signing_cert.subject
-        result = name.native['common_name']
+        try:
+            result = name.native['common_name']
+        except KeyError:
+            result = name.native['organization_name']
         try:
             email = name.native['email_address']
             result = '%s <%s>' % (result, email)
