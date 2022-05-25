@@ -78,7 +78,7 @@ setup(
             # Only tested systematically on 8.x,
             # but we allow 7.2.x to support system PIL on Ubuntu
             'Pillow>=7.2.0',
-            'python-barcode>=0.13.1',
+            'python-barcode==0.14.0',
         ],
         'pkcs11': ['python-pkcs11~=0.7.0'],
         'async_http': ['aiohttp~=3.8.0']
