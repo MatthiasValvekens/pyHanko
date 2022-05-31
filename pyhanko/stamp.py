@@ -555,7 +555,7 @@ class TextStamp(BaseStamp):
     def get_default_text_params(self):
         """
         Compute values for the default string interpolation parameters
-        to be applied to the template string string specified in the he stamp
+        to be applied to the template string specified in the stamp
         style. This method does not take into account the ``text_params``
         init parameter yet.
 
