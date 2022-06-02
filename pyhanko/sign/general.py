@@ -365,8 +365,11 @@ def load_certs_from_pemder(cert_files):
         A generator producing :class:`.asn1crypto.x509.Certificate` objects.
     """
     for ca_chain_file in cert_files:
-        with open(ca_chain_file, 'rb') as f:
+        try:
+         with open(ca_chain_file, 'rb') as f:
             ca_chain_bytes = f.read()
+        except:
+            ca_chain_bytes=ca_chain_file.read()    
         # use the pattern from the asn1crypto docs
         # to distinguish PEM/DER and read multiple certs
         # from one PEM file (if necessary)
@@ -415,12 +418,18 @@ def load_private_key_from_pemder(key_file, passphrase: Optional[bytes]) \
     :return:
         A private key encoded as an unencrypted PKCS#8 PrivateKeyInfo object.
     """
-    with open(key_file, 'rb') as f:
+    try:
+     with open(key_file, 'rb') as f:
         key_bytes = f.read()
+    except:
+        key_bytes=key_file.read()       
+
     load_fun = (
         serialization.load_pem_private_key if pem.detect(key_bytes)
         else serialization.load_der_private_key
     )
+
+
     return _translate_pyca_cryptography_key_to_asn1(
         load_fun(key_bytes, password=passphrase)
     )
