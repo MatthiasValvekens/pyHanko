@@ -841,7 +841,7 @@ class BasePdfFileWriter(PdfHandler):
             object_positions[(0, xrefs_id)] = xref_location
             trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
             # write XRef stream
-            stream.write(('%d %d obj' % (xrefs_id, 0)).encode('ascii'))
+            stream.write(('%d %d obj\n' % (xrefs_id, 0)).encode('ascii'))
             trailer.write_to_stream(stream, None)
             stream.write(b'\nendobj\n')
         else:
