@@ -412,7 +412,7 @@ class StandardSecurityHandler(SecurityHandler):
         cipher = Cipher(algorithms.AES(encryption_key), modes.ECB())
         encryptor = cipher.encryptor()
         encrypted_perms = \
-            encryptor.update(extd_perms_bytes) + encryptor.finalize()
+            encryptor.update(extd_perms_bytes) + encryptor.finalize()  # lgtm
 
         sh = cls(
             version=SecurityHandlerVersion.AES256,
@@ -678,7 +678,7 @@ class StandardSecurityHandler(SecurityHandler):
         cipher = Cipher(algorithms.AES(key), modes.ECB())
         decryptor = cipher.decryptor()
         decrypted_p_entry = \
-            decryptor.update(self.encrypted_perms) + decryptor.finalize()
+            decryptor.update(self.encrypted_perms) + decryptor.finalize()  # lgtm
 
         # known plaintext mandated in the standard ...sigh...
         perms_ok = decrypted_p_entry[9:12] == b'adb'
