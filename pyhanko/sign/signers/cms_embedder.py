@@ -35,7 +35,6 @@ def docmdp_reference_dictionary(md_algorithm, permission_level: MDPPerm):
     return generic.DictionaryObject({
         pdf_name('/Type'): pdf_name('/SigRef'),
         pdf_name('/TransformMethod'): pdf_name('/DocMDP'),
-        pdf_name('/DigestMethod'): pdf_name('/' + md_algorithm.upper()),
         pdf_name('/TransformParams'): generic.DictionaryObject({
             pdf_name('/Type'): pdf_name('/TransformParams'),
             pdf_name('/V'): pdf_name('/1.2'),
@@ -55,7 +54,6 @@ def fieldmdp_reference_dictionary(field_mdp_spec: FieldMDPSpec,
         pdf_name('/Type'): pdf_name('/SigRef'),
         pdf_name('/TransformMethod'): pdf_name('/FieldMDP'),
         pdf_name('/Data'): data_ref,
-        pdf_name('/DigestMethod'): pdf_name('/' + md_algorithm.upper()),
         pdf_name('/TransformParams'): field_mdp_spec.as_transform_params()
     })
 
