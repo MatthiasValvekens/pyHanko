@@ -1058,18 +1058,15 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
         else:
             timestamper = None
 
-        with open(infile, 'rb') as inf:
-            generic_sign_pdf(
-                writer=IncrementalPdfFileWriter(
-                    inf, strict=not ctx.obj.get(Ctx.LENIENT, False)
-                ),
-                outfile=outfile,
-                signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
-                timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
-                new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-                existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
-                text_params=get_text_params(ctx)
-            )
+        generic_sign_pdf(
+            writer=_open_for_signing(infile, ctx.obj.get(Ctx.LENIENT, False)),
+            outfile=outfile,
+            signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
+            timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
+            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
+            existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
+            text_params=get_text_params(ctx)
+        )
 
 
 @click.argument('infile', type=readable_file)
