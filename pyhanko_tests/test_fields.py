@@ -430,3 +430,33 @@ def test_circular_form_tree_sign_deep():
                     field_name='TextInput.Sig'
                 ), signer=FROM_CA
             )
+
+
+def test_visible_field_flags():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    fields.append_signature_field(
+        w, sig_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', box=(20, 20, 80, 40)
+        )
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
+    # 'lock' and 'print'
+    assert annot['/F'] == 0b10000100
+
+
+def test_invisible_field_flags():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    fields.append_signature_field(
+        w, sig_field_spec=fields.SigFieldSpec(sig_field_name='Sig1')
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
+    # 'lock' and 'hidden'
+    assert annot['/F'] == 0b10000010
