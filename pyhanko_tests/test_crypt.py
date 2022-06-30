@@ -30,6 +30,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.general import load_cert_from_pemder
 from pyhanko_tests.samples import (
+    MINIMAL,
     MINIMAL_AES256,
     MINIMAL_ONE_FIELD,
     MINIMAL_ONE_FIELD_AES256,
@@ -1208,3 +1209,31 @@ def test_add_recp_after_key_deriv():
     assert cf.shared_key is not None
     with pytest.raises(misc.PdfError, match="after deriving.*shared key"):
         cf.add_recipients([PUBKEY_SELFSIGNED_DECRYPTER.cert])
+
+
+def test_encrypted_obj_stm():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = writer.copy_into_new_writer(r, writer_kwargs={'stream_xrefs': True})
+    obj_stm = w.prepare_object_stream()
+    objref = w.add_object(
+        generic.TextStringObject("Hello there"), obj_stream=obj_stm
+    )
+    w.encrypt("ownersecret", "usersecret")
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    result = r.decrypt("ownersecret")
+    assert result.status == AuthStatus.OWNER
+
+    # assert that the content was present in the actual content stream
+    # in unencrypted form (after decrypting the wrapping object stream)
+    new_objref = generic.Reference(objref.idnum, objref.generation, pdf=r)
+    xref_data = r.xrefs[new_objref]
+    stm = r.get_object(
+        generic.Reference(xref_data.obj_stream_id, pdf=r),
+        transparent_decrypt=False
+    )
+    assert b"(Hello there)" in stm.decrypted.data
+
+    # assert that the object can be correctly retrieved
+    assert new_objref.get_object() == "Hello there"
