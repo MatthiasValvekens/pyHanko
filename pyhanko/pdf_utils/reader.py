@@ -392,7 +392,9 @@ class PdfFileReader(PdfHandler):
                 generic.read_non_whitespace(self.stream, seek_back=True)
 
         # override encryption is used for the /Encrypt dictionary
-        if not never_decrypt and self.encrypted:
+        # and objects inside object streams should also remain unencrypted
+        if not never_decrypt and not isinstance(marker, ObjStreamRef) \
+                and self.encrypted:
             sh: SecurityHandler = self.security_handler
             # make sure the object that lands in the cache is always
             # a proxy object
