@@ -1,7 +1,6 @@
 """
 Utilities to deal with signature form fields and their properties in PDF files.
 """
-
 import logging
 from dataclasses import dataclass
 from enum import Enum, Flag, unique
@@ -1133,6 +1132,42 @@ class FieldMDPSpec:
         return not lock_result
 
 
+@dataclass(frozen=True)
+class InvisSigSettings:
+    """
+    Invisible signature widget generation settings.
+
+    These settings exist because there is no real way of including an untagged
+    invisible signature in a document that complies with the requirements
+    of both PDF/A-2 (or -3) and PDF/UA-1.
+
+    Compatibility with PDF/A (the default) requires the print flag to be set.
+    Compatibility with PDF/UA requires the hidden flag to be set (which is
+    banned in PDF/A) or the box to be outside the crop box.
+    """
+
+    set_print_flag: bool = True
+    """
+    Set the print flag. Required in PDF/A.
+    """
+
+    set_hidden_flag: bool = False
+    """
+    Set the hidden flag. Required in PDF/UA.
+    """
+
+    box_out_of_bounds: bool = False
+    """
+    Put the box out of bounds (technically, this just makes the box
+    zero-sized with large negative coordinates).
+
+    This is a hack to get around the fact that PDF/UA requires the hidden
+    flag to be set on all in-bounds untagged annotations, and some validators
+    consider [0, 0, 0, 0] to be an in-bounds rectangle if (0, 0) is a point
+    that falls within the crop box.
+    """
+
+
 # TODO deal with fully qualified field names for the signature field
 
 @dataclass(frozen=True)
@@ -1208,6 +1243,11 @@ class SigFieldSpec:
         will not use it to render the appearance of the empty field on-screen.
 
         Instead, these viewers typically substitute their own native widget.
+    """
+
+    invis_sig_settings: InvisSigSettings = InvisSigSettings()
+    """
+    Advanced settings to control invisible signature field generation.
     """
 
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
@@ -1474,7 +1514,8 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
         sig_field_spec.sig_field_name, root, update_writer=pdf_out,
         existing_fields_only=False,
         box=sig_field_spec.box, include_on_page=page_ref,
-        combine_annotation=sig_field_spec.combine_annotation
+        combine_annotation=sig_field_spec.combine_annotation,
+        invis_settings=sig_field_spec.invis_sig_settings
     )
     ensure_sig_flags(writer=pdf_out, lock_sig_flags=False)
     if not field_created:
@@ -1525,13 +1566,15 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, *, box=None, include_on_page=None,
                  combine_annotation=True,
+                 invis_settings: InvisSigSettings = InvisSigSettings(),
                  annot_flags=None):
 
         if box is not None:
             rect = [generic.FloatObject(rd(x)) for x in box]
             invisible = not (abs(box[0] - box[2]) and abs(box[1] - box[3]))
         else:
-            rect = [generic.FloatObject(0)] * 4
+            coord = -9999 if invis_settings.box_out_of_bounds else 0
+            rect = [generic.FloatObject(coord)] * 4
             invisible = True
 
         super().__init__({
@@ -1552,10 +1595,11 @@ class SignatureFormField(generic.DictionaryObject):
 
         if annot_flags is None:
             if invisible:
-                # this sets the "hidden" and "lock" bits
-                # (note that we're not touching "invisible")
-                # for better tagging compatibility
-                annot_flags = 0b10000010
+                annot_flags = 0b10000000
+                if invis_settings.set_hidden_flag:
+                    annot_flags |= 0b10
+                if invis_settings.set_print_flag:
+                    annot_flags |= 0b100
             else:
                 # this sets the "print" and "lock" bits
                 annot_flags = 0b10000100
