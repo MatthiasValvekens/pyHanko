@@ -1525,13 +1525,14 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, *, box=None, include_on_page=None,
                  combine_annotation=True,
-                 # this sets the "print" and "lock" bits
-                 annot_flags=0b10000100):
+                 annot_flags=None):
 
         if box is not None:
             rect = [generic.FloatObject(rd(x)) for x in box]
+            invisible = not (abs(box[0] - box[2]) and abs(box[1] - box[3]))
         else:
             rect = [generic.FloatObject(0)] * 4
+            invisible = True
 
         super().__init__({
             # Signature field properties
@@ -1548,6 +1549,17 @@ class SignatureFormField(generic.DictionaryObject):
         # Annotation properties: bare minimum
         annot_dict['/Type'] = pdf_name('/Annot')
         annot_dict['/Subtype'] = pdf_name('/Widget')
+
+        if annot_flags is None:
+            if invisible:
+                # this sets the "hidden" and "lock" bits
+                # (note that we're not touching "invisible")
+                # for better tagging compatibility
+                annot_flags = 0b10000010
+            else:
+                # this sets the "print" and "lock" bits
+                annot_flags = 0b10000100
+
         annot_dict['/F'] = generic.NumberObject(annot_flags)
         annot_dict['/Rect'] = generic.ArrayObject(rect)
 
