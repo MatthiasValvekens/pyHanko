@@ -32,7 +32,7 @@ __all__ = [
     'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigSeedSubFilter',
     'SeedValueDictVersion', 'SeedLockDocument', 'SigCertKeyUsage',
     'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
-    'SignatureFormField',
+    'SignatureFormField', 'InvisSigSettings',
     'enumerate_sig_fields', 'append_signature_field',
     'ensure_sig_flags', 'prepare_sig_field'
 ]
