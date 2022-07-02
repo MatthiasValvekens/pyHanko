@@ -2,6 +2,38 @@
 Release history
 ***************
 
+
+.. _release-0.13.2:
+
+0.13.2
+======
+
+*Release date:* 2022-07-02
+
+Note
+----
+
+This is a patch release to address some dependency issues and bugs.
+
+
+Dependency updates
+------------------
+
+ * ``python-barcode`` updated and pinned to ``0.14.0``.
+
+
+Bugs fixed
+----------
+
+ * Fix lack of newline after XRef stream header.
+ * Do not write **DigestMethod** in signature reference dictionaries
+   (deprecated/nonfunctional entry).
+ * Make :func:`pyhanko.pdf_utils.writer.copy_into_new_writer` more flexible by allowing
+   caller-specified keyword arguments for the writer object.
+ * Refine settings for invisible signature fields (see :class:`pyhanko.sign.fields.InvisSigSettings`).
+ * Correctly read objects from object streams in encrypted documents.
+
+
 .. _release-0.13.1:
 
 0.13.1
