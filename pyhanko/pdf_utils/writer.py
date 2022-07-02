@@ -841,7 +841,7 @@ class BasePdfFileWriter(PdfHandler):
             object_positions[(0, xrefs_id)] = xref_location
             trailer[pdf_name('/Size')] = generic.NumberObject(xrefs_id + 1)
             # write XRef stream
-            stream.write(('%d %d obj' % (xrefs_id, 0)).encode('ascii'))
+            stream.write(('%d %d obj\n' % (xrefs_id, 0)).encode('ascii'))
             trailer.write_to_stream(stream, None)
             stream.write(b'\nendobj\n')
         else:
@@ -1422,15 +1422,36 @@ PERMISSIBLE_INFO_KEYS = {
 }
 
 
-def _clone_info_dict(input_info_dict):
-    return generic.DictionaryObject({
+def _derive_info_dict(input_handler: PdfHandler) \
+        -> Optional[generic.DictionaryObject]:
+    try:
+        info_ref = input_handler.trailer_view.raw_get('/Info')
+    except KeyError:
+        info_ref = None
+
+    if info_ref is None:
+        return None
+
+    input_info_dict = info_ref.get_object()
+    info = generic.DictionaryObject({
         k: pdf_string(str(v.get_object()))
         for k, v in input_info_dict.items()
         if k in PERMISSIBLE_INFO_KEYS
     })
+    try:
+        producer_string = info['/Producer']
+        if VENDOR not in producer_string:
+            producer_string = \
+                pdf_string(f"{producer_string}; {VENDOR}")
+    except KeyError:
+        producer_string = pdf_string(VENDOR)
+    # always override this
+    info['/Producer'] = producer_string
+    return info
 
 
-def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
+def copy_into_new_writer(input_handler: PdfHandler,
+                         writer_kwargs: dict = None) -> PdfFileWriter:
     """
     Copy all objects in a given PDF handler into a new :class:`.PdfFileWriter`.
     This operation will attempt to preserve the document catalog
@@ -1446,30 +1467,20 @@ def copy_into_new_writer(input_handler: PdfHandler) -> PdfFileWriter:
 
     :param input_handler:
         :class:`.PdfHandler` to source objects from.
+    :param writer_kwargs:
+        Keyword arguments to pass to the writer.
     :return:
         New :class:`.PdfFileWriter` containing all objects from the input
         handler.
     """
-    try:
-        info_ref = input_handler.trailer_view.raw_get('/Info')
-    except KeyError:
-        info_ref = None
 
-    if info_ref is not None:
-        info = _clone_info_dict(info_ref.get_object())
-        try:
-            producer_string = info['/Producer']
-            if VENDOR not in producer_string:
-                producer_string = pdf_string(f"{producer_string}; {VENDOR}")
-        except KeyError:
-            producer_string = pdf_string(VENDOR)
-        # always override this
-        info['/Producer'] = producer_string
-    else:
-        info = None
+    writer_kwargs = writer_kwargs or {}
+    writer_kwargs.setdefault("stream_xrefs", False)
+    if "info" not in writer_kwargs:
+        writer_kwargs['info'] = _derive_info_dict(input_handler)
 
     # TODO try to be more clever with object streams
-    w = PdfFileWriter(init_page_tree=False, stream_xrefs=False, info=info)
+    w = PdfFileWriter(init_page_tree=False, **writer_kwargs)
     input_root_ref = input_handler.root_ref
     output_root_ref = w.root_ref
     # call _import_object in such a way that we translate the input handler's

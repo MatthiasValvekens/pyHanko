@@ -11,6 +11,7 @@ from pyhanko.pdf_utils.misc import PdfError, PdfReadError, PdfWriteError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
+from pyhanko.sign.fields import InvisSigSettings
 from pyhanko.sign.general import SigningError
 from pyhanko_tests.samples import (
     MINIMAL,
@@ -430,3 +431,53 @@ def test_circular_form_tree_sign_deep():
                     field_name='TextInput.Sig'
                 ), signer=FROM_CA
             )
+
+
+def test_visible_field_flags():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    fields.append_signature_field(
+        w, sig_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', box=(20, 20, 80, 40)
+        )
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
+    # 'lock' and 'print'
+    assert annot['/F'] == 0b10000100
+
+
+@pytest.mark.parametrize(
+    'settings,flags,box',
+    [
+        (InvisSigSettings(), 0b10000100, [0, 0, 0, 0]),
+        (
+                InvisSigSettings(set_hidden_flag=True, set_print_flag=False),
+                0b10000010,
+                [0, 0, 0, 0]
+        ),
+        (
+                InvisSigSettings(box_out_of_bounds=True),
+                0b10000100,
+                [-9999, -9999, -9999, -9999]
+        ),
+    ]
+)
+def test_invisible_field_flags(settings, flags, box):
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    fields.append_signature_field(
+        w, sig_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', invis_sig_settings=settings
+        )
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
+
+    # 'lock' and 'hidden'
+    assert annot['/F'] == flags
+    assert [int(x) for x in annot['/Rect']] == box
