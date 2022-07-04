@@ -34,7 +34,8 @@ __all__ = [
     'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
     'SignatureFormField', 'InvisSigSettings',
     'enumerate_sig_fields', 'append_signature_field',
-    'ensure_sig_flags', 'prepare_sig_field'
+    'ensure_sig_flags', 'prepare_sig_field',
+    'apply_sig_field_spec_properties'
 ]
 
 logger = logging.getLogger(__name__)
@@ -1250,6 +1251,15 @@ class SigFieldSpec:
     Advanced settings to control invisible signature field generation.
     """
 
+    readable_field_name: Optional[str] = None
+    """
+    Human-readable field name (``/TU`` entry).
+    
+    .. note::
+        This value is commonly rendered as a tooltip in viewers, but also
+        serves an accessibility purpose.
+    """
+
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
         if self.field_mdp_spec is None:
             return
@@ -1525,12 +1535,9 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
         )
 
     sig_field = sig_field_ref.get_object()
-    if sig_field_spec.seed_value_dict is not None:
-        # /SV must be an indirect reference as per the spec
-        sv_ref = pdf_out.add_object(
-            sig_field_spec.seed_value_dict.as_pdf_object()
-        )
-        sig_field[pdf_name('/SV')] = sv_ref
+    apply_sig_field_spec_properties(
+        pdf_out, sig_field=sig_field, sig_field_spec=sig_field_spec
+    )
 
     if sig_field_spec.box is not None:
         llx, lly, urx, ury = sig_field_spec.box
@@ -1557,6 +1564,24 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
                     b'', box=BoxConstraints(width=w, height=h)
                 ).as_form_xobject()
             ap_dict[pdf_name('/N')] = pdf_out.add_object(ap_stream)
+
+
+def apply_sig_field_spec_properties(
+        pdf_out: BasePdfFileWriter, sig_field: generic.DictionaryObject,
+        sig_field_spec: SigFieldSpec):
+    """
+    Internal function to apply field spec properties to a newly created field.
+    """
+
+    if sig_field_spec.readable_field_name is not None:
+        sig_field[pdf_name('/TU')] \
+            = generic.TextStringObject(sig_field_spec.readable_field_name)
+    if sig_field_spec.seed_value_dict is not None:
+        # /SV must be an indirect reference as per the spec
+        sv_ref = pdf_out.add_object(
+            sig_field_spec.seed_value_dict.as_pdf_object()
+        )
+        sig_field[pdf_name('/SV')] = sv_ref
 
     lock = sig_field_spec.format_lock_dictionary()
     if lock is not None:

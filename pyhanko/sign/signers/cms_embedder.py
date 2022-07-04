@@ -15,6 +15,7 @@ from pyhanko.sign.fields import (
     FieldMDPSpec,
     MDPPerm,
     SigFieldSpec,
+    apply_sig_field_spec_properties,
     ensure_sig_flags,
     enumerate_sig_fields,
     prepare_sig_field,
@@ -99,7 +100,8 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
                 'include_on_page': pdf_out.find_page_for_modification(
                     new_field_spec.on_page
                 )[0],
-                'combine_annotation': new_field_spec.combine_annotation
+                'combine_annotation': new_field_spec.combine_annotation,
+                'invis_settings': new_field_spec.invis_sig_settings,
             }
         else:
             sig_field_kwargs = {}
@@ -109,6 +111,11 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
             existing_fields_only=existing_fields_only,
             **sig_field_kwargs
         )
+        if field_created and new_field_spec is not None:
+            apply_sig_field_spec_properties(
+                pdf_out, sig_field=sig_field_ref.get_object(),
+                sig_field_spec=new_field_spec
+            )
 
     ensure_sig_flags(writer=pdf_out, lock_sig_flags=True)
 

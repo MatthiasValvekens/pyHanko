@@ -145,6 +145,22 @@ def test_simple_sign_fresh_doc():
     val_untrusted(emb)
 
 
+def test_append_sigfield_tu_on_signing():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    spec = fields.SigFieldSpec(
+        sig_field_name='Sig1', empty_field_appearance=True,
+        readable_field_name="Test test"
+    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.PdfSigner(meta, signer=SELF_SIGN, new_field_spec=spec)\
+        .sign_pdf(w)
+
+    r = PdfFileReader(out)
+
+    assert r.root['/AcroForm']['/Fields'][0]['/TU'] == "Test test"
+
+
 @pytest.mark.parametrize('policy, skip_diff',
                          [(None, False),
                           (NO_CHANGES_DIFF_POLICY, False),

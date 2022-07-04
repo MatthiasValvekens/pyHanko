@@ -481,3 +481,18 @@ def test_invisible_field_flags(settings, flags, box):
     # 'lock' and 'hidden'
     assert annot['/F'] == flags
     assert [int(x) for x in annot['/Rect']] == box
+
+
+def test_append_sigfield_tu():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    spec = fields.SigFieldSpec(
+        sig_field_name='Sig1', empty_field_appearance=True,
+        readable_field_name="Test test"
+    )
+    fields.append_signature_field(w, sig_field_spec=spec)
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+
+    assert r.root['/AcroForm']['/Fields'][0]['/TU'] == "Test test"
