@@ -30,7 +30,7 @@ __all__ = [
 ]
 
 
-def docmdp_reference_dictionary(md_algorithm, permission_level: MDPPerm):
+def docmdp_reference_dictionary(permission_level: MDPPerm):
     # this is part of the /Reference entry of the signature object.
     return generic.DictionaryObject({
         pdf_name('/Type'): pdf_name('/SigRef'),
@@ -44,7 +44,6 @@ def docmdp_reference_dictionary(md_algorithm, permission_level: MDPPerm):
 
 
 def fieldmdp_reference_dictionary(field_mdp_spec: FieldMDPSpec,
-                                  md_algorithm: str,
                                   data_ref: generic.Reference):
     data_ref = generic.IndirectObject(
         data_ref.idnum, data_ref.generation, data_ref.pdf
@@ -160,7 +159,6 @@ class SigMDPSetup:
         docmdp_perms = self.docmdp_perms
 
         lock = self.field_lock
-        md_algorithm = self.md_algorithm
 
         reference_array = generic.ArrayObject()
 
@@ -176,12 +174,12 @@ class SigMDPSetup:
             perms[pdf_name('/DocMDP')] = sig_obj_ref
             writer.update_container(perms)
             reference_array.append(
-                docmdp_reference_dictionary(md_algorithm, docmdp_perms)
+                docmdp_reference_dictionary(docmdp_perms)
             )
 
         if lock is not None:
             fieldmdp_ref = fieldmdp_reference_dictionary(
-                lock, md_algorithm, data_ref=writer.root_ref
+                lock, data_ref=writer.root_ref
             )
             reference_array.append(fieldmdp_ref)
 
