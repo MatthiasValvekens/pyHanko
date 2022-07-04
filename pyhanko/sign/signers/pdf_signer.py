@@ -27,13 +27,14 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.fields import (
     FieldMDPSpec,
+    InvisSigSettings,
     MDPPerm,
     SeedLockDocument,
     SigFieldSpec,
     SigSeedSubFilter,
     SigSeedValFlags,
     SigSeedValueSpec,
-    enumerate_sig_fields, InvisSigSettings,
+    enumerate_sig_fields,
 )
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.timestamps import TimeStamper
