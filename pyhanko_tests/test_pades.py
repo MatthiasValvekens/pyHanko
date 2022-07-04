@@ -309,6 +309,7 @@ def test_update_no_timestamps():
         validation_context=ValidationContext(trust_roots=TRUST_ROOTS)
     )
     assert status.valid and status.trusted
+    assert r.embedded_timestamp_signatures[0].sig_field['/TU'] == "Timestamp"
 
 
 @freeze_time('2020-11-01')

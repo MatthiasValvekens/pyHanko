@@ -33,7 +33,7 @@ from pyhanko.sign.fields import (
     SigSeedSubFilter,
     SigSeedValFlags,
     SigSeedValueSpec,
-    enumerate_sig_fields,
+    enumerate_sig_fields, InvisSigSettings,
 )
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.timestamps import TimeStamper
@@ -438,9 +438,13 @@ class PdfTimeStamper:
     """
 
     def __init__(self, timestamper: TimeStamper,
-                 field_name: Optional[str] = None):
+                 field_name: Optional[str] = None,
+                 invis_settings: InvisSigSettings = InvisSigSettings(),
+                 readable_field_name: str = "Timestamp"):
         self.default_timestamper = timestamper
         self._field_name = field_name
+        self._readable_field_name = readable_field_name
+        self._invis_settings = invis_settings
 
     @property
     def field_name(self) -> str:
@@ -636,7 +640,12 @@ class PdfTimeStamper:
 
         timestamp_obj = DocumentTimestamp(bytes_reserved=bytes_reserved)
 
-        cms_writer = PdfCMSEmbedder().write_cms(
+        field_spec = SigFieldSpec(
+            sig_field_name=field_name,
+            invis_sig_settings=self._invis_settings,
+            readable_field_name=self._readable_field_name,
+        )
+        cms_writer = PdfCMSEmbedder(new_field_spec=field_spec).write_cms(
             field_name=field_name, writer=pdf_out,
             # for LTA, requiring existing_fields_only doesn't make sense
             # since we should in principle be able to add document timestamps
