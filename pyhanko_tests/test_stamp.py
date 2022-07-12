@@ -172,6 +172,20 @@ def test_four_qr_stamps(fixed_size):
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/four-stamps-{postfix}.pdf')
 
 
+def test_fancy_qr_stamp():
+    w = empty_page()
+    style = QRStampStyle(
+        stamp_text='Test stamp text\nAnother line of text',
+        qr_inner_content=STAMP_ART_CONTENT,
+    )
+    box = layout.BoxConstraints(width=300, height=100)
+    QRStamp(
+        writer=w, style=style, box=box, url='https://example.com'
+    ).apply(0, x=10, y=500)
+
+    compare_output(w, f'{EXPECTED_OUTPUT_DIR}/fancy-qr-stamp-test.pdf')
+
+
 @with_layout_comparison
 def test_japanese_vertical_text_stamp():
     gaf = GlyphAccumulatorFactory(

@@ -23,7 +23,7 @@ from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import rd
-from pyhanko.pdf_utils.qr import PdfStreamQRImage
+from pyhanko.pdf_utils.qr import PdfStreamQRImage, PdfFancyQRImage
 from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle
 from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 
@@ -354,6 +354,11 @@ class QRStampStyle(TextStampStyle):
     qr_position: QRPosition = QRPosition.LEFT_OF_TEXT
     """
     Position of the QR code relative to the text box.
+    """
+
+    qr_inner_content: Optional[content.PdfContent] = None
+    """
+    Inner graphics content to be included in the QR code (experimental).
     """
 
     @classmethod
@@ -701,8 +706,8 @@ class QRStamp(TextStamp):
         # (which also implies an adjustment in the y displacement)
         draw_qr_command = b'q %g 0 0 %g %g %g cm /QR Do Q' % (
             qr_inn_pos.x_scale * qr_innunits_scale,
-            -qr_inn_pos.y_scale * qr_innunits_scale,
-            qr_inn_pos.x_pos, qr_inn_pos.y_pos + qr_size,
+            qr_inn_pos.y_scale * qr_innunits_scale,
+            qr_inn_pos.x_pos, qr_inn_pos.y_pos,
         )
 
         # Time to put in the text box now
@@ -741,11 +746,22 @@ class QRStamp(TextStamp):
         return commands, (inn_width, inn_height)
 
     def _qr_xobject(self):
-        qr = qrcode.QRCode()
+        is_fancy = self.style.qr_inner_content is not None
+        err_corr = (
+            qrcode.constants.ERROR_CORRECT_H if is_fancy
+            else qrcode.constants.ERROR_CORRECT_M
+        )
+        qr = qrcode.QRCode(error_correction=err_corr)
         qr.add_data(self.url)
         qr.make()
 
-        img = qr.make_image(image_factory=PdfStreamQRImage)
+        if is_fancy:
+            img = qr.make_image(
+                image_factory=PdfFancyQRImage, version=qr.version,
+                center_image=self.style.qr_inner_content
+            )
+        else:
+            img = qr.make_image(image_factory=PdfStreamQRImage)
         command_stream = img.render_command_stream()
 
         bbox_size = (qr.modules_count + 2 * qr.border) * qr.box_size
