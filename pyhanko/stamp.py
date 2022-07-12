@@ -23,7 +23,7 @@ from pyhanko.pdf_utils.generic import pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import rd
-from pyhanko.pdf_utils.qr import PdfStreamQRImage, PdfFancyQRImage
+from pyhanko.pdf_utils.qr import PdfFancyQRImage, PdfStreamQRImage
 from pyhanko.pdf_utils.text import DEFAULT_BOX_LAYOUT, TextBox, TextBoxStyle
 from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 
