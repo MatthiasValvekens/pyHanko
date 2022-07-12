@@ -1,6 +1,8 @@
 import logging
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
 
 import pytest
@@ -38,6 +40,16 @@ def _render_pdf(pdf_file, out_file_prefix):
     return f"{out_file_prefix}.png"
 
 
+def _ensure_path(failed_tests_root, expected_output_path):
+    out_dir = os.path.join(
+        failed_tests_root,
+        os.path.dirname(expected_output_path),
+        os.path.basename(expected_output_path) + '_results'
+    )
+    os.makedirs(out_dir, mode=0o700, exist_ok=True)
+    return out_dir
+
+
 def compare_output(writer: BasePdfFileWriter, expected_output_path):
     with tempfile.TemporaryDirectory() as working_dir:
         output_path = os.path.join(working_dir, 'output.pdf')
@@ -58,9 +70,20 @@ def compare_output(writer: BasePdfFileWriter, expected_output_path):
             ],
             capture_output=True
         )
-        # TODO maintain a directory of failed test outputs?
         if result.stderr != b'0':
+            dest_dir = _ensure_path("failed_layout_tests", expected_output_path)
+            shutil.copy(output_path, os.path.join(dest_dir, "output.pdf"))
+            from_workdir = ('actual.png', 'diff.png', 'expected.png')
+            for f in from_workdir:
+                shutil.copy(
+                    src=os.path.join(working_dir, f),
+                    dst=os.path.join(dest_dir, f),
+                    follow_symlinks=False
+                )
+            shutil.copy(os.path.join(working_dir, 'diff.png'), dest_dir)
+            shutil.copy(os.path.join(working_dir, 'expected.png'), dest_dir)
             raise RuntimeError(
                 f"Output compare test failed --- absolute error: "
-                f"{result.stderr.decode('utf8')}"
+                f"{result.stderr.decode('utf8')}; "
+                f"Output saved in {dest_dir}."
             )
