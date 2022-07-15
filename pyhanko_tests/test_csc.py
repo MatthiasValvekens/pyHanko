@@ -250,6 +250,7 @@ def test_parse_csc_auth_response_error(response_data, err_msg):
 
 
 # network failure tests
+@pytest.mark.asyncio
 async def test_cert_provision_fail():
     csc_session_info = csc_signer.CSCServiceSessionInfo(
         'https://example.invalid', 'foobar'
@@ -261,6 +262,7 @@ async def test_cert_provision_fail():
             )
 
 
+@pytest.mark.asyncio
 async def test_sign_mechanism_not_supported():
     csc_session_info = csc_signer.CSCServiceSessionInfo(
         'https://example.com', 'foobar'
@@ -295,6 +297,7 @@ async def test_sign_mechanism_not_supported():
     assert signer.get_signature_mechanism(digest_algorithm='sha256') == mech
 
 
+@pytest.mark.asyncio
 async def test_sign_network_fail():
     csc_session_info = csc_signer.CSCServiceSessionInfo(
         'https://example.invalid', 'foobar'
@@ -316,6 +319,7 @@ async def test_sign_network_fail():
             await signer.async_sign_raw(b'foobarbazquux', 'sha256')
 
 
+@pytest.mark.asyncio
 async def test_sign_wrong_number_of_sigs(aiohttp_client):
     csc_session_info = csc_signer.CSCServiceSessionInfo('', 'foobar')
     auth_man = csc_signer.PrefetchedSADAuthorizationManager(
@@ -357,6 +361,7 @@ async def test_sign_wrong_number_of_sigs(aiohttp_client):
 
 
 @pytest.mark.parametrize('response_obj', [{'signatures': [None]}, {}])
+@pytest.mark.asyncio
 async def test_sign_unreadable_sig(aiohttp_client, response_obj):
     csc_session_info = csc_signer.CSCServiceSessionInfo('', 'foobar')
     auth_man = csc_signer.PrefetchedSADAuthorizationManager(
@@ -392,6 +397,8 @@ async def test_sign_unreadable_sig(aiohttp_client, response_obj):
     except asyncio.CancelledError:
         pass
 
+
+@pytest.mark.asyncio
 async def test_fail_different_digest():
     csc_session_info = csc_signer.CSCServiceSessionInfo('', 'foobar')
     auth_man = csc_signer.PrefetchedSADAuthorizationManager(
@@ -436,6 +443,7 @@ async def _set_up_dummy_client(aiohttp_client, require_hash_pinning=True):
     return client, auth_man, csc_dummy
 
 
+@pytest.mark.asyncio
 async def test_submit_job_during_commit(aiohttp_client):
 
     client, auth_man, csc_dummy = await _set_up_dummy_client(aiohttp_client)
@@ -484,6 +492,7 @@ async def test_submit_job_during_commit(aiohttp_client):
     assert auth_man.authorizations_requested == 2
 
 
+@pytest.mark.asyncio
 async def test_multi_commit_failure(aiohttp_client):
 
     client, auth_man, csc_dummy = await _set_up_dummy_client(aiohttp_client)
@@ -524,6 +533,7 @@ async def test_multi_commit_failure(aiohttp_client):
     await signer.commit()
 
 
+@pytest.mark.asyncio
 async def test_csc_with_parameters(aiohttp_client):
     #  produce a signature with parameters
 
@@ -545,6 +555,7 @@ async def test_csc_with_parameters(aiohttp_client):
     )
 
 
+@pytest.mark.asyncio
 async def test_prefetched_sad_not_twice(aiohttp_client):
     client, auth_man, csc_dummy = await _set_up_dummy_client(
         aiohttp_client, require_hash_pinning=False
@@ -583,6 +594,7 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
 # The API docs say that the placeholder will be 512 bytes, so we record
 # that in a test here
 
+@pytest.mark.asyncio
 async def test_csc_placeholder_sig_size():
 
     csc_session_info = csc_signer.CSCServiceSessionInfo(

@@ -294,6 +294,7 @@ def test_cert_constraint_subject():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cert_constraint_issuer(requests_mock):
     vc = live_testing_vc(requests_mock)
     signer_validation_path = await CertificateValidator(
@@ -334,6 +335,7 @@ async def test_cert_constraint_issuer(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cert_constraint_composite(requests_mock):
     vc = live_testing_vc(requests_mock)
     signer_validation_path = await CertificateValidator(
@@ -409,6 +411,7 @@ async def sign_with_sv(sv_spec, sig_meta, signer=FROM_CA, timestamper=DUMMY_TS, 
     return EmbeddedPdfSignature(r, s.sig_field, s.fq_name)
 
 
+@pytest.mark.asyncio
 async def test_sv_sign_md_req():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.DIGEST_METHOD,
@@ -436,6 +439,7 @@ async def test_sv_sign_md_req():
     assert emb_sig.md_algorithm == 'sha512'
 
 
+@pytest.mark.asyncio
 async def test_sv_sign_md_hint():
     sv = fields.SigSeedValueSpec(digest_methods=['sha256', 'sha512'])
     emb_sig = await sign_with_sv(
@@ -456,6 +460,7 @@ async def test_sv_sign_md_hint():
     assert emb_sig.md_algorithm == 'sha512'
 
 
+@pytest.mark.asyncio
 async def test_sv_sign_subfilter_req():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.SUBFILTER, subfilters=[PADES]
@@ -479,6 +484,7 @@ async def test_sv_sign_subfilter_req():
     assert emb_sig.sig_object['/SubFilter'] == PADES.value
 
 
+@pytest.mark.asyncio
 async def test_sv_sign_subfilter_hint():
     sv = fields.SigSeedValueSpec(subfilters=[PADES])
     emb_sig = await sign_with_sv(
@@ -495,6 +501,7 @@ async def test_sv_sign_subfilter_hint():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_sv_sign_addrevinfo_req(requests_mock):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
@@ -534,6 +541,7 @@ async def test_sv_sign_addrevinfo_req(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_sv_sign_addrevinfo_subfilter_conflict():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
@@ -570,6 +578,7 @@ async def test_sv_sign_addrevinfo_subfilter_conflict():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_add_revinfo_wrong_subfilter():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.ADD_REV_INFO,
@@ -617,6 +626,7 @@ async def test_add_revinfo_wrong_subfilter():
     assert not status.seed_value_ok
 
 
+@pytest.mark.asyncio
 async def test_sv_sign_cert_constraint():
     # this is more thoroughly unit tested at a lower level (see further up),
     # so we simply try two basic scenarios here for now
@@ -641,6 +651,7 @@ async def test_sv_sign_cert_constraint():
     )
 
 
+@pytest.mark.asyncio
 async def test_sv_flag_unsupported():
     sv = fields.SigSeedValueSpec(
         flags=(
@@ -655,6 +666,7 @@ async def test_sv_flag_unsupported():
         await sign_with_sv(sv, meta, test_violation=True)
 
 
+@pytest.mark.asyncio
 async def test_sv_cert_flag_unsupported():
     sv = fields.SigSeedValueSpec(
         cert=fields.SigCertConstraints(
@@ -666,6 +678,7 @@ async def test_sv_cert_flag_unsupported():
         await sign_with_sv(sv, meta)
 
 
+@pytest.mark.asyncio
 async def test_sv_flag_appearance_required():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.APPEARANCE_FILTER,
@@ -676,6 +689,7 @@ async def test_sv_flag_appearance_required():
         await sign_with_sv(sv, meta)
 
 
+@pytest.mark.asyncio
 async def test_sv_mdp_no_certify():
 
     sv = fields.SigSeedValueSpec(
@@ -692,6 +706,7 @@ async def test_sv_mdp_no_certify():
     await sign_with_sv(sv, meta, test_violation=True)
 
 
+@pytest.mark.asyncio
 async def test_sv_mdp_must_certify():
 
     sv = fields.SigSeedValueSpec(
@@ -714,6 +729,7 @@ async def test_sv_mdp_must_certify():
     await sign_with_sv(sv, meta, test_violation=True)
 
 
+@pytest.mark.asyncio
 async def test_sv_mdp_must_certify_wrong_docmdp():
 
     sv = fields.SigSeedValueSpec(
@@ -791,6 +807,7 @@ def test_sv_subfilter_unsupported_partial():
         )
 
 
+@pytest.mark.asyncio
 async def test_sv_timestamp_url(requests_mock):
     # state issues (see comment in signers.py), so create a fresh signer
     sv = fields.SigSeedValueSpec(
@@ -814,6 +831,7 @@ async def test_sv_timestamp_url(requests_mock):
     assert ts_requested
 
 
+@pytest.mark.asyncio
 async def test_sv_sign_reason_req():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.REASONS,
@@ -838,6 +856,7 @@ async def test_sv_sign_reason_req():
 
 
 @pytest.mark.parametrize('reasons_param', [None, [], ["."]])
+@pytest.mark.asyncio
 async def test_sv_sign_reason_prohibited(reasons_param):
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.REASONS, reasons=reasons_param
@@ -858,6 +877,7 @@ async def test_sv_sign_reason_prohibited(reasons_param):
     assert pdf_name('/Reason') not in emb_sig.sig_object
 
 
+@pytest.mark.asyncio
 async def test_sv_lock_certify():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
@@ -884,6 +904,7 @@ async def test_sv_lock_certify():
     await sign_with_sv(sv, meta)
 
 
+@pytest.mark.asyncio
 async def test_sv_no_lock_certify():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,
@@ -916,6 +937,7 @@ async def test_sv_no_lock_certify():
     await sign_with_sv(sv, meta, test_violation=True)
 
 
+@pytest.mark.asyncio
 async def test_field_lock_compat():
     sv = fields.SigSeedValueSpec(
         flags=fields.SigSeedValFlags.LOCK_DOCUMENT,

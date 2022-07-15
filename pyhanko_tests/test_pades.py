@@ -313,6 +313,7 @@ def test_update_no_timestamps():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -826,6 +827,7 @@ def test_sign_with_content_sig():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_sign_with_wrong_content_sig():
 
     class CustomSigner(signers.SimpleSigner):
@@ -1466,6 +1468,7 @@ def test_pades_revinfo_live_nofullchain():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_pades_lta_no_embed_root(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     cr = SimpleCertificateStore()
@@ -1503,6 +1506,7 @@ async def test_pades_lta_no_embed_root(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_pades_live_ac_presign_validation(requests_mock):
     # integration test for heavy-duty autofetching logic with ACs
     # NOTE: certificate autofetching is not tested due to lack of availability
@@ -1587,6 +1591,7 @@ async def test_pades_live_ac_presign_validation(requests_mock):
 
 
 @pytest.mark.parametrize('with_force_revinfo', [True, False])
+@pytest.mark.asyncio
 async def test_pades_lta_live_ac_presign_validation(requests_mock,
                                                     with_force_revinfo):
     # Same as the above, but with LTA instead (+some time manipulation)
@@ -1672,6 +1677,7 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock,
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_autofill_dss(requests_mock):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
@@ -1709,6 +1715,7 @@ async def test_cades_signer_attrs_autofill_dss(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_validate_acs(requests_mock):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
@@ -1785,6 +1792,7 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('pass_ac_vc', [True, False])
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
@@ -1834,6 +1842,7 @@ async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
@@ -1896,6 +1905,7 @@ async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
@@ -1960,6 +1970,7 @@ async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     signer = signers.SimpleSigner(
@@ -2026,6 +2037,7 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
 @pytest.mark.parametrize('as_signed_assertions,pass_ac_vc', [
     (True, True), (True, False), (False, True), (False, False)
 ])
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_unknown_attrs(requests_mock,
                                                 as_signed_assertions,
                                                 pass_ac_vc):
@@ -2106,6 +2118,7 @@ async def test_cades_signer_attrs_unknown_attrs(requests_mock,
 
 @freeze_time('2020-11-01')
 @pytest.mark.parametrize('pass_ac_vc', [True, False])
+@pytest.mark.asyncio
 async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
     class CustomSigner(signers.SimpleSigner):
         async def signed_attrs(self, *args, **kwargs):
