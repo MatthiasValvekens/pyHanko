@@ -19,5 +19,5 @@ certomancer~=0.8.2
 uharfbuzz==0.25.0
 isort>=5.9.3
 aiohttp~=3.8.0
-pytest-aiohttp~=0.3.0
+pytest-aiohttp~=1.0.4
 certomancer-csc-dummy==0.1.0

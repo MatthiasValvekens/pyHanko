@@ -321,6 +321,7 @@ def test_simple_sign_from_config():
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_simple_sign_from_config_async(bulk_fetch, pss):
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -344,6 +345,7 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
+@pytest.mark.asyncio
 async def test_async_sign_many_concurrent(bulk_fetch, pss):
 
     concurrent_count = 10
@@ -379,6 +381,7 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
 @pytest.mark.skip  # FIXME flaky test, sometimes coredumps with SoftHSM
 @pytest.mark.parametrize('bulk_fetch,pss', [(True, True), (False, False),
                                             (True, False), (True, True)])
+@pytest.mark.asyncio
 async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
     concurrent_count = 10
 

@@ -31,6 +31,7 @@ MESSAGE = b'Hello world!'
 MESSAGE_DIGEST = hashlib.sha256(MESSAGE).digest()
 
 
+@pytest.mark.asyncio
 async def test_ts_fetch_aiohttp():
     async with aiohttp.ClientSession() as session:
         ts = AIOHttpTimeStamper(
@@ -48,6 +49,7 @@ async def test_ts_fetch_aiohttp():
                == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
 
 
+@pytest.mark.asyncio
 async def test_ts_fetch_aiohttp_error():
     with pytest.raises(TimestampRequestError):
         async with aiohttp.ClientSession() as session:
@@ -58,6 +60,7 @@ async def test_ts_fetch_aiohttp_error():
             await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
 
 
+@pytest.mark.asyncio
 async def test_ts_fetch_requests():
     ts = HTTPTimeStamper(
         EXTERNAL_TSA_URL, timeout=FETCH_TIMEOUT
@@ -74,6 +77,7 @@ async def test_ts_fetch_requests():
            == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
 
 
+@pytest.mark.asyncio
 async def test_ts_fetch_requests_error():
     with pytest.raises(TimestampRequestError):
         ts = HTTPTimeStamper(

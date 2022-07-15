@@ -136,6 +136,7 @@ def test_sign_field_unclear():
         )
 
 
+@pytest.mark.asyncio
 async def test_sign_field_unclear_async():
     # test error on signing attempt where the signature field to be used
     # is not clear
@@ -298,6 +299,7 @@ def test_sign_new_existingonly(file):
 
 
 @pytest.mark.parametrize('file', [0, 1])
+@pytest.mark.asyncio
 async def test_async_sign_new_existingonly(file):
     w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
     with pytest.raises(SigningError):

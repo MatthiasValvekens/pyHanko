@@ -208,6 +208,7 @@ def test_sign_with_trust():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_sign_with_trust_async():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
@@ -439,6 +440,7 @@ def test_adobe_revinfo_live(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_meta_tsa_verify():
     # check if my testing setup works
     vc = ValidationContext(
@@ -867,6 +869,7 @@ def test_add_revinfo_without_timestamp(requests_mock):
             )
 
 
+@pytest.mark.asyncio
 async def test_embed_signed_attachment():
     dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
     signature = await FROM_CA.async_sign_general_data(
@@ -943,6 +946,7 @@ def test_simple_interrupted_signature():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_sign_prescribed_attrs(requests_mock):
     vc = live_testing_vc(requests_mock)
     message = b'Hello world!'

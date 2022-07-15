@@ -133,6 +133,7 @@ def test_generic_data_sign_legacy():
         [True, False]
     ))
 )
+@pytest.mark.asyncio
 async def test_generic_data_sign(input_data, detached):
 
     signature = await FROM_CA.async_sign_general_data(
@@ -177,6 +178,7 @@ async def test_generic_data_sign(input_data, detached):
 
 
 @pytest.mark.parametrize('detached', [True, False])
+@pytest.mark.asyncio
 async def test_cms_v3_sign(detached):
     inner_obj = await FROM_CA.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False
@@ -214,6 +216,7 @@ async def test_cms_v3_sign(detached):
     assert status.intact
 
 
+@pytest.mark.asyncio
 async def test_detached_cms_with_self_reported_timestamp():
     dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
     signature = await FROM_CA.async_sign_general_data(
@@ -232,6 +235,7 @@ async def test_detached_cms_with_self_reported_timestamp():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cms_with_tst():
     signature = await FROM_CA.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS
@@ -250,6 +254,7 @@ async def test_detached_cms_with_tst():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cms_with_content_tst():
     signed_attr_settings = PdfCMSSignedAttributes(
         cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
@@ -281,6 +286,7 @@ async def test_detached_cms_with_content_tst():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cms_with_wrong_content_tst():
     class CustomSigner(signers.SimpleSigner):
         def _signed_attr_providers(self, *args, **kwargs):
@@ -335,6 +341,7 @@ async def test_detached_cms_with_wrong_content_tst():
     }), False),
     (cms.ContentInfo({'content_type': '2.999',}), True),
 ])
+@pytest.mark.asyncio
 async def test_detached_with_malformed_content_tst(content, detach):
     class CustomProvider(CMSAttributeProvider):
         attribute_type = 'content_time_stamp'
@@ -603,6 +610,7 @@ def test_sign_weak_digest_prevention():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_sign_weak_sig_digest():
     # We have to jump through some hoops to put together a signature
     # where the signing method's digest is not the same as the "external"
@@ -981,6 +989,7 @@ def test_direct_pdfcmsembedder_usage():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_no_embed_root():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     cr = SimpleCertificateStore()
@@ -1002,6 +1011,7 @@ async def test_no_embed_root():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_noop_attribute_prov():
     class NoopProv(CMSAttributeProvider):
         async def build_attr_value(self, dry_run=False):
@@ -1030,6 +1040,7 @@ async def test_noop_attribute_prov():
 
 
 @pytest.mark.parametrize('delete', [True, False])
+@pytest.mark.asyncio
 async def test_no_certificates(delete):
     input_buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(input_buf)
@@ -1076,6 +1087,7 @@ async def test_no_certificates(delete):
         r.embedded_signatures[0].signer_cert.dump()
 
 
+@pytest.mark.asyncio
 async def test_two_signer_infos():
     input_buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(input_buf)
@@ -1137,6 +1149,7 @@ def get_ac_aware_signer(actual_signer='signer1'):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_embed_ac(requests_mock):
     signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -1162,6 +1175,7 @@ async def test_embed_ac(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_embed_ac_revinfo_adobe_style(requests_mock):
     signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -1223,6 +1237,7 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_ac_detached(requests_mock):
     input_data = b'Hello world!'
     signer = get_ac_aware_signer()
@@ -1242,6 +1257,7 @@ async def test_ac_detached(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_ac_attr_validation_fail(requests_mock):
     input_data = b'Hello world!'
     signer = get_ac_aware_signer()
@@ -1258,6 +1274,7 @@ async def test_ac_attr_validation_fail(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_ac_attr_validation_holder_mismatch(requests_mock):
     input_data = b'Hello world!'
     # sign with a key pair that's not the same as the holder of the AC
@@ -1276,6 +1293,7 @@ async def test_ac_attr_validation_holder_mismatch(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cades_cms_with_tst():
     signature = await FROM_CA.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
@@ -1327,6 +1345,7 @@ UNTYPABLE_ATTR = cms.AttCertAttribute.load(
         [True, False]
     ))
 )
+@pytest.mark.asyncio
 async def test_parse_malformed_claimed_attrs(data, fatal):
     # This should parse up to the first level and be reencoded by asn1crypto
     #  without asking any questions.
@@ -1347,6 +1366,7 @@ async def test_parse_malformed_claimed_attrs(data, fatal):
 
 
 @pytest.mark.parametrize('bad_attr', [NONSENSICAL_ATTR, UNTYPABLE_ATTR])
+@pytest.mark.asyncio
 async def test_validate_with_malformed_claimed_attrs(bad_attr, requests_mock):
     # This should parse up to the first level and be reencoded by asn1crypto
     #  without asking any questions.
@@ -1399,6 +1419,7 @@ BASIC_AC_ISSUER_SETUP = '''
 '''
 
 
+@pytest.mark.asyncio
 async def test_parse_ac_with_malformed_attribute(requests_mock):
     attr_cert_cfg = f'''
     test-ac:
@@ -1469,6 +1490,7 @@ async def test_parse_ac_with_malformed_attribute(requests_mock):
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cms_with_invalid_cn():
     cert = TESTING_CA.get_cert(CertLabel('signer-with-invalid-cn'))
     sgn = signers.SimpleSigner(
@@ -1492,6 +1514,7 @@ async def test_detached_cms_with_invalid_cn():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
     cert = TESTING_CA.get_cert(CertLabel('issued-by-invalid-cn'))
     sgn = signers.SimpleSigner(
@@ -1517,6 +1540,7 @@ async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
 async def test_detached_cms_with_invalid_cn_in_ca():
     cert = TESTING_CA.get_cert(CertLabel('issued-by-invalid-cn'))
 
