@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum, auto
 
 import click
+import pytz
 import tzlocal
 from asn1crypto import cms, pem
 from pyhanko_certvalidator import ValidationContext
@@ -428,6 +429,27 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
             return 'INVALID', False
 
 
+def _attempt_iso_dt_parse(dt_str) -> datetime:
+    try:
+        # Try to import the ISO parser from dateutil, if available
+        from dateutil.parser import isoparse
+    except ImportError:
+        # if not, call fromisoformat in the standard library
+        # (only implements a subset of ISO 8601)
+        isoparse = datetime.fromisoformat
+
+    try:
+        dt = isoparse(dt_str)
+    except ValueError:
+        raise click.ClickException(f"datetime {dt_str!r} could not be parsed")
+
+    if dt.tzinfo is None:
+        # assume UTC
+        dt = dt.replace(tzinfo=pytz.UTC)
+
+    return dt
+
+
 # TODO add an option to do LTV, but guess the profile
 @signing.command(name='validate', help='validate signatures')
 @click.argument('infile', type=click.File('rb'))
@@ -458,6 +480,14 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
               help='Treat revocation info as retroactively valid '
                    '(i.e. ignore thisUpdate timestamp)',
               type=bool, is_flag=True, default=False, show_default=True)
+@click.option('--validation-time',
+              help=(
+                   'Override the validation time (ISO 8601 date). '
+                   'The special value \'claimed\' causes the validation time '
+                   'claimed by the signer to be used. Revocation checking '
+                   'will be disabled. Option ignored in LTV mode.'
+              ),
+              type=str, required=False)
 @click.option('--password', required=False, type=str,
               help='password to access the file (can also be read from stdin)')
 @click.option('--no-diff-analysis', default=False, type=bool, is_flag=True,
@@ -481,7 +511,9 @@ def validate_signatures(ctx, infile, executive_summary,
                         other_certs, ltv_profile, force_revinfo,
                         soft_revocation_check, no_revocation_check, password,
                         retroactive_revinfo, detached, no_diff_analysis,
-                        no_strict_syntax):
+                        validation_time, no_strict_syntax):
+
+    no_revocation_check |= validation_time is not None
 
     if no_revocation_check:
         soft_revocation_check = True
@@ -492,6 +524,10 @@ def validate_signatures(ctx, infile, executive_summary,
         )
 
     if ltv_profile is not None:
+        if validation_time is not None:
+            raise click.ClickException(
+                "--validation-time is not compatible with --ltv-profile"
+            )
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     vc_kwargs = _build_vc_kwargs(
@@ -499,6 +535,12 @@ def validate_signatures(ctx, infile, executive_summary,
         retroactive_revinfo,
         allow_fetching=False if no_revocation_check else None
     )
+
+    use_claimed_validation_time = False
+    if validation_time == 'claimed':
+        use_claimed_validation_time = True
+    elif validation_time is not None:
+        vc_kwargs['moment'] = _attempt_iso_dt_parse(validation_time)
 
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
     vc_kwargs = _prepare_vc(
@@ -544,6 +586,8 @@ def validate_signatures(ctx, infile, executive_summary,
         all_signatures_ok = True
         for ix, embedded_sig in enumerate(r.embedded_regular_signatures):
             fingerprint: str = embedded_sig.signer_cert.sha256.hex()
+            if use_claimed_validation_time:
+                vc_kwargs['moment'] = embedded_sig.self_reported_timestamp
             (status_str, signature_ok) = _signature_status_str(
                 status_callback=lambda: _signature_status(
                     ltv_profile=ltv_profile, force_revinfo=force_revinfo,
