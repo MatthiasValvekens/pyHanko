@@ -5,15 +5,9 @@ exemptLabels:
   - pinned
   - security
   - help wanted
+  - bug
 
-pulls:
-  daysUntilStale: 21
-  daysUntilClose: 14
-  markComment: >
-    This pull request has been automatically marked as stale because it has not had
-    recent activity. It will be closed in 14 days if no further activity occurs.
-    Thank you for your contributions!
-
+only: issues
 issues:
   daysUntilStale: 60
   daysUntilClose: 14
