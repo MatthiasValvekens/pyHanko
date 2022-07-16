@@ -54,7 +54,7 @@ async def test_ts_fetch_aiohttp_error():
     with pytest.raises(TimestampRequestError):
         async with aiohttp.ClientSession() as session:
             ts = AIOHttpTimeStamper(
-                "http://nasdlfkqowiuqoeljasd.yyq", session,
+                "http://example.invalid", session,
                 timeout=FETCH_TIMEOUT
             )
             await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
@@ -81,7 +81,7 @@ async def test_ts_fetch_requests():
 async def test_ts_fetch_requests_error():
     with pytest.raises(TimestampRequestError):
         ts = HTTPTimeStamper(
-            "http://nasdlfkqowiuqoeljasd.yyq", timeout=FETCH_TIMEOUT
+            "http://example.invalid", timeout=FETCH_TIMEOUT
         )
         await ts.async_timestamp(MESSAGE_DIGEST, 'sha256')
 
