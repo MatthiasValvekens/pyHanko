@@ -105,10 +105,13 @@ class PreparedByteRangeDigest:
     """
     .. versionadded:: 0.7.0
 
+    .. versionchanged:: 0.14.0
+
+        Removed ``md_algorithm`` attribute since it was unused.
+
     Bookkeeping class that contains the digest of a document that is about to be
     signed (or otherwise authenticated) based on said digest. It also keeps
-    track of the digest algorithm used, and the region in the output stream that
-    will contain the signature.
+    track of the region in the output stream that is omitted in the byte range.
 
     Instances of this class can easily be serialised, which allows for
     interrupting the signing process partway through.
@@ -117,11 +120,6 @@ class PreparedByteRangeDigest:
     document_digest: bytes
     """
     Digest of the document, computed over the appropriate ``/ByteRange``.
-    """
-
-    md_algorithm: str
-    """
-    Name of the digest algorithm used.
     """
 
     reserved_region_start: int
@@ -297,7 +295,6 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         digest_value = md.finalize()
         prepared_br_digest = PreparedByteRangeDigest(
             document_digest=digest_value,
-            md_algorithm=md_algorithm,
             reserved_region_start=sig_start, reserved_region_end=sig_end
         )
         cms_data = yield prepared_br_digest, output
