@@ -9,7 +9,7 @@ CMS is defined in :rfc:`5652`. To parse CMS messages, pyHanko relies heavily on
 import hashlib
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import IO, Iterable, List, Optional, Tuple, Union
 
 from asn1crypto import algos, cms, keys, pem, tsp, x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -20,6 +20,8 @@ from pyhanko_certvalidator.registry import (
     CertificateStore,
     SimpleCertificateStore,
 )
+
+from pyhanko.pdf_utils import misc
 
 __all__ = [
     'simple_cms_attribute',
@@ -32,8 +34,7 @@ __all__ = [
     'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
     'optimal_pss_params', 'process_pss_params', 'as_signing_certificate',
     'as_signing_certificate_v2', 'match_issuer_serial',
-    'check_ess_certid',
-    'CMSExtractionError'
+    'check_ess_certid', 'CMSExtractionError', 'byte_range_digest'
 ]
 
 logger = logging.getLogger(__name__)
@@ -555,3 +556,38 @@ def extract_certificate_info(signed_data: cms.SignedData) -> SignedDataCerts:
         attribute_certs=attr_certs
     )
     return cert_info
+
+
+def byte_range_digest(stream: IO, byte_range: Iterable[int],
+                      md_algorithm: str,
+                      chunk_size=misc.DEFAULT_CHUNK_SIZE) -> Tuple[int, bytes]:
+    """
+    Internal API to compute byte range digests. Potentially dangerous if used
+    without due caution.
+
+    :param stream:
+        Stream over which to compute the digest. Must support seeking and
+        reading.
+    :param byte_range:
+        The byte range, as a list of (offset, length) pairs, flattened.
+    :param md_algorithm:
+        The message digest algorithm to use.
+    :param chunk_size:
+        The I/O chunk size to use.
+    :return:
+        A tuple of the total digested length, and the actual digest.
+    """
+    md_spec = get_pyca_cryptography_hash(md_algorithm)
+    md = hashes.Hash(md_spec)
+
+    # compute the digest
+    # here, we allow arbitrary byte ranges
+    # for the coverage check, we'll impose more constraints
+    total_len = 0
+    chunk_buf = bytearray(chunk_size)
+    for lo, chunk_len in misc.pair_iter(byte_range):
+        stream.seek(lo)
+        misc.chunked_digest(chunk_buf, stream, md, max_read=chunk_len)
+        total_len += chunk_len
+
+    return total_len, md.finalize()

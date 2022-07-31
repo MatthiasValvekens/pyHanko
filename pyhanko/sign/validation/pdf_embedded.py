@@ -5,13 +5,11 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 from asn1crypto import cms, x509
-from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import pdf_name
-from pyhanko.pdf_utils.misc import DEFAULT_CHUNK_SIZE
 from pyhanko.pdf_utils.reader import PdfFileReader, process_data_at_eof
 from pyhanko.sign.diff_analysis import (
     DEFAULT_DIFF_POLICY,
@@ -30,8 +28,8 @@ from pyhanko.sign.fields import (
 )
 from pyhanko.sign.general import (
     UnacceptableSignerError,
+    byte_range_digest,
     extract_signer_info,
-    get_pyca_cryptography_hash,
 )
 
 from .errors import (
@@ -413,22 +411,11 @@ class EmbeddedPdfSignature:
         if self.external_digest is not None:
             return self.external_digest
 
-        md_spec = get_pyca_cryptography_hash(self.external_md_algorithm)
-        md = hashes.Hash(md_spec)
-        stream = self.reader.stream
-
-        # compute the digest
-        # here, we allow arbitrary byte ranges
-        # for the coverage check, we'll impose more constraints
-        total_len = 0
-        chunk_buf = bytearray(DEFAULT_CHUNK_SIZE)
-        for lo, chunk_len in misc.pair_iter(self.byte_range):
-            stream.seek(lo)
-            misc.chunked_digest(chunk_buf, stream, md, max_read=chunk_len)
-            total_len += chunk_len
-
-        self.total_len = total_len
-        self.external_digest = digest = md.finalize()
+        self.total_len, digest = byte_range_digest(
+            self.reader.stream, byte_range=self.byte_range,
+            md_algorithm=self.external_md_algorithm,
+        )
+        self.external_digest = digest
         return digest
 
     def compute_tst_digest(self) -> Optional[bytes]:
