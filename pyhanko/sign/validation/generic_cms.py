@@ -24,7 +24,7 @@ from pyhanko.sign.general import (
 
 from ...pdf_utils import misc
 from ..ades.report import AdESFailure, AdESIndeterminate
-from .errors import SignatureValidationError, WeakHashAlgorithmError
+from . import errors
 from .settings import KeyUsageConstraints
 from .status import (
     CAdESSignerAttributeAssertions,
@@ -46,7 +46,7 @@ __all__ = [
     'async_validate_detached_cms', 'cms_basic_validation',
     'compute_signature_tst_digest', 'extract_tst_data',
     'extract_self_reported_ts', 'extract_certs_for_validation',
-    'collect_signer_attr_status',
+    'collect_signer_attr_status', 'validate_algorithm_protection'
 ]
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def _check_signing_certificate(cert: x509.Certificate,
         except NonexistentAttributeError:
             return None
         except MultivaluedAttributeError as e:
-            raise SignatureValidationError(
+            raise errors.SignatureValidationError(
                 "Wrong cardinality for signing certificate attribute"
             ) from e
 
@@ -81,12 +81,64 @@ def _check_signing_certificate(cert: x509.Certificate,
     certid = attr['certs'][0]
 
     if not check_ess_certid(cert, certid):
-        raise SignatureValidationError(
+        raise errors.SignatureValidationError(
             f"Signing certificate attribute does not match selected "
             f"signer's certificate for subject"
             f"\"{cert.subject.human_friendly}\".",
             ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
         )
+
+
+def validate_algorithm_protection(
+        attrs: cms.CMSAttributes,
+        claimed_digest_algorithm_obj: cms.DigestAlgorithm,
+        claimed_signature_algorithm_obj: cms.SignedDigestAlgorithm):
+    """
+    Internal API to validate the CMS algorithm protection attribute
+    defined in :rfc:`6211`, if present.
+
+    :param attrs:
+        A CMS attribute list.
+    :param claimed_digest_algorithm_obj:
+        The claimed (i.e. unprotected) digest algorithm value.
+    :param claimed_signature_algorithm_obj:
+        The claimed (i.e. unprotected) signature algorithm value.
+    :raises errors.CMSStructuralError:
+        if multiple CMS protection attributes are present
+    :raises errors.CMSAlgorithmProtectionError:
+        if a mismatch is detected
+    """
+
+    try:
+        cms_algid_protection = find_unique_cms_attribute(
+            attrs, 'cms_algorithm_protection'
+        )
+    except NonexistentAttributeError:
+        cms_algid_protection = None
+    except MultivaluedAttributeError:
+        raise errors.CMSStructuralError(
+            "Multiple CMS protection attributes present",
+        )
+    if cms_algid_protection is not None:
+        auth_digest_algorithm = \
+            cms_algid_protection['digest_algorithm'].native
+        if auth_digest_algorithm != claimed_digest_algorithm_obj.native:
+            raise errors.CMSAlgorithmProtectionError(
+                "Digest algorithm does not match CMS algorithm protection "
+                "attribute.",
+            )
+        signed_sig_algorithm = \
+            cms_algid_protection['signature_algorithm'].native
+        if signed_sig_algorithm is None:
+            raise errors.CMSAlgorithmProtectionError(
+                "CMS algorithm protection attribute not valid for signed "
+                "data",
+            )
+        elif signed_sig_algorithm != claimed_signature_algorithm_obj.native:
+            raise errors.CMSAlgorithmProtectionError(
+                "Signature mechanism does not match CMS algorithm "
+                "protection attribute.",
+            )
 
 
 def validate_sig_integrity(signer_info: cms.SignerInfo,
@@ -129,7 +181,7 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
     if md_algorithm in weak_hash_algorithms:
-        raise WeakHashAlgorithmError(md_algorithm)
+        raise errors.WeakHashAlgorithmError(md_algorithm)
     signature = signer_info['signature'].native
 
     # signed_attrs comes with some context-specific tagging.
@@ -144,42 +196,23 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         prehashed = False
         # check the CMSAlgorithmProtection attr, if present
         try:
-            cms_algid_protection = find_unique_cms_attribute(
-                signed_attrs, 'cms_algorithm_protection'
+            validate_algorithm_protection(
+                signed_attrs,
+                claimed_digest_algorithm_obj=digest_algorithm_obj,
+                claimed_signature_algorithm_obj=signature_algorithm
             )
-        except NonexistentAttributeError:
-            cms_algid_protection = None
-        except MultivaluedAttributeError:
-            raise SignatureValidationError(
-                'Multiple CMS protection attributes present',
-                ades_subindication=AdESFailure.FORMAT_FAILURE
+        except errors.CMSStructuralError as e:
+            raise errors.SignatureValidationError(
+                e.failure_message, ades_subindication=AdESFailure.FORMAT_FAILURE
             )
-        if cms_algid_protection is not None:
-            signed_digest_algorithm = \
-                cms_algid_protection['digest_algorithm'].native
-            if signed_digest_algorithm != digest_algorithm_obj.native:
-                raise SignatureValidationError(
-                    "Digest algorithm does not match CMS algorithm protection "
-                    "attribute.",
-                    # these are conceptually failures, but AdES doesn't have
-                    # them in its validation model, so 'GENERIC' it is.
-                    #  (same applies to other such cases)
-                    ades_subindication=AdESIndeterminate.GENERIC
-                )
-            signed_sig_algorithm = \
-                cms_algid_protection['signature_algorithm'].native
-            if signed_sig_algorithm is None:
-                raise SignatureValidationError(
-                    "CMS algorithm protection attribute not valid for signed "
-                    "data",
-                    ades_subindication=AdESIndeterminate.GENERIC
-                )
-            elif signed_sig_algorithm != signature_algorithm.native:
-                raise SignatureValidationError(
-                    "Signature mechanism does not match CMS algorithm "
-                    "protection attribute.",
-                    ades_subindication=AdESIndeterminate.GENERIC
-                )
+        except errors.CMSAlgorithmProtectionError as e:
+            raise errors.SignatureValidationError(
+                e.failure_message,
+                # these are conceptually failures, but AdES doesn't have
+                # them in its validation model, so 'GENERIC' it is.
+                #  (same applies to other such cases)
+                ades_subindication=AdESIndeterminate.GENERIC
+            )
 
         # check the signing-certificate or signing-certificate-v2 attr
         # Note: Through the usual "full validation" call path, this check is
@@ -194,14 +227,14 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
                 signed_attrs, 'content_type'
             )
         except (NonexistentAttributeError, MultivaluedAttributeError):
-            raise SignatureValidationError(
+            raise errors.SignatureValidationError(
                 'Content type not found in signature, or multiple content-type '
                 'attributes present.',
                 ades_subindication=AdESFailure.FORMAT_FAILURE
             )
         content_type = content_type.native
         if content_type != expected_content_type:
-            raise SignatureValidationError(
+            raise errors.SignatureValidationError(
                 f'Content type {content_type} did not match expected value '
                 f'{expected_content_type}',
                 ades_subindication=AdESFailure.FORMAT_FAILURE
@@ -246,7 +279,7 @@ def extract_certs_for_validation(signed_data: cms.SignedData) \
         cert_info = extract_certificate_info(signed_data)
         cert = cert_info.signer_cert
     except CMSExtractionError:
-        raise SignatureValidationError(
+        raise errors.SignatureValidationError(
             'signer certificate not included in signature',
             ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
         )
@@ -525,7 +558,7 @@ async def validate_tst_signed_data(
     if isinstance(tst_info_bytes, core.ParsableOctetString):
         tst_info = tst_info_bytes.parsed
     if not isinstance(tst_info, tsp.TSTInfo):
-        raise SignatureValidationError(
+        raise errors.SignatureValidationError(
             "SignedData does not encapsulate TSTInfo"
         )
     # compare the expected TST digest against the message imprint
@@ -579,7 +612,7 @@ async def collect_signer_attr_status(
     except NonexistentAttributeError:
         signer_attrs = None
     except MultivaluedAttributeError as e:
-        raise SignatureValidationError(str(e)) from e
+        raise errors.SignatureValidationError(str(e)) from e
 
     result = {}
     cades_ac_results = None

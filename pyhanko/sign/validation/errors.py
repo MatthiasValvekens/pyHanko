@@ -6,10 +6,22 @@ __all__ = [
     'SignatureValidationError', 'WeakHashAlgorithmError',
     'ValidationInfoReadingError', 'NoDSSFoundError',
     'SigSeedValueValidationError',
+    'CMSStructuralError', 'CMSAlgorithmProtectionError',
+    'ValueErrorWithMessage'
 ]
 
 
-class ValidationInfoReadingError(ValueError):
+class ValueErrorWithMessage(ValueError):
+    """
+    Value error with a failure message attribute that can be conveniently
+    extracted, instead of having to rely on extracting exception args
+    generically.
+    """
+    def __init__(self, failure_message):
+        self.failure_message = str(failure_message)
+
+
+class ValidationInfoReadingError(ValueErrorWithMessage):
     """Error reading validation info."""
     pass
 
@@ -19,11 +31,18 @@ class NoDSSFoundError(ValidationInfoReadingError):
         super().__init__("No DSS found")
 
 
-class SignatureValidationError(ValueError):
+class CMSStructuralError(ValueErrorWithMessage):
+    """Structural error in a CMS object."""
+
+
+class CMSAlgorithmProtectionError(ValueErrorWithMessage):
+    """Error related to CMS algorithm protection checks."""
+
+
+class SignatureValidationError(ValueErrorWithMessage):
     """Error validating a signature."""
     def __init__(self, failure_message,
                  ades_subindication: Optional[AdESSubIndic] = None):
-        self.failure_message = str(failure_message)
         self.ades_subindication = ades_subindication
         super().__init__(failure_message)
 
