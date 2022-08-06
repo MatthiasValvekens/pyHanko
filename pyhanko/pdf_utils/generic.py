@@ -88,7 +88,8 @@ def _deproxy_decrypt(obj, eoa: EncryptedObjAccess):
 
 
 class Dereferenceable:
-    """Represents an opaque reference to a PDF object associated with
+    """
+    Represents an opaque reference to a PDF object associated with
     a PDF Handler (see :class:`PdfHandler <.rw_common.PdfHandler>`).
 
     This can either be a reference to an object with an object ID
@@ -112,20 +113,19 @@ class Dereferenceable:
 
 
 class TrailerReference(Dereferenceable):
-    """A reference to the trailer of a PDF document.
+    """
+    A reference to the trailer of a PDF document.
 
     .. warning::
        Since the trailer does not have a well-defined object ID in files with
        "classical" cross-reference tables (as opposed to cross-reference
        streams), this is not a subclass of :class:`.Reference`.
+
+    :param reader:
+        a :class:`~pyhanko.pdf_utils.reader.PdfFileReader`
     """
 
     def __init__(self, reader):
-        """Create a reference to the trailer of a :class:`.reader.PdfFileReader`
-        instance.
-
-        :param reader: A PDF reader
-        """
         self.reader = reader
 
     def get_object(self) -> 'PdfObject':
@@ -137,7 +137,8 @@ class TrailerReference(Dereferenceable):
 
 @dataclass(frozen=True)
 class Reference(Dereferenceable):
-    """A reference to an object with a certain ID and generation number, with
+    """
+    A reference to an object with a certain ID and generation number, with
     a PDF handler attached to it.
 
     .. warning::
@@ -185,7 +186,8 @@ class Reference(Dereferenceable):
 
 
 def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
-    """Read a PDF object from an input stream.
+    """
+    Read a PDF object from an input stream.
 
     .. note::
        The `container_ref` parameter tells the API which reference to register
@@ -324,7 +326,8 @@ class PdfObject:
 
 
 class NullObject(PdfObject):
-    """PDF `null` object.
+    """
+    PDF `null` object.
 
     All instances are treated as equal and falsy.
     """
@@ -387,7 +390,8 @@ class BooleanObject(PdfObject):
 
 
 class ArrayObject(list, PdfObject):
-    """PDF array object. This class extends from Python's list class,
+    """
+    PDF array object. This class extends from Python's list class,
     and supports its interface.
 
     .. warning::
@@ -556,7 +560,8 @@ class IndirectObject(PdfObject, Dereferenceable):
 
 
 class FloatObject(decimal.Decimal, PdfObject):
-    """PDF Float object.
+    """
+    PDF Float object.
 
     Internally, these are treated as decimals (and therefore actually
     fixed-point objects, to be precise).
@@ -757,8 +762,7 @@ def read_string_from_stream(stream) -> Union['ByteStringObject',
 
 
 class ByteStringObject(bytes, PdfObject):
-    """ PDF bytestring class.
-    """
+    """PDF bytestring class."""
 
     original_bytes = property(lambda self: self)
     """
@@ -1214,7 +1218,8 @@ class DictionaryObject(dict, PdfObject):
 
 
 class StreamObject(DictionaryObject):
-    """PDF stream object.
+    """
+    PDF stream object.
 
     Essentially, a PDF stream is a dictionary object with a binary blob of
     data attached. This data can be encoded by various filters (not all of which
@@ -1225,30 +1230,34 @@ class StreamObject(DictionaryObject):
     decoding, with :class:`.writer.BasePdfFileWriter` and its subclasses working
     the other way around.
 
-    Note that the :class:`.StreamObject` class manages some of its dictionary
-    keys by itself. This is partly the case for the various ``/Filter``
-    and ``/DecodeParms`` entries, but also for the ``/Length`` entry.
-    The latter will be overwritten as necessary.
+    .. note::
+        The :class:`.StreamObject` class manages some of its dictionary
+        keys by itself. This is partly the case for the various ``/Filter``
+        and ``/DecodeParms`` entries, but also for the ``/Length`` entry.
+        The latter will be overwritten as necessary.
+
+    :param dict_data:
+        The dictionary data for this stream object.
+    :param stream_data:
+        The (unencoded) stream data.
+    :param encoded_data:
+        The encoded stream data.
+
+        .. warning::
+            Ordinarily, a stream can be initialised either from decoded and from
+            encoded data.
+
+            If both `stream_data` and `encoded_data` are provided, the caller
+            is responsible for making sure that both are compatible given the
+            currently relevant filter configuration.
+    :param handler:
+        A reference to the currently active
+        :class:`.pyhanko.pdf_utils.crypt.SecurityHandler`.
+        This is only necessary if the stream requires crypt filters.
     """
 
     def __init__(self, dict_data=None, stream_data=None, encoded_data=None,
                  handler=None):
-        """Initialise a stream with dictionary data and stream data
-        (either encoded or decoded). If both `stream_data` and `encoded_data`
-        are provided, the caller is responsible for making sure that both are
-        compatible given the currently relevant filter configuration.
-
-        :param dict_data:
-            The dictionary data for this stream object.
-        :param stream_data:
-            The (unencoded) stream data.
-        :param encoded_data:
-            The encoded stream data.
-        :param handler:
-            A reference to the currently active
-            :class:`.pyhanko.pdf_utils.crypt.SecurityHandler`.
-            This is only necessary if the stream requires crypt filters.
-        """
         super().__init__(dict_data)
         self._data = stream_data
         self._encoded_data = encoded_data
