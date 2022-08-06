@@ -566,7 +566,9 @@ class BasePdfFileWriter(PdfHandler):
 
         # check if the extension is already registered,
         try:
-            cur_ext_value = extensions[ext.prefix_name]
+            cur_ext_value = extensions.raw_get(
+                ext.prefix_name, decrypt=generic.EncryptedObjAccess.RAW
+            )
         except KeyError:
             cur_ext_value = None
         extension_dicts = ()
