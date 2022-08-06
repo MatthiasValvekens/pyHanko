@@ -100,17 +100,11 @@ def extract_contents(sig_object: generic.DictionaryObject) -> bytes:
     """
 
     try:
-        cms_content = sig_object.raw_get('/Contents', decrypt=False)
+        cms_content = sig_object.raw_get(
+            '/Contents', decrypt=generic.EncryptedObjAccess.RAW
+        )
     except KeyError:
         raise misc.PdfReadError('Could not read /Contents entry in signature')
-
-    # we need the cms_content raw, so we need to deencapsulate a couple
-    # pieces of data here.
-    if isinstance(cms_content, generic.DecryptedObjectProxy):
-        # it was a direct reference, so just grab the raw one
-        cms_content = cms_content.raw_object
-    elif isinstance(cms_content, generic.IndirectObject):
-        raise misc.PdfReadError("/Contents in signature must be direct")
 
     if not isinstance(cms_content,
                       (generic.TextStringObject, generic.ByteStringObject)):

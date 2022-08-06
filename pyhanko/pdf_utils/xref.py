@@ -16,6 +16,7 @@ from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Union
 
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.generic import EncryptedObjAccess
 from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
@@ -840,7 +841,9 @@ class TrailerDictionary(generic.PdfObject):
         # as necessary.
         return self.raw_get(item).get_object()
 
-    def raw_get(self, key, decrypt=True, revision=None):
+    def raw_get(self, key,
+                decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT,
+                revision=None):
         revisions = self._trailer_revisions
         if revision is None:
             try:
@@ -896,7 +899,7 @@ class TrailerDictionary(generic.PdfObject):
 
     def __contains__(self, item):
         try:
-            self.raw_get(item, decrypt=False)
+            self.raw_get(item, decrypt=EncryptedObjAccess.PROXY)
             return True
         except KeyError:
             return False

@@ -37,7 +37,7 @@ __all__ = [
     'NumberObject', 'ByteStringObject', 'TextStringObject', 'NameObject',
     'ArrayObject', 'DictionaryObject', 'StreamObject',
     'read_object', 'pdf_name', 'pdf_string', 'pdf_date',
-    'TextStringEncoding'
+    'TextStringEncoding', 'EncryptedObjAccess'
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -47,11 +47,43 @@ INDIRECT_PATTERN = re.compile(r"(\d+)\s+(\d+)\s+R[^a-zA-Z]".encode('ascii'))
 logger = logging.getLogger(__name__)
 
 
-def _deproxy_decrypt(obj):
+class EncryptedObjAccess(enum.Enum):
+    """
+    Defines what to do when an encrypted object is encountered when retrieving
+    an object from a container.
+    """
+
+    PROXY = 0
+    """
+    Return the proxy object as-is, and leave further encryption/decryption
+    handling to the caller.
+    """
+
+    TRANSPARENT = 1
+    """
+    Transparently decrypt the proxy's content (similarly wrapping any
+    sub-containers in :class:`.DecryptedObjectProxy`.
+
+    .. note::
+        This is the default in most situations, since it's the least likely
+        to get in the way of any APIs that are not explicitly aware of
+        content encryption concerns.
+    """
+
+    RAW = 2
+    """
+    Return the underlying raw object as written, without attempting or deferring
+    decryption.
+    """
+
+
+def _deproxy_decrypt(obj, eoa: EncryptedObjAccess):
     if isinstance(obj, DecryptedObjectProxy):
-        return obj.decrypted
-    else:
-        return obj
+        if eoa == EncryptedObjAccess.TRANSPARENT:
+            return obj.decrypted
+        elif eoa == EncryptedObjAccess.RAW:
+            return obj.raw_object
+    return obj
 
 
 class Dereferenceable:
@@ -373,7 +405,8 @@ class ArrayObject(list, PdfObject):
     def __getitem__(self, index):
         return self.raw_get(index).get_object()
 
-    def raw_get(self, index, decrypt=True):
+    def raw_get(self, index,
+                decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT):
         """
         Get a value from an array without dereferencing.
         In other words, if the value corresponding to the given key is of type
@@ -382,15 +415,15 @@ class ArrayObject(list, PdfObject):
         :param index:
             Key to look up in the dictionary.
         :param decrypt:
-            If ``False``, instances of :class:`.DecryptedObjectProxy` will
-            be returned as-is. If ``True``, they will be decrypted.
-            Default ``True``.
+            What to do when retrieving encrypted objects; see
+            :class:`.EncryptedObjAccess`. The default is
+            :attr:`.EncryptedObjAccess.TRANSPARENT`.
         :return:
             A :class:`.PdfObject`.
         """
 
         val = list.__getitem__(self, index)
-        return _deproxy_decrypt(val) if decrypt else val
+        return _deproxy_decrypt(val, decrypt)
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
         stream.write(b"[")
@@ -1028,7 +1061,8 @@ class DictionaryObject(dict, PdfObject):
         else:
             super().__init__()
 
-    def raw_get(self, key, decrypt=True):
+    def raw_get(self, key,
+                decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT):
         """
         Get a value from a dictionary without dereferencing.
         In other words, if the value corresponding to the given key is of type
@@ -1037,14 +1071,14 @@ class DictionaryObject(dict, PdfObject):
         :param key:
             Key to look up in the dictionary.
         :param decrypt:
-            If ``False``, instances of :class:`.DecryptedObjectProxy` will
-            be returned as-is. If ``True``, they will be decrypted.
-            Default ``True``.
+            What to do when retrieving encrypted objects; see
+            :class:`.EncryptedObjAccess`. The default is
+            :attr:`.EncryptedObjAccess.TRANSPARENT`.
         :return:
             A :class:`.PdfObject`.
         """
         val = dict.__getitem__(self, key)
-        return _deproxy_decrypt(val) if decrypt else val
+        return _deproxy_decrypt(val, decrypt)
 
     def __setitem__(self, key, value):
         key = _normalise_key(key)

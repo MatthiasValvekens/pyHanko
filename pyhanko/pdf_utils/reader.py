@@ -259,7 +259,9 @@ class PdfFileReader(PdfHandler):
 
     @property
     def root_ref(self) -> generic.Reference:
-        return self.trailer.raw_get('/Root', decrypt=False).reference
+        return self.trailer.raw_get(
+            '/Root', decrypt=generic.EncryptedObjAccess.RAW
+        ).reference
 
     @property
     def document_id(self) -> Tuple[bytes, bytes]:

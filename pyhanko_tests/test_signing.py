@@ -712,7 +712,7 @@ def test_sig_indirect_contents():
     out = _tamper_with_sig_obj(tamper)
 
     r = PdfFileReader(out)
-    with pytest.raises(PdfReadError, match='.*be direct.*'):
+    with pytest.raises(PdfReadError, match='.*be string-like.*'):
         # noinspection PyStatementEffect
         r.embedded_signatures[0]
 
