@@ -37,7 +37,7 @@ __all__ = [
     'NumberObject', 'ByteStringObject', 'TextStringObject', 'NameObject',
     'ArrayObject', 'DictionaryObject', 'StreamObject',
     'read_object', 'pdf_name', 'pdf_string', 'pdf_date',
-    'TextStringEncoding', 'EncryptedObjAccess'
+    'TextStringEncoding', 'EncryptedObjAccess', 'DecryptedObjectProxy'
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -62,7 +62,8 @@ class EncryptedObjAccess(enum.Enum):
     TRANSPARENT = 1
     """
     Transparently decrypt the proxy's content (similarly wrapping any
-    sub-containers in :class:`.DecryptedObjectProxy`.
+    sub-containers in :class:`.DecryptedObjectProxy`, so this applies
+    recursively).
 
     .. note::
         This is the default in most situations, since it's the least likely
@@ -408,6 +409,10 @@ class ArrayObject(list, PdfObject):
     def raw_get(self, index,
                 decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT):
         """
+        .. versionchanged:: 0.14.0
+
+            ``decrypt`` parameter is no longer boolean
+
         Get a value from an array without dereferencing.
         In other words, if the value corresponding to the given key is of type
         :class:`.IndirectObject`, the indirect reference will not be resolved.
@@ -1064,6 +1069,10 @@ class DictionaryObject(dict, PdfObject):
     def raw_get(self, key,
                 decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT):
         """
+        .. versionchanged:: 0.14.0
+
+            ``decrypt`` parameter is no longer boolean
+
         Get a value from a dictionary without dereferencing.
         In other words, if the value corresponding to the given key is of type
         :class:`.IndirectObject`, the indirect reference will not be resolved.
@@ -1553,6 +1562,38 @@ def proxy_encrypted_obj(encrypted_obj, handler):
 
 
 class DecryptedObjectProxy(PdfObject):
+    """
+    Internal proxy class that allows transparent on-demand encryption
+    of objects.
+
+    .. warning::
+        Most public-facing APIs won't leave you to deal with these *directly*
+        (that's half the reason this class exists in the first place), and
+        the API of this class is considered internal.
+
+        However, for reasons related to the historical PyPDF2 codebase from
+        which pyHanko's object handling code ultimately derives, there are
+        some Python builtins that might cause these wrapper objects to
+        inadvertently "leak". Please `tell us about such cases
+        <https://github.com/MatthiasValvekens/pyHanko/discussions>`_ so we can
+        make those types of access more convenient and robust.
+
+    .. danger::
+        The ``__eq__`` implementation on this class is not safe for general use,
+        due to the fact that certain structures in PDF are exempt from
+        encryption. Only compare proxy objects with ``==`` in areas of the
+        document where these exemptions don't apply.
+
+    :param raw_object:
+        A raw object, typically as-parsed from a PDF file.
+    :param handler:
+        The security handler governing this object.
+    """
+
+    raw_object: PdfObject
+    """
+    The underlying raw object, in its encrypted state.
+    """
 
     def __init__(self, raw_object: PdfObject, handler):
         self.raw_object = raw_object
@@ -1560,7 +1601,16 @@ class DecryptedObjectProxy(PdfObject):
         self.handler = handler
 
     @property
-    def decrypted(self):
+    def decrypted(self) -> PdfObject:
+        """
+        The decrypted PDF object exposed as a property.
+
+        If this object is a container object, its constituent parts will be
+        wrapped in :class:`.DecryptedObjectProxy` as well, in order to defer
+        further decryption until the values are requested through a getter
+        method on the container.
+        """
+
         decrypted = self._decrypted
         if decrypted is not None:
             return decrypted
