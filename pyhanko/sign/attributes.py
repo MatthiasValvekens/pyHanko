@@ -154,6 +154,8 @@ class TSTProvider(CMSAttributeProvider):
 
 class SignedAttributeProviderSpec(abc.ABC):
     """
+    .. versionadded:: 0.14.0
+
     Interface for setting up signed attributes, independently of the
     :class:`~pyhanko.sign.signers.pdf_cms.Signer` hierarchy.
     """
@@ -173,6 +175,8 @@ class SignedAttributeProviderSpec(abc.ABC):
 
 class UnsignedAttributeProviderSpec(abc.ABC):
     """
+    .. versionadded:: 0.14.0
+
     Interface for setting up unsigned attributes, independently of the
     :class:`~pyhanko.sign.signers.pdf_cms.Signer` hierarchy.
     """

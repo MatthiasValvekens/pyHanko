@@ -62,6 +62,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CMSSignedAttributes:
+    """
+    .. versionadded:: 0.14.0
+
+    Serialisable container class describing input for various signed attributes
+    in a signature CMS object.
+    """
 
     signing_time: Optional[datetime] = None
     """
@@ -79,6 +85,10 @@ class CMSSignedAttributes:
 class PdfCMSSignedAttributes(CMSSignedAttributes):
     """
     .. versionadded:: 0.7.0
+
+    .. versionchanged:: 0.14.0
+        Split off some fields into :class:`.CMSSignedAttributes`.
+
 
     Serialisable container class describing input for various signed attributes
     in a CMS object for a PDF signature.
@@ -598,12 +608,17 @@ class Signer:
         """
         raise NotImplementedError
 
-    async def unsigned_attrs(self, digest_algorithm, signature: bytes,
+    async def unsigned_attrs(self, digest_algorithm: str,
+                             signature: bytes,
+                             signed_attrs: cms.CMSAttributes,
                              timestamper=None, dry_run=False) \
             -> Optional[cms.CMSAttributes]:
         """
         .. versionchanged:: 0.9.0
             Made asynchronous _(breaking change)_
+
+        .. versionchanged:: 0.14.0
+            Added ``signed_attrs`` parameter _(breaking change)_
 
         Compute the unsigned attributes to embed into the CMS object.
         This function is called after signing the hash of the signed attributes
