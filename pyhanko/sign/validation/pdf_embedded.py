@@ -57,7 +57,7 @@ from .status import (
 __all__ = [
     'EmbeddedPdfSignature', 'DocMDPInfo', 'read_certification_data',
     'async_validate_pdf_signature', 'async_validate_pdf_timestamp',
-    'report_seed_value_validation'
+    'report_seed_value_validation', 'extract_contents'
 ]
 
 logger = logging.getLogger(__name__)
@@ -86,6 +86,36 @@ def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
         raise SignatureValidationError(
             "Failed to read document permissions", e
         )
+
+
+def extract_contents(sig_object: generic.DictionaryObject) -> bytes:
+    """
+    Internal function to extract the (DER-encoded) signature bytes from a PDF
+    signature dictionary.
+
+    :param sig_object:
+        A signature dictionary.
+    :return:
+        The extracted contents as a byte string.
+    """
+
+    try:
+        cms_content = sig_object.raw_get('/Contents', decrypt=False)
+    except KeyError:
+        raise misc.PdfReadError('Could not read /Contents entry in signature')
+
+    # we need the cms_content raw, so we need to deencapsulate a couple
+    # pieces of data here.
+    if isinstance(cms_content, generic.DecryptedObjectProxy):
+        # it was a direct reference, so just grab the raw one
+        cms_content = cms_content.raw_object
+    elif isinstance(cms_content, generic.IndirectObject):
+        raise misc.PdfReadError("/Contents in signature must be direct")
+
+    if not isinstance(cms_content,
+                      (generic.TextStringObject, generic.ByteStringObject)):
+        raise misc.PdfReadError('/Contents must be string-like')
+    return cms_content.original_bytes
 
 
 # TODO clarify in docs that "external timestamp" is always None when dealing
@@ -121,27 +151,14 @@ class EmbeddedPdfSignature:
         self.sig_object = sig_object = sig_object_ref.get_object()
         assert isinstance(sig_object, generic.DictionaryObject)
         try:
-            pkcs7_content = sig_object.raw_get('/Contents', decrypt=False)
-            self.byte_range = sig_object['/ByteRange']
+            self.byte_range = sig_object.raw_get('/ByteRange')
         except KeyError:
             raise misc.PdfReadError(
-                'Signature PDF object is not correctly formatted'
+                'Could not read /ByteRange entry in signature'
             )
+        self.pkcs7_content = cms_content = extract_contents(sig_object)
 
-        # we need the pkcs7_content raw, so we need to deencapsulate a couple
-        # pieces of data here.
-        if isinstance(pkcs7_content, generic.DecryptedObjectProxy):
-            # it was a direct reference, so just grab the raw one
-            pkcs7_content = pkcs7_content.raw_object
-        elif isinstance(pkcs7_content, generic.IndirectObject):
-            raise misc.PdfReadError("/Contents in signature must be direct")
-
-        if not isinstance(pkcs7_content,
-                          (generic.TextStringObject, generic.ByteStringObject)):
-            raise misc.PdfReadError('/Contents must be string-like')
-        self.pkcs7_content = pkcs7_content
-
-        message = cms.ContentInfo.load(pkcs7_content.original_bytes)
+        message = cms.ContentInfo.load(cms_content)
         signed_data = message['content']
         self.signed_data: cms.SignedData = signed_data
 

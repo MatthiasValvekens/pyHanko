@@ -687,7 +687,7 @@ def test_sig_no_contents():
     out = _tamper_with_sig_obj(tamper)
 
     r = PdfFileReader(out)
-    with pytest.raises(PdfReadError, match='.*not correctly formatted.*'):
+    with pytest.raises(PdfReadError, match='.*Could not read /Contents.*'):
         # noinspection PyStatementEffect
         r.embedded_signatures[0]
 
