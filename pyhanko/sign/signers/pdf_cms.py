@@ -7,7 +7,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
-from typing import IO, Iterable, List, Optional, Union
+from typing import IO, Callable, Iterable, List, Optional, Union
 
 import tzlocal
 from asn1crypto import algos, cms, core, keys
@@ -28,7 +28,11 @@ from pyhanko_certvalidator._asyncio_compat import to_thread
 from pyhanko.pdf_utils import misc
 from pyhanko.sign import attributes
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
-from pyhanko.sign.attributes import CMSAttributeProvider
+from pyhanko.sign.attributes import (
+    CMSAttributeProvider,
+    SignedAttributeProviderSpec,
+    UnsignedAttributeProviderSpec,
+)
 from pyhanko.sign.general import (
     CertificateStore,
     SigningError,
@@ -57,13 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class PdfCMSSignedAttributes:
-    """
-    .. versionadded:: 0.7.0
-
-    Serialisable container class describing input for various signed attributes
-    in a CMS object for a PDF signature.
-    """
+class CMSSignedAttributes:
 
     signing_time: Optional[datetime] = None
     """
@@ -71,14 +69,24 @@ class PdfCMSSignedAttributes:
     context.
     """
 
-    adobe_revinfo_attr: Optional[asn1_pdf.RevocationInfoArchival] = None
-    """
-    Adobe-style signed revocation info attribute.
-    """
-
     cades_signed_attrs: Optional[CAdESSignedAttrSpec] = None
     """
     Optional settings for CAdES-style signed attributes.
+    """
+
+
+@dataclass(frozen=True)
+class PdfCMSSignedAttributes(CMSSignedAttributes):
+    """
+    .. versionadded:: 0.7.0
+
+    Serialisable container class describing input for various signed attributes
+    in a CMS object for a PDF signature.
+    """
+
+    adobe_revinfo_attr: Optional[asn1_pdf.RevocationInfoArchival] = None
+    """
+    Adobe-style signed revocation info attribute.
     """
 
 
@@ -280,6 +288,9 @@ class Signer:
     def __init__(self, prefer_pss=False, embed_roots=True):
         self.prefer_pss = prefer_pss
         self.embed_roots = embed_roots
+        self.signed_attr_prov_spec: Optional[SignedAttributeProviderSpec] = None
+        self.unsigned_attr_prov_spec: Optional[UnsignedAttributeProviderSpec] \
+            = None
 
     def get_signature_mechanism(self, digest_algorithm):
         """
@@ -389,6 +400,38 @@ class Signer:
         if revinfo_dict:
             return asn1_pdf.RevocationInfoArchival(revinfo_dict)
 
+    def _signed_attr_provider_spec(self,
+                                   attr_settings: PdfCMSSignedAttributes,
+                                   timestamper=None, use_cades=False,
+                                   is_pdf_sig=True):
+        """
+        Internal method to select a default attribute provider spec if none
+        is available already.
+        """
+
+        if self.signed_attr_prov_spec is not None:
+            return self.signed_attr_prov_spec
+        elif use_cades:
+            return CAdESSignedAttributeProviderSpec(
+                attr_settings=attr_settings,
+                signing_cert=self.signing_cert, is_pades=is_pdf_sig,
+                timestamper=timestamper
+            )
+        elif is_pdf_sig:
+            return GenericPdfSignedAttributeProviderSpec(
+                attr_settings=attr_settings,
+                signing_cert=self.signing_cert,
+                signature_mechanism=self.get_signature_mechanism,
+                timestamper=timestamper
+            )
+        else:
+            return GenericCMSSignedAttributeProviderSpec(
+                attr_settings=attr_settings,
+                signing_cert=self.signing_cert,
+                signature_mechanism=self.get_signature_mechanism,
+                timestamper=timestamper
+            )
+
     def _signed_attr_providers(self, data_digest: bytes, digest_algorithm: str,
                                attr_settings: PdfCMSSignedAttributes,
                                timestamper=None, use_cades=False,
@@ -396,51 +439,36 @@ class Signer:
         """
         Prepare "standard" signed attribute providers. Internal API.
         """
-        yield attributes.SigningCertificateV2Provider(
-            signing_cert=self.signing_cert
+
+        spec = self._signed_attr_provider_spec(
+            attr_settings=attr_settings,
+            timestamper=timestamper,
+            use_cades=use_cades,
+            is_pdf_sig=is_pdf_sig
         )
-        if not is_pdf_sig or not use_cades:
-            # NOTE: PAdES actually forbids this, but CAdES requires it!
-            signing_time = attr_settings.signing_time
-            if signing_time is None and not is_pdf_sig and use_cades:
-                # Ensure CAdES mandate is followed
-                signing_time = datetime.now(tz=tzlocal.get_localzone())
-            if signing_time is not None:
-                yield attributes.SigningTimeProvider(timestamp=signing_time)
-        if not use_cades:
-            if attr_settings.adobe_revinfo_attr is not None:
-                yield attributes.AdobeRevinfoProvider(
-                    value=attr_settings.adobe_revinfo_attr
-                )
 
-            # TODO not sure if PAdES/CAdES allow this, need to check.
-            #  It *should*, but perhaps the version of CMS it is based on is too
-            #  old, or it might not allow undefined signed attributes.
-            # In the meantime, we only add this attribute to non-PAdES sigs
-            yield attributes.CMSAlgorithmProtectionProvider(
-                digest_algo=digest_algorithm,
-                signature_algo=self.get_signature_mechanism(digest_algorithm)
-            )
-        cades_meta = attr_settings.cades_signed_attrs
-        # apply CAdES-specific attributes regardless of use_pades
-        if cades_meta is not None:
-            yield from cades_meta.prepare_providers(
-                message_digest=data_digest,
-                md_algorithm=digest_algorithm,
-                timestamper=timestamper
-            )
+        return spec.signed_attr_providers(
+            data_digest=data_digest, digest_algorithm=digest_algorithm,
+        )
 
-    def _unsigned_attr_providers(self, digest_algorithm, signature: bytes,
+    def _unsigned_attr_provider_spec(self,
+                                     timestamper: Optional[TimeStamper] = None):
+        if self.unsigned_attr_prov_spec is not None:
+            return self.unsigned_attr_prov_spec
+        else:
+            return DefaultUnsignedAttributes(timestamper=timestamper)
+
+    def _unsigned_attr_providers(self, digest_algorithm: str, signature: bytes,
+                                 signed_attrs: cms.CMSAttributes,
                                  timestamper: Optional[TimeStamper] = None):
         """
         Prepare "standard" unsigned attribute providers. Internal API.
         """
-        if timestamper is not None:
-            # the timestamp server needs to cross-sign our signature
-            yield attributes.TSTProvider(
-                digest_algorithm=digest_algorithm, data_to_ts=signature,
-                timestamper=timestamper
-            )
+        spec = self._unsigned_attr_provider_spec(timestamper)
+        return spec.unsigned_attr_providers(
+            digest_algorithm=digest_algorithm, signature=signature,
+            signed_attrs=signed_attrs
+        )
 
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
         """
@@ -589,6 +617,8 @@ class Signer:
 
         :param digest_algorithm:
             Digest algorithm used to hash the signed attributes.
+        :param signed_attrs:
+            Signed attributes of the signature.
         :param signature:
             Signature of the signed attribute hash.
         :param timestamper:
@@ -601,7 +631,9 @@ class Signer:
             The unsigned attributes to add, or ``None``.
         """
         provs = self._unsigned_attr_providers(
-            digest_algorithm=digest_algorithm, signature=signature,
+            signature=signature,
+            signed_attrs=signed_attrs,
+            digest_algorithm=digest_algorithm,
             timestamper=timestamper
         )
         attrs = await format_attributes(list(provs), dry_run=dry_run)
@@ -796,7 +828,9 @@ class Signer:
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
         )
         unsigned_attrs = await self.unsigned_attrs(
-            digest_algorithm, signature, timestamper=timestamper,
+            digest_algorithm, signature,
+            signed_attrs=signed_attrs,
+            timestamper=timestamper,
             dry_run=dry_run
         )
         return self._package_signature(
@@ -1360,33 +1394,141 @@ class ExternalSigner(Signer):
         return self._signature_value
 
 
-# TODO consider deprecating the current signed_attrs kwargs in favour of this
-#  dataclass
-
-@dataclass(frozen=True)
-class PdfCMSSignedAttributes:
+class GenericCMSSignedAttributeProviderSpec(SignedAttributeProviderSpec):
     """
-    .. versionadded:: 0.7.0
-
-    Serialisable container class describing input for various signed attributes
-    in a CMS object for a PDF signature.
+    Signed attribute provider spec for generic CMS signatures.
     """
 
-    signing_time: Optional[datetime] = None
+    def __init__(self,
+                 attr_settings: CMSSignedAttributes,
+                 signing_cert: Optional[x509.Certificate],
+                 signature_mechanism: Union[
+                     Callable[[str], algos.SignedDigestAlgorithm],
+                     None
+                 ],
+                 timestamper: Optional[TimeStamper]):
+        self.signing_cert = signing_cert
+        self.attr_settings = attr_settings
+        self.signature_mechanism = signature_mechanism
+        self.timestamper = timestamper
+
+    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
+            -> Iterable[CMSAttributeProvider]:
+        attr_settings = self.attr_settings
+        if self.signing_cert is not None:
+            yield attributes.SigningCertificateV2Provider(
+                signing_cert=self.signing_cert
+            )
+        signing_time = attr_settings.signing_time
+        if signing_time is not None:
+            yield attributes.SigningTimeProvider(timestamp=signing_time)
+        if attr_settings.cades_signed_attrs is not None:
+            yield from attr_settings.cades_signed_attrs.prepare_providers(
+                message_digest=data_digest,
+                md_algorithm=digest_algorithm,
+                timestamper=self.timestamper
+            )
+
+        if self.signature_mechanism is not None:
+            mech = self.signature_mechanism(digest_algorithm)
+            # TODO not sure if PAdES/CAdES allow this, need to check.
+            #  It *should*, but perhaps the version of CMS it is based on is too
+            #  old, or it might not allow undefined signed attributes.
+            # In the meantime, we only add this attribute to non-PAdES sigs
+            yield attributes.CMSAlgorithmProtectionProvider(
+                digest_algo=digest_algorithm,
+                signature_algo=mech
+            )
+
+
+class GenericPdfSignedAttributeProviderSpec(GenericCMSSignedAttributeProviderSpec):
     """
-    Timestamp for the ``signingTime`` attribute. Will be ignored in a PAdES
-    context.
+    Signed attribute provider spec for generic PDF signatures.
     """
 
-    adobe_revinfo_attr: Optional[cms.CMSAttribute] = None
+    def __init__(self,
+                 attr_settings: PdfCMSSignedAttributes,
+                 signing_cert: Optional[x509.Certificate],
+                 signature_mechanism: Union[
+                     Callable[[str], algos.SignedDigestAlgorithm],
+                     None
+                 ],
+                 timestamper: Optional[TimeStamper]):
+        super().__init__(
+            attr_settings=attr_settings,
+            signing_cert=signing_cert,
+            signature_mechanism=signature_mechanism,
+            timestamper=timestamper
+        )
+
+    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
+            -> Iterable[CMSAttributeProvider]:
+        yield from super().signed_attr_providers(
+            data_digest=data_digest, digest_algorithm=digest_algorithm
+
+        )
+        attr_settings = self.attr_settings
+        assert isinstance(attr_settings, PdfCMSSignedAttributes)
+        if attr_settings.adobe_revinfo_attr is not None:
+            yield attributes.AdobeRevinfoProvider(
+                value=attr_settings.adobe_revinfo_attr)
+
+
+class CAdESSignedAttributeProviderSpec(SignedAttributeProviderSpec):
     """
-    Adobe-style signed revocation info attribute.
+    Signed attribute provider spec for CAdES and PAdES signatures.
     """
 
-    cades_signed_attrs: Optional[CAdESSignedAttrSpec] = None
+    def __init__(self, attr_settings: CMSSignedAttributes,
+                 signing_cert: x509.Certificate, is_pades: bool,
+                 timestamper: Optional[TimeStamper]):
+        self.signing_cert = signing_cert
+        self.attr_settings = attr_settings
+        self.is_pades = is_pades
+        self.timestamper = timestamper
+
+    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
+            -> Iterable[CMSAttributeProvider]:
+
+        yield attributes.SigningCertificateV2Provider(
+            signing_cert=self.signing_cert
+        )
+        attr_settings = self.attr_settings
+        if not self.is_pades:
+            # NOTE: PAdES actually forbids this, but CAdES requires it!
+            signing_time = attr_settings.signing_time
+            if signing_time is None:
+                # Ensure CAdES mandate is followed
+                signing_time = datetime.now(tz=tzlocal.get_localzone())
+            if signing_time is not None:
+                yield attributes.SigningTimeProvider(timestamp=signing_time)
+        cades_meta = attr_settings.cades_signed_attrs
+        if cades_meta is not None:
+            yield from cades_meta.prepare_providers(
+                message_digest=data_digest,
+                md_algorithm=digest_algorithm,
+                timestamper=self.timestamper
+            )
+
+
+class DefaultUnsignedAttributes(UnsignedAttributeProviderSpec):
     """
-    Optional settings for CAdES-style signed attributes.
+    Default unsigned attribute provider spec.
     """
+
+    def __init__(self, timestamper: Optional[TimeStamper]):
+        self.timestamper = timestamper
+
+    def unsigned_attr_providers(
+            self, digest_algorithm, signed_attrs: cms.CMSAttributes,
+            signature: bytes) -> Iterable[CMSAttributeProvider]:
+        timestamper = self.timestamper
+        if timestamper is not None:
+            # the timestamp server needs to cross-sign our signature
+            yield attributes.TSTProvider(
+                digest_algorithm=digest_algorithm, data_to_ts=signature,
+                timestamper=timestamper
+            )
 
 
 RSA_THRESHOLDS = [(2048, 'sha256'), (3072, 'sha384')]

@@ -1,5 +1,6 @@
+import abc
 from datetime import datetime
-from typing import Optional
+from typing import Iterable, Optional
 
 from asn1crypto import algos, cms, core
 from asn1crypto import pdf as asn1_pdf
@@ -149,3 +150,44 @@ class TSTProvider(CMSAttributeProvider):
         else:
             ts_coro = self.timestamper.async_timestamp(digest, digest_algorithm)
         return await ts_coro
+
+
+class SignedAttributeProviderSpec(abc.ABC):
+    """
+    Interface for setting up signed attributes, independently of the
+    :class:`~pyhanko.sign.signers.pdf_cms.Signer` hierarchy.
+    """
+
+    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
+            -> Iterable[CMSAttributeProvider]:
+        """
+        Lazily set up signed attribute providers.
+
+        :param data_digest:
+            The digest of the data to be signed.
+        :param digest_algorithm:
+            The digest algorithm used.
+        """
+        raise NotImplementedError
+
+
+class UnsignedAttributeProviderSpec(abc.ABC):
+    """
+    Interface for setting up unsigned attributes, independently of the
+    :class:`~pyhanko.sign.signers.pdf_cms.Signer` hierarchy.
+    """
+
+    def unsigned_attr_providers(
+            self, signature: bytes, signed_attrs: cms.CMSAttributes,
+            digest_algorithm: str) -> Iterable[CMSAttributeProvider]:
+        """
+        Lazily set up unsigned attribute providers.
+
+        :param signature:
+            The signature computed over the signed attributes.
+        :param signed_attrs:
+            Signed attributes over which the signature was taken.
+        :param digest_algorithm:
+            The digest algorithm used.
+        """
+        raise NotImplementedError
