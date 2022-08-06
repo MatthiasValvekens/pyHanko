@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 from io import BytesIO
+from typing import Iterable
 
 import pytest
 import pytz
@@ -36,7 +37,11 @@ from pyhanko.sign.ades.cades_asn1 import (
     SignedAssertion,
     SignerAttributesV2,
 )
-from pyhanko.sign.attributes import CMSAttributeProvider, TSTProvider
+from pyhanko.sign.attributes import (
+    CMSAttributeProvider,
+    SignedAttributeProviderSpec,
+    TSTProvider,
+)
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.general import SigningError, find_cms_attribute
 from pyhanko.sign.signers.pdf_signer import (
@@ -830,9 +835,10 @@ def test_sign_with_content_sig():
 @pytest.mark.asyncio
 async def test_sign_with_wrong_content_sig():
 
-    class CustomSigner(signers.SimpleSigner):
-        def _signed_attr_providers(self, *args, **kwargs):
-            yield from super()._signed_attr_providers(*args, **kwargs)
+    class Spec(SignedAttributeProviderSpec):
+        def signed_attr_providers(self, data_digest: bytes,
+                                  digest_algorithm: str) \
+                -> Iterable[CMSAttributeProvider]:
             yield TSTProvider(
                 digest_algorithm='sha256',
                 data_to_ts=b'\xde\xad\xbe\xef',
@@ -843,11 +849,12 @@ async def test_sign_with_wrong_content_sig():
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
     )
-    signer = CustomSigner(
+    signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
         cert_registry=FROM_CA.cert_registry
     )
+    signer.signed_attr_prov_spec = Spec()
     out = await signers.async_sign_pdf(
         w, meta, signer=signer, timestamper=DUMMY_TS
     )

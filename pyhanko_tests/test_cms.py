@@ -26,7 +26,12 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, SignerAttrSpec
 from pyhanko.sign.ades.report import AdESIndeterminate, AdESStatus
-from pyhanko.sign.attributes import CMSAttributeProvider, TSTProvider
+from pyhanko.sign.attributes import (
+    CMSAttributeProvider,
+    SignedAttributeProviderSpec,
+    TSTProvider,
+    UnsignedAttributeProviderSpec,
+)
 from pyhanko.sign.general import (
     CMSExtractionError,
     SigningError,
@@ -287,20 +292,71 @@ async def test_detached_cms_with_content_tst():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_detached_cms_with_wrong_content_tst():
-    class CustomSigner(signers.SimpleSigner):
-        def _signed_attr_providers(self, *args, **kwargs):
-            yield from super()._signed_attr_providers(*args, **kwargs)
+async def test_detached_cms_with_wrong_tst():
+
+    class Spec(UnsignedAttributeProviderSpec):
+
+        def unsigned_attr_providers(
+                self, signature: bytes, signed_attrs: cms.CMSAttributes,
+                digest_algorithm: str):
             yield TSTProvider(
-                digest_algorithm='sha256', data_to_ts=b'\xde\xad\xbe\xef',
-                timestamper=DUMMY_TS, attr_type='content_time_stamp',
+                digest_algorithm='sha256',
+                data_to_ts=b'\xde\xad\xbe\xef',
+                timestamper=DUMMY_TS,
             )
 
-    signer = CustomSigner(
+    signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
         cert_registry=FROM_CA.cert_registry
     )
+    signer.unsigned_attr_prov_spec = Spec()
+    signature = await signer.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        signed_attr_settings=PdfCMSSignedAttributes(
+            cades_signed_attrs=CAdESSignedAttrSpec(
+                timestamp_content=True
+            )
+        )
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    status = await async_validate_detached_cms(
+        b'Hello world!', signature['content']
+    )
+    assert status.signer_reported_dt is None
+    assert not status.timestamp_validity.intact
+    assert not status.timestamp_validity.valid
+    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.content_timestamp_validity
+    assert status.content_timestamp_validity.intact
+    assert status.content_timestamp_validity.valid
+    assert status.content_timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.valid
+    assert status.intact
+    assert 'CONTENT_TIMESTAMP_TOKEN<INTACT:UNTRUSTED>' in status.summary()
+    assert 'TIMESTAMP_TOKEN<INVALID>' in status.summary()
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_detached_cms_with_wrong_content_tst():
+
+    class Spec(SignedAttributeProviderSpec):
+        def signed_attr_providers(self, data_digest: bytes,
+                                  digest_algorithm: str):
+            yield TSTProvider(
+                digest_algorithm='sha256',
+                data_to_ts=b'\xde\xad\xbe\xef',
+                timestamper=DUMMY_TS,
+                attr_type='content_time_stamp',
+            )
+
+    signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    signer.signed_attr_prov_spec = Spec()
     signature = await signer.async_sign_general_data(
         b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
     )
