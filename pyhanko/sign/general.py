@@ -34,13 +34,28 @@ __all__ = [
     'load_private_key_from_pemder', 'get_pyca_cryptography_hash',
     'optimal_pss_params', 'process_pss_params', 'as_signing_certificate',
     'as_signing_certificate_v2', 'match_issuer_serial',
-    'check_ess_certid', 'CMSExtractionError', 'byte_range_digest'
+    'check_ess_certid', 'CMSExtractionError', 'byte_range_digest',
+    'ValueErrorWithMessage', 'CMSStructuralError'
 ]
 
 logger = logging.getLogger(__name__)
 
 
-class CMSExtractionError(ValueError):
+class ValueErrorWithMessage(ValueError):
+    """
+    Value error with a failure message attribute that can be conveniently
+    extracted, instead of having to rely on extracting exception args
+    generically.
+    """
+    def __init__(self, failure_message):
+        self.failure_message = str(failure_message)
+
+
+class CMSStructuralError(ValueErrorWithMessage):
+    """Structural error in a CMS object."""
+
+
+class CMSExtractionError(ValueErrorWithMessage):
     pass
 
 
@@ -74,6 +89,11 @@ def find_cms_attribute(attrs, name):
     """
     Find and return CMS attribute values of a given type.
 
+    .. note::
+        This function will also check for duplicates, but not in the sense
+        of multivalued attributes. In other words: multivalued attributes
+        are allowed; listing the same attribute OID more than once is not.
+
     :param attrs:
         The :class:`.cms.CMSAttributes` object.
     :param name:
@@ -83,12 +103,24 @@ def find_cms_attribute(attrs, name):
     :raise NonexistentAttributeError:
         Raised when no such type entry could be found in the
         :class:`.cms.CMSAttributes` object.
+    :raise CMSStructuralError:
+        Raised if the given OID occurs more than once.
     """
+
+    found_values = None
     if attrs:
         for attr in attrs:
             if attr['type'].native == name:
-                return attr['values']
-    raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
+                if found_values is not None:
+                    raise CMSStructuralError(
+                        f"Attribute {name!r} was duplicated"
+                    )
+                found_values = attr['values']
+
+    if found_values is not None:
+        return found_values
+    else:
+        raise NonexistentAttributeError(f'Unable to locate attribute {name}.')
 
 
 def find_unique_cms_attribute(attrs, name):

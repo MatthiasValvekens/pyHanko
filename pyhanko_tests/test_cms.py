@@ -34,6 +34,7 @@ from pyhanko.sign.attributes import (
 )
 from pyhanko.sign.general import (
     CMSExtractionError,
+    CMSStructuralError,
     SigningError,
     as_signing_certificate,
     as_signing_certificate_v2,
@@ -383,6 +384,38 @@ async def test_detached_cms_with_wrong_content_tst():
 
 
 @freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_detached_cms_with_duplicated_attr():
+
+    class CustomProvider(CMSAttributeProvider):
+        attribute_type = 'message_digest'
+
+        async def build_attr_value(self, dry_run=False):
+            return b'\xde\xad\xbe\xef'
+
+    class Spec(SignedAttributeProviderSpec):
+        def signed_attr_providers(self, data_digest: bytes,
+                                  digest_algorithm: str):
+            yield CustomProvider()
+
+    signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry
+    )
+    signer.signed_attr_prov_spec = Spec()
+    signature = await signer.async_sign_general_data(
+        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+    )
+    signature = cms.ContentInfo.load(signature.dump())
+    with pytest.raises(SignatureValidationError, match='structural'):
+        await async_validate_cms_signature(
+            signature['content'],
+            raw_digest=hashlib.sha256(b'Hello world!').digest(),
+        )
+
+
+@freeze_time('2020-11-01')
 @pytest.mark.parametrize('content,detach', [
     (b'This is not a TST!', True),
     (b'This is not a TST!', False),
@@ -467,7 +500,9 @@ def test_overspecify_cms_digest_algo():
         )
 
 
-def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
+def _tamper_with_signed_attrs(attr_name, *, duplicate=False,
+                              oid_duplicate=False,
+                              delete=False,
                               replace_with=None, resign=False):
     input_buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(input_buf)
@@ -512,6 +547,8 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False, delete=False,
     elif duplicate:
         vals = signed_attrs[ix]['values']
         vals.append(vals[0])
+    elif oid_duplicate:
+        signed_attrs.append(signed_attrs[ix])
     else:
         vals = signed_attrs[ix]['values']
         vals[0] = replace_with
@@ -603,6 +640,21 @@ def test_duplicate_content_type():
             emb.signer_info, emb.signer_cert, 'data', digest
         )
     assert exc_info.value.ades_status == AdESStatus.FAILED
+
+
+def test_duplicate_content_type_oid():
+    output = _tamper_with_signed_attrs(
+        'content_type', oid_duplicate=True, resign=True
+    )
+
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+    digest = emb.compute_digest()
+
+    with pytest.raises(CMSStructuralError):
+        validate_sig_integrity(
+            emb.signer_info, emb.signer_cert, 'data', digest
+        )
 
 
 def test_no_content_type():

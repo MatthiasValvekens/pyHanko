@@ -1,24 +1,13 @@
 from typing import Optional
 
 from ..ades.report import AdESIndeterminate, AdESStatus, AdESSubIndic
+from ..general import ValueErrorWithMessage
 
 __all__ = [
     'SignatureValidationError', 'WeakHashAlgorithmError',
     'ValidationInfoReadingError', 'NoDSSFoundError',
-    'SigSeedValueValidationError',
-    'CMSStructuralError', 'CMSAlgorithmProtectionError',
-    'ValueErrorWithMessage'
+    'SigSeedValueValidationError', 'CMSAlgorithmProtectionError'
 ]
-
-
-class ValueErrorWithMessage(ValueError):
-    """
-    Value error with a failure message attribute that can be conveniently
-    extracted, instead of having to rely on extracting exception args
-    generically.
-    """
-    def __init__(self, failure_message):
-        self.failure_message = str(failure_message)
 
 
 class ValidationInfoReadingError(ValueErrorWithMessage):
@@ -29,10 +18,6 @@ class ValidationInfoReadingError(ValueErrorWithMessage):
 class NoDSSFoundError(ValidationInfoReadingError):
     def __init__(self):
         super().__init__("No DSS found")
-
-
-class CMSStructuralError(ValueErrorWithMessage):
-    """Structural error in a CMS object."""
 
 
 class CMSAlgorithmProtectionError(ValueErrorWithMessage):

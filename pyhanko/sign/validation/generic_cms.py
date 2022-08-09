@@ -12,6 +12,7 @@ from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
     CMSExtractionError,
+    CMSStructuralError,
     MultivaluedAttributeError,
     NonexistentAttributeError,
     SignedDataCerts,
@@ -114,10 +115,11 @@ def validate_algorithm_protection(
             attrs, 'cms_algorithm_protection'
         )
     except NonexistentAttributeError:
+        # TODO make this optional to enforce?
         cms_algid_protection = None
     except MultivaluedAttributeError:
-        raise errors.CMSStructuralError(
-            "Multiple CMS protection attributes present",
+        raise CMSStructuralError(
+            "Multiple CMS algorithm protection attributes present",
         )
     if cms_algid_protection is not None:
         auth_digest_algorithm = \
@@ -201,7 +203,7 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
                 claimed_digest_algorithm_obj=digest_algorithm_obj,
                 claimed_signature_algorithm_obj=signature_algorithm
             )
-        except errors.CMSStructuralError as e:
+        except CMSStructuralError as e:
             raise errors.SignatureValidationError(
                 e.failure_message, ades_subindication=AdESFailure.FORMAT_FAILURE
             )
@@ -331,10 +333,15 @@ async def cms_basic_validation(
         raw_digest = md.finalize()
 
     # first, do the cryptographic identity checks
-    intact, valid = validate_sig_integrity(
-        signer_info, cert, expected_content_type=expected_content_type,
-        actual_digest=raw_digest, weak_hash_algorithms=weak_hash_algos
-    )
+    try:
+        intact, valid = validate_sig_integrity(
+            signer_info, cert, expected_content_type=expected_content_type,
+            actual_digest=raw_digest, weak_hash_algorithms=weak_hash_algos
+        )
+    except CMSStructuralError as e:
+        raise errors.SignatureValidationError(
+            "CMS structural error: " + e.failure_message
+        ) from e
 
     # if the data being encapsulated by the signature is itself invalid,
     #  this flag is set
