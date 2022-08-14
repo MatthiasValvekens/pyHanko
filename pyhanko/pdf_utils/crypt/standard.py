@@ -395,6 +395,7 @@ class StandardSecurityHandler(SecurityHandler):
         desired_user_pass=None,
         perms: StandardPermissions = StandardPermissions.allow_everything(),
         encrypt_metadata=True,
+        pdf_mac: bool = True,
         **kwargs,
     ):
         """
@@ -413,6 +414,8 @@ class StandardSecurityHandler(SecurityHandler):
         :param encrypt_metadata:
             Whether to set up the security handler for encrypting metadata
             as well.
+        :param pdf_mac:
+            Include an ISO 32004 MAC.
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
@@ -443,6 +446,9 @@ class StandardSecurityHandler(SecurityHandler):
         )
         assert len(oe_seed) == 32
 
+        if pdf_mac:
+            # clear bit 13 (1-indexed)
+            perms &= ~StandardPermissions.TOLERATE_MISSING_PDF_MAC
         perms_bytes = perms.as_bytes()[::-1]
         extd_perms_bytes = (
             perms_bytes
@@ -462,6 +468,11 @@ class StandardSecurityHandler(SecurityHandler):
             encryptor.update(extd_perms_bytes) + encryptor.finalize()
         )  # lgtm
 
+        if pdf_mac:
+            kdf_salt = secrets.token_bytes(32)
+        else:
+            kdf_salt = None
+
         sh = cls(
             version=SecurityHandlerVersion.AES256,
             revision=StandardSecuritySettingsRevision.AES256,
@@ -473,6 +484,7 @@ class StandardSecurityHandler(SecurityHandler):
             ueseed=ue_seed,
             encrypted_perms=encrypted_perms,
             encrypt_metadata=encrypt_metadata,
+            kdf_salt=kdf_salt,
             **kwargs,
         )
         sh._shared_key = encryption_key
@@ -511,6 +523,7 @@ class StandardSecurityHandler(SecurityHandler):
         encrypt_metadata=True,
         crypt_filter_config: Optional[CryptFilterConfiguration] = None,
         compat_entries=True,
+        kdf_salt: Optional[bytes] = None,
     ):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
@@ -534,9 +547,13 @@ class StandardSecurityHandler(SecurityHandler):
             crypt_filter_config,
             encrypt_metadata=encrypt_metadata,
             compat_entries=compat_entries,
+            kdf_salt=kdf_salt,
         )
         self.revision = revision
         self.perms = perm_flags
+        self._mac_required = not (
+            self.perms & StandardPermissions.TOLERATE_MISSING_PDF_MAC
+        )
         if revision >= StandardSecuritySettingsRevision.AES256:
             self.__class__._check_r6_values(
                 udata, odata, oeseed, ueseed, encrypted_perms
@@ -608,6 +625,16 @@ class StandardSecurityHandler(SecurityHandler):
             encrypt_metadata=encrypt_dict.get_and_apply(
                 '/EncryptMetadata', bool, default=True
             ),
+            kdf_salt=encrypt_dict.get_and_apply(
+                '/KDFSalt',
+                lambda x: (
+                    x.original_bytes
+                    if isinstance(
+                        x, (generic.TextStringObject, generic.ByteStringObject)
+                    )
+                    else None
+                ),
+            ),
         )
 
     @classmethod
@@ -623,12 +650,18 @@ class StandardSecurityHandler(SecurityHandler):
             **cls.gather_encryption_metadata(encrypt_dict),
         )
 
+    @property
+    def pdf_mac_enabled(self) -> bool:
+        return super().pdf_mac_enabled or self._mac_required
+
     def as_pdf_object(self):
         result = generic.DictionaryObject()
         result['/Filter'] = generic.NameObject('/Standard')
         result['/O'] = generic.ByteStringObject(self.odata)
         result['/U'] = generic.ByteStringObject(self.udata)
         result['/P'] = generic.NumberObject(self.perms.as_sint32())
+        if self._kdf_salt:
+            result['/KDFSalt'] = generic.ByteStringObject(self._kdf_salt)
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
         if (
@@ -770,7 +803,7 @@ class StandardSecurityHandler(SecurityHandler):
 
         # known plaintext mandated in the standard ...sigh...
         perms_ok = decrypted_p_entry[9:12] == b'adb'
-        # endianness reversal
+        # endianness reversal, also mask off all but the upper 3 bytes
         perms_ok &= self.perms == StandardPermissions.from_uint(
             struct.unpack('<I', decrypted_p_entry[:4])[0]
         )

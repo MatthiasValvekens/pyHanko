@@ -5,6 +5,7 @@ from typing import Callable, Dict, Optional, Set, Tuple, Type
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
 from pyhanko.pdf_utils.crypt.permissions import PdfPermissions
+from pyhanko.pdf_utils.misc import PdfReadError
 
 
 class PdfKeyNotAvailableError(misc.PdfReadError):
@@ -19,6 +20,16 @@ class AuthStatus(misc.OrderedEnum):
     FAILED = 0
     USER = 1
     OWNER = 2
+
+
+class PdfMacStatus(enum.Enum):
+    """
+    Status of PDF MAC validation.
+    """
+
+    NOT_APPLICABLE = 0
+    SUCCESSFUL = 1
+    FAILED = 2
 
 
 @dataclass(frozen=True)
@@ -36,6 +47,16 @@ class AuthResult:
     """
     Granular permission flags. The precise meaning depends on the security
     handler.
+    """
+
+    mac_status: PdfMacStatus = PdfMacStatus.NOT_APPLICABLE
+    """
+    Status of PDF MAC validation.
+    """
+
+    mac_failure_reason: Optional[str] = None
+    """
+    Reason for PDF MAC validation failure in human-readable form.
     """
 
 
@@ -115,6 +136,13 @@ class SecurityHandler:
 
             Nonetheless, the value of this flag is required in key derivation
             computations, so the security handler needs to know about it.
+    :param kdf_salt:
+        Optional salt value used when deriving additional key material from
+        the main file encryption key.
+
+        .. note::
+            This is currently only relevant for the ISO/TS 32004 (PDF MAC)
+            extension.
     :param compat_entries:
         Write deprecated but technically unnecessary configuration settings for
         compatibility with certain implementations.
@@ -130,6 +158,7 @@ class SecurityHandler:
         crypt_filter_config: 'CryptFilterConfiguration',
         encrypt_metadata=True,
         compat_entries=True,
+        kdf_salt: Optional[bytes] = None,
     ):
         self.version = version
         crypt_filter_config.set_security_handler(self)
@@ -139,6 +168,7 @@ class SecurityHandler:
         self.encrypt_metadata = encrypt_metadata
         self._compat_entries = compat_entries
         self._credential: Optional[SerialisableCredential] = None
+        self._kdf_salt = kdf_salt
 
     def __init_subclass__(cls, **kwargs):
         # ensure that _known_crypt_filters is initialised to a fresh object
@@ -347,6 +377,30 @@ class SecurityHandler:
         :raise PdfKeyNotAvailableError: when the key is not available
         """
         raise NotImplementedError
+
+    def get_kdf_salt(self) -> bytes:
+        """
+        Get KDF salt value, or raise an error if there is none.
+
+        .. note::
+            This is currently only relevant for the ISO/TS 32004 (PDF MAC)
+            extension.
+
+        :return:
+            The KDF salt value.
+        """
+        salt = self._kdf_salt
+        if salt is None:
+            raise PdfReadError("No KDF salt available")
+        return salt
+
+    @property
+    def pdf_mac_enabled(self) -> bool:
+        """
+        Boolean indicating whether this security handler has PDF MAC
+        support enabled.
+        """
+        return self._kdf_salt is not None
 
     @classmethod
     def read_cf_dictionary(

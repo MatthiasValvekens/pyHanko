@@ -9,7 +9,7 @@ import uuid
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import IO, Any, Dict, List, Optional, Set, Tuple, Union
+from typing import IO, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import tzlocal
 from asn1crypto import algos, cms, crl, keys, ocsp
@@ -21,10 +21,12 @@ from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.crypt import pdfmac
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
+from pyhanko.sign import attributes
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.fields import (
     FieldMDPSpec,
@@ -40,6 +42,7 @@ from pyhanko.sign.fields import (
 )
 from pyhanko.sign.general import (
     SigningError,
+    find_unique_cms_attribute,
     get_cms_hash_algo_for_mechanism,
     get_pyca_cryptography_hash,
 )
@@ -78,6 +81,7 @@ __all__ = [
 ]
 
 from ...pdf_utils.crypt import SerialisedCredential
+from ..attributes import CMSAttributeProvider
 
 logger = logging.getLogger(__name__)
 
@@ -1108,6 +1112,12 @@ class PdfSigner:
     ):
         if self.signature_meta.subfilter == SigSeedSubFilter.PADES:
             _ensure_esic_ext(pdf_out)
+
+        if (
+            pdf_out.security_handler is not None
+            and pdf_out.security_handler.pdf_mac_enabled
+        ):
+            pdf_out.register_extension(pdfmac.ISO32004)
 
         try:
             sig_mech = self.signer.get_signature_mechanism_for_digest(
@@ -2180,13 +2190,29 @@ class PdfSigningSession:
         )
 
         # Pass in the SignatureObject settings
-        self.cms_writer.send(
+        sig_obj_ref = self.cms_writer.send(
             SigObjSetup(
                 sig_placeholder=sig_obj,
                 mdp_setup=sig_mdp_setup,
                 appearance_setup=sig_appearance,
             )
         )
+
+        signer = pdf_signer.signer
+        security_handler = self.pdf_out.security_handler
+        if security_handler is not None and security_handler.pdf_mac_enabled:
+            self.pdf_out.set_custom_trailer_entry(
+                pdf_name('/AuthCode'),
+                generic.DictionaryObject(
+                    {
+                        pdf_name('/MACLocation'): pdf_name('/AttachedToSig'),
+                        pdf_name('/SigObjRef'): sig_obj_ref,
+                    }
+                ),
+            )
+            PdfMacAttrProviderSpec(self.pdf_out).install(
+                signer, self.timestamper
+            )
 
         # At this point, the document is in its final pre-signing state
 
@@ -2205,8 +2231,8 @@ class PdfSigningSession:
             # if necessary/supported, extract a file access credential
             # to perform post-signing operations later
             credential_ser: Optional[SerialisedCredential] = None
-            if self.pdf_out.security_handler is not None:
-                credential = self.pdf_out.security_handler.extract_credential()
+            if security_handler is not None:
+                credential = security_handler.extract_credential()
                 if credential is not None:
                     credential_ser = credential.serialise()
             post_signing_instr = PostSignInstructions(
@@ -2226,7 +2252,7 @@ class PdfSigningSession:
             )
         return PdfTBSDocument(
             cms_writer=self.cms_writer,
-            signer=pdf_signer.signer,
+            signer=signer,
             md_algorithm=md_algorithm,
             timestamper=self.timestamper,
             use_pades=self.use_pades,
@@ -2313,6 +2339,112 @@ class PostSignInstructions:
 
     Serialised file credential, to update encrypted files.
     """
+
+
+class PdfMacAttrProvider(attributes.CMSAttributeProvider):
+    attribute_type = 'pdf_mac_data'
+
+    def __init__(
+        self,
+        *,
+        document_digest: bytes,
+        signature_digest: bytes,
+        mac_handler: 'pdfmac.PdfMacTokenHandler',
+    ):
+        self.document_digest = document_digest
+        self.signature_digest = signature_digest
+        self.mac_handler = mac_handler
+
+    async def build_attr_value(self, dry_run=False):
+        return self.mac_handler.build_pdfmac_token(
+            document_digest=self.document_digest,
+            signature_digest=self.signature_digest,
+            dry_run=dry_run,
+        )
+
+
+class PdfMacAttrProviderSpec(attributes.UnsignedAttributeProviderSpec):
+    """
+    Internal handler to deal with signatures under ISO/TS 32004.
+    """
+
+    def __init__(
+        self,
+        pdf_out: BasePdfFileWriter,
+        document_digest: Optional[bytes] = None,
+    ):
+        self.pdf_out = pdf_out
+        self.document_digest = document_digest
+        self.wrapped: Optional[attributes.UnsignedAttributeProviderSpec] = None
+        self._orig: Optional[attributes.UnsignedAttributeProviderSpec] = None
+        self._target: Optional[Signer] = None
+
+    def install(self, signer: Signer, timestamper: Optional[TimeStamper]):
+        """
+        Install the provider on a signer.
+
+        NOTE: this is a stateful operation and won't work
+        if the signer is shared, but we have a safeguard in place
+        for that (will fail during size estimation under normal
+        circumstances).
+        """
+        # TODO find a way to handle this set/reset process more cleanly,
+        #  and/or expose more control. Would wrapping Signer be easier
+        #  in practice? It's cleaner in theory, but Signer is a bad mix
+        #  between extensible API and structural logic, so that might have to
+        #  wait.
+        assert self._orig is None
+        self._target = signer
+        self._orig = signer.unsigned_attr_prov_spec
+        self.wrapped = signer._unsigned_attr_provider_spec(timestamper)
+        signer.unsigned_attr_prov_spec = self
+
+    def uninstall(self):
+        """
+        Remove the provider from its target (internal API).
+        """
+        self._target.unsigned_attr_prov_spec = self._orig
+
+    def unsigned_attr_providers(
+        self,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+        digest_algorithm: str,
+    ) -> Iterable[CMSAttributeProvider]:
+        assert self.wrapped is not None, "Unsigned attr provider not installed"
+        other_provs = self.wrapped.unsigned_attr_providers(
+            signature, signed_attrs, digest_algorithm
+        )
+
+        for prov in other_provs:
+            if isinstance(prov, PdfMacAttrProvider):
+                raise SigningError(
+                    "Other PDF MAC attribute provider found. This may be the "
+                    "result of signer instances being shared across multiple "
+                    "documents. This workflow is not supported for encrypted "
+                    "documents. Either turn off MAC generation, or use "
+                    "separate signer instances for different documents."
+                )
+            yield prov
+
+        md = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
+        md.update(signature)
+        sig_digest = md.finalize()
+
+        document_digest = self.document_digest
+        if not document_digest:
+            # since by default we're aligning the hash function with that of
+            # the underlying signature anyhow,
+            # we can simply "steal" the value of the messageDigest attribute
+            document_digest = find_unique_cms_attribute(
+                signed_attrs, 'message_digest'
+            ).native
+        assert document_digest is not None
+        yield PdfMacAttrProvider(
+            document_digest=document_digest,
+            signature_digest=sig_digest,
+            mac_handler=self.pdf_out._init_mac_handler(digest_algorithm),
+        )
 
 
 class PdfTBSDocument:
@@ -2421,6 +2553,10 @@ class PdfTBSDocument:
         )
         # ... and feed it to the CMS writer
         sig_contents = self.cms_writer.send(signature_cms)
+
+        # lastly, restore the signer
+        if isinstance(signer.unsigned_attr_prov_spec, PdfMacAttrProviderSpec):
+            signer.unsigned_attr_prov_spec.uninstall()
         return PdfPostSignatureDocument(
             sig_contents,
             post_sign_instr=self.post_sign_instructions,

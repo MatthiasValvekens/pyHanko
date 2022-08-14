@@ -223,6 +223,7 @@ def _produce_pubkey_encrypted_file(
         use_crypt_filters=use_crypt_filters,
         perms=PUBKEY_PERMS,
         policy=policy,
+        pdf_mac=False,
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -450,6 +451,7 @@ def test_key_encipherment_requirement():
             use_aes=True,
             use_crypt_filters=True,
             perms=PUBKEY_PERMS,
+            pdf_mac=False,
         )
 
 
@@ -482,6 +484,7 @@ def test_key_encipherment_requirement_override(
         use_crypt_filters=use_crypt_filters,
         perms=PUBKEY_PERMS,
         policy=pubkey.RecipientEncryptionPolicy(ignore_key_usage=True),
+        pdf_mac=False,
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -783,10 +786,11 @@ def test_custom_crypt_filter_errors():
         w.write(out)
 
 
-def test_continue_encrypted_file_without_auth():
+@pytest.mark.parametrize('pdf_mac', [True, False])
+def test_continue_encrypted_file_without_auth(pdf_mac):
     w = writer.PdfFileWriter()
     w.root["/Test"] = generic.TextStringObject("Blah blah")
-    w.encrypt("ownersecret", "usersecret")
+    w.encrypt("ownersecret", "usersecret", pdf_mac=pdf_mac)
     out = BytesIO()
     w.write(out)
     incr_w = IncrementalPdfFileWriter(out)
@@ -806,7 +810,21 @@ def test_continue_encrypted_file_without_auth_disable_meta():
     incr_w._update_meta = lambda: None
     incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
     incr_w.update_root()
-    with pytest.raises(misc.PdfWriteError, match='Cannot update'):
+    with pytest.raises(PdfKeyNotAvailableError, match='Cannot update'):
+        incr_w.write_in_place()
+
+
+def test_continue_encrypted_file_without_auth_disable_meta_and_mac():
+    w = writer.PdfFileWriter()
+    w.root["/Test"] = generic.TextStringObject("Blah blah")
+    w.encrypt("ownersecret", "usersecret", pdf_mac=False)
+    out = BytesIO()
+    w.write(out)
+    incr_w = IncrementalPdfFileWriter(out)
+    incr_w._update_meta = lambda: None
+    incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
+    incr_w.update_root()
+    with pytest.raises(misc.PdfWriteError, match="Cannot update"):
         incr_w.write_in_place()
 
 

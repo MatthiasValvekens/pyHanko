@@ -79,6 +79,9 @@ class PdfPermissions(Flag):
         """
         return struct.unpack('>i', self.as_bytes())[0]
 
+    def mac_required(self) -> bool:
+        raise NotImplementedError
+
 
 class StandardPermissions(PdfPermissions, Flag):
     """
@@ -95,9 +98,13 @@ class StandardPermissions(PdfPermissions, Flag):
     ALLOW_ASSISTIVE_TECHNOLOGY = 512
     ALLOW_REASSEMBLY = 1024
     ALLOW_HIGH_QUALITY_PRINTING = 2048
+    TOLERATE_MISSING_PDF_MAC = 4096
 
     def as_uint32(self) -> int:
-        return sum(x.value for x in self.__class__ if x in self) | 0xFFFFF0C0
+        return sum(x.value for x in self.__class__ if x in self) | 0xFFFFE0C0
+
+    def mac_required(self) -> bool:
+        return StandardPermissions.TOLERATE_MISSING_PDF_MAC not in self
 
 
 class PubKeyPermissions(PdfPermissions, Flag):
@@ -116,7 +123,11 @@ class PubKeyPermissions(PdfPermissions, Flag):
     ALLOW_ASSISTIVE_TECHNOLOGY = 512
     ALLOW_REASSEMBLY = 1024
     ALLOW_HIGH_QUALITY_PRINTING = 2048
+    TOLERATE_MISSING_PDF_MAC = 4096
 
     def as_uint32(self) -> int:
         # ensure the first bit is set for compatibility with Acrobat
-        return sum(x.value for x in self.__class__ if x in self) | 0xFFFFF0C1
+        return sum(x.value for x in self.__class__ if x in self) | 0xFFFFE0C1
+
+    def mac_required(self) -> bool:
+        return PubKeyPermissions.TOLERATE_MISSING_PDF_MAC not in self

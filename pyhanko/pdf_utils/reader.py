@@ -20,11 +20,13 @@ from typing import BinaryIO, Dict, Generator, Optional, Set, Tuple, Union
 from . import generic, misc
 from .crypt import (
     AuthResult,
+    AuthStatus,
     EnvelopeKeyDecrypter,
     PubKeySecurityHandler,
     SecurityHandler,
     StandardSecurityHandler,
 )
+from .crypt.api import PdfMacStatus
 from .metadata.info import view_from_info_dict
 from .metadata.model import DocumentMetadata
 from .misc import PdfReadError, PdfStrictReadError
@@ -529,6 +531,46 @@ class PdfFileReader(PdfHandler):
         self.resolved_objects[(generation, idnum)] = obj
         return obj
 
+    def _validate_pdf_mac(self, prelim_auth_result: AuthResult):
+        sh = self.security_handler
+        assert sh is not None
+
+        # TODO add MAC enforcement policy param
+        # TODO forbid empty user pws (in the standard SH)
+        # Default strategy:
+        # we ALWAYS enforce the MAC if the security handler says that support
+        # is enabled (checked by presence of KDFSalt entry), or if there's
+        # an auth code entry in the trailer.
+        # In addition, we cross-check against permission bit 13 (1-indexed)
+        # returned by the security handler.
+        traces_of_mac = '/AuthCode' in self.trailer or sh.pdf_mac_enabled
+        perms = prelim_auth_result.permission_flags
+        mac_required = perms is not None and perms.mac_required()
+        if prelim_auth_result.status != AuthStatus.FAILED and (
+            traces_of_mac or mac_required
+        ):
+            from pyhanko.pdf_utils.crypt import pdfmac
+
+            try:
+                pdfmac.validate_pdf_mac(self)
+                auth_result = AuthResult(
+                    status=prelim_auth_result.status,
+                    permission_flags=prelim_auth_result.permission_flags,
+                    mac_status=PdfMacStatus.SUCCESSFUL,
+                )
+            except pdfmac.PdfMacValidationError as e:
+                logger.warning(
+                    f"Failed to validate MAC: {e.failure_message}", exc_info=e
+                )
+                auth_result = AuthResult(
+                    status=AuthStatus.FAILED,
+                    mac_status=PdfMacStatus.FAILED,
+                    mac_failure_reason=e.failure_message,
+                )
+            return auth_result
+        else:
+            return prelim_auth_result
+
     def decrypt(self, password: Union[str, bytes]) -> AuthResult:
         """
         When using an encrypted PDF file with the standard PDF encryption
@@ -564,7 +606,8 @@ class PdfFileReader(PdfHandler):
                 f"not StandardSecurityHandler"
             )  # pragma: nocover
 
-        return sh.authenticate(password, id1=self.document_id[0])
+        auth_result = sh.authenticate(password, id1=self.document_id[0])
+        return self._validate_pdf_mac(auth_result)
 
     def decrypt_pubkey(self, credential: EnvelopeKeyDecrypter) -> AuthResult:
         """
@@ -592,7 +635,8 @@ class PdfFileReader(PdfHandler):
                 f"Security handler is of type '{type(sh)}', "
                 f"not PubKeySecurityHandler"
             )  # pragma: nocover
-        return sh.authenticate(credential)
+        auth_result = sh.authenticate(credential)
+        return self._validate_pdf_mac(auth_result)
 
     @property
     def encrypted(self):

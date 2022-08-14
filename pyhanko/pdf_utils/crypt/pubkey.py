@@ -1195,6 +1195,7 @@ class PubKeySecurityHandler(SecurityHandler):
         perms: PubKeyPermissions = PubKeyPermissions.allow_everything(),
         encrypt_metadata=True,
         policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
+        pdf_mac: bool = True,
         **kwargs,
     ) -> 'PubKeySecurityHandler':
         """
@@ -1227,6 +1228,11 @@ class PubKeySecurityHandler(SecurityHandler):
             .. warning::
                 See :class:`.SecurityHandler` for some background on the
                 way pyHanko interprets this value.
+        :param pdf_mac:
+            Include an ISO 32004 MAC.
+
+            .. warning::
+                Only works for PDF 2.0 security handlers.
         :param policy:
             Encryption policy choices for the chosen set of recipients.
         :return:
@@ -1251,6 +1257,11 @@ class PubKeySecurityHandler(SecurityHandler):
                     recipients=None,
                     encrypt_metadata=encrypt_metadata,
                 )
+        if pdf_mac and version >= SecurityHandlerVersion.AES256:
+            perms &= ~PubKeyPermissions.TOLERATE_MISSING_PDF_MAC
+            kdf_salt = secrets.token_bytes(32)
+        else:
+            kdf_salt = None
         # noinspection PyArgumentList
         sh = cls(
             version,
@@ -1259,6 +1270,7 @@ class PubKeySecurityHandler(SecurityHandler):
             encrypt_metadata=encrypt_metadata,
             crypt_filter_config=cfc,
             recipient_objs=None,
+            kdf_salt=kdf_salt,
             **kwargs,
         )
         sh.add_recipients(certs, perms=perms, policy=policy)
@@ -1273,6 +1285,7 @@ class PubKeySecurityHandler(SecurityHandler):
         crypt_filter_config: Optional['CryptFilterConfiguration'] = None,
         recipient_objs: Optional[list] = None,
         compat_entries=True,
+        kdf_salt: Optional[bytes] = None,
     ):
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
@@ -1317,6 +1330,7 @@ class PubKeySecurityHandler(SecurityHandler):
             crypt_filter_config,
             encrypt_metadata=encrypt_metadata,
             compat_entries=compat_entries,
+            kdf_salt=kdf_salt,
         )
         self.subfilter = pubkey_handler_subfilter
         self.encrypt_metadata = encrypt_metadata
@@ -1384,6 +1398,16 @@ class PubKeySecurityHandler(SecurityHandler):
             legacy_keylen=keylen,
             recipient_objs=recipients,
             encrypt_metadata=encrypt_metadata,
+            kdf_salt=encrypt_dict.get_and_apply(
+                '/KDFSalt',
+                lambda x: (
+                    x.original_bytes
+                    if isinstance(
+                        x, (generic.TextStringObject, generic.ByteStringObject)
+                    )
+                    else None
+                ),
+            ),
         )
 
     @classmethod
@@ -1423,6 +1447,8 @@ class PubKeySecurityHandler(SecurityHandler):
         result['/Filter'] = generic.NameObject(self.get_name())
         result['/SubFilter'] = self.subfilter.value
         result['/V'] = self.version.as_pdf_object()
+        if self._kdf_salt:
+            result['/KDFSalt'] = generic.ByteStringObject(self._kdf_salt)
         if (
             self._compat_entries
             or self.version == SecurityHandlerVersion.RC4_LONGER_KEYS
