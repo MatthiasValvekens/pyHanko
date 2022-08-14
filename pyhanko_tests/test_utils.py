@@ -9,6 +9,7 @@ from typing import Tuple
 import pytest
 import pytz
 
+import pyhanko.pdf_utils.extensions
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.content import (
     PdfResources,
@@ -791,46 +792,46 @@ def test_ensure_version_update_twice_smaller():
     assert r.input_version == (2, 0)
 
 
-TEST_EXT2 = writer.DeveloperExtension(
+TEST_EXT2 = pyhanko.pdf_utils.extensions.DeveloperExtension(
     prefix_name=generic.NameObject('/TEST'),
     base_version=generic.NameObject('/1.7'),
     extension_level=2, url='https://example.com',
     extension_revision='No-frills test extension'
 )
 
-TEST_EXT_MULTI = writer.DeveloperExtension(
+TEST_EXT_MULTI = pyhanko.pdf_utils.extensions.DeveloperExtension(
     prefix_name=generic.NameObject('/MULT'),
     base_version=generic.NameObject('/1.7'),
     extension_level=2, url='https://example.com',
     extension_revision='Test extension intended to be used as multivalue',
-    multivalued=writer.DevExtensionMultivalued.ALWAYS
+    multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.ALWAYS
 )
 
 
 @pytest.mark.parametrize(
     'expected_lvl,new_ext', [
         (2, TEST_EXT2),
-        (3, writer.DeveloperExtension(
+        (3, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, compare_by_level=True
         )),
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, compare_by_level=True
         )),
-        (3, writer.DeveloperExtension(
+        (3, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, subsumes=(2,)
         )),
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, subsumed_by=(2,)
         )),
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
@@ -853,32 +854,32 @@ def test_single_extension_registration(expected_lvl, new_ext):
 
 @pytest.mark.parametrize(
     'expected_len,new_ext', [
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3,
         )),
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, compare_by_level=False
         )),
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, subsumed_by=(5,)
         )),
-        (2, writer.DeveloperExtension(
+        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
             subsumed_by=(2000,), subsumes=(1000, 1)
         )),
-        (1, writer.DeveloperExtension(
+        (1, pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, compare_by_level=True,
-            multivalued=writer.DevExtensionMultivalued.ALWAYS
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.ALWAYS
         )),
     ]
 )
@@ -898,48 +899,48 @@ def test_extension_registration_create_array(expected_len, new_ext):
 @pytest.mark.parametrize(
     'expected_lvls,new_ext', [
         ((2,), TEST_EXT_MULTI),
-        ((3,), writer.DeveloperExtension(
+        ((3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, compare_by_level=True
         )),
-        ((2,), writer.DeveloperExtension(
+        ((2,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, compare_by_level=True
         )),
-        ((3,), writer.DeveloperExtension(
+        ((3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, subsumes=(2,)
         )),
-        ((2,), writer.DeveloperExtension(
+        ((2,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, subsumed_by=(2,)
         )),
-        ((2,), writer.DeveloperExtension(
+        ((2,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
             subsumed_by=(2,), subsumes=(1000, 1)
         )),
-        ((2, 3,), writer.DeveloperExtension(
+        ((2, 3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3
         )),
-        ((2, 3,), writer.DeveloperExtension(
+        ((2, 3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, compare_by_level=False
         )),
-        ((2, 1,), writer.DeveloperExtension(
+        ((2, 1,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, subsumed_by=(5,)
         )),
-        ((2, 1001,), writer.DeveloperExtension(
+        ((2, 1001,), pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/MULT'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
@@ -966,30 +967,30 @@ def test_multi_extension_registration(expected_lvls, new_ext):
 
 @pytest.mark.parametrize(
     'new_ext', [
-        writer.DeveloperExtension(
+        pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3,
-            multivalued=writer.DevExtensionMultivalued.NEVER
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
         ),
-        writer.DeveloperExtension(
+        pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3, compare_by_level=False,
-            multivalued=writer.DevExtensionMultivalued.NEVER
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
         ),
-        writer.DeveloperExtension(
+        pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1, subsumed_by=(5,),
-            multivalued=writer.DevExtensionMultivalued.NEVER
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
         ),
-        writer.DeveloperExtension(
+        pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
             subsumed_by=(2000,), subsumes=(1000, 1),
-            multivalued=writer.DevExtensionMultivalued.NEVER
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
         ),
     ]
 )

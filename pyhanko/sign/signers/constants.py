@@ -3,7 +3,10 @@ This module defines constants & defaults used by pyHanko when creating digital
 signatures.
 """
 from pyhanko.pdf_utils import generic
-from pyhanko.pdf_utils.writer import DeveloperExtension, DevExtensionMultivalued
+from pyhanko.pdf_utils.extensions import (
+    DeveloperExtension,
+    DevExtensionMultivalued,
+)
 from pyhanko.sign.fields import SigSeedSubFilter
 from pyhanko.stamp import STAMP_ART_CONTENT, TextStampStyle
 
