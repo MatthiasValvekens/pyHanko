@@ -481,6 +481,8 @@ class BasePdfFileWriter(PdfHandler):
         min_pdf_version = sh.get_min_pdf_version()
         if min_pdf_version is not None:
             self.ensure_output_version(min_pdf_version)
+        for extension in self.security_handler.get_extensions():
+            self.register_extension(extension)
 
     def _flush_obj_stream(self, obj_stm: ObjectStream):
         """

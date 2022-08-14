@@ -60,6 +60,11 @@ def pdf_mac_good(test_fun):
         r = PdfFileReader(output_buf)
         result = _dummy_decrypt(r)
         assert result.mac_status == PdfMacStatus.SUCCESSFUL
+        iso_exts = {
+            int(ext.get_object()['/ExtensionLevel'])
+            for ext in r.root['/Extensions']['/ISO_']
+        }
+        assert 32004 in iso_exts
 
     return _wrap
 

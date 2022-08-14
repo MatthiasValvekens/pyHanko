@@ -1,10 +1,11 @@
 import enum
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Set, Tuple, Type
+from typing import Callable, Dict, List, Optional, Set, Tuple, Type
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
 from pyhanko.pdf_utils.crypt.permissions import PdfPermissions
+from pyhanko.pdf_utils.extensions import DeveloperExtension
 from pyhanko.pdf_utils.misc import PdfReadError
 
 
@@ -468,6 +469,13 @@ class SecurityHandler:
         elif v >= SecurityHandlerVersion.RC4_LONGER_KEYS:
             return 1, 4
         return None
+
+    def get_extensions(self) -> List[DeveloperExtension]:
+        if self.pdf_mac_enabled:
+            from .pdfmac import ISO32004
+
+            return [ISO32004]
+        return []
 
 
 class CryptFilter:

@@ -262,7 +262,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         if self._need_mac_on_write:
             from pyhanko.pdf_utils.crypt import pdfmac
 
-            self.register_extension(pdfmac.ISO32004)
             pdfmac.add_standalone_mac(self, in_place=True)
         else:
             stream = self.prev.stream
