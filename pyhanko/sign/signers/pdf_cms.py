@@ -1535,8 +1535,8 @@ class DefaultUnsignedAttributes(UnsignedAttributeProviderSpec):
         self.timestamper = timestamper
 
     def unsigned_attr_providers(
-            self, digest_algorithm, signed_attrs: cms.CMSAttributes,
-            signature: bytes) -> Iterable[CMSAttributeProvider]:
+            self, signature: bytes, signed_attrs: cms.CMSAttributes,
+            digest_algorithm: str) -> Iterable[CMSAttributeProvider]:
         timestamper = self.timestamper
         if timestamper is not None:
             # the timestamp server needs to cross-sign our signature
