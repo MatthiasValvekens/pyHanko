@@ -81,10 +81,9 @@ def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
     result = r.decrypt("ownersecret" if use_owner_pass else "usersecret")
     if use_owner_pass:
         assert result.status == AuthStatus.OWNER
-        assert result.permission_flags is None
     else:
         assert result.status == AuthStatus.USER
-        assert result.permission_flags == -44
+    assert result.permission_flags == -44
     page = r.root['/Pages']['/Kids'][0].get_object()
     assert r.trailer['/Encrypt']['/P'] == -44
     assert '/ExtGState' in page['/Resources']
@@ -577,9 +576,11 @@ def test_continue_encrypted_file_from_reader():
 def test_aes256_perm_read():
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
     result = r.decrypt("ownersecret")
-    assert result.permission_flags is None
+    assert result.status == AuthStatus.OWNER
+    assert result.permission_flags == -4
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD_AES256))
     result = r.decrypt("usersecret")
+    assert result.status == AuthStatus.USER
     assert result.permission_flags == -4
 
     assert r.trailer['/Encrypt']['/P'] == -4

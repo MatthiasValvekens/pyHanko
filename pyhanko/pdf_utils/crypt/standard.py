@@ -649,10 +649,7 @@ class StandardSecurityHandler(SecurityHandler):
             self._shared_key = key
         else:
             self._auth_failed = True
-        return AuthResult(
-            status=res,
-            permission_flags=self.perms if res == AuthStatus.USER else None
-        )
+        return AuthResult(status=res, permission_flags=self.perms)
 
     # Algorithm 2.A in ISO 32000-2 § 7.6.4.3.3
     def _authenticate_r6(self, password) -> Tuple[AuthStatus, Optional[bytes]]:
