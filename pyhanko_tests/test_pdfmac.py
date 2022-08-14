@@ -16,7 +16,9 @@ from typing import Callable, Optional, Type
 
 import pytest
 from asn1crypto import core
+from certomancer.integrations.illusionist import Illusionist
 from freezegun import freeze_time
+from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.pdf_utils import generic, writer
 from pyhanko.pdf_utils.crypt import (
@@ -29,14 +31,30 @@ from pyhanko.pdf_utils.font.basic import get_courier
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter
-from pyhanko.sign import PdfSigner, SimpleSigner, signers
+from pyhanko.sign import (
+    PdfSigner,
+    PdfTimeStamper,
+    SimpleSigner,
+    signers,
+    timestamps,
+)
 from pyhanko.sign.general import SigningError, simple_cms_attribute
 from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_byterange import SigByteRangeObject
+from pyhanko.sign.validation import (
+    RevocationInfoValidationType,
+    validate_pdf_ltv_signature,
+)
 from pyhanko.sign.validation.errors import DisallowedAlgorithmError
 
 from .samples import *
-from .signing_commons import FROM_ECC_CA, SIMPLE_ECC_V_CONTEXT, val_trusted
+from .signing_commons import (
+    DUMMY_TS,
+    ECC_ROOT_CERT,
+    FROM_ECC_CA,
+    SIMPLE_ECC_V_CONTEXT,
+    val_trusted,
+)
 
 DUMMY_PASSWORD = "secret"
 
@@ -280,6 +298,69 @@ def test_signature_nondefault_hash(encryption_type):
         signer=signer,
     )
 
+    return out
+
+
+@pdf_mac_good
+@freeze_time('2020-11-01')
+def test_pdf_mac_pades(requests_mock):
+    w = init_sample_doc(EncryptionType.STANDARD)
+
+    trust_roots = [ECC_ROOT_CERT]
+    vc = ValidationContext(
+        trust_roots=trust_roots, allow_fetching=True, other_certs=[]
+    )
+    Illusionist(TESTING_CA_ECDSA).register(requests_mock)
+
+    from pyhanko_tests.test_pades import PADES
+
+    signer = SimpleSigner(
+        signing_cert=FROM_ECC_CA.signing_cert,
+        signing_key=FROM_ECC_CA.signing_key,
+        cert_registry=FROM_ECC_CA.cert_registry,
+    )
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
+            validation_context=vc,
+            embed_validation_info=True,
+            use_pades_lta=True,
+        ),
+        timestamper=timestamps.HTTPTimeStamper(
+            'http://pyhanko.tests/testing-ca-ecdsa/tsa/tsa',
+        ),
+        signer=signer,
+    )
+
+    r = PdfFileReader(out)
+    r.decrypt(DUMMY_PASSWORD)
+    validate_pdf_ltv_signature(
+        r.embedded_signatures[0],
+        validation_type=RevocationInfoValidationType.PADES_LTA,
+        validation_context_kwargs={
+            'trust_roots': trust_roots,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
+    )
+    return out
+
+
+@pdf_mac_good
+@pytest.mark.parametrize('encryption_type', list(EncryptionType))
+@freeze_time('2020-11-01')
+def test_pdf_mac_timestamp(encryption_type):
+    w = init_sample_doc(EncryptionType.STANDARD)
+    out = BytesIO()
+    w.write(out)
+
+    w = IncrementalPdfFileWriter(out)
+    w.encrypt("secret")
+    PdfTimeStamper(timestamper=DUMMY_TS).timestamp_pdf(
+        w, md_algorithm='sha256', in_place=True
+    )
     return out
 
 

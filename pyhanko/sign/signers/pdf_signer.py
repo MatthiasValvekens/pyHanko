@@ -14,6 +14,7 @@ from typing import IO, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 import tzlocal
 from asn1crypto import algos, cms, crl, keys, ocsp
 from asn1crypto import pdf as asn1_pdf
+from asn1crypto.core import VOID
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
@@ -45,6 +46,7 @@ from pyhanko.sign.general import (
     find_unique_cms_attribute,
     get_cms_hash_algo_for_mechanism,
     get_pyca_cryptography_hash,
+    simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.stamp import BaseStampStyle
@@ -480,6 +482,50 @@ def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
         pdf_writer.register_extension(constants.ESIC_EXTENSION_1)
 
 
+def add_mac_to_external_cms(
+    pdf_out: BasePdfFileWriter,
+    md_algorithm: str,
+    signed_data: cms.SignedData,
+    document_digest: bytes,
+    dry_run=False,
+):
+    """
+    Utility function to add a MAC token to an externally generated CMS
+    payload. The payload is modified in-place.
+
+    :param pdf_out:
+        Writer to contain output.
+    :param md_algorithm:
+        The message digest algorithm to use for the MAC.
+    :param document_digest:
+        The document digest that should go into the MAC token.
+    :param signed_data:
+        A CMS signed data value.
+    :param dry_run:
+        Whether this is considered a dry run for size estimation purposes.
+    """
+
+    mac_handler = pdf_out._init_mac_handler(md_algorithm)
+    si = signed_data['signer_infos'][0]
+    signature_bytes = si['signature'].native
+    md = hashes.Hash(get_pyca_cryptography_hash(md_algorithm))
+    md.update(signature_bytes)
+    sig_digest = md.finalize()
+    if dry_run:
+        # sig_digest always has the right length
+        document_digest = sig_digest
+    mac_token = mac_handler.build_pdfmac_token(
+        document_digest=document_digest,
+        signature_digest=sig_digest,
+        dry_run=dry_run,
+    )
+    ua = si['unsigned_attrs']
+    if ua is VOID:
+        ua = cms.CMSAttributes([])
+    ua.append(simple_cms_attribute('pdf_mac_data', mac_token))
+    si['unsigned_attrs'] = ua
+
+
 def _ensure_iso32001_ext(pdf_writer: BasePdfFileWriter):
     pdf_writer.ensure_output_version(version=(2, 0))
     pdf_writer.register_extension(constants.ISO32001)
@@ -694,6 +740,10 @@ class PdfTimeStamper:
         """
 
         _ensure_esic_ext(pdf_out)
+        need_mac = (
+            pdf_out.security_handler is not None
+            and pdf_out.security_handler.pdf_mac_enabled
+        )
         from pyhanko.sign import validation
 
         timestamper = timestamper or self.default_timestamper
@@ -716,10 +766,16 @@ class PdfTimeStamper:
 
         field_name = self.field_name
         if bytes_reserved is None:
-            test_signature_cms = await timestamper.async_dummy_response(
-                md_algorithm
-            )
-            test_len = len(test_signature_cms.dump()) * 2
+            test_tst = await timestamper.async_dummy_response(md_algorithm)
+            if need_mac:
+                add_mac_to_external_cms(
+                    pdf_out,
+                    md_algorithm=md_algorithm,
+                    signed_data=test_tst['content'],
+                    document_digest=b"",
+                    dry_run=True,
+                )
+            test_len = len(test_tst.dump()) * 2
             if tight_size_estimates:
                 bytes_reserved = test_len
             else:
@@ -743,7 +799,11 @@ class PdfTimeStamper:
         )
 
         next(cms_writer)
-        cms_writer.send(SigObjSetup(sig_placeholder=timestamp_obj))
+        sig_obj_ref = cms_writer.send(
+            SigObjSetup(sig_placeholder=timestamp_obj)
+        )
+        if need_mac:
+            _register_mac_on_sig(pdf_out, sig_obj_ref)
 
         sig_io = SigIOSetup(
             md_algorithm=md_algorithm,
@@ -756,6 +816,13 @@ class PdfTimeStamper:
         timestamp_cms = await timestamper.async_timestamp(
             prep_digest.document_digest, md_algorithm
         )
+        if need_mac:
+            add_mac_to_external_cms(
+                pdf_out,
+                md_algorithm=md_algorithm,
+                signed_data=timestamp_cms['content'],
+                document_digest=prep_digest.document_digest,
+            )
         sig_contents = cms_writer.send(timestamp_cms)
 
         # update the DSS if necessary
@@ -1601,6 +1668,20 @@ class PreSignValidationStatus:
     """
 
 
+def _register_mac_on_sig(
+    pdf_out: BasePdfFileWriter, sig_obj_ref: generic.IndirectObject
+):
+    pdf_out.set_custom_trailer_entry(
+        pdf_name('/AuthCode'),
+        generic.DictionaryObject(
+            {
+                pdf_name('/MACLocation'): pdf_name('/AttachedToSig'),
+                pdf_name('/SigObjRef'): sig_obj_ref,
+            }
+        ),
+    )
+
+
 class PdfSigningSession:
     """
     .. versionadded:: 0.7.0
@@ -2201,15 +2282,7 @@ class PdfSigningSession:
         signer = pdf_signer.signer
         security_handler = self.pdf_out.security_handler
         if security_handler is not None and security_handler.pdf_mac_enabled:
-            self.pdf_out.set_custom_trailer_entry(
-                pdf_name('/AuthCode'),
-                generic.DictionaryObject(
-                    {
-                        pdf_name('/MACLocation'): pdf_name('/AttachedToSig'),
-                        pdf_name('/SigObjRef'): sig_obj_ref,
-                    }
-                ),
-            )
+            _register_mac_on_sig(self.pdf_out, sig_obj_ref)
             PdfMacAttrProviderSpec(self.pdf_out).install(
                 signer, self.timestamper
             )
