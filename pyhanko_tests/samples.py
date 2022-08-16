@@ -104,20 +104,12 @@ def _configure_certomancer():
         cfg_text = inf.read()
     cfg = yaml.safe_load(cfg_text)
 
-    pki_archs = cfg['pki-architectures']
-    # Clone RSA config to get equivalent ECDSA & DSA setup
-    ecdsa_clone = dict(pki_archs['testing-ca'])
-    ecdsa_clone['keyset'] = 'testing-ca-ecdsa'
-    pki_archs['testing-ca-ecdsa'] = ecdsa_clone
-    dsa_clone = dict(pki_archs['testing-ca'])
-    dsa_clone['keyset'] = 'testing-ca-dsa'
-    pki_archs['testing-ca-dsa'] = dsa_clone
-
     return CertomancerConfig(cfg, key_search_dir=CRYPTO_DATA_DIR)
 
 
 CERTOMANCER = _configure_certomancer()
 TESTING_CA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca'))
+TESTING_CA_ERRORS = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-errors'))
 UNRELATED_TSA = CERTOMANCER.get_pki_arch(ArchLabel('unrelated-tsa'))
 TESTING_CA_ECDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ecdsa'))
 TESTING_CA_DSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-dsa'))

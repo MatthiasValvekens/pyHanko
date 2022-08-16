@@ -215,61 +215,17 @@ pki-architectures:
                 ca-issuer-links:
                   - repo: interm
                     include-repo-authority: true
-      decrypter1:
-        subject: signer1
-        issuer: interm
-        validity:
-          valid-from: "2020-01-01T00:00:00+0000"
-          valid-to: "2022-01-01T00:00:00+0000"
-        extensions:
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [key_encipherment]
-          - id: crl_distribution_points
-            smart-value:
-              schema: crl-dist-url
-              params:
-                crl-repo-names: [interm]
-          - id: authority_information_access
-            smart-value:
-              schema: aia-urls
-              params:
-                ocsp-responder-names: [interm]
-      decrypter2:
-        subject: signer2
-        template: decrypter1
       signer2:
         template: signer1
         revocation:
           revoked-since: "2020-12-01T00:00:00+0000"
           reason: key_compromise
-      signer-no-cn:
-        subject: signer-no-cn
-        subject-key: signer1
-        template: signer1
       signer1-long:
         subject: signer1
         template: signer1
         validity:
           valid-from: "2020-01-01T00:00:00+0000"
           valid-to: "2030-01-01T00:00:00+0000"
-      signer-with-invalid-cn:
-        subject: invalid-cn
-        subject-key: signer2
-        template: signer1
-      ca-with-invalid-cn:
-        subject: invalid-cn
-        subject-key: interm
-        template: interm
-      issued-by-invalid-cn:
-        subject: signer2
-        subject-key: signer2
-        issuer: invalid-cn
-        issuer-cert: ca-with-invalid-cn
-        authority-key: interm
-        template: signer1
     services:
       ocsp:
         interm:
@@ -299,6 +255,72 @@ pki-architectures:
         tsa2:
           signing-key: tsa2
           signing-cert: tsa2
+  testing-ca-with-decrypters:
+    template: testing-ca
+    keyset: testing-ca
+    entity-defaults:
+      country-name: BE
+      organization-name: Example Inc
+      organizational-unit-name: Testing Authority
+    certs:
+      decrypter1:
+        subject: signer1
+        issuer: interm
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [key_encipherment]
+          - id: crl_distribution_points
+            smart-value:
+              schema: crl-dist-url
+              params:
+                crl-repo-names: [interm]
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [interm]
+      decrypter2:
+        subject: signer2
+        template: decrypter1
+  testing-ca-with-errors:
+    template: testing-ca
+    keyset: testing-ca
+    entity-defaults:
+      country-name: BE
+      organization-name: Example Inc
+      organizational-unit-name: Testing Authority
+    certs:
+      signer-no-cn:
+        subject: signer-no-cn
+        subject-key: signer1
+        template: signer1
+      signer-with-invalid-cn:
+        subject: invalid-cn
+        subject-key: signer2
+        template: signer1
+      ca-with-invalid-cn:
+        subject: invalid-cn
+        subject-key: interm
+        template: interm
+      issued-by-invalid-cn:
+        subject: signer2
+        subject-key: signer2
+        issuer: invalid-cn
+        issuer-cert: ca-with-invalid-cn
+        authority-key: interm
+        template: signer1
+  testing-ca-dsa:
+    template: testing-ca
+    keyset: testing-ca-dsa
+  testing-ca-ecdsa:
+    template: testing-ca
+    keyset: testing-ca-ecdsa
   testing-ca-with-aa:
     template: testing-ca
     entities:

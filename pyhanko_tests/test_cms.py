@@ -67,6 +67,7 @@ from pyhanko_tests.samples import (
     TESTING_CA,
     TESTING_CA_DSA,
     TESTING_CA_ECDSA,
+    TESTING_CA_ERRORS,
 )
 from pyhanko_tests.signing_commons import (
     DSA_INTERM_CERT,
@@ -1600,7 +1601,7 @@ async def test_parse_ac_with_malformed_attribute(requests_mock):
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_invalid_cn():
-    cert = TESTING_CA.get_cert(CertLabel('signer-with-invalid-cn'))
+    cert = TESTING_CA_ERRORS.get_cert(CertLabel('signer-with-invalid-cn'))
     sgn = signers.SimpleSigner(
         signing_cert=cert,
         signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
@@ -1624,7 +1625,7 @@ async def test_detached_cms_with_invalid_cn():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
-    cert = TESTING_CA.get_cert(CertLabel('issued-by-invalid-cn'))
+    cert = TESTING_CA_ERRORS.get_cert(CertLabel('issued-by-invalid-cn'))
     sgn = signers.SimpleSigner(
         signing_cert=cert,
         signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
@@ -1650,7 +1651,7 @@ async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_invalid_cn_in_ca():
-    cert = TESTING_CA.get_cert(CertLabel('issued-by-invalid-cn'))
+    cert = TESTING_CA_ERRORS.get_cert(CertLabel('issued-by-invalid-cn'))
 
     class DummySigner(signers.SimpleSigner):
         # make sure the signing cert attr is not included
@@ -1673,7 +1674,7 @@ async def test_detached_cms_with_invalid_cn_in_ca():
     signature['content']['certificates'].append(
         cms.CertificateChoices(
             name='certificate',
-            value=TESTING_CA.get_cert(CertLabel('ca-with-invalid-cn'))
+            value=TESTING_CA_ERRORS.get_cert(CertLabel('ca-with-invalid-cn'))
         )
     )
     signature = cms.ContentInfo.load(signature.dump())
