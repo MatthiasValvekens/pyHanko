@@ -9,7 +9,9 @@ import enum
 import functools
 import hashlib
 import itertools
+import os
 import re
+import typing
 from functools import wraps
 from io import BytesIO
 from typing import Callable, Optional, Type
@@ -19,6 +21,7 @@ from asn1crypto import core
 from certomancer.integrations.illusionist import Illusionist
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
+from requests_mock import Mocker
 
 from pyhanko.pdf_utils import generic, writer
 from pyhanko.pdf_utils.crypt import (
@@ -59,6 +62,9 @@ from .signing_commons import (
 DUMMY_PASSWORD = "secret"
 
 
+GENERATED_TEST_OUTPUTS: Optional[str] = None
+
+
 def _dummy_decrypt(r: PdfFileReader, ignore_mac=False):
     if ignore_mac:
         r._validate_pdf_mac = id
@@ -69,6 +75,46 @@ def _dummy_decrypt(r: PdfFileReader, ignore_mac=False):
     else:
         raise NotImplementedError
     return result
+
+
+def _fmt_arg(arg: typing.Any) -> str:
+    # hacky helper function for choosing file names for test outputs
+    if isinstance(arg, (int, bool)):
+        return str(arg)
+    elif isinstance(arg, str) and arg.isalnum():
+        return arg
+    elif isinstance(arg, enum.Enum):
+        return f"{arg.__class__.__name__}_{arg.name}"
+    elif isinstance(arg, Mocker):
+        return ""  # ignore
+    else:
+        raise NotImplementedError(
+            f"Test with bad argument of type {type(arg)}; "
+            f"can't derive output file name"
+        )
+
+
+def _preserve_test_result(
+    subfolder: str, name: str, output: BytesIO, test_kwargs: dict
+):
+    """
+    Hook to preserve test outputs as reference files.
+    """
+
+    if not GENERATED_TEST_OUTPUTS:
+        return
+
+    out_dir = os.path.join(GENERATED_TEST_OUTPUTS, subfolder)
+    fmt_args = (_fmt_arg(v) for v in test_kwargs.values())
+    name_suffix = '-'.join(p for p in fmt_args if p)
+    if name_suffix:
+        out_dir = os.path.join(out_dir, name)
+        fname = f"{name}-{name_suffix}"
+    else:
+        fname = name
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, f"{fname}.pdf"), 'wb') as outf:
+        outf.write(output.getvalue())
 
 
 def pdf_mac_good(test_fun):
@@ -83,6 +129,7 @@ def pdf_mac_good(test_fun):
             for ext in r.root['/Extensions']['/ISO_']
         }
         assert 32004 in iso_exts
+        _preserve_test_result("good", test_fun.__name__, output_buf, kwargs)
 
     return _wrap
 
@@ -102,6 +149,7 @@ def pdfmac_known_bad_case(error_message: str):
                 f"Error {result.mac_failure_reason!r} did "
                 f"not match {error_message!r}"
             )
+            _preserve_test_result("bad", test_fun.__name__, output_buf, kwargs)
 
         return _wrap
 

@@ -810,7 +810,7 @@ def test_continue_encrypted_file_without_auth_disable_meta():
     incr_w._update_meta = lambda: None
     incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
     incr_w.update_root()
-    with pytest.raises(PdfKeyNotAvailableError, match='Cannot update'):
+    with pytest.raises(PdfKeyNotAvailableError):
         incr_w.write_in_place()
 
 
