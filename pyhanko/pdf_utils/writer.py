@@ -645,6 +645,9 @@ class BasePdfFileWriter(PdfHandler):
     def _assign_security_handler(self, sh: SecurityHandler):
         self.security_handler = sh
         self._encrypt = self.add_object(sh.as_pdf_object())
+        min_pdf_version = sh.get_min_pdf_version()
+        if min_pdf_version is not None:
+            self.ensure_output_version(min_pdf_version)
 
     def _write_objects(self, stream, object_position_dict):
         # deal with objects in object streams first
@@ -1238,7 +1241,6 @@ class PdfFileWriter(BasePdfFileWriter):
             Other keyword arguments to be passed to
             :meth:`.StandardSecurityHandler.build_from_pw`.
         """
-        self.output_version = (2, 0)
         sh = StandardSecurityHandler.build_from_pw(
             owner_pass, user_pass, **kwargs
         )

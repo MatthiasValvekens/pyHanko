@@ -50,8 +50,7 @@ def _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes):
         keylen_bytes=keylen_bytes, use_aes128=use_aes,
         perms=-44
     )
-    w.security_handler = sh
-    w._encrypt = w.add_object(sh.as_pdf_object())
+    w._assign_security_handler(sh)
     new_page_tree = w.import_object(
         r.root.raw_get('/Pages'),
     )
@@ -183,8 +182,7 @@ def _produce_pubkey_encrypted_file(version, keylen, use_aes, use_crypt_filters):
         version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
         perms=-44
     )
-    w.security_handler = sh
-    w._encrypt = w.add_object(sh.as_pdf_object())
+    w._assign_security_handler(sh)
     new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
@@ -209,6 +207,8 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
         version, keylen, use_aes, use_crypt_filters
     )
     r = PdfFileReader(out)
+    if version == SecurityHandlerVersion.AES256:
+        assert r.input_version == (2, 0)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
     assert result.status == AuthStatus.USER
     assert result.permission_flags == -44
@@ -251,8 +251,7 @@ def test_key_encipherment_requirement_override(version, keylen, use_aes,
         version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
         perms=-44, ignore_key_usage=True
     )
-    w.security_handler = sh
-    w._encrypt = w.add_object(sh.as_pdf_object())
+    w._assign_security_handler(sh)
     new_page_tree = w.import_object(
         r.root.raw_get('/Pages'),
     )

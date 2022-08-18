@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Set, Type
+from typing import Callable, Dict, Optional, Set, Tuple, Type
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
@@ -384,6 +384,15 @@ class SecurityHandler:
     def register_crypt_filter(cls, method: generic.NameObject,
                               factory: 'CryptFilterBuilder'):
         cls._known_crypt_filters[method] = factory
+
+    def get_min_pdf_version(self) -> Optional[Tuple[int, int]]:
+        v = self.version
+        if v >= SecurityHandlerVersion.AES256:
+            return 2, 0
+        elif v >= SecurityHandlerVersion.RC4_OR_AES128:
+            return 1, 5
+        elif v >= SecurityHandlerVersion.RC4_LONGER_KEYS:
+            return 1, 4
 
 
 class CryptFilter:
