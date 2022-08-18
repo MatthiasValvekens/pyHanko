@@ -344,3 +344,23 @@ def test_simple_text_stamp_string_keyed_font():
     ts.apply(dest_page=0, x=70, y=50)
 
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/freeserif-test.pdf')
+
+
+@with_layout_comparison
+def test_double_newline():
+    gaf = GlyphAccumulatorFactory(FREE_SERIF, font_size=10)
+
+    w = empty_page()
+    style = TextStampStyle(
+        stamp_text=(
+            "Hi, this is a test. There should be two newlines here:\n\n"
+            "And now a single newline:\n"
+            "See?"
+        ),
+        text_box_style=TextBoxStyle(font=gaf),
+    )
+
+    ts = TextStamp(w, style, box=layout.BoxConstraints(200, 50))
+    ts.apply(dest_page=0, x=70, y=50)
+
+    compare_output(w, f'{EXPECTED_OUTPUT_DIR}/double-newline.pdf')

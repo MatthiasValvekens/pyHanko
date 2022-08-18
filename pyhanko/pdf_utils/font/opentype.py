@@ -430,6 +430,10 @@ class GlyphAccumulator(FontEngine):
         return result
 
     def shape(self, txt: str, with_actual_text: bool = True) -> ShapeResult:
+        if not txt:
+            # currently, uharfbuzz will return buf.glyph_positions=None when
+            # passed an empty string, so we handle that as a special case
+            return ShapeResult(b'', 0, 0)
         buf = hb.Buffer()
         buf.add_str(txt)
 
