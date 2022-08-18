@@ -47,12 +47,12 @@ def simple_page(pdf_out, ascii_text, compress=False, extra_stream=False):
     # based on the minimal pdf file of
     # https://brendanzagaeski.appspot.com/0004.html
     from pyhanko.pdf_utils import generic, writer
+    from pyhanko.pdf_utils.font.basic import get_courier
     from pyhanko.pdf_utils.generic import pdf_name
-    from pyhanko.pdf_utils.misc import get_courier
 
     resources = generic.DictionaryObject({
         pdf_name('/Font'): generic.DictionaryObject({
-            pdf_name('/F1'): get_courier()
+            pdf_name('/F1'): get_courier(pdf_out)
         })
     })
     media_box = generic.ArrayObject(

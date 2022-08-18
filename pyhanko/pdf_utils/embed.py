@@ -12,14 +12,13 @@ from typing import List, Optional
 from asn1crypto import x509
 
 from . import crypt, generic, misc, writer
+from .font.basic import get_courier
 from .generic import pdf_name, pdf_string
 
 __all__ = [
     'embed_file', 'EmbeddedFileObject', 'EmbeddedFileParams',
     'FileSpec', 'RelatedFileSpec', 'wrap_encrypted_payload'
 ]
-
-from .misc import get_courier
 
 
 @dataclass(frozen=True)
@@ -460,7 +459,7 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
     if include_explanation_page:
         resources = generic.DictionaryObject({
             pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/F1'): get_courier()
+                pdf_name('/F1'): get_courier(w)
             })
         })
 

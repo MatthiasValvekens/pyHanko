@@ -15,7 +15,7 @@ from enum import Enum
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfStrictReadError',
     'PdfWriteError', 'PdfStreamError', 'IndirectObjectExpected',
-    'get_and_apply', 'get_courier', 'OrderedEnum',
+    'get_and_apply', 'OrderedEnum',
     'is_regular_character',
     'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
     'skip_over_whitespace', 'skip_over_comment', 'instance_test', 'peek',
@@ -203,20 +203,6 @@ def peek(itr):
         yield from itr
 
     return first, _itr()
-
-
-def get_courier():
-    """
-    :return:
-        A resource dictionary representing the standard Courier font
-        (or one of its metric equivalents).
-    """
-    from .generic import DictionaryObject, pdf_name
-    return DictionaryObject({
-        pdf_name('/Type'): pdf_name('/Font'),
-        pdf_name('/Subtype'): pdf_name('/Type1'),
-        pdf_name('/BaseFont'): pdf_name('/Courier')
-    })
 
 
 class OrderedEnum(Enum):
