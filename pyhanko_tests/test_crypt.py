@@ -35,6 +35,7 @@ from pyhanko.pdf_utils.crypt.permissions import (
     PubKeyPermissions,
     StandardPermissions,
 )
+from pyhanko.pdf_utils.crypt.standard import StandardAESGCMCryptFilter
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -901,6 +902,33 @@ def test_correctly_align_perms():
     assert result.permission_flags == perms
 
 
+def test_default_no_gcm():
+    # document the fact that we don't yet apply ISO/TS 32003 by default
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt("ownersecret", "usersecret")
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.decrypt("usersecret").status == AuthStatus.USER
+    assert isinstance(
+        r.security_handler.get_stream_filter(), StandardAESCryptFilter
+    )
+
+
+def test_gcm_via_encrypt_call():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = writer.copy_into_new_writer(r)
+    w.encrypt("ownersecret", "usersecret", use_gcm=True)
+    out = BytesIO()
+    w.write(out)
+    r = PdfFileReader(out)
+    assert r.decrypt("usersecret").status == AuthStatus.USER
+    assert isinstance(
+        r.security_handler.get_stream_filter(), StandardAESGCMCryptFilter
+    )
+
+
 def test_empty_user_pass():
     r = PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
     w = writer.copy_into_new_writer(r)
@@ -1065,7 +1093,7 @@ def test_security_handler_version_deser():
     assert (
         SecurityHandlerVersion.from_number(5) == SecurityHandlerVersion.AES256
     )
-    assert SecurityHandlerVersion.from_number(6) == SecurityHandlerVersion.OTHER
+    assert SecurityHandlerVersion.from_number(0) == SecurityHandlerVersion.OTHER
     assert (
         SecurityHandlerVersion.from_number(None) == SecurityHandlerVersion.OTHER
     )
@@ -1075,7 +1103,7 @@ def test_security_handler_version_deser():
         == StandardSecuritySettingsRevision.AES256
     )
     assert (
-        StandardSecuritySettingsRevision.from_number(7)
+        StandardSecuritySettingsRevision.from_number(0)
         == StandardSecuritySettingsRevision.OTHER
     )
 
@@ -1616,6 +1644,119 @@ def test_tolerate_direct_encryption_dict_in_nonstrict():
         r.decrypt('ownersecret')
         data = r.root['/Pages']['/Kids'][0]['/Contents'].data
         assert b'Hello' in data
+
+
+def test_gcm_standard():
+    w = writer.copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+
+    sh = StandardSecurityHandler.build_from_pw(
+        "secret", pdf_mac=False, use_gcm=True
+    )
+    w._assign_security_handler(sh)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    r.decrypt("secret")
+    page_content = r.root['/Pages']['/Kids'][0]['/Contents'].data
+    assert b"Hello" in page_content
+
+    iso_exts = {
+        int(ext.get_object()['/ExtensionLevel'])
+        for ext in r.root['/Extensions']['/ISO_']
+    }
+    assert iso_exts == {32003}
+
+
+def _gcm_standard_tamper(tamperer):
+    w = writer.copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+
+    sh = StandardSecurityHandler.build_from_pw(
+        "secret", pdf_mac=False, use_gcm=True
+    )
+    w._assign_security_handler(sh)
+    out = BytesIO()
+    w.write(out)
+
+    class NeverDecryptReader(PdfFileReader):
+        def __init__(self):
+            super().__init__(out)
+
+        @property
+        def security_handler(self):
+            return None
+
+    r = NeverDecryptReader()
+    w = IncrementalPdfFileWriter.from_reader(r)
+    page_dict = w.root['/Pages']['/Kids'][0]
+    content: generic.StreamObject = page_dict['/Contents']
+    content._encoded_data = tamperer(content.encoded_data)
+    w.update_container(content)
+    w._update_meta = lambda: None
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    r.decrypt("secret")
+
+    # this should work
+    assert "https" in r.root['/Extensions']['/ISO_'][0]['/URL']
+
+    # this shouldn't
+    with pytest.raises(misc.PdfReadError, match="Invalid GCM tag"):
+        len(r.root['/Pages']['/Kids'][0]['/Contents'].data)
+
+
+def test_gcm_change_content():
+    def tamper(ciphertext):
+        out = BytesIO()
+        out.write(ciphertext)
+        out.seek(14)
+        out.write(b"\xde\xad\xbe\xef")
+        return out.getvalue()
+
+    _gcm_standard_tamper(tamper)
+
+
+def test_gcm_remove_tag():
+    def tamper(ciphertext):
+        return ciphertext[:-16]
+
+    _gcm_standard_tamper(tamper)
+
+
+def test_gcm_change_nonce():
+    def tamper(ciphertext):
+        out = BytesIO()
+        out.write(ciphertext)
+        out.seek(0)
+        out.write(bytes(12))
+        return out.getvalue()
+
+    _gcm_standard_tamper(tamper)
+
+
+def test_gcm_pubkey():
+    w = writer.copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+
+    sh = PubKeySecurityHandler.build_from_certs(
+        [PUBKEY_TEST_DECRYPTER.cert],
+        version=SecurityHandlerVersion.AES_GCM,
+        pdf_mac=False,
+    )
+    w._assign_security_handler(sh)
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    page_content = r.root['/Pages']['/Kids'][0]['/Contents'].data
+    assert b"Hello" in page_content
+
+    iso_exts = {
+        int(ext.get_object()['/ExtensionLevel'])
+        for ext in r.root['/Extensions']['/ISO_']
+    }
+    assert iso_exts == {32003}
 
 
 def test_tolerate_empty_encrypted_string():

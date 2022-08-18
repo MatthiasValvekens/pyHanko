@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Set, Tuple, Type
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Type
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.crypt.cred_ser import SerialisableCredential
@@ -74,6 +74,7 @@ class SecurityHandlerVersion(misc.VersionEnum):
     RC4_LONGER_KEYS = 2
     RC4_OR_AES128 = 4
     AES256 = 5
+    AES_GCM = 6
 
     OTHER = None
     """
@@ -471,11 +472,17 @@ class SecurityHandler:
         return None
 
     def get_extensions(self) -> List[DeveloperExtension]:
+        exts = []
         if self.pdf_mac_enabled:
             from .pdfmac import ISO32004
 
-            return [ISO32004]
-        return []
+            exts.append(ISO32004)
+
+        for cf in self.crypt_filter_config.filters():
+            cf_exts = cf.get_extensions()
+            if cf_exts is not None:
+                exts.extend(cf_exts)
+        return exts
 
 
 class CryptFilter:
@@ -524,6 +531,12 @@ class CryptFilter:
             The method name (``/CFM`` entry) associated with this crypt filter.
         """
         raise NotImplementedError
+
+    def get_extensions(self) -> Optional[List[DeveloperExtension]]:
+        """
+        Get applicable developer extensions for this crypt filter.
+        """
+        return None
 
     @property
     def keylen(self) -> int:
@@ -624,7 +637,7 @@ class CryptFilter:
         :return:
             The local key to use for this object.
         """
-        raise NotImplementedError
+        return self.shared_key
 
     def set_embedded_only(self):
         self._embedded_only = True
@@ -781,7 +794,7 @@ class CryptFilterConfiguration:
             or item in self._crypt_filters
         )
 
-    def filters(self):
+    def filters(self) -> Iterable['CryptFilter']:
         """Enumerate all crypt filters in this configuration."""
         return self._crypt_filters.values()
 

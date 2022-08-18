@@ -57,7 +57,11 @@ from .api import (
     build_crypt_filter,
 )
 from .cred_ser import SerialisableCredential, SerialisedCredential
-from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
+from .filter_mixins import (
+    AESCryptFilterMixin,
+    AESGCMCryptFilterMixin,
+    RC4CryptFilterMixin,
+)
 from .permissions import PubKeyPermissions
 
 logger = logging.getLogger(__name__)
@@ -229,6 +233,14 @@ class PubKeyAESCryptFilter(PubKeyCryptFilter, AESCryptFilterMixin):
     pass
 
 
+class PubKeyAESGCMCryptFilter(PubKeyCryptFilter, AESGCMCryptFilterMixin):
+    """
+    AES-GCM crypt filter for public key security handlers.
+    """
+
+    pass
+
+
 class PubKeyRC4CryptFilter(PubKeyCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for public key security handlers.
@@ -289,9 +301,18 @@ def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
     )
 
 
-"""
-Type alias for a callable that produces a crypt filter from a dictionary.
-"""
+def _pubkey_gcm_config(recipients=None, encrypt_metadata=True):
+    return CryptFilterConfiguration(
+        {
+            DEFAULT_CRYPT_FILTER: PubKeyAESGCMCryptFilter(
+                acts_as_default=True,
+                recipients=recipients,
+                encrypt_metadata=encrypt_metadata,
+            )
+        },
+        default_stream_filter=DEFAULT_CRYPT_FILTER,
+        default_string_filter=DEFAULT_CRYPT_FILTER,
+    )
 
 
 @enum.unique
@@ -1168,6 +1189,12 @@ def _build_aes256_pubkey_cf(cfdict, acts_as_default):
     )
 
 
+def _build_aesgcm_pubkey_cf(cfdict, acts_as_default):
+    return PubKeyAESGCMCryptFilter(
+        acts_as_default=acts_as_default, **_read_generic_pubkey_cf_info(cfdict)
+    )
+
+
 @SecurityHandler.register
 class PubKeySecurityHandler(SecurityHandler):
     """
@@ -1181,6 +1208,7 @@ class PubKeySecurityHandler(SecurityHandler):
         generic.NameObject('/V2'): _build_legacy_pubkey_cf,
         generic.NameObject('/AESV2'): _build_aes128_pubkey_cf,
         generic.NameObject('/AESV3'): _build_aes256_pubkey_cf,
+        generic.NameObject('/AESV4'): _build_aesgcm_pubkey_cf,
         generic.NameObject('/Identity'): lambda _, __: IdentityCryptFilter(),
     }
 
@@ -1312,9 +1340,16 @@ class PubKeySecurityHandler(SecurityHandler):
                     encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs,
                 )
+            elif version == SecurityHandlerVersion.AES_GCM:
+                crypt_filter_config = _pubkey_gcm_config(
+                    recipients=recipient_objs, encrypt_metadata=encrypt_metadata
+                )
             elif version >= SecurityHandlerVersion.AES256:
                 # there's a reasonable default config that we can fall back to
                 # here
+                # NOTE: we _don't_ use GCM by default. With the way PDF
+                # encryption works, the authentication guarantees are not
+                # worth much anyhow (need ISO 32004-style solution).
                 crypt_filter_config = _pubkey_aes_config(
                     keylen=32,
                     encrypt_metadata=encrypt_metadata,

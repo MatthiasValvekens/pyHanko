@@ -31,7 +31,11 @@ from .api import (
     SecurityHandlerVersion,
 )
 from .cred_ser import SerialisableCredential, SerialisedCredential
-from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
+from .filter_mixins import (
+    AESCryptFilterMixin,
+    AESGCMCryptFilterMixin,
+    RC4CryptFilterMixin,
+)
 from .permissions import StandardPermissions
 
 
@@ -124,6 +128,7 @@ class StandardSecuritySettingsRevision(misc.VersionEnum):
     RC4_EXTENDED = 3
     RC4_OR_AES128 = 4
     AES256 = 6
+    AES_GCM = 7
     OTHER = None
     """
     Placeholder value for custom security handlers.
@@ -203,6 +208,14 @@ class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
     pass
 
 
+class StandardAESGCMCryptFilter(StandardCryptFilter, AESGCMCryptFilterMixin):
+    """
+    AES-GCM crypt filter for the standard security handler.
+    """
+
+    pass
+
+
 class StandardRC4CryptFilter(StandardCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for the standard security handler.
@@ -225,6 +238,14 @@ def _std_rc4_config(keylen):
 def _std_aes_config(keylen):
     return CryptFilterConfiguration(
         {STD_CF: StandardAESCryptFilter(keylen=keylen)},
+        default_stream_filter=STD_CF,
+        default_string_filter=STD_CF,
+    )
+
+
+def _std_gcm_config():
+    return CryptFilterConfiguration(
+        {STD_CF: StandardAESGCMCryptFilter()},
         default_stream_filter=STD_CF,
         default_string_filter=STD_CF,
     )
@@ -258,6 +279,7 @@ class StandardSecurityHandler(SecurityHandler):
         generic.NameObject('/AESV3'): lambda _, __: StandardAESCryptFilter(
             keylen=32
         ),
+        generic.NameObject('/AESV4'): lambda _, __: StandardAESGCMCryptFilter(),
         generic.NameObject('/Identity'): lambda _, __: IdentityCryptFilter(),
     }
 
@@ -396,6 +418,7 @@ class StandardSecurityHandler(SecurityHandler):
         perms: StandardPermissions = StandardPermissions.allow_everything(),
         encrypt_metadata=True,
         pdf_mac: bool = True,
+        use_gcm: bool = False,
         **kwargs,
     ):
         """
@@ -415,7 +438,21 @@ class StandardSecurityHandler(SecurityHandler):
             Whether to set up the security handler for encrypting metadata
             as well.
         :param pdf_mac:
-            Include an ISO 32004 MAC.
+            Include an ISO/TS 32004 MAC.
+        :param use_gcm:
+            Use AES-GCM (ISO/TS 32003) to encrypt strings and streams.
+
+            .. danger::
+                Due to the way PDF encryption works, the authentication
+                guarantees of AES-GCM only apply to the content of individual
+                strings and streams. The PDF file structure itself is not
+                authenticated. Document-level integrity protection is provided
+                by the ``pdf_mac=True`` option.
+
+            .. warning::
+                This option is disabled by default because support for
+                ISO/TS 32003 is not available in mainstream PDF
+                software yet. This default may change in the future.
         :return:
             A :class:`StandardSecurityHandler` instance.
         """
@@ -473,9 +510,16 @@ class StandardSecurityHandler(SecurityHandler):
         else:
             kdf_salt = None
 
+        if use_gcm:
+            version = SecurityHandlerVersion.AES_GCM
+            revision = StandardSecuritySettingsRevision.AES_GCM
+        else:
+            version = SecurityHandlerVersion.AES256
+            revision = StandardSecuritySettingsRevision.AES256
+
         sh = cls(
-            version=SecurityHandlerVersion.AES256,
-            revision=StandardSecuritySettingsRevision.AES256,
+            version=version,
+            revision=revision,
             legacy_keylen=32,
             perm_flags=perms,
             odata=o_entry,
@@ -530,6 +574,8 @@ class StandardSecurityHandler(SecurityHandler):
                 crypt_filter_config = _std_rc4_config(5)
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
                 crypt_filter_config = _std_rc4_config(legacy_keylen)
+            elif version == SecurityHandlerVersion.AES_GCM:
+                crypt_filter_config = _std_gcm_config()
             elif (
                 version >= SecurityHandlerVersion.AES256
                 and crypt_filter_config is None
