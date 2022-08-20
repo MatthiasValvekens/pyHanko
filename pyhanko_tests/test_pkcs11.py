@@ -11,10 +11,11 @@ from io import BytesIO
 from typing import Optional
 
 import pytest
+from asn1crypto import algos
 from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
-from pkcs11 import NoSuchKey, PKCS11Error
+from pkcs11 import Mechanism, NoSuchKey, PKCS11Error
 from pkcs11 import types as p11_types
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
@@ -47,7 +48,8 @@ def _simple_sess(token='testrsa'):
     )
 
 
-default_other_certs = ('root', 'intermediate')
+default_other_certs = ('root', 'interm')
+SIGNER_LABEL = 'signer1'
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
@@ -60,7 +62,7 @@ def test_simple_sign(bulk_fetch, pss):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer', other_certs_to_pull=default_other_certs,
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, prefer_pss=pss
         )
         out = signers.sign_pdf(w, meta, signer=signer)
@@ -81,14 +83,14 @@ def test_sign_external_certs(bulk_fetch):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer',
+            sess, SIGNER_LABEL,
             ca_chain=(TESTING_CA.get_cert(CertLabel('interm')),),
             bulk_fetch=bulk_fetch
         )
         orig_fetcher = pkcs11._pull_cert
         try:
             def _trap_pull(session, *, label=None, cert_id=None):
-                if label != 'signer':
+                if label != SIGNER_LABEL:
                     raise RuntimeError
                 return orig_fetcher(session, label=label, cert_id=cert_id)
 
@@ -114,7 +116,7 @@ def test_sign_multiple_cert_sources(bulk_fetch):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer', other_certs_to_pull=('root',),
+            sess, SIGNER_LABEL, other_certs_to_pull=('root',),
             ca_chain=(TESTING_CA.get_cert(CertLabel('interm')),),
             bulk_fetch=bulk_fetch
         )
@@ -137,7 +139,7 @@ def test_wrong_key_label(bulk_fetch):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer', other_certs_to_pull=default_other_certs,
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, key_label='NoSuchKeyExists'
         )
         with pytest.raises(NoSuchKey):
@@ -153,7 +155,7 @@ def test_wrong_cert(bulk_fetch):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, key_label='signer', other_certs_to_pull=default_other_certs,
+            sess, key_label=SIGNER_LABEL, other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, cert_id=binascii.unhexlify(b'deadbeef')
         )
         with pytest.raises(PKCS11Error, match='Could not find.*with ID'):
@@ -169,7 +171,7 @@ def test_provided_certs():
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, key_label='signer',
+            sess, key_label=SIGNER_LABEL,
             signing_cert=signer_cert,
             ca_chain={
                 TESTING_CA.get_cert(CertLabel('root')),
@@ -195,7 +197,7 @@ def test_signer_provided_others_pulled(bulk_fetch):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer',
+            sess, SIGNER_LABEL,
             ca_chain={
                 TESTING_CA.get_cert(CertLabel('root')),
                 TESTING_CA.get_cert(CertLabel('interm')),
@@ -219,7 +221,7 @@ def test_signer_pulled_others_provided(bulk_fetch):
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, key_label='signer',
+            sess, key_label=SIGNER_LABEL,
             signing_cert=signer_cert, bulk_fetch=bulk_fetch,
             other_certs_to_pull=default_other_certs
         )
@@ -266,7 +268,7 @@ def test_simple_sign_dsa(bulk_fetch):
     )
     with _simple_sess(token='testdsa') as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer', other_certs_to_pull=default_other_certs,
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch
         )
         out = signers.sign_pdf(w, meta, signer=signer)
@@ -288,7 +290,7 @@ def test_simple_sign_ecdsa(bulk_fetch):
     )
     with _simple_sess(token='testecdsa') as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer', other_certs_to_pull=default_other_certs,
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, use_raw_mechanism=True
         )
         out = signers.sign_pdf(w, meta, signer=signer)
@@ -307,7 +309,7 @@ def test_simple_sign_from_config():
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
         module_path=pkcs11_test_module, token_label='testrsa',
-        cert_label='signer', user_pin='1234', other_certs_to_pull=None
+        cert_label=SIGNER_LABEL, user_pin='1234', other_certs_to_pull=None
     )
 
     with PKCS11SigningContext(config) as signer:
@@ -317,6 +319,100 @@ def test_simple_sign_from_config():
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@freeze_time('2020-11-01')
+def test_simple_sign_with_raw_rsa():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=pkcs11_test_module, token_label='testrsa',
+        cert_label=SIGNER_LABEL, user_pin='1234', other_certs_to_pull=None,
+        raw_mechanism=True
+    )
+
+    with PKCS11SigningContext(config) as signer:
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_simple_sign_with_raw_dsa(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='sha256'
+    )
+    with _simple_sess(token='testdsa') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch, use_raw_mechanism=True
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+def test_no_raw_pss():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='sha256'
+    )
+    with _simple_sess(token='testrsa') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
+            use_raw_mechanism=True, prefer_pss=True
+        )
+        with pytest.raises(NotImplementedError, match='PSS not available'):
+            signers.sign_pdf(w, meta, signer=signer)
+
+
+def test_unsupported_algo():
+    with pytest.raises(NotImplementedError, match="2.999"):
+        pkcs11.select_pkcs11_signing_params(
+            algos.SignedDigestAlgorithm({'algorithm': '2.999'}),
+            digest_algorithm='sha256',
+            use_raw_mechanism=False
+        )
+
+
+@pytest.mark.parametrize('md', ['sha256', 'sha384'])
+def test_select_ecdsa_mech(md):
+    # can't do a round-trip test since softhsm doesn't support these, but
+    # we can at least verify that the selection works
+    algo = f'{md}_ecdsa'
+    result = pkcs11.select_pkcs11_signing_params(
+        algos.SignedDigestAlgorithm({'algorithm': algo}),
+        digest_algorithm=md,
+        use_raw_mechanism=False
+    )
+    assert result.sign_kwargs['mechanism'] \
+           == getattr(Mechanism, f"ECDSA_{md.upper()}")
+
+
+@pytest.mark.parametrize('label,cert_id,no_results,exp_err', [
+    ('foo', b'foo', True, "Could not find cert with label 'foo', ID '666f6f'."),
+    ('foo', None, True, "Could not find cert with label 'foo'."),
+    (None, b'foo', True, "Could not find cert with ID '666f6f'."),
+    ('foo', None, False, "Found more than one cert with label 'foo'."),
+])
+def test_pull_err_fmt(label, cert_id, no_results, exp_err):
+    err = pkcs11._format_pull_err_msg(
+        no_results=no_results, label=label, cert_id=cert_id
+    )
+    assert err == exp_err
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
@@ -332,7 +428,7 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
         module_path=pkcs11_test_module, token_label='testrsa',
         other_certs_to_pull=default_other_certs,
         bulk_fetch=bulk_fetch, prefer_pss=pss,
-        cert_label='signer', user_pin='1234'
+        cert_label=SIGNER_LABEL, user_pin='1234'
     )
     async with PKCS11SigningContext(config=config) as signer:
         pdf_signer = signers.PdfSigner(meta, signer)
@@ -355,7 +451,7 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
         module_path=pkcs11_test_module, token_label='testrsa',
         other_certs_to_pull=default_other_certs,
         bulk_fetch=bulk_fetch, prefer_pss=pss,
-        cert_label='signer', user_pin='1234'
+        cert_label=SIGNER_LABEL, user_pin='1234'
     )
     async with PKCS11SigningContext(config=config) as signer:
         async def _job(_i):
@@ -392,7 +488,7 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
     # the awaiting logic in sign_raw for object loading
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, 'signer', other_certs_to_pull=default_other_certs,
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch
         )
 

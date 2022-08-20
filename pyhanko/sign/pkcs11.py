@@ -23,7 +23,14 @@ from pyhanko.sign.general import (
 from pyhanko.sign.signers import Signer
 
 try:
-    from pkcs11 import Attribute, ObjectClass, PKCS11Error, Session
+    from pkcs11 import (
+        MGF,
+        Attribute,
+        Mechanism,
+        ObjectClass,
+        PKCS11Error,
+        Session,
+    )
     from pkcs11 import lib as p11_lib
     from pkcs11 import types as p11_types
 except ImportError as e:  # pragma: nocover
@@ -35,7 +42,8 @@ except ImportError as e:  # pragma: nocover
 
 
 __all__ = [
-    'PKCS11Signer', 'open_pkcs11_session', 'PKCS11SigningContext', 'find_token'
+    'PKCS11Signer', 'open_pkcs11_session', 'PKCS11SigningContext', 'find_token',
+    'select_pkcs11_signing_params'
 ]
 
 logger = logging.getLogger(__name__)
@@ -102,6 +110,63 @@ class PKCS11SignatureOperationSpec:
     """
 
 
+RSA_MECH_MAP = {
+    'sha1': Mechanism.SHA1_RSA_PKCS,
+    'sha224': Mechanism.SHA224_RSA_PKCS,
+    'sha256': Mechanism.SHA256_RSA_PKCS,
+    'sha384': Mechanism.SHA384_RSA_PKCS,
+    'sha512': Mechanism.SHA512_RSA_PKCS,
+}
+
+
+RSASSA_PSS_MECH_MAP = {
+    'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
+    'sha224': Mechanism.SHA224_RSA_PKCS_PSS,
+    'sha256': Mechanism.SHA256_RSA_PKCS_PSS,
+    'sha384': Mechanism.SHA384_RSA_PKCS_PSS,
+    'sha512': Mechanism.SHA512_RSA_PKCS_PSS,
+}
+
+MGF_MECH_MAP = {
+    'sha1': MGF.SHA1,
+    'sha224': MGF.SHA224,
+    'sha256': MGF.SHA256,
+    'sha384': MGF.SHA384,
+    'sha512': MGF.SHA512
+}
+
+
+ECDSA_MECH_MAP = {
+    'sha1': Mechanism.ECDSA_SHA1,
+    'sha224': Mechanism.ECDSA_SHA224,
+    'sha256': Mechanism.ECDSA_SHA256,
+    'sha384': Mechanism.ECDSA_SHA384,
+    'sha512': Mechanism.ECDSA_SHA512,
+}
+
+
+DSA_MECH_MAP = {
+    'sha1': Mechanism.DSA_SHA1,
+    'sha224': Mechanism.DSA_SHA224,
+    'sha256': Mechanism.DSA_SHA256,
+    # These can't be used in CMS IIRC (since the key sizes required
+    # to meaningfully use them are ridiculous),
+    # but they're in the PKCS#11 spec, so let's add them for
+    # completeness
+    'sha384': Mechanism.DSA_SHA384,
+    'sha512': Mechanism.DSA_SHA512,
+}
+
+
+DIGEST_MECH_MAP = {
+    'sha1': Mechanism.SHA_1,
+    'sha224': Mechanism.SHA224,
+    'sha256': Mechanism.SHA256,
+    'sha384': Mechanism.SHA384,
+    'sha512': Mechanism.SHA512,
+}
+
+
 def select_pkcs11_signing_params(
         signature_mechanism: algos.SignedDigestAlgorithm,
         digest_algorithm: str,
@@ -117,55 +182,44 @@ def select_pkcs11_signing_params(
         Whether to attempt to use the raw mechanism on pre-hashed data.
     :return:
     """
-    from pkcs11 import MGF, Mechanism
+    from pkcs11.util.dsa import encode_dsa_signature
+    from pkcs11.util.ec import encode_ecdsa_signature
 
-    signature_algo = signature_mechanism.signature_algo
     pre_sign_transform = None
     post_sign_transform = None
     kwargs = {}
+
+    try:
+        signature_algo = signature_mechanism.signature_algo
+    except ValueError:
+        signature_algo = signature_mechanism['algorithm'].native
+
     if signature_algo == 'rsassa_pkcs1v15':
         if use_raw_mechanism:
-            raise NotImplementedError(
-                "RSASSA-PKCS1v15 not available in raw mode"
+            kwargs['mechanism'] = Mechanism.RSA_PKCS
+            pre_sign_transform = _hash_fully(
+                digest_algorithm, wrap_digest_info=True
             )
-        kwargs['mechanism'] = {
-            'sha1': Mechanism.SHA1_RSA_PKCS,
-            'sha224': Mechanism.SHA224_RSA_PKCS,
-            'sha256': Mechanism.SHA256_RSA_PKCS,
-            'sha384': Mechanism.SHA384_RSA_PKCS,
-            'sha512': Mechanism.SHA512_RSA_PKCS,
-        }[digest_algorithm]
+        else:
+            kwargs['mechanism'] = RSA_MECH_MAP[digest_algorithm]
     elif signature_algo == 'dsa':
         if use_raw_mechanism:
-            raise NotImplementedError("DSA not available in raw mode")
-        kwargs['mechanism'] = {
-            'sha1': Mechanism.DSA_SHA1,
-            'sha224': Mechanism.DSA_SHA224,
-            'sha256': Mechanism.DSA_SHA256,
-            # These can't be used in CMS IIRC (since the key sizes required
-            # to meaningfully use them are ridiculous),
-            # but they're in the PKCS#11 spec, so let's add them for
-            # completeness
-            'sha384': Mechanism.DSA_SHA384,
-            'sha512': Mechanism.DSA_SHA512,
-        }[digest_algorithm]
-        from pkcs11.util.dsa import encode_dsa_signature
+            kwargs['mechanism'] = Mechanism.DSA
+            pre_sign_transform = _hash_fully(
+                digest_algorithm, wrap_digest_info=False
+            )
+        else:
+            kwargs['mechanism'] = DSA_MECH_MAP[digest_algorithm]
         post_sign_transform = encode_dsa_signature
     elif signature_algo == 'ecdsa':
         if use_raw_mechanism:
             kwargs['mechanism'] = Mechanism.ECDSA
-            pre_sign_transform = _hash_fully(digest_algorithm)
+            pre_sign_transform = _hash_fully(
+                digest_algorithm, wrap_digest_info=False
+            )
         else:
             # TODO test these (unsupported in SoftHSMv2 right now)
-            kwargs['mechanism'] = {
-                'sha1': Mechanism.ECDSA_SHA1,
-                'sha224': Mechanism.ECDSA_SHA224,
-                'sha256': Mechanism.ECDSA_SHA256,
-                'sha384': Mechanism.ECDSA_SHA384,
-                'sha512': Mechanism.ECDSA_SHA512,
-            }[digest_algorithm]
-
-        from pkcs11.util.ec import encode_ecdsa_signature
+            kwargs['mechanism'] = ECDSA_MECH_MAP[digest_algorithm]
         post_sign_transform = encode_ecdsa_signature
     elif signature_algo == 'rsassa_pss':
         if use_raw_mechanism:
@@ -177,36 +231,19 @@ def select_pkcs11_signing_params(
                params['hash_algorithm']['algorithm'].native
 
         # unpack PSS parameters into PKCS#11 language
-        kwargs['mechanism'] = {
-            'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
-            'sha224': Mechanism.SHA224_RSA_PKCS_PSS,
-            'sha256': Mechanism.SHA256_RSA_PKCS_PSS,
-            'sha384': Mechanism.SHA384_RSA_PKCS_PSS,
-            'sha512': Mechanism.SHA512_RSA_PKCS_PSS,
-        }[digest_algorithm]
+        kwargs['mechanism'] = RSASSA_PSS_MECH_MAP[digest_algorithm]
 
-        pss_digest_param = {
-            'sha1': Mechanism.SHA_1,
-            'sha224': Mechanism.SHA224,
-            'sha256': Mechanism.SHA256,
-            'sha384': Mechanism.SHA384,
-            'sha512': Mechanism.SHA512,
-        }[digest_algorithm]
+        pss_digest_param = DIGEST_MECH_MAP[digest_algorithm]
 
-        pss_mgf_param = {
-            'sha1': MGF.SHA1,
-            'sha224': MGF.SHA224,
-            'sha256': MGF.SHA256,
-            'sha384': MGF.SHA384,
-            'sha512': MGF.SHA512
-        }[params['mask_gen_algorithm']['parameters']['algorithm'].native]
+        mgf_val = params['mask_gen_algorithm']['parameters']['algorithm'].native
+        pss_mgf_param = MGF_MECH_MAP[mgf_val]
         pss_salt_len = params['salt_length'].native
 
         kwargs['mechanism_param'] = (
             pss_digest_param, pss_mgf_param, pss_salt_len
         )
     else:
-        raise PKCS11Error(
+        raise NotImplementedError(
             f"Signature algorithm '{signature_algo}' is not supported."
         )
 
@@ -258,6 +295,26 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
     return token.open(**kwargs)
 
 
+def _format_pull_err_msg(
+        no_results: bool,
+        label: Optional[str] = None,
+        cert_id: Optional[bytes] = None):
+
+    info_strs = []
+    if label is not None:
+        info_strs.append(f"label '{label}'")
+    if cert_id is not None:
+        info_strs.append(
+            f"ID '{binascii.hexlify(cert_id).decode('ascii')}'"
+        )
+    qualifier = f" with {', '.join(info_strs)}" if info_strs else ""
+    if no_results:
+        err = f"Could not find cert{qualifier}."
+    else:
+        err = f"Found more than one cert{qualifier}."
+    return err
+
+
 def _pull_cert(pkcs11_session: Session, label: Optional[str] = None,
                cert_id: Optional[bytes] = None):
 
@@ -277,28 +334,26 @@ def _pull_cert(pkcs11_session: Session, label: Optional[str] = None,
         cert_obj = results[0]
         return x509.Certificate.load(cert_obj[Attribute.VALUE])
     else:
-        info_strs = []
-        if label is not None:
-            info_strs.append(f"label '{label}'")
-        if cert_id is not None:
-            info_strs.append(
-                f"ID '{binascii.hexlify(cert_id).decode('ascii')}'"
-            )
-        qualifier = f" with {', '.join(info_strs)}" if info_strs else ""
-        if not results:
-            err = f"Could not find cert{qualifier}."
-        else:
-            err = f"Found more than one cert{qualifier}."
+        err = _format_pull_err_msg(
+            no_results=not results, label=label, cert_id=cert_id
+        )
         raise PKCS11Error(err)
 
 
-def _hash_fully(digest_algorithm):
+def _hash_fully(digest_algorithm: str, *, wrap_digest_info: bool):
     md_spec = get_pyca_cryptography_hash(digest_algorithm)
 
-    def _h(data: bytes):
+    def _h(data: bytes) -> bytes:
         h = hashes.Hash(md_spec)
         h.update(data)
-        return h.finalize()
+        digest = h.finalize()
+        if wrap_digest_info:
+            return algos.DigestInfo({
+                'digest_algorithm': {'algorithm': digest_algorithm.lower()},
+                'digest': digest
+            }).dump()
+        else:
+            return digest
 
     return _h
 
