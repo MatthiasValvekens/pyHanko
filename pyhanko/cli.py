@@ -1167,8 +1167,15 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
     pin = pkcs11_config.user_pin
     if pin is None and pkcs11_config.prompt_pin:  # pragma: nocover
         pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
-    with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
-        _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url)
+    try:
+        with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
+            _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url)
+    except pkcs11.PKCS11Error as e:
+        # This will catch errors that happen during PKCS#11 setup
+        # TODO make sure PKCS11Signer doesn't leak PCKS11Errors in its
+        #  generic signing API
+        logger.error("PKCS#11 error", exc_info=e)
+        raise click.ClickException(f"PKCS#11 error: [{type(e).__name__}] {e}")
 
 
 @click.argument('infile', type=readable_file)
@@ -1193,7 +1200,12 @@ def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
         lib = cli_config.beid_module_path
 
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
-    session = beid.open_beid_session(lib, slot_no=slot_no)
+
+    try:
+        session = beid.open_beid_session(lib, slot_no=slot_no)
+    except pkcs11.PKCS11Error as e:
+        logger.error("PKCS#11 error", exc_info=e)
+        raise click.ClickException(f"PKCS#11 error: [{type(e).__name__}] {e}")
     with session:
         signer = beid.BEIDSigner(session, use_auth_cert=use_auth_cert)
         _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url)
