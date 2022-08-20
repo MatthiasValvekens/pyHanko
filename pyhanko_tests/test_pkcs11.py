@@ -19,7 +19,7 @@ from pkcs11 import Mechanism, NoSuchKey, PKCS11Error
 from pkcs11 import types as p11_types
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-from pyhanko.config import PKCS11SignatureConfig
+from pyhanko.config import PKCS11PinEntryMode, PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import general, pkcs11, signers
@@ -35,11 +35,13 @@ from pyhanko_tests.signing_commons import (
 
 logger = logging.getLogger(__name__)
 
-SKIP_PKCS11 = False
+SKIP_PKCS11 = SOFTHSM = False
 pkcs11_test_module = os.environ.get('PKCS11_TEST_MODULE', None)
 if not pkcs11_test_module:
     logger.warning("Skipping PKCS#11 tests --- no PCKS#11 module specified")
     SKIP_PKCS11 = True
+elif 'softhsm' in pkcs11_test_module.casefold():
+    SOFTHSM = True
 
 
 def _simple_sess(token='testrsa'):
@@ -155,7 +157,8 @@ def test_wrong_cert(bulk_fetch):
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
         signer = pkcs11.PKCS11Signer(
-            sess, key_label=SIGNER_LABEL, other_certs_to_pull=default_other_certs,
+            sess, key_label=SIGNER_LABEL,
+            other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch, cert_id=binascii.unhexlify(b'deadbeef')
         )
         with pytest.raises(PKCS11Error, match='Could not find.*with ID'):
@@ -319,6 +322,49 @@ def test_simple_sign_from_config():
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@freeze_time('2020-11-01')
+def test_sign_skip_login_fail():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=pkcs11_test_module, token_label='testrsa',
+        cert_label=SIGNER_LABEL, prompt_pin=PKCS11PinEntryMode.SKIP
+    )
+
+    # no key will be found, since we didn't bother logging in
+    with pytest.raises(NoSuchKey):
+        with PKCS11SigningContext(config) as signer:
+            signers.sign_pdf(w, meta, signer=signer)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.skipif(
+    not SOFTHSM,
+    reason=(
+        "this test relies on SoftHSM not supporting the "
+        "PROTECTED_AUTHENTICATION_PATH flag, and is disabled when running "
+        "against other PKCS#11 implementations."
+    )
+)
+@freeze_time('2020-11-01')
+def test_sign_deferred_auth():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    config = PKCS11SignatureConfig(
+        module_path=pkcs11_test_module, token_label='testrsa',
+        cert_label=SIGNER_LABEL, prompt_pin=PKCS11PinEntryMode.DEFER
+    )
+
+    # no key will be found, since we didn't bother logging in
+    with pytest.raises(PKCS11Error,
+                       match="Protected auth.*not supported by loaded module"):
+        with PKCS11SigningContext(config) as signer:
+            signers.sign_pdf(w, meta, signer=signer)
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")

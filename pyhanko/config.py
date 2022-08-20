@@ -3,7 +3,7 @@ import enum
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import yaml
 from asn1crypto import x509
@@ -370,6 +370,54 @@ class PemDerSignatureConfig(config_utils.ConfigurableMixin):
         return result
 
 
+class PKCS11PinEntryMode(enum.Enum):
+    """
+    Pin entry behaviour if the user PIN is not supplied as part of the config.
+    """
+
+    PROMPT = enum.auto()
+    """
+    Prompt for a PIN (the default).
+
+    .. note::
+        This value is only processed by the CLI, and ignored when the PKCS#11
+        signer is called from library code. In those cases, the default
+        is effectively :attr:`SKIP`.
+    """
+
+    DEFER = enum.auto()
+    """
+    Let the PKCS #11 module handle its own authentication during login.
+
+    .. note::
+        This applies to some devices that have physical PIN pads, for example.
+    """
+
+    SKIP = enum.auto()
+    """
+    Skip the login process altogether.
+
+    .. note::
+        This applies to some devices that manage user authentication outside
+        the scope of PKCS #11 entirely.
+    """
+
+    @staticmethod
+    def parse_mode_setting(value: Any) -> 'PKCS11PinEntryMode':
+        if isinstance(value, str):
+            try:
+                return PKCS11PinEntryMode.__members__[value.upper()]
+            except KeyError:
+                raise ConfigurationError(
+                    f"Invalid PIN entry mode {value!r}; must be one of "
+                    f"{', '.join(repr(x.name) for x in PKCS11PinEntryMode)}."
+                )
+        else:
+            # fallback for backwards compatibility
+            return PKCS11PinEntryMode.PROMPT if value \
+                else PKCS11PinEntryMode.SKIP
+
+
 @dataclass(frozen=True)
 class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     """
@@ -403,7 +451,7 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     token_label: Optional[str] = None
     """PKCS#11 token name"""
 
-    other_certs: List[x509.Certificate] = None
+    other_certs: Optional[List[x509.Certificate]] = None
     """Other relevant certificates."""
 
     key_label: Optional[str] = None
@@ -435,9 +483,9 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
         set :attr:`prompt_pin` to ``False``.
     """
 
-    prompt_pin: bool = True
+    prompt_pin: PKCS11PinEntryMode = PKCS11PinEntryMode.PROMPT
     """
-    Prompt for the user's PIN. Default is ``True``.
+    Set PIN entry and PKCS #11 login behaviour.
 
     .. note::
         If :attr:`user_pin` is not ``None``, this setting has no effect.
@@ -502,6 +550,11 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
                 "Either 'cert_id', 'cert_label' or 'signing_certificate' "
                 "must be provided in PKCS#11 setup"
             )
+
+        config_dict['prompt_pin'] = get_and_apply(
+            config_dict, 'prompt_pin', PKCS11PinEntryMode.parse_mode_setting,
+            default=PKCS11PinEntryMode.PROMPT
+        )
 
 
 def _process_pkcs11_id_value(x: Union[str, int]):

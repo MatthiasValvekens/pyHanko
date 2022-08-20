@@ -18,6 +18,7 @@ from pyhanko.config import (
     CLIConfig,
     LogConfig,
     PemDerSignatureConfig,
+    PKCS11PinEntryMode,
     PKCS11SignatureConfig,
     PKCS12SignatureConfig,
     StdLogOutput,
@@ -1158,14 +1159,23 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
             raise click.ClickException(
                 "The parameters --lib and --cert-label are required."
             )
+
+        pinentry_mode = (
+            PKCS11PinEntryMode.SKIP if skip_user_pin
+            else PKCS11PinEntryMode.PROMPT
+        )
+
         pkcs11_config = PKCS11SignatureConfig(
             module_path=lib, cert_label=cert_label, key_label=key_label,
             slot_no=slot_no, token_label=token_label,
-            prompt_pin=not skip_user_pin, raw_mechanism=raw_mechanism
+            # for now, DEFER requires a config file
+            prompt_pin=pinentry_mode,
+            raw_mechanism=raw_mechanism
         )
 
     pin = pkcs11_config.user_pin
-    if pin is None and pkcs11_config.prompt_pin:  # pragma: nocover
+    if pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT \
+            and pin is None:  # pragma: nocover
         pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
     try:
         with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
