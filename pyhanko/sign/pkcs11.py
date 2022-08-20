@@ -6,9 +6,10 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 import asyncio
 import binascii
 import logging
-from typing import List, Optional, Set
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Set
 
-from asn1crypto import x509
+from asn1crypto import algos, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
 
@@ -76,6 +77,144 @@ def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
             )
         return token
     return None
+
+
+@dataclass(frozen=True)
+class PKCS11SignatureOperationSpec:
+    """
+    Internal helper class to describe how to invoke a signature operation on
+    a key in a PKCS #11 token.
+    """
+
+    sign_kwargs: Dict[str, Any]
+    """
+    Keyword arguments to the ``sign`` function on the key handle.
+    """
+
+    pre_sign_transform: Optional[Callable[[bytes], bytes]]
+    """
+    An optional transformation to apply to the data prior to signing.
+    """
+
+    post_sign_transform: Optional[Callable[[bytes], bytes]]
+    """
+    An optional transformation to apply to the data after signing.
+    """
+
+
+def select_pkcs11_signing_params(
+        signature_mechanism: algos.SignedDigestAlgorithm,
+        digest_algorithm: str,
+        use_raw_mechanism: bool) -> PKCS11SignatureOperationSpec:
+    """
+    Internal helper function to set up a PKCS #11 signing operation.
+
+    :param signature_mechanism:
+        The signature mechanism to use (as an ASN.1 value)
+    :param digest_algorithm:
+        The digest algorithm to use
+    :param use_raw_mechanism:
+        Whether to attempt to use the raw mechanism on pre-hashed data.
+    :return:
+    """
+    from pkcs11 import MGF, Mechanism
+
+    signature_algo = signature_mechanism.signature_algo
+    pre_sign_transform = None
+    post_sign_transform = None
+    kwargs = {}
+    if signature_algo == 'rsassa_pkcs1v15':
+        if use_raw_mechanism:
+            raise NotImplementedError(
+                "RSASSA-PKCS1v15 not available in raw mode"
+            )
+        kwargs['mechanism'] = {
+            'sha1': Mechanism.SHA1_RSA_PKCS,
+            'sha224': Mechanism.SHA224_RSA_PKCS,
+            'sha256': Mechanism.SHA256_RSA_PKCS,
+            'sha384': Mechanism.SHA384_RSA_PKCS,
+            'sha512': Mechanism.SHA512_RSA_PKCS,
+        }[digest_algorithm]
+    elif signature_algo == 'dsa':
+        if use_raw_mechanism:
+            raise NotImplementedError("DSA not available in raw mode")
+        kwargs['mechanism'] = {
+            'sha1': Mechanism.DSA_SHA1,
+            'sha224': Mechanism.DSA_SHA224,
+            'sha256': Mechanism.DSA_SHA256,
+            # These can't be used in CMS IIRC (since the key sizes required
+            # to meaningfully use them are ridiculous),
+            # but they're in the PKCS#11 spec, so let's add them for
+            # completeness
+            'sha384': Mechanism.DSA_SHA384,
+            'sha512': Mechanism.DSA_SHA512,
+        }[digest_algorithm]
+        from pkcs11.util.dsa import encode_dsa_signature
+        post_sign_transform = encode_dsa_signature
+    elif signature_algo == 'ecdsa':
+        if use_raw_mechanism:
+            kwargs['mechanism'] = Mechanism.ECDSA
+            pre_sign_transform = _hash_fully(digest_algorithm)
+        else:
+            # TODO test these (unsupported in SoftHSMv2 right now)
+            kwargs['mechanism'] = {
+                'sha1': Mechanism.ECDSA_SHA1,
+                'sha224': Mechanism.ECDSA_SHA224,
+                'sha256': Mechanism.ECDSA_SHA256,
+                'sha384': Mechanism.ECDSA_SHA384,
+                'sha512': Mechanism.ECDSA_SHA512,
+            }[digest_algorithm]
+
+        from pkcs11.util.ec import encode_ecdsa_signature
+        post_sign_transform = encode_ecdsa_signature
+    elif signature_algo == 'rsassa_pss':
+        if use_raw_mechanism:
+            raise NotImplementedError(
+                "RSASSA-PSS not available in raw mode"
+            )
+        params: RSASSAPSSParams = signature_mechanism['parameters']
+        assert digest_algorithm == \
+               params['hash_algorithm']['algorithm'].native
+
+        # unpack PSS parameters into PKCS#11 language
+        kwargs['mechanism'] = {
+            'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
+            'sha224': Mechanism.SHA224_RSA_PKCS_PSS,
+            'sha256': Mechanism.SHA256_RSA_PKCS_PSS,
+            'sha384': Mechanism.SHA384_RSA_PKCS_PSS,
+            'sha512': Mechanism.SHA512_RSA_PKCS_PSS,
+        }[digest_algorithm]
+
+        pss_digest_param = {
+            'sha1': Mechanism.SHA_1,
+            'sha224': Mechanism.SHA224,
+            'sha256': Mechanism.SHA256,
+            'sha384': Mechanism.SHA384,
+            'sha512': Mechanism.SHA512,
+        }[digest_algorithm]
+
+        pss_mgf_param = {
+            'sha1': MGF.SHA1,
+            'sha224': MGF.SHA224,
+            'sha256': MGF.SHA256,
+            'sha384': MGF.SHA384,
+            'sha512': MGF.SHA512
+        }[params['mask_gen_algorithm']['parameters']['algorithm'].native]
+        pss_salt_len = params['salt_length'].native
+
+        kwargs['mechanism_param'] = (
+            pss_digest_param, pss_mgf_param, pss_salt_len
+        )
+    else:
+        raise PKCS11Error(
+            f"Signature algorithm '{signature_algo}' is not supported."
+        )
+
+    return PKCS11SignatureOperationSpec(
+        sign_kwargs=kwargs,
+        pre_sign_transform=pre_sign_transform,
+        post_sign_transform=post_sign_transform
+    )
 
 
 def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
@@ -280,6 +419,15 @@ class PKCS11Signer(Signer):
         self._load_objects()
         return self._signing_cert
 
+    def _select_pkcs11_signing_params(self, digest_algorithm: str) \
+            -> PKCS11SignatureOperationSpec:
+        digest_algorithm = digest_algorithm.lower()
+        return select_pkcs11_signing_params(
+            self.get_signature_mechanism(digest_algorithm),
+            digest_algorithm,
+            use_raw_mechanism=self.use_raw_mechanism
+        )
+
     async def async_sign_raw(self, data: bytes,
                              digest_algorithm: str, dry_run=False) -> bytes:
         if dry_run:
@@ -287,109 +435,18 @@ class PKCS11Signer(Signer):
             return b'0' * 512
 
         await self.ensure_objects_loaded()
-        from pkcs11 import MGF, Mechanism, SignMixin
+        from pkcs11 import SignMixin
 
         kh: SignMixin = self._key_handle
-        kwargs = {}
-        digest_algorithm = digest_algorithm.lower()
-        signature_mechanism = self.get_signature_mechanism(digest_algorithm)
-        signature_algo = signature_mechanism.signature_algo
-        pre_sign_transform = None
-        post_sign_transform = None
-        if signature_algo == 'rsassa_pkcs1v15':
-            if self.use_raw_mechanism:
-                raise NotImplementedError(
-                    "RSASSA-PKCS1v15 not available in raw mode"
-                )
-            kwargs['mechanism'] = {
-                'sha1': Mechanism.SHA1_RSA_PKCS,
-                'sha224': Mechanism.SHA224_RSA_PKCS,
-                'sha256': Mechanism.SHA256_RSA_PKCS,
-                'sha384': Mechanism.SHA384_RSA_PKCS,
-                'sha512': Mechanism.SHA512_RSA_PKCS,
-            }[digest_algorithm]
-        elif signature_algo == 'dsa':
-            if self.use_raw_mechanism:
-                raise NotImplementedError("DSA not available in raw mode")
-            kwargs['mechanism'] = {
-                'sha1': Mechanism.DSA_SHA1,
-                'sha224': Mechanism.DSA_SHA224,
-                'sha256': Mechanism.DSA_SHA256,
-                # These can't be used in CMS IIRC (since the key sizes required
-                # to meaningfully use them are ridiculous),
-                # but they're in the PKCS#11 spec, so let's add them for
-                # completeness
-                'sha384': Mechanism.DSA_SHA384,
-                'sha512': Mechanism.DSA_SHA512,
-            }[digest_algorithm]
-            from pkcs11.util.dsa import encode_dsa_signature
-            post_sign_transform = encode_dsa_signature
-        elif signature_algo == 'ecdsa':
-            if self.use_raw_mechanism:
-                kwargs['mechanism'] = Mechanism.ECDSA
-                pre_sign_transform = _hash_fully(digest_algorithm)
-            else:
-                # TODO test these (unsupported in SoftHSMv2 right now)
-                kwargs['mechanism'] = {
-                    'sha1': Mechanism.ECDSA_SHA1,
-                    'sha224': Mechanism.ECDSA_SHA224,
-                    'sha256': Mechanism.ECDSA_SHA256,
-                    'sha384': Mechanism.ECDSA_SHA384,
-                    'sha512': Mechanism.ECDSA_SHA512,
-                }[digest_algorithm]
+        spec = self._select_pkcs11_signing_params(digest_algorithm)
 
-            from pkcs11.util.ec import encode_ecdsa_signature
-            post_sign_transform = encode_ecdsa_signature
-        elif signature_algo == 'rsassa_pss':
-            if self.use_raw_mechanism:
-                raise NotImplementedError(
-                    "RSASSA-PSS not available in raw mode"
-                )
-            params: RSASSAPSSParams = signature_mechanism['parameters']
-            assert digest_algorithm == \
-                   params['hash_algorithm']['algorithm'].native
-
-            # unpack PSS parameters into PKCS#11 language
-            kwargs['mechanism'] = {
-                'sha1': Mechanism.SHA1_RSA_PKCS_PSS,
-                'sha224': Mechanism.SHA224_RSA_PKCS_PSS,
-                'sha256': Mechanism.SHA256_RSA_PKCS_PSS,
-                'sha384': Mechanism.SHA384_RSA_PKCS_PSS,
-                'sha512': Mechanism.SHA512_RSA_PKCS_PSS,
-            }[digest_algorithm]
-
-            pss_digest_param = {
-                'sha1': Mechanism.SHA_1,
-                'sha224': Mechanism.SHA224,
-                'sha256': Mechanism.SHA256,
-                'sha384': Mechanism.SHA384,
-                'sha512': Mechanism.SHA512,
-            }[digest_algorithm]
-
-            pss_mgf_param = {
-                'sha1': MGF.SHA1,
-                'sha224': MGF.SHA224,
-                'sha256': MGF.SHA256,
-                'sha384': MGF.SHA384,
-                'sha512': MGF.SHA512
-            }[params['mask_gen_algorithm']['parameters']['algorithm'].native]
-            pss_salt_len = params['salt_length'].native
-
-            kwargs['mechanism_param'] = (
-                pss_digest_param, pss_mgf_param, pss_salt_len
-            )
-        else:
-            raise PKCS11Error(
-                f"Signature algorithm '{signature_algo}' is not supported."
-            )
-
-        if pre_sign_transform is not None:
-            data = pre_sign_transform(data)
+        if spec.pre_sign_transform is not None:
+            data = spec.pre_sign_transform(data)
 
         def _perform_signature():
-            signature = kh.sign(data, **kwargs)
-            if post_sign_transform is not None:
-                signature = post_sign_transform(signature)
+            signature = kh.sign(data, **spec.sign_kwargs)
+            if spec.post_sign_transform is not None:
+                signature = spec.post_sign_transform(signature)
             return signature
 
         loop = asyncio.get_running_loop()
