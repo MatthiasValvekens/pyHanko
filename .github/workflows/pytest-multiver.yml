@@ -23,13 +23,24 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install poppler-utils imagemagick
+        sudo apt-get install poppler-utils imagemagick softhsm2
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install --upgrade pytest
+    - name: Initialise SoftHSM tokens
+      run: |
+        mkdir softhsm_tokens
+        echo "directories.tokendir = $(pwd)/softhsm_tokens" > softhsm2.conf
+        ./pyhanko_tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
+      env:
+        SOFTHSM2_MODULE_PATH: /usr/lib/softhsm/libsofthsm2.so
+        SOFTHSM2_CONF: softhsm2.conf
+        CERTOMANCER_CONFIG_PATH: pyhanko_tests/data/crypto/certomancer.yml
     - name: Test with pytest
       run: |
         python -m pytest
       env:
         PDFTOPPM_PATH: /usr/bin/pdftoppm
         IM_COMPARE_PATH: /usr/bin/compare
+        SOFTHSM2_CONF: softhsm2.conf
+        PKCS11_TEST_MODULE: /usr/lib/softhsm/libsofthsm2.so

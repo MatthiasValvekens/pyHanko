@@ -571,7 +571,7 @@ class PKCS11Signer(Signer):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._load_objects)
             event.set()
-        else:
+        else:  # pragma: nocover
             # some other coroutine is dealing with fetching already,
             # just wait for that one to finish
             await self.__loading_event.wait()
