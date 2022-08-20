@@ -7,13 +7,13 @@ import asyncio
 import binascii
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 from asn1crypto import algos, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
 
-from pyhanko.config import PKCS11SignatureConfig
+from pyhanko.config import PKCS11PinEntryMode, PKCS11SignatureConfig
 from pyhanko.sign.general import (
     CertificateStore,
     SigningError,
@@ -25,6 +25,7 @@ from pyhanko.sign.signers import Signer
 try:
     from pkcs11 import (
         MGF,
+        PROTECTED_AUTH,
         Attribute,
         Mechanism,
         ObjectClass,
@@ -265,7 +266,7 @@ def select_pkcs11_signing_params(
 
 def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
                         token_label: Optional[str] = None,
-                        user_pin: Optional[str] = None) -> Session:
+                        user_pin: Union[str, object, None] = None) -> Session:
     """
     Open a PKCS#11 session
 
@@ -277,11 +278,14 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
     :param token_label:
         Label of the token to use. If ``None``, there is no constraint.
     :param user_pin:
-        User PIN to use.
+        User PIN to use, or :attr:`.PROTECTED_AUTH`. If ``None``, authentication
+        is skipped.
 
         .. note::
             Some PKCS#11 implementations do not require PIN when the token
             is opened, but will prompt for it out-of-band when signing.
+            Whether :attr:`.PROTECTED_AUTH` or ``None`` is used in this case
+            depends on the implementation.
     :return:
         An open PKCS#11 session object.
     """
@@ -613,10 +617,20 @@ class PKCS11SigningContext:
         self._session = None
         self._user_pin = user_pin
 
+    def _handle_pin(self):
+        pin = self._user_pin or self.config.user_pin
+        # mode 'PROMPT' is irrelevant for library usage.
+        if pin is not None:
+            pin = str(pin)
+        elif self.config.prompt_pin == PKCS11PinEntryMode.DEFER:
+            pin = PROTECTED_AUTH
+        else:
+            pin = None
+        return pin
+
     def _instantiate(self) -> PKCS11Signer:
         config = self.config
-        pin = self._user_pin or config.user_pin
-        pin = str(pin) if pin is not None else None
+        pin = self._handle_pin()
 
         self._session = session = open_pkcs11_session(
             config.module_path, slot_no=config.slot_no,
