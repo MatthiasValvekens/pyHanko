@@ -627,6 +627,60 @@ def test_read_pkcs11_config_no_cert_spec():
         cli_config.get_pkcs11_config('foo')
 
 
+@pytest.mark.parametrize('literal,exp_val', [
+    ('prompt', config.PKCS11PinEntryMode.PROMPT),
+    ('skip', config.PKCS11PinEntryMode.SKIP),
+    ('defer', config.PKCS11PinEntryMode.DEFER),
+    # fallbacks
+    ('true', config.PKCS11PinEntryMode.PROMPT),
+    ('false', config.PKCS11PinEntryMode.SKIP),
+    ('1', config.PKCS11PinEntryMode.PROMPT),
+    ('0', config.PKCS11PinEntryMode.SKIP),
+])
+def test_read_pkcs11_prompt_pin(literal, exp_val):
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                cert-label: signer
+                prompt-pin: {literal}
+        """
+    )
+    setup = cli_config.get_pkcs11_config('foo')
+    assert setup.prompt_pin == exp_val
+
+
+def test_read_pkcs11_prompt_pin_default():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                cert-label: signer
+        """
+    )
+    setup = cli_config.get_pkcs11_config('foo')
+    assert setup.prompt_pin == config.PKCS11PinEntryMode.PROMPT
+
+
+def test_read_pkcs11_prompt_pin_invalid():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                cert-label: signer
+                prompt-pin: foobar
+        """
+    )
+    with pytest.raises(ConfigurationError, match='Invalid'):
+        cli_config.get_pkcs11_config('foo')
+
+
 def _signer_sanity_check(signer):
     digest = hashlib.sha256(b'Hello world!').digest()
     with pytest.deprecated_call():
