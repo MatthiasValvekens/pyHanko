@@ -22,6 +22,7 @@ from pyhanko_tests.samples import (
     MINIMAL_TWO_PAGES,
     PDF_DATA_DIR,
     TESTING_CA,
+    TESTING_CA_ERRORS,
     simple_page,
 )
 from pyhanko_tests.signing_commons import (
@@ -514,8 +515,10 @@ async def test_sign_with_cert_no_common_name_appearance():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
     sg = signers.SimpleSigner(
-        signing_cert=TESTING_CA.get_cert(CertLabel('signer-no-cn')),
-        signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
+        signing_cert=TESTING_CA_ERRORS.get_cert(CertLabel('signer-no-cn')),
+        signing_key=TESTING_CA_ERRORS.key_set.get_private_key(
+            KeyLabel('signer1')
+        ),
         cert_registry=SimpleCertificateStore.from_certs(
             [ROOT_CERT, INTERM_CERT]
         )
