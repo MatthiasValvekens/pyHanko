@@ -6,7 +6,7 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 import asyncio
 import binascii
 import logging
-from typing import Optional, Set
+from typing import List, Optional, Set
 
 from asn1crypto import x509
 from asn1crypto.algos import RSASSAPSSParams
@@ -23,7 +23,8 @@ from pyhanko.sign.signers import Signer
 
 try:
     from pkcs11 import Attribute, ObjectClass, PKCS11Error, Session
-    from pkcs11 import lib as pkcs11_lib
+    from pkcs11 import lib as p11_lib
+    from pkcs11 import types as p11_types
 except ImportError as e:  # pragma: nocover
     raise ImportError(
         "pyhanko.sign.pkcs11 requires pyHanko to be installed with "
@@ -33,14 +34,53 @@ except ImportError as e:  # pragma: nocover
 
 
 __all__ = [
-    'PKCS11Signer', 'open_pkcs11_session', 'PKCS11SigningContext'
+    'PKCS11Signer', 'open_pkcs11_session', 'PKCS11SigningContext', 'find_token'
 ]
 
 logger = logging.getLogger(__name__)
 
 
-def open_pkcs11_session(lib_location, slot_no=None, token_label=None,
-                        user_pin=None) -> Session:
+def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
+               token_label: Optional[str] = None) -> Optional[p11_types.Token]:
+    """
+    Internal helper method to find a token.
+
+    :param slots:
+        The list of slots.
+    :param slot_no:
+        Slot number to use. If not specified, the first slot containing a token
+        labelled ``token_label`` will be used.
+    :param token_label:
+        Label of the token to use. If ``None``, there is no constraint.
+    :return:
+        A PKCS#11 token object, or ``None`` if none was found.
+    """
+
+    if slot_no is None:
+        for slot in slots:
+            try:
+                token = slot.get_token()
+                if token_label is None or token.label == token_label:
+                    return token
+            except PKCS11Error:
+                continue
+    else:
+        if slot_no >= len(slots):
+            raise PKCS11Error(
+                f"Slot index {slot_no} too large; there are only {len(slots)}"
+            )
+        token = slots[slot_no].get_token()
+        if token_label is not None and token.label != token_label:
+            raise PKCS11Error(
+                f"Token in slot {slot_no} is not {token_label!r}."
+            )
+        return token
+    return None
+
+
+def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
+                        token_label: Optional[str] = None,
+                        user_pin: Optional[str] = None) -> Session:
     """
     Open a PKCS#11 session
 
@@ -60,27 +100,17 @@ def open_pkcs11_session(lib_location, slot_no=None, token_label=None,
     :return:
         An open PKCS#11 session object.
     """
-    lib = pkcs11_lib(lib_location)
+    lib = p11_lib(lib_location)
 
     slots = lib.get_slots()
-    token = None
-    if slot_no is None:
-        for slot in slots:
-            try:
-                token = slot.get_token()
-                if token_label is None or token.label == token_label:
-                    break
-            except PKCS11Error:
-                continue
-        if token is None:
-            raise PKCS11Error(
-                f'No token with label {token_label} found'
-                if token_label is not None else 'No token found'
-            )
-    else:
-        token = slots[slot_no].get_token()
-        if token_label is not None and token.label != token_label:
-            raise PKCS11Error(f'Token in slot {slot_no} is not {token_label}.')
+    token = find_token(
+        slots, slot_no=slot_no, token_label=token_label
+    )
+    if token is None:
+        raise PKCS11Error(
+            f'No token with label {token_label} found'
+            if token_label is not None else 'No token found'
+        )
 
     kwargs = {}
     if user_pin is not None:

@@ -8,12 +8,14 @@ import binascii
 import logging
 import os
 from io import BytesIO
+from typing import Optional
 
 import pytest
 from asn1crypto.algos import SignedDigestAlgorithm
 from certomancer.registry import CertLabel
 from freezegun import freeze_time
 from pkcs11 import NoSuchKey, PKCS11Error
+from pkcs11 import types as p11_types
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.config import PKCS11SignatureConfig
@@ -21,7 +23,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import general, pkcs11, signers
 from pyhanko.sign.general import SigningError
-from pyhanko.sign.pkcs11 import PKCS11SigningContext
+from pyhanko.sign.pkcs11 import PKCS11SigningContext, find_token
 from pyhanko_tests.samples import MINIMAL, TESTING_CA
 from pyhanko_tests.signing_commons import (
     SIMPLE_DSA_V_CONTEXT,
@@ -412,3 +414,101 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
                     {'algorithm': 'sha256_rsa'}
                 )
             )
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+def test_token_does_not_exist():
+
+    with pytest.raises(PKCS11Error, match='No token with label.*found'):
+        _simple_sess(token='aintnosuchtoken')
+
+
+DUMMY_VER = {'major': 0, 'minor': 0}
+DUMMY_ARGS = dict(
+    serialNumber=b'\xde\xad\xbe\xef',
+    slotDescription=b'', manufacturerID=b'',
+    hardwareVersion=DUMMY_VER, firmwareVersion=DUMMY_VER,
+)
+
+
+class DummyToken(p11_types.Token):
+
+    def open(self, rw=False, user_pin=None, so_pin=None):
+        raise NotImplementedError
+
+
+class DummySlot(p11_types.Slot):
+    def __init__(self, lbl: Optional[str]):
+        self.lbl = lbl
+
+        super().__init__(
+            "dummy.so.0", slot_id=0xdeadbeef,
+            flags=(
+                p11_types.SlotFlag(0) if lbl is None else
+                p11_types.SlotFlag.TOKEN_PRESENT
+            ),
+            **DUMMY_ARGS,
+        )
+
+    def get_token(self):
+        if self.lbl is not None:
+            return DummyToken(
+                self, label=self.lbl.encode('utf8'),
+                model=b'DummyToken',
+                flags=p11_types.TokenFlag(0),
+                **DUMMY_ARGS
+            )
+        else:
+            raise PKCS11Error("No token in slot")
+
+    def get_mechanisms(self):
+        return []
+
+    def get_mechanism_info(self, mechanism):
+        raise NotImplementedError
+
+
+@pytest.mark.parametrize('slot_list,slot_no_query,token_lbl_query', [
+    (['foo', 'bar'], 0, 'foo'),
+    (['foo', None, 'bar'], 0, 'foo'),
+    (['foo', None, 'bar'], None, 'foo'),
+    # skip over empty slots when doing this scan
+    ([None, 'foo', None, 'bar'], None, 'foo'),
+    ([None, 'foo', None], None, None),
+    ([None, 'foo', None], 1, None),
+])
+def test_find_token(slot_list, slot_no_query, token_lbl_query):
+    tok = find_token(
+        [DummySlot(lbl) for lbl in slot_list],
+        slot_no=slot_no_query, token_label=token_lbl_query
+    )
+    if token_lbl_query:
+        assert tok.label == token_lbl_query
+
+
+@pytest.mark.parametrize('slot_list,slot_no_query,token_lbl_query, err', [
+    (['foo', 'bar'], 2, 'foo', 'too large'),
+    (['foo', 'bar'], 1, 'foo', 'Token in slot 1 is not \'foo\''),
+    # when querying by slot, we want the error to be passed on
+    ([None, 'bar'], 0, None, 'No token in'),
+])
+def test_find_token_error(slot_list, slot_no_query, token_lbl_query, err):
+    with pytest.raises(PKCS11Error, match=err):
+        find_token(
+            [DummySlot(lbl) for lbl in slot_list],
+            slot_no=slot_no_query, token_label=token_lbl_query
+        )
+
+
+@pytest.mark.parametrize('slot_list,token_lbl_query', [
+    ([None, 'bar'], 'foo'),
+    (['foo', 'bar'], 'baz'),
+    ([None, None], 'foo'),
+    ([], 'foo'),
+])
+def test_token_not_found(slot_list, token_lbl_query):
+    tok = find_token(
+        [DummySlot(lbl) for lbl in slot_list],
+        slot_no=None, token_label=token_lbl_query
+    )
+    assert tok is None
