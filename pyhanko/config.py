@@ -479,12 +479,6 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
             other_certs = (other_certs,)
         config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
 
-        if 'token_label' not in config_dict and 'slot_no' not in config_dict:
-            raise ConfigurationError(
-                "Either 'slot_no' or 'token_label' must be provided in "
-                "PKCS#11 setup"
-            )
-
         cert_file = config_dict.get('signing_certificate', None)
         if cert_file is not None:
             config_dict['signing_certificate'] \

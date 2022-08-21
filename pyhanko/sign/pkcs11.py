@@ -65,6 +65,15 @@ def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
         A PKCS#11 token object, or ``None`` if none was found.
     """
 
+    if token_label is None and slot_no is None:
+        if len(slots) == 1:
+            return slots[0].get_token()
+        else:
+            raise PKCS11Error(
+                "Module has more than 1 slot; slot index or token label "
+                "must be provided"
+            )
+
     if slot_no is None:
         for slot in slots:
             try:

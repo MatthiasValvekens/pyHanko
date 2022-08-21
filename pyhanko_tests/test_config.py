@@ -566,19 +566,6 @@ def test_read_pkcs11_nothing_to_pull():
     assert len(setup.other_certs) == 0
 
 
-def test_read_pkcs11_config_missing_slot():
-    cli_config = config.parse_cli_config(
-        f"""
-        pkcs11-setups:
-            foo:
-                module-path: /path/to/libfoo.so
-                cert-label: signer
-        """
-    )
-    with pytest.raises(ConfigurationError, match='Either'):
-        cli_config.get_pkcs11_config('foo')
-
-
 def test_read_pkcs11_config_ids():
     cli_config = config.parse_cli_config(
         f"""

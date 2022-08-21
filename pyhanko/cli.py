@@ -50,6 +50,7 @@ try:
     import pkcs11  # lgtm [py/unused-import]
     pkcs11_available = True
 except ImportError:
+    pkcs11 = None
     pkcs11_available = False
 
 
@@ -1153,10 +1154,9 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
             logger.error(msg, exc_info=e)
             raise click.ClickException(msg)
     else:
-        if not (lib and token_label and cert_label):
+        if not (lib and cert_label):
             raise click.ClickException(
-                "The parameters --lib, --token-label and --cert-label "
-                "are required."
+                "The parameters --lib and --cert-label are required."
             )
         pkcs11_config = PKCS11SignatureConfig(
             module_path=lib, cert_label=cert_label, key_label=key_label,

@@ -520,6 +520,15 @@ def test_token_does_not_exist():
         _simple_sess(token='aintnosuchtoken')
 
 
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+def test_token_unclear():
+
+    with pytest.raises(PKCS11Error, match='more than 1'):
+        return pkcs11.open_pkcs11_session(
+            pkcs11_test_module, user_pin='1234', token_label=None
+        )
+
+
 DUMMY_VER = {'major': 0, 'minor': 0}
 DUMMY_ARGS = dict(
     serialNumber=b'\xde\xad\xbe\xef',
@@ -566,28 +575,32 @@ class DummySlot(p11_types.Slot):
 
 
 @pytest.mark.parametrize('slot_list,slot_no_query,token_lbl_query', [
-    (['foo', 'bar'], 0, 'foo'),
-    (['foo', None, 'bar'], 0, 'foo'),
-    (['foo', None, 'bar'], None, 'foo'),
+    (('foo',), None, None),
+    (('foo', 'bar'), 0, 'foo'),
+    (('foo', None, 'bar'), 0, 'foo'),
+    (('foo', None, 'bar'), None, 'foo'),
     # skip over empty slots when doing this scan
-    ([None, 'foo', None, 'bar'], None, 'foo'),
-    ([None, 'foo', None], None, None),
-    ([None, 'foo', None], 1, None),
+    ((None, 'foo', None, 'bar'), None, 'foo'),
+    ((None, 'foo', None), 1, None),
 ])
 def test_find_token(slot_list, slot_no_query, token_lbl_query):
     tok = find_token(
         [DummySlot(lbl) for lbl in slot_list],
         slot_no=slot_no_query, token_label=token_lbl_query
     )
+    assert tok is not None
     if token_lbl_query:
         assert tok.label == token_lbl_query
 
 
 @pytest.mark.parametrize('slot_list,slot_no_query,token_lbl_query, err', [
-    (['foo', 'bar'], 2, 'foo', 'too large'),
-    (['foo', 'bar'], 1, 'foo', 'Token in slot 1 is not \'foo\''),
+    (('foo', 'bar'), 2, 'foo', 'too large'),
+    (('foo', 'bar'), 1, 'foo', 'Token in slot 1 is not \'foo\''),
     # when querying by slot, we want the error to be passed on
-    ([None, 'bar'], 0, None, 'No token in'),
+    ((None, 'bar'), 0, None, 'No token in'),
+    (('foo', 'bar'), None, None, 'more than 1'),
+    # right now, we don't care about the status of the slot in any way
+    (('foo', None), None, None, 'more than 1'),
 ])
 def test_find_token_error(slot_list, slot_no_query, token_lbl_query, err):
     with pytest.raises(PKCS11Error, match=err):
@@ -598,10 +611,10 @@ def test_find_token_error(slot_list, slot_no_query, token_lbl_query, err):
 
 
 @pytest.mark.parametrize('slot_list,token_lbl_query', [
-    ([None, 'bar'], 'foo'),
-    (['foo', 'bar'], 'baz'),
-    ([None, None], 'foo'),
-    ([], 'foo'),
+    ((None, 'bar'), 'foo'),
+    (('foo', 'bar'), 'baz'),
+    ((None, None), 'foo'),
+    ((), 'foo'),
 ])
 def test_token_not_found(slot_list, token_lbl_query):
     tok = find_token(
