@@ -9,7 +9,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
-from asn1crypto import algos, x509
+from asn1crypto import algos, core, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
 
@@ -362,7 +362,10 @@ def _hash_fully(digest_algorithm: str, *, wrap_digest_info: bool):
         digest = h.finalize()
         if wrap_digest_info:
             return algos.DigestInfo({
-                'digest_algorithm': {'algorithm': digest_algorithm.lower()},
+                'digest_algorithm': {
+                    'algorithm': digest_algorithm.lower(),
+                    'parameters': core.Null()
+                },
                 'digest': digest
             }).dump()
         else:
