@@ -270,9 +270,25 @@ class Signer:
             for most applications.
     """
 
-    signing_cert: x509.Certificate
+    signing_cert: Optional[x509.Certificate] = None
     """
+    .. versionchanged:: 0.14.0
+        Made optional (see note)
+
     The certificate that will be used to create the signature.
+
+    .. note::
+        This is an optional field only to a limited extent. Subclasses may
+        require it to be present, and not setting it at the beginning of
+        the signing process implies that certain high-level convenience
+        features will no longer work or be limited in function (e.g.,
+        automatic hash selection, appearance generation, revocation information
+        collection, ...).
+
+        However, making :attr:`signing_cert` optional enables certain signing
+        workflows where the certificate of the signer is not known until the
+        signature has actually been produced. This is most relevant in certain
+        types of remote signing scenarios.
     """
 
     cert_registry: CertificateStore
@@ -322,7 +338,7 @@ class Signer:
         if self.signing_cert is None:
             raise SigningError(
                 "Could not set up a default signature mechanism."
-            )  # pragma: nocover
+            )
         # Grab the certificate's algorithm (but forget about the digest)
         #  and use that to set up the default.
         # We'll specify the digest somewhere else.
@@ -370,12 +386,16 @@ class Signer:
         return SignedDigestAlgorithm(sda_kwargs)
 
     @property
-    def subject_name(self):
+    def subject_name(self) -> Optional[str]:
         """
         :return:
             The subject's common name as a string, extracted from
-            :attr:`signing_cert`.
+            :attr:`signing_cert`, or ``None`` if no signer's certificate is
+            available
         """
+        if self.signing_cert is None:
+            return None
+
         name: x509.Name = self.signing_cert.subject
         try:
             result = name.native['common_name']
@@ -1389,15 +1409,20 @@ class ExternalSigner(Signer):
     Intended for use with :ref:`interrupted-signing`.
     """
 
-    def __init__(self, signing_cert: x509.Certificate,
-                 cert_registry: CertificateStore,
-                 signature_value: bytes,
-                 signature_mechanism: SignedDigestAlgorithm = None,
-                 prefer_pss=False, embed_roots=True):
+    # TODO document parameters
+    def __init__(self, signing_cert: Optional[x509.Certificate],
+                 cert_registry: Optional[CertificateStore],
+                 signature_value: Union[bytes, int, None] = None,
+                 signature_mechanism: Optional[SignedDigestAlgorithm] = None,
+                 prefer_pss: bool = False, embed_roots: bool = True):
         self.signing_cert = signing_cert
-        self.cert_registry = cert_registry
+        self.cert_registry = cert_registry or SimpleCertificateStore()
         self.signature_mechanism = signature_mechanism
-        self._signature_value = signature_value
+
+        if isinstance(signature_value, bytes):
+            self._signature_value = signature_value
+        else:
+            self._signature_value = bytes(signature_value or 256)
         super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
     async def async_sign_raw(self,

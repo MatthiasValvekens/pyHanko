@@ -956,9 +956,16 @@ class PdfSigner:
             md_algorithm = self.default_md_for_signer
         elif sv_md_algorithm is not None:
             md_algorithm = sv_md_algorithm
-        else:
+        elif self.signer.signing_cert is not None:
             md_algorithm = select_suitable_signing_md(
                 self.signer.signing_cert.public_key
+            )
+        else:
+            raise SigningError(
+                "Could not select a default digest algorithm. Please supply "
+                "a value in the signature settings, or configure the signer "
+                "with an explicit signature mechanism that includes a digest "
+                "algorithm specification."
             )
 
         # TODO fall back to more useful default for weak_hash_algos
@@ -1088,7 +1095,7 @@ class PdfSigner:
         :param bytes_reserved:
             Bytes to reserve for the CMS object in the PDF file.
             If not specified, make an estimate based on a dummy signature.
-            
+
             .. warning::
                 Since the CMS object is written to the output file as a
                 hexadecimal string, you should request **twice** the (estimated)
@@ -1796,6 +1803,13 @@ class PdfSigningSession:
         md_algorithm = self.md_algorithm
         signature_meta = self.pdf_signer.signature_meta
         signer = self.pdf_signer.signer
+
+        if signer.signing_cert is None:
+            raise SigningError(
+                "Automatic signature size estimation is not available without "
+                "a signer's certificate. Space must be allocated manually "
+                "using bytes_reserved=..."
+            )
         # estimate bytes_reserved by creating a fake CMS object
         md_spec = get_pyca_cryptography_hash(md_algorithm)
         test_md = hashes.Hash(md_spec).finalize()

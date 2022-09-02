@@ -32,7 +32,11 @@ from pyhanko.sign.general import (
     load_certs_from_pemder,
 )
 from pyhanko.sign.signers import cms_embedder
-from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes, asyncify_signer
+from pyhanko.sign.signers.pdf_cms import (
+    ExternalSigner,
+    PdfCMSSignedAttributes,
+    asyncify_signer,
+)
 from pyhanko.sign.signers.pdf_signer import PdfTBSDocument
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
@@ -959,6 +963,88 @@ def test_simple_interrupted_signature():
 
     r = PdfFileReader(new_output)
     val_trusted(r.embedded_signatures[0])
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_interrupted_with_delayed_signing_cert():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=ExternalSigner(
+            signing_cert=None, cert_registry=None,
+            signature_value=256,
+            signature_mechanism=SignedDigestAlgorithm({
+                'algorithm': 'sha256_rsa'
+            }),
+        )
+    )
+    prep_digest, tbs_document, output = await pdf_signer\
+        .async_digest_doc_for_signing(w, bytes_reserved=8192)
+    md_algorithm = tbs_document.md_algorithm
+    assert tbs_document.post_sign_instructions is None
+
+    # copy the output to a new buffer, just to make a point
+    new_output = BytesIO()
+    assert isinstance(output, BytesIO)
+    buf = output.getbuffer()
+    new_output.write(buf)
+    buf.release()
+
+    await PdfTBSDocument.async_finish_signing(
+        new_output, prep_digest, await FROM_CA.async_sign(
+            prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+        ),
+    )
+
+    r = PdfFileReader(new_output)
+    await async_val_trusted(r.embedded_signatures[0])
+
+
+@pytest.mark.asyncio
+async def test_interrupted_could_not_determine_digest_algo():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=ExternalSigner(
+            signing_cert=None, cert_registry=None,
+            signature_value=256
+        )
+    )
+
+    with pytest.raises(SigningError,
+                       match="Could not select.*digest algorithm"):
+        await pdf_signer.async_digest_doc_for_signing(w)
+
+
+@pytest.mark.asyncio
+async def test_interrupted_no_estimation():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=ExternalSigner(
+            signing_cert=None, cert_registry=None,
+            signature_value=bytes(256),
+            signature_mechanism=SignedDigestAlgorithm({
+                'algorithm': 'sha256_rsa'
+            })
+        ),
+    )
+
+    with pytest.raises(SigningError,
+                       match="estimation.*bytes_reserved"):
+        await pdf_signer.async_digest_doc_for_signing(w)
+
+def test_determine_mechanism_no_signing_cert():
+    signer = ExternalSigner(
+        signing_cert=None, cert_registry=None,
+        signature_value=bytes(256)
+    )
+
+    with pytest.raises(SigningError,
+                       match="Could not set up.*mechanism"):
+        signer.get_signature_mechanism('sha256')
 
 
 @freeze_time('2020-11-01')
