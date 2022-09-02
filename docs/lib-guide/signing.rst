@@ -745,6 +745,13 @@ Interrupted signing
     The new async-first API requires some changes to the workflow at this (relatively low)
     level of abstraction.
 
+.. versionchanged:: 0.14.0
+    It is no longer mandatory to make the signer's certificate available from the start of the workflow,
+    although this comes at the cost of some convenience (signature size estimation and revocation info
+    collection being two major ones). This makes it easier to implement remote signing scenarios where
+    the signer's certificate is unknown until the remote signing service produces its response.
+
+
 There are use cases where trying to run the entire signing process in one go isn't feasible.
 Think of a remote signing scenario with pyHanko running on a server, and calling an external signing
 service to perform the cryptographic operations, or a case where pyHanko needs to wait for
