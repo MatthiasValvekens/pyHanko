@@ -532,5 +532,5 @@ async def test_sign_with_cert_no_common_name_appearance():
     annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
     ap_data = annot['/AP']['/N'].data
 
-    assert b'signed by Example Inc <info@example.com>' in ap_data
+    assert b'signed by Example Inc ' in ap_data
 
