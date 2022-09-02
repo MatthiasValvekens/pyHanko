@@ -967,7 +967,7 @@ def test_simple_interrupted_signature():
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_interrupted_with_delayed_signing_cert():
+async def test_interrupted_with_delayed_signing_cert_mech():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     pdf_signer = signers.PdfSigner(
         signers.PdfSignatureMetadata(field_name='SigNew'),
@@ -999,6 +999,35 @@ async def test_interrupted_with_delayed_signing_cert():
     )
 
     r = PdfFileReader(new_output)
+    await async_val_trusted(r.embedded_signatures[0])
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_interrupted_with_delayed_signing_cert_directly_specify_md():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(
+            field_name='SigNew', md_algorithm='sha256'
+        ),
+        signer=ExternalSigner(
+            signing_cert=None, cert_registry=None,
+            signature_value=256,
+        )
+    )
+    prep_digest, tbs_document, output = await pdf_signer \
+        .async_digest_doc_for_signing(w, bytes_reserved=8192)
+    md_algorithm = tbs_document.md_algorithm
+    assert tbs_document.post_sign_instructions is None
+
+    await PdfTBSDocument.async_finish_signing(
+        output, prep_digest, await FROM_CA.async_sign(
+            prep_digest.document_digest,
+            digest_algorithm=md_algorithm,
+        ),
+    )
+
+    r = PdfFileReader(output)
     await async_val_trusted(r.embedded_signatures[0])
 
 
