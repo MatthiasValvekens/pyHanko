@@ -219,12 +219,12 @@ class SigAppearanceSetup:
     Timestamp to show in the signature appearance.
     """
 
-    name: str
+    name: Optional[str]
     """
     Signer name to show in the signature appearance.
     """
 
-    text_params: dict = None
+    text_params: Optional[dict] = None
     """
     Additional text interpolation parameters to pass to the underlying
     stamp style.
@@ -262,11 +262,11 @@ class SigAppearanceSetup:
 
         name = self.name
         timestamp = self.timestamp
-        extra_text_params = self.text_params or {}
-        text_params = {
-            'signer': name,
-            **extra_text_params
-        }
+        text_params = {}
+        if name is not None:
+            text_params['signer'] = name
+        text_params.update(self.text_params or {})
+
         if isinstance(style, TextStampStyle):
             text_params['ts'] = timestamp.strftime(style.timestamp_format)
 
