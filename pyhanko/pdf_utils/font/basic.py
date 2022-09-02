@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from io import BytesIO
 from typing import List, Optional
 
 from pyhanko.pdf_utils import generic
@@ -65,11 +66,13 @@ class SimpleFontEngine(FontEngine):
         super().__init__(writer, name, embedded_subset=False)
 
     def shape(self, txt) -> ShapeResult:
-        ops = f'({txt}) Tj'.encode('latin1')
+        ops = BytesIO()
+        generic.TextStringObject(txt).write_to_stream(ops)
+        ops.write(b" Tj")
         total_len = len(txt) * self.avg_width
 
         return ShapeResult(
-            graphics_ops=ops, x_advance=total_len,
+            graphics_ops=ops.getvalue(), x_advance=total_len,
             y_advance=0
         )
 
