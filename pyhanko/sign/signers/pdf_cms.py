@@ -518,6 +518,11 @@ class Signer:
         )
 
         signing_cert = self.signing_cert
+        if signing_cert is None:
+            raise SigningError(
+                "The signer\'s certificate must be available for "
+                "SignerInfo assembly to proceed."
+            )
         # build the signer info object that goes into the PKCS7 signature
         # (see RFC 2315 § 9.2)
         sig_info = cms.SignerInfo({
@@ -551,11 +556,12 @@ class Signer:
         if unsigned_attrs is not None:
             sig_info['unsigned_attrs'] = unsigned_attrs
 
+        cert_registry = self.cert_registry or ()
         # Note: we do not add the TS certs at this point
         if self.embed_roots:
             certs = {
                 cms.CertificateChoices(name='certificate', value=cert)
-                for cert in self.cert_registry
+                for cert in cert_registry
             }
         else:
             # asn1crypto's heuristic is good enough for now, we won't check the
@@ -565,7 +571,7 @@ class Signer:
             # asn1crypto either way.
             certs = {
                 cms.CertificateChoices(name='certificate', value=cert)
-                for cert in self.cert_registry if cert.self_signed == 'no'
+                for cert in cert_registry if cert.self_signed == 'no'
             }
         certs.add(
             cms.CertificateChoices(name='certificate', value=self.signing_cert)

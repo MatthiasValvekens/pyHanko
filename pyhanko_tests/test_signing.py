@@ -1036,6 +1036,28 @@ async def test_interrupted_no_estimation():
                        match="estimation.*bytes_reserved"):
         await pdf_signer.async_digest_doc_for_signing(w)
 
+
+@pytest.mark.asyncio
+async def test_interrupted_with_delayed_signing_no_prevalidation():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(
+            field_name='SigNew',
+            embed_validation_info=True,
+            validation_context=SIMPLE_V_CONTEXT()
+        ),
+        signer=ExternalSigner(
+            signing_cert=None, cert_registry=None,
+            signature_value=256,
+            signature_mechanism=SignedDigestAlgorithm({
+                'algorithm': 'sha256_rsa'
+            }),
+        )
+    )
+    with pytest.raises(SigningError, match='certificate must be provided'):
+        await pdf_signer.async_digest_doc_for_signing(w, bytes_reserved=8192)
+
+
 def test_determine_mechanism_no_signing_cert():
     signer = ExternalSigner(
         signing_cert=None, cert_registry=None,
@@ -1045,6 +1067,23 @@ def test_determine_mechanism_no_signing_cert():
     with pytest.raises(SigningError,
                        match="Could not set up.*mechanism"):
         signer.get_signature_mechanism('sha256')
+
+
+@pytest.mark.asyncio
+async def test_signer_info_no_signing_cert():
+    signer = ExternalSigner(
+        signing_cert=None, cert_registry=None,
+        signature_value=256,
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'sha256_rsa'
+        }),
+    )
+
+    with pytest.raises(SigningError,
+                       match="certificate must be available.*SignerInfo"):
+        await signer.async_sign_general_data(
+            b"Hello world", digest_algorithm="sha256",
+        )
 
 
 @freeze_time('2020-11-01')

@@ -1442,11 +1442,17 @@ class PdfSigningSession:
         validation_context = signature_meta.validation_context
 
         if signature_meta.embed_validation_info:
-            if validation_context is None:
+            if self.pdf_signer.signer.signing_cert is None:
                 raise SigningError(
-                    'A validation context must be provided if '
-                    'validation/revocation info is to be embedded into the '
-                    'signature.'
+                    "A signer's certificate must be provided if "
+                    "validation/revocation info is to be embedded into the "
+                    "signature."
+                )
+            elif validation_context is None:
+                raise SigningError(
+                    "A validation context must be provided if "
+                    "validation/revocation info is to be embedded into the "
+                    "signature."
                 )
             elif not validation_context.fetching_allowed:
                 logger.warning(
@@ -1690,6 +1696,11 @@ class PdfSigningSession:
         flags: SigSeedValFlags = sv_spec.flags
 
         if sv_spec.cert is not None:
+            if pdf_signer.signer.signing_cert is None:
+                raise SigningError(
+                    "Cannot verify seed value constraints on the signer's "
+                    "certificate since it is not available"
+                )
             sv_spec.cert.satisfied_by(
                 pdf_signer.signer.signing_cert, validation_path
             )

@@ -1,7 +1,9 @@
 from io import BytesIO
 
 import pytest
+from asn1crypto import algos
 from asn1crypto import pdf as asn1_pdf
+from asn1crypto import x509
 from freezegun.api import freeze_time
 from pyhanko_certvalidator import CertificateValidator
 
@@ -231,7 +233,6 @@ def test_cert_constraint_key_usage_not_ok(ku_strs):
 
 def test_cert_constraint_subject_dn():
 
-    from asn1crypto import x509
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.SUBJECT_DN,
         subject_dn=x509.Name.build({'common_name': 'Alice'}),
@@ -345,7 +346,6 @@ async def test_cert_constraint_composite(requests_mock):
         DUMMY_TS.tsa_cert, FROM_CA.cert_registry, validation_context=vc
     ).async_validate_usage(set())
 
-    from asn1crypto import x509
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.ISSUER | fields.SigCertConstraintFlags.SUBJECT_DN,
         issuers=[INTERM_CERT],
@@ -357,7 +357,6 @@ async def test_cert_constraint_composite(requests_mock):
     with pytest.raises(UnacceptableSignerError):
         scc.satisfied_by(DUMMY_TS.tsa_cert, tsa_validation_path)
 
-    from asn1crypto import x509
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.ISSUER | fields.SigCertConstraintFlags.SUBJECT_DN,
         issuers=[INTERM_CERT],
@@ -630,7 +629,6 @@ async def test_add_revinfo_wrong_subfilter():
 async def test_sv_sign_cert_constraint():
     # this is more thoroughly unit tested at a lower level (see further up),
     # so we simply try two basic scenarios here for now
-    from asn1crypto import x509
     sv = fields.SigSeedValueSpec(
         cert=fields.SigCertConstraints(
             flags=fields.SigCertConstraintFlags.SUBJECT_DN,
@@ -1007,3 +1005,35 @@ def test_cert_constraint_deserialisation():
     assert '/C' in constr_ser['/SubjectDN'][0]
     constr_parsed = fields.SigCertConstraints.from_pdf_object(constr_ser)
     assert constr_parsed.subject_dn == signer1.subject
+
+
+@pytest.mark.asyncio
+async def test_sign_with_sv_missing_cert():
+
+    w = IncrementalPdfFileWriter(
+        prepare_sv_field(
+            fields.SigSeedValueSpec(
+                cert=fields.SigCertConstraints(
+                    flags=fields.SigCertConstraintFlags.SUBJECT_DN,
+                    subject_dn=x509.Name.build({'common_name': 'Alice'}),
+                )
+            ),
+        )
+    )
+
+    pdf_signer = signers.PdfSigner(
+        signers.PdfSignatureMetadata(),
+        signers.ExternalSigner(
+            signing_cert=None, cert_registry=None,
+            signature_value=256,
+            signature_mechanism=algos.SignedDigestAlgorithm({
+                'algorithm': 'sha256_rsa'
+            }),
+        ),
+    )
+
+    with pytest.raises(SigningError,
+                       match="Cannot verify seed value.*certificate"):
+        await pdf_signer.async_sign_pdf(
+            w, existing_fields_only=True, bytes_reserved=8192
+        )
