@@ -851,6 +851,46 @@ In particular, you don't have to bother with
 :class:`~pyhanko.sign.signers.pdf_signer.PostSignInstructions` at all.
 
 
+Note that, starting with pyHanko ``0.14.0``, the signer's certificate need no
+longer be provided at the start of the signing process, if you supply some
+additional parameters yourself. Here's what that might look like in a toy
+example.
+
+.. code-block:: python
+
+    w = IncrementalPdfFileWriter(pdf_file_handle)
+    pdf_signer = signers.PdfSigner(
+        # Specifying a digest algorithm (or signature mechanism)
+        # is necessary if the signing cert is not available
+        signers.PdfSignatureMetadata(
+            field_name='Signature',
+        ),
+        signer=ExternalSigner(
+            # note the 'None's
+            signing_cert=None, cert_registry=None,
+            signature_value=256,
+        )
+    )
+
+    # Since estimation is disabled without a certificate
+    # available, bytes_reserved becomes mandatory.
+    prep_digest, tbs_document, output = await pdf_signer\
+        .async_digest_doc_for_signing(w, bytes_reserved=8192)
+
+    # Call the external service
+    # note: the signing certificate is in the returned payload,
+    # but we don't (necessarily) need to do anything with it.
+    signature_container = \
+        await call_external_service(prep_digest.document_digest)
+
+    # Note: in the meantime, we could've serialised and deserialised
+    # the contents of 'output', of course
+    await PdfTBSDocument.async_finish_signing(output, prep_digest)
+
+    # If you want, you can now proceed to tack on additional revisions
+    # with revocation information, document timestamps and the like.
+
+
 .. _generic-signing:
 
 Generic data signing
