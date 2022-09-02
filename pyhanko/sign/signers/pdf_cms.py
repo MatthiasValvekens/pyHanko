@@ -1413,9 +1413,23 @@ class ExternalSigner(Signer):
     It embeds a fixed signature value into the CMS, set at initialisation.
 
     Intended for use with :ref:`interrupted-signing`.
+
+    :param signing_cert:
+        The signer's certificate.
+    :param cert_registry:
+        The certificate registry to use in CMS generation.
+    :param signature_value:
+        The value of the signature as a byte string, a placeholder length,
+        or ``None``.
+    :param signature_mechanism:
+        The signature mechanism used by the external signing service.
+    :param prefer_pss:
+        Switch to prefer PSS when producing RSA signatures, as opposed to
+        RSA with PKCS#1 v1.5 padding.
+    :param embed_roots:
+        Whether to embed relevant root certificates into the CMS payload.
     """
 
-    # TODO document parameters
     def __init__(self, signing_cert: Optional[x509.Certificate],
                  cert_registry: Optional[CertificateStore],
                  signature_value: Union[bytes, int, None] = None,
