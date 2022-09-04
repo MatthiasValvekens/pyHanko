@@ -1,6 +1,7 @@
 import asyncio
 import getpass
 import logging
+import os
 import sys
 from contextlib import contextmanager
 from datetime import datetime
@@ -53,6 +54,8 @@ try:
 except ImportError:
     pkcs11 = None
     pkcs11_available = False
+
+P11_PIN_ENV_VAR = "PYHANKO_PKCS11_PIN"
 
 
 class NoStackTraceFormatter(logging.Formatter):
@@ -1174,6 +1177,13 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
         )
 
     pin = pkcs11_config.user_pin
+
+    # try to fetch the PIN from an env var
+    if pin is None:
+        pin_env = os.environ.get(P11_PIN_ENV_VAR, None)
+        if pin_env:
+            pin = pin_env.strip()
+
     if pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT \
             and pin is None:  # pragma: nocover
         pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
