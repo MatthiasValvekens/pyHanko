@@ -344,7 +344,7 @@ overlaid on top. Here's how that works.
 
     from pyhanko import stamp
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import signers
+    from pyhanko.sign import fields, signers
 
 
     signer = signers.SimpleSigner.load(...)
