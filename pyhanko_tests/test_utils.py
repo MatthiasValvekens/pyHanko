@@ -375,6 +375,7 @@ def test_box_constraint_recalc():
 
 def test_trailer_update():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    w._update_meta = lambda: None
     dt = generic.pdf_date(datetime.datetime(2020, 10, 10, tzinfo=pytz.utc))
 
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
@@ -1235,23 +1236,6 @@ def test_fresh_producer():
     outf = BytesIO()
     w.write(outf)
     r = PdfFileReader(outf)
-    proc = r.trailer['/Info']['/Producer']
-    assert proc.startswith('pyHanko')
-
-
-def test_fresh_producer_existing_info():
-    inf = BytesIO(MINIMAL)
-    w = writer.copy_into_new_writer(PdfFileReader(inf))
-    w.set_info(generic.DictionaryObject({'/Title': generic.pdf_string('test')}))
-    outf = BytesIO()
-    w.write(outf)
-    r = PdfFileReader(outf)
-    assert '/Producer' not in r.trailer['/Info']
-
-    w = writer.copy_into_new_writer(r)
-    outf2 = BytesIO()
-    w.write(outf2)
-    r = PdfFileReader(outf2)
     proc = r.trailer['/Info']['/Producer']
     assert proc.startswith('pyHanko')
 

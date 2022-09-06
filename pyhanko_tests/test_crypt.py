@@ -11,6 +11,7 @@ from pyhanko.pdf_utils.crypt import (
     AuthStatus,
     CryptFilterConfiguration,
     IdentityCryptFilter,
+    PdfKeyNotAvailableError,
     PubKeyAdbeSubFilter,
     PubKeyAESCryptFilter,
     PubKeyRC4CryptFilter,
@@ -549,7 +550,21 @@ def test_continue_encrypted_file_without_auth():
     incr_w = IncrementalPdfFileWriter(out)
     incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
     incr_w.update_root()
-    with pytest.raises(misc.PdfWriteError):
+    with pytest.raises(PdfKeyNotAvailableError):
+        incr_w.write_in_place()
+
+
+def test_continue_encrypted_file_without_auth_disable_meta():
+    w = writer.PdfFileWriter()
+    w.root["/Test"] = generic.TextStringObject("Blah blah")
+    w.encrypt("ownersecret", "usersecret")
+    out = BytesIO()
+    w.write(out)
+    incr_w = IncrementalPdfFileWriter(out)
+    incr_w._update_meta = lambda: None
+    incr_w.root["/Test"] = generic.TextStringObject("Bluh bluh")
+    incr_w.update_root()
+    with pytest.raises(misc.PdfWriteError, match='Cannot update'):
         incr_w.write_in_place()
 
 

@@ -11,11 +11,13 @@ classes.
 import os
 from dataclasses import dataclass
 from enum import Enum
+from io import BytesIO
+from typing import Callable, Generator, Iterable, Optional, TypeVar
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfStrictReadError',
     'PdfWriteError', 'PdfStreamError', 'IndirectObjectExpected',
-    'get_and_apply', 'OrderedEnum',
+    'get_and_apply', 'OrderedEnum', 'StringWithLanguage',
     'is_regular_character',
     'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
     'skip_over_whitespace', 'skip_over_comment', 'instance_test', 'peek',
@@ -25,8 +27,6 @@ __all__ = [
     'ConsList', 'Singleton', 'rd'
 ]
 
-from io import BytesIO
-from typing import Callable, Generator, Iterable, TypeVar
 
 DEFAULT_CHUNK_SIZE = 4096
 """
@@ -168,6 +168,17 @@ def read_until_regex(stream, regex, ignore_eof=False):
             break
         name += tok
     return name
+
+
+@dataclass(frozen=True)
+class StringWithLanguage:
+    """
+    A string with a language attached to it.
+    """
+
+    value: str
+    lang_code: Optional[str] = None
+    country_code: Optional[str] = None
 
 
 class PdfError(Exception):

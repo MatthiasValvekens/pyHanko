@@ -24,6 +24,8 @@ from .crypt import (
     SecurityHandler,
     StandardSecurityHandler,
 )
+from .metadata.info import view_from_info_dict
+from .metadata.model import DocumentMetadata
 from .misc import PdfReadError, PdfStrictReadError
 from .rw_common import PdfHandler
 from .xref import ObjStreamRef, XRefBuilder, XRefCache, read_object_header
@@ -153,6 +155,15 @@ class PdfFileReader(PdfHandler):
             self.security_handler = SecurityHandler.build(encrypt_dict)
 
         self._embedded_signatures = None
+
+    @property
+    def document_meta_view(self) -> DocumentMetadata:
+        try:
+            info_dict = self.trailer_view['/Info']
+        except KeyError:
+            return DocumentMetadata()
+
+        return view_from_info_dict(info_dict)
 
     @property
     def input_version(self):

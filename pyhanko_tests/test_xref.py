@@ -451,6 +451,7 @@ def test_xref_access_no_decrypt():
 def test_xref_null_update():
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
+    w._update_meta = lambda: None
     w.write_in_place()
     r = PdfFileReader(buf)
     assert r.xrefs.total_revisions == 2
@@ -460,6 +461,7 @@ def test_xref_null_update():
 def test_xref_stream_null_update():
     buf = BytesIO(MINIMAL_XREF)
     w = IncrementalPdfFileWriter(buf)
+    w._update_meta = lambda: None
     w.write_in_place()
     r = PdfFileReader(buf)
     assert r.xrefs.total_revisions == 2

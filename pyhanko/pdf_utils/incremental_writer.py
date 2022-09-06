@@ -8,6 +8,7 @@ from typing import Optional, Union
 from . import generic, misc
 from .crypt import EnvelopeKeyDecrypter
 from .generic import pdf_name
+from .metadata.model import DocumentMetadata
 from .reader import PdfFileReader, parse_catalog_version
 from .writer import BasePdfFileWriter
 
@@ -210,14 +211,26 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             # just write the original and then bail
             self._write_header(stream)
             return
+        self._prep_dom_for_writing()
         super().write(stream)
 
-    def write_updated_section(self, stream):
+    @property
+    def document_meta_view(self) -> DocumentMetadata:
+        return self._meta.view_over(self.prev.document_meta_view)
+
+    def _write_updated_section(self, stream):
         """
         Only write the updated and new objects to the designated output stream.
 
         The new PDF file can then be put together by concatenating the original
         input with the generated output.
+
+        .. danger::
+            The offsets in this output will typically be wrong unless the missing
+            previous section is somehow taken into account.
+
+        .. danger::
+            Object graph finalisation will not run.
 
         :param stream:
             Output stream to write to.
@@ -232,9 +245,10 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         operations.
         """
 
+        self._prep_dom_for_writing()
         stream = self.prev.stream
         stream.seek(0, os.SEEK_END)
-        self.write_updated_section(stream)
+        self._write_updated_section(stream)
 
     def encrypt(self, user_pwd):
         """Method to handle updates to encrypted files.

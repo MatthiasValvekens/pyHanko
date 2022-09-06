@@ -23,6 +23,7 @@ from pyhanko.sign import PdfTimeStamper, fields, signers
 from pyhanko.sign.diff_analysis import (
     DEFAULT_DIFF_POLICY,
     NO_CHANGES_DIFF_POLICY,
+    DocInfoRule,
     ModificationLevel,
     QualifiedWhitelistRule,
     ReferenceUpdate,
@@ -1416,6 +1417,7 @@ def test_orphan(ignored):
     policy = StandardDiffPolicy(
         global_rules=[
             XrefStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
+            DocInfoRule().as_qualified(ModificationLevel.LTA_UPDATES),
         ],
         form_rule=None,
         ignore_orphaned_objects=ignored

@@ -5,6 +5,7 @@ from . import generic, misc
 
 __all__ = ['PdfHandler']
 
+from .metadata.model import DocumentMetadata
 from .misc import PdfError
 
 
@@ -38,6 +39,10 @@ class PdfHandler:
             A :class:`.generic.DictionaryObject` representing the current state
             of the document trailer.
         """
+        raise NotImplementedError
+
+    @property
+    def document_meta_view(self) -> DocumentMetadata:
         raise NotImplementedError
 
     @property

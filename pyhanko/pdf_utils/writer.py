@@ -10,7 +10,6 @@ from typing import List, Optional, Tuple, Union
 
 from asn1crypto import x509
 
-from pyhanko import __version__
 from pyhanko.pdf_utils import content, generic
 from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,
@@ -22,6 +21,11 @@ from pyhanko.pdf_utils.extensions import (
     DevExtensionMultivalued,
 )
 from pyhanko.pdf_utils.generic import pdf_name, pdf_string
+from pyhanko.pdf_utils.metadata.info import (
+    update_info_dict,
+    view_from_info_dict,
+)
+from pyhanko.pdf_utils.metadata.model import VENDOR, DocumentMetadata
 from pyhanko.pdf_utils.misc import (
     PdfError,
     PdfReadError,
@@ -42,8 +46,6 @@ __all__ = [
     'PageObject', 'PdfFileWriter', 'init_xobject_dictionary',
     'copy_into_new_writer'
 ]
-
-VENDOR = 'pyHanko ' + __version__
 
 
 # TODO move this to content.py?
@@ -112,11 +114,16 @@ class BasePdfFileWriter(PdfHandler):
         self._encrypt = self._encrypt_key = None
         self._document_id = document_id
         self.stream_xrefs = stream_xrefs
-        if info is not None and \
-                not isinstance(info, generic.IndirectObject):
-            self._info = self.add_object(info)
-        else:
-            self._info = info
+        info_ref = None
+        if info is not None:
+            if not isinstance(info, generic.IndirectObject):
+                info_ref = self.add_object(info)
+            else:
+                info_ref = generic.IndirectObject(
+                    info.idnum, info.generation, self
+                )
+        self._info = info_ref
+        self._meta: DocumentMetadata = DocumentMetadata()
 
         self._font_resources = {}
 
@@ -129,6 +136,23 @@ class BasePdfFileWriter(PdfHandler):
             self._font_resources[base_postscript_name] = fsc
 
         return fsc
+
+    @property
+    def document_meta(self) -> DocumentMetadata:
+        return self._meta
+
+    @property
+    def document_meta_view(self) -> DocumentMetadata:
+        # we need the view_over (not just a copy) because
+        # e.g. copy_into_new_writer will populate the info dict with
+        # base values that can then be "cleanly" overridden in the
+        # high-level API without destroying any unsupported entries
+        # in the original info dict
+        if self._info:
+            base = view_from_info_dict(self._info.get_object())
+        else:
+            base = DocumentMetadata()
+        return self._meta.view_over(base)
 
     def ensure_output_version(self, version):
         if self.output_version < version:
@@ -465,6 +489,24 @@ class BasePdfFileWriter(PdfHandler):
             obj.write_to_stream(stream, handler, container_ref)
             stream.write(b'\nendobj\n')
 
+    def _prep_dom_for_writing(self):
+        # ensure that all font resources are flushed
+        for fsc in self._font_resources.values():
+            for engine in fsc.subsets.values():
+                engine.prepare_write()
+
+        self._update_meta()
+
+    def _update_meta(self):
+        if self._info is not None:
+            mod = update_info_dict(self._meta, self._info.get_object())
+            if mod:
+                self.mark_update(self._info)
+        else:
+            info_dict = generic.DictionaryObject()
+            update_info_dict(self._meta, info_dict)
+            self._info = self.add_object(info_dict)
+
     def _populate_trailer(self, trailer):
         # prepare trailer dictionary entries
         trailer[pdf_name('/Root')] = self._root
@@ -489,15 +531,10 @@ class BasePdfFileWriter(PdfHandler):
         :param stream:
             A writable output stream.
         """
+        self._prep_dom_for_writing()
         self._write(stream)
 
     def _write(self, stream, skip_header=False):
-
-        # ensure that all font resources are flushed
-        for fsc in self._font_resources.values():
-            for engine in fsc.subsets.values():
-                engine.prepare_write()
-
         object_positions: PositionDict = {}
 
         if self.stream_xrefs:
@@ -1091,41 +1128,6 @@ class PdfFileWriter(BasePdfFileWriter):
         super()._populate_trailer(trailer)
 
 
-# skip Trapped because we don't care, and because it's not a string
-PERMISSIBLE_INFO_KEYS = {
-    '/Title', '/Author', '/Subject', '/Keywords', '/Creator', '/Producer',
-    '/CreationDate', '/ModDate'
-}
-
-
-def _derive_info_dict(input_handler: PdfHandler) \
-        -> Optional[generic.DictionaryObject]:
-    try:
-        info_ref = input_handler.trailer_view.raw_get('/Info')
-    except KeyError:
-        info_ref = None
-
-    if info_ref is None:
-        return None
-
-    input_info_dict = info_ref.get_object()
-    info = generic.DictionaryObject({
-        k: pdf_string(str(v.get_object()))
-        for k, v in input_info_dict.items()
-        if k in PERMISSIBLE_INFO_KEYS
-    })
-    try:
-        producer_string = info['/Producer']
-        if VENDOR not in producer_string:
-            producer_string = \
-                pdf_string(f"{producer_string}; {VENDOR}")
-    except KeyError:
-        producer_string = pdf_string(VENDOR)
-    # always override this
-    info['/Producer'] = producer_string
-    return info
-
-
 def copy_into_new_writer(input_handler: PdfHandler,
                          writer_kwargs: dict = None) -> PdfFileWriter:
     """
@@ -1152,8 +1154,6 @@ def copy_into_new_writer(input_handler: PdfHandler,
 
     writer_kwargs = writer_kwargs or {}
     writer_kwargs.setdefault("stream_xrefs", False)
-    if "info" not in writer_kwargs:
-        writer_kwargs['info'] = _derive_info_dict(input_handler)
 
     # TODO try to be more clever with object streams
     w = PdfFileWriter(init_page_tree=False, **writer_kwargs)
@@ -1171,5 +1171,20 @@ def copy_into_new_writer(input_handler: PdfHandler,
     # override the old root ref
     ix = (output_root_ref.generation, output_root_ref.idnum)
     w.objects[ix] = new_root_dict
+
+    if "info" not in writer_kwargs:
+        try:
+            # migrate the info dict. We do this low-level to avoid issues
+            # with the producer string handling, and to keep a nice separation
+            # between user-supplied metadata values and values that were present
+            # in the original doc.
+            info_dict = input_handler.trailer_view['/Info']
+        except KeyError:
+            info_dict = None
+        if info_dict is not None:
+            imported_info = w._import_object(
+                info_dict, reference_map={}, obj_stream=None
+            )
+            w._info = w.add_object(imported_info)
 
     return w
