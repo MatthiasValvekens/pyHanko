@@ -507,6 +507,23 @@ class BasePdfFileWriter(PdfHandler):
             update_info_dict(self._meta, info_dict)
             self._info = self.add_object(info_dict)
 
+        need_xmp = (
+            self._meta.xmp_unmanaged
+            or (self.output_version <= (1, 7) and '/Metadata' in self.root)
+            or self.output_version >= (2, 0)
+        )
+
+        if need_xmp:
+            # delayed import since the namespace registration operation
+            # is global (thank you ElementTree...)
+            from pyhanko.pdf_utils.metadata import xmp_xml
+
+            # FIXME update existing
+            self.root['/Metadata'] = self.add_object(
+                xmp_xml.MetadataStream(meta=xmp_xml.meta_as_xmp(self._meta))
+            )
+            self.update_root()
+
     def _populate_trailer(self, trailer):
         # prepare trailer dictionary entries
         trailer[pdf_name('/Root')] = self._root

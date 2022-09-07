@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 import tzlocal
 
@@ -43,31 +43,22 @@ def _write_meta_string(dictionary: generic.DictionaryObject,
 
 
 def _write_meta_date(dictionary: generic.DictionaryObject,
-                     key: str, meta_date: Optional[datetime]) -> bool:
+                     key: str, meta_date: Union[datetime, str, None]) -> bool:
     if isinstance(meta_date, datetime):
-        dictionary[key] = generic.pdf_date(meta_date)
-        return True
-    return False
+        value = meta_date
+    elif meta_date == 'now':
+        value = datetime.now(tz=tzlocal.get_localzone())
+    else:
+        return False
+
+    dictionary[key] = generic.pdf_date(value)
+    return True
 
 
 def update_info_dict(meta: model.DocumentMetadata,
                      info: generic.DictionaryObject) -> bool:
 
-    mod = False
-    mod |= _write_meta_string(info, "/Title", meta.title)
-    mod |= _write_meta_string(info, "/Author", meta.author)
-    mod |= _write_meta_string(info, "/Subject", meta.subject)
-    mod |= _write_meta_string(info, "/Creator", meta.creator)
-    mod |= _write_meta_date(info, "/CreationDate", meta.created)
-    mod |= _write_meta_date(
-        info, "/ModDate",
-        meta.last_modified or datetime.now(tz=tzlocal.get_localzone())
-    )
-
-    if meta.keywords:
-        info['/Keywords'] = generic.TextStringObject(','.join(meta.keywords))
-        mod = True
-
+    mod = _write_meta_date(info, "/ModDate", meta.last_modified)
     producer = model.VENDOR
     try:
         producer_string = info['/Producer']
@@ -80,6 +71,20 @@ def update_info_dict(meta: model.DocumentMetadata,
         mod = True
     # always override this
     info['/Producer'] = producer_string
+
+    if meta.xmp_unmanaged:
+        return mod
+
+    mod |= _write_meta_string(info, "/Title", meta.title)
+    mod |= _write_meta_string(info, "/Author", meta.author)
+    mod |= _write_meta_string(info, "/Subject", meta.subject)
+    mod |= _write_meta_string(info, "/Creator", meta.creator)
+    mod |= _write_meta_date(info, "/CreationDate", meta.created)
+
+    if meta.keywords:
+        info['/Keywords'] = generic.TextStringObject(','.join(meta.keywords))
+        mod = True
+
     return mod
 
 
