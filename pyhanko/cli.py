@@ -139,6 +139,15 @@ class Ctx(Enum):
     LENIENT = auto()
 
 
+def _warn_empty_passphrase():
+    click.echo(
+        click.style(
+            "WARNING: passphrase is empty. If you intended to sign with an "
+            "unencrypted private key, use --no-pass instead.",
+            bold=True
+        )
+    )
+
 @click.group()
 @click.version_option(prog_name='pyHanko', version=__version__)
 @click.option('--config',
@@ -1001,6 +1010,8 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup,
         passfile.close()
     elif pemder_config.prompt_passphrase and not no_pass:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+        if not passphrase:
+            _warn_empty_passphrase()
     else:
         passphrase = None
 
@@ -1467,6 +1478,8 @@ def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
         passfile.close()
     elif not no_pass:
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
+        if not passphrase:
+            _warn_empty_passphrase()
     else:
         passphrase = None
 
