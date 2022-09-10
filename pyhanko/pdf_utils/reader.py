@@ -299,7 +299,7 @@ class PdfFileReader(PdfHandler):
         return self.xrefs.total_revisions
 
     def get_object(self, ref, revision=None, never_decrypt=False,
-                   transparent_decrypt=True):
+                   transparent_decrypt=True, as_metadata_stream=False):
         """
         Read an object from the input stream.
 
@@ -322,6 +322,8 @@ class PdfFileReader(PdfHandler):
             .. danger::
                 The encryption parameters are considered internal,
                 undocumented API, and subject to change without notice.
+        :param as_metadata_stream:
+            Whether to dereference the object as an XMP metadata stream.
         :return:
             A :class:`~.generic.PdfObject`.
         :raises PdfReadError:
@@ -335,7 +337,8 @@ class PdfFileReader(PdfHandler):
             obj = self.cache_get_indirect_object(ref.generation, ref.idnum)
             if obj is None:
                 obj = self._read_object(
-                    ref, self.xrefs[ref], never_decrypt=never_decrypt
+                    ref, self.xrefs[ref], never_decrypt=never_decrypt,
+                    as_metadata_stream=as_metadata_stream
                 )
                 # cache before (potential) decrypting
                 self.cache_indirect_object(ref.generation, ref.idnum, obj)
@@ -348,7 +351,8 @@ class PdfFileReader(PdfHandler):
                     f'in history at revision {revision}.'
                 )
             obj = self._read_object(
-                ref, marker, never_decrypt=never_decrypt
+                ref, marker, never_decrypt=never_decrypt,
+                as_metadata_stream=as_metadata_stream
             )
 
         if transparent_decrypt and \
@@ -357,7 +361,8 @@ class PdfFileReader(PdfHandler):
 
         return obj
 
-    def _read_object(self, ref, marker, never_decrypt=False):
+    def _read_object(self, ref, marker, never_decrypt=False,
+                     as_metadata_stream=False):
         if marker is None:
             if self.strict:
                 raise PdfStrictReadError(
@@ -390,7 +395,8 @@ class PdfFileReader(PdfHandler):
                     f"does not match actual ({idnum} {generation})."
                 )
             retval = generic.read_object(
-                self.stream, generic.Reference(idnum, generation, self)
+                self.stream, generic.Reference(idnum, generation, self),
+                as_metadata_stream=as_metadata_stream
             )
             generic.read_non_whitespace(self.stream, seek_back=True)
             obj_data_end = self.stream.tell() - 1
@@ -725,6 +731,15 @@ class HistoricalResolver(PdfHandler):
     """
 
     @property
+    def document_meta_view(self) -> DocumentMetadata:
+        try:
+            info_dict = self.trailer_view['/Info']
+        except KeyError:
+            return DocumentMetadata()
+
+        return view_from_info_dict(info_dict)
+
+    @property
     def document_id(self) -> Tuple[bytes, bytes]:
         id_arr = self._trailer['/ID']
         return id_arr[0].original_bytes, id_arr[1].original_bytes
@@ -740,7 +755,8 @@ class HistoricalResolver(PdfHandler):
     def trailer_view(self) -> generic.DictionaryObject:
         return self._trailer
 
-    def get_object(self, ref: generic.Reference):
+    def get_object(self, ref: generic.Reference,
+                   as_metadata_stream: bool = False):
         cache = self.cache
         try:
             obj = cache[ref]
@@ -757,10 +773,14 @@ class HistoricalResolver(PdfHandler):
                 )
                 last_change = None
             if last_change is not None and last_change <= revision:
-                obj = reader.get_object(ref, transparent_decrypt=False)
+                obj = reader.get_object(
+                    ref, transparent_decrypt=False,
+                    as_metadata_stream=as_metadata_stream
+                )
             else:
                 obj = reader.get_object(
-                    ref, revision, transparent_decrypt=False
+                    ref, revision, transparent_decrypt=False,
+                    as_metadata_stream=as_metadata_stream
                 )
 
             # replace all PDF handler references in the object with references

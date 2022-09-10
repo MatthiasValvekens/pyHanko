@@ -1,7 +1,16 @@
 import re
 from datetime import datetime
 from io import BytesIO
-from typing import BinaryIO, Dict, Iterator, List, Optional, Tuple, Union
+from typing import (
+    BinaryIO,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 from xml.etree import ElementTree
 
 import tzlocal
@@ -10,18 +19,22 @@ from defusedxml.ElementTree import parse as defused_parse
 
 from pyhanko.pdf_utils import generic, misc
 
+from ..misc import get_and_apply, isoparse
 from . import model
 
 
 def _tag(name: model.ExpandedName) -> str:
     return "{%s}%s" % (name.ns, name.local_name)
 
+
 TAG_RE = re.compile(r'\{(.*)}(.*)')
+
 
 def _untag(tag: str) -> Optional[model.ExpandedName]:
     m = TAG_RE.match(tag)
     if m is not None:
         return model.ExpandedName(ns=m.group(1), local_name=m.group(2))
+
 
 def _name(elem: ElementTree.Element) -> Optional[model.ExpandedName]:
     return _untag(elem.tag)
@@ -35,12 +48,23 @@ def iter_attrs(elem: ElementTree.Element) \
             yield name, value
 
 
+# URI regex from urllib3
+URI_RE = re.compile(
+    r"^(?:([a-zA-Z][a-zA-Z0-9+.-]*):)?"
+    r"(?://([^\\/?#]*))?"
+    r"([^?#]*)"
+    r"(?:\?([^#]*))?"
+    r"(?:#(.*))?$",
+    re.UNICODE | re.DOTALL,
+)
 
 def _add_inner_value(container: ElementTree.Element,
                      value: Union[model.XmpStructure, model.XmpArray, str]):
     if isinstance(value, str):
-        # TODO deal with URIs using rdf:resource
-        container.text = value
+        if URI_RE.match(value):
+            container.set(_tag(model.RDF_RESOURCE), value)
+        else:
+            container.text = value
         return
     elif isinstance(value, model.XmpStructure):
         description = ElementTree.SubElement(
@@ -82,15 +106,15 @@ def add_xmp_value(container: ElementTree.Element, value: model.XmpValue):
         _add_inner_value(container, value.value)
 
     if quals.lang is not None:
-        container.attrib[_tag(model.XML_LANG)] = quals.lang
+        container.set(_tag(model.XML_LANG), quals.lang)
 
 
 def _xmp_as_xml_tree(roots: List[model.XmpStructure]) \
         -> ElementTree.ElementTree:
     xmpmeta = ElementTree.Element(_tag(model.X_XMPMETA))
-    xmpmeta.attrib[_tag(model.X_XMPTK)] = model.VENDOR
+    xmpmeta.set(_tag(model.X_XMPTK), model.VENDOR)
     rdf = ElementTree.SubElement(xmpmeta, _tag(model.RDF_RDF))
-    rdf.attrib[_tag(model.RDF_ABOUT)] = ""
+    rdf.set(_tag(model.RDF_ABOUT), "")
     for root in roots:
         add_xmp_value(rdf, model.XmpValue(root))
     return ElementTree.ElementTree(xmpmeta)
@@ -110,27 +134,39 @@ def serialise_xmp(roots: List[model.XmpStructure], out: BinaryIO):
 
 class MetadataStream(generic.StreamObject):
 
-    # TODO reading logic
+    def __init__(self, dict_data=None, stream_data=None, encoded_data=None,
+                 handler=None):
+        self._xmp: Optional[List[model.XmpStructure]] = None
+        super().__init__(
+            dict_data=dict_data,
+            stream_data=stream_data,
+            encoded_data=encoded_data,
+            handler=handler
+        )
 
-    def __init__(self, meta: List[model.XmpStructure]):
-        self._meta = meta
-        self._meta_updated = True
-        super().__init__()
+    @classmethod
+    def from_xmp(cls, xmp: List[model.XmpStructure]) -> 'MetadataStream':
+        stm = cls()
+        stm._xmp = xmp
+        stm._reserialise()
+        return stm
 
     @property
-    def meta(self):
-        return self._meta
+    def xmp(self) -> List[model.XmpStructure]:
+        if self._xmp is None:
+            self._xmp = parse_xmp(BytesIO(self.data))
+        return self._xmp
 
-    @property
-    def data(self) -> bytes:
-        if self._meta is not None and self._meta_updated:
-            stm = BytesIO()
-            serialise_xmp(self._meta, stm)
-            self._data = data = stm.getvalue()
-            self._meta_updated = False
-            return data
-        else:
-            return super().data
+    def update_xmp_with_meta(self, meta: model.DocumentMetadata):
+        self._xmp = update_xmp_with_meta(meta, roots=self.xmp)
+        self._reserialise()
+        self._encoded_data = None
+
+    def _reserialise(self) -> bytes:
+        stm = BytesIO()
+        serialise_xmp(self._xmp, stm)
+        self._data = data = stm.getvalue()
+        return data
 
 
 def _meta_string_as_value(meta_str: model.MetaString, lang_xdefault=False) \
@@ -185,9 +221,20 @@ def _write_meta_date(fields: Dict[model.ExpandedName, model.XmpValue],
     return True
 
 
-def meta_as_xmp(meta: model.DocumentMetadata) -> List[model.XmpStructure]:
-    fields: Dict[model.ExpandedName, model.XmpValue] = {}
+def update_xmp_with_meta(meta: model.DocumentMetadata,
+                         roots: Iterable[model.XmpStructure] = ()):
+    # group everything first, then populate
+    fields: Dict[model.ExpandedName, model.XmpValue] = {
+        k: v
+        for root in roots
+        for k, v in root
+    }
+    return _populate_xmp_with_meta(meta, fields)
 
+
+def _populate_xmp_with_meta(meta: model.DocumentMetadata,
+                            fields: Dict[model.ExpandedName, model.XmpValue]) \
+        -> List[model.XmpStructure]:
     _write_meta_date(fields, model.XMP_MODDATE, meta.last_modified)
     _write_meta_string(fields, model.PDF_PRODUCER, model.VENDOR)
     if meta.xmp_unmanaged:
@@ -213,8 +260,92 @@ def meta_as_xmp(meta: model.DocumentMetadata) -> List[model.XmpStructure]:
     return [model.XmpStructure(fields), *meta.xmp_extra]
 
 
+def _parse_dt(xmp_val: model.XmpValue):
+    if isinstance(xmp_val.value, str):
+        dt_str = xmp_val.value
+    else:
+        raise XmpXmlProcessingError("Wrong type for XMP date")
+    try:
+        dt = isoparse(dt_str)
+    except ValueError:
+        raise XmpXmlProcessingError(f"Failed to parse {dt_str!r} as a date")
+    return dt
+
+
+def _one_or_none(iterable):
+    try:
+        return next(iter(iterable))
+    except StopIteration:
+        return None
+
+
+def _simplify_meta_str(val: model.XmpValue) -> model.MetaString:
+    result = None
+    focus = val
+    if isinstance(val.value, model.XmpArray) \
+            and len(val.value.entries) > 0:
+        # we expect this to be the case
+        # (we're not going to check the array type, though)
+        # we also tolerate simple values
+        focus = val.value.entries[0]
+
+    if isinstance(focus.value, str):
+        val_str = focus.value
+        quals = focus.qualifiers
+        lang = quals.lang
+        if lang:
+            components = lang.split('-', 1)
+            result = model.StringWithLanguage(
+                val_str,
+                lang_code=components[0],
+                country_code=(
+                    components[1] if len(components) > 1 else None
+                )
+            )
+        else:
+            result = val_str
+    return result
+
+
+def meta_from_xmp(roots: List[model.XmpStructure]):
+    all_fields: Dict[model.ExpandedName, model.XmpValue] = {
+        k: v
+        for root in roots
+        for k, v in root
+    }
+
+    kwargs = {}
+    mod_date = all_fields.get(model.XMP_MODDATE, None)
+    if mod_date is not None:
+        kwargs['last_modified'] = _parse_dt(mod_date)
+
+    create_date = all_fields.get(model.XMP_CREATEDATE, None)
+    if create_date is not None:
+        kwargs['created'] = _parse_dt(create_date)
+
+    title = get_and_apply(all_fields, model.DC_TITLE, _simplify_meta_str)
+    if title is not None:
+        kwargs['title'] = title
+    author = get_and_apply(all_fields, model.DC_CREATOR, _simplify_meta_str)
+    if author is not None:
+        kwargs['author'] = author
+    subject = get_and_apply(all_fields, model.DC_DESCRIPTION, _simplify_meta_str)
+    if subject is not None:
+        kwargs['subject'] = subject
+
+    keywords = all_fields.get(model.PDF_KEYWORDS, None)
+    if keywords is not None and isinstance(keywords.value, str):
+        kwargs['keywords'] = keywords.value.split(',')
+
+    creator = all_fields.get(model.XMP_CREATORTOOL, None)
+    if creator is not None and isinstance(creator.value, str):
+        kwargs['creator'] = creator.value
+
+    return model.DocumentMetadata(**kwargs)
+
+
 XMP_HEADER_PATTERN = re.compile(
-    b'<\\?\\s?xpacket begin="(...?)" id="W5M0MpCehiHzreSzNTczkc9d"\\s?\\?>',
+    b'\\s*<\\?\\s?xpacket begin="(...?)" id="W5M0MpCehiHzreSzNTczkc9d"\\s?\\?>',
 )
 
 BOM_REGISTRY = {
@@ -228,7 +359,8 @@ class XmpXmlProcessingError(ValueError):
 
 
 def _check_lang(elem: ElementTree.Element) -> Optional[str]:
-    return elem.attrib.get(_tag(model.XML_LANG), None)
+    lang = elem.get(_tag(model.XML_LANG), None)
+    return None if lang == "x-default" else lang
 
 
 def _proc_xmp_struct(elem: ElementTree.Element, lang: Optional[str]) \
@@ -292,15 +424,9 @@ def _unwrap_resource(elem: ElementTree.Element, lang: Optional[str]):
     except StopIteration:
         rdf_value = None
 
-    if rdf_value:
+    if rdf_value is not None:
         # this is the actual value, the other things are qualifiers
-        try:
-            inner_value_xml, = iter(rdf_value)
-        except StopIteration:
-            raise XmpXmlProcessingError(
-                "rdf:value should only have one child"
-            )
-        inner_value = _proc_xmp_value(inner_value_xml, lang)
+        inner_value = _proc_xmp_value(rdf_value, lang).value
         quals = _extract_qualifiers(elem, lang)
     else:
         # no rdf:value? -> regular structure element
@@ -327,7 +453,10 @@ def _proc_xmp_value(elem: ElementTree.Element, lang: Optional[str]) \
     child_count = len(elem)
     if child_count == 0:
         # simple value
-        return model.XmpValue(elem.text, model.Qualifiers.lang_as_qual(lang))
+        value_str = elem.get(_tag(model.RDF_RESOURCE), None)
+        if value_str is None:
+            value_str = elem.text or ""
+        return model.XmpValue(value_str, model.Qualifiers.lang_as_qual(lang))
     elif child_count == 1:
         # Child should be rdf:Description or one of the array types
         child = elem[0]

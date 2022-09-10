@@ -123,11 +123,15 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             id1 = generic.ByteStringObject(os.urandom(16))
         return generic.ArrayObject([id1, id2])
 
-    def get_object(self, ido):
+    def get_object(self, ido, as_metadata_stream: bool = False):
         try:
-            return super().get_object(ido)
+            return super().get_object(
+                ido, as_metadata_stream=as_metadata_stream
+            )
         except KeyError:
-            return self.prev.get_object(ido)
+            return self.prev.get_object(
+                ido, as_metadata_stream=as_metadata_stream
+            )
 
     def mark_update(self, obj_ref: Union[generic.Reference,
                                          generic.IndirectObject]):

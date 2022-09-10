@@ -19,6 +19,7 @@ from pyhanko.pdf_utils.content import (
 from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
+from pyhanko.pdf_utils.metadata.model import DocumentMetadata
 from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
@@ -601,6 +602,11 @@ def test_copy_file():
 
 # noinspection PyMethodMayBeStatic
 class PathMockHandler(PdfHandler):
+
+    @property
+    def document_meta_view(self) -> DocumentMetadata:
+        raise NotImplementedError
+
     @property
     def trailer_view(self) -> generic.DictionaryObject:
         raise NotImplementedError

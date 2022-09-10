@@ -10,6 +10,7 @@ classes.
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from io import BytesIO
 from typing import Callable, Generator, Iterable, Optional, TypeVar
@@ -24,9 +25,10 @@ __all__ = [
     'assert_writable_and_random_access', 'prepare_rw_output_stream',
     'finalise_output',
     'DEFAULT_CHUNK_SIZE', 'chunked_write', 'chunked_digest', 'chunk_stream',
-    'ConsList', 'Singleton', 'rd'
+    'ConsList', 'Singleton', 'rd', 'isoparse'
 ]
 
+import pytz
 
 DEFAULT_CHUNK_SIZE = 4096
 """
@@ -468,3 +470,18 @@ def finalise_output(orig_output, returned_output):
         return orig_output
     return returned_output
 
+
+def isoparse(dt_str: str) -> datetime:
+    try:
+        # Try to import the ISO parser from dateutil, if available
+        from dateutil.parser import isoparse as parse
+    except ImportError:  # pragma: nocover
+        # if not, call fromisoformat in the standard library
+        # (only implements a subset of ISO 8601)
+        parse = datetime.fromisoformat
+
+    dt = parse(dt_str)
+    if dt.tzinfo is None:
+        # assume UTC
+        dt = dt.replace(tzinfo=pytz.UTC)
+    return dt

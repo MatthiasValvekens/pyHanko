@@ -31,6 +31,7 @@ from pyhanko.pdf_utils import crypt, misc
 from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
+from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers, validation
@@ -445,22 +446,9 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
 
 def _attempt_iso_dt_parse(dt_str) -> datetime:
     try:
-        # Try to import the ISO parser from dateutil, if available
-        from dateutil.parser import isoparse
-    except ImportError:
-        # if not, call fromisoformat in the standard library
-        # (only implements a subset of ISO 8601)
-        isoparse = datetime.fromisoformat
-
-    try:
         dt = isoparse(dt_str)
     except ValueError:
         raise click.ClickException(f"datetime {dt_str!r} could not be parsed")
-
-    if dt.tzinfo is None:
-        # assume UTC
-        dt = dt.replace(tzinfo=pytz.UTC)
-
     return dt
 
 

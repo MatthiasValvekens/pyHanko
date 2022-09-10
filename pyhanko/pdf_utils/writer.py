@@ -27,6 +27,7 @@ from pyhanko.pdf_utils.metadata.info import (
 )
 from pyhanko.pdf_utils.metadata.model import VENDOR, DocumentMetadata
 from pyhanko.pdf_utils.misc import (
+    IndirectObjectExpected,
     PdfError,
     PdfReadError,
     PdfWriteError,
@@ -341,7 +342,7 @@ class BasePdfFileWriter(PdfHandler):
                 )
         self.update_container(extensions)
 
-    def get_object(self, ido):
+    def get_object(self, ido, as_metadata_stream: bool = False):
         if ido.pdf not in self._resolves_objs_from:
             raise PdfError(
                 f'Reference {ido} has no relation to this PDF writer.'
@@ -498,6 +499,7 @@ class BasePdfFileWriter(PdfHandler):
         self._update_meta()
 
     def _update_meta(self):
+        self._meta.last_modified = 'now'
         if self._info is not None:
             mod = update_info_dict(self._meta, self._info.get_object())
             if mod:
@@ -509,19 +511,30 @@ class BasePdfFileWriter(PdfHandler):
 
         need_xmp = (
             self._meta.xmp_unmanaged
-            or (self.output_version <= (1, 7) and '/Metadata' in self.root)
             or self.output_version >= (2, 0)
+            or '/Metadata' in self.root
         )
 
         if need_xmp:
             # delayed import since the namespace registration operation
             # is global (thank you ElementTree...)
+            # TODO ensure xmp deps are optional by guarding this import
+            #  with a try/except block
             from pyhanko.pdf_utils.metadata import xmp_xml
 
-            # FIXME update existing
-            self.root['/Metadata'] = self.add_object(
-                xmp_xml.MetadataStream(meta=xmp_xml.meta_as_xmp(self._meta))
-            )
+            meta_stm = None
+            if '/Metadata' in self.root:
+                meta_obj = self.root['/Metadata']
+                if isinstance(meta_obj, xmp_xml.MetadataStream):
+                    meta_stm = meta_obj
+                    meta_stm.update_xmp_with_meta(self._meta)
+                    self.update_container(meta_stm)
+            if meta_stm is None:
+                meta_stm = xmp_xml.MetadataStream.from_xmp(
+                    xmp_xml.update_xmp_with_meta(self._meta)
+                )
+                self.root['/Metadata'] = self.add_object(meta_stm)
+                self.update_root()
             self.update_root()
 
     def _populate_trailer(self, trailer):
@@ -733,15 +746,41 @@ class BasePdfFileWriter(PdfHandler):
             raw_dict = {
                 k: self._import_object(v, reference_map, obj_stream)
                 for k, v in obj.items()
+                if k != '/Metadata'
             }
+            try:
+                # make sure to import metadata streams as such
+                meta_ref = obj.get_value_as_reference('/Metadata')
+                # ensure a MetadataStream object ends up in the cache
+                meta_ref.get_pdf_handler().get_object(
+                    meta_ref, as_metadata_stream=True
+                )
+                # ...then import the reference
+                raw_dict['/Metadata'] = self._import_object(
+                    generic.IndirectObject(
+                        meta_ref.idnum, meta_ref.generation, meta_ref.pdf
+                    ),
+                    reference_map,
+                    obj_stream
+                )
+            except (KeyError, IndirectObjectExpected):
+                pass
+
             if isinstance(obj, generic.StreamObject):
+                stm_cls = generic.StreamObject
+                # again, make sure to import metadata streams as such
+                try:
+                    # noinspection PyUnresolvedReferences
+                    from pyhanko.pdf_utils.metadata import xmp_xml
+                    if isinstance(obj, xmp_xml.MetadataStream):
+                        stm_cls = xmp_xml.MetadataStream
+                except ImportError:
+                    pass
                 # In the vast majority of use cases, I'd expect the content
                 # to be available in encoded form by default.
                 # By initialising the stream object in this way, we avoid
                 # a potentially costly decoding operation.
-                return generic.StreamObject(
-                    raw_dict, encoded_data=obj.encoded_data
-                )
+                return stm_cls(raw_dict, encoded_data=obj.encoded_data)
             else:
                 return generic.DictionaryObject(raw_dict)
         elif isinstance(obj, generic.ArrayObject):

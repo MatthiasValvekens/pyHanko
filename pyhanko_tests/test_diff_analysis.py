@@ -326,6 +326,7 @@ def test_bogus_metadata_manipulation():
         assert status.modification_level == ModificationLevel.OTHER
 
     w = IncrementalPdfFileWriter(infile)
+    w._update_meta = lambda: None
     w.root['/Metadata'] = w.add_object(generic.StreamObject(stream_data=bogus))
     w.update_root()
     out = BytesIO()
@@ -333,6 +334,7 @@ def test_bogus_metadata_manipulation():
     do_check()
 
     w = IncrementalPdfFileWriter(infile)
+    w._update_meta = lambda: None
     metadata_ref = w.root.raw_get('/Metadata')
     metadata_stream: generic.StreamObject = metadata_ref.get_object()
     metadata_stream.strip_filters()
@@ -344,6 +346,7 @@ def test_bogus_metadata_manipulation():
     do_check()
 
     w = IncrementalPdfFileWriter(infile)
+    w._update_meta = lambda: None
     w.root['/Metadata'] = generic.NullObject()
     w.update_root()
     out = BytesIO()
@@ -351,6 +354,7 @@ def test_bogus_metadata_manipulation():
     do_check()
 
     w = IncrementalPdfFileWriter(infile)
+    w._update_meta = lambda: None
     w.root['/Metadata'] = w.add_object(generic.NullObject())
     w.update_root()
     out = BytesIO()

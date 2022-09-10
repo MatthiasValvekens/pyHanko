@@ -185,7 +185,8 @@ class Reference(Dereferenceable):
         return self.pdf
 
 
-def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
+def read_object(stream, container_ref: 'Dereferenceable',
+                as_metadata_stream: bool = False) -> 'PdfObject':
     """
     Read a PDF object from an input stream.
 
@@ -202,6 +203,8 @@ def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
 
         *Note:* It is perfectly possible (and common) for `container_ref` to
         resolve to the return value of this function.
+    :param as_metadata_stream:
+        Whether to dereference the object as an XMP metadata stream.
     :return:
         A :class:`.PdfObject`.
     """
@@ -218,7 +221,7 @@ def read_object(stream, container_ref: 'Dereferenceable') -> 'PdfObject':
         stream.seek(-2, os.SEEK_CUR)  # reset to start
         if peek == b'<<':
             result = DictionaryObject.read_from_stream(
-                stream, container_ref
+                stream, container_ref, as_metadata_stream=as_metadata_stream
             )
         else:
             result = read_hex_string_from_stream(stream)
@@ -1110,7 +1113,16 @@ class DictionaryObject(dict, PdfObject):
         return dict.setdefault(self, key, value)
 
     def __getitem__(self, key):
-        return dict.__getitem__(self, key).get_object()
+        raw_obj = dict.__getitem__(self, key)
+        if key == '/Metadata' and isinstance(raw_obj, IndirectObject):
+            from pyhanko.pdf_utils.rw_common import PdfHandler
+            handler = raw_obj.get_pdf_handler()
+            assert isinstance(handler, PdfHandler)
+            return handler.get_object(
+                raw_obj.reference, as_metadata_stream=True
+            )
+        else:
+            return raw_obj.get_object()
 
     def get_and_apply(self, key, function: Callable[[PdfObject], Any], *,
                       raw=False, default=None):
@@ -1141,7 +1153,8 @@ class DictionaryObject(dict, PdfObject):
         stream.write(b">>")
 
     @staticmethod
-    def read_from_stream(stream, container_ref: 'Dereferenceable'):
+    def read_from_stream(stream, container_ref: 'Dereferenceable',
+                         as_metadata_stream: bool = False):
         tmp = stream.read(2)
         if tmp != b"<<":
             raise PdfReadError(
@@ -1212,7 +1225,11 @@ class DictionaryObject(dict, PdfObject):
         if stream_data is not None:
             # pass in everything as encoded data, the StreamObject class
             # will take care of decoding as necessary
-            return StreamObject(data, encoded_data=stream_data)
+            if as_metadata_stream:
+                from pyhanko.pdf_utils.metadata.xmp_xml import MetadataStream
+                return MetadataStream(data, encoded_data=stream_data)
+            else:
+                return StreamObject(data, encoded_data=stream_data)
         else:
             return DictionaryObject(data)
 

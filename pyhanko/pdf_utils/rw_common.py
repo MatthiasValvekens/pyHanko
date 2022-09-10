@@ -2,24 +2,26 @@
 from typing import Tuple
 
 from . import generic, misc
-
-__all__ = ['PdfHandler']
-
 from .metadata.model import DocumentMetadata
 from .misc import PdfError
+
+__all__ = ['PdfHandler']
 
 
 class PdfHandler:
     """Abstract class providing a general interface for quering objects
     in PDF readers and writers alike."""
 
-    def get_object(self, ref: generic.Reference):
+    def get_object(self, ref: generic.Reference,
+                   as_metadata_stream: bool = False):
         """
         Retrieve the object associated with the provided reference from
         this PDF handler.
 
         :param ref:
             An instance of :class:`.generic.Reference`.
+        :param as_metadata_stream:
+            Whether to dereference the object as an XMP metadata stream.
         :return:
             A PDF object.
         """
