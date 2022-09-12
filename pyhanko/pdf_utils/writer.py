@@ -20,12 +20,12 @@ from pyhanko.pdf_utils.extensions import (
     DeveloperExtension,
     DevExtensionMultivalued,
 )
-from pyhanko.pdf_utils.generic import pdf_name, pdf_string
+from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.metadata.info import (
     update_info_dict,
     view_from_info_dict,
 )
-from pyhanko.pdf_utils.metadata.model import VENDOR, DocumentMetadata
+from pyhanko.pdf_utils.metadata.model import DocumentMetadata
 from pyhanko.pdf_utils.misc import (
     IndirectObjectExpected,
     PdfError,
@@ -499,29 +499,37 @@ class BasePdfFileWriter(PdfHandler):
         self._update_meta()
 
     def _update_meta(self):
+        try:
+            # delayed import since the namespace registration operation
+            # is global (thank you ElementTree...)
+            # also, we want the XML dep(s) to be optional
+            from pyhanko.pdf_utils.metadata import xmp_xml
+            need_xmp = (
+                self._meta.xmp_unmanaged
+                or self.output_version >= (2, 0)
+                or '/Metadata' in self.root
+            )
+        except ImportError:
+            need_xmp = False
+            xmp_xml = None
+
         self._meta.last_modified = 'now'
         if self._info is not None:
-            mod = update_info_dict(self._meta, self._info.get_object())
+            mod = update_info_dict(
+                self._meta, self._info.get_object(),
+                # if we write XMP, we only update existing entries
+                only_update_existing=need_xmp
+            )
             if mod:
                 self.mark_update(self._info)
-        else:
+        elif not need_xmp:
             info_dict = generic.DictionaryObject()
             update_info_dict(self._meta, info_dict)
             self._info = self.add_object(info_dict)
-
-        need_xmp = (
-            self._meta.xmp_unmanaged
-            or self.output_version >= (2, 0)
-            or '/Metadata' in self.root
-        )
+            # if there's no info dict, and we're going to write XMP anyhow,
+            # don't bother creating one
 
         if need_xmp:
-            # delayed import since the namespace registration operation
-            # is global (thank you ElementTree...)
-            # TODO ensure xmp deps are optional by guarding this import
-            #  with a try/except block
-            from pyhanko.pdf_utils.metadata import xmp_xml
-
             meta_stm = None
             if '/Metadata' in self.root:
                 meta_obj = self.root['/Metadata']
@@ -1066,12 +1074,6 @@ class PdfFileWriter(BasePdfFileWriter):
         id1 = generic.ByteStringObject(os.urandom(16))
         id2 = generic.ByteStringObject(os.urandom(16))
         id_obj = generic.ArrayObject([id1, id2])
-
-        # info object
-        if info is None:
-            info = generic.DictionaryObject({
-                pdf_name('/Producer'): pdf_string(VENDOR)
-            })
 
         self._custom_trailer_entries = {}
         super().__init__(root, info, id_obj, stream_xrefs=stream_xrefs)

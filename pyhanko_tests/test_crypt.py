@@ -641,7 +641,7 @@ def test_empty_user_pass():
     assert r.root_ref == old_root_ref
     assert len(r.root['/AcroForm']['/Fields']) == 1
     assert len(r.root['/Pages']['/Kids']) == 1
-    assert r.trailer['/Info']['/Producer'].startswith('pyHanko')
+    assert r.root['/AcroForm']['/Fields'][0]['/T'] == 'Sig1'
 
 
 def test_load_pkcs12():

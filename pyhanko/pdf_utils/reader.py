@@ -156,8 +156,22 @@ class PdfFileReader(PdfHandler):
 
         self._embedded_signatures = None
 
+    def _xmp_meta_view(self) -> Optional[DocumentMetadata]:
+        try:
+            from pyhanko.pdf_utils.metadata import xmp_xml
+            meta_obj = self.root['/Metadata']
+        except (ImportError, KeyError):
+            return
+
+        if isinstance(meta_obj, xmp_xml.MetadataStream):
+            return xmp_xml.meta_from_xmp(meta_obj.xmp)
+
     @property
     def document_meta_view(self) -> DocumentMetadata:
+        xmp_view = self._xmp_meta_view()
+        if xmp_view is not None:
+            return xmp_view
+
         try:
             info_dict = self.trailer_view['/Info']
         except KeyError:

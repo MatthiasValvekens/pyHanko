@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.metadata import model, xmp_xml
+from pyhanko.pdf_utils.misc import StringWithLanguage
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko_tests.samples import MINIMAL, PDF_DATA_DIR, VECTOR_IMAGE_PDF
@@ -60,16 +61,18 @@ def test_writer_meta_view_does_not_persist_changes(writer_type):
 
 
 @freeze_time(datetime(2022, 9, 7, tzinfo=tzlocal.get_localzone()))
-@pytest.mark.parametrize('writer_type,meta_dict', list(itertools.product(
+@pytest.mark.parametrize('writer_type,meta_dict,ver', list(itertools.product(
     ('fresh', 'from_data', 'incremental', 'in_place'),
     [
         {'title': 'Test test'},
         {'author': 'John Doe'},
         {'title': 'Test test', 'keywords': ['foo', 'bar', 'baz']},
         {'created': datetime(2022, 9, 7, tzinfo=pytz.utc)},
-    ]
+        {'author': 'John Doe', 'subject': 'Blah blah blah'},
+    ],
+    ((1, 7), (2, 0))
 )))
-def test_metadata_info_round_trip(writer_type, meta_dict: dict):
+def test_metadata_info_round_trip(writer_type, meta_dict: dict, ver):
     out = BytesIO()
     if writer_type == 'fresh':
         w = PdfFileWriter()
@@ -77,6 +80,7 @@ def test_metadata_info_round_trip(writer_type, meta_dict: dict):
         w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
     else:
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    w.output_version = ver
 
     w.update_root()
 
@@ -92,6 +96,42 @@ def test_metadata_info_round_trip(writer_type, meta_dict: dict):
     r = PdfFileReader(out)
     meta_dict['last_modified'] = datetime.now(tz=tzlocal.get_localzone())
     assert r.document_meta_view == model.DocumentMetadata(**meta_dict)
+
+    if ver == (2, 0):
+        assert '/Info' not in r.trailer_view
+
+
+@pytest.mark.parametrize('writer_type,ver', list(itertools.product(
+    ('fresh', 'from_data', 'incremental', 'in_place'),
+    ((1, 7), (2, 0))
+)))
+def test_metadata_info_with_language_round_trip(writer_type, ver):
+    title = StringWithLanguage('Test test', lang_code='en', country_code='US')
+    out = BytesIO()
+    if writer_type == 'fresh':
+        w = PdfFileWriter()
+    elif writer_type == 'from_data':
+        w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+    else:
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    w.output_version = ver
+
+    w.update_root()
+    w.document_meta.title = title
+
+    if writer_type == 'in_place':
+        w.write_in_place()
+        out = w.prev.stream
+    else:
+        w.write(out)
+
+    r = PdfFileReader(out)
+    if '/Metadata' in r.root:
+        # language info preserved
+        assert r.document_meta_view.title == title
+    else:
+        # language info not preserved
+        assert r.document_meta_view.title == title.value
 
 
 # Example from ISO 16684-1:20121 7.9.2.3
@@ -182,3 +222,26 @@ def test_rewrite_update_doc_with_xmp():
         "http://www.aiim.org/pdfa/ns/id/", "conformance"
     )
     assert xmp[pdfa_conformance].value == "B"
+
+
+@freeze_time('2022-09-10')
+def test_meta_view_from_xmp():
+    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
+            as inf:
+        r = PdfFileReader(inf)
+        # wipe out the info dict just because
+        r.trailer['/Info'] = generic.DictionaryObject()
+        assert r.document_meta_view.title == "Test document"
+
+
+def test_upgrade_pdf2_no_info_dict():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    w.output_version = (2, 0)
+    w.root['/Foo'] = generic.NameObject('/Bar')
+    w.document_meta.title = "Test document"
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    assert '/Info' not in r.trailer_view
+    assert r.document_meta_view.title == "Test document"

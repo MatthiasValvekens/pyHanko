@@ -13,37 +13,33 @@ __all__ = ['update_info_dict', 'view_from_info_dict']
 logger = logging.getLogger(__name__)
 
 
-def _string_with_lang_to_pdf(string: misc.StringWithLanguage) \
-        -> generic.TextStringObject:
-    if string.lang_code is None:
-        return generic.TextStringObject(string.value)
-    else:
-        return generic.TextStringObject(
-            f"\u001b{string.lang_code}{string.country_code or ''}{string.value}"
-        )
-
-
 def _write_meta_string(dictionary: generic.DictionaryObject,
-                       key: str, meta_str: model.MetaString) -> bool:
+                       key: str, meta_str: model.MetaString,
+                       existing_only: bool) -> bool:
 
     if isinstance(meta_str, misc.StringWithLanguage):
-        pdf_str = _string_with_lang_to_pdf(meta_str)
+        # don't bother with embedding language codes in strings,
+        # too few people implement escapes anyway, so meh
+        string = meta_str.value
     elif isinstance(meta_str, str):
-        pdf_str = generic.TextStringObject(meta_str)
+        string = meta_str
     else:
         return False
 
+    pdf_str = generic.TextStringObject(string)
     try:
         old_value = dictionary[key]
         mod = old_value != pdf_str
     except KeyError:
-        mod = True
-    dictionary[key] = pdf_str
+        mod = not existing_only
+    if mod:
+        dictionary[key] = pdf_str
     return mod
 
 
 def _write_meta_date(dictionary: generic.DictionaryObject,
-                     key: str, meta_date: Union[datetime, str, None]) -> bool:
+                     key: str, meta_date: Union[datetime, str, None],
+                     existing_only: bool) -> bool:
     if isinstance(meta_date, datetime):
         value = meta_date
     elif meta_date == 'now':
@@ -51,14 +47,21 @@ def _write_meta_date(dictionary: generic.DictionaryObject,
     else:
         return False
 
-    dictionary[key] = generic.pdf_date(value)
-    return True
+    if not existing_only or key in dictionary:
+        dictionary[key] = generic.pdf_date(value)
+        return True
+    else:
+        return False
 
 
 def update_info_dict(meta: model.DocumentMetadata,
-                     info: generic.DictionaryObject) -> bool:
+                     info: generic.DictionaryObject,
+                     only_update_existing: bool = False) -> bool:
 
-    mod = _write_meta_date(info, "/ModDate", meta.last_modified)
+    mod = _write_meta_date(
+        info, "/ModDate", meta.last_modified,
+        existing_only=only_update_existing
+    )
     producer = model.VENDOR
     try:
         producer_string = info['/Producer']
@@ -75,11 +78,26 @@ def update_info_dict(meta: model.DocumentMetadata,
     if meta.xmp_unmanaged:
         return mod
 
-    mod |= _write_meta_string(info, "/Title", meta.title)
-    mod |= _write_meta_string(info, "/Author", meta.author)
-    mod |= _write_meta_string(info, "/Subject", meta.subject)
-    mod |= _write_meta_string(info, "/Creator", meta.creator)
-    mod |= _write_meta_date(info, "/CreationDate", meta.created)
+    mod |= _write_meta_string(
+        info, "/Title", meta.title,
+        existing_only=only_update_existing
+    )
+    mod |= _write_meta_string(
+        info, "/Author", meta.author,
+        existing_only=only_update_existing
+    )
+    mod |= _write_meta_string(
+        info, "/Subject", meta.subject,
+        existing_only=only_update_existing
+    )
+    mod |= _write_meta_string(
+        info, "/Creator", meta.creator,
+        existing_only=only_update_existing
+    )
+    mod |= _write_meta_date(
+        info, "/CreationDate", meta.created,
+        existing_only=only_update_existing
+    )
 
     if meta.keywords:
         info['/Keywords'] = generic.TextStringObject(','.join(meta.keywords))
