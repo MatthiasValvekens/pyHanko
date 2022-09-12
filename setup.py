@@ -24,7 +24,7 @@ setup(
     packages=[
         'pyhanko',
         'pyhanko.pdf_utils', 'pyhanko.pdf_utils.font',
-        'pyhanko.pdf_utils.crypt',
+        'pyhanko.pdf_utils.crypt', 'pyhanko.pdf_utils.metadata',
         'pyhanko.sign', 'pyhanko.sign.ades', 'pyhanko.sign.signers',
         'pyhanko.sign.diff_analysis', 'pyhanko.sign.diff_analysis.rules',
         'pyhanko.sign.timestamps', 'pyhanko.sign.validation'
@@ -73,6 +73,7 @@ setup(
     ],
     extras_require={
         'extra_pubkey_algs': ['oscrypto>=1.2.1'],
+        'xmp': ['defusedxml~=0.7.1'],
         'opentype': ['fonttools>=4.33.3', 'uharfbuzz==0.25.0'],
         'image-support': [
             # Only tested systematically on 8.x,

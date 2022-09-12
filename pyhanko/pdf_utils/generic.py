@@ -1225,11 +1225,17 @@ class DictionaryObject(dict, PdfObject):
         if stream_data is not None:
             # pass in everything as encoded data, the StreamObject class
             # will take care of decoding as necessary
+            stm_cls = StreamObject
             if as_metadata_stream:
-                from pyhanko.pdf_utils.metadata.xmp_xml import MetadataStream
-                return MetadataStream(data, encoded_data=stream_data)
-            else:
-                return StreamObject(data, encoded_data=stream_data)
+                try:
+                    # noinspection PyUnresolvedReferences
+                    from pyhanko.pdf_utils.metadata.xmp_xml import (
+                        MetadataStream,
+                    )
+                    stm_cls = MetadataStream
+                except ImportError:  # pragma: nocover
+                    pass
+            return stm_cls(data, encoded_data=stream_data)
         else:
             return DictionaryObject(data)
 
