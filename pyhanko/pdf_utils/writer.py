@@ -506,6 +506,7 @@ class BasePdfFileWriter(PdfHandler):
             from pyhanko.pdf_utils.metadata import xmp_xml
             need_xmp = (
                 self._meta.xmp_unmanaged
+                or bool(self._meta.xmp_extra)
                 or self.output_version >= (2, 0)
                 or '/Metadata' in self.root
             )

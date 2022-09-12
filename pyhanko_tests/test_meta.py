@@ -245,3 +245,33 @@ def test_upgrade_pdf2_no_info_dict():
     r = PdfFileReader(buf)
     assert '/Info' not in r.trailer_view
     assert r.document_meta_view.title == "Test document"
+
+
+def test_add_extra_xmp():
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    w.root['/Foo'] = generic.NameObject('/Bar')
+    w.document_meta.title = "Test document"
+
+    n_base_url = model.ExpandedName(ns=model.NS['xmp'], local_name="BaseURL")
+    n_xe_qualifier = model.ExpandedName(
+        ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
+    )
+    extra = model.XmpStructure.of(
+        (n_base_url, model.XmpValue(
+            "https://example.com/",
+            qualifiers=model.Qualifiers.of(
+                (n_xe_qualifier, model.XmpValue('artificial example'))
+            )
+        )),
+    )
+    w.document_meta.xmp_extra = [extra]
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    assert '/Info' not in r.trailer_view
+    assert r.document_meta_view.title == "Test document"
+
+    base_url_val = r.root['/Metadata'].xmp[1][n_base_url]
+    assert base_url_val.qualifiers[n_xe_qualifier].value == 'artificial example'
+    assert base_url_val.value == "https://example.com/"
