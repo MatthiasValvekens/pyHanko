@@ -121,8 +121,8 @@ def _read_date_from_dict(info_dict: generic.DictionaryObject,
         pass
 
     logger.warning(
-        "Key {} in info dict has value {}, which is not a valid date string",
-        key, date_str
+        "Key %s in info dict has value %s, which is not a valid date string",
+        key, repr(date_str)
     )
     return None
 

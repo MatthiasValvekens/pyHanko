@@ -510,7 +510,7 @@ class BasePdfFileWriter(PdfHandler):
                 or self.output_version >= (2, 0)
                 or '/Metadata' in self.root
             )
-        except ImportError:
+        except ImportError:  # pragma: nocover
             need_xmp = False
             xmp_xml = None
 
@@ -783,7 +783,7 @@ class BasePdfFileWriter(PdfHandler):
                     from pyhanko.pdf_utils.metadata import xmp_xml
                     if isinstance(obj, xmp_xml.MetadataStream):
                         stm_cls = xmp_xml.MetadataStream
-                except ImportError:
+                except ImportError:  # pragma: nocover
                     pass
                 # In the vast majority of use cases, I'd expect the content
                 # to be available in encoded form by default.

@@ -263,13 +263,6 @@ def _parse_dt(xmp_val: model.XmpValue):
     return dt
 
 
-def _one_or_none(iterable):
-    try:
-        return next(iter(iterable))
-    except StopIteration:
-        return None
-
-
 def _simplify_meta_str(val: model.XmpValue) -> model.MetaString:
     result = None
     focus = val
@@ -502,9 +495,9 @@ def parse_xmp(inp: BinaryIO) -> List[model.XmpStructure]:
                 if _name(c) == model.RDF_RDF
             )
         except StopIteration:
-            raise XmpXmlProcessingError("No RDF:RDF node in x:xmpmeta")
+            raise XmpXmlProcessingError("No rdf:RDF node in x:xmpmeta")
     else:
-        raise XmpXmlProcessingError("XMP root must be RDF:RDF or x:xmpmeta")
+        raise XmpXmlProcessingError("XMP root must be rdf:RDF or x:xmpmeta")
 
     return [
         _proc_xmp_struct(node, lang=None)

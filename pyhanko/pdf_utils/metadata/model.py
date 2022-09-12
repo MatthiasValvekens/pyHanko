@@ -164,7 +164,7 @@ class Qualifiers:
             lang = quals[XML_LANG]
             del quals[XML_LANG]
             if not isinstance(lang.value, str):
-                raise TypeError
+                raise TypeError  # pragma: nocover
             self._lang = lang.value
         except KeyError:
             self._lang = None
@@ -203,6 +203,11 @@ class Qualifiers:
             q['lang'] = self._lang
         return f"Qualifiers({q!r})"
 
+    def __eq__(self, other):
+        return isinstance(other, Qualifiers) \
+                and self._lang == other._lang \
+                and self._quals == other._quals
+
 
 @dataclass(frozen=True)
 class XmpUri:
@@ -238,6 +243,10 @@ class XmpStructure:
     def __repr__(self):
         return f"XmpStructure({self._fields!r})"
 
+    def __eq__(self, other):
+        return isinstance(other, XmpStructure) \
+                and self._fields == other._fields
+
 
 @enum.unique
 class XmpArrayType(enum.Enum):
@@ -265,3 +274,13 @@ class XmpArray:
     @classmethod
     def alternative(cls, lst: Iterable[XmpValue]) -> 'XmpArray':
         return cls(XmpArrayType.ALTERNATIVE, list(lst))
+
+    def __eq__(self, other):
+        if not isinstance(other, XmpArray) or \
+                self.array_type != other.array_type:
+            return False
+        if self.array_type == XmpArrayType.UNORDERED:
+            return all(e in self.entries for e in other.entries) and \
+                    all(e in other.entries for e in self.entries)
+        else:
+            return self.entries == other.entries

@@ -36,6 +36,24 @@ def test_copy_into_new_writer_sets_info():
     assert 'pyHanko' in r.trailer_view['/Info']['/Producer']
 
 
+def test_date_parse_failure():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = copy_into_new_writer(r)
+    w._update_meta = lambda: None
+    w._info = generic.DictionaryObject({
+        generic.pdf_name('/Title'): generic.pdf_string('a failure test'),
+        generic.pdf_name('/CreationDate'):
+            generic.pdf_string('this makes no sense')
+    })
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    meta = r.document_meta_view
+    assert meta.created is None
+    assert meta.title == "a failure test"
+
+
 @freeze_time(datetime(2022, 9, 7, tzinfo=tzlocal.get_localzone()))
 def test_incremental_update_meta_view():
     w = IncrementalPdfFileWriter(BytesIO(VECTOR_IMAGE_PDF))
@@ -275,3 +293,316 @@ def test_add_extra_xmp():
     base_url_val = r.root['/Metadata'].xmp[1][n_base_url]
     assert base_url_val.qualifiers[n_xe_qualifier].value == 'artificial example'
     assert base_url_val.value == model.XmpUri("https://example.com/")
+
+
+def test_unmanaged_xmp():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = copy_into_new_writer(r)
+    n_base_url = model.ExpandedName(ns=model.NS['xmp'], local_name="BaseURL")
+    n_xe_qualifier = model.ExpandedName(
+        ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
+    )
+    extra = model.XmpStructure.of(
+        (n_base_url, model.XmpValue(
+            model.XmpUri("https://example.com/"),
+            qualifiers=model.Qualifiers.of(
+                (n_xe_qualifier, model.XmpValue('artificial example'))
+            )
+        )),
+    )
+    w.document_meta.title = "This should not be written"
+    w.document_meta.xmp_unmanaged = True
+    w.document_meta.xmp_extra = [extra]
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    assert '/Info' not in r.trailer_view
+    assert r.document_meta_view.title is None
+
+    base_url_val = r.root['/Metadata'].xmp[1][n_base_url]
+    assert base_url_val.qualifiers[n_xe_qualifier].value == 'artificial example'
+    assert base_url_val.value == model.XmpUri("https://example.com/")
+
+
+def test_unmanaged_xmp_does_not_affect_info():
+    # use a PDF that already has an info dictionary
+    r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
+    w = copy_into_new_writer(r)
+    n_base_url = model.ExpandedName(ns=model.NS['xmp'], local_name="BaseURL")
+    n_xe_qualifier = model.ExpandedName(
+        ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
+    )
+    extra = model.XmpStructure.of(
+        (n_base_url, model.XmpValue(
+            model.XmpUri("https://example.com/"),
+            qualifiers=model.Qualifiers.of(
+                (n_xe_qualifier, model.XmpValue('artificial example'))
+            )
+        )),
+    )
+    w.document_meta.title = "This should not be written"
+    w.document_meta.xmp_unmanaged = True
+    w.document_meta.xmp_extra = [extra]
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    meta = r.document_meta_view
+    assert meta.title is None
+    # producer line should update
+    assert 'pyHanko' in r.trailer_view['/Info']['/Producer']
+
+
+XMP_WITH_RESOURCE_WITH_MULTIPLE_QUALS = """
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:dc="http://purl.org/dc/elements/1.1/"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <dc:title rdf:parseType="Resource" xml:lang="en">
+            <!-- NOTE: this is actually not valid in the DC schema -->
+            <rdf:value>This is a test</rdf:value>
+            <xe:qualifier>artificial example</xe:qualifier>
+        </dc:title>
+   </rdf:Description>
+</rdf:RDF>
+"""
+
+
+def test_xmp_with_resource_with_multiple_quals():
+    inp = BytesIO(XMP_WITH_RESOURCE_WITH_MULTIPLE_QUALS.encode('utf8'))
+    result = xmp_xml.parse_xmp(inp)[0]
+    qual_ct = result[model.DC_TITLE].qualifiers.iter_quals(with_lang=True)
+    assert len(list(qual_ct)) == 2
+
+    n_xe_qualifier = model.ExpandedName(
+        ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
+    )
+
+    assert result == model.XmpStructure.of(
+        (model.DC_TITLE, model.XmpValue(
+            "This is a test", model.Qualifiers.of(
+                (model.XML_LANG, model.XmpValue("en")),
+                (n_xe_qualifier, model.XmpValue(
+                     "artificial example",
+                     model.Qualifiers.lang_as_qual("en")))
+            )
+        )),
+        (model.RDF_ABOUT, model.XmpValue(""))
+    )
+    title_val = result[model.DC_TITLE]
+    assert title_val.qualifiers[n_xe_qualifier].value == 'artificial example'
+    assert xmp_xml.meta_from_xmp([result]).title \
+           == model.StringWithLanguage("This is a test", lang_code="en")
+
+
+def test_xmp_str():
+    inp = BytesIO(XMP_WITH_RESOURCE_WITH_MULTIPLE_QUALS.encode('utf8'))
+    result = xmp_xml.parse_xmp(inp)[0]
+    r = repr(result)
+    assert "artificial" in r
+    assert "lang': \'en\'" in r
+
+
+XMP_WITH_BAG = """
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <xe:keywords rdf:parseType="Resource">
+            <rdf:value>
+                <rdf:Bag>
+                    <rdf:li>apple</rdf:li>
+                    <rdf:li>pear</rdf:li>
+                    <rdf:li>banana</rdf:li>
+                </rdf:Bag>
+            </rdf:value>
+            <xml:lang>en</xml:lang>
+            <xe:qualifier>artificial example</xe:qualifier>
+        </xe:keywords>
+   </rdf:Description>
+</rdf:RDF>
+"""
+
+
+def test_xmp_with_bag():
+    inp = BytesIO(XMP_WITH_BAG.encode('utf8'))
+    result = xmp_xml.parse_xmp(inp)[0]
+
+    n_xe_keywords = model.ExpandedName(
+        ns="http://ns.adobe.com/xmp-example/",
+        local_name="keywords"
+    )
+    n_xe_qualifier = model.ExpandedName(
+        ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
+    )
+
+    keywords_val = result[n_xe_keywords]
+    assert keywords_val.qualifiers[n_xe_qualifier].value == 'artificial example'
+
+    assert keywords_val.value == model.XmpArray.unordered(
+        map(model.XmpValue, ['apple', 'banana', 'pear'])
+    )
+
+
+def test_xmp_ord_arr_comparison():
+    o1 = model.XmpArray.ordered(
+        map(model.XmpValue, ['apple', 'pear', 'banana'])
+    )
+    o2 = model.XmpArray.ordered(
+        map(model.XmpValue, ['apple',  'banana', 'pear'])
+    )
+    a = model.XmpArray.alternative(
+        map(model.XmpValue, ['apple', 'pear', 'banana'])
+    )
+    assert o1 != o2
+    assert o1 != a
+
+
+def test_xmp_unord_arr_comparison():
+    u1 = model.XmpArray.unordered(
+        map(model.XmpValue, ['apple', 'pear', 'banana'])
+    )
+    u2 = model.XmpArray.unordered(
+        map(model.XmpValue, ['apple',  'banana', 'pear'])
+    )
+    assert u1 == u2
+
+
+XMP_WITH_PARSETYPE_LIT_INVALID = """
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <xe:title rdf:parseType="Literal">bleh</xe:title>
+   </rdf:Description>
+</rdf:RDF>
+"""
+
+
+def test_xmp_parsetype_lit_not_supported():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError, match="Literal"):
+        xmp_xml.parse_xmp(
+            BytesIO(XMP_WITH_PARSETYPE_LIT_INVALID.encode('utf8'))
+        )
+
+
+XMP_WITH_INVALID_VALUE_FORM = """
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <xe:title><xe:zzz/></xe:title>
+   </rdf:Description>
+</rdf:RDF>
+"""
+
+
+def test_xmp_with_invalid_form():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError,
+                       match="value form"):
+        xmp_xml.parse_xmp(
+            BytesIO(XMP_WITH_INVALID_VALUE_FORM.encode('utf8'))
+        )
+
+
+XMP_VALUE_FORM_MULTIPLE_CHILDREN = """
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <xe:title><xe:foo/><xe:bar/></xe:title>
+   </rdf:Description>
+</rdf:RDF>
+"""
+
+
+def test_xmp_value_form_multiple_children():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError,
+                       match="more than one child"):
+        xmp_xml.parse_xmp(
+            BytesIO(XMP_VALUE_FORM_MULTIPLE_CHILDREN.encode('utf8'))
+        )
+
+
+XMP_NO_RDF_IN_XMPMETA = """
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+</x:xmpmeta>
+"""
+
+
+def test_xmp_no_rdf_in_xmpmeta():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError,
+                       match="RDF node in x:xmpmeta"):
+        xmp_xml.parse_xmp(
+            BytesIO(XMP_NO_RDF_IN_XMPMETA.encode('utf8'))
+        )
+
+
+XMP_INVALID_ROOT = """
+<xml:boo/>
+"""
+
+
+def test_xmp_invalid_root():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError,
+                       match="XMP root must be"):
+        xmp_xml.parse_xmp(
+            BytesIO(XMP_INVALID_ROOT.encode('utf8'))
+        )
+
+
+XMP_WITH_DUPLICATE_STRUCT_FIELD = """
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:xe="http://ns.adobe.com/xmp-example/">
+    <rdf:Description rdf:about="">
+        <xe:title>bleh</xe:title>
+        <xe:title>bleh</xe:title>
+   </rdf:Description>
+</rdf:RDF>
+"""
+
+
+def test_xmp_with_duplicate_struct_field():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError, match="Duplicate field"):
+        xmp_xml.parse_xmp(
+            BytesIO(XMP_WITH_DUPLICATE_STRUCT_FIELD.encode('utf8'))
+        )
+
+
+XMP_INVALID_DATE1 = """
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+   <xmp:CreateDate>1/1/2022</xmp:CreateDate>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"""
+
+
+def test_xmp_invalid_date1():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError,
+                       match="Failed to parse.*as a date"):
+        xmp_xml.meta_from_xmp(
+            xmp_xml.parse_xmp(
+                BytesIO(XMP_INVALID_DATE1.encode('utf8'))
+            )
+        )
+
+
+XMP_INVALID_DATE2 = """
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+   <xmp:CreateDate rdf:parseType="Resource"></xmp:CreateDate>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"""
+
+
+def test_xmp_invalid_date2():
+    with pytest.raises(xmp_xml.XmpXmlProcessingError,
+                       match="Wrong type"):
+        xmp_xml.meta_from_xmp(
+            xmp_xml.parse_xmp(
+                BytesIO(XMP_INVALID_DATE2.encode('utf8'))
+            )
+        )
