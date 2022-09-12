@@ -48,23 +48,14 @@ def iter_attrs(elem: ElementTree.Element) \
             yield name, value
 
 
-# URI regex from urllib3
-URI_RE = re.compile(
-    r"^(?:([a-zA-Z][a-zA-Z0-9+.-]*):)?"
-    r"(?://([^\\/?#]*))?"
-    r"([^?#]*)"
-    r"(?:\?([^#]*))?"
-    r"(?:#(.*))?$",
-    re.UNICODE | re.DOTALL,
-)
-
-def _add_inner_value(container: ElementTree.Element,
-                     value: Union[model.XmpStructure, model.XmpArray, str]):
+def _add_inner_value(
+        container: ElementTree.Element,
+        value: Union[model.XmpStructure, model.XmpArray, model.XmpUri, str]):
     if isinstance(value, str):
-        if URI_RE.match(value):
-            container.set(_tag(model.RDF_RESOURCE), value)
-        else:
-            container.text = value
+        container.text = value
+        return
+    if isinstance(value, model.XmpUri):
+        container.set(_tag(model.RDF_RESOURCE), str(value))
         return
     elif isinstance(value, model.XmpStructure):
         description = ElementTree.SubElement(
@@ -453,9 +444,10 @@ def _proc_xmp_value(elem: ElementTree.Element, lang: Optional[str]) \
     child_count = len(elem)
     if child_count == 0:
         # simple value
-        value_str = elem.get(_tag(model.RDF_RESOURCE), None)
-        if value_str is None:
-            value_str = elem.text or ""
+        uri_str = elem.get(_tag(model.RDF_RESOURCE), None)
+        if uri_str is not None:
+            return model.XmpValue(model.XmpUri(uri_str))
+        value_str = elem.text or ""
         return model.XmpValue(value_str, model.Qualifiers.lang_as_qual(lang))
     elif child_count == 1:
         # Child should be rdf:Description or one of the array types

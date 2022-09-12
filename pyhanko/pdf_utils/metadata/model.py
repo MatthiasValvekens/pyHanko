@@ -204,9 +204,17 @@ class Qualifiers:
         return f"Qualifiers({q!r})"
 
 
+@dataclass(frozen=True)
+class XmpUri:
+    value: str
+
+    def __str__(self):
+        return self.value
+
+
 @dataclass
 class XmpValue:
-    value: Union['XmpStructure', 'XmpArray', str]
+    value: Union['XmpStructure', 'XmpArray', XmpUri, str]
     qualifiers: Qualifiers = field(default_factory=Qualifiers.of)
 
 

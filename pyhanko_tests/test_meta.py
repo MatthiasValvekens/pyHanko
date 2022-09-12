@@ -176,13 +176,13 @@ def test_xmp_parsetype_resource():
 
     base_url_val = result[n_base_url]
     assert base_url_val.qualifiers[n_xe_qualifier].value == 'artificial example'
-    assert base_url_val.value == "https://www.adobe.com/"
+    assert base_url_val.value == model.XmpUri("https://www.adobe.com/")
 
 
 def test_ensure_uri_is_rdf_resource():
     n_base_url = model.ExpandedName(ns=model.NS['xmp'], local_name="BaseURL")
     root = model.XmpStructure.of(
-        (n_base_url, model.XmpValue("https://example.com"))
+        (n_base_url, model.XmpValue(model.XmpUri("https://example.com")))
     )
     out = BytesIO()
     xmp_xml.serialise_xmp([root], out)
@@ -259,7 +259,7 @@ def test_add_extra_xmp():
     )
     extra = model.XmpStructure.of(
         (n_base_url, model.XmpValue(
-            "https://example.com/",
+            model.XmpUri("https://example.com/"),
             qualifiers=model.Qualifiers.of(
                 (n_xe_qualifier, model.XmpValue('artificial example'))
             )
@@ -274,4 +274,4 @@ def test_add_extra_xmp():
 
     base_url_val = r.root['/Metadata'].xmp[1][n_base_url]
     assert base_url_val.qualifiers[n_xe_qualifier].value == 'artificial example'
-    assert base_url_val.value == "https://example.com/"
+    assert base_url_val.value == model.XmpUri("https://example.com/")
