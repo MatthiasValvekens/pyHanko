@@ -6,8 +6,6 @@ for the original license.
 """
 
 import os
-import struct
-from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 from asn1crypto import x509
@@ -29,241 +27,23 @@ from pyhanko.pdf_utils.misc import (
     PdfReadError,
     PdfWriteError,
     instance_test,
-    peek,
 )
 from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko.pdf_utils.xref import (
+    OBJSTREAM_FORBIDDEN,
+    ObjectStream,
+    PositionDict,
+    XRefStream,
+    write_xref_table,
+)
 
 __all__ = [
-    'ObjectStream', 'BasePdfFileWriter',
+    'BasePdfFileWriter',
     'PageObject', 'PdfFileWriter', 'init_xobject_dictionary',
     'copy_into_new_writer'
 ]
 
 VENDOR = 'pyHanko ' + __version__
-
-
-OBJSTREAM_FORBIDDEN = (generic.IndirectObject, generic.StreamObject)
-
-
-class ObjectStream:
-    """
-    Utility class to collect objects into a PDF object stream.
-
-    Object streams are mainly useful for space efficiency reasons.
-    They allow related objects to be grouped & compressed together in a
-    more flexible manner.
-
-
-    .. warning::
-        Object streams can only be used in files with a cross-reference
-        stream, as opposed to a classical XRef table.
-        In particular, this means that incremental updates to files with a
-        legacy XRef table cannot contain object streams either.
-        See § 7.5.7 in ISO 32000-1 for further details.
-
-    .. danger::
-        Use :meth:`.BasePdfFileWriter.prepare_object_stream` to create instances
-        of object streams. The `__init__` function is internal API.
-
-    """
-
-    def __init__(self, writer: 'BasePdfFileWriter', compress=True):
-        self._obj_refs = {}
-        self.compress = compress
-        self.writer = writer
-        self._ref = None
-
-    def add_object(self, idnum: int, obj: generic.PdfObject):
-        """
-        Add an object to an object stream.
-        Note that objects in object streams always have their generation number
-        set to `0` by definition.
-
-        :param idnum:
-            The object's ID number.
-        :param obj:
-            The object to embed into the object stream.
-        :raise TypeError:
-            Raised if ``obj`` is an instance of :class:`~.generic.StreamObject`
-            or :class:`~.generic.IndirectObject`.
-        """
-
-        if isinstance(obj, OBJSTREAM_FORBIDDEN):
-            raise TypeError(
-                'Stream objects and bare references cannot be embedded into '
-                'object streams.'
-            )
-        self._obj_refs[idnum] = obj
-
-    def register_and_emit(self):
-        """
-        Internal method to flush an object stream as part of the file
-        writing process.
-        """
-        stream_ref = self._ref
-        objects = self._obj_refs
-        if objects and stream_ref is None:
-            # first, register the object stream object
-            #  (will get written later)
-            stream_ref = self._ref \
-                = self.writer.add_object(self.as_pdf_object())
-        # loop over all objects in the stream, and prepare
-        # the data to put in the XRef table
-        for ix, (idnum, obj) in enumerate(objects.items()):
-            yield idnum, (stream_ref.idnum, ix)
-
-    def as_pdf_object(self) -> generic.StreamObject:
-        """
-        Render the object stream to a PDF stream object
-
-        :return: An instance of :class:`~.generic.StreamObject`.
-        """
-        stream_header = BytesIO()
-        main_body = BytesIO()
-        for idnum, obj in self._obj_refs.items():
-            offset = main_body.tell()
-            obj.write_to_stream(main_body, None)
-            stream_header.write(b'%d %d ' % (idnum, offset))
-
-        first_obj_offset = stream_header.tell()
-        stream_header.seek(0)
-        sh_bytes = stream_header.read(first_obj_offset)
-        stream_data = sh_bytes + main_body.getvalue()
-        stream_object = generic.StreamObject({
-            pdf_name('/Type'): pdf_name('/ObjStm'),
-            pdf_name('/N'): generic.NumberObject(len(self._obj_refs)),
-            pdf_name('/First'): generic.NumberObject(first_obj_offset)
-        }, stream_data=stream_data)
-        if self.compress:
-            stream_object.compress()
-        return stream_object
-
-
-def _contiguous_xref_chunks(position_dict):
-    """
-    Helper method to divide the XRef table (or stream) into contiguous chunks.
-    """
-    previous_idnum = None
-    current_chunk = []
-
-    if not position_dict.keys():
-        # return immediately, there are no objects
-        return
-
-    # iterate over keys in object ID order
-    key_iter = sorted(position_dict.keys(), key=lambda t: t[1])
-    (_, first_idnum), key_iter = peek(key_iter)
-    for ix in key_iter:
-        generation, idnum = ix
-
-        # the idnum jumped, so yield the current chunk
-        # and start a new one
-        if current_chunk and idnum != previous_idnum + 1:
-            yield first_idnum, current_chunk
-            current_chunk = []
-            first_idnum = idnum
-
-        # append the object reference to the current chunk
-        # (xref table requires position and generation entries)
-        current_chunk.append((position_dict[ix], generation))
-        previous_idnum = idnum
-
-    # there is always at least one chunk, so this is fine
-    yield first_idnum, current_chunk
-
-
-def _write_xref_table(stream, position_dict):
-    xref_location = stream.tell()
-    stream.write(b'xref\n')
-    # Insert xref table subsections in contiguous chunks.
-    # This is necessarily more complicated than the implementation
-    # in PyPDF2 (see ISO 32000 § 7.5.4, esp. on updates), since
-    # we need to handle incremental updates correctly.
-    subsections = _contiguous_xref_chunks(position_dict)
-
-    def write_header(idnum, length):
-        header = '%d %d\n' % (idnum, length)
-        stream.write(header.encode('ascii'))
-
-    def write_subsection(chunk):
-        for position, generation in chunk:
-            entry = "%010d %05d n \n" % (position, generation)
-            stream.write(entry.encode('ascii'))
-
-    try:
-        first_idnum, subsection = next(subsections)
-    except StopIteration:
-        # no updates, just write '0 0' and be done with it
-        stream.write(b'0 0\n')
-        return xref_location
-    # TODO support deleting objects
-    # case distinction: in contrast with the above we have to ensure that
-    # everything is written in one chunk when *not* doing incremental updates.
-    # In particular, this applies to the null object
-    null_obj_ref = b'0000000000 65535 f \n'
-    if first_idnum == 1:
-        # integrate the null object into the first subsection
-        write_header(0, len(subsection) + 1)
-        stream.write(null_obj_ref)
-        write_subsection(subsection)
-    else:
-        # insert origin of linked list of freed objects, and then the first
-        # subsection, as usual
-        stream.write(b'0 1\n')
-        stream.write(null_obj_ref)
-        write_header(first_idnum, len(subsection))
-        write_subsection(subsection)
-    for first_idnum, subsection in subsections:
-        # subsection header: list first object ID + length of subsection
-        write_header(first_idnum, len(subsection))
-        write_subsection(subsection)
-
-    return xref_location
-
-
-class XRefStream(generic.StreamObject):
-
-    def __init__(self, position_dict):
-        super().__init__()
-        self.position_dict = position_dict
-
-        # type indicator is one byte wide
-        # we use longs to indicate positions of objects (>Q)
-        # two more bytes for the generation number of an uncompressed object
-        widths = map(generic.NumberObject, (1, 8, 2))
-        self.update({
-            pdf_name('/W'): generic.ArrayObject(widths),
-            pdf_name('/Type'): pdf_name('/XRef'),
-        })
-
-    def write_to_stream(self, stream, handler=None, container_ref=None):
-        # the caller is responsible for making sure that the stream
-        # is registered in the position dictionary
-
-        index = [0, 1]
-        subsections = _contiguous_xref_chunks(self.position_dict)
-        stream_content = BytesIO()
-        # write null object
-        stream_content.write(b'\x00' * 9 + b'\xff\xff')
-        for first_idnum, subsection in subsections:
-            index += [first_idnum, len(subsection)]
-            for position, generation in subsection:
-                if isinstance(position, tuple):
-                    # reference to object in object stream
-                    assert generation == 0
-                    obj_stream_num, ix = position
-                    stream_content.write(b'\x02')
-                    stream_content.write(struct.pack('>Q', obj_stream_num))
-                    stream_content.write(struct.pack('>H', ix))
-                else:
-                    stream_content.write(b'\x01')
-                    stream_content.write(struct.pack('>Q', position))
-                    stream_content.write(struct.pack('>H', generation))
-        index_entry = generic.ArrayObject(map(generic.NumberObject, index))
-
-        self[pdf_name('/Index')] = index_entry
-        self._data = stream_content.getbuffer()
-        super().write_to_stream(stream, None)
 
 
 # TODO move this to content.py?
@@ -635,7 +415,7 @@ class BasePdfFileWriter(PdfHandler):
             raise PdfWriteError(
                 'Object streams require Xref streams to be enabled.'
             )
-        stream = ObjectStream(self, compress=compress)
+        stream = ObjectStream(compress=compress)
         self.object_streams.append(stream)
         return stream
 
@@ -649,10 +429,26 @@ class BasePdfFileWriter(PdfHandler):
         if min_pdf_version is not None:
             self.ensure_output_version(min_pdf_version)
 
-    def _write_objects(self, stream, object_position_dict):
+    def _flush_obj_stream(self, obj_stm: ObjectStream):
+        """
+        Internal method to flush an object stream as part of the file
+        writing process.
+        """
+        stream_ref = obj_stm.ref
+        if obj_stm and not stream_ref:
+            # first, register the object stream object
+            #  (will get written later)
+            obj_stm.ref = stream_ref = self.add_object(obj_stm.as_pdf_object())
+        # loop over all objects in the stream, and prepare
+        # the data to put in the XRef table
+        for ix, (idnum, obj) in enumerate(obj_stm):
+            yield idnum, (stream_ref.idnum, ix)
+
+    def _write_objects(self, stream,
+                       object_position_dict: PositionDict):
         # deal with objects in object streams first
         for obj_stream in self.object_streams:
-            for idnum, pos_record in obj_stream.register_and_emit():
+            for idnum, pos_record in self._flush_obj_stream(obj_stream):
                 object_position_dict[(0, idnum)] = pos_record
 
         for ix in sorted(self.objects.keys()):
@@ -702,7 +498,7 @@ class BasePdfFileWriter(PdfHandler):
             for engine in fsc.subsets.values():
                 engine.prepare_write()
 
-        object_positions = {}
+        object_positions: PositionDict = {}
 
         if self.stream_xrefs:
             trailer = XRefStream(object_positions)
@@ -727,7 +523,7 @@ class BasePdfFileWriter(PdfHandler):
             stream.write(b'\nendobj\n')
         else:
             # classical xref table
-            xref_location = _write_xref_table(stream, object_positions)
+            xref_location = write_xref_table(stream, object_positions)
             trailer[pdf_name('/Size')] = generic.NumberObject(
                 self._lastobj_id + 1
             )
