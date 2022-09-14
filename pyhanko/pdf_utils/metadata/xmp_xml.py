@@ -48,6 +48,20 @@ def iter_attrs(elem: ElementTree.Element) \
             yield name, value
 
 
+def _xmp_struct_to_xml(description: ElementTree.Element,
+                       value: model.XmpStructure):
+    for k, v in value:
+        if isinstance(v.value, str) and not v.qualifiers:
+            # simple unqualified non-URI fields can be serialised
+            # as attributes
+            description.set(_tag(k), v.value)
+        else:
+            add_xmp_value(
+                ElementTree.SubElement(description, _tag(k)),
+                v
+            )
+
+
 def _add_inner_value(
         container: ElementTree.Element,
         value: Union[model.XmpStructure, model.XmpArray, model.XmpUri, str]):
@@ -61,11 +75,7 @@ def _add_inner_value(
         description = ElementTree.SubElement(
             container, _tag(model.RDF_DESCRIPTION),
         )
-        for k, v in value:
-            add_xmp_value(
-                ElementTree.SubElement(description, _tag(k)),
-                v
-            )
+        _xmp_struct_to_xml(description, value)
         return
     elif isinstance(value, model.XmpArray):
         arr = ElementTree.SubElement(
@@ -100,27 +110,39 @@ def add_xmp_value(container: ElementTree.Element, value: model.XmpValue):
         container.set(_tag(model.XML_LANG), quals.lang)
 
 
-def _xmp_as_xml_tree(roots: List[model.XmpStructure]) \
-        -> ElementTree.ElementTree:
-    xmpmeta = ElementTree.Element(_tag(model.X_XMPMETA))
-    xmpmeta.set(_tag(model.X_XMPTK), model.VENDOR)
-    rdf = ElementTree.SubElement(xmpmeta, _tag(model.RDF_RDF))
-    rdf.set(_tag(model.RDF_ABOUT), "")
-    for root in roots:
-        add_xmp_value(rdf, model.XmpValue(root))
-    return ElementTree.ElementTree(xmpmeta)
+def _xmp_root_as_xml_tree(root: model.XmpStructure) -> ElementTree.ElementTree:
+    description = ElementTree.Element(_tag(model.RDF_DESCRIPTION))
+    _xmp_struct_to_xml(description, root)
+    # manually set rdf:about="" on each of the roots
+    description.set(_tag(model.RDF_ABOUT), "")
+    return ElementTree.ElementTree(description)
 
 
 def serialise_xmp(roots: List[model.XmpStructure], out: BinaryIO):
     out.write(
         '<?xpacket begin="\ufeff" id="W5M0MpCehiHzreSzNTczkc9d"?>\n'
-        .encode('utf8')
+        .encode('utf-8')
     )
-    xmp_data = _xmp_as_xml_tree(roots)
-    xmp_data.write(out, xml_declaration=False, encoding='utf-8')
+
+    # some processors don't like it if all namespace declarations are dumped
+    # on the xmpmeta tag, and want them lower in the tree instead
+    # Hence, we write x:xmpmeta manually.
+    out.write(
+        f'<x:xmpmeta xmlns:x="{model.NS["x"]}" x:xmptk="{model.VENDOR}">\n'
+        .encode('utf-8')
+    )
+    # same story for rdf:RDF
+    out.write(
+        f'<rdf:RDF xmlns:rdf="{model.NS["rdf"]}">\n'.encode('utf-8')
+    )
+    for root in roots:
+        xmp_data = _xmp_root_as_xml_tree(root)
+        xmp_data.write(out, xml_declaration=False, encoding='utf-8')
+    out.write(b'\n</rdf:RDF>')
+    out.write(b'\n</x:xmpmeta>')
     # do not allow "dumb" processors to touch the XMP, so we don't have
     # to bother with padding
-    out.write('\n<?xpacket end="r"?>'.encode('utf8'))
+    out.write(b'\n<?xpacket end="r"?>')
 
 
 class MetadataStream(generic.StreamObject):
@@ -160,22 +182,25 @@ class MetadataStream(generic.StreamObject):
         return data
 
 
+LANG_X_DEFAULT = model.Qualifiers.of(
+    (model.XML_LANG, model.XmpValue("x-default")),
+)
+
+
 def _meta_string_as_value(meta_str: model.MetaString, lang_xdefault=False) \
         -> Optional[model.XmpValue]:
 
     if isinstance(meta_str, misc.StringWithLanguage):
-        cc = ("-" + meta_str.country_code) if meta_str.country_code else ""
-        quals = model.Qualifiers.of(
-            (model.XML_LANG, model.XmpValue(f"{meta_str.lang_code}{cc}")),
-        )
+        if meta_str.lang_code == "DEFAULT":
+            quals = LANG_X_DEFAULT if lang_xdefault else model.Qualifiers.of()
+        else:
+            cc = ("-" + meta_str.country_code) if meta_str.country_code else ""
+            quals = model.Qualifiers.of(
+                (model.XML_LANG, model.XmpValue(f"{meta_str.lang_code}{cc}")),
+            )
         return model.XmpValue(meta_str.value, quals)
     elif isinstance(meta_str, str):
-        if lang_xdefault:
-            quals = model.Qualifiers.of(
-                (model.XML_LANG, model.XmpValue("x-default")),
-            )
-        else:
-            quals = model.Qualifiers.of()
+        quals = LANG_X_DEFAULT if lang_xdefault else model.Qualifiers.of()
         return model.XmpValue(meta_str, quals)
 
 
@@ -193,7 +218,6 @@ def _write_lang_alternative(
 
     val = _meta_string_as_value(meta_str, lang_xdefault=True)
     if val is not None:
-
         fields[key] = model.XmpValue(model.XmpArray.alternative([val]))
 
 
@@ -277,7 +301,11 @@ def _simplify_meta_str(val: model.XmpValue) -> model.MetaString:
         val_str = focus.value
         quals = focus.qualifiers
         lang = quals.lang
-        if lang:
+        if not lang:
+            result = val_str
+        elif lang == "x-default":
+            result = model.StringWithLanguage(val_str, lang_code="DEFAULT")
+        else:
             components = lang.split('-', 1)
             result = model.StringWithLanguage(
                 val_str,
@@ -286,8 +314,6 @@ def _simplify_meta_str(val: model.XmpValue) -> model.MetaString:
                     components[1] if len(components) > 1 else None
                 )
             )
-        else:
-            result = val_str
     return result
 
 
@@ -343,8 +369,7 @@ class XmpXmlProcessingError(ValueError):
 
 
 def _check_lang(elem: ElementTree.Element) -> Optional[str]:
-    lang = elem.get(_tag(model.XML_LANG), None)
-    return None if lang == "x-default" else lang
+    return elem.get(_tag(model.XML_LANG), None)
 
 
 def _proc_xmp_struct(elem: ElementTree.Element, lang: Optional[str]) \
@@ -363,6 +388,12 @@ def _proc_xmp_struct(elem: ElementTree.Element, lang: Optional[str]) \
     # extract attributes as unqualified simple values
     for name, value in iter_attrs(elem):
         if name != model.XML_LANG:
+            if HTTP_URI_RE.match(value):
+                # hack to get around some popular XMP processors
+                # putting URIs in places where they shouldn't go
+                # (in particular: "Structure element with field attributes"
+                # pattern
+                value = model.XmpUri(value)
             fields[name] = model.XmpValue(value)
 
     return model.XmpStructure(fields)
@@ -419,6 +450,9 @@ def _unwrap_resource(elem: ElementTree.Element, lang: Optional[str]):
     return inner_value, quals
 
 
+HTTP_URI_RE = re.compile("^https?://")
+
+
 def _proc_xmp_value(elem: ElementTree.Element, lang: Optional[str]) \
         -> model.XmpValue:
 
@@ -440,8 +474,14 @@ def _proc_xmp_value(elem: ElementTree.Element, lang: Optional[str]) \
         uri_str = elem.get(_tag(model.RDF_RESOURCE), None)
         if uri_str is not None:
             return model.XmpValue(model.XmpUri(uri_str))
-        value_str = elem.text or ""
-        return model.XmpValue(value_str, model.Qualifiers.lang_as_qual(lang))
+        elif elem.text:
+            return model.XmpValue(
+                elem.text, model.Qualifiers.lang_as_qual(lang)
+            )
+        elif elem.attrib:
+            return model.XmpValue(_proc_xmp_struct(elem, lang))
+        else:
+            return model.XmpValue("", model.Qualifiers.lang_as_qual(lang))
     elif child_count == 1:
         # Child should be rdf:Description or one of the array types
         child = elem[0]

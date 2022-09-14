@@ -125,6 +125,11 @@ NS = {
     'xmp': 'http://ns.adobe.com/xap/1.0/',
     'dc': 'http://purl.org/dc/elements/1.1/',
     'pdf': 'http://ns.adobe.com/pdf/1.3/',
+    'pdfaid': 'http://www.aiim.org/pdfa/ns/id/',
+    'pdfuaid': 'http://www.aiim.org/pdfua/ns/id/',
+    'pdfaSchema': 'http://www.aiim.org/pdfa/ns/schema#',
+    'pdfaExtension': 'http://www.aiim.org/pdfa/ns/extension/',
+    'pdfaProperty': 'http://www.aiim.org/pdfa/ns/property#',
     'x': 'adobe:ns:meta/'
 }
 
@@ -196,6 +201,9 @@ class Qualifiers:
     @property
     def has_non_lang_quals(self) -> bool:
         return bool(self._quals)
+
+    def __bool__(self):
+        return bool(self._quals or self._lang)
 
     def __repr__(self):
         q = dict(self._quals)

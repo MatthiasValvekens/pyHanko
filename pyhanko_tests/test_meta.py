@@ -84,11 +84,11 @@ def test_writer_meta_view_does_not_persist_changes(writer_type):
     [
         {'title': 'Test test'},
         {'author': 'John Doe'},
-        {'title': 'Test test', 'keywords': ['foo', 'bar', 'baz']},
+        {'keywords': ['foo', 'bar', 'baz']},
         {'created': datetime(2022, 9, 7, tzinfo=pytz.utc)},
         {'author': 'John Doe', 'subject': 'Blah blah blah'},
     ],
-    ((1, 7), (2, 0))
+    ("pdf1.7", "pdf2.0")
 )))
 def test_metadata_info_round_trip(writer_type, meta_dict: dict, ver):
     out = BytesIO()
@@ -98,7 +98,7 @@ def test_metadata_info_round_trip(writer_type, meta_dict: dict, ver):
         w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
     else:
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    w.output_version = ver
+    w.output_version = (1, 7) if ver == "pdf1.7" else (2, 0)
 
     w.update_root()
 
@@ -113,10 +113,10 @@ def test_metadata_info_round_trip(writer_type, meta_dict: dict, ver):
 
     r = PdfFileReader(out)
     meta_dict['last_modified'] = datetime.now(tz=tzlocal.get_localzone())
-    assert r.document_meta_view == model.DocumentMetadata(**meta_dict)
-
-    if ver == (2, 0):
+    if ver == "pdf2.0":
         assert '/Info' not in r.trailer_view
+    else:
+        assert r.document_meta_view == model.DocumentMetadata(**meta_dict)
 
 
 @pytest.mark.parametrize('writer_type,ver', list(itertools.product(
@@ -154,6 +154,7 @@ def test_metadata_info_with_language_round_trip(writer_type, ver):
 
 # Example from ISO 16684-1:20121 7.9.2.3
 
+# noinspection HttpUrlsUsage
 XMP_WITH_PARSETYPE_RESOURCE = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"
@@ -175,6 +176,7 @@ XMP_WITH_PARSETYPE_RESOURCE = """
 """
 
 
+# noinspection HttpUrlsUsage
 def test_xmp_parsetype_resource():
     inp = BytesIO(XMP_WITH_PARSETYPE_RESOURCE.encode('utf8'))
     result = xmp_xml.parse_xmp(inp)[0]
@@ -207,6 +209,7 @@ def test_ensure_uri_is_rdf_resource():
     assert b'rdf:resource="https://example.com"' in out.getvalue()
 
 
+# noinspection HttpUrlsUsage
 @freeze_time('2022-09-10')
 def test_incremental_update_doc_with_xmp():
     with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
@@ -225,6 +228,7 @@ def test_incremental_update_doc_with_xmp():
     assert xmp[pdfa_conformance].value == "B"
 
 
+# noinspection HttpUrlsUsage
 @freeze_time('2022-09-10')
 def test_rewrite_update_doc_with_xmp():
     with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
@@ -249,7 +253,8 @@ def test_meta_view_from_xmp():
         r = PdfFileReader(inf)
         # wipe out the info dict just because
         r.trailer['/Info'] = generic.DictionaryObject()
-        assert r.document_meta_view.title == "Test document"
+        assert r.document_meta_view.title == \
+               StringWithLanguage(value="Test document", lang_code="DEFAULT")
 
 
 def test_upgrade_pdf2_no_info_dict():
@@ -262,9 +267,10 @@ def test_upgrade_pdf2_no_info_dict():
 
     r = PdfFileReader(buf)
     assert '/Info' not in r.trailer_view
-    assert r.document_meta_view.title == "Test document"
+    assert r.document_meta_view.title.value == "Test document"
 
 
+# noinspection HttpUrlsUsage
 def test_add_extra_xmp():
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
@@ -288,13 +294,14 @@ def test_add_extra_xmp():
 
     r = PdfFileReader(buf)
     assert '/Info' not in r.trailer_view
-    assert r.document_meta_view.title == "Test document"
+    assert r.document_meta_view.title.value == "Test document"
 
     base_url_val = r.root['/Metadata'].xmp[1][n_base_url]
     assert base_url_val.qualifiers[n_xe_qualifier].value == 'artificial example'
     assert base_url_val.value == model.XmpUri("https://example.com/")
 
 
+# noinspection HttpUrlsUsage
 def test_unmanaged_xmp():
     r = PdfFileReader(BytesIO(MINIMAL))
     w = copy_into_new_writer(r)
@@ -325,6 +332,7 @@ def test_unmanaged_xmp():
     assert base_url_val.value == model.XmpUri("https://example.com/")
 
 
+# noinspection HttpUrlsUsage
 def test_unmanaged_xmp_does_not_affect_info():
     # use a PDF that already has an info dictionary
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
@@ -354,6 +362,7 @@ def test_unmanaged_xmp_does_not_affect_info():
     assert 'pyHanko' in r.trailer_view['/Info']['/Producer']
 
 
+# noinspection HttpUrlsUsage
 XMP_WITH_RESOURCE_WITH_MULTIPLE_QUALS = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:dc="http://purl.org/dc/elements/1.1/"
@@ -369,6 +378,7 @@ XMP_WITH_RESOURCE_WITH_MULTIPLE_QUALS = """
 """
 
 
+# noinspection HttpUrlsUsage
 def test_xmp_with_resource_with_multiple_quals():
     inp = BytesIO(XMP_WITH_RESOURCE_WITH_MULTIPLE_QUALS.encode('utf8'))
     result = xmp_xml.parse_xmp(inp)[0]
@@ -404,6 +414,7 @@ def test_xmp_str():
     assert "lang': \'en\'" in r
 
 
+# noinspection HttpUrlsUsage
 XMP_WITH_BAG = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:xe="http://ns.adobe.com/xmp-example/">
@@ -424,6 +435,7 @@ XMP_WITH_BAG = """
 """
 
 
+# noinspection HttpUrlsUsage
 def test_xmp_with_bag():
     inp = BytesIO(XMP_WITH_BAG.encode('utf8'))
     result = xmp_xml.parse_xmp(inp)[0]
@@ -468,6 +480,7 @@ def test_xmp_unord_arr_comparison():
     assert u1 == u2
 
 
+# noinspection HttpUrlsUsage
 XMP_WITH_PARSETYPE_LIT_INVALID = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:xe="http://ns.adobe.com/xmp-example/">
@@ -485,6 +498,7 @@ def test_xmp_parsetype_lit_not_supported():
         )
 
 
+# noinspection HttpUrlsUsage
 XMP_WITH_INVALID_VALUE_FORM = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:xe="http://ns.adobe.com/xmp-example/">
@@ -503,6 +517,7 @@ def test_xmp_with_invalid_form():
         )
 
 
+# noinspection HttpUrlsUsage
 XMP_VALUE_FORM_MULTIPLE_CHILDREN = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:xe="http://ns.adobe.com/xmp-example/">
@@ -548,6 +563,7 @@ def test_xmp_invalid_root():
         )
 
 
+# noinspection HttpUrlsUsage
 XMP_WITH_DUPLICATE_STRUCT_FIELD = """
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:xe="http://ns.adobe.com/xmp-example/">
@@ -566,6 +582,7 @@ def test_xmp_with_duplicate_struct_field():
         )
 
 
+# noinspection HttpUrlsUsage
 XMP_INVALID_DATE1 = """
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -587,6 +604,7 @@ def test_xmp_invalid_date1():
         )
 
 
+# noinspection HttpUrlsUsage
 XMP_INVALID_DATE2 = """
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -606,3 +624,171 @@ def test_xmp_invalid_date2():
                 BytesIO(XMP_INVALID_DATE2.encode('utf8'))
             )
         )
+
+
+# noinspection HttpUrlsUsage
+PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE = """
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.1.0-jc003">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+        xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
+        xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
+        xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"
+        xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+        xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+        xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"
+      dc:format="application/pdf"
+      xmp:CreateDate="2022-07-07T01:26:05+02:00"
+      xmp:ModifyDate="2022-07-07T01:26:05+02:00"
+      pdfaid:part="2"
+      pdfaid:conformance="A">
+      <dc:creator>
+        <rdf:Seq>
+          <rdf:li>Matthias Valvekens</rdf:li>
+        </rdf:Seq>
+      </dc:creator>
+      <dc:title>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">Curriculum Vitae</rdf:li>
+        </rdf:Alt>
+      </dc:title>
+      <pdfuaid:part>1</pdfuaid:part>
+      <pdfaExtension:schemas>
+        <rdf:Bag>
+          <rdf:li>
+            <rdf:Description
+              pdfaSchema:namespaceURI="http://www.aiim.org/pdfua/ns/id/"
+              pdfaSchema:prefix="pdfuaid"
+              pdfaSchema:schema="PDF/UA identification schema">
+            <pdfaSchema:property>
+              <rdf:Seq>
+                <rdf:li
+                  pdfaProperty:category="internal"
+                  pdfaProperty:description="PDF/UA version identifier"
+                  pdfaProperty:name="part"
+                  pdfaProperty:valueType="Integer"/>
+                <rdf:li
+                  pdfaProperty:category="internal"
+                  pdfaProperty:description="PDF/UA amendment identifier"
+                  pdfaProperty:name="amd"
+                  pdfaProperty:valueType="Text"/>
+                <rdf:li
+                  pdfaProperty:category="internal"
+                  pdfaProperty:description="PDF/UA corrigenda identifier"
+                  pdfaProperty:name="corr"
+                  pdfaProperty:valueType="Text"/>
+              </rdf:Seq>
+            </pdfaSchema:property>
+            </rdf:Description>
+          </rdf:li>
+        </rdf:Bag>
+      </pdfaExtension:schemas>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+"""
+
+
+# noinspection HttpUrlsUsage
+PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE = """
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.1.0-jc003">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+        xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
+        xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
+        xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"
+        xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+        xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+        xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"
+      dc:format="application/pdf"
+      xmp:CreateDate="2022-07-07T01:26:05+02:00"
+      xmp:ModifyDate="2022-07-07T01:26:05+02:00"
+      pdfaid:part="2"
+      pdfaid:conformance="A">
+      <dc:creator>
+        <rdf:Seq>
+          <rdf:li>Matthias Valvekens</rdf:li>
+        </rdf:Seq>
+      </dc:creator>
+      <dc:title>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">Curriculum Vitae</rdf:li>
+        </rdf:Alt>
+      </dc:title>
+      <pdfuaid:part>1</pdfuaid:part>
+      <pdfaExtension:schemas>
+        <rdf:Bag>
+          <rdf:li>
+            <rdf:Description
+              pdfaSchema:prefix="pdfuaid"
+              pdfaSchema:schema="PDF/UA identification schema">
+            <pdfaSchema:namespaceURI
+              rdf:resource="http://www.aiim.org/pdfua/ns/id/"/>
+            <pdfaSchema:property>
+              <rdf:Seq>
+                <rdf:li
+                  pdfaProperty:category="internal"
+                  pdfaProperty:description="PDF/UA version identifier"
+                  pdfaProperty:name="part"
+                  pdfaProperty:valueType="Integer"/>
+                <rdf:li
+                  pdfaProperty:category="internal"
+                  pdfaProperty:description="PDF/UA amendment identifier"
+                  pdfaProperty:name="amd"
+                  pdfaProperty:valueType="Text"/>
+                <rdf:li
+                  pdfaProperty:category="internal"
+                  pdfaProperty:description="PDF/UA corrigenda identifier"
+                  pdfaProperty:name="corr"
+                  pdfaProperty:valueType="Text"/>
+              </rdf:Seq>
+            </pdfaSchema:property>
+            </rdf:Description>
+          </rdf:li>
+        </rdf:Bag>
+      </pdfaExtension:schemas>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+"""
+
+
+@pytest.mark.parametrize('sample', ['ok', 'wrong uri type'])
+def test_parse_pdfa_ext_schema(sample):
+    xmp = (
+        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE if sample == 'ok'
+        else PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE
+    )
+    roots = xmp_xml.parse_xmp(BytesIO(xmp.encode('utf8')))
+    root = roots[0]
+    pdfa_ext = root[model.ExpandedName(model.NS['pdfaExtension'], 'schemas')]
+    pdfua_ext_schema = pdfa_ext.value.entries[0]
+    pfx = pdfua_ext_schema\
+        .value[model.ExpandedName(model.NS['pdfaSchema'], 'prefix')].value
+    assert pfx == "pdfuaid"
+    property_seq = pdfua_ext_schema \
+        .value[model.ExpandedName(model.NS['pdfaSchema'], 'property')].value
+    desc_value = property_seq.entries[0]\
+        .value[model.ExpandedName(model.NS['pdfaProperty'], 'description')]
+    assert desc_value.value == "PDF/UA version identifier"
+    ns_uri = pdfua_ext_schema \
+        .value[model.ExpandedName(model.NS['pdfaSchema'], 'namespaceURI')].value
+    assert isinstance(ns_uri, model.XmpUri)
+    assert ns_uri.value == model.NS['pdfuaid']
+
+
+@pytest.mark.parametrize('sample', ['ok', 'wrong uri type'])
+def test_reser_pdfa_ext_schema(sample):
+    xmp = (
+        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE if sample == 'ok'
+        else PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE
+    )
+    roots = xmp_xml.parse_xmp(BytesIO(xmp.encode('utf8')))
+    out = BytesIO()
+    xmp_xml.serialise_xmp(roots, out)
+    roots_redux = xmp_xml.parse_xmp(out)
+    assert roots_redux[0] == roots[0]

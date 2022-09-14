@@ -182,6 +182,9 @@ class StringWithLanguage:
     lang_code: Optional[str] = None
     country_code: Optional[str] = None
 
+    def __str__(self):
+        return self.value
+
 
 class PdfError(Exception):
     pass
