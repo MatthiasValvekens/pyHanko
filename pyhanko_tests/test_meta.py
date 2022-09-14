@@ -38,13 +38,15 @@ def test_copy_into_new_writer_sets_info():
 
 def test_date_parse_failure():
     r = PdfFileReader(BytesIO(MINIMAL))
-    w = copy_into_new_writer(r)
+    writer_kwargs = {
+        'info': generic.DictionaryObject({
+            generic.pdf_name('/Title'): generic.pdf_string('a failure test'),
+            generic.pdf_name('/CreationDate'):
+                generic.pdf_string('this makes no sense')
+        })
+    }
+    w = copy_into_new_writer(r, writer_kwargs=writer_kwargs)
     w._update_meta = lambda: None
-    w._info = generic.DictionaryObject({
-        generic.pdf_name('/Title'): generic.pdf_string('a failure test'),
-        generic.pdf_name('/CreationDate'):
-            generic.pdf_string('this makes no sense')
-    })
     out = BytesIO()
     w.write(out)
 
