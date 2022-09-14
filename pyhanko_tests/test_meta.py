@@ -263,11 +263,17 @@ def test_upgrade_pdf2_no_info_dict():
     w.output_version = (2, 0)
     w.root['/Foo'] = generic.NameObject('/Bar')
     w.document_meta.title = "Test document"
+    w.document_meta.author = "John Doe"
+    w.document_meta.subject = "Test subject"
+    w.document_meta.keywords = ["these", "are", "key", "words"]
     w.write_in_place()
 
     r = PdfFileReader(buf)
     assert '/Info' not in r.trailer_view
     assert r.document_meta_view.title.value == "Test document"
+    assert r.document_meta_view.author == "John Doe"
+    assert r.document_meta_view.subject.value == "Test subject"
+    assert r.document_meta_view.keywords == ["these", "are", "key", "words"]
 
 
 # noinspection HttpUrlsUsage
@@ -792,3 +798,36 @@ def test_reser_pdfa_ext_schema(sample):
     xmp_xml.serialise_xmp(roots, out)
     roots_redux = xmp_xml.parse_xmp(out)
     assert roots_redux[0] == roots[0]
+
+XMP_WITH_EMPTY_STRING = """
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.1.0-jc003">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        dc:format="application/pdf">
+      <dc:creator>
+        <rdf:Seq>
+          <rdf:li/>
+        </rdf:Seq>
+      </dc:creator>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+"""
+
+
+def test_empty_string():
+    roots = xmp_xml.parse_xmp(BytesIO(XMP_WITH_EMPTY_STRING.encode('utf8')))
+    assert roots[0][model.DC_CREATOR].value.entries[0].value == ""
+
+
+def test_xmp_lang_explicit_xdefault():
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+    w.output_version = (2, 0)
+    w.document_meta.subject = model.StringWithLanguage("Blah", "DEFAULT")
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    assert b"<rdf:li xml:lang=\"x-default\">Blah</rdf:li>" \
+           in r.root['/Metadata'].data

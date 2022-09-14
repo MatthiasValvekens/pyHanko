@@ -156,6 +156,7 @@ class MetadataStream(generic.StreamObject):
             encoded_data=encoded_data,
             handler=handler
         )
+        self['/Subtype'] = generic.pdf_name('/XML')
 
     @classmethod
     def from_xmp(cls, xmp: List[model.XmpStructure]) -> 'MetadataStream':
