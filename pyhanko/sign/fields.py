@@ -1169,6 +1169,38 @@ class InvisSigSettings:
     """
 
 
+@dataclass(frozen=True)
+class VisibleSigSettings:
+    """
+    .. versionadded:: 0.14.0
+
+    Additional flags used when setting up visible signature widgets.
+    """
+
+    rotate_with_page: bool = True
+    """
+    Allow the signature widget to rotate with the page if rotation is applied
+    (e.g. by way of the page's ``/Rotate`` entry). Default is ``True``.
+
+    .. note::
+        If ``False``, this will cause the ``NoRotate`` flag to be set.
+    """
+
+    scale_with_page_zoom: bool = True
+    """
+    Allow the signature widget to scale with the page's zoom level.
+    Default is ``True``.
+
+    .. note::
+        If ``False``, this will cause the ``NoZoom`` flag to be set.
+    """
+
+    print_signature: bool = True
+    """
+    Render the signature when the document is printed. Default ``True``.
+    """
+
+
 # TODO deal with fully qualified field names for the signature field
 
 @dataclass(frozen=True)
@@ -1258,6 +1290,11 @@ class SigFieldSpec:
     .. note::
         This value is commonly rendered as a tooltip in viewers, but also
         serves an accessibility purpose.
+    """
+
+    visible_sig_settings: VisibleSigSettings = VisibleSigSettings()
+    """
+    Advanced settings to control the generation of visible signature fields.
     """
 
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
@@ -1525,7 +1562,8 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
         existing_fields_only=False,
         box=sig_field_spec.box, include_on_page=page_ref,
         combine_annotation=sig_field_spec.combine_annotation,
-        invis_settings=sig_field_spec.invis_sig_settings
+        invis_settings=sig_field_spec.invis_sig_settings,
+        visible_settings=sig_field_spec.visible_sig_settings
     )
     ensure_sig_flags(writer=pdf_out, lock_sig_flags=False)
     if not field_created:
@@ -1592,6 +1630,7 @@ class SignatureFormField(generic.DictionaryObject):
     def __init__(self, field_name, *, box=None, include_on_page=None,
                  combine_annotation=True,
                  invis_settings: InvisSigSettings = InvisSigSettings(),
+                 visible_settings: VisibleSigSettings = VisibleSigSettings(),
                  annot_flags=None):
 
         if box is not None:
@@ -1619,15 +1658,20 @@ class SignatureFormField(generic.DictionaryObject):
         annot_dict['/Subtype'] = pdf_name('/Widget')
 
         if annot_flags is None:
+            # this sets the "lock" bit
+            annot_flags = 0b10000000
             if invisible:
-                annot_flags = 0b10000000
                 if invis_settings.set_hidden_flag:
                     annot_flags |= 0b10
                 if invis_settings.set_print_flag:
                     annot_flags |= 0b100
             else:
-                # this sets the "print" and "lock" bits
-                annot_flags = 0b10000100
+                if visible_settings.print_signature:
+                    annot_flags |= 0b100
+                if not visible_settings.scale_with_page_zoom:
+                    annot_flags |= 0b1000
+                if not visible_settings.rotate_with_page:
+                    annot_flags |= 0b10000
 
         annot_dict['/F'] = generic.NumberObject(annot_flags)
         annot_dict['/Rect'] = generic.ArrayObject(rect)

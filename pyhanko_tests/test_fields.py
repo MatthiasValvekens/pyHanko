@@ -13,7 +13,7 @@ from pyhanko.pdf_utils.misc import PdfError, PdfReadError, PdfWriteError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter
 from pyhanko.sign import fields, signers
-from pyhanko.sign.fields import InvisSigSettings
+from pyhanko.sign.fields import InvisSigSettings, VisibleSigSettings
 from pyhanko.sign.general import SigningError
 from pyhanko_tests.samples import (
     MINIMAL,
@@ -21,7 +21,6 @@ from pyhanko_tests.samples import (
     MINIMAL_TWO_FIELDS,
     MINIMAL_TWO_PAGES,
     PDF_DATA_DIR,
-    TESTING_CA,
     TESTING_CA_ERRORS,
     simple_page,
 )
@@ -534,3 +533,44 @@ async def test_sign_with_cert_no_common_name_appearance():
 
     assert b'signed by Example Inc ' in ap_data
 
+
+@pytest.mark.parametrize(
+    'settings,flags',
+    [
+        (VisibleSigSettings(), 0b10000100),
+        (
+            VisibleSigSettings(rotate_with_page=False),
+            0b10010100,
+        ),
+        (
+            VisibleSigSettings(scale_with_page_zoom=False),
+            0b10001100,
+        ),
+        (
+            VisibleSigSettings(print_signature=False),
+            0b10000000,
+        ),
+        (
+            VisibleSigSettings(
+                print_signature=False, scale_with_page_zoom=False,
+                rotate_with_page=False
+            ),
+            0b10011000,
+        ),
+    ]
+)
+def test_visible_field_flags(settings, flags):
+    buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(buf)
+    fields.append_signature_field(
+        w, sig_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1', visible_sig_settings=settings,
+            box=[10, 10, 100, 100]
+        )
+    )
+    w.write_in_place()
+
+    r = PdfFileReader(buf)
+    annot = r.root['/Pages']['/Kids'][0]['/Annots'][0]
+
+    assert annot['/F'] == flags
