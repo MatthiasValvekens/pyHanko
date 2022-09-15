@@ -503,6 +503,7 @@ class BasePdfFileWriter(PdfHandler):
             # delayed import since the namespace registration operation
             # is global (thank you ElementTree...)
             # also, we want the XML dep(s) to be optional
+            # noinspection PyUnresolvedReferences
             from pyhanko.pdf_utils.metadata import xmp_xml
             need_xmp = (
                 self._meta.xmp_unmanaged
@@ -512,7 +513,6 @@ class BasePdfFileWriter(PdfHandler):
             )
         except ImportError:  # pragma: nocover
             need_xmp = False
-            xmp_xml = None
 
         self._meta.last_modified = 'now'
         if self._info is not None:

@@ -8,7 +8,6 @@ from datetime import datetime
 from enum import Enum, auto
 
 import click
-import pytz
 import tzlocal
 from asn1crypto import cms, pem
 from pyhanko_certvalidator import ValidationContext
