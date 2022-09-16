@@ -9,7 +9,7 @@ user-provided configuration (e.g. from a Yaml file).
 
 import dataclasses
 import re
-from typing import Optional, Type, Union
+from typing import Optional, Set, Type, Union
 
 from asn1crypto.core import BitString, ObjectIdentifier
 
@@ -111,6 +111,20 @@ class ConfigurableMixin:
                 ) from e
             config_dict[f.name] = field_value
 
+    @classmethod
+    def check_config_keys(cls, keys_supplied: Set[str]):
+        """
+        Check whether all supplied keys are meaningful.
+
+        :param keys_supplied:
+            The keys supplied in the configuration.
+        :raises ConfigurationError: if at least one key does not make sense.
+        """
+
+        check_config_keys(
+            cls.__name__, {f.name for f in dataclasses.fields(cls)},
+            keys_supplied
+        )
 
     @classmethod
     def from_config(cls, config_dict):
@@ -133,10 +147,11 @@ class ConfigurableMixin:
             unfilled, or when there is a problem processing one of the config
             values.
         """
-        check_config_keys(
-            cls.__name__, {f.name for f in dataclasses.fields(cls)},
-            config_dict
-        )
+        if not isinstance(config_dict, dict):
+            raise ConfigurationError(
+                f"{cls.__name__} requires a dictionary to initialise."
+            )
+        cls.check_config_keys(set(config_dict.keys()))
         # in Python we need underscores
         config_dict = {
             key.replace('-', '_'): v for key, v in config_dict.items()
@@ -158,17 +173,13 @@ class ConfigurableMixin:
             raise ConfigurationError(e)
 
 
-def check_config_keys(config_name, expected_keys, config_dict):
+def check_config_keys(config_name, expected_keys, supplied_keys):
     # wrapper function to provide user-friendly errors
     #  (mainly intended for the CLI)
     # This does not check whether all required keys are present, that happens
     # later
     # TODO What about type checking?
-    if not isinstance(config_dict, dict):  # pragma: nocover
-        raise ConfigurationError(
-            f"{config_name} requires a dictionary to initialise."
-        )
-    unexpected_keys = _check_subset(config_dict.keys(), expected_keys)
+    unexpected_keys = _check_subset(supplied_keys, expected_keys)
     if unexpected_keys:
         # this is easier to present to the user than a TypeError
         raise ConfigurationError(
