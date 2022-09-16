@@ -200,7 +200,8 @@ want to put the parameters in the configuration file. You can declare named PKCS
     pkcs11-setups:
         test-setup:
             module-path: /usr/lib/libsofthsm2.so
-            token-label: testrsa
+            token-criteria:
+                label: testrsa
             cert-label: signer
 
 If you need to, you can also put the user PIN right in the configuration:
@@ -210,7 +211,8 @@ If you need to, you can also put the user PIN right in the configuration:
     pkcs11-setups:
         test-setup:
             module-path: /usr/lib/libsofthsm2.so
-            token-label: testrsa
+            token-criteria:
+                label: testrsa
             cert-label: signer
             user-pin: 1234
 
@@ -223,6 +225,25 @@ To use a named PKCS#11 configuration from the command line, invoke pyHanko like 
 .. code-block:: bash
 
     pyhanko sign addsig pkcs11 --p11-setup test-setup input.pdf output.pdf
+
+
+Named PKCS#11 setups also allow you to access certain advanced features that otherwise aren't
+available from the CLI directly. Here is an example.
+
+.. code-block:: yaml
+
+   pkcs11-setups:
+      test-setup:
+          module-path: /path/to/module.so
+          token-criteria:
+              serial: 17aa21784b9f
+          cert-id: 1382391af78ac390
+          key-id: 1382391af78ac390
+
+
+This configuration will select a token based on the serial number instead of the label,
+and use PKCS#11 object IDs to select the certificate and the private key. All of these
+are represented as hex strings.
 
 For a full overview of the parameters you can set on a PKCS#11 configuration, see the API reference
 documentation for :class:`~pyhanko.config.PKCS11SignatureConfig`.

@@ -222,13 +222,16 @@ In order to do so, you'll need the following information:
  - The path to the PKCS#11 module, which is typically a shared object library (``.so``, ``.dll``
    or ``.dylib``, depending on your operating system)
 
- - The label of the PKCS#11 token you're accessing.
+ - The label of the PKCS#11 token you're accessing (unless the token selection criteria
+   are specified in the configuration file).
 
  - The PKCS#11 label(s) of the certificate and key you're using, stored in the token.
    If the key and certificate labels are the same, you can omit the key label.
 
 Most of these settings can be stored in the configuration file as well, see
-:ref:`pkcs11-setup-conf`.
+:ref:`pkcs11-setup-conf`. In fact, there are quite a few advanced settings that are not exposed
+as command-line switches, but can be specified in the configuration file.
+These include selecting tokens by serial number and selecting keys and certificates by ID.
 
 With this information, producing a basic signature isn't very hard:
 
