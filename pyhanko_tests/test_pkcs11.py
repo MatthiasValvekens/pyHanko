@@ -24,7 +24,12 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import general, pkcs11, signers
 from pyhanko.sign.general import SigningError
-from pyhanko.sign.pkcs11 import PKCS11SigningContext, find_token
+from pyhanko.sign.pkcs11 import (
+    PKCS11SigningContext,
+    TokenCriteria,
+    criteria_satisfied_by,
+    find_token,
+)
 from pyhanko_tests.samples import MINIMAL, TESTING_CA
 from pyhanko_tests.signing_commons import (
     SIMPLE_DSA_V_CONTEXT,
@@ -46,7 +51,8 @@ elif 'softhsm' in pkcs11_test_module.casefold():
 
 def _simple_sess(token='testrsa'):
     return pkcs11.open_pkcs11_session(
-        pkcs11_test_module, user_pin='1234', token_label=token
+        pkcs11_test_module, user_pin='1234',
+        token_criteria=TokenCriteria(label=token)
     )
 
 
@@ -68,6 +74,27 @@ def test_simple_sign(bulk_fetch, pss):
             bulk_fetch=bulk_fetch, prefer_pss=pss
         )
         out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@freeze_time('2020-11-01')
+def test_simple_sign_legacy_open_session_by_token_label():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with pytest.deprecated_call():
+        with pkcs11.open_pkcs11_session(
+                pkcs11_test_module, user_pin='1234', token_label='testrsa'
+        ) as sess:
+            signer = pkcs11.PKCS11Signer(
+                sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
+            )
+            out = signers.sign_pdf(w, meta, signer=signer)
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
@@ -311,7 +338,7 @@ def test_simple_sign_from_config():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module, token_label='testrsa',
+        module_path=pkcs11_test_module, token_criteria=TokenCriteria('testrsa'),
         cert_label=SIGNER_LABEL, user_pin='1234', other_certs_to_pull=None
     )
 
@@ -331,7 +358,8 @@ def test_sign_skip_login_fail():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module, token_label='testrsa',
+        module_path=pkcs11_test_module,
+        token_criteria=TokenCriteria(label='testrsa'),
         cert_label=SIGNER_LABEL, prompt_pin=PKCS11PinEntryMode.SKIP
     )
 
@@ -356,7 +384,8 @@ def test_sign_deferred_auth():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module, token_label='testrsa',
+        module_path=pkcs11_test_module,
+        token_criteria=TokenCriteria('testrsa'),
         cert_label=SIGNER_LABEL, prompt_pin=PKCS11PinEntryMode.DEFER
     )
 
@@ -374,7 +403,8 @@ def test_simple_sign_with_raw_rsa():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module, token_label='testrsa',
+        module_path=pkcs11_test_module,
+        token_criteria=TokenCriteria('testrsa'),
         cert_label=SIGNER_LABEL, user_pin='1234', other_certs_to_pull=None,
         raw_mechanism=True
     )
@@ -471,7 +501,7 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module, token_label='testrsa',
+        module_path=pkcs11_test_module, token_criteria=TokenCriteria('testrsa'),
         other_certs_to_pull=default_other_certs,
         bulk_fetch=bulk_fetch, prefer_pss=pss,
         cert_label=SIGNER_LABEL, user_pin='1234'
@@ -495,7 +525,8 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
 
     concurrent_count = 10
     config = PKCS11SignatureConfig(
-        module_path=pkcs11_test_module, token_label='testrsa',
+        module_path=pkcs11_test_module,
+        token_criteria=TokenCriteria(label='testrsa'),
         other_certs_to_pull=default_other_certs,
         bulk_fetch=bulk_fetch, prefer_pss=pss,
         cert_label=SIGNER_LABEL, user_pin='1234'
@@ -562,7 +593,7 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 def test_token_does_not_exist():
 
-    with pytest.raises(PKCS11Error, match='No token with label.*found'):
+    with pytest.raises(PKCS11Error, match='No token matching criteria'):
         _simple_sess(token='aintnosuchtoken')
 
 
@@ -577,7 +608,6 @@ def test_token_unclear():
 
 DUMMY_VER = {'major': 0, 'minor': 0}
 DUMMY_ARGS = dict(
-    serialNumber=b'\xde\xad\xbe\xef',
     slotDescription=b'', manufacturerID=b'',
     hardwareVersion=DUMMY_VER, firmwareVersion=DUMMY_VER,
 )
@@ -604,10 +634,12 @@ class DummySlot(p11_types.Slot):
 
     def get_token(self):
         if self.lbl is not None:
+            lbl = self.lbl.encode('utf8')
             return DummyToken(
-                self, label=self.lbl.encode('utf8'),
+                self, label=lbl,
                 model=b'DummyToken',
                 flags=p11_types.TokenFlag(0),
+                serialNumber=lbl + b'-\xde\xad\xbe\xef',
                 **DUMMY_ARGS
             )
         else:
@@ -620,39 +652,46 @@ class DummySlot(p11_types.Slot):
         raise NotImplementedError
 
 
-@pytest.mark.parametrize('slot_list,slot_no_query,token_lbl_query', [
+@pytest.mark.parametrize('slot_list,slot_no_query,token_criteria', [
     (('foo',), None, None),
-    (('foo', 'bar'), 0, 'foo'),
-    (('foo', None, 'bar'), 0, 'foo'),
-    (('foo', None, 'bar'), None, 'foo'),
+    (('foo', 'bar'), 0, TokenCriteria(label='foo')),
+    (('foo', None, 'bar'), 0, TokenCriteria(label='foo')),
+    (('foo', None, 'bar'), None, TokenCriteria(label='foo')),
+    (('foo', None, 'bar'), None,
+     TokenCriteria(label='foo', serial=b'foo-\xde\xad\xbe\xef')),
+    (('foo', None, 'bar'), None,
+     TokenCriteria(serial=b'foo-\xde\xad\xbe\xef')),
+    (('foo', None, 'bar'), None,
+     TokenCriteria(serial=b'bar-\xde\xad\xbe\xef')),
     # skip over empty slots when doing this scan
-    ((None, 'foo', None, 'bar'), None, 'foo'),
+    ((None, 'foo', None, 'bar'), None, TokenCriteria(label='foo')),
     ((None, 'foo', None), 1, None),
 ])
-def test_find_token(slot_list, slot_no_query, token_lbl_query):
+def test_find_token(slot_list, slot_no_query, token_criteria):
     tok = find_token(
         [DummySlot(lbl) for lbl in slot_list],
-        slot_no=slot_no_query, token_label=token_lbl_query
+        slot_no=slot_no_query, token_criteria=token_criteria
     )
     assert tok is not None
-    if token_lbl_query:
-        assert tok.label == token_lbl_query
+    criteria_satisfied_by(token_criteria, tok)
 
 
-@pytest.mark.parametrize('slot_list,slot_no_query,token_lbl_query, err', [
-    (('foo', 'bar'), 2, 'foo', 'too large'),
-    (('foo', 'bar'), 1, 'foo', 'Token in slot 1 is not \'foo\''),
+@pytest.mark.parametrize('slot_list,slot_no_query,criteria,err', [
+    (('foo', 'bar'), 2, TokenCriteria(label='foo'), 'too large'),
+    (('foo', 'bar'), 1, TokenCriteria(label='foo'), 'label is not \'foo\''),
+    (('foo', 'bar'), 1, TokenCriteria(serial=b'foo-\xde\xad\xbe\xef'),
+     'serial is not \'666f6f2ddeadbeef\''),
     # when querying by slot, we want the error to be passed on
     ((None, 'bar'), 0, None, 'No token in'),
     (('foo', 'bar'), None, None, 'more than 1'),
     # right now, we don't care about the status of the slot in any way
     (('foo', None), None, None, 'more than 1'),
 ])
-def test_find_token_error(slot_list, slot_no_query, token_lbl_query, err):
+def test_find_token_error(slot_list, slot_no_query, criteria, err):
     with pytest.raises(PKCS11Error, match=err):
         find_token(
             [DummySlot(lbl) for lbl in slot_list],
-            slot_no=slot_no_query, token_label=token_lbl_query
+            slot_no=slot_no_query, token_criteria=criteria
         )
 
 
@@ -665,6 +704,6 @@ def test_find_token_error(slot_list, slot_no_query, token_lbl_query, err):
 def test_token_not_found(slot_list, token_lbl_query):
     tok = find_token(
         [DummySlot(lbl) for lbl in slot_list],
-        slot_no=None, token_label=token_lbl_query
+        slot_no=None, token_criteria=TokenCriteria(label=token_lbl_query)
     )
     assert tok is None

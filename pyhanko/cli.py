@@ -22,6 +22,7 @@ from pyhanko.config import (
     PKCS11SignatureConfig,
     PKCS12SignatureConfig,
     StdLogOutput,
+    TokenCriteria,
     init_validation_context_kwargs,
     parse_cli_config,
     parse_logging_config,
@@ -1168,7 +1169,7 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
 
         pkcs11_config = PKCS11SignatureConfig(
             module_path=lib, cert_label=cert_label, key_label=key_label,
-            slot_no=slot_no, token_label=token_label,
+            slot_no=slot_no, token_criteria=TokenCriteria(token_label),
             # for now, DEFER requires a config file
             prompt_pin=pinentry_mode,
             raw_mechanism=raw_mechanism
