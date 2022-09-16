@@ -157,9 +157,9 @@ class ConfigurableMixin:
             key.replace('-', '_'): v for key, v in config_dict.items()
         }
 
-        cls._process_configurable_fields(config_dict)
-
         cls.process_entries(config_dict)
+
+        cls._process_configurable_fields(config_dict)
 
         enforce_required_keys(
             cls.__name__, {
