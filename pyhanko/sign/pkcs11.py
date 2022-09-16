@@ -6,14 +6,19 @@ seamlessly plugged into a :class:`~.signers.PdfSigner`.
 import asyncio
 import binascii
 import logging
+import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 from asn1crypto import algos, core, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
 
-from pyhanko.config import PKCS11PinEntryMode, PKCS11SignatureConfig
+from pyhanko.config import (
+    PKCS11PinEntryMode,
+    PKCS11SignatureConfig,
+    TokenCriteria,
+)
 from pyhanko.sign.general import (
     CertificateStore,
     SigningError,
@@ -50,8 +55,32 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
+def criteria_mismatches(criteria: TokenCriteria, token: p11_types.Token) \
+        -> List[Tuple[str, str]]:
+    if criteria is None:
+        return []
+
+    err_items = []
+
+    if criteria.label is not None and token.label != criteria.label:
+        err_items.append(
+            ('label', criteria.label)
+        )
+    if criteria.serial is not None and token.serial != criteria.serial:
+        err_items.append(
+            ('serial', criteria.serial.hex())
+        )
+    return err_items
+
+
+def criteria_satisfied_by(criteria: TokenCriteria, token: p11_types.Token) \
+        -> bool:
+    return not criteria_mismatches(criteria, token)
+
+
 def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
-               token_label: Optional[str] = None) -> Optional[p11_types.Token]:
+               token_criteria: Optional[TokenCriteria] = None) \
+        -> Optional[p11_types.Token]:
     """
     Internal helper method to find a token.
 
@@ -59,19 +88,19 @@ def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
         The list of slots.
     :param slot_no:
         Slot number to use. If not specified, the first slot containing a token
-        labelled ``token_label`` will be used.
-    :param token_label:
-        Label of the token to use. If ``None``, there is no constraint.
+        satisfying the criteria will be used
+    :param token_criteria:
+        Criteria the token must satisfy.
     :return:
         A PKCS#11 token object, or ``None`` if none was found.
     """
 
-    if token_label is None and slot_no is None:
+    if token_criteria is None and slot_no is None:
         if len(slots) == 1:
             return slots[0].get_token()
         else:
             raise PKCS11Error(
-                "Module has more than 1 slot; slot index or token label "
+                "Module has more than 1 slot; slot index or token criteria "
                 "must be provided"
             )
 
@@ -79,7 +108,7 @@ def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
         for slot in slots:
             try:
                 token = slot.get_token()
-                if token_label is None or token.label == token_label:
+                if criteria_satisfied_by(token_criteria, token):
                     return token
             except PKCS11Error:
                 continue
@@ -89,9 +118,14 @@ def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
                 f"Slot index {slot_no} too large; there are only {len(slots)}"
             )
         token = slots[slot_no].get_token()
-        if token_label is not None and token.label != token_label:
+        errors = criteria_mismatches(token_criteria, token)
+        if errors:
+            err_str = ", ".join(
+                f"{field} is not {val!r}"
+                for field, val in errors
+            )
             raise PKCS11Error(
-                f"Token in slot {slot_no} is not {token_label!r}."
+                f"Token in slot {slot_no} does not satisfy criteria; {err_str}."
             )
         return token
     return None
@@ -266,6 +300,7 @@ def select_pkcs11_signing_params(
 
 def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
                         token_label: Optional[str] = None,
+                        token_criteria: Optional[TokenCriteria] = None,
                         user_pin: Union[str, object, None] = None) -> Session:
     """
     Open a PKCS#11 session
@@ -276,7 +311,12 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
         Slot number to use. If not specified, the first slot containing a token
         labelled ``token_label`` will be used.
     :param token_label:
+        .. deprecated:: 0.14.0
+            Use ``token_criteria`` instead.
+
         Label of the token to use. If ``None``, there is no constraint.
+    :param token_criteria:
+        Criteria that the token should match.
     :param user_pin:
         User PIN to use, or :attr:`.PROTECTED_AUTH`. If ``None``, authentication
         is skipped.
@@ -291,14 +331,19 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
     """
     lib = p11_lib(lib_location)
 
+    if token_criteria is None and token_label is not None:
+        warnings.warn(
+            "'token_label' is deprecated, use 'token_criteria' instead",
+            DeprecationWarning
+        )
+        token_criteria = TokenCriteria(label=token_label)
+
     slots = lib.get_slots()
-    token = find_token(
-        slots, slot_no=slot_no, token_label=token_label
-    )
+    token = find_token(slots, slot_no=slot_no, token_criteria=token_criteria)
     if token is None:
         raise PKCS11Error(
-            f'No token with label {token_label} found'
-            if token_label is not None else 'No token found'
+            f'No token matching criteria {token_criteria!r} found'
+            if token_criteria is not None else 'No token found'
         )
 
     kwargs = {}
@@ -637,7 +682,7 @@ class PKCS11SigningContext:
 
         self._session = session = open_pkcs11_session(
             config.module_path, slot_no=config.slot_no,
-            token_label=config.token_label,
+            token_criteria=config.token_criteria,
             user_pin=pin
         )
         return PKCS11Signer(

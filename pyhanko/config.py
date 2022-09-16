@@ -1,9 +1,10 @@
 import binascii
 import enum
 import logging
+import warnings
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Union
 
 import yaml
 from asn1crypto import x509
@@ -370,6 +371,36 @@ class PemDerSignatureConfig(config_utils.ConfigurableMixin):
         return result
 
 
+@dataclass(frozen=True)
+class TokenCriteria(config_utils.ConfigurableMixin):
+    """
+    .. versionadded:: 0.14.0
+
+    Search criteria for a PKCS#11 token.
+    """
+
+    label: Optional[str] = None
+    """
+    Label of the token to use. If ``None``, there is no constraint.
+    """
+
+    serial: Optional[bytes] = None
+    """
+    Serial number of the token to use. If ``None``, there is no constraint.
+    """
+
+    @classmethod
+    def process_entries(cls, config_dict):
+        try:
+            config_dict['serial'] = binascii.unhexlify(config_dict['serial'])
+        except KeyError:
+            pass
+        except ValueError as e:
+            raise ConfigurationError(
+                "Failed to parse PKCS #11 token serial number as a hex string"
+            ) from e
+
+
 class PKCS11PinEntryMode(enum.Enum):
     """
     Pin entry behaviour if the user PIN is not supplied as part of the config.
@@ -448,7 +479,7 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
         the one provided on the token.
     """
 
-    token_label: Optional[str] = None
+    token_criteria: Optional[TokenCriteria] = None
     """PKCS#11 token name"""
 
     other_certs: Optional[List[x509.Certificate]] = None
@@ -520,6 +551,15 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     """
 
     @classmethod
+    def check_config_keys(cls, keys_supplied: Set[str]):
+        # make sure we don't ding token_label since we actually still
+        # process it for compatibility reasons
+        super().check_config_keys({
+            k for k in keys_supplied
+            if k not in ('token_label', 'token-label')
+        })
+
+    @classmethod
     def process_entries(cls, config_dict):
         super().process_entries(config_dict)
         other_certs = config_dict.get('other_certs', ())
@@ -555,6 +595,18 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
             config_dict, 'prompt_pin', PKCS11PinEntryMode.parse_mode_setting,
             default=PKCS11PinEntryMode.PROMPT
         )
+
+        if 'token_label' in config_dict:
+            warnings.warn(
+                "'token_label' is deprecated, use 'token_criteria.label' "
+                "instead",
+                DeprecationWarning
+            )
+            lbl = config_dict.pop('token_label')
+            if 'token_criteria' not in config_dict:
+                config_dict['token_criteria'] = {'label': lbl}
+            else:
+                config_dict['token_criteria'].setdefault('label', lbl)
 
 
 def _process_pkcs11_id_value(x: Union[str, int]):

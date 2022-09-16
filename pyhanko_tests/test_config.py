@@ -12,6 +12,7 @@ from pyhanko.config import (
     DEFAULT_ROOT_LOGGER_LEVEL,
     DEFAULT_TIME_TOLERANCE,
     StdLogOutput,
+    TokenCriteria,
     init_validation_context_kwargs,
 )
 from pyhanko.pdf_utils import layout
@@ -520,7 +521,8 @@ def test_read_pkcs11_config():
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
-                token-label: testrsa
+                token-criteria:
+                    label: testrsa
                 cert-label: signer
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
@@ -529,9 +531,47 @@ def test_read_pkcs11_config():
     with pytest.raises(ConfigurationError):
         cli_config.get_pkcs11_config('bar')
 
-    assert setup.token_label == 'testrsa'
+    assert setup.token_criteria == TokenCriteria('testrsa')
     assert setup.module_path == '/path/to/libfoo.so'
     assert len(setup.other_certs) == 2
+
+
+def test_read_pkcs11_config_legacy():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    with pytest.deprecated_call():
+        setup = cli_config.get_pkcs11_config('foo')
+
+    assert setup.token_criteria == TokenCriteria('testrsa')
+
+
+def test_read_pkcs11_config_legacy_with_extra_criteria():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-label: testrsa
+                token-criteria:
+                    serial: deadbeef
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    with pytest.deprecated_call():
+        setup = cli_config.get_pkcs11_config('foo')
+
+    assert setup.token_criteria == TokenCriteria(
+        label='testrsa', serial=b'\xde\xad\xbe\xef'
+    )
 
 
 def test_read_pkcs11_config_slot_no():
@@ -558,7 +598,8 @@ def test_read_pkcs11_nothing_to_pull():
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
-                token-label: testrsa
+                token-criteria:
+                    label: testrsa
                 cert-label: signer
         """
     )
@@ -613,6 +654,39 @@ def test_read_pkcs11_config_no_key_spec():
         cli_config.get_pkcs11_config('foo')
 
 
+def test_read_pkcs11_config_bad_criteria_type():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-criteria: bleh
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    with pytest.raises(ConfigurationError,
+                       match="TokenCriteria requires a dictionary"):
+        cli_config.get_pkcs11_config('foo')
+
+
+def test_read_pkcs11_config_bad_serial():
+    cli_config = config.parse_cli_config(
+        f"""
+        pkcs11-setups:
+            foo:
+                module-path: /path/to/libfoo.so
+                token-criteria:
+                    serial: bazz
+                cert-label: signer
+                other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
+        """
+    )
+    with pytest.raises(ConfigurationError,
+                       match="Failed to parse.*hex"):
+        cli_config.get_pkcs11_config('foo')
+
+
 def test_read_pkcs11_config_no_cert_spec():
     cli_config = config.parse_cli_config(
         f"""
@@ -643,7 +717,8 @@ def test_read_pkcs11_prompt_pin(literal, exp_val):
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
-                token-label: testrsa
+                token-criteria:
+                    label: testrsa
                 cert-label: signer
                 prompt-pin: {literal}
         """
@@ -658,7 +733,8 @@ def test_read_pkcs11_prompt_pin_default():
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
-                token-label: testrsa
+                token-criteria:
+                    label: testrsa
                 cert-label: signer
         """
     )
@@ -672,7 +748,8 @@ def test_read_pkcs11_prompt_pin_invalid():
         pkcs11-setups:
             foo:
                 module-path: /path/to/libfoo.so
-                token-label: testrsa
+                token-criteria:
+                    label: testrsa
                 cert-label: signer
                 prompt-pin: foobar
         """
