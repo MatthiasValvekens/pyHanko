@@ -59,6 +59,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         if self._info is not None:
             self.trailer['/Info'] = self._info
         self._resolves_objs_from = (self, prev)
+        input_ver = self.prev.input_version
+        if input_ver > self.output_version:
+            self.output_version = input_ver
         self.ensure_output_version(self.__class__.output_version)
 
         self.security_handler = prev.security_handler
