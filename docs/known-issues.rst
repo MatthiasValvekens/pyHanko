@@ -16,8 +16,11 @@ This page lists some TODOs and known limitations of pyHanko.
   annotations) is not supported.
   Comments added to a signed PDF will therefore be considered "unsafe" changes,
   regardless of the policy set by the signer.
-* There is currently no support for signing and stamping PDF/A and PDF/UA files.
-  That is to say, pyHanko treats these as any other PDF file and will produce
-  output that may not comply with the provisions of these standards.
+* There is currently no explicit support for signing and stamping PDF/A and
+  PDF/UA files. That is to say, pyHanko treats these as any other PDF file
+  and will produce output that may not comply with the provisions of these
+  standards. As of ``0.14.0``, it is possible to generate compliant output
+  using pyHanko in most cases, but pyHanko itself will not attempt to enforce
+  any additional restrictions.
 * CLI support for signing files encrypted using PDF's public-key encryption
   functionality is limited.

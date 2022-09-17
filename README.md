@@ -20,13 +20,13 @@ PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
 and can be installed using `pip`:
 
 ```bash
-pip install 'pyHanko[pkcs11,image-support,opentype]'
+pip install 'pyHanko[pkcs11,image-support,opentype,xmp]'
 ```
 
 Depending on your shell, you might have to leave off the quotes:
 
 ```bash
-pip install pyHanko[pkcs11,image-support,opentype]
+pip install pyHanko[pkcs11,image-support,opentype,xmp]
 ```
 
 This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
@@ -67,6 +67,7 @@ Note that not all of these are necessarily exposed through the CLI.
  - Document preparation 
     - Add empty signature fields to existing PDFs
     - Add seed values to signature fields, with or without constraints
+    - Manage document metadata
  - Signing
     * Option to use async signing API
     - Signatures can be invisible, or with an appearance based on the stamping tools

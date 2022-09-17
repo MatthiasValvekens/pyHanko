@@ -3,6 +3,158 @@ Release history
 ***************
 
 
+.. _release-0.14.0:
+
+0.14.0
+======
+
+
+*Release date:* 2022-09-17
+
+
+Note
+----
+
+This release contains a mixture of minor and major changes.
+Of particular note is the addition of automated metadata management support,
+including XMP metadata. This change affects almost every PDF write operation
+in the background. While pyHanko has very good test coverage, some instability
+and regressions may ensue. Bug reports are obviously welcome.
+
+
+Breaking changes
+----------------
+
+The breaking changes in this release are all relatively minor.
+Chances are that your code isn't affected at all, other than perhaps by
+the change to
+:class:`~pyhanko.sign.signers.pdf_byterange.PreparedByteRangeDigest`.
+
+
+ * ``md_algorithm`` attribute removed from
+   :class:`~pyhanko.sign.signers.pdf_byterange.PreparedByteRangeDigest` since
+   it wasn't necessary for further processing.
+ * Low-level change in ``raw_get`` for PDF container object types
+   (:class:`~pyhanko.pdf_utils.generic.ArrayObject` and
+   :class:`~pyhanko.pdf_utils.generic.DictionaryObject`): the ``decrypt``
+   parameter is no longer a boolean, but a tri-state enum value of type
+   :class:`~pyhanko.pdf_utils.generic.EncryptedObjAccess`.
+ * Developer extension management API moved into :mod:`pyhanko.pdf_utils.extensions`.
+ * :func:`~pyhanko.pdf_utils.font.basic.get_courier` convenience function moved into
+   :mod:`pyhanko.pdf_utils.font.basic` and now takes a mandatory writer argument.
+ * The ``token_label`` attribute was removed from
+   :class:`~pyhanko.config.PKCS11SignatureConfig`, but will still be parsed
+   (with a deprecation warning).
+ * The :attr:`~pyhanko.config.PKCS11SignatureConfig.prompt_pin` attribute in
+   :class:`~pyhanko.config.PKCS11SignatureConfig` was changed from a bool to
+   an enum. See :class:`~pyhanko.config.PKCS11PinEntryMode`.
+
+
+Dependency updates
+------------------
+
+ * ``pytest-aiohttp`` updated to ``1.0.4``
+ * ``certomancer`` updated to ``0.9.0``
+ * ``certomancer-csc-dummy`` updated to ``0.2.1``
+ * Relax bounds on ``uharfbuzz`` to allow everything up to the current version
+   (i.e. ``0.30.0``) as well.
+ * New optional dependency group ``xmp``, which for now only contains ``defusedxml``
+
+
+Bugs fixed
+----------
+
+ * Allow certificates with no ``CN`` in the certificate subject.
+ * The extension dictionary handling logic can now deal with encrypted
+   documents without actually decrypting the document contents.
+ * Fix processing error when passing empty strings to ``uharfbuzz``;
+   see `issue #132 <https://github.com/MatthiasValvekens/pyHanko/issues/132>`_.
+ * Use proper PDF text string serialisation routine in simple font handler, to ensure
+   everything is escaped correctly.
+ * Ensure that ``output_version`` is set to at least the input version in
+   incrementally updated files.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Drop the requirement for :attr:`~pyhanko.sign.signers.pdf_cms.Signer.signing_cert`
+   to be set from the start of the signing process in an interrupted signing workflow.
+   This has come up on several occasions in the past, since it's necessary in remote
+   signing scenarios where the certificate is generated or provided on-demand when
+   submitting the document digest to the signing service.
+   See `pull #141 <https://github.com/MatthiasValvekens/pyHanko/pull/141>`_ for details.
+ * Add convenience API to set the ``/TU`` entry on a signature field;
+   see :attr:`~pyhanko.sign.fields.SigFieldSpec.readable_field_name`.
+ * Allow greater control over the initialisation of document timestamp fields.
+ * New class hierarchy for (un)signed attribute provisioning;
+   see :class:`~pyhanko.sign.attributes.SignedAttributeProviderSpec`
+   and :class:`~pyhanko.sign.attributes.UnsignedAttributeProviderSpec`.
+ * Allow greater control over annotation flags for visible signatures.
+   This is implemented using :class:`~pyhanko.sign.fields.VisibleSigSettings`.
+   See `discussion #150 <https://github.com/MatthiasValvekens/pyHanko/discussions/150>`_.
+ * Factor out and improve PKCS#11 token finding; see
+   :class:`~pyhanko.config.TokenCriteria`
+   and `issue #149 <https://github.com/MatthiasValvekens/pyHanko/issues/149>`_.
+ * Factor out and improve PKCS#11 mechanism selection, allowing more raw modes.
+ * Change pin entry settings for PKCS#11 to be more granular, in order to also
+   allow ``PROTECTED_AUTH``;
+   see `issue #133 <https://github.com/MatthiasValvekens/pyHanko/issues/133>`_.
+ * Allow the PKCS#11 PIN to be sourced from an environment variable when
+   pyHanko is invoked through the CLI and no PIN is provided in the configuration.
+   PyHanko will now first check the ``PYHANKO_PKCS11_PIN`` variable before
+   prompting for a PIN. This also works when prompting for PIN entry is
+   disabled altogether.
+
+
+.. note::
+
+    The PKCS#11 code is now also tested in CI, using
+    `SoftHSMv2 <https://github.com/opendnssec/SoftHSMv2>`_.
+
+
+Validation
+^^^^^^^^^^
+
+ * Allow validation time overrides in the CLI. Passing in the special value
+   ``claimed`` tells pyHanko to take the stated signing time in the file at
+   face value.
+   See `issue #130 <https://github.com/MatthiasValvekens/pyHanko/issues/130>`_.
+
+
+Encryption
+^^^^^^^^^^
+
+ * Also return permissions on owner access to allow for easier inspection.
+ * Better version enforcement for security handlers.
+
+
+Layout
+^^^^^^
+
+ * Allow metrics to be specified for simple fonts.
+ * Provide metrics for default Courier font.
+ * Experimental option that allows graphics to be embedded in the central area
+   of the QR code; see :attr:`~pyhanko.stamp.QRStampStyle.qr_inner_content`.
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+ * Basic XMP metadata support with optional ``xmp`` dependency group.
+ * Automated metadata management (document info dictionary, XMP metadata).
+ * Refactor some low-level digesting and CMS validation code.
+ * Make the CLI print a warning when the key passphrase is left empty.
+ * Tweak configuration management utilities to better cope with fallback
+   logic for deprecated configuration parameters.
+ * Move all cross-reference writing logic into :mod:`pyhanko.pdf_utils.xref`.
+ * Improve error classes and error reporting in the CLI so that errors in non-verbose mode
+   still provide a little more info.
+
+
 .. _release-0.13.2:
 
 0.13.2
