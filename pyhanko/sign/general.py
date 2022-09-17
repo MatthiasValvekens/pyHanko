@@ -297,7 +297,9 @@ class SigningError(ValueError):
     """
     Error encountered while signing a file.
     """
-    pass
+    def __init__(self, msg: str, *args):
+        self.msg = msg
+        super().__init__(msg, *args)
 
 
 class UnacceptableSignerError(SigningError):

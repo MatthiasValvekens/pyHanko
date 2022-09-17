@@ -19,12 +19,16 @@ logger = logging.getLogger(__name__)
 
 class LayoutError(ValueError):
     """Indicates an error in a layout computation."""
-    pass
+
+    def __init__(self, msg: str, *args):
+        self.msg = msg
+        super().__init__(msg, *args)
 
 
 class BoxSpecificationError(LayoutError):
     """Raised when a box constraint is over/underspecified."""
-    pass
+    def __init__(self, msg: Optional[str] = None):
+        super().__init__(msg=msg or "box constraint is over/underspecified")
 
 
 class BoxConstraints:

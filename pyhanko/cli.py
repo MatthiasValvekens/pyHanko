@@ -101,20 +101,21 @@ def pyhanko_exception_manager():
         exception = e
         msg = (
             "Failed to read PDF file in strict mode; rerun with "
-            "--no-strict-syntax to try again"
+            "--no-strict-syntax to try again.\n"
+            f"Error message: {e.msg}"
         )
     except misc.PdfReadError as e:
         exception = e
-        msg = "Failed to read PDF file."
+        msg = f"Failed to read PDF file: {e.msg}"
     except misc.PdfWriteError as e:
         exception = e
-        msg = "Failed to write PDF file."
+        msg = f"Failed to write PDF file: {e.msg}"
     except SigningError as e:
         exception = e
-        msg = "Error raised while producing signed file."
+        msg = f"Error raised while producing signed file: {e.msg}"
     except LayoutError as e:
         exception = e
-        msg = "Error raised while producing signature layout."
+        msg = f"Error raised while producing signature layout: {e.msg}"
     except Exception as e:
         exception = e
         msg = "Generic processing error."

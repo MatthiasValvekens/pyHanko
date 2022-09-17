@@ -187,7 +187,10 @@ class StringWithLanguage:
 
 
 class PdfError(Exception):
-    pass
+
+    def __init__(self, msg: str, *args):
+        self.msg = msg
+        super().__init__(msg, *args)
 
 
 class PdfReadError(PdfError):
@@ -199,7 +202,8 @@ class PdfStrictReadError(PdfReadError):
 
 
 class IndirectObjectExpected(PdfReadError):
-    pass
+    def __init__(self, msg: Optional[str] = None):
+        super().__init__(msg=msg or "indirect object expected")
 
 
 class PdfWriteError(PdfError):
