@@ -74,7 +74,12 @@ setup(
     extras_require={
         'extra_pubkey_algs': ['oscrypto>=1.2.1'],
         'xmp': ['defusedxml~=0.7.1'],
-        'opentype': ['fonttools>=4.33.3', 'uharfbuzz==0.25.0'],
+        'opentype': [
+            'fonttools>=4.33.3',
+            # uharfbuzz sometimes includes breaking changes, so
+            # we set an explicit range
+            'uharfbuzz>=0.25.0,<0.31.0'
+        ],
         'image-support': [
             # Only tested systematically on 8.x,
             # but we allow 7.2.x to support system PIL on Ubuntu
