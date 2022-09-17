@@ -5,6 +5,7 @@ pyhanko.sign package
    :maxdepth: 4
 
    pyhanko.sign.ades
+   pyhanko.sign.attributes
    pyhanko.sign.beid
    pyhanko.sign.diff_analysis
    pyhanko.sign.fields
