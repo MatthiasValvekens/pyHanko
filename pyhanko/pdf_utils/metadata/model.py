@@ -1,5 +1,9 @@
 """
-Simplified document metadata model.
+.. versionadded:: 0.14.0
+
+This module contains the XMP data model classes and namespace registry,
+in addition to a simplified document metadata model used for automated
+metadata management.
 """
 import enum
 from dataclasses import dataclass, field
@@ -11,8 +15,17 @@ from pyhanko.pdf_utils.misc import StringWithLanguage
 
 __all__ = [
     'DocumentMetadata', 'VENDOR', 'MetaString',
-    'NS', 'ExpandedName', 'Qualifiers', 'XmpValue',
-    'XmpStructure', 'XmpArrayType', 'XmpArray'
+    'ExpandedName', 'Qualifiers', 'XmpValue',
+    'XmpStructure', 'XmpArrayType', 'XmpArray',
+    'NS',
+    'XML_LANG',
+    'RDF_RDF', 'RDF_SEQ', 'RDF_BAG', 'RDF_ALT', 'RDF_LI',
+    'RDF_VALUE', 'RDF_RESOURCE', 'RDF_PARSE_TYPE', 'RDF_ABOUT',
+    'RDF_DESCRIPTION',
+    'DC_TITLE', 'DC_CREATOR', 'DC_DESCRIPTION',
+    'PDF_PRODUCER', 'PDF_KEYWORDS',
+    'X_XMPMETA', 'X_XMPTK',
+    'XMP_CREATORTOOL', 'XMP_CREATEDATE', 'XMP_MODDATE'
 ]
 
 VENDOR = 'pyHanko ' + __version__
@@ -108,12 +121,24 @@ class DocumentMetadata:
 
 @dataclass(frozen=True)
 class ExpandedName:
+    """
+    An expanded XML name.
+    """
+
     ns: str
+    """
+    The URI of the namespace in which the name resides.
+    """
+
     local_name: str
+    """
+    The local part of the name.
+    """
 
     def __str__(self):
         ns = self.ns
-        return f"{ns}{'' if ns.endswith('/') else '/'}{self.local_name}"
+        sep = '' if ns.endswith('/') or ns.endswith('#') else '/'
+        return f"{ns}{sep}{self.local_name}"
 
     def __repr__(self):
         return str(self)
@@ -132,33 +157,126 @@ NS = {
     'pdfaProperty': 'http://www.aiim.org/pdfa/ns/property#',
     'x': 'adobe:ns:meta/'
 }
+"""
+Known namespaces and their customary prefixes.
+"""
 
 
 XML_LANG = ExpandedName(ns=NS['xml'], local_name='lang')
+"""
+``lang`` in the ``xml`` namespace.
+"""
+
 RDF_RDF = ExpandedName(ns=NS['rdf'], local_name='RDF')
+"""
+``RDF`` in the ``rdf`` namespace.
+"""
+
 RDF_SEQ = ExpandedName(ns=NS['rdf'], local_name='Seq')
+"""
+``Seq`` in the ``rdf`` namespace.
+"""
+
 RDF_BAG = ExpandedName(ns=NS['rdf'], local_name='Bag')
+"""
+``Bag`` in the ``rdf`` namespace.
+"""
+
 RDF_ALT = ExpandedName(ns=NS['rdf'], local_name='Alt')
+"""
+``Alt`` in the ``rdf`` namespace.
+"""
+
 RDF_LI = ExpandedName(ns=NS['rdf'], local_name='li')
+"""
+``li`` in the ``rdf`` namespace.
+"""
+
 RDF_VALUE = ExpandedName(ns=NS['rdf'], local_name='value')
+"""
+``value`` in the ``rdf`` namespace.
+"""
+
 RDF_RESOURCE = ExpandedName(ns=NS['rdf'], local_name='resource')
+"""
+``resource`` in the ``rdf`` namespace.
+"""
+
 RDF_ABOUT = ExpandedName(ns=NS['rdf'], local_name='about')
+"""
+``about`` in the ``rdf`` namespace.
+"""
+
 RDF_PARSE_TYPE = ExpandedName(ns=NS['rdf'], local_name='parseType')
+"""
+``parseType`` in the ``rdf`` namespace.
+"""
+
 RDF_DESCRIPTION = ExpandedName(ns=NS['rdf'], local_name='Description')
+"""
+``Description`` in the ``rdf`` namespace.
+"""
+
 X_XMPMETA = ExpandedName(ns=NS['x'], local_name='xmpmeta')
+"""
+``xmpmeta`` in the ``x`` namespace.
+"""
+
 X_XMPTK = ExpandedName(ns=NS['x'], local_name='xmptk')
+"""
+``xmptk`` in the ``x`` namespace.
+"""
+
 
 DC_TITLE = ExpandedName(ns=NS['dc'], local_name='title')
+"""
+``title`` in the ``dc`` namespace.
+"""
+
 DC_CREATOR = ExpandedName(ns=NS['dc'], local_name='creator')
+"""
+``creator`` in the ``dc`` namespace.
+"""
+
 DC_DESCRIPTION = ExpandedName(ns=NS['dc'], local_name='description')
+"""
+``description`` in the ``dc`` namespace.
+"""
+
 PDF_KEYWORDS = ExpandedName(ns=NS['pdf'], local_name='keywords')
-XMP_CREATORTOOL = ExpandedName(ns=NS['xmp'], local_name='CreatorTool')
+"""
+``keywords`` in the ``pdf`` namespace.
+"""
+
 PDF_PRODUCER = ExpandedName(ns=NS['pdf'], local_name='Producer')
+"""
+``Producer`` in the ``pdf`` namespace.
+"""
+
+XMP_CREATORTOOL = ExpandedName(ns=NS['xmp'], local_name='CreatorTool')
+"""
+``CreatorTool`` in the ``xmp`` namespace.
+"""
+
 XMP_CREATEDATE = ExpandedName(ns=NS['xmp'], local_name='CreateDate')
+"""
+``CreateDate`` in the ``xmp`` namespace.
+"""
+
 XMP_MODDATE = ExpandedName(ns=NS['xmp'], local_name='ModifyDate')
+"""
+``ModifyDate`` in the ``xmp`` namespace.
+"""
 
 
 class Qualifiers:
+    """
+    XMP value qualifiers wrapper. Implements ``__getitem__``.
+    Note that ``xml:lang`` gets special treatment.
+
+    :param quals:
+        The qualifiers to model.
+    """
 
     _quals: Dict[ExpandedName, 'XmpValue']
     _lang: Optional[str]
@@ -176,10 +294,27 @@ class Qualifiers:
 
     @classmethod
     def of(cls, *lst: Tuple[ExpandedName, 'XmpValue']) -> 'Qualifiers':
+        """
+        Construct a :class:`.Qualifiers` object from a list of name-value pairs.
+
+        :param lst:
+            A list of name-value pairs.
+        :return:
+            A :class:`.Qualifiers` object.
+        """
         return Qualifiers({k: v for k, v in lst})
 
     @classmethod
     def lang_as_qual(cls, lang: Optional[str]) -> 'Qualifiers':
+        """
+        Construct a :class:`.Qualifiers` object that only wraps a language
+        qualifier.
+
+        :param lang:
+            A language code.
+        :return:
+            A :class:`.Qualifiers` object.
+        """
         quals = Qualifiers({})
         if lang:
             quals._lang = lang
@@ -190,16 +325,29 @@ class Qualifiers:
 
     def iter_quals(self, with_lang: bool = True) \
             -> Iterable[Tuple[ExpandedName, 'XmpValue']]:
+        """
+        Iterate over all qualifiers.
+
+        :param with_lang:
+            Include the language qualifier.
+        :return:
+        """
         yield from self._quals.items()
         if with_lang and self._lang is not None:
             yield XML_LANG, XmpValue(self._lang)
 
     @property
     def lang(self) -> Optional[str]:
+        """
+        Retrieve the language qualifier, if any.
+        """
         return self._lang
 
     @property
     def has_non_lang_quals(self) -> bool:
+        """
+        Check if there are any non-language qualifiers.
+        """
         return bool(self._quals)
 
     def __bool__(self):
@@ -219,6 +367,10 @@ class Qualifiers:
 
 @dataclass(frozen=True)
 class XmpUri:
+    """
+    An XMP URI value.
+    """
+
     value: str
 
     def __str__(self):
@@ -227,11 +379,29 @@ class XmpUri:
 
 @dataclass
 class XmpValue:
+    """
+    A general XMP value, potentially with qualifiers.
+    """
+
     value: Union['XmpStructure', 'XmpArray', XmpUri, str]
+    """
+    The value.
+    """
+
     qualifiers: Qualifiers = field(default_factory=Qualifiers.of)
+    """
+    Qualifiers that apply to the value.
+    """
 
 
 class XmpStructure:
+    """
+    A generic XMP structure value. Implements ``__getitem__`` for field access.
+
+    :param fields:
+        The structure's fields.
+    """
+
     # isomorphic to Qualifiers, but we keep them separate to stay
     # closer to the spec (and this one doesn't special-case anything)
 
@@ -240,6 +410,14 @@ class XmpStructure:
 
     @classmethod
     def of(cls, *lst: Tuple[ExpandedName, 'XmpValue']) -> 'XmpStructure':
+        """
+        Construct an :class:`.XmpStructure` from a list of name-value pairs.
+
+        :param lst:
+            A list of name-value pairs.
+        :return:
+            An an :class:`.XmpStructure`.
+        """
         return cls({k: v for k, v in lst})
 
     def __getitem__(self, item):
@@ -258,29 +436,82 @@ class XmpStructure:
 
 @enum.unique
 class XmpArrayType(enum.Enum):
+    """
+    XMP array types.
+    """
+
     ORDERED = 'Seq'
+    """
+    Ordered array.
+    """
+
     UNORDERED = 'Bag'
+    """
+    Unordered array.
+    """
+
     ALTERNATIVE = 'Alt'
+    """
+    Alternative array.
+    """
 
     def as_rdf(self) -> ExpandedName:
+        """
+        Render the type as an XML name.
+        """
         return ExpandedName(ns=NS['rdf'], local_name=str(self.value))
 
 
 @dataclass
 class XmpArray:
+    """
+    An XMP array.
+    """
+
     array_type: XmpArrayType
+    """
+    The type of the array.
+    """
+
     entries: List[XmpValue]
+    """
+    The entries in the array.
+    """
 
     @classmethod
     def ordered(cls, lst: Iterable[XmpValue]) -> 'XmpArray':
+        """
+        Convert a list to an ordered XMP array.
+
+        :param lst:
+            An iterable of XMP values.
+        :return:
+            An ordered :class:`.XmpArray`.
+        """
         return cls(XmpArrayType.ORDERED, list(lst))
 
     @classmethod
     def unordered(cls, lst: Iterable[XmpValue]) -> 'XmpArray':
+        """
+        Convert a list to an unordered XMP array.
+
+        :param lst:
+            An iterable of XMP values.
+        :return:
+            An unordered :class:`.XmpArray`.
+        """
         return cls(XmpArrayType.UNORDERED, list(lst))
 
     @classmethod
     def alternative(cls, lst: Iterable[XmpValue]) -> 'XmpArray':
+        """
+        Convert a list to an alternative XMP array.
+
+        :param lst:
+            An iterable of XMP values.
+        :return:
+            An alternative :class:`.XmpArray`.
+        """
         return cls(XmpArrayType.ALTERNATIVE, list(lst))
 
     def __eq__(self, other):
