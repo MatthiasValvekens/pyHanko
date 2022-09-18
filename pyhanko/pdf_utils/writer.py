@@ -499,6 +499,7 @@ class BasePdfFileWriter(PdfHandler):
         self._update_meta()
 
     def _update_meta(self):
+        xmp_xml = None
         try:
             # delayed import since the namespace registration operation
             # is global (thank you ElementTree...)
@@ -542,6 +543,13 @@ class BasePdfFileWriter(PdfHandler):
                 meta_stm = xmp_xml.MetadataStream.from_xmp(
                     xmp_xml.update_xmp_with_meta(self._meta)
                 )
+                sh = self.security_handler
+                meta_stm._handler = sh
+                if sh is not None and \
+                        not self.security_handler.encrypt_metadata:
+                    # note: this will add the /Identity crypt filter, hence
+                    # metadata encryption will be omitted
+                    meta_stm.add_crypt_filter()
                 self.root['/Metadata'] = self.add_object(meta_stm)
                 self.update_root()
             self.update_root()

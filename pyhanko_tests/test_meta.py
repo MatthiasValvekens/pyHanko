@@ -9,6 +9,7 @@ import tzlocal
 from freezegun import freeze_time
 
 from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.generic import EncryptedObjAccess
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.metadata import model, xmp_xml
 from pyhanko.pdf_utils.misc import StringWithLanguage
@@ -833,3 +834,40 @@ def test_xmp_lang_explicit_xdefault():
     r = PdfFileReader(out)
     assert b"<rdf:li xml:lang=\"x-default\">Blah</rdf:li>" \
            in r.root['/Metadata'].data
+
+
+def test_encrypt_skipping_managed_metadata():
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+    w.encrypt("secret", "secret", encrypt_metadata=False)
+    w.document_meta.title = "Metadata is unencrypted"
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    # do not decrypt anything (not that it would matter in this case)
+    ref = r.root.raw_get("/Metadata", decrypt=EncryptedObjAccess.RAW)
+    raw_md = r.get_object(ref, never_decrypt=True)
+    assert raw_md['/DecodeParms']['/Name'] == '/Identity'
+    assert b'Metadata is unencrypted' in raw_md.encoded_data
+
+    r = PdfFileReader(out)
+    r.decrypt("secret")
+    assert r.document_meta_view.title.value == "Metadata is unencrypted"
+
+
+def test_encrypt_with_managed_metadata():
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL)))
+    w.encrypt("secret", "secret")
+    w.document_meta.title = "Metadata is encrypted"
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    # do not decrypt at first
+    ref = r.root.raw_get("/Metadata", decrypt=EncryptedObjAccess.RAW)
+    raw_md = r.get_object(ref, never_decrypt=True)
+    assert b'Metadata is encrypted' not in raw_md.encoded_data
+
+    r = PdfFileReader(out)
+    r.decrypt("secret")
+    assert r.document_meta_view.title.value == "Metadata is encrypted"
