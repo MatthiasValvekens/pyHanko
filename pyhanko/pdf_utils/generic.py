@@ -1286,6 +1286,44 @@ class StreamObject(DictionaryObject):
         self._encoded_data = encoded_data
         self._handler = handler
 
+    def _implicit_decrypt_stream_content(self, handler, ref: Reference,
+                                         decrypted_entries: dict):
+        """
+        Internal method to handle decrypting streams that are encrypted
+        with the document's default encryption handler for streams and/or
+        embedded files (i.e. not with any custom crypt filters).
+
+        This routine is called deep in the object fetching stack, and you should
+        never invoke it yourself. It's defined as a method in
+        :class:`.StreamObject` because it needs to be able to preserve the
+        type (subclass) of the stream object on which it is called, in order
+        to properly feed into the logic surrounding metadata streams.
+        """
+
+        if handler is not None:
+            self._handler = handler
+        # can't deal with crypt filters here
+        if self._has_crypt_filter:
+            # in this case, dealing with encryption is delegated
+            # to the stream decoding process, so just pretend the data
+            # is decrypted.
+            # We pass a reference to the security handler below,
+            # which is sufficient to take care of /Crypt filters
+            # in the stream.
+            decrypted_data = self.encoded_data
+        else:
+            if self.is_embedded_file_stream:
+                cf = handler.get_embedded_file_filter()
+            else:
+                cf = handler.get_stream_filter()
+            local_key = cf.derive_object_key(ref.idnum, ref.generation)
+            decrypted_data = cf.decrypt(local_key, self.encoded_data)
+
+        return self.__class__(
+            decrypted_entries, encoded_data=decrypted_data,
+            handler=handler
+        )
+
     @property
     def _has_crypt_filter(self) -> bool:
         return '/Crypt' in (name for name, _ in self._filters())
@@ -1670,28 +1708,8 @@ class DecryptedObjectProxy(PdfObject):
                 for dictkey, value in obj.items()
             }
             if isinstance(obj, StreamObject):
-                # can't deal with crypt filters here
-                if obj._has_crypt_filter:
-                    # in this case, dealing with encryption is delegated
-                    # to the stream decoding process, so just pretend the data
-                    # is decrypted.
-                    # We pass a reference to the security handler below,
-                    # which is sufficient to take care of /Crypt filters
-                    # in the stream.
-                    decrypted_data = obj.encoded_data
-                else:
-                    if obj.is_embedded_file_stream:
-                        cf = handler.get_embedded_file_filter()
-                    else:
-                        cf = handler.get_stream_filter()
-                    local_key = cf.derive_object_key(
-                        container_ref.idnum, container_ref.generation
-                    )
-                    decrypted_data = cf.decrypt(local_key, obj.encoded_data)
-
-                decrypted = StreamObject(
-                    decrypted_entries, encoded_data=decrypted_data,
-                    handler=handler
+                decrypted = obj._implicit_decrypt_stream_content(
+                    handler, container_ref, decrypted_entries
                 )
             else:
                 decrypted = DictionaryObject(decrypted_entries)
