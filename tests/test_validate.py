@@ -171,7 +171,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
         expected = (
             '(CRL|OCSP response) indicates the end-entity certificate was '
-            'revoked at 22:42:35 on 2021-08-17, due to an unspecified reason'
+            'revoked at \\d\\d:\\d\\d:\\d\\d on \\d\\d\\d\\d-\\d\\d-\\d\\d'
+            ', due to an unspecified reason'
         )
         with self.assertRaisesRegex(RevokedError, expected):
             validate_path(context, path)
@@ -201,8 +202,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
             expected = (
                 '(CRL|OCSP response) indicates the end-entity certificate was '
-                'revoked at 22:42:35 on 2021-08-17, due to an unspecified '
-                'reason'
+                'revoked at \\d\\d:\\d\\d:\\d\\d on \\d\\d\\d\\d-\\d\\d-\\d\\d'
+                ', due to an unspecified reason'
             )
             with self.assertRaisesRegex(RevokedError, expected):
                 await async_validate_path(context, path)
@@ -229,8 +230,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
             expected = (
                 '(CRL|OCSP response) indicates the end-entity certificate was '
-                'revoked at 22:42:35 on 2021-08-17, due to an unspecified '
-                'reason'
+                'revoked at \\d\\d:\\d\\d:\\d\\d on \\d\\d\\d\\d-\\d\\d-\\d\\d'
+                ', due to an unspecified reason'
             )
             with self.assertRaisesRegex(RevokedError, expected):
                 await async_validate_path(context, path)
@@ -257,8 +258,8 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
 
             expected = (
                 '(CRL|OCSP response) indicates the end-entity certificate was '
-                'revoked at 22:42:35 on 2021-08-17, due to an unspecified '
-                'reason'
+                'revoked at \\d\\d:\\d\\d:\\d\\d on \\d\\d\\d\\d-\\d\\d-\\d\\d'
+                ', due to an unspecified reason'
             )
             with self.assertRaisesRegex(RevokedError, expected):
                 await async_validate_path(context, path)
