@@ -156,6 +156,7 @@ class MetadataStream(generic.StreamObject):
             encoded_data=encoded_data,
             handler=handler
         )
+        self['/Type'] = generic.pdf_name('/Metadata')
         self['/Subtype'] = generic.pdf_name('/XML')
 
     @classmethod
