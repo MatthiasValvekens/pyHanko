@@ -102,6 +102,7 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
                 )[0],
                 'combine_annotation': new_field_spec.combine_annotation,
                 'invis_settings': new_field_spec.invis_sig_settings,
+                'visible_settings': new_field_spec.visible_sig_settings
             }
         else:
             sig_field_kwargs = {}
