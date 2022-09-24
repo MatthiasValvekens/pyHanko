@@ -1,24 +1,23 @@
 import asyncio
 import warnings
-from typing import Optional, Iterable
+from typing import Iterable, Optional
 
 from asn1crypto import x509
 
+from ._types import type_name
 from .context import ValidationContext
+from .errors import InvalidCertificateError, PathBuildingError, ValidationError
 from .policy_decl import PKIXValidationParams
-from .errors import ValidationError, PathBuildingError, InvalidCertificateError
+from .util import pretty_message
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
-from .util import pretty_message
-from ._types import type_name
-
 
 __all__ = [
     '__version__',
     '__version_info__',
     'CertificateValidator',
     'ValidationContext',
-    'PKIXValidationParams'
+    'PKIXValidationParams',
 ]
 
 
@@ -37,11 +36,12 @@ class CertificateValidator:
     _params = None
 
     def __init__(
-            self,
-            end_entity_cert: x509.Certificate,
-            intermediate_certs: Optional[Iterable[x509.Certificate]] = None,
-            validation_context: Optional[ValidationContext] = None,
-            pkix_params: PKIXValidationParams = None):
+        self,
+        end_entity_cert: x509.Certificate,
+        intermediate_certs: Optional[Iterable[x509.Certificate]] = None,
+        validation_context: Optional[ValidationContext] = None,
+        pkix_params: PKIXValidationParams = None,
+    ):
         """
         :param end_entity_cert:
             An asn1crypto.x509.Certificate object X.509 end-entity
@@ -100,13 +100,15 @@ class CertificateValidator:
         exceptions = []
 
         if self._certificate.hash_algo in self._context.weak_hash_algos:
-            raise InvalidCertificateError(pretty_message(
-                '''
+            raise InvalidCertificateError(
+                pretty_message(
+                    '''
                 The X.509 certificate provided has a signature using the weak
                 hash algorithm %s
                 ''',
-                self._certificate.hash_algo
-            ))
+                    self._certificate.hash_algo,
+                )
+            )
 
         try:
             paths = await self._context.path_builder.async_build_paths(
@@ -114,17 +116,21 @@ class CertificateValidator:
             )
         except PathBuildingError:
             if self._certificate.self_signed in {'yes', 'maybe'}:
-                raise InvalidCertificateError(pretty_message(
-                    '''
+                raise InvalidCertificateError(
+                    pretty_message(
+                        '''
                     The X.509 certificate provided is self-signed - "%s"
                     ''',
-                    self._certificate.subject.human_friendly
-                ))
+                        self._certificate.subject.human_friendly,
+                    )
+                )
             raise
 
         for candidate_path in paths:
             try:
-                await async_validate_path(self._context, candidate_path, self._params)
+                await async_validate_path(
+                    self._context, candidate_path, self._params
+                )
                 self._path = candidate_path
                 return
             except ValidationError as e:
@@ -143,7 +149,9 @@ class CertificateValidator:
 
         raise exceptions[0]
 
-    def validate_usage(self, key_usage, extended_key_usage=None, extended_optional=False):
+    def validate_usage(
+        self, key_usage, extended_key_usage=None, extended_optional=False
+    ):
         """
         Validates the certificate path and that the certificate is valid for
         the key usage and extended key usage purposes specified.
@@ -202,7 +210,7 @@ class CertificateValidator:
         warnings.warn(
             "'validate_usage' is deprecated, use "
             "'async_validate_usage' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
         return asyncio.run(
@@ -211,8 +219,9 @@ class CertificateValidator:
             )
         )
 
-    async def async_validate_usage(self, key_usage, extended_key_usage=None,
-                                   extended_optional=False):
+    async def async_validate_usage(
+        self, key_usage, extended_key_usage=None, extended_optional=False
+    ):
         """
         Validates the certificate path and that the certificate is valid for
         the key usage and extended key usage purposes specified.
@@ -271,7 +280,7 @@ class CertificateValidator:
             self._certificate,
             key_usage,
             extended_key_usage,
-            extended_optional
+            extended_optional,
         )
         return self._path
 
@@ -299,7 +308,7 @@ class CertificateValidator:
 
         warnings.warn(
             "'validate_tls' is deprecated, use 'async_validate_tls' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
         return asyncio.run(self.async_validate_tls(hostname))

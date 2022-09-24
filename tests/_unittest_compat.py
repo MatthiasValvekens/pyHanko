@@ -2,9 +2,9 @@
 
 import asyncio
 import inspect
+import re
 import sys
 import unittest
-import re
 from unittest import TestCase
 
 _non_local = {'patched': False}
@@ -16,8 +16,8 @@ _non_local = {'patched': False}
 # License: https://github.com/python/cpython/blob/94b462686b7dfabbd69cc9401037d736d71c4dc2/LICENSE
 # Copyright (c) 2021 Python Software Foundation
 
-class _IsolatedAsyncioTestCase(TestCase):
 
+class _IsolatedAsyncioTestCase(TestCase):
     def __init__(self, methodName='runTest'):
         super().__init__(methodName)
         self._asyncioTestLoop = None
@@ -122,17 +122,20 @@ class _IsolatedAsyncioTestCase(TestCase):
                 task.cancel()
 
             loop.run_until_complete(
-                asyncio.gather(*to_cancel, loop=loop, return_exceptions=True))
+                asyncio.gather(*to_cancel, loop=loop, return_exceptions=True)
+            )
 
             for task in to_cancel:
                 if task.cancelled():
                     continue
                 if task.exception() is not None:
-                    loop.call_exception_handler({
-                        'message': 'unhandled exception during test shutdown',
-                        'exception': task.exception(),
-                        'task': task,
-                    })
+                    loop.call_exception_handler(
+                        {
+                            'message': 'unhandled exception during test shutdown',
+                            'exception': task.exception(),
+                            'task': task,
+                        }
+                    )
             # shutdown asyncgens
             loop.run_until_complete(loop.shutdown_asyncgens())
         finally:
@@ -173,7 +176,9 @@ def patch():
         unittest.TestCase.assertNotIn = _assert_not_in
     else:
         unittest.TestCase.assertRegex = unittest.TestCase.assertRegexpMatches
-        unittest.TestCase.assertRaisesRegex = unittest.TestCase.assertRaisesRegexp
+        unittest.TestCase.assertRaisesRegex = (
+            unittest.TestCase.assertRaisesRegexp
+        )
     _non_local['patched'] = True
 
 
@@ -190,7 +195,10 @@ def _format_message(msg, standard_msg):
 
 def _assert_greater_equal(self, a, b, msg=None):
     if not a >= b:
-        standard_msg = '%s not greater than or equal to %s' % (_safe_repr(a), _safe_repr(b))
+        standard_msg = '%s not greater than or equal to %s' % (
+            _safe_repr(a),
+            _safe_repr(b),
+        )
         self.fail(_format_message(msg, standard_msg))
 
 
@@ -202,7 +210,10 @@ def _assert_less(self, a, b, msg=None):
 
 def _assert_less_equal(self, a, b, msg=None):
     if not a <= b:
-        standard_msg = '%s not less than or equal to %s' % (_safe_repr(a), _safe_repr(b))
+        standard_msg = '%s not less than or equal to %s' % (
+            _safe_repr(a),
+            _safe_repr(b),
+        )
         self.fail(_format_message(msg, standard_msg))
 
 
@@ -215,13 +226,19 @@ def _assert_is_instance(self, obj, cls, msg=None):
 
 def _assert_in(self, member, container, msg=None):
     if member not in container:
-        standard_msg = '%s not found in %s' % (_safe_repr(member), _safe_repr(container))
+        standard_msg = '%s not found in %s' % (
+            _safe_repr(member),
+            _safe_repr(container),
+        )
         self.fail(_format_message(msg, standard_msg))
 
 
 def _assert_not_in(self, member, container, msg=None):
     if member in container:
-        standard_msg = '%s found in %s' % (_safe_repr(member), _safe_repr(container))
+        standard_msg = '%s found in %s' % (
+            _safe_repr(member),
+            _safe_repr(container),
+        )
         self.fail(_format_message(msg, standard_msg))
 
 
@@ -243,7 +260,14 @@ def _assert_raises(self, excClass, callableObj=None, *args, **kwargs):  # noqa
         callableObj(*args, **kwargs)
 
 
-def _assert_raises_regex(self, expected_exception, expected_regexp, callable_obj=None, *args, **kwargs):
+def _assert_raises_regex(
+    self,
+    expected_exception,
+    expected_regexp,
+    callable_obj=None,
+    *args,
+    **kwargs
+):
     if expected_regexp is not None:
         expected_regexp = re.compile(expected_regexp)
     context = _AssertRaisesContext(expected_exception, self, expected_regexp)
@@ -268,8 +292,7 @@ class _AssertRaisesContext(object):
                 exc_name = self.expected.__name__
             except AttributeError:
                 exc_name = str(self.expected)
-            raise self.failureException(
-                "{0} not raised".format(exc_name))
+            raise self.failureException("{0} not raised".format(exc_name))
         if not issubclass(exc_type, self.expected):
             # let unexpected exceptions pass through
             return False
@@ -280,7 +303,7 @@ class _AssertRaisesContext(object):
         expected_regexp = self.expected_regexp
         if not expected_regexp.search(str(exc_value)):
             raise self.failureException(
-                '"%s" does not match "%s"' %
-                (expected_regexp.pattern, str(exc_value))
+                '"%s" does not match "%s"'
+                % (expected_regexp.pattern, str(exc_value))
             )
         return True

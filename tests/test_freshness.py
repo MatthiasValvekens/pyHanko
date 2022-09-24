@@ -1,15 +1,19 @@
 import os
 import unittest
-from datetime import timedelta, datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from asn1crypto import x509, crl, ocsp
+from asn1crypto import crl, ocsp, x509
 
-from pyhanko_certvalidator.errors import PathValidationError, RevokedError
-from pyhanko_certvalidator.policy_decl import RevocationCheckingPolicy, \
-    CertRevTrustPolicy, FreshnessReqType
-from pyhanko_certvalidator.validate import async_validate_path
-from .test_validate import fixtures_dir
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.errors import PathValidationError, RevokedError
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    FreshnessReqType,
+    RevocationCheckingPolicy,
+)
+from pyhanko_certvalidator.validate import async_validate_path
+
+from .test_validate import fixtures_dir
 
 freshness_dir = os.path.join(fixtures_dir, 'freshness')
 certs = os.path.join(freshness_dir, 'certs')
@@ -31,7 +35,6 @@ def load_ocsp_response(fname) -> ocsp.OCSPResponse:
 
 
 class FreshnessTests(unittest.IsolatedAsyncioTestCase):
-
     async def test_cooldown_period_ok(self):
         req_policy = RevocationCheckingPolicy.from_legacy('require')
         policy = CertRevTrustPolicy(
@@ -46,18 +49,18 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         alice_ocsp = load_ocsp_response(
             os.path.join(freshness_dir, 'alice-2020-10-01.ors')
         )
-        root_crl = load_crl(
-            os.path.join(freshness_dir, 'root-2020-10-01.crl')
-        )
+        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
             use_poe_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)
 
     async def test_cooldown_period_too_early(self):
@@ -74,18 +77,18 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         alice_ocsp = load_ocsp_response(
             os.path.join(freshness_dir, 'alice-2020-10-01.ors')
         )
-        root_crl = load_crl(
-            os.path.join(freshness_dir, 'root-2020-10-01.crl')
-        )
+        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
             use_poe_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
             await async_validate_path(vc, path)
 
@@ -103,17 +106,17 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         alice_ocsp = load_ocsp_response(
             os.path.join(freshness_dir, 'alice-2020-10-01.ors')
         )
-        root_crl = load_crl(
-            os.path.join(freshness_dir, 'root-2020-10-01.crl')
-        )
+        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)
 
     async def test_use_delta_stale(self):
@@ -130,17 +133,17 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         alice_ocsp = load_ocsp_response(
             os.path.join(freshness_dir, 'alice-2020-10-01.ors')
         )
-        root_crl = load_crl(
-            os.path.join(freshness_dir, 'root-2020-10-01.crl')
-        )
+        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
             await async_validate_path(vc, path)
 
@@ -161,29 +164,31 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         alice_ocsp_recent = load_ocsp_response(
             os.path.join(freshness_dir, 'alice-2020-12-10.ors')
         )
-        root_crl = load_crl(
-            os.path.join(freshness_dir, 'root-2020-12-10.crl')
-        )
+        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-12-10.crl'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp_older, alice_ocsp_recent], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp_older, alice_ocsp_recent],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         with self.assertRaises(RevokedError):
             await async_validate_path(vc, path)
 
         # Double-check: the validator should be fooled if we don't include the
         #  second OCSP response because of the very lenient time delta allowed
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp_older], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp_older],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)
 
     async def test_discard_post_validation_time(self):
@@ -203,15 +208,15 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
         alice_ocsp_recent = load_ocsp_response(
             os.path.join(freshness_dir, 'alice-2020-12-10.ors')
         )
-        root_crl = load_crl(
-            os.path.join(freshness_dir, 'root-2020-11-29.crl')
-        )
+        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-11-29.crl'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm],
-            ocsps=[alice_ocsp_older, alice_ocsp_recent], crls=[root_crl],
+            trust_roots=[root],
+            other_certs=[interm],
+            ocsps=[alice_ocsp_older, alice_ocsp_recent],
+            crls=[root_crl],
             revinfo_policy=policy,
             moment=datetime(2020, 11, 29, tzinfo=timezone.utc),
         )
-        path, = await vc.path_builder.async_build_paths(alice)
+        (path,) = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)

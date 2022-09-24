@@ -1,0 +1,15 @@
+name: Lint
+
+on: ["push", "pull_request"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - run: pip install isort black
+      - name: Check import order
+        run: isort --profile black --line-length 80 --check pyhanko_certvalidator tests
+      - name: Run Black
+        run: black -S --line-length 80 --check pyhanko_certvalidator tests

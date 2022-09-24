@@ -8,10 +8,13 @@ from pyhanko_certvalidator.util import ConsList
 
 @dataclass
 class ValProcState:
-
-    def __init__(self, *, cert_path_stack: ConsList,
-                 ee_name_override: Optional[str] = None,
-                 is_side_validation: bool = False):
+    def __init__(
+        self,
+        *,
+        cert_path_stack: ConsList,
+        ee_name_override: Optional[str] = None,
+        is_side_validation: bool = False,
+    ):
         if cert_path_stack.head is None:
             raise ValueError("Empty path stack")
         self.index: int = 0
@@ -29,6 +32,7 @@ class ValProcState:
             the root doesn't count.
         """
         from pyhanko_certvalidator.path import ValidationPath
+
         path = self.cert_path_stack.head
         assert isinstance(path, ValidationPath)
         return path.pkix_len
@@ -45,6 +49,7 @@ class ValProcState:
         which could cause a naive implementation to recurse.
         """
         from pyhanko_certvalidator.path import ValidationPath
+
         path: ValidationPath
         for path in self.cert_path_stack:
             cert = path.get_ee_cert_safe()
@@ -65,9 +70,7 @@ class ValProcState:
             result = "certificate"
         elif not self.is_ee_cert:
             prefix &= def_interm
-            result = (
-                f'intermediate certificate {self.index}'
-            )
+            result = f'intermediate certificate {self.index}'
         elif self.ee_name_override is not None:
             result = self.ee_name_override
         else:

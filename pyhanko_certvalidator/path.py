@@ -1,14 +1,18 @@
 # coding: utf-8
 import itertools
-from typing import FrozenSet, Optional, Iterable, Union
 from dataclasses import dataclass
+from typing import FrozenSet, Iterable, Optional, Union
 
-from asn1crypto import x509, cms
+from asn1crypto import cms, x509
 
 from .asn1_types import AAControls
-from .authority import TrustAnchor, CertTrustAnchor, Authority, \
-    AuthorityWithCert
-from .util import get_issuer_dn, get_ac_extension_value
+from .authority import (
+    Authority,
+    AuthorityWithCert,
+    CertTrustAnchor,
+    TrustAnchor,
+)
+from .util import get_ac_extension_value, get_issuer_dn
 
 
 @dataclass(frozen=True)
@@ -42,8 +46,12 @@ class ValidationPath:
 
     _path_aa_controls = None
 
-    def __init__(self, trust_anchor: TrustAnchor,
-                 interm: Iterable[x509.Certificate], leaf: Optional[Leaf]):
+    def __init__(
+        self,
+        trust_anchor: TrustAnchor,
+        interm: Iterable[x509.Certificate],
+        leaf: Optional[Leaf],
+    ):
 
         if interm and not leaf:
             raise ValueError("Leafless paths cannot have intermediate certs")
@@ -157,7 +165,9 @@ class ValidationPath:
                     continue
                 return authority
 
-        raise LookupError('Unable to find the issuer of the certificate specified')
+        raise LookupError(
+            'Unable to find the issuer of the certificate specified'
+        )
 
     def truncate_to_and_append(self, cert: x509.Certificate, new_leaf: Leaf):
         """
@@ -193,7 +203,7 @@ class ValidationPath:
         if cert_index is None:
             raise LookupError('Unable to find the certificate specified')
         return ValidationPath(
-            self._root, interm=certs[:cert_index + 1], leaf=new_leaf
+            self._root, interm=certs[: cert_index + 1], leaf=new_leaf
         )
 
     # TODO generalise this to ACs as well?
@@ -234,19 +244,18 @@ class ValidationPath:
                     break
 
         if issuer_index is None:
-            raise LookupError('Unable to find the issuer of the certificate specified')
+            raise LookupError(
+                'Unable to find the issuer of the certificate specified'
+            )
 
-        return ValidationPath(
-            self._root, certs[:issuer_index + 1], leaf=cert
-        )
+        return ValidationPath(self._root, certs[: issuer_index + 1], leaf=cert)
 
     def copy_and_append(self, cert: Leaf):
         new_certs = self._interm[:]
         if self._leaf:
             new_certs.append(self._leaf)
         return ValidationPath(
-            trust_anchor=self._root,
-            interm=new_certs, leaf=cert
+            trust_anchor=self._root, interm=new_certs, leaf=cert
         )
 
     def _set_qualified_policies(self, policies):
@@ -270,7 +279,8 @@ class ValidationPath:
             # This is appropriate in PKIX-land (see RFC 5280, § 6.2 as
             # updated in RFC 6818, § 4)
             return all(
-                ctrl.accept(attr_id) for ctrl in aa_controls_extensions
+                ctrl.accept(attr_id)
+                for ctrl in aa_controls_extensions
                 # None check for defensiveness (already enforced by validation
                 # algorithm), and to (potentially) skip the root
                 if ctrl is not None
@@ -304,8 +314,7 @@ class ValidationPath:
         # if it is supplied as a cert
         root = self._root.authority
         from_root = (
-            (root.certificate,)
-            if isinstance(root, AuthorityWithCert) else ()
+            (root.certificate,) if isinstance(root, AuthorityWithCert) else ()
         )
         leaf = self._leaf
         from_leaf = (leaf,) if isinstance(leaf, x509.Certificate) else ()

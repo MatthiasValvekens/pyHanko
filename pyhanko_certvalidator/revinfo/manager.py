@@ -1,15 +1,18 @@
-from typing import Iterable, Optional, List
+from typing import Iterable, List, Optional
 
 from asn1crypto import crl, ocsp, x509
 
 from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
+from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
-from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer,\
-    sort_freshest_first
-from pyhanko_certvalidator.ltv.poe import POEManager
+from pyhanko_certvalidator.revinfo.archival import (
+    CRLContainer,
+    OCSPContainer,
+    sort_freshest_first,
+)
 
 
 class RevinfoManager:
@@ -31,11 +34,15 @@ class RevinfoManager:
         If ``None``, no fetching will be performed.
     """
 
-    def __init__(self, certificate_registry: CertificateRegistry,
-                 poe_manager: POEManager,
-                 revinfo_policy: CertRevTrustPolicy,
-                 crls: Iterable[CRLContainer], ocsps: Iterable[OCSPContainer],
-                 fetchers: Optional[Fetchers] = None):
+    def __init__(
+        self,
+        certificate_registry: CertificateRegistry,
+        poe_manager: POEManager,
+        revinfo_policy: CertRevTrustPolicy,
+        crls: Iterable[CRLContainer],
+        ocsps: Iterable[OCSPContainer],
+        fetchers: Optional[Fetchers] = None,
+    ):
         self._certificate_registry = certificate_registry
         self._revinfo_policy = revinfo_policy
         self._poe_manager = poe_manager
@@ -190,8 +197,9 @@ class RevinfoManager:
         conts = [CRLContainer(crl_data) for crl_data in crls]
         return conts + self._crls
 
-    async def async_retrieve_ocsps(self, cert, authority: Authority) \
-            -> List[OCSPContainer]:
+    async def async_retrieve_ocsps(
+        self, cert, authority: Authority
+    ) -> List[OCSPContainer]:
         """
         .. versionadded:: 0.20.0
 
@@ -214,8 +222,9 @@ class RevinfoManager:
             for resp in fetchers.ocsp_fetcher.fetched_responses_for_cert(cert)
         ]
         if not ocsps:
-            ocsp_response_data \
-                = await fetchers.ocsp_fetcher.fetch(cert, authority)
+            ocsp_response_data = await fetchers.ocsp_fetcher.fetch(
+                cert, authority
+            )
             ocsps = OCSPContainer.load_multi(ocsp_response_data)
 
             # Responses can contain certificates that are useful in

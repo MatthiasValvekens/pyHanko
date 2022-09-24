@@ -37,7 +37,6 @@ class CRLFetchError(CRLValidationError):
 
 
 class CRLValidationIndeterminateError(CRLValidationError):
-
     @property
     def failures(self):
         return self.args[1]
@@ -54,7 +53,6 @@ class OCSPNoMatchesError(OCSPValidationError):
 
 
 class OCSPValidationIndeterminateError(OCSPValidationError):
-
     @property
     def failures(self):
         return self.args[1]
@@ -73,13 +71,12 @@ TPathErr = TypeVar('TPathErr', bound='PathValidationError')
 
 
 class PathValidationError(ValidationError):
-
     @classmethod
     def from_state(cls, msg, proc_state: ValProcState) -> TPathErr:
         return cls(
             msg,
             is_ee_cert=proc_state.is_ee_cert,
-            is_side_validation=proc_state.is_side_validation
+            is_side_validation=proc_state.is_side_validation,
         )
 
     def __init__(self, msg, *, is_ee_cert: bool, is_side_validation: bool):
@@ -90,10 +87,14 @@ class PathValidationError(ValidationError):
 
 
 class RevokedError(PathValidationError):
-
     @classmethod
-    def format(cls, reason: CRLReason, revocation_dt: datetime,
-               revinfo_type: str, proc_state: ValProcState):
+    def format(
+        cls,
+        reason: CRLReason,
+        revocation_dt: datetime,
+        revinfo_type: str,
+        proc_state: ValProcState,
+    ):
         reason_str = reason.human_friendly
         date = revocation_dt.strftime('%Y-%m-%d')
         time = revocation_dt.strftime('%H:%M:%S')
@@ -103,13 +104,19 @@ class RevokedError(PathValidationError):
         )
         return RevokedError(msg, reason, revocation_dt, proc_state)
 
-    def __init__(self, msg, reason: CRLReason, revocation_dt: datetime,
-                 proc_state: ValProcState):
+    def __init__(
+        self,
+        msg,
+        reason: CRLReason,
+        revocation_dt: datetime,
+        proc_state: ValProcState,
+    ):
         self.reason = reason
         self.revocation_dt = revocation_dt
         super().__init__(
-            msg, is_ee_cert=proc_state.is_ee_cert,
-            is_side_validation=proc_state.is_side_validation
+            msg,
+            is_ee_cert=proc_state.is_ee_cert,
+            is_side_validation=proc_state.is_side_validation,
         )
 
 
@@ -126,7 +133,6 @@ class NotYetValidError(PathValidationError):
 
 
 class InvalidCertificateError(PathValidationError):
-
     def __init__(self, msg, is_ee_cert=True, is_side_validation=False):
         super().__init__(
             msg, is_ee_cert=is_ee_cert, is_side_validation=is_side_validation

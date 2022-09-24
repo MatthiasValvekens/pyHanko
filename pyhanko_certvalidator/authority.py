@@ -2,13 +2,13 @@ import abc
 from dataclasses import dataclass
 from typing import Optional
 
-from asn1crypto import x509, keys
+from asn1crypto import keys, x509
 
 from .name_trees import process_general_subtrees
 from .policy_decl import PKIXValidationParams
 
-
 # TODO add support for roots that are limited in time?
+
 
 @dataclass(frozen=True)
 class TrustQualifiers:
@@ -103,8 +103,9 @@ class TrustAnchor:
     Equality of trust roots reduces to equality of authorities.
     """
 
-    def __init__(self, authority: Authority,
-                 quals: Optional[TrustQualifiers] = None):
+    def __init__(
+        self, authority: Authority, quals: Optional[TrustQualifiers] = None
+    ):
         self._authority = authority
         self._quals = quals
 
@@ -120,8 +121,10 @@ class TrustAnchor:
         return self._quals or TrustQualifiers()
 
     def __eq__(self, other):
-        return isinstance(other, TrustAnchor) \
-               and other._authority == self._authority
+        return (
+            isinstance(other, TrustAnchor)
+            and other._authority == self._authority
+        )
 
     def __hash__(self):
         return hash(self._authority)
@@ -162,9 +165,9 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
     if cert.certificate_policies_value is not None:
         ext_found = True
         policies_val: x509.CertificatePolicies = cert.certificate_policies_value
-        acceptable_policies = frozenset([
-            pol_info['policy_identifier'].dotted for pol_info in policies_val
-        ])
+        acceptable_policies = frozenset(
+            [pol_info['policy_identifier'].dotted for pol_info in policies_val]
+        )
 
     params = None
     if ext_found:
@@ -176,7 +179,7 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
             #  let's assume that they want the policies to be enforced.
             initial_explicit_policy=acceptable_policies is not None,
             initial_permitted_subtrees=permitted_subtrees,
-            initial_excluded_subtrees=excluded_subtrees
+            initial_excluded_subtrees=excluded_subtrees,
         )
 
     return TrustQualifiers(
@@ -191,6 +194,7 @@ class AuthorityWithCert(Authority):
     :param cert:
         The certificate.
     """
+
     def __init__(self, cert: x509.Certificate):
         self._cert = cert
 
@@ -237,9 +241,12 @@ class CertTrustAnchor(TrustAnchor):
         content if explicit ones are not provided. Defaults to ``False``.
     """
 
-    def __init__(self, cert: x509.Certificate,
-                 quals: Optional[TrustQualifiers] = None,
-                 derive_default_quals_from_cert: bool = False):
+    def __init__(
+        self,
+        cert: x509.Certificate,
+        quals: Optional[TrustQualifiers] = None,
+        derive_default_quals_from_cert: bool = False,
+    ):
         authority = AuthorityWithCert(cert)
         self._cert = cert
         super().__init__(authority, quals)

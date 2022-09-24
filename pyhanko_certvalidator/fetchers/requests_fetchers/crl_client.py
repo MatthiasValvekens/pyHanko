@@ -1,27 +1,29 @@
+import logging
 from typing import Iterable, Union
 
-import logging
 import requests
-from asn1crypto import crl, x509, pem, cms
+from asn1crypto import cms, crl, pem, x509
 
 from ... import errors
-from .util import RequestsFetcherMixin
+from ...util import get_relevant_crl_dps, issuer_serial
 from ..api import CRLFetcher
 from ..common_utils import crl_job_results_as_completed
-from ...util import issuer_serial, get_relevant_crl_dps
+from .util import RequestsFetcherMixin
 
 logger = logging.getLogger(__name__)
 
 
 class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._by_cert = {}
 
-    async def fetch(self,
-                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                    *, use_deltas=True):
+    async def fetch(
+        self,
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        *,
+        use_deltas=True,
+    ):
         iss_serial = issuer_serial(cert)
         try:
             return self._by_cert[iss_serial]
@@ -49,6 +51,7 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
                 raise errors.CRLFetchError(
                     f"Failure to fetch CRL from URL {url}"
                 ) from e
+
         return await self._perform_fetch(url, task)
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):

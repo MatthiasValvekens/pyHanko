@@ -1,9 +1,12 @@
 from .api import *
 
 __all__ = [
-    'Fetchers', 'FetcherBackend',
-    'OCSPFetcher', 'CRLFetcher', 'CertificateFetcher',
-    'default_fetcher_backend'
+    'Fetchers',
+    'FetcherBackend',
+    'OCSPFetcher',
+    'CRLFetcher',
+    'CertificateFetcher',
+    'default_fetcher_backend',
 ]
 
 
@@ -15,4 +18,5 @@ def default_fetcher_backend() -> FetcherBackend:
     """
 
     from .requests_fetchers import RequestsFetcherBackend
+
     return RequestsFetcherBackend()

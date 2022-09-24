@@ -1,23 +1,27 @@
 # coding: utf-8
 
-import unittest
 import os
+import unittest
 
 from asn1crypto import pem, x509
 
+from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
-from pyhanko_certvalidator.registry import CertificateRegistry, PathBuilder, SimpleTrustManager
-from pyhanko_certvalidator.context import ValidationContext
+from pyhanko_certvalidator.registry import (
+    CertificateRegistry,
+    PathBuilder,
+    SimpleTrustManager,
+)
 from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
-from.constants import TEST_REQUEST_TIMEOUT
+
+from .constants import TEST_REQUEST_TIMEOUT
 
 tests_root = os.path.dirname(__file__)
 fixtures_dir = os.path.join(tests_root, 'fixtures')
 
 
 class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
-
     def _get_cert(self, cert_file):
         with open(cert_file, 'rb') as f:
             file_bytes = f.read()
@@ -31,16 +35,14 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
         )
         intermediate = self._get_cert(cert_file)
 
-        trust_roots = [self._get_cert(
-            os.path.join(fixtures_dir, 'digicert-root-g5.crt')
-        )]
+        trust_roots = [
+            self._get_cert(os.path.join(fixtures_dir, 'digicert-root-g5.crt'))
+        ]
         path_builder = PathBuilder(
             registry=CertificateRegistry.build(
                 cert_fetcher=fetchers.cert_fetcher
             ),
-            trust_manager=SimpleTrustManager.build(
-                trust_roots=trust_roots
-            )
+            trust_manager=SimpleTrustManager.build(trust_roots=trust_roots),
         )
         paths = await path_builder.async_build_paths(intermediate)
         path = paths[0]
@@ -50,8 +52,7 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
             intermediate, authority
         )
         context = ValidationContext(
-            trust_roots=trust_roots,
-            ocsps=[ocsp_response], fetchers=fetchers
+            trust_roots=trust_roots, ocsps=[ocsp_response], fetchers=fetchers
         )
         await verify_ocsp_response(intermediate, path, context)
 
@@ -71,9 +72,7 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
             registry=CertificateRegistry.build(
                 cert_fetcher=fetchers.cert_fetcher
             ),
-            trust_manager=SimpleTrustManager.build(
-                trust_roots=[root]
-            )
+            trust_manager=SimpleTrustManager.build(trust_roots=[root]),
         )
         paths = await path_builder.async_build_paths(intermediate)
         path = paths[0]

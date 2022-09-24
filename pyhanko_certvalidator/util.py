@@ -1,13 +1,19 @@
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import Union, Optional, List
+from typing import List, Optional, Union
 
-from asn1crypto import x509, cms, core, algos
+from asn1crypto import algos, cms, core, x509
 from asn1crypto.keys import PublicKeyInfo
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding, dsa, ec, \
-    ed25519, ed448
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import (
+    dsa,
+    ec,
+    ed448,
+    ed25519,
+    padding,
+    rsa,
+)
 
 
 def pretty_message(string, *params):
@@ -43,12 +49,12 @@ def pretty_message(string, *params):
     return output
 
 
-def extract_dir_name(names: x509.GeneralNames,
-                     err_msg_prefix: str) -> x509.Name:
+def extract_dir_name(
+    names: x509.GeneralNames, err_msg_prefix: str
+) -> x509.Name:
     try:
         name: x509.Name = next(
-            gname.chosen for gname in names
-            if gname.name == 'directory_name'
+            gname.chosen for gname in names if gname.name == 'directory_name'
         )
     except StopIteration:
         raise NotImplementedError(
@@ -58,8 +64,9 @@ def extract_dir_name(names: x509.GeneralNames,
     return name.untag()
 
 
-def extract_ac_issuer_dir_name(attr_cert: cms.AttributeCertificateV2) \
-        -> x509.Name:
+def extract_ac_issuer_dir_name(
+    attr_cert: cms.AttributeCertificateV2,
+) -> x509.Name:
     issuer_rec = attr_cert['ac_info']['issuer']
     if issuer_rec.name == 'v1_form':
         aa_names = issuer_rec.chosen
@@ -72,28 +79,32 @@ def extract_ac_issuer_dir_name(attr_cert: cms.AttributeCertificateV2) \
     return extract_dir_name(aa_names, "Could not extract AC issuer name")
 
 
-def get_issuer_dn(cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
-        -> x509.Name:
+def get_issuer_dn(
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+) -> x509.Name:
     if isinstance(cert, x509.Certificate):
         return cert.issuer
     else:
         return extract_ac_issuer_dir_name(cert)
 
 
-def issuer_serial(cert: Union[x509.Certificate, cms.AttributeCertificateV2]) \
-        -> bytes:
+def issuer_serial(
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+) -> bytes:
     if isinstance(cert, x509.Certificate):
         return cert.issuer_serial
     else:
         issuer_name = extract_ac_issuer_dir_name(cert)
         result_bytes = b'%s:%d' % (
-            issuer_name.sha256, cert['ac_info']['serial_number'].native
+            issuer_name.sha256,
+            cert['ac_info']['serial_number'].native,
         )
         return result_bytes
 
 
-def get_ac_extension_value(attr_cert: cms.AttributeCertificateV2,
-                           ext_name: str):
+def get_ac_extension_value(
+    attr_cert: cms.AttributeCertificateV2, ext_name: str
+):
     try:
         return next(
             ext['extn_value'].parsed
@@ -123,21 +134,23 @@ def _get_absolute_http_crls(dps: Optional[x509.CRLDistributionPoints]):
                 yield distribution_point
 
 
-def _get_ac_crl_dps(attr_cert: cms.AttributeCertificateV2) \
-        -> List[x509.DistributionPoint]:
+def _get_ac_crl_dps(
+    attr_cert: cms.AttributeCertificateV2,
+) -> List[x509.DistributionPoint]:
     dps_ext = get_ac_extension_value(attr_cert, 'crl_distribution_points')
     return list(_get_absolute_http_crls(dps_ext))
 
 
-def _get_ac_delta_crl_dps(attr_cert: cms.AttributeCertificateV2) \
-        -> List[x509.DistributionPoint]:
+def _get_ac_delta_crl_dps(
+    attr_cert: cms.AttributeCertificateV2,
+) -> List[x509.DistributionPoint]:
     delta_dps_ext = get_ac_extension_value(attr_cert, 'freshest_crl')
     return list(_get_absolute_http_crls(delta_dps_ext))
 
 
 def get_relevant_crl_dps(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        *, use_deltas) -> List[x509.DistributionPoint]:
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2], *, use_deltas
+) -> List[x509.DistributionPoint]:
     is_pkc = isinstance(cert, x509.Certificate)
 
     if is_pkc:
@@ -172,7 +185,12 @@ def _get_http_ocsp_urls(aia_ext):
             if location.name != 'uniform_resource_identifier':
                 continue
             url = location.native
-            if url.lower().startswith(('http://', 'https://', )):
+            if url.lower().startswith(
+                (
+                    'http://',
+                    'https://',
+                )
+            ):
                 yield url
 
 
@@ -186,7 +204,8 @@ def get_ocsp_urls(cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
 
 
 def get_declared_revinfo(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+):
 
     if isinstance(cert, x509.Certificate):
         aia = cert.authority_information_access_value
@@ -207,13 +226,20 @@ def get_declared_revinfo(
     return has_crl, has_ocsp
 
 
-def validate_sig(signature: bytes, signed_data: bytes,
-                 public_key_info: PublicKeyInfo,
-                 sig_algo: str, hash_algo: str, parameters=None):
+def validate_sig(
+    signature: bytes,
+    signed_data: bytes,
+    public_key_info: PublicKeyInfo,
+    sig_algo: str,
+    hash_algo: str,
+    parameters=None,
+):
     from .errors import DSAParametersUnavailable, PSSParameterMismatch
 
-    if sig_algo == 'dsa' and \
-            public_key_info['algorithm']['parameters'].native is None:
+    if (
+        sig_algo == 'dsa'
+        and public_key_info['algorithm']['parameters'].native is None
+    ):
         raise DSAParametersUnavailable(
             "DSA public key parameters were not provided."
         )
@@ -250,8 +276,7 @@ def validate_sig(signature: bytes, signed_data: bytes,
 
         mgf_md = getattr(hashes, mgf_md_name.upper())()
         pss_padding = padding.PSS(
-            mgf=padding.MGF1(algorithm=mgf_md),
-            salt_length=salt_len
+            mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
         )
         hash_algo = getattr(hashes, hash_algo.upper())()
         pub_key.verify(signature, signed_data, pss_padding, hash_algo)

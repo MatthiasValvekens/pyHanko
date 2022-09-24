@@ -1,18 +1,18 @@
 # coding: utf-8
 
 import abc
-from collections import defaultdict
-from typing import List, Optional, Iterable, Union, Iterator
 import asyncio
+from collections import defaultdict
+from typing import Iterable, Iterator, List, Optional, Union
 
 from asn1crypto import x509
 from oscrypto import trust_list
 
-from .util import pretty_message, ConsList
-from .authority import TrustAnchor, CertTrustAnchor
-from .fetchers import CertificateFetcher
+from .authority import CertTrustAnchor, TrustAnchor
 from .errors import PathBuildingError
+from .fetchers import CertificateFetcher
 from .path import ValidationPath
+from .util import ConsList, pretty_message
 
 
 class CertificateCollection(abc.ABC):
@@ -184,8 +184,9 @@ class TrustManager:
         """
         raise NotImplementedError
 
-    def find_potential_issuers(self, cert: x509.Certificate) \
-            -> Iterator[TrustAnchor]:
+    def find_potential_issuers(
+        self, cert: x509.Certificate
+    ) -> Iterator[TrustAnchor]:
         """
         Find potential issuers that might have (directly) issued
         a particular certificate.
@@ -211,9 +212,10 @@ class SimpleTrustManager(TrustManager):
 
     @classmethod
     def build(
-            cls, trust_roots: Optional[TrustRootList] = None,
-            extra_trust_roots: Optional[TrustRootList] = None) \
-            -> 'SimpleTrustManager':
+        cls,
+        trust_roots: Optional[TrustRootList] = None,
+        extra_trust_roots: Optional[TrustRootList] = None,
+    ) -> 'SimpleTrustManager':
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -240,8 +242,7 @@ class SimpleTrustManager(TrustManager):
             manager._register_root(trust_root)
         return manager
 
-    def _register_root(self,
-                       trust_root: Union[TrustAnchor, x509.Certificate]):
+    def _register_root(self, trust_root: Union[TrustAnchor, x509.Certificate]):
         if isinstance(trust_root, TrustAnchor):
             anchor = trust_root
         else:
@@ -249,8 +250,7 @@ class SimpleTrustManager(TrustManager):
         if anchor not in self._roots:
             authority = anchor.authority
             self._roots.add(anchor)
-            self._root_subject_map[authority.name.hashable] \
-                .append(anchor)
+            self._root_subject_map[authority.name.hashable].append(anchor)
 
     def is_root(self, cert: x509.Certificate):
         """
@@ -267,12 +267,14 @@ class SimpleTrustManager(TrustManager):
 
     def iter_certs(self) -> Iterator[x509.Certificate]:
         return (
-            root.certificate for root in self._roots
+            root.certificate
+            for root in self._roots
             if isinstance(root, CertTrustAnchor)
         )
 
-    def find_potential_issuers(self, cert: x509.Certificate) \
-            -> Iterator[TrustAnchor]:
+    def find_potential_issuers(
+        self, cert: x509.Certificate
+    ) -> Iterator[TrustAnchor]:
         issuer_hashable = cert.issuer.hashable
         root: TrustAnchor
         for root in self._root_subject_map[issuer_hashable]:
@@ -293,10 +295,11 @@ class CertificateRegistry(SimpleCertificateStore):
 
     @classmethod
     def build(
-            cls,
-            certs: Iterable[x509.Certificate] = (),
-            *,
-            cert_fetcher: Optional[CertificateFetcher] = None):
+        cls,
+        certs: Iterable[x509.Certificate] = (),
+        *,
+        cert_fetcher: Optional[CertificateFetcher] = None
+    ):
         """
         Convenience method to set up a certificate registry and import
         certs into it.
@@ -317,8 +320,11 @@ class CertificateRegistry(SimpleCertificateStore):
         result.fetcher = cert_fetcher
         return result
 
-    def retrieve_by_name(self, name: x509.Name,
-                         first_certificate: Optional[x509.Certificate] = None):
+    def retrieve_by_name(
+        self,
+        name: x509.Name,
+        first_certificate: Optional[x509.Certificate] = None,
+    ):
         """
         Retrieves a list certs via their subject name
 
@@ -344,9 +350,9 @@ class CertificateRegistry(SimpleCertificateStore):
             output.insert(0, first)
         return output
 
-    def find_potential_issuers(self, cert: x509.Certificate,
-                               trust_manager: TrustManager) \
-            -> Iterator[Union[TrustAnchor, x509.Certificate]]:
+    def find_potential_issuers(
+        self, cert: x509.Certificate, trust_manager: TrustManager
+    ) -> Iterator[Union[TrustAnchor, x509.Certificate]]:
 
         issuer_hashable = cert.issuer.hashable
 
@@ -384,8 +390,9 @@ class PathBuilder:
     Class to handle path building.
     """
 
-    def __init__(self, trust_manager: TrustManager,
-                 registry: CertificateRegistry):
+    def __init__(
+        self, trust_manager: TrustManager, registry: CertificateRegistry
+    ):
         self.trust_manager = trust_manager
         self.registry = registry
 
@@ -410,8 +417,7 @@ class PathBuilder:
         """
         return asyncio.run(self.async_build_paths(end_entity_cert))
 
-    async def async_build_paths(
-            self, end_entity_cert: x509.Certificate):
+    async def async_build_paths(self, end_entity_cert: x509.Certificate):
         """
         Builds a list of ValidationPath objects from a certificate in the
         operating system trust store to the end-entity certificate
@@ -440,19 +446,26 @@ class PathBuilder:
         if len(paths) == 0:
             cert_name = end_entity_cert.subject.human_friendly
             missing_issuer_name = failed_paths[0].head.issuer.human_friendly
-            raise PathBuildingError(pretty_message(
-                '''
+            raise PathBuildingError(
+                pretty_message(
+                    '''
                 Unable to build a validation path for the certificate "%s" - no
                 issuer matching "%s" was found
                 ''',
-                cert_name,
-                missing_issuer_name
-            ))
+                    cert_name,
+                    missing_issuer_name,
+                )
+            )
 
         return paths
 
-    async def _walk_issuers(self, path: ConsList, certs_seen: ConsList,
-                            paths: List[ValidationPath], failed_paths):
+    async def _walk_issuers(
+        self,
+        path: ConsList,
+        certs_seen: ConsList,
+        paths: List[ValidationPath],
+        failed_paths,
+    ):
         """
         Recursively looks through the list of known certificates for the issuer
         of the certificate specified, stopping once the certificate in question
@@ -498,7 +511,9 @@ class PathBuilder:
 
         if not new_branches:
             # attempt to download certs if there's nothing in the context
-            async for issuer in self.registry.fetch_missing_potential_issuers(cert):
+            async for issuer in self.registry.fetch_missing_potential_issuers(
+                cert
+            ):
                 cert_id = issuer.issuer_serial
                 if cert_id in certs_seen:
                     continue
@@ -524,12 +539,14 @@ class LayeredCertificateStore(CertificateCollection):
         def _gen():
             for store in self._stores:
                 yield from store.retrieve_many_by_key_identifier(key_identifier)
+
         return list(_gen())
 
     def retrieve_by_name(self, name: x509.Name):
         def _gen():
             for store in self._stores:
                 yield from store.retrieve_by_name(name)
+
         return list(_gen())
 
     def retrieve_by_issuer_serial(self, issuer_serial):

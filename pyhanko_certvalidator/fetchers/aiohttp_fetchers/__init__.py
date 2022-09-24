@@ -1,18 +1,18 @@
 import aiohttp
 
-from .ocsp_client import AIOHttpOCSPFetcher
-from .crl_client import AIOHttpCRLFetcher
-from .cert_fetch_client import AIOHttpCertificateFetcher
 from ..api import FetcherBackend, Fetchers
+from .cert_fetch_client import AIOHttpCertificateFetcher
+from .crl_client import AIOHttpCRLFetcher
+from .ocsp_client import AIOHttpOCSPFetcher
 from .util import LazySession
 
 __all__ = ['AIOHttpFetcherBackend']
 
 
 class AIOHttpFetcherBackend(FetcherBackend):
-
-    def __init__(self, session: aiohttp.ClientSession = None,
-                 per_request_timeout=10):
+    def __init__(
+        self, session: aiohttp.ClientSession = None, per_request_timeout=10
+    ):
         self.session = session or LazySession()
         self.per_request_timeout = per_request_timeout
 
@@ -24,7 +24,7 @@ class AIOHttpFetcherBackend(FetcherBackend):
             crl_fetcher=AIOHttpCRLFetcher(session, per_request_timeout=to),
             cert_fetcher=AIOHttpCertificateFetcher(
                 session, per_request_timeout=to
-            )
+            ),
         )
 
     async def close(self):

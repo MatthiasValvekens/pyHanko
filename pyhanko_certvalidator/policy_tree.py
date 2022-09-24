@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Optional, Iterable
+from typing import Iterable, Optional
 
 from asn1crypto import x509
 
@@ -8,10 +8,12 @@ from pyhanko_certvalidator.errors import PathValidationError
 from pyhanko_certvalidator.util import pretty_message
 
 
-def update_policy_tree(certificate_policies,
-                       valid_policy_tree: 'PolicyTreeRoot', depth: int,
-                       any_policy_uninhibited: bool) \
-        -> Optional['PolicyTreeRoot']:
+def update_policy_tree(
+    certificate_policies,
+    valid_policy_tree: 'PolicyTreeRoot',
+    depth: int,
+    any_policy_uninhibited: bool,
+) -> Optional['PolicyTreeRoot']:
     """
     Internal method to update the policy tree during RFC 5280 validation.
     """
@@ -42,17 +44,13 @@ def update_policy_tree(certificate_policies,
                 continue
             policy_id_match = True
             node.add_child(
-                policy_identifier,
-                policy_qualifiers,
-                {policy_identifier}
+                policy_identifier, policy_qualifiers, {policy_identifier}
             )
 
         # Step 2 d 1 ii
         if not policy_id_match and parent_any_policy:
             parent_any_policy.add_child(
-                policy_identifier,
-                policy_qualifiers,
-                {policy_identifier}
+                policy_identifier, policy_qualifiers, {policy_identifier}
             )
 
     # Step 2 d 2
@@ -63,7 +61,7 @@ def update_policy_tree(certificate_policies,
                     node.add_child(
                         expected_policy_identifier,
                         cert_any_policy['policy_qualifiers'],
-                        {expected_policy_identifier}
+                        {expected_policy_identifier},
                     )
 
     # Step 2 d 3
@@ -80,8 +78,9 @@ def _prune_policy_tree(valid_policy_tree, depth):
     return valid_policy_tree
 
 
-def enumerate_policy_mappings(mappings: Iterable[x509.PolicyMapping],
-                              proc_state: ValProcState):
+def enumerate_policy_mappings(
+    mappings: Iterable[x509.PolicyMapping], proc_state: ValProcState
+):
     """
     Internal function to process policy mapping extension values into
     a Python dictionary mapping issuer domain policies to the corresponding
@@ -95,21 +94,27 @@ def enumerate_policy_mappings(mappings: Iterable[x509.PolicyMapping],
         policy_map[issuer_domain_policy].add(subject_domain_policy)
 
         # Step 3 a
-        if issuer_domain_policy == 'any_policy' \
-                or subject_domain_policy == 'any_policy':
-            raise PathValidationError.from_state(pretty_message(
-                '''
+        if (
+            issuer_domain_policy == 'any_policy'
+            or subject_domain_policy == 'any_policy'
+        ):
+            raise PathValidationError.from_state(
+                pretty_message(
+                    '''
                 The path could not be validated because %s contains
                 a policy mapping for the "any policy"
                 ''',
-                proc_state.describe_cert(),
-            ), proc_state)
+                    proc_state.describe_cert(),
+                ),
+                proc_state,
+            )
 
     return policy_map
 
 
-def apply_policy_mapping(policy_map, valid_policy_tree, depth: int,
-                         policy_mapping_uninhibited: bool):
+def apply_policy_mapping(
+    policy_map, valid_policy_tree, depth: int, policy_mapping_uninhibited: bool
+):
     """
     Internal function to apply the policy mapping to the current policy tree
     in accordance with the algorithm in RFC 5280.
@@ -133,7 +138,7 @@ def apply_policy_mapping(policy_map, valid_policy_tree, depth: int,
                 cert_any_policy.parent.add_child(
                     issuer_domain_policy,
                     cert_any_policy.qualifier_set,
-                    subject_domain_policies
+                    subject_domain_policies,
                 )
 
         # Step 3 b 2
@@ -141,15 +146,13 @@ def apply_policy_mapping(policy_map, valid_policy_tree, depth: int,
             for node in valid_policy_tree.at_depth(depth):
                 if node.valid_policy == issuer_domain_policy:
                     node.parent.remove_child(node)
-            valid_policy_tree = _prune_policy_tree(
-                valid_policy_tree, depth - 1
-            )
+            valid_policy_tree = _prune_policy_tree(valid_policy_tree, depth - 1)
     return valid_policy_tree
 
 
-def prune_unacceptable_policies(path_length, valid_policy_tree,
-                                acceptable_policies) \
-        -> Optional['PolicyTreeRoot']:
+def prune_unacceptable_policies(
+    path_length, valid_policy_tree, acceptable_policies
+) -> Optional['PolicyTreeRoot']:
     # Step 4 g iii 1: compute nodes that branch off any_policy
     #  In other words, find all policies that are valid and meaningful in
     #  the trust root(s) namespace. We don't care about what policy mapping
@@ -164,8 +167,7 @@ def prune_unacceptable_policies(path_length, valid_policy_tree,
     def _filter_acceptable():
         for policy_node in valid_policy_node_set:
             policy_id = policy_node.valid_policy
-            if policy_id == 'any_policy' or \
-                    policy_id in acceptable_policies:
+            if policy_id == 'any_policy' or policy_id in acceptable_policies:
                 yield policy_id
             else:
                 policy_node.parent.remove_child(policy_node)
@@ -178,15 +180,14 @@ def prune_unacceptable_policies(path_length, valid_policy_tree,
     # that are not explicitly qualified already
     try:
         final_any_policy: PolicyTreeNode = next(
-            policy_node for policy_node
-            in valid_policy_tree.at_depth(path_length)
+            policy_node
+            for policy_node in valid_policy_tree.at_depth(path_length)
             if policy_node.valid_policy == 'any_policy'
         )
         wildcard_parent = final_any_policy.parent
         assert wildcard_parent is not None
         wildcard_quals = final_any_policy.qualifier_set
-        for acceptable_policy in \
-                (acceptable_policies - valid_and_acceptable):
+        for acceptable_policy in acceptable_policies - valid_and_acceptable:
             wildcard_parent.add_child(
                 acceptable_policy, wildcard_quals, {acceptable_policy}
             )

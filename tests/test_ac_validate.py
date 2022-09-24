@@ -2,15 +2,16 @@ import datetime
 import os
 import unittest
 
-from asn1crypto import cms, x509, crl, ocsp
+from asn1crypto import cms, crl, ocsp, x509
 
 from pyhanko_certvalidator import validate
-from pyhanko_certvalidator.revinfo.validate_crl import verify_crl
-from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
-from pyhanko_certvalidator.context import ValidationContext, ACTargetDescription
+from pyhanko_certvalidator.authority import CertTrustAnchor
+from pyhanko_certvalidator.context import ACTargetDescription, ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.authority import CertTrustAnchor
+from pyhanko_certvalidator.revinfo.validate_crl import verify_crl
+from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
+
 from .test_validate import fixtures_dir
 
 attr_cert_dir = os.path.join(fixtures_dir, 'attribute-certs')
@@ -36,6 +37,7 @@ def load_ocsp_response(fname) -> ocsp.OCSPResponse:
     with open(fname, 'rb') as inf:
         return ocsp.OCSPResponse.load(inf.read())
 
+
 # noinspection PyMethodMayBeStatic
 class ACValidateTests(unittest.IsolatedAsyncioTestCase):
     async def test_basic_ac_validation_aacontrols_norev(self):
@@ -44,15 +46,14 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
         )
 
         result = await validate.async_validate_ac(ac, vc)
@@ -61,20 +62,17 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         assert 'group' not in result.approved_attributes
 
     async def test_basic_ac_validation_bad_signature(self):
-        ac = load_attr_cert(
-            os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt')
-        )
+        ac = load_attr_cert(os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt'))
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
         )
         msg = 'signature could not be verified'
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
@@ -86,43 +84,41 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
-            moment=datetime.datetime(3000, 1, 1, tzinfo=datetime.timezone.utc)
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
+            moment=datetime.datetime(3000, 1, 1, tzinfo=datetime.timezone.utc),
         )
         msg = 'intermediate certificate 1 expired'
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
             await validate.async_validate_ac(ac, vc)
 
     async def test_basic_ac_validation_sig_algo_mismatch(self):
-        ac = load_attr_cert(
-            os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt')
-        )
+        ac = load_attr_cert(os.path.join(basic_aa_dir, 'aa', 'badsig.attr.crt'))
         # manipulate the signature algorithm
-        ac = cms.AttributeCertificateV2({
-            'ac_info': ac['ac_info'],
-            'signature_algorithm': {'algorithm': 'md5_rsa'},
-            'signature': ac['signature']
-        })
+        ac = cms.AttributeCertificateV2(
+            {
+                'ac_info': ac['ac_info'],
+                'signature_algorithm': {'algorithm': 'md5_rsa'},
+                'signature': ac['signature'],
+            }
+        )
         ac.dump()
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
         )
         msg = 'algorithm declaration.*does not match'
         with self.assertRaisesRegex(PathValidationError, expected_regex=msg):
@@ -135,15 +131,14 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
         # no AA controls on this one
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-unrestricted.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-unrestricted.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
         )
 
         msg = 'AA controls extension only present on part '
@@ -157,18 +152,19 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
         # no AA controls on this one
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'inbetween', 'interm-pathlen-violation.crt'
-        ))
-        inbetween = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'inbetween-aa.crt'
-        ))
-        role_aa = load_cert(os.path.join(
-            basic_aa_dir, 'interm', 'role-aa.crt'
-        ))
+        interm = load_cert(
+            os.path.join(
+                basic_aa_dir, 'inbetween', 'interm-pathlen-violation.crt'
+            )
+        )
+        inbetween = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'inbetween-aa.crt')
+        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa, inbetween],
+            trust_roots=[root],
+            other_certs=[interm, role_aa, inbetween],
         )
 
         msg = 'exceeds the maximum path length for an AA certificate'
@@ -181,8 +177,8 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-unrestricted.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-unrestricted.crt')
         )
         aa = load_cert(
             os.path.join(basic_aa_dir, 'interm', 'aa-unrestricted.crt')
@@ -193,7 +189,8 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         root, interm, aa, ac = self._load_targeted_ac()
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, aa],
+            trust_roots=[root],
+            other_certs=[interm, aa],
         )
 
         msg = 'no targeting information'
@@ -204,17 +201,23 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         root, interm, aa, ac = self._load_targeted_ac()
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, aa],
+            trust_roots=[root],
+            other_certs=[interm, aa],
             acceptable_ac_targets=ACTargetDescription(
-                validator_names=[x509.GeneralName(
-                    name='directory_name', value=x509.Name.build({
-                        'country_name': 'XX',
-                        'organization_name': 'Testing Attribute Authority',
-                        'organizational_unit_name': 'Validators',
-                        'common_name': 'Not Validator'
-                    })
-                )]
-            )
+                validator_names=[
+                    x509.GeneralName(
+                        name='directory_name',
+                        value=x509.Name.build(
+                            {
+                                'country_name': 'XX',
+                                'organization_name': 'Testing Attribute Authority',
+                                'organizational_unit_name': 'Validators',
+                                'common_name': 'Not Validator',
+                            }
+                        ),
+                    )
+                ]
+            ),
         )
 
         msg = 'AC targeting'
@@ -225,16 +228,22 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         root, interm, aa, ac = self._load_targeted_ac()
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, aa],
+            trust_roots=[root],
+            other_certs=[interm, aa],
             acceptable_ac_targets=ACTargetDescription(
-                group_memberships=[x509.GeneralName(
-                    name='directory_name', value=x509.Name.build({
-                        'country_name': 'XX',
-                        'organization_name': 'Testing Attribute Authority',
-                        'organizational_unit_name': 'Not Validators',
-                    })
-                )]
-            )
+                group_memberships=[
+                    x509.GeneralName(
+                        name='directory_name',
+                        value=x509.Name.build(
+                            {
+                                'country_name': 'XX',
+                                'organization_name': 'Testing Attribute Authority',
+                                'organizational_unit_name': 'Not Validators',
+                            }
+                        ),
+                    )
+                ]
+            ),
         )
 
         msg = 'AC targeting'
@@ -245,17 +254,23 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         root, interm, aa, ac = self._load_targeted_ac()
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, aa],
+            trust_roots=[root],
+            other_certs=[interm, aa],
             acceptable_ac_targets=ACTargetDescription(
-                validator_names=[x509.GeneralName(
-                    name='directory_name', value=x509.Name.build({
-                        'country_name': 'XX',
-                        'organization_name': 'Testing Attribute Authority',
-                        'organizational_unit_name': 'Validators',
-                        'common_name': 'Validator'
-                    })
-                )]
-            )
+                validator_names=[
+                    x509.GeneralName(
+                        name='directory_name',
+                        value=x509.Name.build(
+                            {
+                                'country_name': 'XX',
+                                'organization_name': 'Testing Attribute Authority',
+                                'organizational_unit_name': 'Validators',
+                                'common_name': 'Validator',
+                            }
+                        ),
+                    )
+                ]
+            ),
         )
 
         result = await validate.async_validate_ac(ac, vc)
@@ -267,16 +282,22 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         root, interm, aa, ac = self._load_targeted_ac()
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, aa],
+            trust_roots=[root],
+            other_certs=[interm, aa],
             acceptable_ac_targets=ACTargetDescription(
-                group_memberships=[x509.GeneralName(
-                    name='directory_name', value=x509.Name.build({
-                        'country_name': 'XX',
-                        'organization_name': 'Testing Attribute Authority',
-                        'organizational_unit_name': 'Validators',
-                    })
-                )]
-            )
+                group_memberships=[
+                    x509.GeneralName(
+                        name='directory_name',
+                        value=x509.Name.build(
+                            {
+                                'country_name': 'XX',
+                                'organization_name': 'Testing Attribute Authority',
+                                'organizational_unit_name': 'Validators',
+                            }
+                        ),
+                    )
+                ]
+            ),
         )
 
         result = await validate.async_validate_ac(ac, vc)
@@ -290,19 +311,16 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        alice = load_cert(
-            os.path.join(basic_aa_dir, 'people-ca', 'alice.crt')
-        )
+        alice = load_cert(os.path.join(basic_aa_dir, 'people-ca', 'alice.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
         )
 
         await validate.async_validate_ac(ac, vc, holder_cert=alice)
@@ -313,17 +331,16 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
         bob = load_cert(os.path.join(basic_aa_dir, 'people-ca', 'bob.crt'))
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
         )
 
         msg = 'Could not match.*base_certificate_id'
@@ -333,34 +350,30 @@ class ACValidateTests(unittest.IsolatedAsyncioTestCase):
 
 # noinspection PyMethodMayBeStatic
 class ACCRLTests(unittest.IsolatedAsyncioTestCase):
-
     async def test_ac_revoked(self):
         ac = load_attr_cert(
             os.path.join(basic_aa_dir, 'aa', 'alice-role-with-rev.attr.crt')
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        role_aa_crl = load_crl(os.path.join(
-            basic_aa_dir, 'role-aa-some-revoked.crl'
-        ))
+        role_aa_crl = load_crl(
+            os.path.join(basic_aa_dir, 'role-aa-some-revoked.crl')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             crls=[role_aa_crl],
             moment=datetime.datetime(
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
-        ac_path = ValidationPath(
-            CertTrustAnchor(root), [interm, role_aa], ac
-        )
+        ac_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa], ac)
 
         with self.assertRaises(RevokedError):
             await verify_crl(ac, ac_path, vc)
@@ -371,27 +384,24 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        role_aa_crl = load_crl(os.path.join(
-            basic_aa_dir, 'role-aa-all-good.crl'
-        ))
+        role_aa_crl = load_crl(
+            os.path.join(basic_aa_dir, 'role-aa-all-good.crl')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             crls=[role_aa_crl],
             moment=datetime.datetime(
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
-        ac_path = ValidationPath(
-            CertTrustAnchor(root), [interm, role_aa], ac
-        )
+        ac_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa], ac)
 
         await verify_crl(ac, ac_path, vc)
 
@@ -401,23 +411,22 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        role_aa_crl = load_crl(os.path.join(
-            basic_aa_dir, 'role-aa-some-revoked.crl'
-        ))
+        role_aa_crl = load_crl(
+            os.path.join(basic_aa_dir, 'role-aa-some-revoked.crl')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             crls=[role_aa_crl],
             moment=datetime.datetime(
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
 
         with self.assertRaises(RevokedError):
@@ -429,23 +438,22 @@ class ACCRLTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        role_aa_crl = load_crl(os.path.join(
-            basic_aa_dir, 'role-aa-all-good.crl'
-        ))
+        role_aa_crl = load_crl(
+            os.path.join(basic_aa_dir, 'role-aa-all-good.crl')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             crls=[role_aa_crl],
             moment=datetime.datetime(
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
         await validate.async_validate_ac(ac, vc)
 
@@ -458,23 +466,22 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        ocsp_resp = load_ocsp_response(os.path.join(
-            basic_aa_dir, 'alice-revoked.ors'
-        ))
+        ocsp_resp = load_ocsp_response(
+            os.path.join(basic_aa_dir, 'alice-revoked.ors')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             ocsps=[ocsp_resp],
             moment=datetime.datetime(
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
         ac_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa], ac)
 
@@ -487,23 +494,22 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        ocsp_resp = load_ocsp_response(os.path.join(
-            basic_aa_dir, 'alice-all-good.ors'
-        ))
+        ocsp_resp = load_ocsp_response(
+            os.path.join(basic_aa_dir, 'alice-all-good.ors')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             ocsps=[ocsp_resp],
             moment=datetime.datetime(
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
         ac_path = ValidationPath(CertTrustAnchor(root), [interm, role_aa], ac)
         await verify_ocsp_response(ac, ac_path, vc)
@@ -514,23 +520,22 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        ocsp_resp = load_ocsp_response(os.path.join(
-            basic_aa_dir, 'alice-revoked.ors'
-        ))
+        ocsp_resp = load_ocsp_response(
+            os.path.join(basic_aa_dir, 'alice-revoked.ors')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             ocsps=[ocsp_resp],
             moment=datetime.datetime(
                 year=2021, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
 
         with self.assertRaises(RevokedError):
@@ -542,23 +547,22 @@ class ACOCSPResponseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         root = load_cert(os.path.join(basic_aa_dir, 'root', 'root.crt'))
-        interm = load_cert(os.path.join(
-            basic_aa_dir, 'root', 'interm-role.crt')
+        interm = load_cert(
+            os.path.join(basic_aa_dir, 'root', 'interm-role.crt')
         )
-        role_aa = load_cert(
-            os.path.join(basic_aa_dir, 'interm', 'role-aa.crt')
-        )
+        role_aa = load_cert(os.path.join(basic_aa_dir, 'interm', 'role-aa.crt'))
 
-        ocsp_resp = load_ocsp_response(os.path.join(
-            basic_aa_dir, 'alice-all-good.ors'
-        ))
+        ocsp_resp = load_ocsp_response(
+            os.path.join(basic_aa_dir, 'alice-all-good.ors')
+        )
 
         vc = ValidationContext(
-            trust_roots=[root], other_certs=[interm, role_aa],
+            trust_roots=[root],
+            other_certs=[interm, role_aa],
             ocsps=[ocsp_resp],
             moment=datetime.datetime(
                 year=2019, month=12, day=12, tzinfo=datetime.timezone.utc
-            )
+            ),
         )
 
         await validate.async_validate_ac(ac, vc)

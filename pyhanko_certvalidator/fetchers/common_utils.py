@@ -5,39 +5,48 @@ and OCSP responses.
 import asyncio
 import logging
 import os
+from typing import Optional, Union
 
-from typing import Union, Optional
+from asn1crypto import algos, cms, core, ocsp, pem, x509
 
 from .. import errors
 from ..authority import Authority
 from ..util import extract_ac_issuer_dir_name, get_ac_extension_value
-from asn1crypto import x509, pem, cms, ocsp, algos, core
 
 __all__ = [
-    'unpack_cert_content', 'format_ocsp_request', 'process_ocsp_response_data',
+    'unpack_cert_content',
+    'format_ocsp_request',
+    'process_ocsp_response_data',
     'queue_fetch_task',
     'crl_job_results_as_completed',
     'ocsp_job_get_earliest',
-    'complete_certificate_fetch_jobs', 'gather_aia_issuer_urls',
+    'complete_certificate_fetch_jobs',
+    'gather_aia_issuer_urls',
     'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
-    'ACCEPTABLE_CERT_PEM_ALIASES'
+    'ACCEPTABLE_CERT_PEM_ALIASES',
 ]
 
 logger = logging.getLogger(__name__)
 
 
 ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = (
-    'application/pkix-cert', 'application/pkcs7-mime',
-    'application/x-x509-ca-cert'
+    'application/pkix-cert',
+    'application/pkcs7-mime',
+    'application/x-x509-ca-cert',
 )
 
 ACCEPTABLE_CERT_PEM_ALIASES = (
-    'application/x-pem-file', 'text/plain',
+    'application/x-pem-file',
+    'text/plain',
 )
 
 
-def unpack_cert_content(response_data: bytes, content_type: Optional[str],
-                        url: str, permit_pem: bool):
+def unpack_cert_content(
+    response_data: bytes,
+    content_type: Optional[str],
+    url: str,
+    permit_pem: bool,
+):
 
     der_types = ('application/pkix-cert', 'application/x-x509-ca-cert')
     if content_type is None or content_type in der_types:
@@ -75,8 +84,12 @@ def unpack_cert_content(response_data: bytes, content_type: Optional[str],
                     yield cert_choice.chosen
 
 
-def get_certid(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-               authority: Authority, *, certid_hash_algo) -> ocsp.CertId:
+def get_certid(
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    authority: Authority,
+    *,
+    certid_hash_algo,
+) -> ocsp.CertId:
 
     if isinstance(cert, x509.Certificate):
         serial_number = cert.serial_number
@@ -84,35 +97,49 @@ def get_certid(cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         serial_number = cert['ac_info']['serial_number'].native
 
     iss_name_hash = getattr(authority.name, certid_hash_algo)
-    cert_id = ocsp.CertId({
-        'hash_algorithm': algos.DigestAlgorithm(
-            {'algorithm': certid_hash_algo}
-        ),
-        'issuer_name_hash': iss_name_hash,
-        'issuer_key_hash': getattr(authority.public_key, certid_hash_algo),
-        'serial_number': serial_number,
-    })
+    cert_id = ocsp.CertId(
+        {
+            'hash_algorithm': algos.DigestAlgorithm(
+                {'algorithm': certid_hash_algo}
+            ),
+            'issuer_name_hash': iss_name_hash,
+            'issuer_key_hash': getattr(authority.public_key, certid_hash_algo),
+            'serial_number': serial_number,
+        }
+    )
     return cert_id
 
 
-def format_ocsp_request(cert: x509.Certificate, authority: Authority,
-                        *, certid_hash_algo: str, request_nonces: bool):
+def format_ocsp_request(
+    cert: x509.Certificate,
+    authority: Authority,
+    *,
+    certid_hash_algo: str,
+    request_nonces: bool,
+):
     cert_id = get_certid(cert, authority, certid_hash_algo=certid_hash_algo)
 
-    request = ocsp.Request({
-        'req_cert': cert_id,
-    })
-    tbs_request = ocsp.TBSRequest({
-        'request_list': ocsp.Requests([request]),
-    })
+    request = ocsp.Request(
+        {
+            'req_cert': cert_id,
+        }
+    )
+    tbs_request = ocsp.TBSRequest(
+        {
+            'request_list': ocsp.Requests([request]),
+        }
+    )
 
     if request_nonces:
-        nonce_extension = ocsp.TBSRequestExtension({
-            'extn_id': 'nonce',
-            'critical': False,
-            'extn_value': core.OctetString(
-                core.OctetString(os.urandom(16)).dump())
-        })
+        nonce_extension = ocsp.TBSRequestExtension(
+            {
+                'extn_id': 'nonce',
+                'critical': False,
+                'extn_value': core.OctetString(
+                    core.OctetString(os.urandom(16)).dump()
+                ),
+            }
+        )
         tbs_request['request_extensions'] = ocsp.TBSRequestExtensions(
             [nonce_extension]
         )
@@ -120,14 +147,13 @@ def format_ocsp_request(cert: x509.Certificate, authority: Authority,
     return ocsp.OCSPRequest({'tbs_request': tbs_request})
 
 
-def process_ocsp_response_data(response_data: bytes, *,
-                               ocsp_request: ocsp.OCSPRequest, ocsp_url: str):
+def process_ocsp_response_data(
+    response_data: bytes, *, ocsp_request: ocsp.OCSPRequest, ocsp_url: str
+):
     try:
         ocsp_response = ocsp.OCSPResponse.load(response_data)
     except ValueError:
-        raise errors.OCSPFetchError(
-            'Failed to parse response from OCSP server'
-        )
+        raise errors.OCSPFetchError('Failed to parse response from OCSP server')
     status = ocsp_response['response_status'].native
     if status != 'successful':
         raise errors.OCSPValidationError(
@@ -168,9 +194,7 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
         pass
     try:
         wait_event: asyncio.Event = running_jobs[tag]
-        logger.debug(
-            f"Waiting for fetch job with tag {repr(tag)} to return..."
-        )
+        logger.debug(f"Waiting for fetch job with tag {repr(tag)} to return...")
         # there's a fetch job running, wait for it to finish and then
         # return the result
         await wait_event.wait()
@@ -179,9 +203,7 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
         )
         return _return_or_raise(results[tag])
     except KeyError:
-        logger.debug(
-            f"Starting new fetch job with tag {repr(tag)}..."
-        )
+        logger.debug(f"Starting new fetch job with tag {repr(tag)}...")
         # no fetch job running, run the task and store the result
         running_jobs[tag] = wait_event = asyncio.Event()
         try:
@@ -192,9 +214,7 @@ async def queue_fetch_task(results, running_jobs, tag, async_fun):
             )
             result = e
         results[tag] = result
-        logger.debug(
-            f"New fetch job with tag {repr(tag)} returned."
-        )
+        logger.debug(f"New fetch job with tag {repr(tag)} returned.")
         # deregister event, notify waiters
         del running_jobs[tag]
         wait_event.set()
@@ -251,7 +271,8 @@ async def ocsp_job_get_earliest(jobs):
 
 
 def gather_aia_issuer_urls(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+):
     if isinstance(cert, x509.Certificate):
         aia_value = cert.authority_information_access_value
     else:

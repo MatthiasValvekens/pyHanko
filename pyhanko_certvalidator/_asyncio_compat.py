@@ -1,7 +1,6 @@
+import asyncio
 import contextvars
 import functools
-import asyncio
-
 
 # Used as an alternative for asyncio.to_thread in python <=3.8
 # Repurposed from CPython, used under the terms of the PSL

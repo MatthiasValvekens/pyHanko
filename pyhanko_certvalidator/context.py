@@ -1,25 +1,32 @@
 import asyncio
+import binascii
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-import binascii
-from typing import Optional, Iterable, Union, List
+from typing import Iterable, List, Optional, Union
 
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
 from .authority import AuthorityWithCert, CertTrustAnchor
+from .fetchers import FetcherBackend, Fetchers, default_fetcher_backend
+from .ltv.poe import POEManager
+from .ltv.types import ValidationTimingInfo, ValidationTimingParams
+from .path import ValidationPath
+from .policy_decl import CertRevTrustPolicy, RevocationCheckingPolicy
+from .registry import (
+    CertificateRegistry,
+    PathBuilder,
+    SimpleTrustManager,
+    TrustManager,
+    TrustRootList,
+)
+from .revinfo.archival import (
+    process_legacy_crl_input,
+    process_legacy_ocsp_input,
+)
 from .revinfo.manager import RevinfoManager
 from .util import pretty_message
-from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
-from .path import ValidationPath
-from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
-from .registry import CertificateRegistry, TrustRootList, TrustManager, SimpleTrustManager, PathBuilder
-from .revinfo.archival import \
-    process_legacy_crl_input, \
-    process_legacy_ocsp_input
-from .ltv.types import ValidationTimingParams, ValidationTimingInfo
-from .ltv.poe import POEManager
 
 
 @dataclass(frozen=True)
@@ -80,31 +87,32 @@ class ValidationContext:
     _acceptable_ac_targets = None
 
     def __init__(
-            self,
-            trust_roots: Optional[TrustRootList] = None,
-            extra_trust_roots: Optional[TrustRootList] = None,
-            other_certs: Optional[Iterable[x509.Certificate]] = None,
-            whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
-            moment: Optional[datetime] = None,
-            # FIXME before releasing the AdES stuff,
-            #  check if this still makes sense to include, or we should stick
-            #  to `moment` only at this level of the API
-            use_poe_time: Optional[datetime] = None,
-            allow_fetching: bool = False,
-            crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
-            ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
-            revocation_mode: str = "soft-fail",
-            revinfo_policy: Optional[CertRevTrustPolicy] = None,
-            weak_hash_algos: Iterable[str] = None,
-            time_tolerance: timedelta = timedelta(seconds=1),
-            retroactive_revinfo: bool = False,
-            fetcher_backend: FetcherBackend = None,
-            acceptable_ac_targets: Optional[ACTargetDescription] = None,
-            poe_manager: Optional[POEManager] = None,
-            revinfo_manager: Optional[RevinfoManager] = None,
-            certificate_registry: Optional[CertificateRegistry] = None,
-            trust_manager: Optional[TrustManager] = None,
-            fetchers: Fetchers = None):
+        self,
+        trust_roots: Optional[TrustRootList] = None,
+        extra_trust_roots: Optional[TrustRootList] = None,
+        other_certs: Optional[Iterable[x509.Certificate]] = None,
+        whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
+        moment: Optional[datetime] = None,
+        # FIXME before releasing the AdES stuff,
+        #  check if this still makes sense to include, or we should stick
+        #  to `moment` only at this level of the API
+        use_poe_time: Optional[datetime] = None,
+        allow_fetching: bool = False,
+        crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
+        ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
+        revocation_mode: str = "soft-fail",
+        revinfo_policy: Optional[CertRevTrustPolicy] = None,
+        weak_hash_algos: Iterable[str] = None,
+        time_tolerance: timedelta = timedelta(seconds=1),
+        retroactive_revinfo: bool = False,
+        fetcher_backend: FetcherBackend = None,
+        acceptable_ac_targets: Optional[ACTargetDescription] = None,
+        poe_manager: Optional[POEManager] = None,
+        revinfo_manager: Optional[RevinfoManager] = None,
+        certificate_registry: Optional[CertificateRegistry] = None,
+        trust_manager: Optional[TrustManager] = None,
+        fetchers: Fetchers = None,
+    ):
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
@@ -203,7 +211,7 @@ class ValidationContext:
         if revinfo_policy is None:
             revinfo_policy = CertRevTrustPolicy(
                 RevocationCheckingPolicy.from_legacy(revocation_mode),
-                retroactive_revinfo=retroactive_revinfo
+                retroactive_revinfo=retroactive_revinfo,
             )
         elif revinfo_policy.expected_post_expiry_revinfo_time is not None:
             raise NotImplementedError(
@@ -214,44 +222,56 @@ class ValidationContext:
         rev_essential = revinfo_policy.revocation_checking_policy.essential
         if moment is not None:
             if allow_fetching:
-                raise ValueError(pretty_message(
-                    '''
+                raise ValueError(
+                    pretty_message(
+                        '''
                     allow_fetching must be False when moment is specified
                     '''
-                ))
+                    )
+                )
 
-        elif not allow_fetching and crls is None and ocsps is None \
-                and rev_essential:
-            raise ValueError(pretty_message(
-                '''
+        elif (
+            not allow_fetching
+            and crls is None
+            and ocsps is None
+            and rev_essential
+        ):
+            raise ValueError(
+                pretty_message(
+                    '''
                 revocation data is not optional and allow_fetching is False,
                 however crls and ocsps are both None, meaning that no validation
                 can happen
                 '''
-            ))
+                )
+            )
 
         if moment is None:
             moment = datetime.now(timezone.utc)
             point_in_time_validation = False
         elif moment.utcoffset() is None:
-            raise ValueError(pretty_message(
-                '''
+            raise ValueError(
+                pretty_message(
+                    '''
                 moment is a naive datetime object, meaning the tzinfo
                 attribute is not set to a valid timezone
                 '''
-            ))
+                )
+            )
         else:
             point_in_time_validation = True
 
         if use_poe_time is None:
             use_poe_time = moment
         elif use_poe_time.utcoffset() is None:
-            raise ValueError(pretty_message(
-                '''
+            raise ValueError(
+                pretty_message(
+                    '''
                 use_poe_time is a naive datetime object, meaning the tzinfo
                 attribute is not set to a valid timezone
                 '''
-            ))
+                )
+            )
 
         self._whitelisted_certs = set()
         if whitelisted_certs is not None:
@@ -260,7 +280,9 @@ class ValidationContext:
                     whitelisted_cert = whitelisted_cert.decode('ascii')
                 # Allow users to copy from various OS and browser info dialogs,
                 # some of which separate the hex char pairs via spaces or colons
-                whitelisted_cert = whitelisted_cert.replace(' ', '').replace(':', '')
+                whitelisted_cert = whitelisted_cert.replace(' ', '').replace(
+                    ':', ''
+                )
                 self._whitelisted_certs.add(
                     binascii.unhexlify(whitelisted_cert.encode('ascii'))
                 )
@@ -291,8 +313,9 @@ class ValidationContext:
             fetchers = None
 
         if certificate_registry is None:
-            certificate_registry = CertificateRegistry \
-                .build(other_certs or (), cert_fetcher=cert_fetcher)
+            certificate_registry = CertificateRegistry.build(
+                other_certs or (), cert_fetcher=cert_fetcher
+            )
 
         self.certificate_registry: CertificateRegistry = certificate_registry
 
@@ -305,8 +328,7 @@ class ValidationContext:
                 certificate_registry.register(root)
 
         self.path_builder = PathBuilder(
-            trust_manager=trust_manager,
-            registry=certificate_registry
+            trust_manager=trust_manager, registry=certificate_registry
         )
         crls = process_legacy_crl_input(crls) if crls else ()
         ocsps = process_legacy_ocsp_input(ocsps) if ocsps else ()
@@ -315,21 +337,22 @@ class ValidationContext:
             revinfo_manager = RevinfoManager(
                 certificate_registry=certificate_registry,
                 poe_manager=poe_manager or POEManager(),
-                revinfo_policy=revinfo_policy, crls=crls, ocsps=ocsps,
-                fetchers=fetchers
+                revinfo_policy=revinfo_policy,
+                crls=crls,
+                ocsps=ocsps,
+                fetchers=fetchers,
             )
         self._revinfo_manager = revinfo_manager
 
         self._validate_map = {}
 
         self._soft_fail_exceptions = []
-        time_tolerance = (
-            abs(time_tolerance) if time_tolerance else timedelta(0)
-        )
+        time_tolerance = abs(time_tolerance) if time_tolerance else timedelta(0)
         self.timing_params = ValidationTimingParams(
             ValidationTimingInfo(
-                validation_time=moment, use_poe_time=use_poe_time,
-                point_in_time_validation=point_in_time_validation
+                validation_time=moment,
+                use_poe_time=use_poe_time,
+                point_in_time_validation=point_in_time_validation,
             ),
             time_tolerance=time_tolerance,
         )
@@ -428,7 +451,7 @@ class ValidationContext:
 
         warnings.warn(
             "'retrieve_crls' is deprecated, use 'async_retrieve_crls' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
         if not self.revinfo_manager.fetching_allowed:
             return self.revinfo_manager.crls
@@ -445,8 +468,9 @@ class ValidationContext:
         :return:
             A list of asn1crypto.ocsp.OCSPResponse objects
         """
-        results = await self._revinfo_manager\
-            .async_retrieve_ocsps(cert, AuthorityWithCert(issuer))
+        results = await self._revinfo_manager.async_retrieve_ocsps(
+            cert, AuthorityWithCert(issuer)
+        )
         return [res.ocsp_response_data for res in results]
 
     def retrieve_ocsps(self, cert, issuer):
@@ -467,7 +491,7 @@ class ValidationContext:
         warnings.warn(
             "'retrieve_ocsps' is deprecated, use "
             "'async_retrieve_ocsps' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
 
         if not self.revinfo_manager.fetching_allowed:
@@ -502,11 +526,12 @@ class ValidationContext:
             object of the validation path
         """
 
-        if self.path_builder.trust_manager.is_root(cert) and \
-                cert.signature not in self._validate_map:
+        if (
+            self.path_builder.trust_manager.is_root(cert)
+            and cert.signature not in self._validate_map
+        ):
             self._validate_map[cert.signature] = ValidationPath(
-                trust_anchor=CertTrustAnchor(cert),
-                interm=[], leaf=None
+                trust_anchor=CertTrustAnchor(cert), interm=[], leaf=None
             )
 
         return self._validate_map.get(cert.signature)

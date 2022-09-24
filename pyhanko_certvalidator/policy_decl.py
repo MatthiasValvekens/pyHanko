@@ -4,7 +4,7 @@
 import enum
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Optional, FrozenSet
+from typing import FrozenSet, Optional
 
 from pyhanko_certvalidator.name_trees import PKIXSubtrees
 
@@ -76,21 +76,21 @@ class RevocationCheckingRule(enum.Enum):
         return self not in (
             RevocationCheckingRule.CHECK_IF_DECLARED,
             RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
-            RevocationCheckingRule.NO_CHECK
+            RevocationCheckingRule.NO_CHECK,
         )
 
     @property
     def tolerant(self) -> bool:
         return self in (
             RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
-            RevocationCheckingRule.NO_CHECK
+            RevocationCheckingRule.NO_CHECK,
         )
 
     @property
     def crl_mandatory(self) -> bool:
         return self in (
             RevocationCheckingRule.CRL_REQUIRED,
-            RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
+            RevocationCheckingRule.CRL_AND_OCSP_REQUIRED,
         )
 
     @property
@@ -104,14 +104,14 @@ class RevocationCheckingRule(enum.Enum):
     def ocsp_mandatory(self) -> bool:
         return self in (
             RevocationCheckingRule.OCSP_REQUIRED,
-            RevocationCheckingRule.CRL_AND_OCSP_REQUIRED
+            RevocationCheckingRule.CRL_AND_OCSP_REQUIRED,
         )
 
     @property
     def ocsp_relevant(self) -> bool:
         return self not in (
             RevocationCheckingRule.NO_CHECK,
-            RevocationCheckingRule.CRL_REQUIRED
+            RevocationCheckingRule.CRL_REQUIRED,
         )
 
 
@@ -159,7 +159,7 @@ LEGACY_POLICY_MAP = {
     'require': RevocationCheckingPolicy(
         RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
         RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
-    )
+    ),
 }
 
 
@@ -216,8 +216,9 @@ class CertRevTrustPolicy:
     """
 
 
-def intersect_policy_sets(a_pols: FrozenSet[str], b_pols: FrozenSet[str]) \
-        -> FrozenSet[str]:
+def intersect_policy_sets(
+    a_pols: FrozenSet[str], b_pols: FrozenSet[str]
+) -> FrozenSet[str]:
     """
     Intersect two sets of policies, taking into account the special
     'any_policy'.
@@ -332,13 +333,16 @@ class PKIXValidationParams:
         elif 'any_policy' in other.user_initial_policy_set:
             init_policy_set = self.user_initial_policy_set
         else:
-            init_policy_set = \
+            init_policy_set = (
                 other.user_initial_policy_set & self.user_initial_policy_set
+            )
 
-        initial_any_policy_inhibit = \
+        initial_any_policy_inhibit = (
             self.initial_any_policy_inhibit and other.initial_any_policy_inhibit
-        initial_explicit_policy = \
+        )
+        initial_explicit_policy = (
             self.initial_explicit_policy and other.initial_explicit_policy
+        )
         initial_policy_mapping_inhibit = (
             self.initial_policy_mapping_inhibit
             and other.initial_policy_mapping_inhibit
@@ -347,5 +351,5 @@ class PKIXValidationParams:
             user_initial_policy_set=init_policy_set,
             initial_any_policy_inhibit=initial_any_policy_inhibit,
             initial_explicit_policy=initial_explicit_policy,
-            initial_policy_mapping_inhibit=initial_policy_mapping_inhibit
+            initial_policy_mapping_inhibit=initial_policy_mapping_inhibit,
         )

@@ -1,6 +1,7 @@
+from typing import Union
+
 import aiohttp
 
-from typing import Union
 from ..api import DEFAULT_USER_AGENT
 from ..common_utils import queue_fetch_task
 
@@ -8,7 +9,6 @@ __all__ = ['LazySession', 'AIOHttpMixin']
 
 
 class LazySession:
-
     def __init__(self):
         self._session = None
 
@@ -25,9 +25,12 @@ class LazySession:
 
 
 class AIOHttpMixin:
-
-    def __init__(self, session: Union[aiohttp.ClientSession, LazySession],
-                 user_agent=None, per_request_timeout=10):
+    def __init__(
+        self,
+        session: Union[aiohttp.ClientSession, LazySession],
+        user_agent=None,
+        per_request_timeout=10,
+    ):
         self._session = session
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.per_request_timeout = per_request_timeout
@@ -44,8 +47,7 @@ class AIOHttpMixin:
 
     def get_results(self):
         return {
-            v for v in self.__results.values()
-            if not isinstance(v, Exception)
+            v for v in self.__results.values() if not isinstance(v, Exception)
         }
 
     def get_results_for_tag(self, tag):

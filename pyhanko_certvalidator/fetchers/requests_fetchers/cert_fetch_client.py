@@ -1,18 +1,19 @@
-from typing import Iterable, Union
 import logging
-import requests
+from typing import Iterable, Union
 
-from asn1crypto import x509, cms
+import requests
+from asn1crypto import cms, x509
 
 from ...errors import CertificateFetchError
 from ..api import CertificateFetcher
-from .util import RequestsFetcherMixin
 from ..common_utils import (
-    unpack_cert_content,
-    complete_certificate_fetch_jobs,
+    ACCEPTABLE_CERT_PEM_ALIASES,
     ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
-    ACCEPTABLE_CERT_PEM_ALIASES, gather_aia_issuer_urls,
+    complete_certificate_fetch_jobs,
+    gather_aia_issuer_urls,
+    unpack_cert_content,
 )
+from .util import RequestsFetcherMixin
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,9 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
     compatibility. This class does not require resource management.
     """
 
-    def __init__(self, user_agent=None, per_request_timeout=10,
-                 permit_pem=True):
+    def __init__(
+        self, user_agent=None, per_request_timeout=10, permit_pem=True
+    ):
         super().__init__(user_agent, per_request_timeout)
         self.permit_pem = permit_pem
 
@@ -54,10 +56,12 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
                 logger.debug(msg, exc_info=e)
                 raise CertificateFetchError(msg)
             return results
+
         return await self._perform_fetch(url, task)
 
     def fetch_cert_issuers(
-            self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+    ):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')
             for url in gather_aia_issuer_urls(cert)

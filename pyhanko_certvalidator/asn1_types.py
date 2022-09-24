@@ -1,10 +1,14 @@
 from typing import Optional
 
-from asn1crypto import core, x509, cms
+from asn1crypto import cms, core, x509
 
 __all__ = [
-    'Target', 'TargetCert', 'Targets', 'SequenceOfTargets',
-    'AttrSpec', 'AAControls'
+    'Target',
+    'TargetCert',
+    'Targets',
+    'SequenceOfTargets',
+    'AttrSpec',
+    'AAControls',
 ]
 
 
@@ -12,7 +16,7 @@ class TargetCert(core.Sequence):
     _fields = [
         ('target_certificate', cms.IssuerSerial),
         ('target_name', x509.GeneralName, {'optional': True}),
-        ('cert_digest_info', cms.ObjectDigestInfo, {'optional': True})
+        ('cert_digest_info', cms.ObjectDigestInfo, {'optional': True}),
     ]
 
 
@@ -20,7 +24,7 @@ class Target(core.Choice):
     _alternatives = [
         ('target_name', x509.GeneralName, {'explicit': 0}),
         ('target_group', x509.GeneralName, {'explicit': 1}),
-        ('target_cert', TargetCert, {'explicit': 2})
+        ('target_cert', TargetCert, {'explicit': 2}),
     ]
 
 
@@ -42,7 +46,7 @@ class AAControls(core.Sequence):
         ('path_len_constraint', core.Integer, {'optional': True}),
         ('permitted_attrs', AttrSpec, {'optional': True, 'implicit': 0}),
         ('excluded_attrs', AttrSpec, {'optional': True, 'implicit': 1}),
-        ('permit_unspecified', core.Boolean, {'default': True})
+        ('permit_unspecified', core.Boolean, {'default': True}),
     ]
 
     def accept(self, attr_id: cms.AttCertAttributeType) -> bool:
@@ -60,8 +64,9 @@ class AAControls(core.Sequence):
         return bool(self['permit_unspecified'])
 
     @classmethod
-    def read_extension_value(cls, cert: x509.Certificate) \
-            -> Optional['AAControls']:
+    def read_extension_value(
+        cls, cert: x509.Certificate
+    ) -> Optional['AAControls']:
         # handle AA controls (not natively supported by asn1crypto, so
         # not available as an attribute).
         try:

@@ -1,28 +1,34 @@
-from typing import Union, Iterable
-
 import logging
+from typing import Iterable, Union
+
 import aiohttp
-from asn1crypto import crl, x509, pem, cms
+from asn1crypto import cms, crl, pem, x509
 
 from ... import errors
-from .util import AIOHttpMixin, LazySession
+from ...util import get_relevant_crl_dps, issuer_serial
 from ..api import CRLFetcher
 from ..common_utils import crl_job_results_as_completed
-from ...util import get_relevant_crl_dps, issuer_serial
+from .util import AIOHttpMixin, LazySession
 
 logger = logging.getLogger(__name__)
 
 
 class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
-
-    def __init__(self, session: Union[aiohttp.ClientSession, LazySession],
-                 user_agent=None, per_request_timeout=10):
+    def __init__(
+        self,
+        session: Union[aiohttp.ClientSession, LazySession],
+        user_agent=None,
+        per_request_timeout=10,
+    ):
         super().__init__(session, user_agent, per_request_timeout)
         self._by_cert = {}
 
-    async def fetch(self,
-                    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-                    *, use_deltas=True):
+    async def fetch(
+        self,
+        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+        *,
+        use_deltas=True,
+    ):
         iss_serial = issuer_serial(cert)
         try:
             return self._by_cert[iss_serial]
@@ -64,13 +70,14 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
             yield result
 
     async def _single_fetch(self, url):
-
         async def task():
             return await _grab_crl(
-                url, user_agent=self.user_agent,
+                url,
+                user_agent=self.user_agent,
                 session=await self.get_session(),
-                timeout=self.per_request_timeout
+                timeout=self.per_request_timeout,
             )
+
         return await self._post_fetch_task(url, task)
 
     def fetched_crls(self) -> Iterable[crl.CertificateList]:
@@ -80,8 +87,9 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         return self._by_cert[issuer_serial(cert)]
 
 
-async def _grab_crl(url, *, user_agent, session: aiohttp.ClientSession,
-                    timeout):
+async def _grab_crl(
+    url, *, user_agent, session: aiohttp.ClientSession, timeout
+):
     """
     Fetches a CRL and parses it
 
@@ -102,13 +110,11 @@ async def _grab_crl(url, *, user_agent, session: aiohttp.ClientSession,
     """
     try:
         logger.info(f"Requesting CRL from {url}...")
-        headers = {
-            'Accept': 'application/pkix-crl',
-            'User-Agent': user_agent
-        }
+        headers = {'Accept': 'application/pkix-crl', 'User-Agent': user_agent}
         cl_timeout = aiohttp.ClientTimeout(total=timeout)
-        async with session.get(url=url, headers=headers, timeout=cl_timeout,
-                               raise_for_status=True) as response:
+        async with session.get(
+            url=url, headers=headers, timeout=cl_timeout, raise_for_status=True
+        ) as response:
             data = await response.read()
         if pem.detect(data):
             _, _, data = pem.unarmor(data)

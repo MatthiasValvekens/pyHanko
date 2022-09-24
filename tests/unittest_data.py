@@ -28,6 +28,7 @@ def data(provider_method, first_param_name_suffix=False):
         test_func._provider_method = provider_method
         test_func._provider_name_suffix = first_param_name_suffix
         return test_func
+
     return test_func_decorator
 
 

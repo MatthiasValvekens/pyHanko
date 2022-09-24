@@ -17,8 +17,9 @@ class POEManager:
         self._poes = {}
         self._current_dt_override = current_dt_override
 
-    def register(self, data: Union[bytes, core.Asn1Value],
-                 dt: Optional[datetime] = None) -> datetime:
+    def register(
+        self, data: Union[bytes, core.Asn1Value], dt: Optional[datetime] = None
+    ) -> datetime:
         """
         Register a new POE claim if no POE for an earlier time is available.
 
@@ -34,8 +35,9 @@ class POEManager:
         digest = hashlib.sha256(data).digest()
         return self.register_by_digest(digest, dt)
 
-    def register_by_digest(self, digest: bytes, dt: Optional[datetime] = None) \
-            -> datetime:
+    def register_by_digest(
+        self, digest: bytes, dt: Optional[datetime] = None
+    ) -> datetime:
         """
         Register a new POE claim if no POE for an earlier time is available.
 

@@ -1,25 +1,31 @@
-from typing import Union, Iterable
+import logging
+from typing import Iterable, Union
 
 import aiohttp
-import logging
-from asn1crypto import x509, cms
+from asn1crypto import cms, x509
 
 from ...errors import CertificateFetchError
 from ..api import CertificateFetcher
-from .util import AIOHttpMixin, LazySession
 from ..common_utils import (
-    unpack_cert_content, complete_certificate_fetch_jobs,
+    ACCEPTABLE_CERT_PEM_ALIASES,
     ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
-    ACCEPTABLE_CERT_PEM_ALIASES, gather_aia_issuer_urls
+    complete_certificate_fetch_jobs,
+    gather_aia_issuer_urls,
+    unpack_cert_content,
 )
-
+from .util import AIOHttpMixin, LazySession
 
 logger = logging.getLogger(__name__)
 
 
 class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
-    def __init__(self, session: Union[aiohttp.ClientSession, LazySession],
-                 user_agent=None, per_request_timeout=10, permit_pem=True):
+    def __init__(
+        self,
+        session: Union[aiohttp.ClientSession, LazySession],
+        user_agent=None,
+        per_request_timeout=10,
+        permit_pem=True,
+    ):
         super().__init__(session, user_agent, per_request_timeout)
         self.permit_pem = permit_pem
 
@@ -42,11 +48,12 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
             try:
                 logger.info(f"Fetching certificates from {url}...")
                 return await _grab_certs(
-                    url, permit_pem=self.permit_pem,
+                    url,
+                    permit_pem=self.permit_pem,
                     timeout=self.per_request_timeout,
                     user_agent=self.user_agent,
                     session=await self.get_session(),
-                    url_origin_type=url_origin_type
+                    url_origin_type=url_origin_type,
                 )
             except (ValueError, aiohttp.ClientError) as e:
                 msg = f"Failed to fetch certificate(s) from url {url}."
@@ -56,7 +63,8 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
         return await self._post_fetch_task(url, task)
 
     def fetch_cert_issuers(
-            self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
+        self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
+    ):
 
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')
@@ -82,8 +90,15 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
         return self.get_results()
 
 
-async def _grab_certs(url, *, user_agent, session: aiohttp.ClientSession,
-                      url_origin_type, timeout, permit_pem=True):
+async def _grab_certs(
+    url,
+    *,
+    user_agent,
+    session: aiohttp.ClientSession,
+    url_origin_type,
+    timeout,
+    permit_pem=True,
+):
     """
     Grab one or more certificates from a caIssuers URL.
 
@@ -100,13 +115,11 @@ async def _grab_certs(url, *, user_agent, session: aiohttp.ClientSession,
     if permit_pem:
         acceptable_cts += ACCEPTABLE_CERT_PEM_ALIASES
 
-    headers = {
-        'Accept': ','.join(acceptable_cts),
-        'User-Agent': user_agent
-    }
+    headers = {'Accept': ','.join(acceptable_cts), 'User-Agent': user_agent}
     cl_timeout = aiohttp.ClientTimeout(timeout)
-    async with session.get(url=url, headers=headers, timeout=cl_timeout,
-                           raise_for_status=True) as response:
+    async with session.get(
+        url=url, headers=headers, timeout=cl_timeout, raise_for_status=True
+    ) as response:
         response_data = await response.read()
         try:
             content_type = response.headers['Content-Type'].strip()
@@ -117,8 +130,10 @@ async def _grab_certs(url, *, user_agent, session: aiohttp.ClientSession,
                     f"from URL {url}."
                 )
                 raise aiohttp.ContentTypeError(
-                    response.request_info, response.history,
-                    message=ct_err, headers=response.headers,
+                    response.request_info,
+                    response.history,
+                    message=ct_err,
+                    headers=response.headers,
                 )
         except KeyError:
             content_type = None

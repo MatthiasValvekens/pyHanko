@@ -1,30 +1,49 @@
 import datetime
 import logging
 from dataclasses import dataclass, field
-from typing import Union, Optional, List
+from typing import List, Optional, Union
 
-from asn1crypto import x509, cms, crl
+from asn1crypto import cms, crl, x509
 from asn1crypto.crl import CRLReason
 from asn1crypto.keys import PublicKeyInfo
 from cryptography.exceptions import InvalidSignature
 
-from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator._state import ValProcState
-from pyhanko_certvalidator.errors import PathValidationError, \
-    OCSPValidationError, PSSParameterMismatch, RevokedError, \
-    OCSPNoMatchesError, OCSPValidationIndeterminateError
+from pyhanko_certvalidator.authority import (
+    Authority,
+    AuthorityWithCert,
+    TrustAnchor,
+)
+from pyhanko_certvalidator.context import ValidationContext
+from pyhanko_certvalidator.errors import (
+    OCSPNoMatchesError,
+    OCSPValidationError,
+    OCSPValidationIndeterminateError,
+    PathValidationError,
+    PSSParameterMismatch,
+    RevokedError,
+)
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
-    RevocationCheckingPolicy, RevocationCheckingRule
-from pyhanko_certvalidator.registry import CertificateCollection, \
-    LayeredCertificateStore, SimpleCertificateStore
-from pyhanko_certvalidator.revinfo.archival import OCSPContainer, \
-    RevinfoUsabilityRating
-from pyhanko_certvalidator.authority import Authority, \
-    AuthorityWithCert, TrustAnchor
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    RevocationCheckingPolicy,
+    RevocationCheckingRule,
+)
+from pyhanko_certvalidator.registry import (
+    CertificateCollection,
+    LayeredCertificateStore,
+    SimpleCertificateStore,
+)
+from pyhanko_certvalidator.revinfo.archival import (
+    OCSPContainer,
+    RevinfoUsabilityRating,
+)
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.util import (
-    pretty_message, extract_ac_issuer_dir_name, validate_sig, ConsList
+    ConsList,
+    extract_ac_issuer_dir_name,
+    pretty_message,
+    validate_sig,
 )
 
 OCSP_PROVENANCE_ERR = (
@@ -34,26 +53,27 @@ OCSP_PROVENANCE_ERR = (
 
 
 def _delegated_ocsp_response_path(
-        responder_cert: x509.Certificate,
-        issuer: Authority, ee_path: ValidationPath):
+    responder_cert: x509.Certificate, issuer: Authority, ee_path: ValidationPath
+):
 
     if isinstance(issuer, AuthorityWithCert):
-        responder_chain = ee_path \
-            .truncate_to_and_append(issuer.certificate, responder_cert)
+        responder_chain = ee_path.truncate_to_and_append(
+            issuer.certificate, responder_cert
+        )
     else:
         responder_chain = ValidationPath(
-            trust_anchor=TrustAnchor(issuer),
-            interm=[], leaf=responder_cert
+            trust_anchor=TrustAnchor(issuer), interm=[], leaf=responder_cert
         )
     return responder_chain
 
 
 async def _validate_delegated_ocsp_provenance(
-        responder_cert: x509.Certificate,
-        issuer: Authority,
-        validation_context: ValidationContext,
-        ee_path: ValidationPath,
-        proc_state: ValProcState):
+    responder_cert: x509.Certificate,
+    issuer: Authority,
+    validation_context: ValidationContext,
+    ee_path: ValidationPath,
+    proc_state: ValProcState,
+):
 
     if proc_state.check_path_verif_recursion(responder_cert):
         # we permit this for CRLs for historical reasons, but there's no
@@ -62,7 +82,7 @@ async def _validate_delegated_ocsp_provenance(
         raise PathValidationError.from_state(
             "Recursion detected in OCSP responder authorisation check for "
             "responder certificate %s." % responder_cert.subject.human_friendly,
-            proc_state
+            proc_state,
         )
 
     from pyhanko_certvalidator.validate import intl_validate_path
@@ -82,24 +102,24 @@ async def _validate_delegated_ocsp_provenance(
             revocation_checking_policy=RevocationCheckingPolicy(
                 ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
                 # this one should never trigger
-                intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK
+                intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK,
             )
         )
         vc = ValidationContext(
             trust_roots=[TrustAnchor(issuer)],
-            allow_fetching=False, revinfo_policy=revinfo_policy,
+            allow_fetching=False,
+            revinfo_policy=revinfo_policy,
             moment=validation_context.moment,
             weak_hash_algos=validation_context.weak_hash_algos,
-            time_tolerance=validation_context.time_tolerance
+            time_tolerance=validation_context.time_tolerance,
         )
 
         ocsp_trunc_path = ValidationPath(
-            trust_anchor=TrustAnchor(issuer), interm=[],
-            leaf=responder_cert
+            trust_anchor=TrustAnchor(issuer), interm=[], leaf=responder_cert
         )
         ocsp_trunc_proc_state = ValProcState(
             cert_path_stack=proc_state.cert_path_stack.cons(ocsp_trunc_path),
-            ee_name_override=ocsp_ee_name_override
+            ee_name_override=ocsp_ee_name_override,
         )
         try:
             # verify the truncated path
@@ -113,21 +133,24 @@ async def _validate_delegated_ocsp_provenance(
         #  caching OCSP responder validation results with everything else is
         #  probably somewhat incorrect
 
-        responder_chain = \
-            _delegated_ocsp_response_path(responder_cert, issuer, ee_path)
+        responder_chain = _delegated_ocsp_response_path(
+            responder_cert, issuer, ee_path
+        )
         validation_context.record_validation(responder_cert, responder_chain)
     else:
-        responder_chain = \
-            _delegated_ocsp_response_path(responder_cert, issuer, ee_path)
+        responder_chain = _delegated_ocsp_response_path(
+            responder_cert, issuer, ee_path
+        )
 
         ocsp_proc_state = ValProcState(
             cert_path_stack=proc_state.cert_path_stack.cons(responder_chain),
-            ee_name_override=ocsp_ee_name_override
+            ee_name_override=ocsp_ee_name_override,
         )
         try:
             await intl_validate_path(
-                validation_context, path=responder_chain,
-                proc_state=ocsp_proc_state
+                validation_context,
+                path=responder_chain,
+                proc_state=ocsp_proc_state,
             )
         except PathValidationError as e:
             raise OCSPValidationError(OCSP_PROVENANCE_ERR) from e
@@ -148,10 +171,11 @@ class _OCSPErrs:
 
 
 def _match_ocsp_certid(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        issuer: Authority,
-        ocsp_response: OCSPContainer,
-        errs: _OCSPErrs) -> bool:
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    issuer: Authority,
+    ocsp_response: OCSPContainer,
+    errs: _OCSPErrs,
+) -> bool:
 
     cert_response = ocsp_response.extract_single_response()
     if cert_response is None:
@@ -172,44 +196,49 @@ def _match_ocsp_certid(
         cert_serial_number = cert['ac_info']['serial_number'].native
     cert_issuer_key_hash = getattr(issuer.public_key, issuer_hash_algo)
 
-    key_hash_mismatch = \
+    key_hash_mismatch = (
         response_cert_id['issuer_key_hash'].native != cert_issuer_key_hash
+    )
 
-    name_mismatch = \
+    name_mismatch = (
         response_cert_id['issuer_name_hash'].native != cert_issuer_name_hash
-    serial_mismatch = \
+    )
+    serial_mismatch = (
         response_cert_id['serial_number'].native != cert_serial_number
+    )
 
     if (name_mismatch or serial_mismatch) and key_hash_mismatch:
         errs.mismatch_failures += 1
         return False
 
     if name_mismatch:
-        errs.failures.append((
-            'OCSP response issuer name hash does not match',
-            ocsp_response
-        ))
+        errs.failures.append(
+            ('OCSP response issuer name hash does not match', ocsp_response)
+        )
         return False
 
     if serial_mismatch:
-        errs.failures.append((
-            'OCSP response certificate serial number does not match',
-            ocsp_response
-        ))
+        errs.failures.append(
+            (
+                'OCSP response certificate serial number does not match',
+                ocsp_response,
+            )
+        )
         return False
 
     if key_hash_mismatch:
-        errs.failures.append((
-            'OCSP response issuer key hash does not match',
-            ocsp_response
-        ))
+        errs.failures.append(
+            ('OCSP response issuer key hash does not match', ocsp_response)
+        )
         return False
     return True
 
 
 def _identify_responder_cert(
-        ocsp_response: OCSPContainer, cert_store: CertificateCollection,
-        errs: _OCSPErrs) -> Optional[x509.Certificate]:
+    ocsp_response: OCSPContainer,
+    cert_store: CertificateCollection,
+    errs: _OCSPErrs,
+) -> Optional[x509.Certificate]:
     # To verify the response as legitimate, the responder cert must be located
 
     # prioritise the certificates included with the response, if there
@@ -218,10 +247,9 @@ def _identify_responder_cert(
     # should be ensured by successful extraction earlier
     assert response is not None
     if response['certs']:
-        cert_store = LayeredCertificateStore([
-            SimpleCertificateStore.from_certs(response['certs']),
-            cert_store
-        ])
+        cert_store = LayeredCertificateStore(
+            [SimpleCertificateStore.from_certs(response['certs']), cert_store]
+        )
 
     tbs_response = response['tbs_response_data']
     if tbs_response['responder_id'].name == 'by_key':
@@ -231,24 +259,27 @@ def _identify_responder_cert(
         candidate_responder_certs = cert_store.retrieve_by_name(
             tbs_response['responder_id'].chosen
         )
-        responder_cert = candidate_responder_certs[0] if \
-            candidate_responder_certs else None
+        responder_cert = (
+            candidate_responder_certs[0] if candidate_responder_certs else None
+        )
     if not responder_cert:
-        errs.failures.append((
-            pretty_message(
-                '''
+        errs.failures.append(
+            (
+                pretty_message(
+                    '''
                 Unable to verify OCSP response since response signing
                 certificate could not be located
                 '''
-            ),
-            ocsp_response
-        ))
+                ),
+                ocsp_response,
+            )
+        )
     return responder_cert
 
 
 def _precheck_ocsp_responder_auth(
-        responder_cert: x509.Certificate,
-        issuer: Authority, is_pkc: bool) -> Optional[bool]:
+    responder_cert: x509.Certificate, issuer: Authority, is_pkc: bool
+) -> Optional[bool]:
     """
     This function checks OCSP conditions that don't require path validation
     to pass. If ``None`` is returned, path validation is necessary to proceed.
@@ -260,8 +291,10 @@ def _precheck_ocsp_responder_auth(
     # validation (but that may change in the future). This decision is based on
     # a conservative reading of RFC 6960.
     # First, check whether the certs are the same.
-    if isinstance(issuer, AuthorityWithCert) and \
-            issuer.certificate.issuer_serial == responder_cert.issuer_serial:
+    if (
+        isinstance(issuer, AuthorityWithCert)
+        and issuer.certificate.issuer_serial == responder_cert.issuer_serial
+    ):
         issuer_cert = issuer.certificate
         # let's check whether the certs are actually the same
         # (by comparing the signatures as a proxy)
@@ -281,13 +314,15 @@ def _precheck_ocsp_responder_auth(
 
 
 async def _check_ocsp_authorisation(
-        responder_cert: x509.Certificate,
-        issuer: Authority,
-        cert_path: ValidationPath,
-        ocsp_response: OCSPContainer,
-        validation_context: ValidationContext,
-        is_pkc: bool,
-        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
+    responder_cert: x509.Certificate,
+    issuer: Authority,
+    cert_path: ValidationPath,
+    ocsp_response: OCSPContainer,
+    validation_context: ValidationContext,
+    is_pkc: bool,
+    errs: _OCSPErrs,
+    proc_state: ValProcState,
+) -> bool:
 
     simple_check = _precheck_ocsp_responder_auth(responder_cert, issuer, is_pkc)
 
@@ -297,24 +332,28 @@ async def _check_ocsp_authorisation(
     else:
         try:
             await _validate_delegated_ocsp_provenance(
-                responder_cert=responder_cert, issuer=issuer,
-                validation_context=validation_context, ee_path=cert_path,
-                proc_state=proc_state
+                responder_cert=responder_cert,
+                issuer=issuer,
+                validation_context=validation_context,
+                ee_path=cert_path,
+                proc_state=proc_state,
             )
             auth_ok = True
         except OCSPValidationError as e:
             errs.failures.append((e.args[0], ocsp_response))
             auth_ok = False
     if not auth_ok:
-        errs.failures.append((
-            pretty_message(
-                '''
+        errs.failures.append(
+            (
+                pretty_message(
+                    '''
                 Unable to verify OCSP response since response was
                 signed by an unauthorized certificate
                 '''
-            ),
-            ocsp_response
-        ))
+                ),
+                ocsp_response,
+            )
+        )
     return auth_ok
 
 
@@ -333,16 +372,17 @@ def _check_ocsp_status(ocsp_response: OCSPContainer, proc_state: ValProcState):
             reason = crl.CRLReason('unspecified')
         revocation_dt: datetime = revocation_info['revocation_time'].native
         raise RevokedError.format(
-            reason=reason, revocation_dt=revocation_dt,
-            revinfo_type='OCSP response', proc_state=proc_state
+            reason=reason,
+            revocation_dt=revocation_dt,
+            revinfo_type='OCSP response',
+            proc_state=proc_state,
         )
     return False
 
 
 def _verify_ocsp_signature(
-        responder_key: PublicKeyInfo,
-        ocsp_response: OCSPContainer,
-        errs: _OCSPErrs) -> bool:
+    responder_key: PublicKeyInfo, ocsp_response: OCSPContainer, errs: _OCSPErrs
+) -> bool:
 
     response = ocsp_response.extract_basic_ocsp_response()
     # Determine what algorithm was used to sign the response
@@ -356,30 +396,33 @@ def _verify_ocsp_signature(
             signature=response['signature'].native,
             signed_data=tbs_response.dump(),
             public_key_info=responder_key,
-            sig_algo=signature_algo, hash_algo=hash_algo,
-            parameters=response['signature_algorithm']['parameters']
+            sig_algo=signature_algo,
+            hash_algo=hash_algo,
+            parameters=response['signature_algorithm']['parameters'],
         )
         return True
     except PSSParameterMismatch:
-        errs.failures.append((
-            'The signature parameters on the OCSP response do not match '
-            'the constraints on the public key',
-            ocsp_response
-        ))
+        errs.failures.append(
+            (
+                'The signature parameters on the OCSP response do not match '
+                'the constraints on the public key',
+                ocsp_response,
+            )
+        )
     except InvalidSignature:
-        errs.failures.append((
-            'Unable to verify OCSP response signature',
-            ocsp_response
-        ))
+        errs.failures.append(
+            ('Unable to verify OCSP response signature', ocsp_response)
+        )
     return False
 
 
 def _assess_ocsp_relevance(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        issuer: Authority,
-        ocsp_response: OCSPContainer,
-        cert_store: CertificateCollection,
-        errs: _OCSPErrs) -> Optional[x509.Certificate]:
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    issuer: Authority,
+    ocsp_response: OCSPContainer,
+    cert_store: CertificateCollection,
+    errs: _OCSPErrs,
+) -> Optional[x509.Certificate]:
 
     matched = _match_ocsp_certid(
         cert, issuer=issuer, ocsp_response=ocsp_response, errs=errs
@@ -394,8 +437,9 @@ def _assess_ocsp_relevance(
         return None
 
     signature_ok = _verify_ocsp_signature(
-        responder_key=responder_cert.public_key, ocsp_response=ocsp_response,
-        errs=errs
+        responder_key=responder_cert.public_key,
+        ocsp_response=ocsp_response,
+        errs=errs,
     )
     if not signature_ok:
         return None
@@ -403,17 +447,21 @@ def _assess_ocsp_relevance(
 
 
 async def _handle_single_ocsp_resp(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        issuer: Authority,
-        path: ValidationPath,
-        ocsp_response: OCSPContainer,
-        validation_context: ValidationContext,
-        errs: _OCSPErrs, proc_state: ValProcState) -> bool:
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    issuer: Authority,
+    path: ValidationPath,
+    ocsp_response: OCSPContainer,
+    validation_context: ValidationContext,
+    errs: _OCSPErrs,
+    proc_state: ValProcState,
+) -> bool:
 
     responder_cert = _assess_ocsp_relevance(
-        cert=cert, issuer=issuer,
+        cert=cert,
+        issuer=issuer,
         ocsp_response=ocsp_response,
-        cert_store=validation_context.certificate_registry, errs=errs,
+        cert_store=validation_context.certificate_registry,
+        errs=errs,
     )
     if responder_cert is None:
         return False
@@ -434,10 +482,14 @@ async def _handle_single_ocsp_resp(
 
     # check whether the responder cert is authorised
     authorised = await _check_ocsp_authorisation(
-        responder_cert, issuer=issuer, cert_path=path,
-        ocsp_response=ocsp_response, validation_context=validation_context,
+        responder_cert,
+        issuer=issuer,
+        cert_path=path,
+        ocsp_response=ocsp_response,
+        validation_context=validation_context,
         is_pkc=isinstance(cert, x509.Certificate),
-        errs=errs, proc_state=proc_state
+        errs=errs,
+        proc_state=proc_state,
     )
     if not authorised:
         return False
@@ -446,10 +498,11 @@ async def _handle_single_ocsp_resp(
 
 
 async def verify_ocsp_response(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath,
-        validation_context: ValidationContext,
-        proc_state: Optional[ValProcState] = None):
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    path: ValidationPath,
+    validation_context: ValidationContext,
+    proc_state: Optional[ValProcState] = None,
+):
     """
     Verifies an OCSP response, checking to make sure the certificate has not
     been revoked. Fulfills the requirements of
@@ -484,24 +537,32 @@ async def verify_ocsp_response(
     try:
         cert_issuer = path.find_issuing_authority(cert)
     except LookupError:
-        raise OCSPNoMatchesError(pretty_message(
-            '''
+        raise OCSPNoMatchesError(
+            pretty_message(
+                '''
             Could not determine issuer certificate for %s in path.
             ''',
-            proc_state.describe_cert()
-        ))
+                proc_state.describe_cert(),
+            )
+        )
 
     errs = _OCSPErrs()
-    ocsp_responses = await validation_context.revinfo_manager\
-        .async_retrieve_ocsps(cert, cert_issuer)
+    ocsp_responses = (
+        await validation_context.revinfo_manager.async_retrieve_ocsps(
+            cert, cert_issuer
+        )
+    )
 
     for ocsp_response in ocsp_responses:
         try:
             ocsp_good = await _handle_single_ocsp_resp(
-                cert=cert, issuer=cert_issuer, path=path,
+                cert=cert,
+                issuer=cert_issuer,
+                path=path,
                 ocsp_response=ocsp_response,
                 validation_context=validation_context,
-                errs=errs, proc_state=proc_state
+                errs=errs,
+                proc_state=proc_state,
             )
             if ocsp_good:
                 return
@@ -511,12 +572,14 @@ async def verify_ocsp_response(
             errs.failures.append((msg, ocsp_response))
 
     if errs.mismatch_failures == len(ocsp_responses):
-        raise OCSPNoMatchesError(pretty_message(
-            '''
+        raise OCSPNoMatchesError(
+            pretty_message(
+                '''
             No OCSP responses were issued for %s
             ''',
-            cert_description
-        ))
+                cert_description,
+            )
+        )
 
     raise OCSPValidationIndeterminateError(
         pretty_message(
@@ -524,9 +587,9 @@ async def verify_ocsp_response(
             Unable to determine if %s is revoked due to insufficient
             information from OCSP responses
             ''',
-            cert_description
+            cert_description,
         ),
-        errs.failures
+        errs.failures,
     )
 
 
@@ -555,10 +618,12 @@ class OCSPCollectionResult:
 
 
 async def collect_relevant_responses_with_paths(
-        cert: Union[x509.Certificate, cms.AttributeCertificateV2],
-        path: ValidationPath, revinfo_manager: RevinfoManager,
-        control_time: datetime, proc_state: Optional[ValProcState] = None) \
-        -> OCSPCollectionResult:
+    cert: Union[x509.Certificate, cms.AttributeCertificateV2],
+    path: ValidationPath,
+    revinfo_manager: RevinfoManager,
+    control_time: datetime,
+    proc_state: Optional[ValProcState] = None,
+) -> OCSPCollectionResult:
     """
     Collect potentially relevant OCSP responses with the associated validation
     paths. Will not perform actual path validation.
@@ -582,33 +647,40 @@ async def collect_relevant_responses_with_paths(
     try:
         cert_issuer_auth = path.find_issuing_authority(cert)
     except LookupError:
-        raise OCSPNoMatchesError(pretty_message(
-            '''
+        raise OCSPNoMatchesError(
+            pretty_message(
+                '''
             Could not determine issuer certificate for %s in path.
             ''',
-            proc_state.describe_cert()
-        ))
+                proc_state.describe_cert(),
+            )
+        )
 
     relevant = []
 
-    ocsp_responses = await revinfo_manager \
-        .async_retrieve_ocsps(cert, cert_issuer_auth)
+    ocsp_responses = await revinfo_manager.async_retrieve_ocsps(
+        cert, cert_issuer_auth
+    )
 
     poe_manager = revinfo_manager.poe_manager
     errs = _OCSPErrs()
     for ocsp_response_cont in ocsp_responses:
         issued = ocsp_response_cont.issuance_date
         ocsp_resp_data = ocsp_response_cont.ocsp_response_data
-        if issued is None or issued > control_time or \
-                poe_manager[ocsp_resp_data] > control_time:
+        if (
+            issued is None
+            or issued > control_time
+            or poe_manager[ocsp_resp_data] > control_time
+        ):
             # We don't care about responses issued after control_time
             continue
         try:
             responder_cert = _assess_ocsp_relevance(
-                cert=cert, issuer=cert_issuer_auth,
+                cert=cert,
+                issuer=cert_issuer_auth,
                 ocsp_response=ocsp_response_cont,
                 cert_store=revinfo_manager.certificate_registry,
-                errs=errs
+                errs=errs,
             )
             if responder_cert is None:
                 continue
@@ -616,8 +688,7 @@ async def collect_relevant_responses_with_paths(
                 responder_cert, cert_issuer_auth, ee_path=path
             )
             result = OCSPResponseOfInterest(
-                ocsp_response=ocsp_response_cont,
-                prov_path=path
+                ocsp_response=ocsp_response_cont, prov_path=path
             )
             relevant.append(result)
         except ValueError as e:
@@ -625,5 +696,6 @@ async def collect_relevant_responses_with_paths(
             logging.debug(msg, exc_info=e)
             errs.failures.append((msg, ocsp_response_cont))
     return OCSPCollectionResult(
-        responses=relevant, failure_msgs=[f[0] for f in errs.failures],
+        responses=relevant,
+        failure_msgs=[f[0] for f in errs.failures],
     )

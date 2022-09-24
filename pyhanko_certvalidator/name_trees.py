@@ -2,11 +2,10 @@ import enum
 import logging
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address
-from typing import Union, Callable, Optional, Set, Dict, List, Iterable
+from typing import Callable, Dict, Iterable, List, Optional, Set, Union
 
 from asn1crypto import x509
 from uritools import urisplit
-
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +27,10 @@ def host_tree_contains(base_host: str, other_host: str) -> bool:
 def _host_regname(cand_uri):
     cand_host = urisplit(cand_uri).gethost()
     if not cand_host or isinstance(cand_host, (IPv4Address, IPv6Address)):
-        host_err = f'has host {cand_host}.' if cand_host is not None else (
-            'is not a well-formed URI.'
+        host_err = (
+            f'has host {cand_host}.'
+            if cand_host is not None
+            else ('is not a well-formed URI.')
         )
         msg = (
             "URI constraints require URIs with a host specified as a FQDN; "
@@ -82,6 +83,7 @@ def dirname_tree_contains(base: x509.Name, other: x509.Name):
 
 # TODO support IP address constraints as well
 
+
 class GeneralNameType(enum.Enum):
     OTHER_NAME = enum.auto()
     RFC822_NAME = enum.auto()
@@ -94,10 +96,11 @@ class GeneralNameType(enum.Enum):
     REGISTERED_ID = enum.auto()
 
     @property
-    def check_membership(self) \
-            -> Optional[
-                Callable[[Union[str, x509.Name], Union[str, x509.Name]], bool]
-            ]:
+    def check_membership(
+        self,
+    ) -> Optional[
+        Callable[[Union[str, x509.Name], Union[str, x509.Name]], bool]
+    ]:
         return _name_type_checkers.get(self, None)
 
     @classmethod
@@ -109,7 +112,7 @@ _name_type_checkers = {
     GeneralNameType.DIRECTORY_NAME: dirname_tree_contains,
     GeneralNameType.RFC822_NAME: email_tree_contains,
     GeneralNameType.DNS_NAME: dns_tree_contains,
-    GeneralNameType.UNIFORM_RESOURCE_IDENTIFIER: uri_tree_contains
+    GeneralNameType.UNIFORM_RESOURCE_IDENTIFIER: uri_tree_contains,
 }
 
 
@@ -190,17 +193,17 @@ class NameSubtree:
 
     @classmethod
     def from_name(cls, name_type: GeneralNameType, name: Union[str, x509.Name]):
-        return NameSubtree(
-            name_type=name_type, tree_base=_StringOrName(name)
-        )
+        return NameSubtree(name_type=name_type, tree_base=_StringOrName(name))
 
     @classmethod
     def from_general_subtree(cls, subtree) -> 'NameSubtree':
         gname = subtree['base']
         name_type, name_obj = _interpret_general_name(gname)
         return NameSubtree(
-            name_type, _StringOrName(name_obj), min=subtree['minimum'].native,
-            max=subtree['maximum'].native
+            name_type,
+            _StringOrName(name_obj),
+            min=subtree['minimum'].native,
+            max=subtree['maximum'].native,
         )
 
     @classmethod
@@ -227,7 +230,6 @@ def x509_names_to_subtrees(names: Iterable[x509.Name]) -> PKIXSubtrees:
     return {GeneralNameType.DIRECTORY_NAME: {_subtree(n) for n in names}}
 
 
-
 def _group_subtrees(trees: Iterable[NameSubtree]) -> PKIXSubtrees:
     # This should NOT be a defaultdict, because the semantics of a tree
     # type not being present vs. the set being empty are very different!
@@ -248,7 +250,6 @@ def process_general_subtrees(subtrees: x509.GeneralSubtrees) -> PKIXSubtrees:
 
 
 class NameConstraintValidationResult:
-
     def __init__(self, failing_name_type=None, failing_name=None):
         self.failing_name_type: GeneralNameType = failing_name_type
         self.failing_name: Union[str, x509.Name] = failing_name
@@ -264,9 +265,7 @@ class NameConstraintValidationResult:
             name_str = name_str.human_friendly
 
         name_type = self.failing_name_type.name.lower()
-        return (
-            f"The name '{name_str}' of type {name_type} is not allowed."
-        )
+        return f"The name '{name_str}' of type {name_type} is not allowed."
 
 
 class PermittedSubtrees:
@@ -307,8 +306,9 @@ class PermittedSubtrees:
         except NameConstraintError:
             return False
 
-    def accept_cert(self, cert: x509.Certificate) \
-            -> NameConstraintValidationResult:
+    def accept_cert(
+        self, cert: x509.Certificate
+    ) -> NameConstraintValidationResult:
         try:
             failing_name_type, failing_name = next(
                 (name_type, name)
@@ -316,15 +316,13 @@ class PermittedSubtrees:
                 if not self.accept_name(name_type, name)
             )
             return NameConstraintValidationResult(
-                failing_name_type=failing_name_type,
-                failing_name=failing_name
+                failing_name_type=failing_name_type, failing_name=failing_name
             )
         except StopIteration:
             return NameConstraintValidationResult()
 
 
 class ExcludedSubtrees:
-
     def __init__(self, initial_excluded_subtrees: PKIXSubtrees):
         # The situation is not fully symmetric with the whitelist case:
         # here, we don't need to remember individual generations of blacklists,
@@ -346,8 +344,9 @@ class ExcludedSubtrees:
         except NameConstraintError:
             return True
 
-    def accept_cert(self, cert: x509.Certificate) \
-            -> NameConstraintValidationResult:
+    def accept_cert(
+        self, cert: x509.Certificate
+    ) -> NameConstraintValidationResult:
         try:
             failing_name_type, failing_name = next(
                 (name_type, name)
@@ -355,8 +354,7 @@ class ExcludedSubtrees:
                 if self.reject_name(name_type, name)
             )
             return NameConstraintValidationResult(
-                failing_name_type=failing_name_type,
-                failing_name=failing_name
+                failing_name_type=failing_name_type, failing_name=failing_name
             )
         except StopIteration:
             return NameConstraintValidationResult()

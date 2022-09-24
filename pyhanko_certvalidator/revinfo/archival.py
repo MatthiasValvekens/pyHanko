@@ -2,16 +2,20 @@ import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, List, Iterable, Union
+from typing import Iterable, List, Optional, Union
 
-from asn1crypto import ocsp, crl
+from asn1crypto import crl, ocsp
 
 from pyhanko_certvalidator._types import type_name
-from pyhanko_certvalidator.ltv.types import ValidationTimingParams, \
-    IssuedItemContainer
+from pyhanko_certvalidator.ltv.types import (
+    IssuedItemContainer,
+    ValidationTimingParams,
+)
+from pyhanko_certvalidator.policy_decl import (
+    CertRevTrustPolicy,
+    FreshnessReqType,
+)
 from pyhanko_certvalidator.util import pretty_message
-from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
-    FreshnessReqType
 
 
 class RevinfoUsabilityRating(enum.Enum):
@@ -26,9 +30,9 @@ class RevinfoUsabilityRating(enum.Enum):
 
 
 class RevinfoContainer(IssuedItemContainer, abc.ABC):
-
-    def usable_at(self, policy: CertRevTrustPolicy,
-                  timing_params: ValidationTimingParams) -> RevinfoUsabilityRating:
+    def usable_at(
+        self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
+    ) -> RevinfoUsabilityRating:
         raise NotImplementedError
 
 
@@ -42,6 +46,7 @@ def sort_freshest_first(lst: Iterable[RevinfoContainer]):
         #  else. Since we sort reversed, the "unknown issuance date" ones
         #  are dumped at the end of the list.
         return dt is not None, dt
+
     return sorted(lst, key=_key, reverse=True)
 
 
@@ -56,11 +61,12 @@ def _freshness_delta(policy, this_update, next_update, time_tolerance):
     return freshness_delta
 
 
-def _judge_revinfo(this_update: Optional[datetime],
-                   next_update: Optional[datetime],
-                   policy: CertRevTrustPolicy,
-                   timing_params: ValidationTimingParams) \
-        -> RevinfoUsabilityRating:
+def _judge_revinfo(
+    this_update: Optional[datetime],
+    next_update: Optional[datetime],
+    policy: CertRevTrustPolicy,
+    timing_params: ValidationTimingParams,
+) -> RevinfoUsabilityRating:
 
     if this_update is None:
         return RevinfoUsabilityRating.UNCLEAR
@@ -74,8 +80,10 @@ def _judge_revinfo(this_update: Optional[datetime],
     #   validation. Maybe this needs to be dealt with at a higher level, to
     #   accept future revinfo as evidence of non-revocation or somesuch
     if timing_params.validation_time < this_update:
-        if not policy.retroactive_revinfo or \
-                policy.freshness_req_type != FreshnessReqType.DEFAULT:
+        if (
+            not policy.retroactive_revinfo
+            or policy.freshness_req_type != FreshnessReqType.DEFAULT
+        ):
             return RevinfoUsabilityRating.TOO_NEW
 
     validation_time = timing_params.validation_time
@@ -92,8 +100,10 @@ def _judge_revinfo(this_update: Optional[datetime],
         signature_poe_time = timing_params.use_poe_time
         if this_update - signature_poe_time < freshness_delta:
             return RevinfoUsabilityRating.STALE
-    elif policy.freshness_req_type \
-            == FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION:
+    elif (
+        policy.freshness_req_type
+        == FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION
+    ):
         # check whether the difference between thisUpdate
         # and the validation time is small enough
 
@@ -126,8 +136,9 @@ def _judge_revinfo(this_update: Optional[datetime],
     return RevinfoUsabilityRating.OK
 
 
-def _extract_basic_ocsp_response(ocsp_response) \
-        -> Optional[ocsp.BasicOCSPResponse]:
+def _extract_basic_ocsp_response(
+    ocsp_response,
+) -> Optional[ocsp.BasicOCSPResponse]:
 
     # Make sure that we get a valid response back from the OCSP responder
     status = ocsp_response['response_status'].native
@@ -147,8 +158,9 @@ class OCSPContainer(RevinfoContainer):
     index: int = 0
 
     @classmethod
-    def load_multi(cls, ocsp_response: ocsp.OCSPResponse) \
-            -> List['OCSPContainer']:
+    def load_multi(
+        cls, ocsp_response: ocsp.OCSPResponse
+    ) -> List['OCSPContainer']:
         basic_ocsp_response = _extract_basic_ocsp_response(ocsp_response)
         if basic_ocsp_response is None:
             return []
@@ -167,8 +179,9 @@ class OCSPContainer(RevinfoContainer):
 
         return cert_response['this_update'].native
 
-    def usable_at(self, policy: CertRevTrustPolicy,
-                  timing_params: ValidationTimingParams) -> RevinfoUsabilityRating:
+    def usable_at(
+        self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
+    ) -> RevinfoUsabilityRating:
 
         cert_response = self.extract_single_response()
         if cert_response is None:
@@ -177,8 +190,10 @@ class OCSPContainer(RevinfoContainer):
         this_update = cert_response['this_update'].native
         next_update = cert_response['next_update'].native
         return _judge_revinfo(
-            this_update, next_update,
-            policy=policy, timing_params=timing_params,
+            this_update,
+            next_update,
+            policy=policy,
+            timing_params=timing_params,
         )
 
     def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
@@ -199,14 +214,14 @@ class OCSPContainer(RevinfoContainer):
 class CRLContainer(RevinfoContainer):
     crl_data: crl.CertificateList
 
-    def usable_at(self, policy: CertRevTrustPolicy,
-                  timing_params: ValidationTimingParams) -> RevinfoUsabilityRating:
+    def usable_at(
+        self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
+    ) -> RevinfoUsabilityRating:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         this_update = tbs_cert_list['this_update'].native
         next_update = tbs_cert_list['next_update'].native
         return _judge_revinfo(
-            this_update, next_update,  policy=policy,
-            timing_params=timing_params
+            this_update, next_update, policy=policy, timing_params=timing_params
         )
 
     @property
@@ -219,8 +234,9 @@ LegacyCompatCRL = Union[bytes, crl.CertificateList, CRLContainer]
 LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPContainer]
 
 
-def process_legacy_crl_input(crls: Iterable[LegacyCompatCRL]) \
-        -> List[CRLContainer]:
+def process_legacy_crl_input(
+    crls: Iterable[LegacyCompatCRL],
+) -> List[CRLContainer]:
     new_crls = []
     for crl_ in crls:
         if isinstance(crl_, bytes):
@@ -231,18 +247,21 @@ def process_legacy_crl_input(crls: Iterable[LegacyCompatCRL]) \
             new_crls.append(crl_)
         else:
             # TODO update error messages
-            raise TypeError(pretty_message(
-                '''
+            raise TypeError(
+                pretty_message(
+                    '''
                 crls must be a list of byte strings or
                 asn1crypto.crl.CertificateList objects, not %s
                 ''',
-                type_name(crl_)
-            ))
+                    type_name(crl_),
+                )
+            )
     return new_crls
 
 
-def process_legacy_ocsp_input(ocsps: Iterable[LegacyCompatOCSP]) \
-        -> List[OCSPContainer]:
+def process_legacy_ocsp_input(
+    ocsps: Iterable[LegacyCompatOCSP],
+) -> List[OCSPContainer]:
     new_ocsps = []
     for ocsp_ in ocsps:
         if isinstance(ocsp_, bytes):
@@ -254,11 +273,13 @@ def process_legacy_ocsp_input(ocsps: Iterable[LegacyCompatOCSP]) \
             new_ocsps.append(ocsp_)
         else:
             # TODO update error messages
-            raise TypeError(pretty_message(
-                '''
+            raise TypeError(
+                pretty_message(
+                    '''
                 ocsps must be a list of byte strings or
                 asn1crypto.ocsp.OCSPResponse objects, not %s
                 ''',
-                type_name(ocsp_)
-            ))
+                    type_name(ocsp_),
+                )
+            )
     return new_ocsps
