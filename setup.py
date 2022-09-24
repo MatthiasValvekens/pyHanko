@@ -139,8 +139,6 @@ setup(
     ],
     package_data=package_data,
 
-    test_suite='tests.make_suite',
-
     cmdclass={
         'clean': CleanCommand,
         'egg_info': EggInfoCommand,

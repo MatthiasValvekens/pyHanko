@@ -10,13 +10,11 @@ options, including: validation at a specific moment in time, whitelisting and re
  - [Features](#features)
  - [Related Crypto Libraries](#related-crypto-libraries)
  - [Current Release](#current-release)
- - [Dependencies](#dependencies)
  - [Installation](#installation)
  - [License](#license)
  - [Documentation](#documentation)
  - [Continuous Integration](#continuous-integration)
  - [Testing](#testing)
- - [CI Tasks](#ci-tasks)
 
 
 ## Features
