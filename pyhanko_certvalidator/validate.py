@@ -17,6 +17,7 @@ from .errors import (
     CRLFetchError,
     CRLNoMatchesError,
     CRLValidationIndeterminateError,
+    DisallowedAlgorithmError,
     ExpiredError,
     InsufficientRevinfoError,
     InvalidAttrCertificateError,
@@ -29,7 +30,6 @@ from .errors import (
     PathValidationError,
     PSSParameterMismatch,
     ValidationError,
-    WeakAlgorithmError,
 )
 from .name_trees import (
     ExcludedSubtrees,
@@ -495,7 +495,7 @@ def _check_ac_signature(
     hash_algo = attr_cert['signature_algorithm'].hash_algo
 
     if hash_algo in validation_context.weak_hash_algos:
-        raise WeakAlgorithmError(
+        raise DisallowedAlgorithmError(
             pretty_message(
                 '''
             The attribute certificate could not be validated because 
@@ -1015,7 +1015,7 @@ class _PathValidationState:
         hash_algo = cert['signature_algorithm'].hash_algo
 
         if hash_algo in weak_hash_algos:
-            raise WeakAlgorithmError.from_state(
+            raise DisallowedAlgorithmError.from_state(
                 pretty_message(
                     '''
                 The path could not be validated because the signature of %s

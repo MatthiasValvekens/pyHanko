@@ -139,7 +139,7 @@ class InvalidCertificateError(PathValidationError):
         )
 
 
-class WeakAlgorithmError(PathValidationError):
+class DisallowedAlgorithmError(PathValidationError):
     pass
 
 
