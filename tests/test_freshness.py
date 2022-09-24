@@ -57,7 +57,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
             use_poe_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)
 
     async def test_cooldown_period_too_early(self):
@@ -85,7 +85,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
             use_poe_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
             await async_validate_path(vc, path)
 
@@ -113,7 +113,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             revinfo_policy=policy,
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)
 
     async def test_use_delta_stale(self):
@@ -140,7 +140,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             revinfo_policy=policy,
             moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
             await async_validate_path(vc, path)
 
@@ -171,7 +171,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             revinfo_policy=policy,
             moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         with self.assertRaises(RevokedError):
             await async_validate_path(vc, path)
 
@@ -183,7 +183,7 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             revinfo_policy=policy,
             moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)
 
     async def test_discard_post_validation_time(self):
@@ -213,5 +213,5 @@ class FreshnessTests(unittest.IsolatedAsyncioTestCase):
             revinfo_policy=policy,
             moment=datetime(2020, 11, 29, tzinfo=timezone.utc),
         )
-        path, = await vc.certificate_registry.async_build_paths(alice)
+        path, = await vc.path_builder.async_build_paths(alice)
         await async_validate_path(vc, path)

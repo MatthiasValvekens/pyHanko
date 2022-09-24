@@ -142,7 +142,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             weak_hash_algos={'md2', 'md5'},
             fetcher_backend=MockFetcherBackend()
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -166,7 +166,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 per_request_timeout=TEST_REQUEST_TIMEOUT
             )
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -197,7 +197,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 weak_hash_algos={'md2', 'md5'},
                 fetchers=fetchers
             )
-            paths = await context.certificate_registry.async_build_paths(cert)
+            paths = await context.path_builder.async_build_paths(cert)
             self.assertEqual(1, len(paths))
             path = paths[0]
             self.assertEqual(3, len(path))
@@ -225,7 +225,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 weak_hash_algos={'md2', 'md5'},
                 fetchers=fetchers
             )
-            paths = await context.certificate_registry.async_build_paths(cert)
+            paths = await context.path_builder.async_build_paths(cert)
             self.assertEqual(1, len(paths))
             path = paths[0]
             self.assertEqual(3, len(path))
@@ -253,7 +253,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
                 weak_hash_algos={'md2', 'md5'},
                 fetchers=fetchers
             )
-            paths = await context.certificate_registry.async_build_paths(cert)
+            paths = await context.path_builder.async_build_paths(cert)
             self.assertEqual(1, len(paths))
             path = paths[0]
             self.assertEqual(3, len(path))
@@ -283,7 +283,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             revocation_mode='soft-fail',
             weak_hash_algos={'md2', 'md5'}
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -310,7 +310,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             revocation_mode='soft-fail',
             weak_hash_algos={'md2', 'md5'}
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -332,7 +332,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             weak_hash_algos={'md2', 'md5'},
             moment=datetime(2020, 11, 1, tzinfo=timezone.utc)
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -354,7 +354,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             weak_hash_algos={'md2', 'md5'},
             moment=datetime(2020, 11, 1, tzinfo=timezone.utc)
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -384,7 +384,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
         )
 
         cert = self._load_cert_object('multitasking-ocsp', 'alice.cert.pem')
-        paths = vc.certificate_registry.build_paths(cert)
+        paths = vc.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(3, len(path))
@@ -404,7 +404,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             ocsps=ocsp_responses,
             weak_hash_algos={'md2', 'md5'}
         )
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path = paths[0]
         self.assertEqual(path_len, len(path))
@@ -1014,7 +1014,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             weak_hash_algos={'md2', 'md5'}
         )
 
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path: ValidationPath = paths[0]
         self.assertEqual(path_len, len(path))
@@ -1052,7 +1052,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             weak_hash_algos={'md2', 'md5'}
         )
 
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path: ValidationPath = paths[0]
         validate_path(context, path, parameters=params)
@@ -1166,7 +1166,7 @@ class ValidateTests(unittest.IsolatedAsyncioTestCase):
             weak_hash_algos={'md2', 'md5'}
         )
 
-        paths = context.certificate_registry.build_paths(cert)
+        paths = context.path_builder.build_paths(cert)
         self.assertEqual(1, len(paths))
         path: ValidationPath = paths[0]
         validate_path(context, path)

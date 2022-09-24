@@ -134,7 +134,7 @@ class RevinfoManager:
         basic = ocsp_response.extract_basic_ocsp_response()
         if basic is not None and basic['certs']:
             for other_cert in basic['certs']:
-                if registry.add_other_cert(other_cert):
+                if registry.register(other_cert):
                     revo_certs[other_cert.issuer_serial] = other_cert
                     # register with the same POE as the OCSP response
                     poe_man.register(other_cert, dt=ocsp_poe_time)

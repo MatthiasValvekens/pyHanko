@@ -74,7 +74,7 @@ class CertificateValidator:
         if intermediate_certs is not None:
             certificate_registry = validation_context.certificate_registry
             for intermediate_cert in intermediate_certs:
-                certificate_registry.add_other_cert(intermediate_cert)
+                certificate_registry.register(intermediate_cert)
 
         self._context = validation_context
         self._certificate = end_entity_cert
@@ -109,7 +109,7 @@ class CertificateValidator:
             ))
 
         try:
-            paths = await self._context.certificate_registry.async_build_paths(
+            paths = await self._context.path_builder.async_build_paths(
                 self._certificate
             )
         except PathBuildingError:

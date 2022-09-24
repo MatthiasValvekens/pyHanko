@@ -67,7 +67,7 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         context = ValidationContext(
             trust_roots=[anchor], revocation_mode='soft-fail',
         )
-        path, = await context.certificate_registry.async_build_paths(ee)
+        path, = await context.path_builder.async_build_paths(ee)
         self.assertEqual(path.pkix_len, 1)
         with self.assertRaisesRegex(PathValidationError,
                                     'not all names.*permitted'):
@@ -80,7 +80,7 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         context = ValidationContext(
             trust_roots=[anchor], revocation_mode='soft-fail',
         )
-        path, = await context.certificate_registry.async_build_paths(ee)
+        path, = await context.path_builder.async_build_paths(ee)
         self.assertEqual(path.pkix_len, 1)
 
         # this should be OK
@@ -105,7 +105,7 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         context = ValidationContext(
             trust_roots=[anchor], revocation_mode='soft-fail',
         )
-        path, = await context.certificate_registry.async_build_paths(ee)
+        path, = await context.path_builder.async_build_paths(ee)
         self.assertEqual(path.pkix_len, 1)
 
         # this should be OK
@@ -142,7 +142,7 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         context = ValidationContext(
             trust_roots=[anchor], revocation_mode='soft-fail',
         )
-        path, = await context.certificate_registry.async_build_paths(ee)
+        path, = await context.path_builder.async_build_paths(ee)
         self.assertEqual(path.pkix_len, 1)
 
         self.assertIsInstance(path.first, x509.Certificate)
@@ -169,7 +169,7 @@ class ValidationWithTrustQualifiersTest(unittest.IsolatedAsyncioTestCase):
         context = ValidationContext(
             trust_roots=[anchor], revocation_mode='soft-fail',
         )
-        path, = await context.certificate_registry.async_build_paths(ee)
+        path, = await context.path_builder.async_build_paths(ee)
         self.assertEqual(path.pkix_len, 1)
 
         self.assertIsInstance(path.first, x509.Certificate)

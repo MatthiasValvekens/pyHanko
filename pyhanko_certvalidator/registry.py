@@ -2,14 +2,14 @@
 
 import abc
 from collections import defaultdict
-from typing import List, Optional, Iterable, Union
+from typing import List, Optional, Iterable, Union, Iterator
 import asyncio
 
 from asn1crypto import x509
 from oscrypto import trust_list
 
 from .util import pretty_message, ConsList
-from .authority import TrustAnchor, CertTrustAnchor, AuthorityWithCert
+from .authority import TrustAnchor, CertTrustAnchor
 from .fetchers import CertificateFetcher
 from .errors import PathBuildingError
 from .path import ValidationPath
@@ -167,47 +167,66 @@ class SimpleCertificateStore(CertificateStore):
 TrustRootList = Iterable[Union[x509.Certificate, TrustAnchor]]
 
 
-class CertificateRegistry(SimpleCertificateStore):
+class TrustManager:
     """
-    Contains certificate lists used to build validation paths
+    Abstract trust manager API.
     """
 
-    def __init__(self,
-                 trust_roots: Optional[TrustRootList] = None,
-                 extra_trust_roots: Optional[TrustRootList] = None,
-                 other_certs: Optional[Iterable[x509.Certificate]] = None,
-                 *, cert_fetcher: CertificateFetcher = None):
+    def is_root(self, cert: x509.Certificate) -> bool:
+        """
+        Checks if a certificate is in the list of trust roots in this registry
+
+        :param cert:
+            An asn1crypto.x509.Certificate object
+
+        :return:
+            A boolean - if the certificate is in the CA list
+        """
+        raise NotImplementedError
+
+    def find_potential_issuers(self, cert: x509.Certificate) \
+            -> Iterator[TrustAnchor]:
+        """
+        Find potential issuers that might have (directly) issued
+        a particular certificate.
+
+        :param cert:
+            Issued certificate.
+        :return:
+            An iterator with potentially relevant trust anchors.
+        """
+        raise NotImplementedError
+
+
+class SimpleTrustManager(TrustManager):
+    """
+    Trust manager backed by a list of trust roots, possibly in addition to the
+    system trust list.
+    """
+
+    def __init__(self):
+
+        self._roots = set()
+        self._root_subject_map = defaultdict(list)
+
+    @classmethod
+    def build(
+            cls, trust_roots: Optional[TrustRootList] = None,
+            extra_trust_roots: Optional[TrustRootList] = None) \
+            -> 'SimpleTrustManager':
         """
         :param trust_roots:
             If the operating system's trust list should not be used, instead
-            pass a list of byte strings containing DER or PEM-encoded X.509
-            certificates, or asn1crypto.x509.Certificate objects. These
+            pass a list of asn1crypto.x509.Certificate objects. These
             certificates will be used as the trust roots for the path being
             built.
 
         :param extra_trust_roots:
             If the operating system's trust list should be used, but augmented
-            with one or more extra certificates. This should be a list of byte
-            strings containing DER or PEM-encoded X.509 certificates, or
+            with one or more extra certificates. This should be a list of
             asn1crypto.x509.Certificate objects.
-
-        :param other_certs:
-            A list of byte strings containing DER or PEM-encoded X.509
-            certificates, or a list of asn1crypto.x509.Certificate objects.
-            These other certs are usually provided by the service/item being
-            validated. In SSL, these would be intermediate chain certs.
+        :return:
         """
-
-        super().__init__()
-
-        self._roots = set()
-        self._root_subject_map = defaultdict(list)
-
-        if other_certs is None:
-            other_certs = []
-        else:
-            other_certs = list(other_certs)
-
         if trust_roots is None:
             trust_roots = [e[0] for e in trust_list.get_list()]
         else:
@@ -216,28 +235,26 @@ class CertificateRegistry(SimpleCertificateStore):
         if extra_trust_roots is not None:
             trust_roots.extend(extra_trust_roots)
 
+        manager = SimpleTrustManager()
         for trust_root in trust_roots:
-            if isinstance(trust_root, TrustAnchor):
-                self._register_ca(trust_root)
-            else:
-                self._register_ca(CertTrustAnchor(trust_root))
+            manager._register_root(trust_root)
+        return manager
 
-        for other_cert in other_certs:
-            self.register(other_cert)
-
-        self.fetcher = cert_fetcher
-
-    def _register_ca(self, anchor: TrustAnchor):
+    def _register_root(self,
+                       trust_root: Union[TrustAnchor, x509.Certificate]):
+        if isinstance(trust_root, TrustAnchor):
+            anchor = trust_root
+        else:
+            anchor = CertTrustAnchor(trust_root)
         if anchor not in self._roots:
             authority = anchor.authority
-            if isinstance(authority, AuthorityWithCert):
-                self.register(authority.certificate)
             self._roots.add(anchor)
-            self._root_subject_map[authority.name.hashable].append(anchor)
+            self._root_subject_map[authority.name.hashable] \
+                .append(anchor)
 
-    def is_ca(self, cert):
+    def is_root(self, cert: x509.Certificate):
         """
-        Checks if a certificate is in the list of CA certs in this registry
+        Checks if a certificate is in the list of trust roots in this registry
 
         :param cert:
             An asn1crypto.x509.Certificate object
@@ -248,20 +265,57 @@ class CertificateRegistry(SimpleCertificateStore):
 
         return CertTrustAnchor(cert) in self._roots
 
-    def add_other_cert(self, cert):
+    def iter_certs(self) -> Iterator[x509.Certificate]:
+        return (
+            root.certificate for root in self._roots
+            if isinstance(root, CertTrustAnchor)
+        )
+
+    def find_potential_issuers(self, cert: x509.Certificate) \
+            -> Iterator[TrustAnchor]:
+        issuer_hashable = cert.issuer.hashable
+        root: TrustAnchor
+        for root in self._root_subject_map[issuer_hashable]:
+            if root.authority.is_potential_issuer_of(cert):
+                yield root
+
+
+class CertificateRegistry(SimpleCertificateStore):
+    """
+    Contains certificate lists used to build validation paths, and
+    is also capable of fetching missing certificates if a certificate
+    fetcher is supplied.
+    """
+
+    def __init__(self, *, cert_fetcher: Optional[CertificateFetcher] = None):
+        super().__init__()
+        self.fetcher = cert_fetcher
+
+    @classmethod
+    def build(
+            cls,
+            certs: Iterable[x509.Certificate] = (),
+            *,
+            cert_fetcher: Optional[CertificateFetcher] = None):
         """
-        Allows adding an "other" cert that is obtained from doing revocation
-        check via OCSP or CRL, or some other method
+        Convenience method to set up a certificate registry and import
+        certs into it.
 
-        :param cert:
-            An asn1crypto.x509.Certificate object
-
+        :param certs:
+            Initial list of certificates to import.
+        :param cert_fetcher:
+            Certificate fetcher to handle retrieval of missing certificates
+            (in situations where that is possible).
         :return:
-            A boolean indicating if the certificate was added - will return
-            False if the certificate was already present
+            A populated certificate registry.
         """
 
-        return self.register(cert)
+        result: CertificateRegistry = cls(cert_fetcher=cert_fetcher)
+        for cert in certs:
+            result.register(cert)
+
+        result.fetcher = cert_fetcher
+        return result
 
     def retrieve_by_name(self, name: x509.Name,
                          first_certificate: Optional[x509.Certificate] = None):
@@ -289,6 +343,51 @@ class CertificateRegistry(SimpleCertificateStore):
         if first:
             output.insert(0, first)
         return output
+
+    def find_potential_issuers(self, cert: x509.Certificate,
+                               trust_manager: TrustManager) \
+            -> Iterator[Union[TrustAnchor, x509.Certificate]]:
+
+        issuer_hashable = cert.issuer.hashable
+
+        # Info from the authority key identifier extension can be used to
+        # eliminate possible options when multiple keys with the same
+        # subject exist, such as during a transition, or with cross-signing.
+
+        # go through matching trust roots first
+        yield from trust_manager.find_potential_issuers(cert)
+
+        for issuer in self._subject_map[issuer_hashable]:
+            if trust_manager.is_root(issuer):
+                continue  # skip, we've had these in the previous step
+            if cert.authority_key_identifier and issuer.key_identifier:
+                if cert.authority_key_identifier != issuer.key_identifier:
+                    continue
+            elif cert.authority_issuer_serial:
+                if cert.authority_issuer_serial != issuer.issuer_serial:
+                    continue
+
+            yield issuer
+
+    async def fetch_missing_potential_issuers(self, cert: x509.Certificate):
+        if self.fetcher is None:
+            return
+
+        async for issuer in self.fetcher.fetch_cert_issuers(cert):
+            # register the cert for future reference
+            self.register(issuer)
+            yield issuer
+
+
+class PathBuilder:
+    """
+    Class to handle path building.
+    """
+
+    def __init__(self, trust_manager: TrustManager,
+                 registry: CertificateRegistry):
+        self.trust_manager = trust_manager
+        self.registry = registry
 
     def build_paths(self, end_entity_cert):
         """
@@ -326,7 +425,8 @@ class CertificateRegistry(SimpleCertificateStore):
             represent the possible paths from the end-entity certificate to one
             of the CA certs.
         """
-        if self.is_ca(end_entity_cert):
+
+        if self.trust_manager.is_root(end_entity_cert):
             result = ValidationPath(CertTrustAnchor(end_entity_cert), [], None)
             return [result]
 
@@ -380,7 +480,10 @@ class CertificateRegistry(SimpleCertificateStore):
         cert = path.head
         assert isinstance(cert, x509.Certificate)
         new_branches = 0
-        for issuer in self._possible_issuers(cert):
+        potential_issuers = self.registry.find_potential_issuers(
+            cert, self.trust_manager
+        )
+        for issuer in potential_issuers:
             if isinstance(issuer, x509.Certificate):
                 cert_id = issuer.issuer_serial
                 if cert_id in certs_seen:  # no duplicates
@@ -393,56 +496,19 @@ class CertificateRegistry(SimpleCertificateStore):
             )
             new_branches += 1
 
-        if not new_branches and self.fetcher is not None:
+        if not new_branches:
             # attempt to download certs if there's nothing in the context
-            async for issuer in self.fetcher.fetch_cert_issuers(cert):
-                if isinstance(issuer, x509.Certificate):
-                    # register the cert for future reference
-                    self.add_other_cert(issuer)
-                    cert_id = issuer.issuer_serial
-                    if cert_id in certs_seen:
-                        continue
-                    new_certs_seen = certs_seen.cons(cert_id)
-                else:
-                    new_certs_seen = certs_seen
+            async for issuer in self.registry.fetch_missing_potential_issuers(cert):
+                cert_id = issuer.issuer_serial
+                if cert_id in certs_seen:
+                    continue
+                new_certs_seen = certs_seen.cons(cert_id)
                 await self._walk_issuers(
                     path.cons(issuer), new_certs_seen, paths, failed_paths
                 )
                 new_branches += 1
         if not new_branches:
             failed_paths.append(path)
-
-    def _possible_issuers(self, cert):
-        """
-        Returns a generator that will list all possible issuers for the cert
-
-        :param cert:
-            An asn1crypto.x509.Certificate object to find the issuer of
-        """
-
-        issuer_hashable = cert.issuer.hashable
-
-        # Info from the authority key identifier extension can be used to
-        # eliminate possible options when multiple keys with the same
-        # subject exist, such as during a transition, or with cross-signing.
-
-        # go through matching trust roots first
-        root: TrustAnchor
-        for root in self._root_subject_map[issuer_hashable]:
-            if root.authority.is_potential_issuer_of(cert):
-                yield root
-
-        for issuer in self._subject_map[issuer_hashable]:
-            if self.is_ca(issuer):
-                continue  # skip, we've had these in the previous step
-            if cert.authority_key_identifier and issuer.key_identifier:
-                if cert.authority_key_identifier != issuer.key_identifier:
-                    continue
-            elif cert.authority_issuer_serial:
-                if cert.authority_issuer_serial != issuer.issuer_serial:
-                    continue
-
-            yield issuer
 
 
 class LayeredCertificateStore(CertificateCollection):

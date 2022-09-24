@@ -632,8 +632,10 @@ async def async_validate_ac(
                 f"certificate; mismatched entries: {', '.join(mismatches)}"
             )
 
-    registry = validation_context.certificate_registry
-    aa_candidates = _candidate_ac_issuers(attr_cert, registry)
+    path_builder = validation_context.path_builder
+    aa_candidates = _candidate_ac_issuers(
+        attr_cert, validation_context.certificate_registry
+    )
 
     exceptions = []
     aa_path: Optional[ValidationPath] = None
@@ -644,7 +646,7 @@ async def async_validate_ac(
             exceptions.append(e)
             continue
         try:
-            paths = await registry.async_build_paths(aa_candidate)
+            paths = await path_builder.async_build_paths(aa_candidate)
         except PathBuildingError as e:
             exceptions.append(e)
             continue

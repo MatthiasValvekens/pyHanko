@@ -14,7 +14,7 @@ from .util import pretty_message
 from .fetchers import Fetchers, FetcherBackend, default_fetcher_backend
 from .path import ValidationPath
 from .policy_decl import RevocationCheckingPolicy, CertRevTrustPolicy
-from .registry import CertificateRegistry, TrustRootList
+from .registry import CertificateRegistry, TrustRootList, TrustManager, SimpleTrustManager, PathBuilder
 from .revinfo.archival import \
     process_legacy_crl_input, \
     process_legacy_ocsp_input
@@ -101,6 +101,9 @@ class ValidationContext:
             fetcher_backend: FetcherBackend = None,
             acceptable_ac_targets: Optional[ACTargetDescription] = None,
             poe_manager: Optional[POEManager] = None,
+            revinfo_manager: Optional[RevinfoManager] = None,
+            certificate_registry: Optional[CertificateRegistry] = None,
+            trust_manager: Optional[TrustManager] = None,
             fetchers: Fetchers = None):
         """
         :param trust_roots:
@@ -189,6 +192,12 @@ class ValidationContext:
                 Be careful with this option, since it will cause incorrect
                 behaviour for CAs that make use of certificate holds or other
                 reversible revocation methods.
+        :param revinfo_manager:
+            Internal API, to be elaborated.
+        :param trust_manager:
+            Internal API, to be elaborated.
+        :param certificate_registry:
+            Internal API, to be elaborated.
         """
 
         if revinfo_policy is None:
@@ -281,18 +290,35 @@ class ValidationContext:
         else:
             fetchers = None
 
-        self.certificate_registry = certificate_registry = CertificateRegistry(
-            trust_roots, extra_trust_roots, other_certs,
-            cert_fetcher=cert_fetcher
+        if certificate_registry is None:
+            certificate_registry = CertificateRegistry \
+                .build(other_certs or (), cert_fetcher=cert_fetcher)
+
+        self.certificate_registry: CertificateRegistry = certificate_registry
+
+        if trust_manager is None:
+            trust_manager = SimpleTrustManager.build(
+                trust_roots=trust_roots, extra_trust_roots=extra_trust_roots
+            )
+        if isinstance(trust_manager, SimpleTrustManager):
+            for root in trust_manager.iter_certs():
+                certificate_registry.register(root)
+
+        self.path_builder = PathBuilder(
+            trust_manager=trust_manager,
+            registry=certificate_registry
         )
         crls = process_legacy_crl_input(crls) if crls else ()
         ocsps = process_legacy_ocsp_input(ocsps) if ocsps else ()
-        self._revinfo_manager = RevinfoManager(
-            certificate_registry=certificate_registry,
-            poe_manager=poe_manager or POEManager(),
-            revinfo_policy=revinfo_policy, crls=crls, ocsps=ocsps,
-            fetchers=fetchers
-        )
+
+        if revinfo_manager is None:
+            revinfo_manager = RevinfoManager(
+                certificate_registry=certificate_registry,
+                poe_manager=poe_manager or POEManager(),
+                revinfo_policy=revinfo_policy, crls=crls, ocsps=ocsps,
+                fetchers=fetchers
+            )
+        self._revinfo_manager = revinfo_manager
 
         self._validate_map = {}
 
@@ -476,8 +502,7 @@ class ValidationContext:
             object of the validation path
         """
 
-        # CA certs are automatically trusted since they are from the trust list
-        if self.certificate_registry.is_ca(cert) and \
+        if self.path_builder.trust_manager.is_root(cert) and \
                 cert.signature not in self._validate_map:
             self._validate_map[cert.signature] = ValidationPath(
                 trust_anchor=CertTrustAnchor(cert),

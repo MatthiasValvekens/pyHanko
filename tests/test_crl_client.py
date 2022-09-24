@@ -35,8 +35,7 @@ class CRLClientTests(unittest.IsolatedAsyncioTestCase):
             trust_roots=[root],
             crls=crls, fetchers=fetchers
         )
-        registry = context.certificate_registry
-        paths = await registry.async_build_paths(intermediate)
+        paths = await context.path_builder.async_build_paths(intermediate)
         path = paths[0]
 
         await verify_crl(intermediate, path, context)

@@ -7,7 +7,7 @@ from asn1crypto import pem, x509
 
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import aiohttp_fetchers, requests_fetchers
-from pyhanko_certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.registry import CertificateRegistry, PathBuilder, SimpleTrustManager
 from pyhanko_certvalidator.context import ValidationContext
 from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
 from.constants import TEST_REQUEST_TIMEOUT
@@ -34,10 +34,15 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
         trust_roots = [self._get_cert(
             os.path.join(fixtures_dir, 'digicert-root-g5.crt')
         )]
-        registry = CertificateRegistry(
-            trust_roots=trust_roots, cert_fetcher=fetchers.cert_fetcher
+        path_builder = PathBuilder(
+            registry=CertificateRegistry.build(
+                cert_fetcher=fetchers.cert_fetcher
+            ),
+            trust_manager=SimpleTrustManager.build(
+                trust_roots=trust_roots
+            )
         )
-        paths = await registry.async_build_paths(intermediate)
+        paths = await path_builder.async_build_paths(intermediate)
         path = paths[0]
         authority = path.find_issuing_authority(intermediate)
 
@@ -62,11 +67,15 @@ class OCSPClientTests(unittest.IsolatedAsyncioTestCase):
         )
         root = self._get_cert(root_file)
 
-        registry = CertificateRegistry(
-            trust_roots=[root],
-            cert_fetcher=fetchers.cert_fetcher
+        path_builder = PathBuilder(
+            registry=CertificateRegistry.build(
+                cert_fetcher=fetchers.cert_fetcher
+            ),
+            trust_manager=SimpleTrustManager.build(
+                trust_roots=[root]
+            )
         )
-        paths = await registry.async_build_paths(intermediate)
+        paths = await path_builder.async_build_paths(intermediate)
         path = paths[0]
         authority = path.find_issuing_authority(intermediate)
 
