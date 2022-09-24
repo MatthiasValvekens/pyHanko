@@ -100,7 +100,7 @@ class Authority(abc.ABC):
 class TrustAnchor:
     """
     Abstract trust root. A trust root is an authority with trust qualifiers.
-    interface. Equality of trust roots reduces to equality of authorities.
+    Equality of trust roots reduces to equality of authorities.
     """
 
     def __init__(self, authority: Authority,

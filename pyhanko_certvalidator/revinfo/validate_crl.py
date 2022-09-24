@@ -18,7 +18,7 @@ from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, \
     RevinfoUsabilityRating
-from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
+from pyhanko_certvalidator.ltv.types import ValidationTimingParams
 from pyhanko_certvalidator.revinfo.constants import VALID_REVOCATION_REASONS, \
     KNOWN_CRL_EXTENSIONS, KNOWN_CRL_ENTRY_EXTENSIONS
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
@@ -553,7 +553,7 @@ async def _handle_single_crl(
 
     freshness_result = certificate_list_cont.usable_at(
         policy=validation_context.revinfo_policy,
-        timing_info=validation_context.timing_info
+        timing_params=validation_context.timing_params
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:
@@ -570,7 +570,7 @@ async def _handle_single_crl(
         delta_certificate_list_cont = _maybe_get_delta_crl(
             certificate_list=certificate_list, crl_issuer=crl_issuer,
             policy=validation_context.revinfo_policy,
-            timing_info=validation_context.timing_info,
+            timing_params=validation_context.timing_params,
             delta_lists_by_issuer=delta_lists_by_issuer, errs=errs
         )
     else:
@@ -640,7 +640,7 @@ def _maybe_get_delta_crl(
         crl_issuer: x509.Certificate,
         delta_lists_by_issuer: Dict[str, List[CRLContainer]],
         errs: _CRLErrs,
-        timing_info: Optional[ValidationTimingInfo] = None,
+        timing_params: Optional[ValidationTimingParams] = None,
         policy: Optional[CertRevTrustPolicy] = None) -> Optional[CRLContainer]:
 
     if not certificate_list.freshest_crl_value \
@@ -682,9 +682,9 @@ def _maybe_get_delta_crl(
         ))
         return None
 
-    if policy and timing_info:
+    if policy and timing_params:
         freshness_result = delta_certificate_list_cont.usable_at(
-            policy=policy, timing_info=timing_info
+            policy=policy, timing_params=timing_params
         )
         if freshness_result != RevinfoUsabilityRating.OK:
             if freshness_result == RevinfoUsabilityRating.STALE:

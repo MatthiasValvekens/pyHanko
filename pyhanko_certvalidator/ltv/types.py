@@ -10,8 +10,25 @@ from typing import Optional
 class ValidationTimingInfo:
     validation_time: datetime
     use_poe_time: datetime
-    time_tolerance: timedelta
     point_in_time_validation: bool
+
+
+@dataclass(frozen=True)
+class ValidationTimingParams:
+    timing_info: ValidationTimingInfo
+    time_tolerance: timedelta
+
+    @property
+    def validation_time(self):
+        return self.timing_info.validation_time
+
+    @property
+    def use_poe_time(self):
+        return self.timing_info.use_poe_time
+
+    @property
+    def point_in_time_validation(self):
+        return self.timing_info.point_in_time_validation
 
 
 class IssuedItemContainer(abc.ABC):

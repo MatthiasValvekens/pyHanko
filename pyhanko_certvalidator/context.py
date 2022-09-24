@@ -18,7 +18,7 @@ from .registry import CertificateRegistry, TrustRootList
 from .revinfo.archival import \
     process_legacy_crl_input, \
     process_legacy_ocsp_input
-from .ltv.types import ValidationTimingInfo
+from .ltv.types import ValidationTimingParams, ValidationTimingInfo
 from .ltv.poe import POEManager
 
 
@@ -300,10 +300,12 @@ class ValidationContext:
         time_tolerance = (
             abs(time_tolerance) if time_tolerance else timedelta(0)
         )
-        self.timing_info = ValidationTimingInfo(
-            validation_time=moment, use_poe_time=use_poe_time,
+        self.timing_params = ValidationTimingParams(
+            ValidationTimingInfo(
+                validation_time=moment, use_poe_time=use_poe_time,
+                point_in_time_validation=point_in_time_validation
+            ),
             time_tolerance=time_tolerance,
-            point_in_time_validation=point_in_time_validation
         )
 
         self._acceptable_ac_targets = acceptable_ac_targets
@@ -322,15 +324,15 @@ class ValidationContext:
 
     @property
     def time_tolerance(self) -> timedelta:
-        return self.timing_info.time_tolerance
+        return self.timing_params.time_tolerance
 
     @property
     def moment(self) -> datetime:
-        return self.timing_info.validation_time
+        return self.timing_params.validation_time
 
     @property
     def use_poe_time(self) -> datetime:
-        return self.timing_info.use_poe_time
+        return self.timing_params.use_poe_time
 
     @property
     def fetching_allowed(self) -> bool:

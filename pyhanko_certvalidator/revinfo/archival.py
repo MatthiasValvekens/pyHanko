@@ -7,7 +7,7 @@ from typing import Optional, List, Iterable, Union
 from asn1crypto import ocsp, crl
 
 from pyhanko_certvalidator._types import type_name
-from pyhanko_certvalidator.ltv.types import ValidationTimingInfo, \
+from pyhanko_certvalidator.ltv.types import ValidationTimingParams, \
     IssuedItemContainer
 from pyhanko_certvalidator.util import pretty_message
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy, \
@@ -28,7 +28,7 @@ class RevinfoUsabilityRating(enum.Enum):
 class RevinfoContainer(IssuedItemContainer, abc.ABC):
 
     def usable_at(self, policy: CertRevTrustPolicy,
-                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
+                  timing_params: ValidationTimingParams) -> RevinfoUsabilityRating:
         raise NotImplementedError
 
 
@@ -59,7 +59,7 @@ def _freshness_delta(policy, this_update, next_update, time_tolerance):
 def _judge_revinfo(this_update: Optional[datetime],
                    next_update: Optional[datetime],
                    policy: CertRevTrustPolicy,
-                   timing_info: ValidationTimingInfo) \
+                   timing_params: ValidationTimingParams) \
         -> RevinfoUsabilityRating:
 
     if this_update is None:
@@ -73,13 +73,13 @@ def _judge_revinfo(this_update: Optional[datetime],
     #  TODO revisit this when we actually implement AdES point-in-time
     #   validation. Maybe this needs to be dealt with at a higher level, to
     #   accept future revinfo as evidence of non-revocation or somesuch
-    if timing_info.validation_time < this_update:
+    if timing_params.validation_time < this_update:
         if not policy.retroactive_revinfo or \
                 policy.freshness_req_type != FreshnessReqType.DEFAULT:
             return RevinfoUsabilityRating.TOO_NEW
 
-    validation_time = timing_info.validation_time
-    time_tolerance = timing_info.time_tolerance
+    validation_time = timing_params.validation_time
+    time_tolerance = timing_params.time_tolerance
     # see 5.2.5.4 in ETSI EN 319 102-1
     if policy.freshness_req_type == FreshnessReqType.TIME_AFTER_SIGNATURE:
         # check whether the revinfo was generated sufficiently long _after_
@@ -89,7 +89,7 @@ def _judge_revinfo(this_update: Optional[datetime],
         )
         if freshness_delta is None:
             return RevinfoUsabilityRating.UNCLEAR
-        signature_poe_time = timing_info.use_poe_time
+        signature_poe_time = timing_params.use_poe_time
         if this_update - signature_poe_time < freshness_delta:
             return RevinfoUsabilityRating.STALE
     elif policy.freshness_req_type \
@@ -168,7 +168,7 @@ class OCSPContainer(RevinfoContainer):
         return cert_response['this_update'].native
 
     def usable_at(self, policy: CertRevTrustPolicy,
-                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
+                  timing_params: ValidationTimingParams) -> RevinfoUsabilityRating:
 
         cert_response = self.extract_single_response()
         if cert_response is None:
@@ -178,7 +178,7 @@ class OCSPContainer(RevinfoContainer):
         next_update = cert_response['next_update'].native
         return _judge_revinfo(
             this_update, next_update,
-            policy=policy, timing_info=timing_info,
+            policy=policy, timing_params=timing_params,
         )
 
     def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
@@ -200,13 +200,13 @@ class CRLContainer(RevinfoContainer):
     crl_data: crl.CertificateList
 
     def usable_at(self, policy: CertRevTrustPolicy,
-                  timing_info: ValidationTimingInfo) -> RevinfoUsabilityRating:
+                  timing_params: ValidationTimingParams) -> RevinfoUsabilityRating:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         this_update = tbs_cert_list['this_update'].native
         next_update = tbs_cert_list['next_update'].native
         return _judge_revinfo(
             this_update, next_update,  policy=policy,
-            timing_info=timing_info
+            timing_params=timing_params
         )
 
     @property

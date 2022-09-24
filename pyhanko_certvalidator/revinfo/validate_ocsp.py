@@ -420,7 +420,7 @@ async def _handle_single_ocsp_resp(
 
     freshness_result = ocsp_response.usable_at(
         policy=validation_context.revinfo_policy,
-        timing_info=validation_context.timing_info,
+        timing_params=validation_context.timing_params,
     )
     if freshness_result != RevinfoUsabilityRating.OK:
         if freshness_result == RevinfoUsabilityRating.STALE:
