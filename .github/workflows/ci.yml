@@ -5,32 +5,23 @@ on:
   pull_request:
     branches: [ master ]
 
-# TODO: work out how many of these tests configs still make sense now that we use 
 # pyca/cryptography for all crypto operations (and oscrypto just serves as a means
 # to access the system trust)
 jobs:
   build:
-    name: Python ${{ matrix.python }} on ${{ matrix.os }} ${{ matrix.arch }}
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os:
-          - ubuntu-18.04
-          #- macOS-latest # excluded for now due to libcrypto issues in the image
-          - windows-2019
+          - ubuntu-latest
+          - macOS-latest
+          - windows-latest
         python:
           - '3.7'
           - '3.8'
           - '3.9'
           - '3.10'
-        arch:
-          - 'x86'
-          - 'x64'
-        exclude:
-          - os: ubuntu-18.04
-            arch: x86
-          - os: macOS-latest
-            arch: x86
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
