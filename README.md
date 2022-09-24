@@ -8,7 +8,6 @@ Bugs and questions regarding this library should be asked in the [pyHanko reposi
 options, including: validation at a specific moment in time, whitelisting and revocation checks.
 
  - [Features](#features)
- - [Related Crypto Libraries](#related-crypto-libraries)
  - [Current Release](#current-release)
  - [Installation](#installation)
  - [License](#license)
@@ -95,7 +94,8 @@ Various combinations of platforms and versions of Python are tested via:
 
 ### Test framework
 
-Tests are written using `unittest` and require no third-party packages.
+Tests are written using `pytest` and require an asynchronous test case backend
+such as `pytest-asyncio`.
 
 ### Test cases
 

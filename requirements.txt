@@ -4,3 +4,4 @@ oscrypto>=1.1.0
 cryptography>=3.3.1
 uritools>=3.0.1
 aiohttp~=3.8.0
+pytest>=7.0.0

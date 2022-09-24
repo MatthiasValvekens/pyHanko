@@ -1,7 +1,7 @@
 import os
-import unittest
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from asn1crypto import crl, ocsp, x509
 
 from pyhanko_certvalidator import ValidationContext
@@ -13,9 +13,9 @@ from pyhanko_certvalidator.policy_decl import (
 )
 from pyhanko_certvalidator.validate import async_validate_path
 
-from .test_validate import fixtures_dir
+from .test_validate import FIXTURES_DIR
 
-freshness_dir = os.path.join(fixtures_dir, 'freshness')
+freshness_dir = os.path.join(FIXTURES_DIR, 'freshness')
 certs = os.path.join(freshness_dir, 'certs')
 
 
@@ -34,189 +34,199 @@ def load_ocsp_response(fname) -> ocsp.OCSPResponse:
         return ocsp.OCSPResponse.load(inf.read())
 
 
-class FreshnessTests(unittest.IsolatedAsyncioTestCase):
-    async def test_cooldown_period_ok(self):
-        req_policy = RevocationCheckingPolicy.from_legacy('require')
-        policy = CertRevTrustPolicy(
-            revocation_checking_policy=req_policy,
-            freshness=timedelta(days=3),
-            freshness_req_type=FreshnessReqType.TIME_AFTER_SIGNATURE,
-        )
-        root = load_cert(os.path.join(certs, 'root.crt'))
-        alice = load_cert(os.path.join(certs, 'alice.crt'))
-        interm = load_cert(os.path.join(certs, 'interm.crt'))
+@pytest.mark.asyncio
+async def test_cooldown_period_ok():
+    req_policy = RevocationCheckingPolicy.from_legacy('require')
+    policy = CertRevTrustPolicy(
+        revocation_checking_policy=req_policy,
+        freshness=timedelta(days=3),
+        freshness_req_type=FreshnessReqType.TIME_AFTER_SIGNATURE,
+    )
+    root = load_cert(os.path.join(certs, 'root.crt'))
+    alice = load_cert(os.path.join(certs, 'alice.crt'))
+    interm = load_cert(os.path.join(certs, 'interm.crt'))
 
-        alice_ocsp = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-        )
-        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+    alice_ocsp = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
+    )
+    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-            use_poe_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
+        use_poe_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    await async_validate_path(vc, path)
+
+
+@pytest.mark.asyncio
+async def test_cooldown_period_too_early():
+    req_policy = RevocationCheckingPolicy.from_legacy('require')
+    policy = CertRevTrustPolicy(
+        revocation_checking_policy=req_policy,
+        freshness=timedelta(days=3),
+        freshness_req_type=FreshnessReqType.TIME_AFTER_SIGNATURE,
+    )
+    root = load_cert(os.path.join(certs, 'root.crt'))
+    alice = load_cert(os.path.join(certs, 'alice.crt'))
+    interm = load_cert(os.path.join(certs, 'interm.crt'))
+
+    alice_ocsp = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
+    )
+    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
+        use_poe_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    with pytest.raises(PathValidationError, match='CRL.*recent enough'):
         await async_validate_path(vc, path)
 
-    async def test_cooldown_period_too_early(self):
-        req_policy = RevocationCheckingPolicy.from_legacy('require')
-        policy = CertRevTrustPolicy(
-            revocation_checking_policy=req_policy,
-            freshness=timedelta(days=3),
-            freshness_req_type=FreshnessReqType.TIME_AFTER_SIGNATURE,
-        )
-        root = load_cert(os.path.join(certs, 'root.crt'))
-        alice = load_cert(os.path.join(certs, 'alice.crt'))
-        interm = load_cert(os.path.join(certs, 'interm.crt'))
 
-        alice_ocsp = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-        )
-        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+@pytest.mark.asyncio
+async def test_use_delta_ok():
+    req_policy = RevocationCheckingPolicy.from_legacy('require')
+    policy = CertRevTrustPolicy(
+        revocation_checking_policy=req_policy,
+        freshness=timedelta(days=9),
+        freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
+    )
+    root = load_cert(os.path.join(certs, 'root.crt'))
+    alice = load_cert(os.path.join(certs, 'alice.crt'))
+    interm = load_cert(os.path.join(certs, 'interm.crt'))
 
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-            use_poe_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
-        with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
-            await async_validate_path(vc, path)
+    alice_ocsp = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
+    )
+    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
-    async def test_use_delta_ok(self):
-        req_policy = RevocationCheckingPolicy.from_legacy('require')
-        policy = CertRevTrustPolicy(
-            revocation_checking_policy=req_policy,
-            freshness=timedelta(days=9),
-            freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
-        )
-        root = load_cert(os.path.join(certs, 'root.crt'))
-        alice = load_cert(os.path.join(certs, 'alice.crt'))
-        interm = load_cert(os.path.join(certs, 'interm.crt'))
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    await async_validate_path(vc, path)
 
-        alice_ocsp = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-        )
-        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
 
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
+@pytest.mark.asyncio
+async def test_use_delta_stale():
+    req_policy = RevocationCheckingPolicy.from_legacy('require')
+    policy = CertRevTrustPolicy(
+        revocation_checking_policy=req_policy,
+        freshness=timedelta(hours=1),
+        freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
+    )
+    root = load_cert(os.path.join(certs, 'root.crt'))
+    alice = load_cert(os.path.join(certs, 'alice.crt'))
+    interm = load_cert(os.path.join(certs, 'interm.crt'))
+
+    alice_ocsp = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
+    )
+    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    with pytest.raises(PathValidationError, match='CRL.*recent enough'):
         await async_validate_path(vc, path)
 
-    async def test_use_delta_stale(self):
-        req_policy = RevocationCheckingPolicy.from_legacy('require')
-        policy = CertRevTrustPolicy(
-            revocation_checking_policy=req_policy,
-            freshness=timedelta(hours=1),
-            freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
-        )
-        root = load_cert(os.path.join(certs, 'root.crt'))
-        alice = load_cert(os.path.join(certs, 'alice.crt'))
-        interm = load_cert(os.path.join(certs, 'interm.crt'))
 
-        alice_ocsp = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-        )
-        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+@pytest.mark.asyncio
+async def test_use_most_recent():
+    req_policy = RevocationCheckingPolicy.from_legacy('require')
+    policy = CertRevTrustPolicy(
+        revocation_checking_policy=req_policy,
+        freshness=timedelta(days=20),  # some ridiculous value
+        freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
+    )
+    root = load_cert(os.path.join(certs, 'root.crt'))
+    alice = load_cert(os.path.join(certs, 'alice.crt'))
+    interm = load_cert(os.path.join(certs, 'interm.crt'))
 
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
-        with self.assertRaisesRegex(PathValidationError, "CRL.*recent enough"):
-            await async_validate_path(vc, path)
+    alice_ocsp_older = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-11-29.ors')
+    )
+    alice_ocsp_recent = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-12-10.ors')
+    )
+    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-12-10.crl'))
 
-    async def test_use_most_recent(self):
-        req_policy = RevocationCheckingPolicy.from_legacy('require')
-        policy = CertRevTrustPolicy(
-            revocation_checking_policy=req_policy,
-            freshness=timedelta(days=20),  # some ridiculous value
-            freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
-        )
-        root = load_cert(os.path.join(certs, 'root.crt'))
-        alice = load_cert(os.path.join(certs, 'alice.crt'))
-        interm = load_cert(os.path.join(certs, 'interm.crt'))
-
-        alice_ocsp_older = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-11-29.ors')
-        )
-        alice_ocsp_recent = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-12-10.ors')
-        )
-        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-12-10.crl'))
-
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp_older, alice_ocsp_recent],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
-        with self.assertRaises(RevokedError):
-            await async_validate_path(vc, path)
-
-        # Double-check: the validator should be fooled if we don't include the
-        #  second OCSP response because of the very lenient time delta allowed
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp_older],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp_older, alice_ocsp_recent],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    with pytest.raises(RevokedError):
         await async_validate_path(vc, path)
 
-    async def test_discard_post_validation_time(self):
-        req_policy = RevocationCheckingPolicy.from_legacy('require')
-        policy = CertRevTrustPolicy(
-            revocation_checking_policy=req_policy,
-            freshness=timedelta(days=20),  # some ridiculous value
-            freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
-        )
-        root = load_cert(os.path.join(certs, 'root.crt'))
-        alice = load_cert(os.path.join(certs, 'alice.crt'))
-        interm = load_cert(os.path.join(certs, 'interm.crt'))
+    # Double-check: the validator should be fooled if we don't include the
+    #  second OCSP response because of the very lenient time delta allowed
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp_older],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 12, 10, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    await async_validate_path(vc, path)
 
-        alice_ocsp_older = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-11-29.ors')
-        )
-        alice_ocsp_recent = load_ocsp_response(
-            os.path.join(freshness_dir, 'alice-2020-12-10.ors')
-        )
-        root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-11-29.crl'))
 
-        vc = ValidationContext(
-            trust_roots=[root],
-            other_certs=[interm],
-            ocsps=[alice_ocsp_older, alice_ocsp_recent],
-            crls=[root_crl],
-            revinfo_policy=policy,
-            moment=datetime(2020, 11, 29, tzinfo=timezone.utc),
-        )
-        (path,) = await vc.path_builder.async_build_paths(alice)
-        await async_validate_path(vc, path)
+@pytest.mark.asyncio
+async def test_discard_post_validation_time():
+    req_policy = RevocationCheckingPolicy.from_legacy('require')
+    policy = CertRevTrustPolicy(
+        revocation_checking_policy=req_policy,
+        freshness=timedelta(days=20),  # some ridiculous value
+        freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
+    )
+    root = load_cert(os.path.join(certs, 'root.crt'))
+    alice = load_cert(os.path.join(certs, 'alice.crt'))
+    interm = load_cert(os.path.join(certs, 'interm.crt'))
+
+    alice_ocsp_older = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-11-29.ors')
+    )
+    alice_ocsp_recent = load_ocsp_response(
+        os.path.join(freshness_dir, 'alice-2020-12-10.ors')
+    )
+    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-11-29.crl'))
+
+    vc = ValidationContext(
+        trust_roots=[root],
+        other_certs=[interm],
+        ocsps=[alice_ocsp_older, alice_ocsp_recent],
+        crls=[root_crl],
+        revinfo_policy=policy,
+        moment=datetime(2020, 11, 29, tzinfo=timezone.utc),
+    )
+    (path,) = await vc.path_builder.async_build_paths(alice)
+    await async_validate_path(vc, path)

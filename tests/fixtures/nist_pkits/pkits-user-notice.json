@@ -1,0 +1,106 @@
+[
+  {
+    "id": "40815",
+    "name": "user_notice_qualifier_test15",
+    "cert": "UserNoticeQualifierTest15EE.crt",
+    "notice": "q1:  This is the user notice from qualifier 1.  This certificate is for test purposes only"
+  },
+  {
+    "id": "40816",
+    "name": "user_notice_qualifier_test16",
+    "cert": "UserNoticeQualifierTest16EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "notice": "q1:  This is the user notice from qualifier 1.  This certificate is for test purposes only"
+  },
+  {
+    "id": "40817",
+    "name": "user_notice_qualifier_test17",
+    "cert": "UserNoticeQualifierTest17EE.crt",
+    "other_certs": [
+      "GoodCACert.crt"
+    ],
+    "crls": [
+      "GoodCACRL.crl"
+    ],
+    "notice": "q3:  This is the user notice from qualifier 3.  This certificate is for test purposes only"
+  },
+  {
+    "id": "40818",
+    "name": "user_notice_qualifier_test18_q4",
+    "cert": "UserNoticeQualifierTest18EE.crt",
+    "other_certs": [
+      "PoliciesP12CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP12CACRL.crl"
+    ],
+    "notice": "q4:  This is the user notice from qualifier 4 associated with NIST-test-policy-1.  This certificate is for test purposes only",
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "40818",
+    "name": "user_notice_qualifier_test18_q5",
+    "cert": "UserNoticeQualifierTest18EE.crt",
+    "other_certs": [
+      "PoliciesP12CACert.crt"
+    ],
+    "crls": [
+      "PoliciesP12CACRL.crl"
+    ],
+    "notice": "q5:  This is the user notice from qualifier 5 associated with anyPolicy.  This user notice should be associated with NIST-test-policy-2",
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  },
+  {
+    "id": "40818",
+    "name": "user_notice_qualifier_test19",
+    "cert": "UserNoticeQualifierTest19EE.crt",
+    "notice": "q6:  Section 4.2.1.5 of RFC 3280 states the maximum size of explicitText is 200 characters, but warns that some non-conforming CAs exceed this limit.  Thus RFC 3280 states that certificate users SHOULD gracefully handle explicitText with more than 200 characters.  This explicitText is over 200 characters long"
+  },
+  {
+    "id": "41012",
+    "name": "valid_policy_mapping_test12_with_testpol1",
+    "cert": "ValidPolicyMappingTest12EE.crt",
+    "other_certs": [
+      "P12Mapping1to3CACert.crt"
+    ],
+    "crls": [
+      "P12Mapping1to3CACRL.crl"
+    ],
+    "notice": "q7:  This is the user notice from qualifier 7 associated with NIST-test-policy-3.  This user notice should be displayed when  NIST-test-policy-1 is in the user-constrained-policy-set",
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.1"
+      ]
+    }
+  },
+  {
+    "id": "41012",
+    "name": "valid_policy_mapping_test12_with_testpol2",
+    "cert": "ValidPolicyMappingTest12EE.crt",
+    "other_certs": [
+      "P12Mapping1to3CACert.crt"
+    ],
+    "crls": [
+      "P12Mapping1to3CACRL.crl"
+    ],
+    "notice": "q8:  This is the user notice from qualifier 8 associated with anyPolicy.  This user notice should be displayed when NIST-test-policy-2 is in the user-constrained-policy-set",
+    "params": {
+      "user_initial_policy_set": [
+        "2.16.840.1.101.3.2.1.48.2"
+      ]
+    }
+  }
+]

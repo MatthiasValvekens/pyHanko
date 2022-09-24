@@ -1,0 +1,435 @@
+[
+  {
+    "name": "direct_with_intermediate_success",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "ND1.ors",
+      "ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00"
+  },
+  {
+    "name": "direct_success",
+    "root": "ND3_Issuer_Root.pem",
+    "cert": "ND3_Cert_EE.pem",
+    "ocsps": [
+      "ND3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-12T00:00:00+00:00"
+  },
+  {
+    "name": "delegated_with_intermediate_success",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-23T11:00:00+00:00"
+  },
+  {
+    "name": "delegated_success",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-23T11:00:00+00:00"
+  },
+  {
+    "name": "direct_with_intermediate_invalid_response_signature_ee",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "ISOP_ND1.ors",
+      "ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_response_signature_intermediate",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "ND1.ors",
+      "ISOP_ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the intermediate certificate 1 revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "direct_invalid_response_signature",
+    "root": "ND3_Issuer_Root.pem",
+    "cert": "ND3_Cert_EE.pem",
+    "ocsps": [
+      "ISOP_ND3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "delegated_with_intermediate_invalid_response_signature",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "ISOP_D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-10T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "delegated_invalid_response_signature",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "ISOP_D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-10T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_wrong_responder_id_ee",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "WRID_ND1.ors",
+      "ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be located"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_wrong_responder_id_intermediate",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "ND1.ors",
+      "WRID_ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the intermediate certificate 1 revocation checks failed: Unable to verify OCSP response since response signing certificate could not be located"
+    }
+  },
+  {
+    "name": "direct_invalid_wrong_responder_id",
+    "root": "ND3_Issuer_Root.pem",
+    "cert": "ND3_Cert_EE.pem",
+    "ocsps": [
+      "WRID_ND3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be located"
+    }
+  },
+  {
+    "name": "delegated_with_intermediate_invalid_wrong_responder_id",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "WRID_D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be located"
+    }
+  },
+  {
+    "name": "delegated_invalid_wrong_responder_id",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "WRID_D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be located"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_wrong_issuer_name_hash_ee",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "WINH_ND1.ors",
+      "ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer name hash does not match"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_wrong_issuer_name_hash_intermediate",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "ND1.ors",
+      "WINH_ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the intermediate certificate 1 revocation checks failed: OCSP response issuer name hash does not match"
+    }
+  },
+  {
+    "name": "direct_invalid_wrong_issuer_name_hash",
+    "root": "ND3_Issuer_Root.pem",
+    "cert": "ND3_Cert_EE.pem",
+    "ocsps": [
+      "WINH_ND3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer name hash does not match"
+    }
+  },
+  {
+    "name": "delegated_with_intermediate_invalid_wrong_issuer_name_hash",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "WINH_D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer name hash does not match"
+    }
+  },
+  {
+    "name": "delegated_invalid_wrong_issuer_name_hash",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "WINH_D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer name hash does not match"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_wrong_issuer_key_hash_ee",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "WIKH_ND1.ors",
+      "ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer key hash does not match"
+    }
+  },
+  {
+    "name": "direct_with_intermediate_invalid_wrong_issuer_key_hash_intermediate",
+    "root": "ND2_Issuer_Root.pem",
+    "other_certs": [
+      "ND1_Issuer_ICA.pem"
+    ],
+    "cert": "ND1_Cert_EE.pem",
+    "ocsps": [
+      "ND1.ors",
+      "WIKH_ND2.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the intermediate certificate 1 revocation checks failed: OCSP response issuer key hash does not match"
+    }
+  },
+  {
+    "name": "direct_invalid_wrong_issuer_key_hash",
+    "root": "ND3_Issuer_Root.pem",
+    "cert": "ND3_Cert_EE.pem",
+    "ocsps": [
+      "WIKH_ND3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-12T00:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer key hash does not match"
+    }
+  },
+  {
+    "name": "delegated_with_intermediate_invalid_wrong_issuer_key_hash",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "WIKH_D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer key hash does not match"
+    }
+  },
+  {
+    "name": "delegated_invalid_wrong_issuer_key_hash",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "WIKH_D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response issuer key hash does not match"
+    }
+  },
+  {
+    "name": "delegated_with_intermediate_invalid_wrong_key_in_signing_cert",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "WKDOSC_D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "delegated_invalid_wrong_key_in_signing_cert",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "WKDOSC_D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response signature"
+    }
+  },
+  {
+    "name": "delegated_with_intermediate_invalid_signature_on_signing_cert",
+    "root": "R2.pem",
+    "other_certs": [
+      "D1_Issuer_ICA.pem"
+    ],
+    "cert": "D1_Cert_EE.pem",
+    "ocsps": [
+      "ISDOSC_D1.ors"
+    ],
+    "path_len": 3,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be validated"
+    }
+  },
+  {
+    "name": "delegated_invalid_signature_on_signing_cert",
+    "root": "D3_Issuer_Root.pem",
+    "cert": "D3_Cert_EE.pem",
+    "ocsps": [
+      "ISDOSC_D3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2012-10-11T14:00:00+00:00",
+    "error": {
+      "class": "InsufficientRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be validated"
+    }
+  }
+]
