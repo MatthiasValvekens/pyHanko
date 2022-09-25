@@ -38,13 +38,11 @@ class RevinfoManager:
         self,
         certificate_registry: CertificateRegistry,
         poe_manager: POEManager,
-        revinfo_policy: CertRevTrustPolicy,
         crls: Iterable[CRLContainer],
         ocsps: Iterable[OCSPContainer],
         fetchers: Optional[Fetchers] = None,
     ):
         self._certificate_registry = certificate_registry
-        self._revinfo_policy = revinfo_policy
         self._poe_manager = poe_manager
 
         self._revocation_certs: Dict[bytes, x509.Certificate] = {}
@@ -82,13 +80,6 @@ class RevinfoManager:
         Boolean indicating whether fetching is allowed.
         """
         return self._fetchers is not None
-
-    @property
-    def revinfo_policy(self) -> CertRevTrustPolicy:
-        """
-        The applicable revocation trust policy.
-        """
-        return self._revinfo_policy
 
     @property
     def crls(self) -> List[crl.CertificateList]:

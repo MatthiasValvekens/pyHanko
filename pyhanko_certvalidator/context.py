@@ -10,6 +10,7 @@ from asn1crypto.util import timezone
 
 from .authority import AuthorityWithCert, CertTrustAnchor
 from .fetchers import FetcherBackend, Fetchers, default_fetcher_backend
+from .fetchers.requests_fetchers import RequestsFetcherBackend
 from .ltv.poe import POEManager
 from .ltv.types import ValidationTimingInfo, ValidationTimingParams
 from .path import ValidationPath
@@ -27,6 +28,8 @@ from .registry import (
     TrustRootList,
 )
 from .revinfo.archival import (
+    CRLContainer,
+    OCSPContainer,
     process_legacy_crl_input,
     process_legacy_ocsp_input,
 )
@@ -194,6 +197,7 @@ class ValidationContext:
                 "Dealing with post-expiry revocation info has not been "
                 "implemented yet."
             )
+        self._revinfo_policy = revinfo_policy
 
         rev_essential = revinfo_policy.revocation_checking_policy.essential
         if moment is not None:
@@ -297,7 +301,6 @@ class ValidationContext:
             revinfo_manager = RevinfoManager(
                 certificate_registry=certificate_registry,
                 poe_manager=poe_manager or POEManager(),
-                revinfo_policy=revinfo_policy,
                 crls=crls,
                 ocsps=ocsps,
                 fetchers=fetchers,
@@ -325,7 +328,7 @@ class ValidationContext:
 
     @property
     def revinfo_policy(self) -> CertRevTrustPolicy:
-        return self._revinfo_manager.revinfo_policy
+        return self.revinfo_policy
 
     @property
     def retroactive_revinfo(self) -> bool:
@@ -510,3 +513,89 @@ class ValidationContext:
     @property
     def acceptable_ac_targets(self) -> Optional[ACTargetDescription]:
         return self._acceptable_ac_targets
+
+
+@dataclass(frozen=True)
+class ValidationDataHandlers:
+    revinfo_manager: RevinfoManager
+    poe_manager: POEManager
+    cert_registry: CertificateRegistry
+
+
+def bootstrap_validation_data_handlers(
+    fetchers: Union[Fetchers, FetcherBackend, None] = RequestsFetcherBackend(),
+    crls: Iterable[CRLContainer] = (),
+    ocsps: Iterable[OCSPContainer] = (),
+) -> ValidationDataHandlers:
+    """
+    Simple bootstrapping method for a :class:`.ValidationDataHandlers`
+    instance with reasonable defaults.
+
+    :param fetchers:
+        Data fetcher implementation and/or backend to use.
+        If ``None``, remote fetching is disabled. The ``requests``-based
+        implementation is the default.
+    :param crls:
+        Initial collection of CRLs to feed to the revocation info manager.
+    :param ocsps:
+        Initial collection of OCSP responses to feed to the revocation info
+        manager.
+    :return:
+        A :class:`.ValidationDataHandlers` object.
+    """
+
+    _fetchers: Optional[Fetchers]
+    if isinstance(fetchers, FetcherBackend):
+        _fetchers = fetchers.get_fetchers()
+    elif isinstance(fetchers, Fetchers):
+        _fetchers = fetchers
+    else:
+        _fetchers = None
+
+    poe_manager = POEManager()
+    cert_registry = CertificateRegistry(
+        cert_fetcher=_fetchers.cert_fetcher if _fetchers is not None else None
+    )
+    revinfo_manager = RevinfoManager(
+        certificate_registry=cert_registry,
+        poe_manager=poe_manager,
+        crls=crls,
+        ocsps=ocsps,
+        fetchers=_fetchers,
+    )
+    return ValidationDataHandlers(
+        revinfo_manager=revinfo_manager,
+        poe_manager=poe_manager,
+        cert_registry=cert_registry,
+    )
+
+
+@dataclass(frozen=True)
+class CertValidationPolicySpec:
+    trust_manager: TrustManager
+    revinfo_policy: CertRevTrustPolicy
+    time_tolerance: timedelta = timedelta(seconds=1)
+    acceptable_ac_targets: Optional[ACTargetDescription] = None
+    algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = field(
+        default=DisallowWeakAlgorithmsPolicy()
+    )
+
+    def build_validation_context(
+        self,
+        timing_info: ValidationTimingInfo,
+        handlers: ValidationDataHandlers,
+    ) -> ValidationContext:
+
+        return ValidationContext(
+            trust_manager=self.trust_manager,
+            revinfo_policy=self.revinfo_policy,
+            revinfo_manager=handlers.revinfo_manager,
+            certificate_registry=handlers.cert_registry,
+            poe_manager=handlers.poe_manager,
+            algorithm_usage_policy=self.algorithm_usage_policy,
+            moment=timing_info.validation_time,
+            use_poe_time=timing_info.use_poe_time,
+            time_tolerance=self.time_tolerance,
+            acceptable_ac_targets=self.acceptable_ac_targets,
+            allow_fetching=handlers.revinfo_manager.fetching_allowed,
+        )
