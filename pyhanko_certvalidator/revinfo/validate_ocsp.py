@@ -1,6 +1,6 @@
-import datetime
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional, Union
 
 from asn1crypto import cms, crl, x509
@@ -357,8 +357,12 @@ async def _check_ocsp_authorisation(
     return auth_ok
 
 
-def _check_ocsp_status(ocsp_response: OCSPContainer, proc_state: ValProcState):
+def _check_ocsp_status(
+    ocsp_response: OCSPContainer, proc_state: ValProcState
+) -> bool:
     cert_response = ocsp_response.extract_single_response()
+    if cert_response is None:
+        return False
 
     # Finally check to see if the certificate has been revoked
     status = cert_response['cert_status'].name
@@ -385,6 +389,9 @@ def _verify_ocsp_signature(
 ) -> bool:
 
     response = ocsp_response.extract_basic_ocsp_response()
+    if response is None:
+        return False
+
     # Determine what algorithm was used to sign the response
     signature_algo = response['signature_algorithm'].signature_algo
     hash_algo = response['signature_algorithm'].hash_algo

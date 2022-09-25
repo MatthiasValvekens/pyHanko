@@ -111,9 +111,12 @@ async def _grab_certs(
     AIA purposes in PEM format, but people do it anyway.
     """
 
-    acceptable_cts = ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
     if permit_pem:
-        acceptable_cts += ACCEPTABLE_CERT_PEM_ALIASES
+        acceptable_cts = (
+            ACCEPTABLE_STRICT_CERT_CONTENT_TYPES | ACCEPTABLE_CERT_PEM_ALIASES
+        )
+    else:
+        acceptable_cts = ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
 
     headers = {'Accept': ','.join(acceptable_cts), 'User-Agent': user_agent}
     cl_timeout = aiohttp.ClientTimeout(timeout)

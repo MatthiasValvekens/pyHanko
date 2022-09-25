@@ -1,4 +1,5 @@
-from typing import Union
+import asyncio
+from typing import Any, Dict, Union
 
 import aiohttp
 
@@ -34,8 +35,8 @@ class AIOHttpMixin:
         self._session = session
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.per_request_timeout = per_request_timeout
-        self.__results = {}
-        self.__result_events = {}
+        self.__results: Dict[Any, Any] = {}
+        self.__result_events: Dict[Any, asyncio.Event] = {}
         super().__init__()
 
     async def get_session(self) -> aiohttp.ClientSession:

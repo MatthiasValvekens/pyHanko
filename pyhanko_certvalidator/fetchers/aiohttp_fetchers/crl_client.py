@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, Union
+from typing import Dict, Iterable, List, Union
 
 import aiohttp
 from asn1crypto import cms, crl, pem, x509
@@ -21,7 +21,7 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         per_request_timeout=10,
     ):
         super().__init__(session, user_agent, per_request_timeout)
-        self._by_cert = {}
+        self._by_cert: Dict[bytes, List[crl.CertificateList]] = {}
 
     async def fetch(
         self,

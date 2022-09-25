@@ -19,7 +19,9 @@ class ValProcState:
             raise ValueError("Empty path stack")
         self.index: int = 0
         self.ee_name_override = ee_name_override
-        self.is_side_validation = is_side_validation or cert_path_stack.tail
+        self.is_side_validation = bool(
+            is_side_validation or cert_path_stack.tail
+        )
         self.cert_path_stack = cert_path_stack
 
     @property

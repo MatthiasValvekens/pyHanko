@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional, Set
+from typing import Dict, FrozenSet, Iterable, List, Optional, Set
 
 from asn1crypto import cms, core, x509
 from asn1crypto.x509 import Validity
@@ -330,13 +330,14 @@ def _validate_ac_targeting(
         return
 
     target: Target
+    gen_name: x509.GeneralName
     for targets in target_info:
         for target in targets:
             if target.name == 'target_name':
-                gen_name: x509.GeneralName = target.chosen
+                gen_name = target.chosen
                 valid_names = acceptable_targets.validator_names
             elif target.name == 'target_group':
-                gen_name: x509.GeneralName = target.chosen
+                gen_name = target.chosen
                 valid_names = acceptable_targets.group_memberships
             else:
                 logger.info(
@@ -453,7 +454,7 @@ def _candidate_ac_issuers(
     else:
         aki = None
 
-    candidates = ()
+    candidates: Iterable[x509.Certificate] = ()
     aa_name = None
     if aa_names is not None:
         aa_name = extract_dir_name(aa_names, "Could not identify AA by name")
@@ -720,7 +721,7 @@ async def async_validate_ac(
         attr_cert, validation_context.certificate_registry
     )
 
-    exceptions = []
+    exceptions: List[Exception] = []
     aa_path: Optional[ValidationPath] = None
     for aa_candidate in aa_candidates:
         try:
@@ -1343,7 +1344,7 @@ def _finish_policy_processing(
         intersection = prune_unacceptable_policies(
             path_length, state.valid_policy_tree, acceptable_policies
         )
-    qualified_policies = frozenset()
+    qualified_policies: FrozenSet[QualifiedPolicy] = frozenset()
     if intersection is not None:
         # collect policies in a user-friendly format and attach them to the
         # path object

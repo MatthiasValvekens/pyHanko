@@ -1,6 +1,6 @@
 import hashlib
 from datetime import datetime, timezone
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 from asn1crypto import core
 
@@ -14,7 +14,7 @@ class POEManager:
     """
 
     def __init__(self, current_dt_override: Optional[datetime] = None):
-        self._poes = {}
+        self._poes: Dict[bytes, datetime] = {}
         self._current_dt_override = current_dt_override
 
     def register(

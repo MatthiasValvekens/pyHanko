@@ -436,16 +436,20 @@ class PathBuilder:
             result = ValidationPath(CertTrustAnchor(end_entity_cert), [], None)
             return [result]
 
-        path = ConsList.sing(end_entity_cert)
-        certs_seen = ConsList.sing(end_entity_cert.issuer_serial)
-        paths = []
-        failed_paths = []
+        path: ConsList[x509.Certificate] = ConsList.sing(end_entity_cert)
+        certs_seen: ConsList[bytes] = ConsList.sing(
+            end_entity_cert.issuer_serial
+        )
+        paths: List[ValidationPath] = []
+        failed_paths: List[ConsList[x509.Certificate]] = []
 
         await self._walk_issuers(path, certs_seen, paths, failed_paths)
 
         if len(paths) == 0:
             cert_name = end_entity_cert.subject.human_friendly
-            missing_issuer_name = failed_paths[0].head.issuer.human_friendly
+            path_head = failed_paths[0].head
+            assert isinstance(path_head, x509.Certificate)
+            missing_issuer_name = path_head.issuer.human_friendly
             raise PathBuildingError(
                 pretty_message(
                     '''
@@ -486,6 +490,7 @@ class PathBuilder:
         """
 
         if isinstance(path.head, TrustAnchor):
+            assert path.tail is not None
             certs = list(path.tail)
             paths.append(ValidationPath(path.head, certs[:-1], certs[-1]))
             return
@@ -532,7 +537,7 @@ class LayeredCertificateStore(CertificateCollection):
     in a specific order.
     """
 
-    def __init__(self, stores: List[CertificateStore]):
+    def __init__(self, stores: List[CertificateCollection]):
         self._stores = stores
 
     def retrieve_many_by_key_identifier(self, key_identifier: bytes):

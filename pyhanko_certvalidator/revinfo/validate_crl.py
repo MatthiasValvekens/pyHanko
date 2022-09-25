@@ -331,7 +331,7 @@ def _find_matching_delta_crl(
     crl_authority_name: x509.Name,
     crl_idp: crl.IssuingDistributionPoint,
     parent_crl_aki: Optional[bytes],
-) -> CRLContainer:
+) -> Optional[CRLContainer]:
     for candidate_delta_cl_cont in delta_lists:
         candidate_delta_cl = candidate_delta_cl_cont.crl_data
         # Step c 1
@@ -353,6 +353,7 @@ def _find_matching_delta_crl(
             continue
 
         return candidate_delta_cl_cont
+    return None
 
 
 def _match_dps_idp_names(
@@ -782,6 +783,7 @@ def _maybe_get_delta_crl(
             errs.failures.append((msg, delta_certificate_list_cont))
             return None
         return delta_certificate_list_cont
+    return None
 
 
 def _get_crl_scope_assuming_authority(

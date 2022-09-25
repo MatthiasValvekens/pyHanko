@@ -3,7 +3,7 @@ import binascii
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Set, Union
 
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
@@ -63,30 +63,6 @@ class ACTargetDescription:
 
 
 class ValidationContext:
-
-    # A pyhanko_certvalidator.registry.CertificateRegistry() object
-    certificate_registry = None
-
-    # A set of byte strings of the SHA-1 hashes of certificates that
-    # are whitelisted
-    _whitelisted_certs = None
-
-    # A dict with keys being an asn1crypto.x509.Certificate.signature byte
-    # string of a certificate. Each value is a
-    # pyhanko_certvalidator.path.ValidationPath object of a fully-validated path
-    # for that certificate.
-    _validate_map = None
-
-    # Any exceptions that were ignored while the revocation_mode is "soft-fail"
-    _soft_fail_exceptions = None
-
-    # By default, any CRLs or OCSP responses that are passed to the constructor
-    # are chccked. If _allow_fetching is True, any CRLs or OCSP responses that
-    # can be downloaded will also be checked. The next two attributes change
-    # that behavior.
-
-    _acceptable_ac_targets = None
-
     def __init__(
         self,
         trust_roots: Optional[TrustRootList] = None,
@@ -274,7 +250,7 @@ class ValidationContext:
                 )
             )
 
-        self._whitelisted_certs = set()
+        self._whitelisted_certs: Set[bytes] = set()
         if whitelisted_certs is not None:
             for whitelisted_cert in whitelisted_certs:
                 if isinstance(whitelisted_cert, bytes):
@@ -345,9 +321,9 @@ class ValidationContext:
             )
         self._revinfo_manager = revinfo_manager
 
-        self._validate_map = {}
+        self._validate_map: Dict[bytes, ValidationPath] = {}
 
-        self._soft_fail_exceptions = []
+        self._soft_fail_exceptions: List[Exception] = []
         time_tolerance = abs(time_tolerance) if time_tolerance else timedelta(0)
         self.timing_params = ValidationTimingParams(
             ValidationTimingInfo(
@@ -549,5 +525,5 @@ class ValidationContext:
             del self._validate_map[cert.signature]
 
     @property
-    def acceptable_ac_targets(self) -> ACTargetDescription:
+    def acceptable_ac_targets(self) -> Optional[ACTargetDescription]:
         return self._acceptable_ac_targets

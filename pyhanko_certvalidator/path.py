@@ -42,7 +42,7 @@ class ValidationPath:
     certificate.
     """
 
-    _qualified_policies = None
+    _qualified_policies: Optional[FrozenSet[QualifiedPolicy]] = None
 
     _path_aa_controls = None
 
@@ -113,6 +113,8 @@ class ValidationPath:
         leaf = self.leaf
         if isinstance(leaf, x509.Certificate):
             return leaf
+        else:
+            return None
 
     @property
     def last(self) -> x509.Certificate:
@@ -261,7 +263,7 @@ class ValidationPath:
     def _set_qualified_policies(self, policies):
         self._qualified_policies = policies
 
-    def qualified_policies(self) -> FrozenSet[QualifiedPolicy]:
+    def qualified_policies(self) -> Optional[FrozenSet[QualifiedPolicy]]:
         return self._qualified_policies
 
     def aa_attr_in_scope(self, attr_id: cms.AttCertAttributeType) -> bool:

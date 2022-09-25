@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from asn1crypto import crl, ocsp, x509
 
@@ -47,8 +47,8 @@ class RevinfoManager:
         self._revinfo_policy = revinfo_policy
         self._poe_manager = poe_manager
 
-        self._revocation_certs = {}
-        self._crl_issuer_map = {}
+        self._revocation_certs: Dict[bytes, x509.Certificate] = {}
+        self._crl_issuer_map: Dict[bytes, x509.Certificate] = {}
 
         self._crls = []
         if crls:
@@ -60,7 +60,6 @@ class RevinfoManager:
             for ocsp_response in ocsps:
                 self._extract_ocsp_certs(ocsp_response)
 
-        self._allow_fetching = fetchers is not None
         self._fetchers = fetchers
 
     @property
@@ -82,7 +81,7 @@ class RevinfoManager:
         """
         Boolean indicating whether fetching is allowed.
         """
-        return self._allow_fetching
+        return self._fetchers is not None
 
     @property
     def revinfo_policy(self) -> CertRevTrustPolicy:
@@ -98,7 +97,7 @@ class RevinfoManager:
         """
 
         raw_crls = [cont.crl_data for cont in self._crls]
-        if not self._allow_fetching:
+        if not self._fetchers:
             return raw_crls
         return list(self._fetchers.crl_fetcher.fetched_crls()) + raw_crls
 
@@ -109,7 +108,7 @@ class RevinfoManager:
         """
 
         raw_ocsps = [cont.ocsp_response_data for cont in self._ocsps]
-        if not self._allow_fetching:
+        if not self._fetchers:
             return raw_ocsps
 
         return list(self._fetchers.ocsp_fetcher.fetched_responses()) + raw_ocsps
@@ -186,7 +185,7 @@ class RevinfoManager:
         :return:
             A list of :class:`CRLWithPOE` objects
         """
-        if not self._allow_fetching:
+        if not self._fetchers:
             return self._crls
 
         fetchers = self._fetchers
@@ -213,7 +212,7 @@ class RevinfoManager:
             A list of :class:`OCSPWithPOE` objects
         """
 
-        if not self._allow_fetching:
+        if not self._fetchers:
             return self._ocsps
 
         fetchers = self._fetchers

@@ -19,7 +19,7 @@ def host_tree_contains(base_host: str, other_host: str) -> bool:
     # expanded with one or more labels, otherwise it refers to a single host.
     if base_host[0] == '.':
         pre, _, post = other_host.rpartition(base_host)
-        return pre and not post
+        return bool(pre) and not bool(post)
     else:
         return other_host == base_host
 
@@ -168,8 +168,8 @@ class _StringOrName:
     def __hash__(self):
         return hash(self._code)
 
-    def __eq__(self, other: '_StringOrName'):
-        return self._code == other._code
+    def __eq__(self, other):
+        return isinstance(other, _StringOrName) and self._code == other._code
 
 
 @dataclass(frozen=True)
@@ -189,7 +189,12 @@ class NameSubtree:
                 "The minimum/maximum fields on a name constraint are not "
                 "meaningful in the PKIX (RFC 5280) profile --- not processing."
             )
-        return self.name_type.check_membership(self.tree_base.value, item)
+        checker = self.name_type.check_membership
+        if checker is None:
+            raise NotImplementedError(
+                f"No containment checker available for {self.name_type}"
+            )
+        return checker(self.tree_base.value, item)
 
     @classmethod
     def from_name(cls, name_type: GeneralNameType, name: Union[str, x509.Name]):
@@ -234,7 +239,7 @@ def _group_subtrees(trees: Iterable[NameSubtree]) -> PKIXSubtrees:
     # This should NOT be a defaultdict, because the semantics of a tree
     # type not being present vs. the set being empty are very different!
     # If necessary, the caller can do a setdefault()
-    result = {}
+    result: PKIXSubtrees = {}
     for tree in trees:
         try:
             result[tree.name_type].add(tree)

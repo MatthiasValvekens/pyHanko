@@ -205,13 +205,6 @@ class PolicyTreeRoot:
     A generic policy tree node, used for the root node in the tree
     """
 
-    # None for the root node, an instance of PolicyTreeNode or PolicyTreeRoot
-    # for all other nodes
-    parent = None
-
-    # A list of PolicyTreeNode objects
-    children = None
-
     @classmethod
     def init_policy_tree(cls, valid_policy, qualifier_set, expected_policy_set):
         """
@@ -231,6 +224,7 @@ class PolicyTreeRoot:
         return root
 
     def __init__(self):
+        self.parent = None
         self.children = []
 
     def add_child(self, valid_policy, qualifier_set, expected_policy_set):

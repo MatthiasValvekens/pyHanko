@@ -11,7 +11,7 @@ from asn1crypto import algos, cms, core, ocsp, pem, x509
 
 from .. import errors
 from ..authority import Authority
-from ..util import extract_ac_issuer_dir_name, get_ac_extension_value
+from ..util import get_ac_extension_value
 
 __all__ = [
     'unpack_cert_content',
@@ -29,15 +29,19 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = (
-    'application/pkix-cert',
-    'application/pkcs7-mime',
-    'application/x-x509-ca-cert',
+ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = frozenset(
+    [
+        'application/pkix-cert',
+        'application/pkcs7-mime',
+        'application/x-x509-ca-cert',
+    ]
 )
 
-ACCEPTABLE_CERT_PEM_ALIASES = (
-    'application/x-pem-file',
-    'text/plain',
+ACCEPTABLE_CERT_PEM_ALIASES = frozenset(
+    [
+        'application/x-pem-file',
+        'text/plain',
+    ]
 )
 
 

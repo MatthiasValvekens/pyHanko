@@ -1,6 +1,6 @@
 # coding: utf-8
 from datetime import datetime
-from typing import TypeVar
+from typing import Type, TypeVar
 
 from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
@@ -72,7 +72,9 @@ TPathErr = TypeVar('TPathErr', bound='PathValidationError')
 
 class PathValidationError(ValidationError):
     @classmethod
-    def from_state(cls, msg, proc_state: ValProcState) -> TPathErr:
+    def from_state(
+        cls: Type[TPathErr], msg, proc_state: ValProcState
+    ) -> TPathErr:
         return cls(
             msg,
             is_ee_cert=proc_state.is_ee_cert,

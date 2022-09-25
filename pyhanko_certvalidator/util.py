@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Generic, List, Optional, TypeVar, Union
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.keys import PublicKeyInfo
@@ -261,8 +263,8 @@ def validate_sig(
 
     if sig_algo == 'rsassa_pkcs1v15':
         assert isinstance(pub_key, rsa.RSAPublicKey)
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, padding.PKCS1v15(), hash_algo)
+        h = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, padding.PKCS1v15(), h)
     elif sig_algo == 'rsassa_pss':
         assert isinstance(pub_key, rsa.RSAPublicKey)
         assert isinstance(parameters, algos.RSASSAPSSParams)
@@ -278,16 +280,16 @@ def validate_sig(
         pss_padding = padding.PSS(
             mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
         )
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, pss_padding, hash_algo)
+        hash_spec = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, pss_padding, hash_spec)
     elif sig_algo == 'dsa':
         assert isinstance(pub_key, dsa.DSAPublicKey)
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, hash_algo)
+        hash_spec = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, hash_spec)
     elif sig_algo == 'ecdsa':
         assert isinstance(pub_key, ec.EllipticCurvePublicKey)
-        hash_algo = getattr(hashes, hash_algo.upper())()
-        pub_key.verify(signature, signed_data, ec.ECDSA(hash_algo))
+        hash_spec = getattr(hashes, hash_algo.upper())()
+        pub_key.verify(signature, signed_data, ec.ECDSA(hash_spec))
     elif sig_algo == 'ed25519':
         assert isinstance(pub_key, ed25519.Ed25519PublicKey)
         pub_key.verify(signature, signed_data)
@@ -300,17 +302,20 @@ def validate_sig(
         )
 
 
+ListElem = TypeVar('ListElem')
+
+
 @dataclass(frozen=True)
-class ConsList:
-    head: object
-    tail: 'ConsList' = None
+class ConsList(Generic[ListElem]):
+    head: Optional[ListElem]
+    tail: Optional[ConsList[ListElem]] = None
 
     @staticmethod
-    def empty() -> 'ConsList':
+    def empty() -> ConsList[ListElem]:
         return ConsList(head=None)
 
     @staticmethod
-    def sing(value) -> 'ConsList':
+    def sing(value: ListElem) -> ConsList[ListElem]:
         return ConsList(value, ConsList.empty())
 
     def __iter__(self):
@@ -319,7 +324,7 @@ class ConsList:
             yield cur.head
             cur = cur.tail
 
-    def cons(self, head):
+    def cons(self, head: ListElem) -> ConsList[ListElem]:
         return ConsList(head, self)
 
     def __repr__(self):  # pragma: nocover

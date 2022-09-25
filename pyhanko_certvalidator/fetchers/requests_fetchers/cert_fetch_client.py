@@ -98,10 +98,14 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
         for AIA purposes in PEM format, but people do it anyway.
         """
 
-        acceptable_cts = ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
         permit_pem = self.permit_pem
         if permit_pem:
-            acceptable_cts += ACCEPTABLE_CERT_PEM_ALIASES
+            acceptable_cts = (
+                ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
+                | ACCEPTABLE_CERT_PEM_ALIASES
+            )
+        else:
+            acceptable_cts = ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
 
         response = await self._get(url, acceptable_content_types=acceptable_cts)
         try:
