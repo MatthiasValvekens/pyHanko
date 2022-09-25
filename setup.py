@@ -5,7 +5,7 @@ import sys
 import warnings
 
 import setuptools
-from setuptools import find_packages, setup, Command
+from setuptools import setup, Command
 from setuptools.command.egg_info import egg_info
 
 
@@ -37,7 +37,10 @@ if sys.argv[1:] == ['sdist'] or sorted(sys.argv[1:]) == ['-q', 'sdist']:
         '../LICENSE',
         '../*.md',
         '../docs/*.md',
+        'py.typed'
     ]
+else:
+    package_data[PYTHON_PACKAGE_NAME] = ['py.typed']
 
 
 # Ensures a copy of the LICENSE is included with the egg-info for
