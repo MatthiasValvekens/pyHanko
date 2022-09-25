@@ -465,8 +465,8 @@ class PathBuilder:
 
     async def _walk_issuers(
         self,
-        path: ConsList,
-        certs_seen: ConsList,
+        path: ConsList[x509.Certificate],
+        certs_seen: ConsList[x509.Certificate],
         paths: List[ValidationPath],
         failed_paths,
     ):
