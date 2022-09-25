@@ -1,3 +1,15 @@
+"""
+This module contains a number of primitives to handle AdES signature validation
+at some point in the future.
+
+It's highly volatile, buggy internal API at this point, and should be considered
+very experimental.
+
+.. note::
+    The only reason why this is even in the main tree at all is because
+    continually rebasing the branch on which it lives became too much of a drag.
+"""
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, TypeVar
@@ -5,6 +17,11 @@ from typing import Optional, TypeVar
 import tzlocal
 from asn1crypto import cms
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.context import (
+    CertValidationPolicySpec,
+    ValidationDataHandlers,
+)
+from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 
 from pyhanko.sign.ades.report import (
     AdESFailure,
@@ -165,21 +182,26 @@ async def _process_basic_validation(
 
 async def ades_basic_validation(
         signed_data: cms.SignedData,
-        validation_context: ValidationContext,
+        # FIXME: streamline validation context bootstrapping, in particular
+        #  it's not yet clear to me how we should handle init for
+        #  ValidationDataHandlers in the general case
+        cert_validation_policy: CertValidationPolicySpec,
+        timing_info: ValidationTimingInfo,
+        validation_data_handlers: ValidationDataHandlers,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes] = None,
-        signature_not_before_time: Optional[datetime] = None,
-        ts_validation_context: Optional[ValidationContext] = None) \
+        signature_not_before_time: Optional[datetime] = None) \
         -> AdESBasicValidationResult:
 
-    # FIXME instead of passing in validation contexts here, the AdES logic
-    #  should take care of that in a spec compliant way (from more basic inputs)
+    validation_context = cert_validation_policy.build_validation_context(
+        timing_info=timing_info,
+        handlers=validation_data_handlers
+    )
     interm_result = await _ades_basic_validation(
         signed_data=signed_data,
         validation_context=validation_context,
         key_usage_settings=key_usage_settings,
         raw_digest=raw_digest,
-        ts_validation_context=ts_validation_context or validation_context,
         signature_not_before_time=signature_not_before_time
     )
     if isinstance(interm_result, AdESBasicValidationResult):
@@ -197,7 +219,6 @@ async def _ades_basic_validation(
         validation_context: ValidationContext,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes],
-        ts_validation_context: ValidationContext,
         signature_not_before_time: Optional[datetime]):
 
     try:
@@ -228,7 +249,7 @@ async def _ades_basic_validation(
         )
 
     interm_result = await _process_basic_validation(
-        signed_data, status, ts_validation_context,
+        signed_data, status, validation_context,
         signature_not_before_time=signature_not_before_time
     )
     interm_result.status_kwargs = status_kwargs
@@ -257,13 +278,19 @@ _WITH_TIME_FURTHER_PROC = frozenset({
 
 async def ades_with_time_validation(
         signed_data: cms.SignedData,
-        validation_context: ValidationContext,
+        cert_validation_policy: CertValidationPolicySpec,
+        timing_info: ValidationTimingInfo,
+        validation_data_handlers: ValidationDataHandlers,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes] = None,
-        ts_validation_context: Optional[ValidationContext] = None,
         signature_not_before_time: Optional[datetime] = None,
         signature_poe_time: Optional[datetime] = None) \
         -> AdESWithTimeValidationResult:
+
+    validation_context = cert_validation_policy.build_validation_context(
+        timing_info=timing_info,
+        handlers=validation_data_handlers
+    )
 
     signature_poe_time = signature_poe_time \
                          or datetime.now(tz=tzlocal.get_localzone())
@@ -275,7 +302,6 @@ async def ades_with_time_validation(
     interm_result = await _ades_basic_validation(
         signed_data, validation_context=validation_context,
         key_usage_settings=key_usage_settings, raw_digest=raw_digest,
-        ts_validation_context=ts_validation_context or validation_context,
         signature_not_before_time=signature_not_before_time
     )
     signature_not_before_time = interm_result.signature_not_before_time
@@ -294,7 +320,7 @@ async def ades_with_time_validation(
     # process signature timestamps
     # TODO allow selecting one of multiple timestamps here
     sig_ts_result = await _ades_process_attached_ts(
-        signer_info, ts_validation_context, signed=False
+        signer_info, validation_context, signed=False
     )
     temp_status = interm_result.update(SignatureStatus, with_ts=False)
 
