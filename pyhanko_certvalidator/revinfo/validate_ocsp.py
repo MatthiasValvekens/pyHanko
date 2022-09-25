@@ -42,7 +42,6 @@ from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.util import (
     ConsList,
     extract_ac_issuer_dir_name,
-    pretty_message,
     validate_sig,
 )
 
@@ -265,12 +264,8 @@ def _identify_responder_cert(
     if not responder_cert:
         errs.failures.append(
             (
-                pretty_message(
-                    '''
-                Unable to verify OCSP response since response signing
-                certificate could not be located
-                '''
-                ),
+                "Unable to verify OCSP response since response signing "
+                "certificate could not be located",
                 ocsp_response,
             )
         )
@@ -345,12 +340,8 @@ async def _check_ocsp_authorisation(
     if not auth_ok:
         errs.failures.append(
             (
-                pretty_message(
-                    '''
-                Unable to verify OCSP response since response was
-                signed by an unauthorized certificate
-                '''
-                ),
+                'Unable to verify OCSP response since response was '
+                'signed by an unauthorized certificate',
                 ocsp_response,
             )
         )
@@ -545,12 +536,8 @@ async def verify_ocsp_response(
         cert_issuer = path.find_issuing_authority(cert)
     except LookupError:
         raise OCSPNoMatchesError(
-            pretty_message(
-                '''
-            Could not determine issuer certificate for %s in path.
-            ''',
-                proc_state.describe_cert(),
-            )
+            'Could not determine issuer certificate for %s in path.',
+            proc_state.describe_cert(),
         )
 
     errs = _OCSPErrs()
@@ -580,22 +567,12 @@ async def verify_ocsp_response(
 
     if errs.mismatch_failures == len(ocsp_responses):
         raise OCSPNoMatchesError(
-            pretty_message(
-                '''
-            No OCSP responses were issued for %s
-            ''',
-                cert_description,
-            )
+            f"No OCSP responses were issued for {cert_description}."
         )
 
     raise OCSPValidationIndeterminateError(
-        pretty_message(
-            '''
-            Unable to determine if %s is revoked due to insufficient
-            information from OCSP responses
-            ''',
-            cert_description,
-        ),
+        f"Unable to determine if {cert_description} "
+        f"is revoked due to insufficient information from OCSP responses.",
         errs.failures,
     )
 
@@ -655,12 +632,8 @@ async def collect_relevant_responses_with_paths(
         cert_issuer_auth = path.find_issuing_authority(cert)
     except LookupError:
         raise OCSPNoMatchesError(
-            pretty_message(
-                '''
-            Could not determine issuer certificate for %s in path.
-            ''',
-                proc_state.describe_cert(),
-            )
+            f"Could not determine issuer certificate "
+            f"for {proc_state.describe_cert()} in path."
         )
 
     relevant = []

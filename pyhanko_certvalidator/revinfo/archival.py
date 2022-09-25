@@ -15,7 +15,6 @@ from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
     FreshnessReqType,
 )
-from pyhanko_certvalidator.util import pretty_message
 
 
 class RevinfoUsabilityRating(enum.Enum):
@@ -246,15 +245,9 @@ def process_legacy_crl_input(
         if isinstance(crl_, CRLContainer):
             new_crls.append(crl_)
         else:
-            # TODO update error messages
             raise TypeError(
-                pretty_message(
-                    '''
-                crls must be a list of byte strings or
-                asn1crypto.crl.CertificateList objects, not %s
-                ''',
-                    type_name(crl_),
-                )
+                f"crls must be a list of byte strings or "
+                f"asn1crypto.crl.CertificateList objects, not {type_name(crl_)}"
             )
     return new_crls
 
@@ -272,14 +265,8 @@ def process_legacy_ocsp_input(
         elif isinstance(ocsp_, OCSPContainer):
             new_ocsps.append(ocsp_)
         else:
-            # TODO update error messages
             raise TypeError(
-                pretty_message(
-                    '''
-                ocsps must be a list of byte strings or
-                asn1crypto.ocsp.OCSPResponse objects, not %s
-                ''',
-                    type_name(ocsp_),
-                )
+                f"ocsps must be a list of byte strings or "
+                f"asn1crypto.ocsp.OCSPResponse objects, not {type_name(ocsp_)}"
             )
     return new_ocsps

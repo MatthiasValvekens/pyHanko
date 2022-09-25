@@ -31,7 +31,6 @@ from .revinfo.archival import (
     process_legacy_ocsp_input,
 )
 from .revinfo.manager import RevinfoManager
-from .util import pretty_message
 
 
 @dataclass(frozen=True)
@@ -200,11 +199,7 @@ class ValidationContext:
         if moment is not None:
             if allow_fetching:
                 raise ValueError(
-                    pretty_message(
-                        '''
-                    allow_fetching must be False when moment is specified
-                    '''
-                    )
+                    "allow_fetching must be False when moment is specified"
                 )
 
         elif (
@@ -214,13 +209,9 @@ class ValidationContext:
             and rev_essential
         ):
             raise ValueError(
-                pretty_message(
-                    '''
-                revocation data is not optional and allow_fetching is False,
-                however crls and ocsps are both None, meaning that no validation
-                can happen
-                '''
-                )
+                "revocation data is not optional and allow_fetching is False, "
+                "however crls and ocsps are both None, meaning "
+                "that no validation can happen"
             )
 
         if moment is None:
@@ -228,12 +219,8 @@ class ValidationContext:
             point_in_time_validation = False
         elif moment.utcoffset() is None:
             raise ValueError(
-                pretty_message(
-                    '''
-                moment is a naive datetime object, meaning the tzinfo
-                attribute is not set to a valid timezone
-                '''
-                )
+                "moment is a naive datetime object, meaning the tzinfo "
+                "attribute is not set to a valid timezone"
             )
         else:
             point_in_time_validation = True
@@ -242,12 +229,8 @@ class ValidationContext:
             use_poe_time = moment
         elif use_poe_time.utcoffset() is None:
             raise ValueError(
-                pretty_message(
-                    '''
-                use_poe_time is a naive datetime object, meaning the tzinfo
-                attribute is not set to a valid timezone
-                '''
-                )
+                "use_poe_time is a naive datetime object, meaning the tzinfo "
+                "attribute is not set to a valid timezone"
             )
 
         self._whitelisted_certs: Set[bytes] = set()

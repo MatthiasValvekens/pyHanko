@@ -3,9 +3,8 @@ from typing import Iterable, Optional
 
 from asn1crypto import x509
 
-from pyhanko_certvalidator._state import ValProcState
-from pyhanko_certvalidator.errors import PathValidationError
-from pyhanko_certvalidator.util import pretty_message
+from ._state import ValProcState
+from .errors import PathValidationError
 
 
 def update_policy_tree(
@@ -99,13 +98,9 @@ def enumerate_policy_mappings(
             or subject_domain_policy == 'any_policy'
         ):
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because %s contains
-                a policy mapping for the "any policy"
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                f"The path could not be validated because "
+                f"{proc_state.describe_cert()} contains "
+                f"a policy mapping for the \"any policy\"",
                 proc_state,
             )
 

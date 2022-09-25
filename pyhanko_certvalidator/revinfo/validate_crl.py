@@ -38,7 +38,6 @@ from pyhanko_certvalidator.util import (
     ConsList,
     get_ac_extension_value,
     get_issuer_dn,
-    pretty_message,
     validate_sig,
 )
 
@@ -443,13 +442,9 @@ def _handle_crl_idp_ext_constraints(
     if not match:
         errs.failures.append(
             (
-                pretty_message(
-                    '''
-                The CRL issuing distribution point extension does not
-                share any names with the certificate CRL distribution
-                point extension
-                '''
-                ),
+                "The CRL issuing distribution point extension does not "
+                "share any names with the certificate CRL distribution "
+                "point extension",
                 certificate_list,
             )
         )
@@ -464,12 +459,8 @@ def _handle_crl_idp_ext_constraints(
         ):
             errs.failures.append(
                 (
-                    pretty_message(
-                        '''
-                    CRL only contains end-entity certificates and
-                    certificate is a CA certificate
-                    '''
-                    ),
+                    "CRL only contains end-entity certificates and "
+                    "certificate is a CA certificate",
                     certificate_list,
                 )
             )
@@ -483,12 +474,8 @@ def _handle_crl_idp_ext_constraints(
         ):
             errs.failures.append(
                 (
-                    pretty_message(
-                        '''
-                    CRL only contains CA certificates and certificate
-                    is an end-entity certificate
-                    '''
-                    ),
+                    "CRL only contains CA certificates and certificate "
+                    "is an end-entity certificate",
                     certificate_list,
                 )
             )
@@ -522,13 +509,9 @@ def _handle_attr_cert_crl_idp_ext_constraints(
     if not match:
         errs.failures.append(
             (
-                pretty_message(
-                    '''
-                The CRL issuing distribution point extension does not
-                share any names with the attribute certificate's
-                CRL distribution point extension
-                '''
-                ),
+                "The CRL issuing distribution point extension does not "
+                "share any names with the attribute certificate's "
+                "CRL distribution point extension",
                 certificate_list,
             )
         )
@@ -543,12 +526,8 @@ def _handle_attr_cert_crl_idp_ext_constraints(
     if pkc_only:
         errs.failures.append(
             (
-                pretty_message(
-                    '''
-                CRL only contains public-key certificates, but
-                certificate is an attribute certificate
-                '''
-                ),
+                "CRL only contains public-key certificates, but "
+                "certificate is an attribute certificate",
                 certificate_list,
             )
         )
@@ -1004,13 +983,9 @@ def _process_crl_completeness(
     if checked_reasons != VALID_REVOCATION_REASONS:
         if total_crls == errs.issuer_failures:
             return CRLNoMatchesError(
-                pretty_message(
-                    '''
-                No CRLs were issued by the issuer of %s, or any indirect CRL
-                issuer
-                ''',
-                    proc_state.describe_cert(),
-                )
+                f"No CRLs were issued by the issuer of "
+                f"{proc_state.describe_cert()}, or any indirect CRL "
+                "issuer"
             )
 
         if not errs.failures:
@@ -1019,13 +994,8 @@ def _process_crl_completeness(
             )
 
         return CRLValidationIndeterminateError(
-            pretty_message(
-                '''
-                Unable to determine if %s is revoked due to insufficient
-                information from known CRLs
-                ''',
-                proc_state.describe_cert(),
-            ),
+            f"Unable to determine if {proc_state.describe_cert()} "
+            f"is revoked due to insufficient information from known CRLs",
             errs.failures,
         )
 
@@ -1084,12 +1054,8 @@ async def verify_crl(
         cert_issuer_auth = path.find_issuing_authority(cert)
     except LookupError:
         raise CRLNoMatchesError(
-            pretty_message(
-                '''
-            Could not determine issuer certificate for %s in path.
-            ''',
-                proc_state.describe_cert(),
-            )
+            f"Could not determine issuer certificate for "
+            f"{proc_state.describe_cert()} in path."
         )
 
     # In the main loop, only complete CRLs are processed, so delta CRLs are
@@ -1320,12 +1286,8 @@ async def collect_relevant_crls_with_paths(
         cert_issuer_auth = path.find_issuing_authority(cert)
     except LookupError:
         raise CRLNoMatchesError(
-            pretty_message(
-                '''
-            Could not determine issuer certificate for %s in path.
-            ''',
-                proc_state.describe_cert(),
-            )
+            f"Could not determine issuer certificate for "
+            f"{proc_state.describe_cert()} in path."
         )
 
     relevant_crls = []

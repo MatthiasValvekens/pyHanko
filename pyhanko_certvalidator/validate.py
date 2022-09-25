@@ -60,7 +60,6 @@ from .util import (
     extract_dir_name,
     get_ac_extension_value,
     get_declared_revinfo,
-    pretty_message,
     validate_sig,
 )
 
@@ -176,14 +175,8 @@ def validate_tls_hostname(
 
     if not cert.is_valid_domain_ip(hostname):
         raise InvalidCertificateError(
-            pretty_message(
-                '''
-            The X.509 certificate provided is not valid for %s. Valid hostnames
-            include: %s
-            ''',
-                hostname,
-                ', '.join(cert.valid_domains),
-            )
+            f"The X.509 certificate provided is not valid for {hostname}. "
+            f"Valid hostnames include: {', '.join(cert.valid_domains)}."
         )
 
     bad_key_usage = (
@@ -197,12 +190,8 @@ def validate_tls_hostname(
 
     if bad_key_usage or bad_ext_key_usage:
         raise InvalidCertificateError(
-            pretty_message(
-                '''
-            The X.509 certificate provided is not valid for securing TLS
-            connections
-            '''
-            )
+            "The X.509 certificate provided is not valid for securing TLS "
+            "connections"
         )
 
 
@@ -215,8 +204,9 @@ def validate_usage(
 ):
     """
     Validates the end-entity certificate from a
-    pyhanko_certvalidator.path.ValidationPath object to ensure that the certificate
-    is valid for the key usage and extended key usage purposes specified.
+    pyhanko_certvalidator.path.ValidationPath object to ensure that the
+    certificate is valid for the key usage and extended key usage purposes
+    specified.
 
     THE CERTIFICATE PATH MUST BE VALIDATED SEPARATELY VIA validate_path()!
 
@@ -272,13 +262,8 @@ def validate_usage(
         for purpose in sorted(missing_key_usage | missing_extended_key_usage):
             friendly_purposes.append(purpose.replace('_', ' '))
         raise InvalidCertificateError(
-            pretty_message(
-                '''
-            The X.509 certificate provided is not valid for the purpose%s of %s
-            ''',
-                plural,
-                ', '.join(friendly_purposes),
-            )
+            f"The X.509 certificate provided is not valid for the "
+            f"purpose{plural} of {', '.join(friendly_purposes)}"
         )
 
 
@@ -311,12 +296,8 @@ def validate_aa_usage(
     bc = cert.basic_constraints_value
     if bc is not None and bool(bc['ca']):
         raise InvalidCertificateError(
-            pretty_message(
-                '''
-            The X.509 certificate provided is a CA certificate, so
-            it cannot be used to validate attribute certificates.
-            '''
-            )
+            "The X.509 certificate provided is a CA certificate, so "
+            "it cannot be used to validate attribute certificates."
         )
 
 
@@ -486,24 +467,16 @@ def _check_ac_signature(
     use_time = validation_context.use_poe_time
     if sd_algo.native != embedded_sd_algo.native:
         raise InvalidAttrCertificateError(
-            pretty_message(
-                '''
-            Signature algorithm declaration in signed portion of AC does not
-            match the signature algorithm declaration on the envelope.
-            '''
-            )
+            "Signature algorithm declaration in signed portion of AC does not "
+            "match the signature algorithm declaration on the envelope."
         )
     elif not validation_context.algorithm_policy.digest_algorithm_allowed(
         sd_algo_str, use_time
     ):
         raise DisallowedAlgorithmError(
-            pretty_message(
-                '''
-            The attribute certificate could not be validated because
-            the signature uses the disallowed signature algorithm %s
-            ''',
-                sd_algo_str,
-            ),
+            "The attribute certificate could not be validated because "
+            f"the signature uses the disallowed signature algorithm "
+            f"{sd_algo_str}. ",
             is_ee_cert=True,
             is_side_validation=False,
         )
@@ -515,13 +488,8 @@ def _check_ac_signature(
         hash_algo, use_time
     ):
         raise DisallowedAlgorithmError(
-            pretty_message(
-                '''
-            The attribute certificate could not be validated because 
-            the signature uses the disallowed hash algorithm %s
-            ''',
-                hash_algo,
-            ),
+            "The attribute certificate could not be validated because "
+            f"the signature uses the disallowed hash algorithm {hash_algo}",
             is_ee_cert=True,
             is_side_validation=False,
         )
@@ -541,21 +509,13 @@ def _check_ac_signature(
         )
     except PSSParameterMismatch:
         raise InvalidAttrCertificateError(
-            pretty_message(
-                '''
-            The signature parameters for the attribute certificate
-            do not match the constraints on the public key.
-            '''
-            )
+            "The signature parameters for the attribute certificate "
+            "do not match the constraints on the public key. "
         )
     except InvalidSignature:
         raise InvalidAttrCertificateError(
-            pretty_message(
-                '''
-            The attribute certificate could not be validated because the
-            signature could not be verified.
-            ''',
-            )
+            "The attribute certificate could not be validated because the "
+            "signature could not be verified."
         )
 
 
@@ -680,14 +640,10 @@ async def async_validate_ac(
     }
     if unsupported_critical_extensions:
         raise PathValidationError(
-            pretty_message(
-                '''
-            The AC could not be validated because it contains the
-            following unsupported critical extension%s: %s
-            ''',
-                's' if len(unsupported_critical_extensions) != 1 else '',
-                ', '.join(sorted(unsupported_critical_extensions)),
-            ),
+            "The AC could not be validated because it contains the "
+            f"following unsupported critical extension"
+            f"{'s' if len(unsupported_critical_extensions) != 1 else ''}: "
+            f"{', '.join(sorted(unsupported_critical_extensions))}.",
             is_ee_cert=True,
             is_side_validation=False,
         )
@@ -695,12 +651,8 @@ async def async_validate_ac(
         targ_desc = validation_context.acceptable_ac_targets
         if targ_desc is None:
             raise InvalidAttrCertificateError(
-                pretty_message(
-                    '''
-                The attribute certificate is targeted, but no targeting
-                information is available in the validation context.
-                '''
-                )
+                "The attribute certificate is targeted, but no targeting "
+                "information is available in the validation context."
             )
         _validate_ac_targeting(attr_cert, targ_desc)
 
@@ -985,13 +937,8 @@ class _PathValidationState:
         # Step 2 f
         if self.valid_policy_tree is None and self.explicit_policy <= 0:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because there is no valid set
-                of policies for %s
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                "The path could not be validated because there is no valid set "
+                f"of policies for {proc_state.describe_cert()}",
                 proc_state,
             )
 
@@ -1000,29 +947,18 @@ class _PathValidationState:
         whitelist_result = self.permitted_subtrees.accept_cert(cert)
         if not whitelist_result:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because not all names of
-                %s are in the permitted namespace of the issuing
-                authority. %s
-                ''',
-                    proc_state.describe_cert(),
-                    whitelist_result.error_message,
-                ),
+                "The path could not be validated because not all names of "
+                f"{proc_state.describe_cert()} are in the permitted namespace "
+                f"of the issuing authority. {whitelist_result.error_message}",
                 proc_state,
             )
         blacklist_result = self.excluded_subtrees.accept_cert(cert)
         if not blacklist_result:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because some names of
-                %s are excluded from the namespace of the issuing
-                authority. %s
-                ''',
-                    proc_state.describe_cert(),
-                    blacklist_result.error_message,
-                ),
+                "The path could not be validated because some names of "
+                f"{proc_state.describe_cert()} are excluded from the "
+                f"namespace of the issuing authority. "
+                f"{blacklist_result.error_message}",
                 proc_state,
             )
 
@@ -1035,28 +971,18 @@ class _PathValidationState:
 
         if not algorithm_policy.digest_algorithm_allowed(hash_algo, moment):
             raise DisallowedAlgorithmError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because the signature of %s
-                uses the disallowed hash algorithm %s
-                ''',
-                    proc_state.describe_cert(),
-                    hash_algo,
-                ),
+                f"The path could not be validated because the signature of "
+                f"{proc_state.describe_cert()} uses the disallowed hash "
+                f"algorithm {hash_algo}.",
                 proc_state,
             )
         if not algorithm_policy.signature_algorithm_allowed(
             signature_algo, moment
         ):
             raise DisallowedAlgorithmError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because the signature of %s
-                uses the disallowed signature algorithm %s
-                ''',
-                    proc_state.describe_cert(),
-                    hash_algo,
-                ),
+                f"The path could not be validated because the signature "
+                f"of {proc_state.describe_cert()} uses the disallowed "
+                f"signature algorithm {hash_algo}",
                 proc_state,
             )
 
@@ -1071,24 +997,14 @@ class _PathValidationState:
             )
         except PSSParameterMismatch:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The signature parameters for %s do not match the constraints
-                on the public key.
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                f"The signature parameters for {proc_state.describe_cert()} do "
+                f"not match the constraints on the public key.",
                 proc_state,
             )
         except InvalidSignature:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because the signature of %s
-                could not be verified
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                f"The path could not be validated because the signature of "
+                f"{proc_state.describe_cert()} could not be verified",
                 proc_state,
             )
 
@@ -1212,13 +1128,9 @@ async def intl_validate_path(
         # Step 2 a 4
         if cert.issuer != state.working_issuer_name:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because %s issuer name
-                could not be matched
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                f"The path could not be validated because "
+                f"{proc_state.describe_cert()} issuer name "
+                f"could not be matched",
                 proc_state,
             )
 
@@ -1251,15 +1163,11 @@ async def intl_validate_path(
         )
         if unsupported_critical_extensions:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because %s contains the
-                following unsupported critical extension%s: %s
-                ''',
-                    proc_state.describe_cert(),
-                    's' if len(unsupported_critical_extensions) != 1 else '',
-                    ', '.join(sorted(unsupported_critical_extensions)),
-                ),
+                f"The path could not be validated because "
+                f"{proc_state.describe_cert()} contains the "
+                f"following unsupported critical extension"
+                f"{'s' if len(unsupported_critical_extensions) != 1 else ''}"
+                f": {', '.join(sorted(unsupported_critical_extensions))}",
                 proc_state,
             )
 
@@ -1297,25 +1205,16 @@ def _check_validity(
 ):
     if moment < validity['not_before'].native - tolerance:
         raise NotYetValidError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because %s is not valid
-            until %s
-            ''',
-                proc_state.describe_cert(),
-                validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ'),
-            ),
+            f"The path could not be validated because "
+            f"{proc_state.describe_cert()} is not valid until "
+            f"{validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ')}",
             proc_state,
         )
     if moment > validity['not_after'].native + tolerance:
         raise ExpiredError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because %s expired %s
-            ''',
-                proc_state.describe_cert(),
-                validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ'),
-            ),
+            f"The path could not be validated because "
+            f"{proc_state.describe_cert()} expired "
+            f"{validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ')}",
             proc_state,
         )
 
@@ -1377,13 +1276,8 @@ def _finish_policy_processing(
         qualified_policies = frozenset(_enum_policies())
     elif state.explicit_policy == 0:
         raise PathValidationError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because there is no valid set of
-            policies for %s
-            ''',
-                proc_state.describe_cert(),
-            ),
+            f"The path could not be validated because there is no valid set of "
+            f"policies for {proc_state.describe_cert()}.",
             proc_state,
         )
     return qualified_policies
@@ -1439,14 +1333,8 @@ async def _check_revocation(
         else:
             err_str = 'an applicable OCSP response could not be found'
         raise InsufficientRevinfoError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because the mandatory OCSP
-            check(s) for %s failed: %s
-            ''',
-                proc_state.describe_cert(),
-                err_str,
-            ),
+            f"The path could not be validated because the mandatory OCSP "
+            f"check(s) for {proc_state.describe_cert()} failed: {err_str}",
             proc_state,
         )
     status_good = (
@@ -1490,14 +1378,8 @@ async def _check_revocation(
         else:
             err_str = 'an applicable CRL could not be found'
         raise InsufficientRevinfoError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because the mandatory CRL
-            check(s) for %s failed: %s
-            ''',
-                proc_state.describe_cert(),
-                err_str,
-            ),
+            f"The path could not be validated because the mandatory CRL "
+            f"check(s) for {proc_state.describe_cert()} failed: {err_str}",
             proc_state,
         )
 
@@ -1516,25 +1398,15 @@ async def _check_revocation(
     if not soft_fail:
         if not status_good and matched and revocation_check_failed:
             raise InsufficientRevinfoError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because %s revocation
-                checks failed: %s
-                ''',
-                    proc_state.describe_cert(def_interm=True),
-                    '; '.join(failures),
-                ),
+                f"The path could not be validated because "
+                f"{proc_state.describe_cert(def_interm=True)} revocation "
+                f"checks failed: {'; '.join(failures)}",
                 proc_state,
             )
         if expected_revinfo_not_found:
             raise InsufficientRevinfoError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because no revocation
-                information could be found for %s
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                f"The path could not be validated because no revocation "
+                f"information could be found for {proc_state.describe_cert()}",
                 proc_state,
             )
 
@@ -1549,13 +1421,9 @@ def _check_aa_controls(
     if aa_controls is not None:
         if not state.aa_controls_used and index > 1:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                AA controls extension only present on part of the certificate
-                chain: %s has AA controls while preceding certificates do not.
-                ''',
-                    proc_state.describe_cert(),
-                ),
+                f"AA controls extension only present on part of the "
+                f"certificate chain: {proc_state.describe_cert()} has AA "
+                f"controls while preceding certificates do not. ",
                 proc_state,
             )
         state.aa_controls_used = True
@@ -1568,13 +1436,9 @@ def _check_aa_controls(
             state.max_aa_path_length = new_max_aa_path_length
     elif state.aa_controls_used:
         raise PathValidationError.from_state(
-            pretty_message(
-                '''
-            AA controls extension only present on part of the certificate chain:
-            %s has no AA controls
-            ''',
-                proc_state.describe_cert(),
-            ),
+            f"AA controls extension only present on part of the "
+            f"certificate chain: {proc_state.describe_cert()} "
+            f"has no AA controls ",
             proc_state,
         )
 
@@ -1642,12 +1506,8 @@ def _prepare_next_step(
     # Step 3 k
     if not cert.ca:
         raise PathValidationError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because %s is not a CA
-            ''',
-                proc_state.describe_cert(),
-            ),
+            f"The path could not be validated because "
+            f"{proc_state.describe_cert()} is not a CA",
             proc_state,
         )
 
@@ -1655,23 +1515,15 @@ def _prepare_next_step(
     if not cert.self_issued:
         if state.max_path_length == 0:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because it exceeds the
-                maximum path length
-                '''
-                ),
+                "The path could not be validated because it exceeds the "
+                "maximum path length",
                 proc_state,
             )
         state.max_path_length -= 1
         if state.max_aa_path_length == 0:
             raise PathValidationError.from_state(
-                pretty_message(
-                    '''
-                The path could not be validated because it exceeds the
-                maximum path length for an AA certificate
-                '''
-                ),
+                "The path could not be validated because it exceeds the "
+                "maximum path length for an AA certificate",
                 proc_state,
             )
         state.max_aa_path_length -= 1
@@ -1689,12 +1541,7 @@ def _prepare_next_step(
         and 'key_cert_sign' not in cert.key_usage_value.native
     ):
         raise PathValidationError.from_state(
-            pretty_message(
-                '''
-            The path could not be validated because %s is not allowed
-            to sign certificates
-            ''',
-                proc_state.describe_cert(),
-            ),
+            "The path could not be validated because "
+            f"{proc_state.describe_cert()} is not allowed to sign certificates",
             proc_state,
         )

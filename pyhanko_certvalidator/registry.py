@@ -12,7 +12,7 @@ from .authority import CertTrustAnchor, TrustAnchor
 from .errors import PathBuildingError
 from .fetchers import CertificateFetcher
 from .path import ValidationPath
-from .util import ConsList, pretty_message
+from .util import ConsList
 
 
 class CertificateCollection(abc.ABC):
@@ -298,7 +298,7 @@ class CertificateRegistry(SimpleCertificateStore):
         cls,
         certs: Iterable[x509.Certificate] = (),
         *,
-        cert_fetcher: Optional[CertificateFetcher] = None
+        cert_fetcher: Optional[CertificateFetcher] = None,
     ):
         """
         Convenience method to set up a certificate registry and import
@@ -451,14 +451,9 @@ class PathBuilder:
             assert isinstance(path_head, x509.Certificate)
             missing_issuer_name = path_head.issuer.human_friendly
             raise PathBuildingError(
-                pretty_message(
-                    '''
-                Unable to build a validation path for the certificate "%s" - no
-                issuer matching "%s" was found
-                ''',
-                    cert_name,
-                    missing_issuer_name,
-                )
+                f"Unable to build a validation path for the certificate "
+                f"\"{cert_name}\" - no issuer matching "
+                f"\"{missing_issuer_name}\" was found"
             )
 
         return paths

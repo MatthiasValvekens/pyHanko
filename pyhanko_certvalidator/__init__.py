@@ -8,7 +8,6 @@ from ._types import type_name
 from .context import ValidationContext
 from .errors import InvalidCertificateError, PathBuildingError, ValidationError
 from .policy_decl import PKIXValidationParams
-from .util import pretty_message
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
 
@@ -105,25 +104,15 @@ class CertificateValidator:
             self._certificate.hash_algo, algo_moment
         ):
             raise InvalidCertificateError(
-                pretty_message(
-                    '''
-                The X.509 certificate provided has a signature using the weak
-                hash algorithm %s
-                ''',
-                    self._certificate.hash_algo,
-                )
+                f'The X.509 certificate provided has a signature using the weak'
+                f' hash algorithm {self._certificate.hash_algo}'
             )
         if not algorithm_policy.signature_algorithm_allowed(
             self._certificate.signature_algo, algo_moment
         ):
             raise InvalidCertificateError(
-                pretty_message(
-                    '''
-                The X.509 certificate provided has a signature using the weak
-                hash algorithm %s
-                ''',
-                    self._certificate.hash_algo,
-                )
+                f'The X.509 certificate provided has a signature using the weak'
+                f' hash algorithm {self.certificate.hash_algo}'
             )
 
         try:
@@ -133,12 +122,8 @@ class CertificateValidator:
         except PathBuildingError:
             if self._certificate.self_signed in {'yes', 'maybe'}:
                 raise InvalidCertificateError(
-                    pretty_message(
-                        '''
-                    The X.509 certificate provided is self-signed - "%s"
-                    ''',
-                        self._certificate.subject.human_friendly,
-                    )
+                    f'The X.509 certificate provided is self-signed - '
+                    f'"{self._certificate.subject.human_friendly}"'
                 )
             raise
 
