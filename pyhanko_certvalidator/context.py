@@ -13,7 +13,12 @@ from .fetchers import FetcherBackend, Fetchers, default_fetcher_backend
 from .ltv.poe import POEManager
 from .ltv.types import ValidationTimingInfo, ValidationTimingParams
 from .path import ValidationPath
-from .policy_decl import CertRevTrustPolicy, RevocationCheckingPolicy
+from .policy_decl import (
+    AlgorithmUsagePolicy,
+    CertRevTrustPolicy,
+    DisallowWeakAlgorithmsPolicy,
+    RevocationCheckingPolicy,
+)
 from .registry import (
     CertificateRegistry,
     PathBuilder,
@@ -62,10 +67,6 @@ class ValidationContext:
     # A pyhanko_certvalidator.registry.CertificateRegistry() object
     certificate_registry = None
 
-    # A set of unicode strings of hash algorithms to be considered weak. Valid
-    # options include: "md2", "md5", "sha1"
-    weak_hash_algos = None
-
     # A set of byte strings of the SHA-1 hashes of certificates that
     # are whitelisted
     _whitelisted_certs = None
@@ -93,9 +94,6 @@ class ValidationContext:
         other_certs: Optional[Iterable[x509.Certificate]] = None,
         whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
         moment: Optional[datetime] = None,
-        # FIXME before releasing the AdES stuff,
-        #  check if this still makes sense to include, or we should stick
-        #  to `moment` only at this level of the API
         use_poe_time: Optional[datetime] = None,
         allow_fetching: bool = False,
         crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
@@ -111,7 +109,8 @@ class ValidationContext:
         revinfo_manager: Optional[RevinfoManager] = None,
         certificate_registry: Optional[CertificateRegistry] = None,
         trust_manager: Optional[TrustManager] = None,
-        fetchers: Fetchers = None,
+        algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
+        fetchers: Optional[Fetchers] = None,
     ):
         """
         :param trust_roots:
@@ -206,6 +205,8 @@ class ValidationContext:
             Internal API, to be elaborated.
         :param certificate_registry:
             Internal API, to be elaborated.
+        :param algorithm_usage_policy:
+            Internal API, to be elaborated.
         """
 
         if revinfo_policy is None:
@@ -287,14 +288,14 @@ class ValidationContext:
                     binascii.unhexlify(whitelisted_cert.encode('ascii'))
                 )
 
-        # TODO factor this out into a separate class that can deprecate
-        #  algorithms at specific times (in accordance with AdES).
-        #  For now, we consider all weak algorithms broken forever for all
-        #  validation purposes.
-        if weak_hash_algos is not None:
-            self.weak_hash_algos = set(weak_hash_algos)
-        else:
-            self.weak_hash_algos = {'md2', 'md5', 'sha1'}
+        if algorithm_usage_policy is None:
+            if weak_hash_algos is not None:
+                algorithm_usage_policy = DisallowWeakAlgorithmsPolicy(
+                    frozenset(weak_hash_algos)
+                )
+            else:
+                algorithm_usage_policy = DisallowWeakAlgorithmsPolicy()
+        self.algorithm_policy = algorithm_usage_policy
 
         cert_fetcher = None
         if allow_fetching:

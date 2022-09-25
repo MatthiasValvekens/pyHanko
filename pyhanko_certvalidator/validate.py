@@ -481,6 +481,8 @@ def _check_ac_signature(
 
     sd_algo = attr_cert['signature_algorithm']
     embedded_sd_algo = attr_cert['ac_info']['signature']
+    sd_algo_str = sd_algo['algorithm'].native
+    use_time = validation_context.use_poe_time
     if sd_algo.native != embedded_sd_algo.native:
         raise InvalidAttrCertificateError(
             pretty_message(
@@ -490,16 +492,32 @@ def _check_ac_signature(
             '''
             )
         )
+    elif not validation_context.algorithm_policy.digest_algorithm_allowed(
+        sd_algo_str, use_time
+    ):
+        raise DisallowedAlgorithmError(
+            pretty_message(
+                '''
+            The attribute certificate could not be validated because
+            the signature uses the disallowed signature algorithm %s
+            ''',
+                sd_algo_str,
+            ),
+            is_ee_cert=True,
+            is_side_validation=False,
+        )
 
     signature_algo = sd_algo.signature_algo
     hash_algo = attr_cert['signature_algorithm'].hash_algo
 
-    if hash_algo in validation_context.weak_hash_algos:
+    if not validation_context.algorithm_policy.digest_algorithm_allowed(
+        hash_algo, use_time
+    ):
         raise DisallowedAlgorithmError(
             pretty_message(
                 '''
             The attribute certificate could not be validated because 
-            the signature uses the weak hash algorithm %s
+            the signature uses the disallowed hash algorithm %s
             ''',
                 hash_algo,
             ),
@@ -1008,18 +1026,32 @@ class _PathValidationState:
             )
 
     def check_certificate_signature(
-        self, cert, weak_hash_algos, proc_state: ValProcState
+        self, cert, algorithm_policy, proc_state: ValProcState, moment
     ):
 
         signature_algo = cert['signature_algorithm'].signature_algo
         hash_algo = cert['signature_algorithm'].hash_algo
 
-        if hash_algo in weak_hash_algos:
+        if not algorithm_policy.digest_algorithm_allowed(hash_algo, moment):
             raise DisallowedAlgorithmError.from_state(
                 pretty_message(
                     '''
                 The path could not be validated because the signature of %s
-                uses the weak hash algorithm %s
+                uses the disallowed hash algorithm %s
+                ''',
+                    proc_state.describe_cert(),
+                    hash_algo,
+                ),
+                proc_state,
+            )
+        if not algorithm_policy.signature_algorithm_allowed(
+            signature_algo, moment
+        ):
+            raise DisallowedAlgorithmError.from_state(
+                pretty_message(
+                    '''
+                The path could not be validated because the signature of %s
+                uses the disallowed signature algorithm %s
                 ''',
                     proc_state.describe_cert(),
                     hash_algo,
@@ -1151,7 +1183,10 @@ async def intl_validate_path(
         proc_state.index += 1
         # Step 2 a 1
         state.check_certificate_signature(
-            cert, validation_context.weak_hash_algos, proc_state
+            cert,
+            validation_context.algorithm_policy,
+            proc_state,
+            validation_context.use_poe_time,
         )
 
         # Step 2 a 2

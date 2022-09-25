@@ -99,7 +99,23 @@ class CertificateValidator:
 
         exceptions = []
 
-        if self._certificate.hash_algo in self._context.weak_hash_algos:
+        algorithm_policy = self._context.algorithm_policy
+        algo_moment = self._context.use_poe_time
+        if not algorithm_policy.digest_algorithm_allowed(
+            self._certificate.hash_algo, algo_moment
+        ):
+            raise InvalidCertificateError(
+                pretty_message(
+                    '''
+                The X.509 certificate provided has a signature using the weak
+                hash algorithm %s
+                ''',
+                    self._certificate.hash_algo,
+                )
+            )
+        if not algorithm_policy.signature_algorithm_allowed(
+            self._certificate.signature_algo, algo_moment
+        ):
             raise InvalidCertificateError(
                 pretty_message(
                     '''

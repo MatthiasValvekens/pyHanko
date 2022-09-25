@@ -110,7 +110,7 @@ async def _validate_delegated_ocsp_provenance(
             allow_fetching=False,
             revinfo_policy=revinfo_policy,
             moment=validation_context.moment,
-            weak_hash_algos=validation_context.weak_hash_algos,
+            algorithm_usage_policy=validation_context.algorithm_policy,
             time_tolerance=validation_context.time_tolerance,
         )
 

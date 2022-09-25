@@ -1,12 +1,15 @@
 """
 .. versionadded:: 0.20.0
 """
+import abc
 import enum
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import FrozenSet, Optional
 
 from pyhanko_certvalidator.name_trees import PKIXSubtrees
+
+DEFAULT_WEAK_HASH_ALGOS = frozenset(['md2', 'md5', 'sha1'])
 
 
 @enum.unique
@@ -353,3 +356,44 @@ class PKIXValidationParams:
             initial_explicit_policy=initial_explicit_policy,
             initial_policy_mapping_inhibit=initial_policy_mapping_inhibit,
         )
+
+
+# TODO document
+
+
+class AlgorithmUsagePolicy(abc.ABC):
+    def digest_algorithm_allowed(
+        self, algo_name: str, moment: Optional[datetime]
+    ) -> bool:
+        raise NotImplementedError
+
+    def signature_algorithm_allowed(
+        self, algo_name: str, moment: Optional[datetime]
+    ) -> bool:
+        raise NotImplementedError
+
+
+class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
+    """
+    Primitive usage policy that forbids a list of user-specified
+    "weak" algorithms and allows everything else.
+    It also ignores the time parameter completely.
+    """
+
+    def __init__(
+        self,
+        weak_hash_algos=DEFAULT_WEAK_HASH_ALGOS,
+        weak_signature_algos=frozenset(),
+    ):
+        self.weak_hash_algos = weak_hash_algos
+        self.weak_signature_algos = weak_signature_algos
+
+    def digest_algorithm_allowed(
+        self, algo_name: str, moment: Optional[datetime]
+    ) -> bool:
+        return algo_name not in self.weak_hash_algos
+
+    def signature_algorithm_allowed(
+        self, algo_name: str, moment: Optional[datetime]
+    ) -> bool:
+        return algo_name not in self.weak_signature_algos
