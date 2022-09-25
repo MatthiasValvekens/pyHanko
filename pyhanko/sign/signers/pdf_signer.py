@@ -996,17 +996,20 @@ class PdfSigner:
                 "algorithm specification."
             )
 
-        # TODO fall back to more useful default for weak_hash_algos
-        weak_hash_algos = (
-            signature_meta.validation_context.weak_hash_algos
+        algorithm_policy = (
+            signature_meta.validation_context.algorithm_policy
             if signature_meta.validation_context is not None
-            else ()
+            else None
         )
-        if md_algorithm in weak_hash_algos:
-            raise SigningError(
-                f"The hash algorithm {md_algorithm} is considered weak in the "
-                f"specified validation context. Please choose another."
-            )
+        if algorithm_policy is not None:
+            now = datetime.now()
+            if not algorithm_policy\
+                    .digest_algorithm_allowed(md_algorithm, now):
+                raise SigningError(
+                    f"The hash algorithm {md_algorithm} is not allowed in the "
+                    f"specified validation context (usage policy of type "
+                    f"{algorithm_policy.__class__.__name__})."
+                )
         return md_algorithm
 
     def register_extensions(self, pdf_out: BasePdfFileWriter, *,

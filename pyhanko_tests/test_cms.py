@@ -19,6 +19,7 @@ from certomancer import PKIArchitecture
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -57,8 +58,8 @@ from pyhanko.sign.validation import (
     validate_cms_signature,
 )
 from pyhanko.sign.validation.errors import (
+    DisallowedAlgorithmError,
     SignatureValidationError,
-    WeakHashAlgorithmError,
 )
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
@@ -707,7 +708,7 @@ def test_sign_weak_digest():
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
-    with pytest.raises(WeakHashAlgorithmError):
+    with pytest.raises(DisallowedAlgorithmError):
         val_trusted(emb)
 
     lenient_vc = ValidationContext(
@@ -723,8 +724,25 @@ def test_sign_weak_digest_prevention():
         field_name='Sig1', md_algorithm='md5',
         validation_context=SIMPLE_V_CONTEXT()
     )
-    with pytest.raises(SigningError, match='.*weak.*'):
+    with pytest.raises(SigningError, match='md5 is not allowed'):
         signers.sign_pdf(w, meta, signer=FROM_CA)
+
+
+@freeze_time('2020-11-01')
+def test_forbidden_signature_algorithm():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    rsa_banned_vc = ValidationContext(
+        trust_roots=[ROOT_CERT],
+        algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+            weak_signature_algos={'rsassa_pkcs1v15'}
+        )
+    )
+    with pytest.raises(DisallowedAlgorithmError, match="rsassa"):
+        val_trusted(r.embedded_signatures[0], vc=rsa_banned_vc)
 
 
 @freeze_time('2020-11-01')
@@ -770,14 +788,14 @@ async def test_sign_weak_sig_digest():
     cms_prot['signature_algorithm'] = bad_algo
     # recompute the signature
     si_obj['signature'] = signer.sign_raw(attrs.untag().dump(), 'md5')
-    sig_contents = cms_writer.send(cms_obj)
+    cms_writer.send(cms_obj)
 
     # we requested in-place output
     assert output is input_buf
 
     r = PdfFileReader(input_buf)
     emb = r.embedded_signatures[0]
-    with pytest.raises(WeakHashAlgorithmError):
+    with pytest.raises(DisallowedAlgorithmError):
         await async_val_trusted(emb)
 
     lenient_vc = ValidationContext(

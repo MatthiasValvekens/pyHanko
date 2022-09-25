@@ -4,7 +4,7 @@ from ..ades.report import AdESIndeterminate, AdESStatus, AdESSubIndic
 from ..general import ValueErrorWithMessage
 
 __all__ = [
-    'SignatureValidationError', 'WeakHashAlgorithmError',
+    'SignatureValidationError', 'DisallowedAlgorithmError',
     'ValidationInfoReadingError', 'NoDSSFoundError',
     'SigSeedValueValidationError', 'CMSAlgorithmProtectionError'
 ]
@@ -37,10 +37,11 @@ class SignatureValidationError(ValueErrorWithMessage):
             return self.ades_subindication.status
 
 
-class WeakHashAlgorithmError(SignatureValidationError):
-    def __init__(self, *args, **kwargs):
+class DisallowedAlgorithmError(SignatureValidationError):
+    def __init__(self, algo_name):
+        self.algo_name = algo_name
         super().__init__(
-            *args, **kwargs,
+            algo_name,
             ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
         )
 

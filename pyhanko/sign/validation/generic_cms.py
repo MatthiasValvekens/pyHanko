@@ -14,6 +14,7 @@ from pyhanko_certvalidator.errors import (
     PathValidationError,
     RevokedError,
 )
+from pyhanko_certvalidator.policy_decl import AlgorithmUsagePolicy
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
@@ -43,7 +44,7 @@ from .status import (
     TimestampSignatureStatus,
 )
 from .utils import (
-    DEFAULT_WEAK_HASH_ALGORITHMS,
+    DEFAULT_ALGORITHM_USAGE_POLICY,
     extract_message_digest,
     validate_raw,
 )
@@ -164,11 +165,13 @@ def validate_algorithm_protection(
             )
 
 
-def validate_sig_integrity(signer_info: cms.SignerInfo,
-                           cert: x509.Certificate,
-                           expected_content_type: str,
-                           actual_digest: bytes,
-                           weak_hash_algorithms=DEFAULT_WEAK_HASH_ALGORITHMS) \
+def validate_sig_integrity(
+        signer_info: cms.SignerInfo,
+        cert: x509.Certificate,
+        expected_content_type: str,
+        actual_digest: bytes,
+        algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
+        time_indic: Optional[datetime] = None) \
         -> Tuple[bool, bool]:
     """
     Validate the integrity of a signature for a particular signerInfo object
@@ -191,8 +194,10 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         see :class:`cms.ContentType`).
     :param actual_digest:
         The actual digest to be matched to the message digest attribute.
-    :param weak_hash_algorithms:
-        List, tuple or set of weak hashing algorithms.
+    :param algorithm_usage_policy:
+        Algorithm usage policy.
+    :param time_indic:
+        Time indication for the production of the signature.
     :return:
         A tuple of two booleans. The first indicates whether the provided
         digest matches the value in the signed attributes.
@@ -203,8 +208,9 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         signer_info['signature_algorithm']
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
-    if md_algorithm in weak_hash_algorithms:
-        raise errors.WeakHashAlgorithmError(md_algorithm)
+    if algorithm_usage_policy is not None and not algorithm_usage_policy\
+            .digest_algorithm_allowed(md_algorithm, time_indic):
+        raise errors.DisallowedAlgorithmError(md_algorithm)
     signature = signer_info['signature'].native
 
     signed_attrs_orig: cms.CMSAttributes = signer_info['signed_attrs']
@@ -278,7 +284,8 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
     try:
         validate_raw(
             signature, signed_data, cert, signature_algorithm, md_algorithm,
-            prehashed=prehashed, weak_hash_algorithms=weak_hash_algorithms
+            prehashed=prehashed, algorithm_policy=algorithm_usage_policy,
+            time_indic=time_indic
         )
         valid = True
     except InvalidSignature:
@@ -339,11 +346,13 @@ async def cms_basic_validation(
     cert = cert_info.signer_cert
     other_certs = cert_info.other_certs
 
-    weak_hash_algos = None
+    algorithm_policy = None
+    time_indic = None
     if validation_context is not None:
-        weak_hash_algos = validation_context.weak_hash_algos
-    if weak_hash_algos is None:
-        weak_hash_algos = DEFAULT_WEAK_HASH_ALGORITHMS
+        algorithm_policy = validation_context.algorithm_policy
+        time_indic = validation_context.use_poe_time
+    if algorithm_policy is None:
+        algorithm_policy = DEFAULT_ALGORITHM_USAGE_POLICY
 
     signature_algorithm: cms.SignedDigestAlgorithm = \
         signer_info['signature_algorithm']
@@ -366,7 +375,8 @@ async def cms_basic_validation(
     try:
         intact, valid = validate_sig_integrity(
             signer_info, cert, expected_content_type=expected_content_type,
-            actual_digest=raw_digest, weak_hash_algorithms=weak_hash_algos
+            actual_digest=raw_digest, algorithm_usage_policy=algorithm_policy,
+            time_indic=time_indic
         )
     except CMSStructuralError as e:
         raise errors.SignatureValidationError(

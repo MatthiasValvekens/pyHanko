@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Optional
+
 from asn1crypto import cms, x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -9,6 +12,10 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PublicKey
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsagePolicy,
+    DisallowWeakAlgorithmsPolicy,
+)
 
 from ..general import (
     MultivaluedAttributeError,
@@ -17,15 +24,21 @@ from ..general import (
     get_pyca_cryptography_hash,
     process_pss_params,
 )
-from .errors import SignatureValidationError, WeakHashAlgorithmError
+from .errors import DisallowedAlgorithmError, SignatureValidationError
 
 DEFAULT_WEAK_HASH_ALGORITHMS = frozenset({'sha1', 'md5', 'md2'})
 
+DEFAULT_ALGORITHM_USAGE_POLICY = \
+    DisallowWeakAlgorithmsPolicy(DEFAULT_WEAK_HASH_ALGORITHMS)
 
-def validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
-                 signature_algorithm: cms.SignedDigestAlgorithm,
-                 md_algorithm: str, prehashed=False,
-                 weak_hash_algorithms=DEFAULT_WEAK_HASH_ALGORITHMS):
+
+def validate_raw(
+        signature: bytes, signed_data: bytes, cert: x509.Certificate,
+        signature_algorithm: cms.SignedDigestAlgorithm,
+        md_algorithm: str, prehashed=False,
+        algorithm_policy: Optional[AlgorithmUsagePolicy]
+        = DEFAULT_ALGORITHM_USAGE_POLICY,
+        time_indic: Optional[datetime] = None):
     """
     Validate a raw signature. Internal API.
     """
@@ -35,9 +48,14 @@ def validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
         sig_md_algorithm = None
 
     if sig_md_algorithm is not None:
-        if sig_md_algorithm in weak_hash_algorithms:
-            raise WeakHashAlgorithmError(md_algorithm)
+        if algorithm_policy is not None and not algorithm_policy\
+                .digest_algorithm_allowed(sig_md_algorithm, time_indic):
+            raise DisallowedAlgorithmError(md_algorithm)
         md_algorithm = sig_md_algorithm.upper()
+    signature_algo = signature_algorithm.signature_algo
+    if algorithm_policy is not None and not algorithm_policy \
+            .signature_algorithm_allowed(signature_algo, time_indic):
+        raise DisallowedAlgorithmError(signature_algo)
 
     verify_md = get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
 
