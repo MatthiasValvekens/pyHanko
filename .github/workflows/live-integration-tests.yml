@@ -2,7 +2,7 @@ name: Live Certomancer integration tests
 
 on:
   push:
-    branches: [ master, "feature/*", "bugfix/*", "release/*", "maintenance/*" ]
+    branches: [ master, "release/*", "maintenance/*" ]
   pull_request:
     branches: [ master ]
 
