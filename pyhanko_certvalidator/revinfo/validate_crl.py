@@ -1138,7 +1138,7 @@ class CRLOfInterest:
 
     crl_authority_name: x509.Name
     """
-    Distinguished name for the authority for which the CRL issues certificates.
+    Distinguished name for the authority for which the CRL controls revocation.
     """
 
 

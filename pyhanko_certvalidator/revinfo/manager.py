@@ -6,7 +6,6 @@ from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
 from pyhanko_certvalidator.ltv.poe import POEManager
-from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import (
     CRLContainer,
