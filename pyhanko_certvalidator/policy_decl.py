@@ -358,18 +358,27 @@ class PKIXValidationParams:
         )
 
 
+@dataclass(frozen=True)
+class AlgorithmUsageConstraint:
+    allowed: bool
+    not_allowed_after: Optional[datetime] = None
+
+    def __bool__(self):
+        return self.allowed
+
+
 # TODO document
 
 
 class AlgorithmUsagePolicy(abc.ABC):
     def digest_algorithm_allowed(
         self, algo_name: str, moment: Optional[datetime]
-    ) -> bool:
+    ) -> AlgorithmUsageConstraint:
         raise NotImplementedError
 
     def signature_algorithm_allowed(
         self, algo_name: str, moment: Optional[datetime]
-    ) -> bool:
+    ) -> AlgorithmUsageConstraint:
         raise NotImplementedError
 
 
@@ -390,10 +399,12 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
 
     def digest_algorithm_allowed(
         self, algo_name: str, moment: Optional[datetime]
-    ) -> bool:
-        return algo_name not in self.weak_hash_algos
+    ) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(algo_name not in self.weak_hash_algos)
 
     def signature_algorithm_allowed(
         self, algo_name: str, moment: Optional[datetime]
-    ) -> bool:
-        return algo_name not in self.weak_signature_algos
+    ) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(
+            algo_name not in self.weak_signature_algos
+        )
