@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, List, Optional, Union
 
-from asn1crypto import crl, ocsp
+from asn1crypto import algos, crl, ocsp
 
 from pyhanko_certvalidator._types import type_name
 from pyhanko_certvalidator.ltv.types import (
@@ -32,6 +32,12 @@ class RevinfoContainer(IssuedItemContainer, abc.ABC):
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
     ) -> RevinfoUsabilityRating:
+        raise NotImplementedError
+
+    @property
+    def revinfo_sig_mechanism_used(
+        self,
+    ) -> Optional[algos.SignedDigestAlgorithm]:
         raise NotImplementedError
 
 
@@ -208,6 +214,13 @@ class OCSPContainer(RevinfoContainer):
             return None
         return tbs_response['responses'][self.index]
 
+    @property
+    def revinfo_sig_mechanism_used(
+        self,
+    ) -> Optional[algos.SignedDigestAlgorithm]:
+        basic_resp = self.extract_basic_ocsp_response()
+        return None if basic_resp is None else basic_resp['signature_algorithm']
+
 
 @dataclass(frozen=True)
 class CRLContainer(RevinfoContainer):
@@ -227,6 +240,10 @@ class CRLContainer(RevinfoContainer):
     def issuance_date(self) -> Optional[datetime]:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         return tbs_cert_list['this_update'].native
+
+    @property
+    def revinfo_sig_mechanism_used(self) -> algos.SignedDigestAlgorithm:
+        return self.crl_data['signature_algorithm']
 
 
 LegacyCompatCRL = Union[bytes, crl.CertificateList, CRLContainer]
