@@ -260,6 +260,19 @@ class ValidationPath:
             trust_anchor=self._root, interm=new_certs, leaf=cert
         )
 
+    def copy_and_drop_leaf(self) -> 'ValidationPath':
+        """
+        Drop the leaf cert from this path and return a new path with the
+        last intermediate certificate set as the leaf.
+        """
+
+        if len(self._interm) == 0:
+            raise IndexError
+        new_interm, new_leaf = self._interm[:-1], self._interm[-1]
+        return ValidationPath(
+            trust_anchor=self._root, interm=new_interm, leaf=new_leaf
+        )
+
     def _set_qualified_policies(self, policies):
         self._qualified_policies = policies
 
