@@ -328,11 +328,11 @@ class ValidationContext:
 
     @property
     def revinfo_policy(self) -> CertRevTrustPolicy:
-        return self.revinfo_policy
+        return self._revinfo_policy
 
     @property
     def retroactive_revinfo(self) -> bool:
-        return self.revinfo_policy.retroactive_revinfo
+        return self._revinfo_policy.retroactive_revinfo
 
     @property
     def time_tolerance(self) -> timedelta:
