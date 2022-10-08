@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
@@ -77,7 +78,6 @@ def _apply_algo_policy(
     algo_used: algos.SignedDigestAlgorithm,
     control_time: datetime,
 ):
-
     sig_algo = algo_used.signature_algo
     sig_constraint = algo_policy.signature_algorithm_allowed(
         sig_algo, control_time
@@ -111,7 +111,6 @@ def _update_control_time(
     time_tolerance: timedelta,
     algo_policy: Optional[AlgorithmUsagePolicy],
 ):
-
     if revoked_date:
         # this means we have to update control_time
         control_time = min(revoked_date, control_time)
@@ -147,7 +146,7 @@ def _update_control_time(
     return control_time
 
 
-async def time_slide(
+async def _time_slide(
     path: ValidationPath,
     init_control_time: datetime,
     revinfo_manager: RevinfoManager,
@@ -155,6 +154,7 @@ async def time_slide(
     algo_usage_policy: Optional[AlgorithmUsagePolicy],
     # TODO use policy objects
     time_tolerance: timedelta,
+    path_stack: ConsList[ValidationPath],
 ) -> datetime:
     control_time = init_control_time
     checking_policy = rev_trust_policy.revocation_checking_policy
@@ -187,28 +187,82 @@ async def time_slide(
                 proc_state,
             )
 
-        # FIXME: for now, take these on faith until we have
-        #  a compliant point-in-time validation routine and we can recursively
-        #  apply the time sliding algorithm to our revinfo paths as well
+        # We always take the chain of trust of a CRL/OCSP response
+        # at face value
+        poe_manager = revinfo_manager.poe_manager
         for crl_of_interest in crls:
-            prima_facie_trust = crl_of_interest.prov_paths[0]
-            revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
-                crl_issuer=prima_facie_trust.path.leaf,
-                cert=cert,
-                certificate_list_cont=crl_of_interest.crl,
-                delta_certificate_list_cont=prima_facie_trust.delta,
-                errs=_CRLErrs(),
+            # skip CRLs that are no longer relevant
+            issued = crl_of_interest.crl.issuance_date
+            if (
+                not issued
+                or issued > control_time
+                or poe_manager[crl_of_interest.crl.crl_data] > control_time
+            ):
+                continue
+            sub_paths = [
+                crl_path
+                for crl_path in crl_of_interest.prov_paths
+                if crl_path.path not in path_stack
+            ]
+
+            # recurse into the paths associated with the CRL and adjust
+            # the control time accordingly
+            control_time = min(
+                await asyncio.gather(
+                    *(
+                        _time_slide(
+                            crl_path.path,
+                            control_time,
+                            revinfo_manager,
+                            rev_trust_policy,
+                            algo_usage_policy,
+                            time_tolerance,
+                            path_stack=path_stack.cons(current_path),
+                        )
+                        for crl_path in sub_paths
+                    )
+                )
             )
 
-            control_time = _update_control_time(
-                revoked_date,
-                control_time,
-                revinfo_container=crl_of_interest.crl,
-                rev_trust_policy=rev_trust_policy,
-                time_tolerance=time_tolerance,
-                algo_policy=algo_usage_policy,
-            )
+            for candidate_crl_path in sub_paths:
+                revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
+                    crl_issuer=candidate_crl_path.path.leaf,
+                    cert=cert,
+                    certificate_list_cont=crl_of_interest.crl,
+                    delta_certificate_list_cont=candidate_crl_path.delta,
+                    errs=_CRLErrs(),
+                )
+
+                control_time = _update_control_time(
+                    revoked_date,
+                    control_time,
+                    revinfo_container=crl_of_interest.crl,
+                    rev_trust_policy=rev_trust_policy,
+                    time_tolerance=time_tolerance,
+                    algo_policy=algo_usage_policy,
+                )
         for ocsp_of_interest in ocsps:
+
+            issued = ocsp_of_interest.ocsp_response.issuance_date
+            if (
+                not issued
+                or issued > control_time
+                or poe_manager[
+                    ocsp_of_interest.ocsp_response.ocsp_response_data
+                ]
+                > control_time
+            ):
+                continue
+
+            control_time = await _time_slide(
+                ocsp_of_interest.prov_path,
+                control_time,
+                revinfo_manager,
+                rev_trust_policy,
+                algo_usage_policy,
+                time_tolerance,
+                path_stack=path_stack.cons(current_path),
+            )
             try:
                 _check_ocsp_status(
                     ocsp_response=ocsp_of_interest.ocsp_response,
@@ -235,3 +289,23 @@ async def time_slide(
             )
 
     return control_time
+
+
+async def time_slide(
+    path: ValidationPath,
+    init_control_time: datetime,
+    revinfo_manager: RevinfoManager,
+    rev_trust_policy: CertRevTrustPolicy,
+    algo_usage_policy: Optional[AlgorithmUsagePolicy],
+    # TODO use policy objects
+    time_tolerance: timedelta,
+) -> datetime:
+    return await _time_slide(
+        path,
+        init_control_time,
+        revinfo_manager,
+        rev_trust_policy,
+        algo_usage_policy,
+        time_tolerance,
+        path_stack=ConsList.empty(),
+    )
