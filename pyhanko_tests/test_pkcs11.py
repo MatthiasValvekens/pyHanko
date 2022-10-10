@@ -34,6 +34,8 @@ from pyhanko_tests.samples import MINIMAL, TESTING_CA
 from pyhanko_tests.signing_commons import (
     SIMPLE_DSA_V_CONTEXT,
     SIMPLE_ECC_V_CONTEXT,
+    SIMPLE_ED448_V_CONTEXT,
+    SIMPLE_ED25519_V_CONTEXT,
     async_val_trusted,
     val_trusted,
 )
@@ -329,6 +331,46 @@ def test_simple_sign_ecdsa(bulk_fetch):
     emb = r.embedded_signatures[0]
     assert emb.field_name == 'Sig1'
     val_trusted(emb, vc=SIMPLE_ECC_V_CONTEXT())
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_simple_sign_ed25519(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess(token='tested25519') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch,
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=SIMPLE_ED25519_V_CONTEXT())
+
+
+@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pytest.mark.parametrize('bulk_fetch', [True, False])
+@freeze_time('2020-11-01')
+def test_simple_sign_ed448(bulk_fetch):
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess(token='tested448') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess, SIGNER_LABEL, other_certs_to_pull=default_other_certs,
+            bulk_fetch=bulk_fetch,
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb, vc=SIMPLE_ED448_V_CONTEXT())
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
