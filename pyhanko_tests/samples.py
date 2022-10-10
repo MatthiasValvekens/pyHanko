@@ -113,6 +113,8 @@ TESTING_CA_ERRORS = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-errors')
 UNRELATED_TSA = CERTOMANCER.get_pki_arch(ArchLabel('unrelated-tsa'))
 TESTING_CA_ECDSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ecdsa'))
 TESTING_CA_DSA = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-dsa'))
+TESTING_CA_ED25519 = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ed25519'))
+TESTING_CA_ED448 = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ed448'))
 TESTING_CA_DIR = CRYPTO_DATA_DIR + '/testing-ca'
 
 SAMPLE_GROUP_ATTR = cms.AttCertAttribute({

@@ -20,6 +20,8 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDSA,
     EllipticCurvePrivateKey,
 )
+from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
@@ -39,6 +41,7 @@ from pyhanko.sign.general import (
     SimpleCertificateStore,
     _translate_pyca_cryptography_cert_to_asn1,
     _translate_pyca_cryptography_key_to_asn1,
+    get_cms_hash_algo_for_mechanism,
     get_pyca_cryptography_hash,
     load_cert_from_pemder,
     load_certs_from_pemder,
@@ -318,7 +321,8 @@ class Signer:
         self.unsigned_attr_prov_spec: Optional[UnsignedAttributeProviderSpec] \
             = None
 
-    def get_signature_mechanism(self, digest_algorithm):
+    def get_signature_mechanism(self, digest_algorithm) \
+            -> SignedDigestAlgorithm:
         """
         Get the signature mechanism for this signer to use.
         If :attr:`signature_mechanism` is set, it will be used.
@@ -375,6 +379,8 @@ class Signer:
                 mech = digest_algorithm + '_rsa'
             else:
                 mech = 'rsassa_pkcs1v15'
+        elif algo in ('ed25519', 'ed448'):
+            mech = algo
         else:  # pragma: nocover
             raise SigningError(
                 f"Signature mechanism {algo} is unsupported."
@@ -599,8 +605,19 @@ class Signer:
 
         implied_hash_algo = None
         try:
-            if self.signature_mechanism is not None:
-                implied_hash_algo = self.signature_mechanism.hash_algo
+            # Just using self.signature_mechanism is not good enough,
+            # we need to cover cases like ed448 and ed25519 (where
+            # the hash algorithm choice is fixed) also when the signature
+            # mechanism is not explicitly passed in.
+            mech = self.get_signature_mechanism(None)
+        except ValueError:
+            # This could happen if there's no explicit mechanism defined,
+            # and we're signing with ECDSA, for example. In that case
+            # we simply use the digest algorithm passed in.
+            mech = None
+        try:
+            if mech is not None:
+                implied_hash_algo = get_cms_hash_algo_for_mechanism(mech)
         except ValueError:
             # this is OK, just use the specified message digest
             pass
@@ -1274,6 +1291,12 @@ class SimpleSigner(Signer):
             hash_algo = get_pyca_cryptography_hash(digest_algorithm)
             assert isinstance(priv_key, DSAPrivateKey)
             return priv_key.sign(data, hash_algo)
+        elif mechanism == 'ed25519':
+            assert isinstance(priv_key, Ed25519PrivateKey)
+            return priv_key.sign(data)
+        elif mechanism == 'ed448':
+            assert isinstance(priv_key, Ed448PrivateKey)
+            return priv_key.sign(data)
         else:  # pragma: nocover
             raise SigningError(
                 f"The signature mechanism {mechanism} "
@@ -1614,8 +1637,13 @@ def select_suitable_signing_md(key: keys.PublicKeyInfo) -> str:
                 return md
         return 'sha512'
 
-    if key.algorithm == 'rsa':
+    key_algo = key.algorithm
+    if key_algo == 'rsa':
         return _with_thresholds(key.bit_size, RSA_THRESHOLDS)
-    elif key.algorithm == 'ec':
+    elif key_algo == 'ec':
         return _with_thresholds(key.bit_size, ECC_THRESHOLDS)
+    elif key_algo == 'ed25519':
+        return 'sha512'
+    elif key_algo == 'ed448':
+        return 'shake256'
     return constants.DEFAULT_MD

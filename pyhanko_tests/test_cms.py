@@ -41,7 +41,10 @@ from pyhanko.sign.general import (
     find_cms_attribute,
 )
 from pyhanko.sign.signers import cms_embedder
-from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
+from pyhanko.sign.signers.pdf_cms import (
+    PdfCMSSignedAttributes,
+    select_suitable_signing_md,
+)
 from pyhanko.sign.validation import (
     DocumentSecurityStore,
     StandardCMSSignatureStatus,
@@ -67,6 +70,8 @@ from pyhanko_tests.samples import (
     TESTING_CA,
     TESTING_CA_DSA,
     TESTING_CA_ECDSA,
+    TESTING_CA_ED448,
+    TESTING_CA_ED25519,
     TESTING_CA_ERRORS,
 )
 from pyhanko_tests.signing_commons import (
@@ -1689,3 +1694,15 @@ async def test_detached_cms_with_invalid_cn_in_ca():
     #  (already very early, when constructing the certificate registry)
     # But that's something I'm willing to live with not supporting.
     assert not status.trusted
+
+
+@pytest.mark.parametrize('testing_ca, expected_md', [
+    (TESTING_CA, 'sha256'),
+    (TESTING_CA_ECDSA, 'sha384'),
+    (TESTING_CA_ED25519, 'sha512'),
+    (TESTING_CA_ED448, 'shake256'),
+])
+def test_key_based_digest_selection(testing_ca, expected_md):
+    pubkey = testing_ca.key_set.get_public_key(KeyLabel('signer1'))
+    md = select_suitable_signing_md(pubkey)
+    assert md == expected_md

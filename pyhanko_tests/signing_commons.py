@@ -23,6 +23,8 @@ from pyhanko_tests.samples import (
     TESTING_CA_DIR,
     TESTING_CA_DSA,
     TESTING_CA_ECDSA,
+    TESTING_CA_ED448,
+    TESTING_CA_ED25519,
     UNRELATED_TSA,
     read_all,
 )
@@ -35,9 +37,13 @@ SELF_SIGN = signers.SimpleSigner.load(
 ROOT_CERT = TESTING_CA.get_cert(CertLabel('root'))
 ECC_ROOT_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('root'))
 DSA_ROOT_CERT = TESTING_CA_DSA.get_cert(CertLabel('root'))
+ED25519_ROOT_CERT = TESTING_CA_ED25519.get_cert(CertLabel('root'))
+ED448_ROOT_CERT = TESTING_CA_ED448.get_cert(CertLabel('root'))
 INTERM_CERT = TESTING_CA.get_cert(CertLabel('interm'))
 ECC_INTERM_CERT = TESTING_CA_ECDSA.get_cert(CertLabel('interm'))
 DSA_INTERM_CERT = TESTING_CA_DSA.get_cert(CertLabel('interm'))
+ED25519_INTERM_CERT = TESTING_CA_ED25519.get_cert(CertLabel('interm'))
+ED448_INTERM_CERT = TESTING_CA_ED448.get_cert(CertLabel('interm'))
 OCSP_CERT = TESTING_CA.get_cert(CertLabel('interm-ocsp'))
 REVOKED_CERT = TESTING_CA.get_cert(CertLabel('signer2'))
 TSA_CERT = TESTING_CA.get_cert(CertLabel('tsa'))
@@ -61,6 +67,20 @@ FROM_DSA_CA = signers.SimpleSigner(
         [DSA_ROOT_CERT, DSA_INTERM_CERT]
     )
 )
+FROM_ED25519_CA = signers.SimpleSigner(
+    signing_cert=TESTING_CA_ED25519.get_cert(CertLabel('signer1')),
+    signing_key=TESTING_CA_ED25519.key_set.get_private_key(KeyLabel('signer1')),
+    cert_registry=SimpleCertificateStore.from_certs(
+        [ED25519_ROOT_CERT, ED25519_INTERM_CERT]
+    )
+)
+FROM_ED448_CA = signers.SimpleSigner(
+    signing_cert=TESTING_CA_ED448.get_cert(CertLabel('signer1')),
+    signing_key=TESTING_CA_ED448.key_set.get_private_key(KeyLabel('signer1')),
+    cert_registry=SimpleCertificateStore.from_certs(
+        [ED448_ROOT_CERT, ED448_INTERM_CERT]
+    )
+)
 REVOKED_SIGNER = signers.SimpleSigner(
     signing_cert=TESTING_CA.get_cert(CertLabel('signer2')),
     signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
@@ -74,6 +94,12 @@ NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
 SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
 SIMPLE_DSA_V_CONTEXT = lambda: ValidationContext(trust_roots=[DSA_ROOT_CERT])
+SIMPLE_ED25519_V_CONTEXT = lambda: ValidationContext(
+    trust_roots=[ED25519_ROOT_CERT]
+)
+SIMPLE_ED448_V_CONTEXT = lambda: ValidationContext(
+    trust_roots=[ED448_ROOT_CERT]
+)
 OCSP_KEY = TESTING_CA.key_set.get_private_key('interm-ocsp')
 DUMMY_TS = timestamps.DummyTimeStamper(
     tsa_cert=TSA_CERT,

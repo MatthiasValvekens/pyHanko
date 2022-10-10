@@ -12,7 +12,8 @@ from pyhanko.stamp import STAMP_ART_CONTENT, TextStampStyle
 
 __all__ = [
     'DEFAULT_MD', 'DEFAULT_SIG_SUBFILTER', 'DEFAULT_SIGNER_KEY_USAGE',
-    'SIG_DETAILS_DEFAULT_TEMPLATE', 'DEFAULT_SIGNING_STAMP_STYLE'
+    'SIG_DETAILS_DEFAULT_TEMPLATE', 'DEFAULT_SIGNING_STAMP_STYLE',
+    'ESIC_EXTENSION_1', 'ISO32001', 'ISO32002'
 ]
 
 
@@ -60,4 +61,52 @@ ESIC_EXTENSION_1 = DeveloperExtension(
 )
 """
 ESIC extension for PDF 1.7. Used to declare usage of PAdES structures.
+"""
+
+
+ISO32001 = DeveloperExtension(
+    prefix_name=generic.pdf_name('/ISO_'),
+    base_version=generic.pdf_name('/2.0'),
+    extension_level=32001,
+    extension_revision=':2022',
+    url='https://www.iso.org/standard/45874.html',
+    compare_by_level=False,
+    multivalued=DevExtensionMultivalued.ALWAYS,
+)
+"""
+ISO extension to PDF 2.0 to include SHA-3 and SHAKE256 support.
+This extension is defined in ISO/TS 32001.
+
+Declared automatically whenever either of these is used in the signing or
+document digesting process.
+"""
+
+
+ISO32002 = DeveloperExtension(
+    prefix_name=generic.pdf_name('/ISO_'),
+    base_version=generic.pdf_name('/2.0'),
+    extension_level=32002,
+    extension_revision=':2022',
+    url='https://www.iso.org/standard/45875.html',
+    compare_by_level=False,
+    multivalued=DevExtensionMultivalued.ALWAYS,
+)
+"""
+ISO extension to PDF 2.0 to include EdDSA support and clarify supported curves
+for ECDSA. This extension is defined in ISO/TS 32002.
+
+Declared automatically whenever Ed25519 or Ed448 are used, and
+when ECDSA is used with one of the curves listed in ISO/TS 32002.
+"""
+
+ISO32002_CURVE_NAMES = {
+    'secp256r1',
+    'secp384r1',
+    'secp521r1',
+    'brainpoolp256r1',
+    'brainpoolp384r1',
+    'brainpoolp512r1',
+}
+"""
+Names used in ``asn1crypto`` for curves included in ISO/TS 32002.
 """
