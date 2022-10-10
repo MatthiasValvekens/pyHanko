@@ -6,6 +6,8 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDSA,
     EllipticCurvePublicKey,
 )
+from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 from ..general import (
@@ -60,6 +62,12 @@ def validate_raw(signature: bytes, signed_data: bytes, cert: x509.Certificate,
     elif sig_algo == 'ecdsa':
         assert isinstance(pub_key, EllipticCurvePublicKey)
         pub_key.verify(signature, signed_data, ECDSA(verify_md))
+    elif sig_algo in 'ed25519':
+        assert isinstance(pub_key, Ed25519PublicKey)
+        pub_key.verify(signature, signed_data)
+    elif sig_algo in 'ed448':
+        assert isinstance(pub_key, Ed448PublicKey)
+        pub_key.verify(signature, signed_data)
     else:  # pragma: nocover
         raise NotImplementedError(
             f"Signature mechanism {sig_algo} is not supported."

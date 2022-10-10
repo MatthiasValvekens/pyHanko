@@ -60,8 +60,13 @@ from .signing_commons import (
     FIXED_OCSP,
     FROM_CA,
     FROM_CA_PKCS12,
+    FROM_ECC_CA,
+    FROM_ED448_CA,
+    FROM_ED25519_CA,
     REVOKED_SIGNER,
     SELF_SIGN,
+    SIMPLE_ED448_V_CONTEXT,
+    SIMPLE_ED25519_V_CONTEXT,
     SIMPLE_V_CONTEXT,
     TRUST_ROOTS,
     TSA_CERT,
@@ -1317,3 +1322,141 @@ def test_allow_hybrid_sign_validate_allow():
     vc = SIMPLE_V_CONTEXT()
     val_status = validate_pdf_signature(s, vc)
     assert val_status.bottom_line
+
+
+@freeze_time('2020-11-01')
+def test_ed25519():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_ED25519_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'sha512'
+
+    extn, = r.root['/Extensions']['/ISO_']
+    assert extn['/ExtensionLevel'] == 32002
+
+
+@freeze_time('2020-11-01')
+def test_ed25519_trust():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_ED25519_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s, vc=SIMPLE_ED25519_V_CONTEXT())
+
+
+@freeze_time('2020-11-01')
+def test_ed448():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_ED448_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'shake256'
+
+    assert len(s.external_digest) == 64
+
+    extn1, extn2 = r.root['/Extensions']['/ISO_']
+    assert {extn1['/ExtensionLevel'], extn2['/ExtensionLevel']} \
+           == {32001, 32002}
+
+
+@freeze_time('2020-11-01')
+def test_ed448_trust():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_ED448_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s, vc=SIMPLE_ED448_V_CONTEXT())
+
+
+@freeze_time('2020-11-01')
+def test_ed448_invalid_hash_algo():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with pytest.raises(SigningError, match='specifies.*shake256'):
+        signers.sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                field_name='Sig1', md_algorithm='sha256'
+            ),
+            signer=FROM_ED448_CA
+        )
+
+
+@freeze_time('2020-11-01')
+def test_ecdsa_with_sha256():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            md_algorithm='sha256'
+        ),
+        signer=FROM_ECC_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'sha256'
+
+    extn, = r.root['/Extensions']['/ISO_']
+    assert extn['/ExtensionLevel'] == 32002
+
+
+@freeze_time('2020-11-01')
+def test_ecdsa_with_sha3():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            md_algorithm='sha3_256'
+        ),
+        signer=FROM_ECC_CA
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'sha3_256'
+
+    extn1, extn2 = r.root['/Extensions']['/ISO_']
+    assert {extn1['/ExtensionLevel'], extn2['/ExtensionLevel']} \
+           == {32001, 32002}
+
+
+@freeze_time('2020-11-01')
+def test_rsa_with_sha3():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        # need the generic mechanism because asn1crypto (==1.5.1)
+        # doesn't have the OIDs for RSA-with-SHA3 family
+        # hash functions.
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    out = signers.sign_pdf(
+        w, signers.PdfSignatureMetadata(
+            field_name='Sig1', md_algorithm='sha3_256',
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    status = val_untrusted(s)
+    assert status.md_algorithm == 'sha3_256'
+
+    extn, = r.root['/Extensions']['/ISO_']
+    assert extn['/ExtensionLevel'] == 32001

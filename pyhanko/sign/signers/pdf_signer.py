@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import IO, List, Optional, Set, Tuple, Union
 
 import tzlocal
-from asn1crypto import cms, crl, ocsp
+from asn1crypto import cms, crl, keys, ocsp
 from asn1crypto import pdf as asn1_pdf
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
@@ -36,7 +36,11 @@ from pyhanko.sign.fields import (
     SigSeedValueSpec,
     enumerate_sig_fields,
 )
-from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
+from pyhanko.sign.general import (
+    SigningError,
+    get_cms_hash_algo_for_mechanism,
+    get_pyca_cryptography_hash,
+)
 from pyhanko.sign.timestamps import TimeStamper
 from pyhanko.stamp import BaseStampStyle
 
@@ -430,6 +434,21 @@ def _ensure_esic_ext(pdf_writer: BasePdfFileWriter):
     pdf_writer.ensure_output_version(version=(1, 7))
     if pdf_writer.output_version < (2, 0):
         pdf_writer.register_extension(constants.ESIC_EXTENSION_1)
+
+
+def _ensure_iso32001_ext(pdf_writer: BasePdfFileWriter):
+    pdf_writer.ensure_output_version(version=(2, 0))
+    pdf_writer.register_extension(constants.ISO32001)
+
+
+def _ensure_iso32002_ext(pdf_writer: BasePdfFileWriter):
+    pdf_writer.ensure_output_version(version=(2, 0))
+    pdf_writer.register_extension(constants.ISO32002)
+
+
+def _is_iso32002_curve(pubkey: keys.PublicKeyInfo):
+    kind, curve_id = pubkey.curve
+    return kind == 'named' and curve_id in constants.ISO32002_CURVE_NAMES
 
 
 class PdfTimeStamper:
@@ -886,8 +905,8 @@ class PdfSigner:
         stamp_style = stamp_style or constants.DEFAULT_SIGNING_STAMP_STYLE
         self.stamp_style: BaseStampStyle = stamp_style
         try:
-            self.signer_hash_algo = \
-                self.signer.get_signature_mechanism(None).hash_algo
+            mech = self.signer.get_signature_mechanism(None)
+            self.signer_hash_algo = get_cms_hash_algo_for_mechanism(mech)
         except ValueError:
             self.signer_hash_algo = None
 
@@ -981,6 +1000,33 @@ class PdfSigner:
             )
         return md_algorithm
 
+    def register_extensions(self, pdf_out: BasePdfFileWriter, *,
+                            md_algorithm: str):
+
+        if self.signature_meta.subfilter == SigSeedSubFilter.PADES:
+            _ensure_esic_ext(pdf_out)
+
+        try:
+            sig_mech = self.signer.get_signature_mechanism(md_algorithm)
+            sig_algo = sig_mech.signature_algo
+        except (SigningError, ValueError) as e:
+            logger.debug(
+                f"Failed to introspect signature mechanism: {str(e)}. "
+                f"Will forgo algorithm-based automatic extension registration.",
+            )
+            return
+        if sig_algo == 'ed25519':
+            _ensure_iso32002_ext(pdf_out)
+        elif sig_algo == 'ed448':
+            _ensure_iso32001_ext(pdf_out)
+            _ensure_iso32002_ext(pdf_out)
+        else:
+            if md_algorithm.startswith('sha3') or md_algorithm == 'shake256':
+                _ensure_iso32001_ext(pdf_out)
+            if sig_algo == 'ecdsa' and \
+                    _is_iso32002_curve(self.signer.signing_cert.public_key):
+                _ensure_iso32002_ext(pdf_out)
+
     def init_signing_session(self, pdf_out: BasePdfFileWriter,
                              existing_fields_only=False) -> 'PdfSigningSession':
         """
@@ -1018,9 +1064,6 @@ class PdfSigner:
 
         signature_meta: PdfSignatureMetadata = self.signature_meta
 
-        if signature_meta.subfilter == SigSeedSubFilter.PADES:
-            _ensure_esic_ext(pdf_out)
-
         cms_writer = PdfCMSEmbedder(
             new_field_spec=self.new_field_spec
         ).write_cms(
@@ -1041,6 +1084,8 @@ class PdfSigner:
             self._enforce_certification_constraints(pdf_out.prev)
 
         md_algorithm = self._select_md_algorithm(sv_spec)
+        self.register_extensions(pdf_out, md_algorithm=md_algorithm)
+
         ts_required = sv_spec is not None and sv_spec.timestamp_required
         if ts_required and timestamper is None:
             timestamper = sv_spec.build_timestamper()

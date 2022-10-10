@@ -78,6 +78,40 @@ keysets:
       signer2:
         path: signer2.key.pem
         password: secret
+  testing-ca-ed25519:
+    path-prefix: keys-ed25519
+    keys:
+      root:
+        path: root_ca.key.pem
+      interm:
+        path: intermediate_ca.key.pem
+      tsa:
+        path: tsa.key.pem
+      tsa2:
+        path: tsa2.key.pem
+      interm-ocsp:
+        path: ocsp.key.pem
+      signer1:
+        path: signer.key.pem
+      signer2:
+        path: signer2.key.pem
+  testing-ca-ed448:
+    path-prefix: keys-ed448
+    keys:
+      root:
+        path: root_ca.key.pem
+      interm:
+        path: intermediate_ca.key.pem
+      tsa:
+        path: tsa.key.pem
+      tsa2:
+        path: tsa2.key.pem
+      interm-ocsp:
+        path: ocsp.key.pem
+      signer1:
+        path: signer.key.pem
+      signer2:
+        path: signer2.key.pem
   unrelated-tsa:
     path-prefix: keys-rsa
     keys:
@@ -321,6 +355,12 @@ pki-architectures:
   testing-ca-ecdsa:
     template: testing-ca
     keyset: testing-ca-ecdsa
+  testing-ca-ed25519:
+    template: testing-ca
+    keyset: testing-ca-ed25519
+  testing-ca-ed448:
+    template: testing-ca
+    keyset: testing-ca-ed448
   testing-ca-with-aa:
     template: testing-ca
     entities:

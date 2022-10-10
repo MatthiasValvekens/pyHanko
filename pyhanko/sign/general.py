@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import IO, Iterable, List, Optional, Tuple, Union
 
 from asn1crypto import algos, cms, keys, pem, tsp, x509
+from asn1crypto.algos import SignedDigestAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
@@ -33,7 +34,7 @@ __all__ = [
     'load_certs_from_pemder', 'load_cert_from_pemder',
     'load_private_key_from_pemder',
     'load_certs_from_pemder_data', 'load_private_key_from_pemder_data',
-    'get_pyca_cryptography_hash',
+    'get_cms_hash_algo_for_mechanism', 'get_pyca_cryptography_hash',
     'optimal_pss_params', 'process_pss_params', 'as_signing_certificate',
     'as_signing_certificate_v2', 'match_issuer_serial',
     'check_ess_certid', 'CMSExtractionError', 'byte_range_digest',
@@ -311,9 +312,37 @@ class UnacceptableSignerError(SigningError):
     pass
 
 
-def get_pyca_cryptography_hash(algorithm, prehashed=False):
-    hash_algo = getattr(hashes, algorithm.upper())()
+def get_pyca_cryptography_hash(algorithm, prehashed=False) \
+        -> Union[hashes.HashAlgorithm, Prehashed]:
+    if algorithm.lower() == 'shake256':
+        # force the output length to 64 bytes = 512 bits
+        hash_algo = hashes.SHAKE256(digest_size=64)
+    else:
+        hash_algo = getattr(hashes, algorithm.upper())()
     return Prehashed(hash_algo) if prehashed else hash_algo
+
+
+def get_cms_hash_algo_for_mechanism(mech: SignedDigestAlgorithm) -> str:
+    """
+    Internal function that takes a :class:`.SignedDigestAlgorithm` instance
+    and returns the name of the digest algorithm that has to be used to compute
+    the ``messageDigest`` attribute.
+
+    :param mech:
+        A signature mechanism.
+    :return:
+        A digest algorithm name.
+    """
+    # anticipate resolution of this discussion:
+    # https://github.com/wbond/asn1crypto/pull/230
+
+    sig_algo = mech.signature_algo
+    if sig_algo == 'ed25519':
+        return 'sha512'
+    elif sig_algo == 'ed448':
+        return 'shake256'
+    else:
+        return mech.hash_algo
 
 
 def process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm,
