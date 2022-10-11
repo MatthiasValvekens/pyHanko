@@ -516,8 +516,10 @@ class SimpleBoxLayoutRule(ConfigurableMixin):
             eff_width = margins.effective_width(container_box.width)
             eff_height = margins.effective_height(container_box.height)
 
-            x_scale = eff_width / inner_nat_width
-            y_scale = eff_height / inner_nat_height
+            x_scale = (eff_width / inner_nat_width) \
+                if inner_nat_width != 0 else 1
+            y_scale = (eff_height / inner_nat_height) \
+                if inner_nat_height != 0 else 1
             if scaling == InnerScaling.STRETCH_TO_FIT:
                 x_scale = y_scale = min(x_scale, y_scale)
             elif scaling == InnerScaling.SHRINK_TO_FIT:

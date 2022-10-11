@@ -9,7 +9,12 @@ from pyhanko.pdf_utils import generic, layout, writer
 from pyhanko.pdf_utils.content import ImportedPdfPage, RawContent
 from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
 from pyhanko.pdf_utils.images import PdfImage
-from pyhanko.pdf_utils.layout import LayoutError
+from pyhanko.pdf_utils.layout import (
+    AxisAlignment,
+    LayoutError,
+    Margins,
+    SimpleBoxLayoutRule,
+)
 from pyhanko.pdf_utils.text import TextBoxStyle
 from pyhanko.stamp import (
     STAMP_ART_CONTENT,
@@ -364,3 +369,29 @@ def test_double_newline():
     ts.apply(dest_page=0, x=70, y=50)
 
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/double-newline.pdf')
+
+
+def test_zero_width_error():
+    w = empty_page()
+    zero_margins = SimpleBoxLayoutRule(
+        x_align=AxisAlignment.ALIGN_MID,
+        y_align=AxisAlignment.ALIGN_MID,
+        margins=Margins()
+    )
+    style = TextStampStyle(
+        stamp_text='', border_width=0,
+        inner_content_layout=zero_margins,
+        text_box_style=TextBoxStyle(
+            box_layout_rule=zero_margins
+        )
+    )
+    box = layout.BoxConstraints(width=100, height=100)
+    stamp = TextStamp(
+        writer=w, style=style, box=box
+    )
+
+    inn_commands, (inn_width, inn_height) = stamp._inner_layout_natural_size()
+    assert inn_width == 0
+
+    # ...this shouldn't throw a division by zero error
+    stamp.apply(0, x=10, y=500)
