@@ -2,6 +2,55 @@
 Release history
 ***************
 
+.. _release-0.15.0:
+
+0.15.0
+======
+
+
+*Release date:* 2022-10-11
+
+
+Note
+----
+
+Other than a few bug fixes, the highlight of this release is the addition of
+support for two very recently published PDF extension standards, ISO/TS 32001
+and ISO/TS 32002.
+
+
+Bugs fixed
+----------
+
+ * Fix metadata handling in encrypted documents
+   see `issue #160 <https://github.com/MatthiasValvekens/pyHanko/issues/160>`_.
+ * Make sure XMP stream dictionaries contain the required typing entries.
+ * Respect ``visible_sig_settings`` on field autocreation.
+ * Fix a division by zero corner case in the stamp layout code;
+   see `issue #170 <https://github.com/MatthiasValvekens/pyHanko/issues/170>`_.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Add support for the new PDF extensions defined by ISO/TS 32001 and ISO/TS 32002;
+   see `PR #169 <https://github.com/MatthiasValvekens/pyHanko/issues/169>`_.
+
+    * SHA-3 support
+    * EdDSA support for both the PKCS#11 signer and the in-memory signer
+    * Auto-register developer extensions in the file
+
+ * Make it easier to extract keys from ``bytes`` objects.
+
+
+Validation
+^^^^^^^^^^
+
+ * Add support for validating EdDSA signatures (as defined in ISO/TS 32002)
+
 
 .. _release-0.14.0:
 

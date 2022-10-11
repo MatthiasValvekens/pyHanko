@@ -77,11 +77,13 @@ Note that not all of these are necessarily exposed through the CLI.
     - RFC 3161 timestamp server support
     - Support for multiple signatures (all modifications are executed using incremental updates to 
       preserve cryptographic integrity)
-    - Supports RSA, DSA and ECDSA
+    - Supports RSA, DSA, ECDSA and EdDSA
       - RSA padding modes: PKCS#1 v1.5 and RSASSA-PSS
       - DSA
       - ECDSA curves: anything supported by the `cryptography` library, 
         see [here](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/#elliptic-curves).
+      - EdDSA: both Ed25519 and Ed448 are supported (in "pure" mode only, as per RFC 8419)
+    - Built-in support for PDF extensions defined in ISO/TS 32001 and ISO/TS 32002.
     - PKCS#11 support
         - Available both from the library and through the CLI
         - Extra convenience wrapper for Belgian eID cards
