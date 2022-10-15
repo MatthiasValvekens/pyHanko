@@ -20,11 +20,18 @@ def load_nist_cert(filename):
     return load_cert_object('nist_pkits', 'certs', filename)
 
 
+def load_crl(*path_components) -> crl.CertificateList:
+    with open(os.path.join(FIXTURES_DIR, *path_components), 'rb') as inf:
+        return crl.CertificateList.load(inf.read())
+
+
+def load_ocsp_response(*path_components) -> ocsp.OCSPResponse:
+    with open(os.path.join(FIXTURES_DIR, *path_components), 'rb') as inf:
+        return ocsp.OCSPResponse.load(inf.read())
+
+
 def load_nist_crl(filename):
-    with open(
-        os.path.join(FIXTURES_DIR, 'nist_pkits', 'crls', filename), 'rb'
-    ) as f:
-        return crl.CertificateList.load(f.read())
+    return load_crl(FIXTURES_DIR, 'nist_pkits', 'crls', filename)
 
 
 def load_openssl_ors(filename):

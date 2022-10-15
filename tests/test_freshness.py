@@ -13,25 +13,10 @@ from pyhanko_certvalidator.policy_decl import (
 )
 from pyhanko_certvalidator.validate import async_validate_path
 
-from .test_validate import FIXTURES_DIR
+from .common import load_cert_object, load_crl, load_ocsp_response
 
-freshness_dir = os.path.join(FIXTURES_DIR, 'freshness')
-certs = os.path.join(freshness_dir, 'certs')
-
-
-def load_cert(fname) -> x509.Certificate:
-    with open(fname, 'rb') as inf:
-        return x509.Certificate.load(inf.read())
-
-
-def load_crl(fname) -> crl.CertificateList:
-    with open(fname, 'rb') as inf:
-        return crl.CertificateList.load(inf.read())
-
-
-def load_ocsp_response(fname) -> ocsp.OCSPResponse:
-    with open(fname, 'rb') as inf:
-        return ocsp.OCSPResponse.load(inf.read())
+freshness_dir = 'freshness'
+certs = os.path.join('freshness', 'certs')
 
 
 @pytest.mark.asyncio
@@ -42,14 +27,12 @@ async def test_cooldown_period_ok():
         freshness=timedelta(days=3),
         freshness_req_type=FreshnessReqType.TIME_AFTER_SIGNATURE,
     )
-    root = load_cert(os.path.join(certs, 'root.crt'))
-    alice = load_cert(os.path.join(certs, 'alice.crt'))
-    interm = load_cert(os.path.join(certs, 'interm.crt'))
+    root = load_cert_object(certs, 'root.crt')
+    alice = load_cert_object(certs, 'alice.crt')
+    interm = load_cert_object(certs, 'interm.crt')
 
-    alice_ocsp = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-    )
-    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+    alice_ocsp = load_ocsp_response(freshness_dir, 'alice-2020-10-01.ors')
+    root_crl = load_crl(freshness_dir, 'root-2020-10-01.crl')
 
     vc = ValidationContext(
         trust_roots=[root],
@@ -72,14 +55,12 @@ async def test_cooldown_period_too_early():
         freshness=timedelta(days=3),
         freshness_req_type=FreshnessReqType.TIME_AFTER_SIGNATURE,
     )
-    root = load_cert(os.path.join(certs, 'root.crt'))
-    alice = load_cert(os.path.join(certs, 'alice.crt'))
-    interm = load_cert(os.path.join(certs, 'interm.crt'))
+    root = load_cert_object(certs, 'root.crt')
+    alice = load_cert_object(certs, 'alice.crt')
+    interm = load_cert_object(certs, 'interm.crt')
 
-    alice_ocsp = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-    )
-    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+    alice_ocsp = load_ocsp_response(freshness_dir, 'alice-2020-10-01.ors')
+    root_crl = load_crl(freshness_dir, 'root-2020-10-01.crl')
 
     vc = ValidationContext(
         trust_roots=[root],
@@ -103,14 +84,12 @@ async def test_use_delta_ok():
         freshness=timedelta(days=9),
         freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
     )
-    root = load_cert(os.path.join(certs, 'root.crt'))
-    alice = load_cert(os.path.join(certs, 'alice.crt'))
-    interm = load_cert(os.path.join(certs, 'interm.crt'))
+    root = load_cert_object(certs, 'root.crt')
+    alice = load_cert_object(certs, 'alice.crt')
+    interm = load_cert_object(certs, 'interm.crt')
 
-    alice_ocsp = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-    )
-    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+    alice_ocsp = load_ocsp_response(freshness_dir, 'alice-2020-10-01.ors')
+    root_crl = load_crl(freshness_dir, 'root-2020-10-01.crl')
 
     vc = ValidationContext(
         trust_roots=[root],
@@ -132,14 +111,12 @@ async def test_use_delta_stale():
         freshness=timedelta(hours=1),
         freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
     )
-    root = load_cert(os.path.join(certs, 'root.crt'))
-    alice = load_cert(os.path.join(certs, 'alice.crt'))
-    interm = load_cert(os.path.join(certs, 'interm.crt'))
+    root = load_cert_object(certs, 'root.crt')
+    alice = load_cert_object(certs, 'alice.crt')
+    interm = load_cert_object(certs, 'interm.crt')
 
-    alice_ocsp = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-10-01.ors')
-    )
-    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-10-01.crl'))
+    alice_ocsp = load_ocsp_response(freshness_dir, 'alice-2020-10-01.ors')
+    root_crl = load_crl(freshness_dir, 'root-2020-10-01.crl')
 
     vc = ValidationContext(
         trust_roots=[root],
@@ -162,17 +139,15 @@ async def test_use_most_recent():
         freshness=timedelta(days=20),  # some ridiculous value
         freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
     )
-    root = load_cert(os.path.join(certs, 'root.crt'))
-    alice = load_cert(os.path.join(certs, 'alice.crt'))
-    interm = load_cert(os.path.join(certs, 'interm.crt'))
+    root = load_cert_object(certs, 'root.crt')
+    alice = load_cert_object(certs, 'alice.crt')
+    interm = load_cert_object(certs, 'interm.crt')
 
-    alice_ocsp_older = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-11-29.ors')
-    )
+    alice_ocsp_older = load_ocsp_response(freshness_dir, 'alice-2020-11-29.ors')
     alice_ocsp_recent = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-12-10.ors')
+        freshness_dir, 'alice-2020-12-10.ors'
     )
-    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-12-10.crl'))
+    root_crl = load_crl(freshness_dir, 'root-2020-12-10.crl')
 
     vc = ValidationContext(
         trust_roots=[root],
@@ -208,17 +183,15 @@ async def test_discard_post_validation_time():
         freshness=timedelta(days=20),  # some ridiculous value
         freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
     )
-    root = load_cert(os.path.join(certs, 'root.crt'))
-    alice = load_cert(os.path.join(certs, 'alice.crt'))
-    interm = load_cert(os.path.join(certs, 'interm.crt'))
+    root = load_cert_object(certs, 'root.crt')
+    alice = load_cert_object(certs, 'alice.crt')
+    interm = load_cert_object(certs, 'interm.crt')
 
-    alice_ocsp_older = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-11-29.ors')
-    )
+    alice_ocsp_older = load_ocsp_response(freshness_dir, 'alice-2020-11-29.ors')
     alice_ocsp_recent = load_ocsp_response(
-        os.path.join(freshness_dir, 'alice-2020-12-10.ors')
+        freshness_dir, 'alice-2020-12-10.ors'
     )
-    root_crl = load_crl(os.path.join(freshness_dir, 'root-2020-11-29.crl'))
+    root_crl = load_crl(freshness_dir, 'root-2020-11-29.crl')
 
     vc = ValidationContext(
         trust_roots=[root],
