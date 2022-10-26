@@ -59,9 +59,13 @@ def _check_signing_certificate(cert: x509.Certificate,
                                signed_attrs: cms.CMSAttributes):
     # TODO check certificate policies, enforce restrictions on chain of trust
     # TODO document and/or mark as internal API explicitly
-    def _grab(attr_name):
+    def _grab(attr_name, cls):
         try:
-            return find_unique_cms_attribute(signed_attrs, attr_name)
+            value = find_unique_cms_attribute(signed_attrs, attr_name)
+            # reencode the attribute to avoid accidentally tripping the
+            # _is_mutated logic on the parent object (is important to preserve
+            # the state of the signed attributes)
+            return cls.load(value.dump())
         except NonexistentAttributeError:
             return None
         except MultivaluedAttributeError as e:
@@ -69,9 +73,9 @@ def _check_signing_certificate(cert: x509.Certificate,
                 "Wrong cardinality for signing certificate attribute"
             ) from e
 
-    attr = _grab('signing_certificate_v2')
+    attr = _grab('signing_certificate_v2', tsp.SigningCertificateV2)
     if attr is None:
-        attr = _grab('signing_certificate')
+        attr = _grab('signing_certificate', tsp.SigningCertificate)
 
     if attr is None:
         # if neither attr is present -> no constraints
@@ -186,15 +190,25 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
         raise errors.WeakHashAlgorithmError(md_algorithm)
     signature = signer_info['signature'].native
 
-    # signed_attrs comes with some context-specific tagging.
-    # We need to re-tag it with a universal SET OF tag.
-    signed_attrs = signer_info['signed_attrs'].untag()
+    signed_attrs_orig: cms.CMSAttributes = signer_info['signed_attrs']
 
-    if not signed_attrs:
+    if signed_attrs_orig is core.VOID:
         embedded_digest = None
         prehashed = True
         signed_data = actual_digest
     else:
+        # signed_attrs comes with context-specific tagging.
+        # We need to re-tag it with a universal SET OF tag.
+        signed_attrs = signer_info['signed_attrs'].untag()
+        # do this ASAP to minimise the chances of accidentally disturbing
+        # the state. We want to tolerate inconsequential deviations from DER,
+        # even though CMS mandates strict adherence to DER (not all signers
+        # follow that rule)
+        # TODO offer a mode with ultra-strict adherence to DER where we call
+        #  dump(force=True) here. That requires changes to asn1crypto, though,
+        #  since it is too eager to mess with URI values in ways that go beyond
+        #  DER.
+        signed_data = signed_attrs.dump()
         prehashed = False
         # check the CMSAlgorithmProtection attr, if present
         try:
@@ -244,7 +258,6 @@ def validate_sig_integrity(signer_info: cms.SignerInfo,
 
         embedded_digest = extract_message_digest(signer_info)
 
-        signed_data = signed_attrs.dump()
     try:
         validate_raw(
             signature, signed_data, cert, signature_algorithm, md_algorithm,
