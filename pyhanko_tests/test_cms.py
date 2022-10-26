@@ -23,7 +23,7 @@ from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import fields, signers, timestamps
+from pyhanko.sign import attributes, fields, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec, SignerAttrSpec
 from pyhanko.sign.ades.report import AdESIndeterminate, AdESStatus
 from pyhanko.sign.attributes import (
@@ -39,6 +39,7 @@ from pyhanko.sign.general import (
     as_signing_certificate,
     as_signing_certificate_v2,
     find_cms_attribute,
+    simple_cms_attribute,
 )
 from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_cms import (
@@ -1706,3 +1707,124 @@ def test_key_based_digest_selection(testing_ca, expected_md):
     pubkey = testing_ca.key_set.get_public_key(KeyLabel('signer1'))
     md = select_suitable_signing_md(pubkey)
     assert md == expected_md
+
+
+async def _generate_badly_ordered_signed_attrs(digest: bytes,
+                                               signer: signers.Signer):
+    class HackySeq(core.SequenceOf):
+        tag = 17  # SET OF
+        _child_spec = cms.CMSAttribute
+
+    class HackySignerInfo(core.Sequence):
+        _fields = [
+            ('version', cms.CMSVersion),
+            ('sid', cms.SignerIdentifier),
+            ('digest_algorithm', DigestAlgorithm),
+            ('signed_attrs', core.Asn1Value, {'implicit': 0}),
+            ('signature_algorithm', SignedDigestAlgorithm),
+            ('signature', core.OctetString),
+        ]
+
+    signing_cert = signer.signing_cert
+    seq = HackySeq([
+        simple_cms_attribute('content_type', cms.ContentType('data')),
+        simple_cms_attribute('message_digest', core.OctetString(digest)),
+        await attributes.SigningCertificateV2Provider(
+            signing_cert=signing_cert
+        ).get_attribute(),
+        # lexicographically, this one can't be last if we would encode this
+        # as a SET OF
+        simple_cms_attribute('2.999', core.OctetString(b"\xde\xad\xbe\xef")),
+    ])
+
+    signature = await signer.async_sign_raw(
+        seq.dump(), digest_algorithm='sha256'
+    )
+
+    digest_algo_obj = cms.DigestAlgorithm({'algorithm': 'sha256'})
+    algo = signer.get_signature_mechanism('sha256')
+    sig_info = HackySignerInfo({
+        'version': 'v1',
+        'sid': cms.SignerIdentifier({
+            'issuer_and_serial_number': cms.IssuerAndSerialNumber({
+                'issuer': signing_cert.issuer,
+                'serial_number': signing_cert.serial_number,
+            })
+        }),
+        'digest_algorithm': digest_algo_obj,
+        'signed_attrs': seq,
+        'signature_algorithm': algo,
+        'signature': signature,
+    })
+
+    nonder_data = sig_info.dump()
+    sig_info = cms.SignerInfo.load(nonder_data)
+    return sig_info
+
+
+@pytest.mark.asyncio
+async def test_tolerate_der_deviations():
+    msg = b'Hello world'
+    digest = hashlib.sha256(msg).digest()
+    sig_info = await _generate_badly_ordered_signed_attrs(digest, FROM_CA)
+
+    intact, valid = validate_sig_integrity(
+        signer_info=sig_info,
+        cert=FROM_CA.signing_cert,
+        expected_content_type='data',
+        actual_digest=digest,
+    )
+
+    assert intact and valid
+
+
+@pytest.mark.asyncio
+@freeze_time('2020-11-01')
+async def test_tolerate_der_deviations_in_pdf():
+    input_buf = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(input_buf)
+    md_algorithm = 'sha256'
+
+    cms_writer = cms_embedder.PdfCMSEmbedder().write_cms(
+        field_name='Signature', writer=w
+    )
+    next(cms_writer)
+    sig_obj = signers.SignatureObject(bytes_reserved=8192)
+
+    cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
+
+    prep_digest, output = cms_writer.send(
+        cms_embedder.SigIOSetup(md_algorithm=md_algorithm, in_place=True)
+    )
+
+    signer: signers.SimpleSigner = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+        signature_mechanism=SignedDigestAlgorithm({
+            'algorithm': 'rsassa_pkcs1v15'
+        })
+    )
+    cms_obj = await signer.async_sign(
+        data_digest=prep_digest.document_digest,
+        digest_algorithm=md_algorithm,
+    )
+    sd = cms_obj['content']
+    sd['signer_infos'][0] = await _generate_badly_ordered_signed_attrs(
+        digest=prep_digest.document_digest, signer=signer
+    )
+    cms_writer.send(cms_obj)
+
+    # first, check if the test file is "corrupted" in the right way
+    r = PdfFileReader(output)
+    sd = r.embedded_signatures[0].signed_data
+    raw_enc = sd.dump()
+    forced_enc = sd.dump(force=True)
+    print(raw_enc.hex())
+    # the 2.999: DEADBEEF attribute should be early in the DER version, but
+    # appear only much further in the non-DER version
+    marker = b'\x31\x06\x04\x04\xde\xad\xbe\xef'
+    assert raw_enc.find(marker) > forced_enc.find(marker)
+
+    # now we run the actual validation after reopening the file
+    r = PdfFileReader(output)
+    await async_val_trusted(r.embedded_signatures[0])
