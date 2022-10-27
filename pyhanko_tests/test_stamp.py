@@ -177,6 +177,7 @@ def test_four_qr_stamps(fixed_size):
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/four-stamps-{postfix}.pdf')
 
 
+@with_layout_comparison
 def test_fancy_qr_stamp():
     w = empty_page()
     style = QRStampStyle(
