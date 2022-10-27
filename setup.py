@@ -48,6 +48,7 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
 
         'Topic :: Security :: Cryptography',
         'Topic :: Software Development :: Libraries :: Python Modules',
@@ -62,7 +63,7 @@ setup(
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
-        'pyhanko-certvalidator~=0.19.5',
+        'pyhanko-certvalidator~=0.19.6',
         'click>=7.1.2',
         'requests>=2.24.0',
         'pyyaml>=5.3.1',
@@ -91,7 +92,7 @@ setup(
     },
     tests_require=[
         'pytest>=6.1.1', 'requests-mock>=1.8.0',
-        'freezegun>=1.1.0', 'certomancer~=0.9.0',
+        'freezegun>=1.1.0', 'certomancer~=0.9.1',
         'aiohttp~=3.8.0', 'pytest-aiohttp~=1.0.4',
         'certomancer-csc-dummy==0.2.1'
     ],
