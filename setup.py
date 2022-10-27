@@ -118,7 +118,9 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
 
         'Topic :: Security :: Cryptography',
     ],
@@ -127,7 +129,7 @@ setup(
 
     install_requires=[
         'requests>=2.24.0',
-        'asn1crypto>=1.5.0',
+        'asn1crypto>=1.5.1',
         'oscrypto>=1.1.0',
         'cryptography>=3.3.1',
         'uritools>=3.0.1'

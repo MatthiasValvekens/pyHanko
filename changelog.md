@@ -1,5 +1,9 @@
 # changelog
 
+## 0.19.6
+
+ - Update `asn1crypto` to `1.5.1`
+ - Declare Python 3.11 support
 
 ## 0.19.5
 
