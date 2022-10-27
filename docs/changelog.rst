@@ -2,6 +2,35 @@
 Release history
 ***************
 
+
+.. _release-0.15.1:
+
+0.15.1
+======
+
+*Release date:* 2022-10-27
+
+
+Note
+----
+
+This release adds Python 3.11 to the list of supported Python versions.
+
+
+Dependency updates
+------------------
+
+ * ``pyhanko-certvalidator`` updated to ``0.19.6``
+ * ``certomancer`` updated to ``0.9.1``
+
+
+Bugs fixed
+----------
+
+ * Be more tolerant towards deviations from DER restrictions in
+   signed attributes when validating signatures.
+
+
 .. _release-0.15.0:
 
 0.15.0
