@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 from asn1crypto import algos, x509
 
@@ -66,11 +66,10 @@ async def _ades_gather_lta_revocation(
 
 def _tails(path: ValidationPath):
     cur_path = path
-    is_ee = True
+    yield cur_path, True
     while cur_path.pkix_len > 1:
-        yield cur_path, is_ee
-        is_ee = False
         cur_path = cur_path.copy_and_drop_leaf()
+        yield cur_path, False
 
 
 def _apply_algo_policy(
@@ -154,12 +153,22 @@ async def _time_slide(
     algo_usage_policy: Optional[AlgorithmUsagePolicy],
     # TODO use policy objects
     time_tolerance: timedelta,
+    cert_stack: ConsList[bytes],
     path_stack: ConsList[ValidationPath],
 ) -> datetime:
     control_time = init_control_time
     checking_policy = rev_trust_policy.revocation_checking_policy
 
-    for current_path, is_ee in reversed(list(_tails(path))):
+    # For zero-length paths, there is nothing to check
+    if path.pkix_len == 0:
+        return init_control_time
+
+    # The ETSI algorithm requires us to collect revinfo for each
+    # cert in the path, starting with the first (after the root).
+    # Since our revinfo collection methods require paths instead of individual
+    # certs, we instead loop over partial paths
+    partial_paths = list(reversed(list(_tails(path))))
+    for current_path, is_ee in partial_paths:
         crls, ocsps = await _ades_gather_lta_revocation(
             current_path,
             revinfo_manager=revinfo_manager,
@@ -171,21 +180,23 @@ async def _time_slide(
             ),
         )
         cert = current_path.leaf
+        new_cert_stack = cert_stack.cons(cert.dump())
+        new_path_stack = path_stack.cons(path)
         if not crls and not ocsps:
             if isinstance(cert, x509.Certificate):
                 ident = cert.subject.human_friendly
             else:
                 ident = "attribute certificate"
 
-            proc_state = ValProcState(
-                cert_path_stack=ConsList.sing(current_path)
-            )
+            proc_state = ValProcState(cert_path_stack=new_path_stack)
 
-            raise InsufficientRevinfoError.from_state(
-                f"No revocation info from before {control_time.isoformat()}"
-                f" found for certificate {ident}.",
-                proc_state,
-            )
+            # don't raise an error for revo-exempt certs (OCSP responders)
+            if cert.ocsp_no_check_value is None:
+                raise InsufficientRevinfoError.from_state(
+                    f"No revocation info from before {control_time.isoformat()}"
+                    f" found for certificate {ident}.",
+                    proc_state,
+                )
 
         # We always take the chain of trust of a CRL/OCSP response
         # at face value
@@ -199,30 +210,35 @@ async def _time_slide(
                 or poe_manager[crl_of_interest.crl.crl_data] > control_time
             ):
                 continue
-            sub_paths = [
-                crl_path
-                for crl_path in crl_of_interest.prov_paths
-                if crl_path.path not in path_stack
-            ]
+            sub_paths = crl_of_interest.prov_paths
 
             # recurse into the paths associated with the CRL and adjust
             # the control time accordingly
-            control_time = min(
-                await asyncio.gather(
-                    *(
-                        _time_slide(
-                            crl_path.path,
-                            control_time,
-                            revinfo_manager,
-                            rev_trust_policy,
-                            algo_usage_policy,
-                            time_tolerance,
-                            path_stack=path_stack.cons(current_path),
-                        )
-                        for crl_path in sub_paths
+            # don't bother checking issuers that already appear
+            # in the chain of trust that we're currently looking into
+            sub_path_skip_list: Set[bytes] = set(new_cert_stack) | set(
+                cert.dump() for cert in current_path
+            )
+            sub_path_control_times = await asyncio.gather(
+                *(
+                    _time_slide(
+                        crl_path.path,
+                        control_time,
+                        revinfo_manager,
+                        rev_trust_policy,
+                        algo_usage_policy,
+                        time_tolerance,
+                        cert_stack=new_cert_stack,
+                        path_stack=new_path_stack,
+                    )
+                    for crl_path in sub_paths
+                    if (
+                        crl_path.path.leaf
+                        and crl_path.path.leaf.dump() not in sub_path_skip_list
                     )
                 )
             )
+            control_time = min([control_time, *sub_path_control_times])
 
             for candidate_crl_path in sub_paths:
                 revoked_date, revoked_reason = _check_cert_on_crl_and_delta(
@@ -261,14 +277,13 @@ async def _time_slide(
                 rev_trust_policy,
                 algo_usage_policy,
                 time_tolerance,
-                path_stack=path_stack.cons(current_path),
+                cert_stack=new_cert_stack,
+                path_stack=new_path_stack,
             )
             try:
                 _check_ocsp_status(
                     ocsp_response=ocsp_of_interest.ocsp_response,
-                    proc_state=ValProcState(
-                        cert_path_stack=ConsList.sing(current_path)
-                    ),
+                    proc_state=ValProcState(cert_path_stack=new_path_stack),
                 )
                 revoked_date = None
             except RevokedError as e:
@@ -307,5 +322,6 @@ async def time_slide(
         rev_trust_policy,
         algo_usage_policy,
         time_tolerance,
+        cert_stack=ConsList.empty(),
         path_stack=ConsList.empty(),
     )

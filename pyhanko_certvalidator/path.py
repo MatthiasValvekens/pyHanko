@@ -231,7 +231,12 @@ class ValidationPath:
         # check the trust root separately
         if self.trust_anchor.authority.is_potential_issuer_of(cert):
             # in case of a match, truncate everything
-            return ValidationPath(self._root, interm=[], leaf=cert)
+            if cert.self_signed == 'maybe':
+                # if the candidate leaf is self-signed (according to metadata),
+                # then it's actually the authority itself -> no need to append.
+                return ValidationPath(self._root, interm=[], leaf=None)
+            else:
+                return ValidationPath(self._root, interm=[], leaf=cert)
 
         # now run through the rest of the path
         certs = self._interm
