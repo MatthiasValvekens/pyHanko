@@ -137,6 +137,11 @@ setup(
     extras_require={
         'async_http': ['aiohttp~=3.8.0'],
     },
+    tests_require=[
+        'pytest>=6.1.1', 'freezegun>=1.1.0',
+        'aiohttp~=3.8.0', 'pytest-aiohttp~=1.0.4',
+        'pytest-asyncio==0.19.0'
+    ],
     packages=[
         PYTHON_PACKAGE_NAME + subp for subp in
         ('', '.fetchers', '.fetchers.requests_fetchers',

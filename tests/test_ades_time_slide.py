@@ -2,7 +2,6 @@ import datetime
 import os
 
 import pytest
-import pytz
 from freezegun import freeze_time
 
 from pyhanko_certvalidator.errors import InsufficientRevinfoError
@@ -48,7 +47,7 @@ def load_cert_registry(revoked_intermediate_ca=False) -> CertificateRegistry:
 
 
 def now() -> datetime.datetime:
-    return datetime.datetime.now(tz=pytz.UTC)
+    return datetime.datetime.now(tz=datetime.timezone.utc)
 
 
 DEFAULT_REV_CHECK_POLICY = RevocationCheckingPolicy(
@@ -107,7 +106,9 @@ async def test_time_slide_revocation_ocsp():
         algo_usage_policy=None,
         time_tolerance=DEFAULT_TOLERANCE,
     )
-    assert control_time == datetime.datetime(2020, 12, 1, tzinfo=pytz.UTC)
+    assert control_time == datetime.datetime(
+        2020, 12, 1, tzinfo=datetime.timezone.utc
+    )
 
 
 @pytest.mark.asyncio
@@ -131,7 +132,9 @@ async def test_time_slide_revocation_crl():
         algo_usage_policy=None,
         time_tolerance=DEFAULT_TOLERANCE,
     )
-    assert control_time == datetime.datetime(2020, 12, 1, tzinfo=pytz.UTC)
+    assert control_time == datetime.datetime(
+        2020, 12, 1, tzinfo=datetime.timezone.utc
+    )
 
 
 VERY_LENIENT_FRESHNESS = CertRevTrustPolicy(
@@ -155,7 +158,8 @@ async def test_time_slide_revoked_intermediate():
     # ...make sure to include some POE prior to the revocation date of the
     # intermediate cert
     poe_manager.register(
-        interm_crl, dt=datetime.datetime(2020, 11, 30, tzinfo=pytz.utc)
+        interm_crl,
+        dt=datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc),
     )
 
     revinfo_manager = RevinfoManager(
@@ -172,7 +176,9 @@ async def test_time_slide_revoked_intermediate():
         algo_usage_policy=None,
         time_tolerance=DEFAULT_TOLERANCE,
     )
-    assert control_time == datetime.datetime(2020, 12, 1, tzinfo=pytz.UTC)
+    assert control_time == datetime.datetime(
+        2020, 12, 1, tzinfo=datetime.timezone.utc
+    )
 
 
 @pytest.mark.asyncio
