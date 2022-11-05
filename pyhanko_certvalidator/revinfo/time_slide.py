@@ -312,9 +312,36 @@ async def time_slide(
     revinfo_manager: RevinfoManager,
     rev_trust_policy: CertRevTrustPolicy,
     algo_usage_policy: Optional[AlgorithmUsagePolicy],
-    # TODO use policy objects
     time_tolerance: timedelta,
 ) -> datetime:
+    """
+    Execute the ETSI EN 319 102-1 time slide algorithm against the given path.
+
+    .. warning::
+        This is incubating internal API.
+
+    .. note::
+        This implementation will also attempt to take into account chains of
+        trust of indirect CRLs. This is not a requirement of the specification,
+        but also somewhat unlikely to arise in practice in cases where AdES
+        compliance actually matters.
+
+    :param path:
+        The prospective validation path against which to execute the time slide
+        algorithm.
+    :param init_control_time:
+        The initial control time, typically the current time.
+    :param revinfo_manager:
+        The revocation info manager.
+    :param rev_trust_policy:
+        The trust policy for revocation information.
+    :param algo_usage_policy:
+        The algorithm usage policy.
+    :param time_tolerance:
+        The tolerance to apply when evaluating time-related constraints.
+    :return:
+        The resulting control time.
+    """
     return await _time_slide(
         path,
         init_control_time,
