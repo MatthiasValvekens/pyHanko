@@ -6,6 +6,7 @@ from freezegun import freeze_time
 
 from pyhanko_certvalidator.errors import InsufficientRevinfoError
 from pyhanko_certvalidator.ltv.poe import POEManager
+from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
@@ -16,7 +17,6 @@ from pyhanko_certvalidator.policy_decl import (
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
-from pyhanko_certvalidator.revinfo.time_slide import time_slide
 
 from .common import load_cert_object, load_crl, load_ocsp_response, load_path
 
