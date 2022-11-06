@@ -4,7 +4,12 @@ import os
 import pytest
 from freezegun import freeze_time
 
+from pyhanko_certvalidator.context import (
+    CertValidationPolicySpec,
+    ValidationDataHandlers,
+)
 from pyhanko_certvalidator.errors import InsufficientRevinfoError
+from pyhanko_certvalidator.ltv.ades_past import past_validate
 from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.path import ValidationPath
@@ -14,7 +19,10 @@ from pyhanko_certvalidator.policy_decl import (
     RevocationCheckingPolicy,
     RevocationCheckingRule,
 )
-from pyhanko_certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.registry import (
+    CertificateRegistry,
+    SimpleTrustManager,
+)
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 
@@ -208,3 +216,83 @@ async def test_time_slide_revoked_intermediate_enforce_poe():
             algo_usage_policy=None,
             time_tolerance=DEFAULT_TOLERANCE,
         )
+
+
+VALIDATION_POLICY_SPEC = CertValidationPolicySpec(
+    trust_manager=SimpleTrustManager.build(
+        trust_roots=[load_cert_object(BASE_DIR, 'certs', 'root.crt')]
+    ),
+    revinfo_policy=DEFAULT_TRUST_POLICY,
+)
+
+
+@pytest.mark.asyncio
+@freeze_time("2020-11-29T00:05:00+00:00")
+async def test_point_in_time_validation_not_revoked():
+    test_path = read_test_path()
+    alice_ocsp = load_ocsp_response(BASE_DIR, 'alice-2020-11-29.ors')
+    root_crl = load_crl(BASE_DIR, 'root-2020-11-29.crl')
+
+    cert_registry = load_cert_registry()
+    poe_manager = POEManager()
+    revinfo_manager = RevinfoManager(
+        certificate_registry=cert_registry,
+        poe_manager=poe_manager,
+        crls=[CRLContainer(root_crl)],
+        ocsps=[OCSPContainer(alice_ocsp)],
+    )
+
+    last_valid_time = await past_validate(
+        test_path,
+        validation_policy_spec=VALIDATION_POLICY_SPEC,
+        init_control_time=now(),
+        validation_data_handlers=ValidationDataHandlers(
+            revinfo_manager=revinfo_manager,
+            poe_manager=poe_manager,
+            cert_registry=cert_registry,
+        ),
+    )
+    assert last_valid_time == now()
+
+
+@pytest.mark.asyncio
+@freeze_time("2020-12-10T00:05:00+00:00")
+async def test_point_in_time_validation_revoked_intermediate():
+    # Same scenario as the time slide test w/ revoked intermediate cert & PoE
+    # in this module
+
+    test_path = read_test_path(revoked_intermediate_ca=True)
+    # the intermediate cert is listed as revoked on this CRL
+    root_crl = load_crl(BASE_DIR, 'root-2020-12-10.crl')
+    # this CRL would be valid long enough to serve as non-revocation
+    # evidence for the 'alice' cert
+    # We set a ridiculous freshness window to ensure it's covered.
+    poe_manager = POEManager()
+    interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
+    # ...make sure to include some POE prior to the revocation date of the
+    # intermediate cert
+    poe_manager.register(
+        interm_crl,
+        dt=datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc),
+    )
+
+    cert_registry = load_cert_registry(revoked_intermediate_ca=True)
+    revinfo_manager = RevinfoManager(
+        certificate_registry=cert_registry,
+        poe_manager=poe_manager,
+        crls=[CRLContainer(root_crl), CRLContainer(interm_crl)],
+        ocsps=[],
+    )
+    last_valid_time = await past_validate(
+        test_path,
+        validation_policy_spec=VALIDATION_POLICY_SPEC,
+        init_control_time=now(),
+        validation_data_handlers=ValidationDataHandlers(
+            revinfo_manager=revinfo_manager,
+            poe_manager=poe_manager,
+            cert_registry=cert_registry,
+        ),
+    )
+    assert last_valid_time == datetime.datetime(
+        2020, 12, 1, tzinfo=datetime.timezone.utc
+    )

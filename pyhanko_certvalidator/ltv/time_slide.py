@@ -284,6 +284,7 @@ async def _time_slide(
                 _check_ocsp_status(
                     ocsp_response=ocsp_of_interest.ocsp_response,
                     proc_state=ValProcState(cert_path_stack=new_path_stack),
+                    control_time=control_time,
                 )
                 revoked_date = None
             except RevokedError as e:

@@ -349,7 +349,9 @@ async def _check_ocsp_authorisation(
 
 
 def _check_ocsp_status(
-    ocsp_response: OCSPContainer, proc_state: ValProcState
+    ocsp_response: OCSPContainer,
+    proc_state: ValProcState,
+    control_time: Optional[datetime],
 ) -> bool:
     cert_response = ocsp_response.extract_single_response()
     if cert_response is None:
@@ -366,12 +368,14 @@ def _check_ocsp_status(
         if reason.native is None:
             reason = crl.CRLReason('unspecified')
         revocation_dt: datetime = revocation_info['revocation_time'].native
-        raise RevokedError.format(
-            reason=reason,
-            revocation_dt=revocation_dt,
-            revinfo_type='OCSP response',
-            proc_state=proc_state,
-        )
+
+        if control_time is None or revocation_dt <= control_time:
+            raise RevokedError.format(
+                reason=reason,
+                revocation_dt=revocation_dt,
+                revinfo_type='OCSP response',
+                proc_state=proc_state,
+            )
     return False
 
 
@@ -492,7 +496,11 @@ async def _handle_single_ocsp_resp(
     if not authorised:
         return False
 
-    return _check_ocsp_status(ocsp_response, proc_state)
+    timing = validation_context.timing_params
+    control_time = (
+        timing.validation_time if timing.point_in_time_validation else None
+    )
+    return _check_ocsp_status(ocsp_response, proc_state, control_time)
 
 
 async def verify_ocsp_response(

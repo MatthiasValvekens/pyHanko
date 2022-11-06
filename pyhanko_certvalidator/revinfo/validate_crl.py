@@ -637,7 +637,11 @@ async def _handle_single_crl(
         # the subroutine already registered the failure, so just bail
         return None
 
-    if revoked_reason:
+    timing = validation_context.timing_params
+    control_time = (
+        timing.validation_time if timing.point_in_time_validation else None
+    )
+    if revoked_reason and (control_time is None or revoked_date < control_time):
         raise RevokedError.format(
             reason=revoked_reason,
             revocation_dt=revoked_date,
