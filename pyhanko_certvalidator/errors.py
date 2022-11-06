@@ -126,6 +126,10 @@ class InsufficientRevinfoError(PathValidationError):
     pass
 
 
+class InsufficientPOEError(PathValidationError):
+    pass
+
+
 class ExpiredError(PathValidationError):
     pass
 

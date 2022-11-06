@@ -8,7 +8,10 @@ from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
 )
-from pyhanko_certvalidator.errors import InsufficientRevinfoError
+from pyhanko_certvalidator.errors import (
+    InsufficientPOEError,
+    InsufficientRevinfoError,
+)
 from pyhanko_certvalidator.ltv.ades_past import past_validate
 from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.ltv.poe import POEManager
@@ -164,12 +167,11 @@ async def test_time_slide_revoked_intermediate():
     # We set a ridiculous freshness window to ensure it's covered.
     poe_manager = POEManager()
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_manager.register(test_path.leaf, dt=poe_date)
     # ...make sure to include some POE prior to the revocation date of the
     # intermediate cert
-    poe_manager.register(
-        interm_crl,
-        dt=datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc),
-    )
+    poe_manager.register(interm_crl, dt=poe_date)
 
     revinfo_manager = RevinfoManager(
         certificate_registry=load_cert_registry(revoked_intermediate_ca=True),
@@ -192,11 +194,43 @@ async def test_time_slide_revoked_intermediate():
 
 @pytest.mark.asyncio
 @freeze_time("2020-12-10T00:05:00+00:00")
-async def test_time_slide_revoked_intermediate_enforce_poe():
+async def test_time_slide_revoked_intermediate_enforce_cert_poe():
     test_path = read_test_path(revoked_intermediate_ca=True)
     # the intermediate cert is listed as revoked on this CRL
     root_crl = load_crl(BASE_DIR, 'root-2020-12-10.crl')
     poe_manager = POEManager()
+    # No POE for the leaf cert at the control time
+    # at which the intermediate cert was revoked => fail
+    interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_manager.register(interm_crl, dt=poe_date)
+
+    revinfo_manager = RevinfoManager(
+        certificate_registry=load_cert_registry(revoked_intermediate_ca=True),
+        poe_manager=poe_manager,
+        crls=[CRLContainer(root_crl), CRLContainer(interm_crl)],
+        ocsps=[],
+    )
+    with pytest.raises(InsufficientPOEError, match='for.*Alice'):
+        await time_slide(
+            test_path,
+            init_control_time=now(),
+            revinfo_manager=revinfo_manager,
+            rev_trust_policy=VERY_LENIENT_FRESHNESS,
+            algo_usage_policy=None,
+            time_tolerance=DEFAULT_TOLERANCE,
+        )
+
+
+@pytest.mark.asyncio
+@freeze_time("2020-12-10T00:05:00+00:00")
+async def test_time_slide_revoked_intermediate_enforce_revinfo_poe():
+    test_path = read_test_path(revoked_intermediate_ca=True)
+    # the intermediate cert is listed as revoked on this CRL
+    root_crl = load_crl(BASE_DIR, 'root-2020-12-10.crl')
+    poe_manager = POEManager()
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
+    poe_manager.register(test_path.leaf, dt=poe_date)
     # This CRL issued by the intermediate CA predates its revocation date
     # so without POE, it should be treated as no longer valid
     # => no revinfo for the leaf cert => can't finish
@@ -268,14 +302,13 @@ async def test_point_in_time_validation_revoked_intermediate():
     # this CRL would be valid long enough to serve as non-revocation
     # evidence for the 'alice' cert
     # We set a ridiculous freshness window to ensure it's covered.
+    poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
     poe_manager = POEManager()
+    poe_manager.register(test_path.leaf, dt=poe_date)
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
     # ...make sure to include some POE prior to the revocation date of the
     # intermediate cert
-    poe_manager.register(
-        interm_crl,
-        dt=datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc),
-    )
+    poe_manager.register(interm_crl, dt=poe_date)
 
     cert_registry = load_cert_registry(revoked_intermediate_ca=True)
     revinfo_manager = RevinfoManager(

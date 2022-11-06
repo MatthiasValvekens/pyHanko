@@ -7,6 +7,7 @@ from asn1crypto import algos, x509
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.errors import (
     DisallowedAlgorithmError,
+    InsufficientPOEError,
     InsufficientRevinfoError,
     RevokedError,
 )
@@ -170,6 +171,7 @@ async def _time_slide(
     # Since our revinfo collection methods require paths instead of individual
     # certs, we instead loop over partial paths
     partial_paths = list(reversed(list(_tails(path))))
+    poe_manager = revinfo_manager.poe_manager
     for current_path, is_ee in partial_paths:
         crls, ocsps = await _ades_gather_lta_revocation(
             current_path,
@@ -184,13 +186,21 @@ async def _time_slide(
         cert = current_path.leaf
         new_cert_stack = cert_stack.cons(cert.dump())
         new_path_stack = path_stack.cons(path)
+
+        proc_state = ValProcState(cert_path_stack=new_path_stack)
+
+        if poe_manager[cert] > control_time:
+            raise InsufficientPOEError.from_state(
+                f"No proof of existence available for certificate "
+                f"{cert.subject.human_friendly} at control time "
+                f"{control_time.isoformat()}.",
+                proc_state,
+            )
         if not crls and not ocsps:
             if isinstance(cert, x509.Certificate):
                 ident = cert.subject.human_friendly
             else:
                 ident = "attribute certificate"
-
-            proc_state = ValProcState(cert_path_stack=new_path_stack)
 
             # don't raise an error for revo-exempt certs (OCSP responders)
             if cert.ocsp_no_check_value is None:
@@ -202,7 +212,6 @@ async def _time_slide(
 
         # We always take the chain of trust of a CRL/OCSP response
         # at face value
-        poe_manager = revinfo_manager.poe_manager
         for crl_of_interest in crls:
             # skip CRLs that are no longer relevant
             issued = crl_of_interest.crl.issuance_date
