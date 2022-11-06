@@ -10,6 +10,7 @@ from pyhanko_certvalidator.context import (
 )
 from pyhanko_certvalidator.errors import InsufficientRevinfoError
 from pyhanko_certvalidator.ltv.ades_past import past_validate
+from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.path import ValidationPath
@@ -296,3 +297,31 @@ async def test_point_in_time_validation_revoked_intermediate():
     assert last_valid_time == datetime.datetime(
         2020, 12, 1, tzinfo=datetime.timezone.utc
     )
+
+
+@pytest.mark.asyncio
+@freeze_time("2020-12-10T00:05:00+00:00")
+async def test_point_in_time_validation_revinfo_insufficient_poe():
+    test_path = read_test_path(revoked_intermediate_ca=True)
+    # the intermediate cert is listed as revoked on this CRL
+    root_crl = load_crl(BASE_DIR, 'root-2020-12-10.crl')
+    poe_manager = POEManager()
+
+    cert_registry = load_cert_registry(revoked_intermediate_ca=True)
+    revinfo_manager = RevinfoManager(
+        certificate_registry=cert_registry,
+        poe_manager=poe_manager,
+        crls=[CRLContainer(root_crl)],
+        ocsps=[],
+    )
+    with pytest.raises(TimeSlideFailure):
+        await past_validate(
+            test_path,
+            validation_policy_spec=VALIDATION_POLICY_SPEC,
+            init_control_time=now(),
+            validation_data_handlers=ValidationDataHandlers(
+                revinfo_manager=revinfo_manager,
+                poe_manager=poe_manager,
+                cert_registry=cert_registry,
+            ),
+        )
