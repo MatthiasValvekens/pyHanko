@@ -871,3 +871,36 @@ def test_encrypt_with_managed_metadata():
     r = PdfFileReader(out)
     r.decrypt("secret")
     assert r.document_meta_view.title.value == "Metadata is encrypted"
+
+
+@freeze_time(datetime(2022, 9, 7, tzinfo=tzlocal.get_localzone()))
+def test_incremental_update_handle_binary_producer_string():
+    # Check whether binary (nondecodable) producer strings are handled
+    # gracefully in incremental updates
+
+    fname = os.path.join(PDF_DATA_DIR, 'info-bin-producer-string.pdf')
+    out = BytesIO()
+    with open(fname, 'rb') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        w.root['/Blah'] = generic.pdf_name('/Blah')
+        w.update_root()
+        w.write(out)
+
+    r = PdfFileReader(out)
+    assert r.trailer_view['/Info']['/Producer'].startswith('pyHanko')
+
+
+@freeze_time(datetime(2022, 9, 7, tzinfo=tzlocal.get_localzone()))
+def test_rewrite_handle_binary_producer_string():
+    # Check whether binary (nondecodable) producer strings are handled
+    # gracefully
+
+    fname = os.path.join(PDF_DATA_DIR, 'info-bin-producer-string.pdf')
+    out = BytesIO()
+    with open(fname, 'rb') as inf:
+        w = copy_into_new_writer(PdfFileReader(inf))
+        w.root['/Blah'] = generic.pdf_name('/Blah')
+        w.write(out)
+
+    r = PdfFileReader(out)
+    assert r.trailer_view['/Info']['/Producer'].startswith('pyHanko')
