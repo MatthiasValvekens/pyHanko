@@ -38,6 +38,8 @@ from pyhanko_certvalidator.revinfo.validate_ocsp import (
 )
 from pyhanko_certvalidator.util import ConsList
 
+__all__ = ['time_slide']
+
 
 async def _ades_gather_lta_revocation(
     path: ValidationPath,

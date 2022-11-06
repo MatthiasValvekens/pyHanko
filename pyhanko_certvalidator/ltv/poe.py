@@ -4,6 +4,8 @@ from typing import Dict, Optional, Union
 
 from asn1crypto import core
 
+__all__ = ['POEManager']
+
 
 class POEManager:
     """

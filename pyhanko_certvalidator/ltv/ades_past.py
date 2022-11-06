@@ -7,6 +7,10 @@ from pyhanko_certvalidator.context import (
     ValidationDataHandlers,
 )
 from pyhanko_certvalidator.errors import ValidationError
+from pyhanko_certvalidator.ltv.errors import (
+    PastValidatePrecheckFailure,
+    TimeSlideFailure,
+)
 from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
@@ -22,13 +26,7 @@ NO_REVOCATION = RevocationCheckingPolicy(
     intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK,
 )
 
-
-class PastValidatePrecheckFailure(ValidationError):
-    pass
-
-
-class TimeSlideFailure(ValidationError):
-    pass
+__all__ = ['past_validate']
 
 
 async def _past_validate_precheck(
