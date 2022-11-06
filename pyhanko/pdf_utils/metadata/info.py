@@ -69,7 +69,7 @@ def update_info_dict(meta: model.DocumentMetadata,
             producer_string = \
                 generic.TextStringObject(f"{producer_string}; {producer}")
             mod = True
-    except KeyError:
+    except (KeyError, TypeError):
         producer_string = generic.TextStringObject(producer)
         mod = True
     # always override this
