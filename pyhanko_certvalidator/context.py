@@ -18,6 +18,7 @@ from .policy_decl import (
     AlgorithmUsagePolicy,
     CertRevTrustPolicy,
     DisallowWeakAlgorithmsPolicy,
+    PKIXValidationParams,
     RevocationCheckingPolicy,
 )
 from .registry import (
@@ -579,23 +580,38 @@ class CertValidationPolicySpec:
     algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = field(
         default=DisallowWeakAlgorithmsPolicy()
     )
+    pkix_validation_params: Optional[PKIXValidationParams] = None
 
     def build_validation_context(
         self,
         timing_info: ValidationTimingInfo,
-        handlers: ValidationDataHandlers,
+        handlers: Optional[ValidationDataHandlers],
     ) -> ValidationContext:
+
+        if handlers is None:
+            cert_registry = CertificateRegistry()
+            poe_manager = POEManager()
+            revinfo_manager = RevinfoManager(
+                certificate_registry=cert_registry,
+                poe_manager=poe_manager,
+                crls=[],
+                ocsps=[],
+            )
+        else:
+            cert_registry = handlers.cert_registry
+            poe_manager = handlers.poe_manager
+            revinfo_manager = handlers.revinfo_manager
 
         return ValidationContext(
             trust_manager=self.trust_manager,
             revinfo_policy=self.revinfo_policy,
-            revinfo_manager=handlers.revinfo_manager,
-            certificate_registry=handlers.cert_registry,
-            poe_manager=handlers.poe_manager,
+            revinfo_manager=revinfo_manager,
+            certificate_registry=cert_registry,
+            poe_manager=poe_manager,
             algorithm_usage_policy=self.algorithm_usage_policy,
             moment=timing_info.validation_time,
             use_poe_time=timing_info.use_poe_time,
             time_tolerance=self.time_tolerance,
             acceptable_ac_targets=self.acceptable_ac_targets,
-            allow_fetching=handlers.revinfo_manager.fetching_allowed,
+            allow_fetching=revinfo_manager.fetching_allowed,
         )

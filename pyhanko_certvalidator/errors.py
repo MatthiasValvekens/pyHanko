@@ -63,8 +63,9 @@ class OCSPFetchError(OCSPValidationError):
 
 
 class ValidationError(Exception):
-
-    pass
+    def __init__(self, message: str):
+        self.failure_msg = message
+        super().__init__(message)
 
 
 TPathErr = TypeVar('TPathErr', bound='PathValidationError')
@@ -73,7 +74,7 @@ TPathErr = TypeVar('TPathErr', bound='PathValidationError')
 class PathValidationError(ValidationError):
     @classmethod
     def from_state(
-        cls: Type[TPathErr], msg, proc_state: ValProcState
+        cls: Type[TPathErr], msg: str, proc_state: ValProcState
     ) -> TPathErr:
         return cls(
             msg,
@@ -81,10 +82,9 @@ class PathValidationError(ValidationError):
             is_side_validation=proc_state.is_side_validation,
         )
 
-    def __init__(self, msg, *, is_ee_cert: bool, is_side_validation: bool):
+    def __init__(self, msg: str, *, is_ee_cert: bool, is_side_validation: bool):
         self.is_ee_cert = is_ee_cert
         self.is_side_validation = is_side_validation
-        self.failure_msg = msg
         super().__init__(msg)
 
 

@@ -1,7 +1,7 @@
 # coding: utf-8
 import itertools
 from dataclasses import dataclass
-from typing import FrozenSet, Iterable, Optional, Union
+from typing import FrozenSet, Iterable, Iterator, Optional, Union
 
 from asn1crypto import cms, x509
 
@@ -329,16 +329,29 @@ class ValidationPath:
             # to fail loudly.
             raise LookupError("Root has no certificate")
 
-    def __iter__(self):
-        # backwards compat, we iterate over all certs _including_ the root
-        # if it is supplied as a cert
+    def iter_certs(self, include_root: bool) -> Iterator[x509.Certificate]:
+        """
+        Iterate over the certificates in the path.
+
+        :param include_root:
+            Include the root (if it is supplied as a certificate)
+        :return:
+            An iterator.
+        """
         root = self._root.authority
         from_root = (
-            (root.certificate,) if isinstance(root, AuthorityWithCert) else ()
+            (root.certificate,)
+            if include_root and isinstance(root, AuthorityWithCert)
+            else ()
         )
         leaf = self._leaf
         from_leaf = (leaf,) if isinstance(leaf, x509.Certificate) else ()
         return itertools.chain(from_root, self._interm, from_leaf)
+
+    def __iter__(self):
+        # backwards compat, we iterate over all certs _including_ the root
+        # if it is supplied as a cert
+        return self.iter_certs(include_root=True)
 
     def __eq__(self, other):
         if not isinstance(other, ValidationPath):
