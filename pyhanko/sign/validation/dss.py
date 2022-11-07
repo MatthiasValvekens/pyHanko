@@ -375,7 +375,7 @@ class DocumentSecurityStore:
             PDF writer to write to.
         :param sig_contents:
             Contents of the new signature (used to compute the VRI hash), as
-            as a hexadecimal string, including any padding.
+            a hexadecimal string, including any padding.
             If ``None``, the information will not be added to any VRI
             dictionary.
         :param certs:
@@ -469,7 +469,7 @@ class DocumentSecurityStore:
             Output stream to write to.
         :param sig_contents:
             Contents of the new signature (used to compute the VRI hash), as
-            as a hexadecimal string, including any padding.
+            a hexadecimal string, including any padding.
             If ``None``, the information will not be added to any VRI
             dictionary.
         :param certs:

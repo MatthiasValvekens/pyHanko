@@ -345,7 +345,7 @@ def extract_certs_for_validation(signed_data: cms.SignedData) \
 async def cms_basic_validation(
         signed_data: cms.SignedData,
         raw_digest: bytes = None,
-        validation_context: ValidationContext = None,
+        validation_context: Optional[ValidationContext] = None,
         status_kwargs: dict = None,
         validation_path: Optional[ValidationPath] = None,
         pkix_validation_params: Optional[PKIXValidationParams] = None,
@@ -627,7 +627,7 @@ async def collect_timing_info(signer_info: cms.SignerInfo,
 
 async def validate_tst_signed_data(
         tst_signed_data: cms.SignedData,
-        validation_context: ValidationContext,
+        validation_context: Optional[ValidationContext],
         expected_tst_imprint: bytes):
     """
     Validate the ``SignedData`` of a time stamp token.

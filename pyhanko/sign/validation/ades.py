@@ -9,14 +9,25 @@ very experimental.
     The only reason why this is even in the main tree at all is because
     continually rebasing the branch on which it lives became too much of a drag.
 """
-
 import asyncio
+import itertools
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
+from typing import (
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
-from asn1crypto import cms, x509
+from asn1crypto import cms
+from asn1crypto import pdf as asn1_pdf
+from asn1crypto import tsp, x509
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.authority import CertTrustAnchor, TrustAnchor
 from pyhanko_certvalidator.context import (
@@ -34,17 +45,35 @@ from pyhanko_certvalidator.registry import PathBuilder, TrustManager
 from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
 from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
 
+from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.ades.report import (
     AdESFailure,
     AdESIndeterminate,
     AdESPassed,
     AdESSubIndic,
 )
-from pyhanko.sign.general import CMSExtractionError, extract_certificate_info
-from pyhanko.sign.validation import errors, generic_cms
+from pyhanko.sign.general import (
+    CMSExtractionError,
+    MultivaluedAttributeError,
+    NonexistentAttributeError,
+    extract_certificate_info,
+    find_unique_cms_attribute,
+)
+from pyhanko.sign.validation import (
+    DocumentSecurityStore,
+    EmbeddedPdfSignature,
+    errors,
+    generic_cms,
+)
+from pyhanko.sign.validation.errors import SignatureValidationError
+from pyhanko.sign.validation.generic_cms import (
+    extract_tst_data,
+    validate_tst_signed_data,
+)
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.sign.validation.status import (
     RevocationDetails,
+    SignatureCoverageLevel,
     SignatureStatus,
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
@@ -274,8 +303,7 @@ class AdESWithTimeValidationResult(AdESBasicValidationResult):
 
 _WITH_TIME_FURTHER_PROC = frozenset({
     AdESPassed.OK,
-    # This is a permanent failure for us
-    # AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
+    AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
     AdESIndeterminate.REVOKED_NO_POE,
     AdESIndeterminate.REVOKED_CA_NO_POE,
     # TODO process TRY_LATER
@@ -303,10 +331,6 @@ async def ades_with_time_validation(
     sig_bytes = signed_data['signer_infos'][0]['signature'].native
     signature_poe_time = validation_data_handlers.poe_manager[sig_bytes]
 
-    # FIXME instead of passing in validation contexts here, the AdES logic
-    #  should take care of that in a spec compliant way (from more basic inputs)
-    # NOTE: in particular, revinfo should be handled by the AdES component
-
     interm_result = await _ades_basic_validation(
         signed_data, validation_context=validation_context,
         key_usage_settings=key_usage_settings, raw_digest=raw_digest,
@@ -326,7 +350,7 @@ async def ades_with_time_validation(
     signer_info = generic_cms.extract_signer_info(signed_data)
 
     # process signature timestamps
-    # TODO allow selecting one of multiple timestamps here
+    # TODO allow selecting one of multiple timestamps here?
     sig_ts_result = await _ades_process_attached_ts(
         signer_info, validation_context, signed=False
     )
@@ -633,3 +657,164 @@ async def ades_past_signature_validation(
         ades_subindication=current_time_sub_indic
     )
 
+
+@dataclass(frozen=True)
+class PrimaFaciePOE:
+    pdf_revision: int
+    timestamp_dt: datetime
+    digests_covered: FrozenSet[bytes]
+    timestamp_token_signed_data: cms.SignedData
+
+
+def _extract_cert_digests_from_signed_data(sd: cms.SignedData):
+    cert_choice: cms.CertificateChoices
+    for cert_choice in sd['certificates']:
+        if cert_choice.name in ('certificate', 'v2_attr_set'):
+            yield digest_for_poe(cert_choice.chosen.dump())
+
+
+def _get_tst_timestamp(sd: cms.SignedData) -> datetime:
+    tst_info: tsp.TSTInfo = sd['encap_content_info']['content']
+    return tst_info['gen_time'].native
+
+
+async def _tst_integrity_precheck(
+        sd: cms.SignedData, expected_tst_imprint: bytes):
+    try:
+        kwargs = await validate_tst_signed_data(
+            tst_signed_data=sd,
+            validation_context=None,
+            expected_tst_imprint=expected_tst_imprint
+        )
+        return kwargs['intact']
+    except SignatureValidationError:
+        return False
+
+
+async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
+
+    # TODO take algorithm usage policy into account?
+
+    # TODO when ingesting OCSP responses, make an effort to register
+    #  POE for the embedded certs as well? Esp. potiential responder certs.
+
+    # timestamp -> hashes index. We haven't validated the chain of trust
+    # of the timestamps yet, so we can't put them in an actual
+    # POE manager immediately
+
+    # Since the embedded signature context is necessary to validate the POE's
+    # integrity, we do run the integrity checker for the TST data at this stage.
+    # The actual trust validation is delegated
+
+    collected_so_far: Set[bytes] = set()
+    # Holds all digests of objects contained in _document_ content so far
+    # (note: this is why it's important to traverse the revisions in order)
+
+    for_next_ts: Set[bytes] = set()
+    # Holds digests of objects that will be registered with POE on the next
+    # document TS or content TS encountered.
+
+    prima_facie_poe_sets: List[PrimaFaciePOE] = []
+    # output array (to avoid having to work with async generators)
+
+    embedded_sig: EmbeddedPdfSignature
+
+    for ix, embedded_sig in enumerate(r.embedded_signatures):
+
+        hist_handler = HistoricalResolver(
+            r, revision=embedded_sig.signed_revision
+        )
+
+        signed_data: cms.SignedData = embedded_sig.signed_data
+        if embedded_sig.sig_object_type == '/DocTimeStamp':
+            content_ts_signed_data = signed_data
+            is_doc_ts = True
+        else:
+            content_ts_signed_data = extract_tst_data(embedded_sig, signed=True)
+            is_doc_ts = False
+
+        # Important remark: at this time, we do NOT consider signature
+        # timestamps when evaluating POE data, only content timestamps &
+        # document timestamps!
+        # Rationale: the signature timestamp only indirectly protects
+        # the document content, and wasn't designed for this purpose.
+        # If we want to use signature TSes as well, we'd have to evaluate
+        # the integrity of the signature, which requires selecting a certificate
+        # (even if just for validation purposes), yada yada. Not doing any of
+        # that for now.
+        # (This approach might change in the future)
+
+        if content_ts_signed_data is not None:
+            # add DSS content
+            dss = DocumentSecurityStore.read_dss(hist_handler)
+            collected_so_far.update(
+                digest_for_poe(item.dump())
+                for item in itertools.chain(dss.crls, dss.ocsps, dss.certs)
+            )
+            collected_so_far.update(for_next_ts)
+            doc_digest = embedded_sig.compute_digest()
+            coverage_normal = embedded_sig.evaluate_signature_coverage() \
+                              >= SignatureCoverageLevel.ENTIRE_REVISION
+            if coverage_normal and \
+                    await _tst_integrity_precheck(signed_data, doc_digest):
+                prima_facie_poe_sets.append(
+                    PrimaFaciePOE(
+                        pdf_revision=embedded_sig.signed_revision,
+                        timestamp_dt=_get_tst_timestamp(content_ts_signed_data),
+                        digests_covered=frozenset(collected_so_far),
+                        timestamp_token_signed_data=content_ts_signed_data
+                    )
+                )
+                # reset for_next_ts
+                for_next_ts = set()
+            for_next_ts.update(
+                _extract_cert_digests_from_signed_data(content_ts_signed_data)
+            )
+
+        # the certs in the signature container itself are not part of the
+        # signed data in that revision, but they're covered
+        # by whatever the next (content) TS covers -> keep 'em
+        for_next_ts.update(_extract_cert_digests_from_signed_data(signed_data))
+
+        # same for revinfo embedded Adobe-style:
+        # part of the signed data, but not directly timestamped
+        # => save for next TS
+        if not is_doc_ts:
+            try:
+                revinfo_attr: asn1_pdf.RevocationInfoArchival = \
+                    find_unique_cms_attribute(
+                        embedded_sig.signer_info['signed_attrs'],
+                        'adobe_revocation_info_archival'
+                    )
+
+                for_next_ts.update(
+                    digest_for_poe(item.dump())
+                    for item in itertools.chain(
+                        revinfo_attr['crl'], revinfo_attr['ocsp']
+                    )
+                )
+            except (MultivaluedAttributeError, NonexistentAttributeError):
+                pass
+
+            # finally, register POE for the signature itself if there
+            # is a signature timestamp
+            sig_ts_signed_data = extract_tst_data(embedded_sig, signed=False)
+            if sig_ts_signed_data is not None:
+                sig_bytes = embedded_sig.signer_info['signature'].native
+                sig_poe_digest = digest_for_poe(sig_bytes)
+                sig_ts_intact = await _tst_integrity_precheck(
+                    sig_ts_signed_data,
+                    expected_tst_imprint=embedded_sig.tst_signature_digest
+                )
+                collected_so_far.add(sig_poe_digest)
+                if sig_ts_intact:
+
+                    prima_facie_poe_sets.append(
+                        PrimaFaciePOE(
+                            pdf_revision=embedded_sig.signed_revision,
+                            timestamp_dt=_get_tst_timestamp(sig_ts_signed_data),
+                            digests_covered=frozenset((sig_poe_digest,)),
+                            timestamp_token_signed_data=sig_ts_signed_data
+                        )
+                    )
+    return prima_facie_poe_sets
