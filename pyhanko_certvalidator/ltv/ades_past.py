@@ -81,6 +81,29 @@ async def past_validate(
     init_control_time: Optional[datetime] = None,
     use_poe_time: Optional[datetime] = None,
 ) -> datetime:
+    """
+    Execute the ETSI EN 319 102-1 past certificate validation algorithm
+    against the given path (ETSI EN 319 102-1, § 5.6.2.1).
+
+    .. warning::
+        This is incubating internal API.
+
+    :param path:
+        The prospective validation path against which to execute the algorithm.
+    :param validation_policy_spec:
+        The validation policy specification.
+    :param validation_data_handlers:
+        The handlers used to manage collected certificates,revocation
+        information and proof-of-existence records.
+    :param init_control_time:
+        Initial control time; defaults to the current time.
+    :param use_poe_time:
+        Usage time to use in freshness computations.
+    :return:
+        The control time returned by the time sliding algorithm.
+        Informally, the last time at which the certificate was known to be
+        valid.
+    """
 
     await _past_validate_precheck(
         path,
