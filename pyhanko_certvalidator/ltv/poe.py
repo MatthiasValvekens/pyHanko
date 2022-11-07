@@ -4,7 +4,11 @@ from typing import Dict, Optional, Union
 
 from asn1crypto import core
 
-__all__ = ['POEManager']
+__all__ = ['POEManager', 'digest_for_poe']
+
+
+def digest_for_poe(data: bytes) -> bytes:
+    return hashlib.sha256(data).digest()
 
 
 class POEManager:
@@ -34,7 +38,7 @@ class POEManager:
         """
         if isinstance(data, core.Asn1Value):
             data = data.dump()
-        digest = hashlib.sha256(data).digest()
+        digest = digest_for_poe(data)
         return self.register_by_digest(digest, dt)
 
     def register_by_digest(
