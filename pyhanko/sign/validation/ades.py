@@ -54,9 +54,11 @@ from pyhanko.sign.ades.report import (
 )
 from pyhanko.sign.general import (
     CMSExtractionError,
+    CMSStructuralError,
     MultivaluedAttributeError,
     NonexistentAttributeError,
     extract_certificate_info,
+    find_cms_attribute,
     find_unique_cms_attribute,
 )
 from pyhanko.sign.validation import (
@@ -691,7 +693,20 @@ async def _tst_integrity_precheck(
         return False
 
 
-async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
+async def _build_prima_facie_poe_index_from_pdf_timestamps(
+        r: PdfFileReader,
+        include_content_ts: bool = False):
+    # This subroutine implements the POE gathering part of the evidence record
+    # processing algorithm in AdES as applied to PDF. For the purposes of this
+    # function, the chain of document timestamps is treated as a single evidence
+    # record, and all document data in the revision in which a timestamp is
+    # contained is considered fair game.
+    # Signature timestamps are not processed as such, but POE for the timestamps
+    # themselves will be accumulated.
+    # Content timestamps can optionally be included. This is not standard
+    # in AdES, but since there's no cryptographic difference (in PDF!) between
+    # a content TS in a signature and a document timestamp signature, they
+    # can be taken into account at the caller's discretion
 
     # TODO take algorithm usage policy into account?
 
@@ -726,12 +741,13 @@ async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
         )
 
         signed_data: cms.SignedData = embedded_sig.signed_data
+        ts_signed_data: Optional[cms.SignedData] = None
+        is_doc_ts = False
         if embedded_sig.sig_object_type == '/DocTimeStamp':
-            content_ts_signed_data = signed_data
+            ts_signed_data = signed_data
             is_doc_ts = True
-        else:
-            content_ts_signed_data = extract_tst_data(embedded_sig, signed=True)
-            is_doc_ts = False
+        elif include_content_ts:
+            ts_signed_data = extract_tst_data(embedded_sig, signed=True)
 
         # Important remark: at this time, we do NOT consider signature
         # timestamps when evaluating POE data, only content timestamps &
@@ -744,7 +760,7 @@ async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
         # that for now.
         # (This approach might change in the future)
 
-        if content_ts_signed_data is not None:
+        if ts_signed_data is not None:
             # add DSS content
             dss = DocumentSecurityStore.read_dss(hist_handler)
             collected_so_far.update(
@@ -760,15 +776,15 @@ async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
                 prima_facie_poe_sets.append(
                     PrimaFaciePOE(
                         pdf_revision=embedded_sig.signed_revision,
-                        timestamp_dt=_get_tst_timestamp(content_ts_signed_data),
+                        timestamp_dt=_get_tst_timestamp(ts_signed_data),
                         digests_covered=frozenset(collected_so_far),
-                        timestamp_token_signed_data=content_ts_signed_data
+                        timestamp_token_signed_data=ts_signed_data
                     )
                 )
                 # reset for_next_ts
                 for_next_ts = set()
             for_next_ts.update(
-                _extract_cert_digests_from_signed_data(content_ts_signed_data)
+                _extract_cert_digests_from_signed_data(ts_signed_data)
             )
 
         # the certs in the signature container itself are not part of the
@@ -779,11 +795,12 @@ async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
         # same for revinfo embedded Adobe-style:
         # part of the signed data, but not directly timestamped
         # => save for next TS
+        signed_attrs = embedded_sig.signer_info['signed_attrs']
         if not is_doc_ts:
             try:
                 revinfo_attr: asn1_pdf.RevocationInfoArchival = \
                     find_unique_cms_attribute(
-                        embedded_sig.signer_info['signed_attrs'],
+                        signed_attrs,
                         'adobe_revocation_info_archival'
                     )
 
@@ -796,25 +813,30 @@ async def _build_prima_facie_poe_index_from_pdf(r: PdfFileReader):
             except (MultivaluedAttributeError, NonexistentAttributeError):
                 pass
 
-            # finally, register POE for the signature itself if there
-            # is a signature timestamp
-            sig_ts_signed_data = extract_tst_data(embedded_sig, signed=False)
-            if sig_ts_signed_data is not None:
-                sig_bytes = embedded_sig.signer_info['signature'].native
-                sig_poe_digest = digest_for_poe(sig_bytes)
-                sig_ts_intact = await _tst_integrity_precheck(
-                    sig_ts_signed_data,
-                    expected_tst_imprint=embedded_sig.tst_signature_digest
-                )
-                collected_so_far.add(sig_poe_digest)
-                if sig_ts_intact:
+        # Prepare a POE entry for the signature itself (to be processed
+        # with the next timestamp)
+        sig_bytes = embedded_sig.signer_info['signature'].native
+        for_next_ts.add(digest_for_poe(sig_bytes))
 
-                    prima_facie_poe_sets.append(
-                        PrimaFaciePOE(
-                            pdf_revision=embedded_sig.signed_revision,
-                            timestamp_dt=_get_tst_timestamp(sig_ts_signed_data),
-                            digests_covered=frozenset((sig_poe_digest,)),
-                            timestamp_token_signed_data=sig_ts_signed_data
-                        )
-                    )
+        # add POE entries for the timestamp(s) attached to this signature
+        try:
+            content_tses = find_cms_attribute(
+                signed_attrs, 'content_time_stamp'
+            )
+        except (NonexistentAttributeError, CMSStructuralError):
+            content_tses = ()
+
+        try:
+            signature_tses = find_cms_attribute(
+                embedded_sig.signer_info['unsigned_attributes'],
+                'signature_time_stamp'
+            )
+        except (NonexistentAttributeError, CMSStructuralError):
+            signature_tses = ()
+
+        for ts_data in itertools.chain(signature_tses, content_tses):
+            for ts_signer_info in ts_data['content']['signer_infos']:
+                ts_sig_bytes = ts_signer_info['signature'].native
+                for_next_ts.add(digest_for_poe(ts_sig_bytes))
+
     return prima_facie_poe_sets
