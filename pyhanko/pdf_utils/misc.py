@@ -13,7 +13,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
-from typing import Callable, Generator, Iterable, Optional, TypeVar
+from typing import (
+    AsyncGenerator,
+    Callable,
+    Generator,
+    Iterable,
+    Optional,
+    TypeVar,
+)
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfStrictReadError',
@@ -25,7 +32,7 @@ __all__ = [
     'assert_writable_and_random_access', 'prepare_rw_output_stream',
     'finalise_output',
     'DEFAULT_CHUNK_SIZE', 'chunked_write', 'chunked_digest', 'chunk_stream',
-    'ConsList', 'Singleton', 'rd', 'isoparse'
+    'ConsList', 'Singleton', 'rd', 'isoparse', 'lift_iterable_async'
 ]
 
 import pytz
@@ -492,3 +499,8 @@ def isoparse(dt_str: str) -> datetime:
         # assume UTC
         dt = dt.replace(tzinfo=pytz.UTC)
     return dt
+
+
+async def lift_iterable_async(i: Iterable[X]) -> AsyncGenerator[X, None]:
+    for x in i:
+        yield x

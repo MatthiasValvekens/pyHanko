@@ -1,12 +1,22 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import IO, Iterable, List, Optional, Tuple, Type, TypeVar, Union
+from typing import (
+    IO,
+    AsyncGenerator,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from asn1crypto import cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
-from pyhanko_certvalidator import CertificateValidator, ValidationContext
+from pyhanko_certvalidator import ValidationContext, find_valid_path
 from pyhanko_certvalidator.errors import (
     ExpiredError,
     InvalidCertificateError,
@@ -14,7 +24,11 @@ from pyhanko_certvalidator.errors import (
     PathValidationError,
     RevokedError,
 )
-from pyhanko_certvalidator.policy_decl import AlgorithmUsagePolicy
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsagePolicy,
+    PKIXValidationParams,
+)
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
@@ -57,6 +71,8 @@ __all__ = [
     'extract_self_reported_ts', 'extract_certs_for_validation',
     'collect_signer_attr_status', 'validate_algorithm_protection'
 ]
+
+from ...pdf_utils.misc import lift_iterable_async
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +350,8 @@ async def cms_basic_validation(
         raw_digest: bytes = None,
         validation_context: ValidationContext = None,
         status_kwargs: dict = None,
+        validation_path: Optional[ValidationPath] = None,
+        pkix_validation_params: Optional[PKIXValidationParams] = None,
         *, key_usage_settings: KeyUsageConstraints):
     """
     Perform basic validation of CMS and PKCS#7 signatures in isolation
@@ -351,6 +369,7 @@ async def cms_basic_validation(
     if validation_context is not None:
         algorithm_policy = validation_context.algorithm_policy
         time_indic = validation_context.use_poe_time
+    validation_context = validation_context or ValidationContext()
     if algorithm_policy is None:
         algorithm_policy = DEFAULT_ALGORITHM_USAGE_POLICY
 
@@ -388,12 +407,17 @@ async def cms_basic_validation(
     ades_status = path = revo_details = None
     if valid:
         try:
-            validator = CertificateValidator(
-                cert, intermediate_certs=other_certs,
-                validation_context=validation_context
-            )
+            validation_context.certificate_registry\
+                .register_multiple(other_certs)
+            if validation_path is not None:
+                paths = lift_iterable_async([validation_path])
+            else:
+                paths = validation_context.path_builder\
+                    .async_build_paths_lazy(cert)
             ades_status, revo_details, path = await validate_cert_usage(
-                validator, key_usage_settings=key_usage_settings
+                cert, validation_context,
+                key_usage_settings=key_usage_settings,
+                paths=paths, pkix_validation_params=pkix_validation_params,
             )
         except ValueError as e:
             logger.error("Processing error in validation process", exc_info=e)
@@ -410,8 +434,11 @@ async def cms_basic_validation(
 
 
 async def validate_cert_usage(
-        validator: CertificateValidator,
-        key_usage_settings: KeyUsageConstraints):
+        cert: x509.Certificate,
+        validation_context: ValidationContext,
+        key_usage_settings: KeyUsageConstraints,
+        paths: AsyncGenerator[ValidationPath, None],
+        pkix_validation_params: Optional[PKIXValidationParams] = None):
     """
     Low-level certificate validation routine.
     Internal API.
@@ -419,13 +446,20 @@ async def validate_cert_usage(
 
     # TODO use path building & validation API directly and filter candidate
     #  paths based on criteria in the signature container.
-    cert: x509.Certificate = validator.certificate
 
     path = revo_details = None
     try:
         # validate usage without going through pyhanko_certvalidator
         key_usage_settings.validate(cert)
-        path = await validator.async_validate_usage(key_usage=set())
+        if validation_context.algorithm_policy is not None:
+            validation_context.algorithm_policy.enforce_for_certificate(
+                cert, validation_context.use_poe_time
+            )
+        path = await find_valid_path(
+            cert, paths,
+            validation_context=validation_context,
+            pkix_validation_params=pkix_validation_params
+        )
         ades_status = None
     except InvalidCertificateError as e:
         # TODO accumulate these somewhere?
