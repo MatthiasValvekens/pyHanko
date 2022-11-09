@@ -1,12 +1,13 @@
 import asyncio
 import warnings
-from typing import Iterable, Optional
+from typing import AsyncGenerator, Iterable, Optional
 
 from asn1crypto import x509
 
 from ._types import type_name
 from .context import ValidationContext
 from .errors import InvalidCertificateError, PathBuildingError, ValidationError
+from .path import ValidationPath
 from .policy_decl import PKIXValidationParams
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
@@ -17,29 +18,58 @@ __all__ = [
     'CertificateValidator',
     'ValidationContext',
     'PKIXValidationParams',
+    'find_valid_path',
 ]
 
 
+async def find_valid_path(
+    certificate: x509.Certificate,
+    paths: AsyncGenerator[ValidationPath, None],
+    validation_context: ValidationContext,
+    pkix_validation_params: Optional[PKIXValidationParams] = None,
+):
+    exceptions = []
+    try:
+        async for candidate_path in paths:
+            try:
+                await async_validate_path(
+                    validation_context, candidate_path, pkix_validation_params
+                )
+                return candidate_path
+            except ValidationError as e:
+                exceptions.append(e)
+    except PathBuildingError:
+        if certificate.self_signed in {'yes', 'maybe'}:
+            raise InvalidCertificateError(
+                f'The X.509 certificate provided is self-signed - '
+                f'"{certificate.subject.human_friendly}"'
+            )
+        raise
+
+    if len(exceptions) == 1:
+        raise exceptions[0]
+
+    non_signature_exception = None
+    for exception in exceptions:
+        if 'signature' not in str(exception):
+            non_signature_exception = exception
+
+    if non_signature_exception:
+        raise non_signature_exception
+
+    raise exceptions[0]
+
+
 class CertificateValidator:
-
-    # A pyhanko_certvalidator.context.ValidationContext object
-    _context = None
-
-    # An asn1crypto.x509.Certificate object
-    _certificate = None
-
     # A pyhanko_certvalidator.path.ValidationPath object - only set once validated
     _path = None
-
-    # A pyhanko_certvalidator.context.PKIXValidationParams object
-    _params = None
 
     def __init__(
         self,
         end_entity_cert: x509.Certificate,
         intermediate_certs: Optional[Iterable[x509.Certificate]] = None,
         validation_context: Optional[ValidationContext] = None,
-        pkix_params: PKIXValidationParams = None,
+        pkix_params: Optional[PKIXValidationParams] = None,
     ):
         """
         :param end_entity_cert:
@@ -75,80 +105,42 @@ class CertificateValidator:
             for intermediate_cert in intermediate_certs:
                 certificate_registry.register(intermediate_cert)
 
-        self._context = validation_context
-        self._certificate = end_entity_cert
-        self._params = pkix_params
+        self._context: ValidationContext = validation_context
+        self._certificate: x509.Certificate = end_entity_cert
+        self._params: Optional[PKIXValidationParams] = pkix_params
 
     @property
     def certificate(self):
         return self._certificate
 
-    async def _validate_path(self):
+    async def async_validate_path(self) -> ValidationPath:
         """
         Builds possible certificate paths and validates them until a valid one
         is found, or all fail.
 
         :raises:
+            pyhanko_certvalidator.errors.PathBuildingError - when an error occurs building the path
             pyhanko_certvalidator.errors.PathValidationError - when an error occurs validating the path
             pyhanko_certvalidator.errors.RevokedError - when the certificate or another certificate in its path has been revoked
         """
 
         if self._path is not None:
-            return
-
-        exceptions = []
+            return self._path
 
         algorithm_policy = self._context.algorithm_policy
         algo_moment = self._context.use_poe_time
-        if not algorithm_policy.digest_algorithm_allowed(
-            self._certificate.hash_algo, algo_moment
-        ):
-            raise InvalidCertificateError(
-                f'The X.509 certificate provided has a signature using the weak'
-                f' hash algorithm {self._certificate.hash_algo}'
-            )
-        if not algorithm_policy.signature_algorithm_allowed(
-            self._certificate.signature_algo, algo_moment
-        ):
-            raise InvalidCertificateError(
-                f'The X.509 certificate provided has a signature using the weak'
-                f' hash algorithm {self.certificate.hash_algo}'
-            )
+        certificate = self._certificate
 
-        try:
-            paths = await self._context.path_builder.async_build_paths(
-                self._certificate
-            )
-        except PathBuildingError:
-            if self._certificate.self_signed in {'yes', 'maybe'}:
-                raise InvalidCertificateError(
-                    f'The X.509 certificate provided is self-signed - '
-                    f'"{self._certificate.subject.human_friendly}"'
-                )
-            raise
+        algorithm_policy.enforce_for_certificate(certificate, algo_moment)
 
-        for candidate_path in paths:
-            try:
-                await async_validate_path(
-                    self._context, candidate_path, self._params
-                )
-                self._path = candidate_path
-                return
-            except ValidationError as e:
-                exceptions.append(e)
-
-        if len(exceptions) == 1:
-            raise exceptions[0]
-
-        non_signature_exception = None
-        for exception in exceptions:
-            if 'signature' not in str(exception):
-                non_signature_exception = exception
-
-        if non_signature_exception:
-            raise non_signature_exception
-
-        raise exceptions[0]
+        paths = self._context.path_builder.async_build_paths_lazy(certificate)
+        self._path = candidate_path = await find_valid_path(
+            certificate,
+            paths,
+            validation_context=self._context,
+            pkix_validation_params=self._params,
+        )
+        return candidate_path
 
     def validate_usage(
         self, key_usage, extended_key_usage=None, extended_optional=False
@@ -275,7 +267,7 @@ class CertificateValidator:
             certificate validation path
         """
 
-        await self._validate_path()
+        validated_path = await self.async_validate_path()
         validate_usage(
             self._context,
             self._certificate,
@@ -283,7 +275,7 @@ class CertificateValidator:
             extended_key_usage,
             extended_optional,
         )
-        return self._path
+        return validated_path
 
     def validate_tls(self, hostname):
         """
@@ -333,6 +325,6 @@ class CertificateValidator:
             certificate validation path
         """
 
-        await self._validate_path()
+        await self.async_validate_path()
         validate_tls_hostname(self._context, self._certificate, hostname)
         return self._path

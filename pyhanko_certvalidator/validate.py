@@ -108,9 +108,9 @@ def validate_path(
 
 
 async def async_validate_path(
-    validation_context,
+    validation_context: ValidationContext,
     path: ValidationPath,
-    parameters: PKIXValidationParams = None,
+    parameters: Optional[PKIXValidationParams] = None,
 ):
     """
     Validates the path using the algorithm from
