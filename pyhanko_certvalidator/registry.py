@@ -420,7 +420,8 @@ class PathBuilder:
     async def async_build_paths(self, end_entity_cert: x509.Certificate):
         """
         Builds a list of ValidationPath objects from a certificate in the
-        operating system trust store to the end-entity certificate
+        operating system trust store to the end-entity certificate, returning
+        all paths in a single list.
 
         :param end_entity_cert:
             A byte string of a DER or PEM-encoded X.509 certificate, or an
@@ -432,20 +433,45 @@ class PathBuilder:
             of the CA certs.
         """
 
+        paths: List[ValidationPath] = []
+        async for result in self.async_build_paths_lazy(end_entity_cert):
+            paths.append(result)
+
+        return paths
+
+    async def async_build_paths_lazy(self, end_entity_cert: x509.Certificate):
+        """
+        Builds a list of ValidationPath objects from a certificate in the
+        operating system trust store to the end-entity certificate, and emit
+        them as an asynchronous generator.
+
+        :param end_entity_cert:
+            A byte string of a DER or PEM-encoded X.509 certificate, or an
+            instance of asn1crypto.x509.Certificate
+
+        :return:
+            A list of pyhanko_certvalidator.path.ValidationPath objects that
+            represent the possible paths from the end-entity certificate to one
+            of the CA certs.
+        :raise PathBuildingError: if no paths could be built
+        """
+
         if self.trust_manager.is_root(end_entity_cert):
-            result = ValidationPath(CertTrustAnchor(end_entity_cert), [], None)
-            return [result]
+            yield ValidationPath(CertTrustAnchor(end_entity_cert), [], None)
+            return
 
         path: ConsList[x509.Certificate] = ConsList.sing(end_entity_cert)
         certs_seen: ConsList[bytes] = ConsList.sing(
             end_entity_cert.issuer_serial
         )
-        paths: List[ValidationPath] = []
         failed_paths: List[ConsList[x509.Certificate]] = []
 
-        await self._walk_issuers(path, certs_seen, paths, failed_paths)
+        emitted_count = 0
+        async for result in self._walk_issuers(path, certs_seen, failed_paths):
+            yield result
+            emitted_count += 1
 
-        if len(paths) == 0:
+        if emitted_count == 0:
             cert_name = end_entity_cert.subject.human_friendly
             path_head = failed_paths[0].head
             assert isinstance(path_head, x509.Certificate)
@@ -456,14 +482,11 @@ class PathBuilder:
                 f"\"{missing_issuer_name}\" was found"
             )
 
-        return paths
-
     async def _walk_issuers(
         self,
         path: ConsList[x509.Certificate],
         certs_seen: ConsList[bytes],
-        paths: List[ValidationPath],
-        failed_paths,
+        failed_paths: List[ConsList[x509.Certificate]],
     ):
         """
         Recursively looks through the list of known certificates for the issuer
@@ -474,12 +497,8 @@ class PathBuilder:
             A ValidationPath object representing the current traversal of
             possible paths
 
-        :param paths:
-            A list of completed ValidationPath objects. This is mutated as
-            results are found.
-
         :param failed_paths:
-            A list of pyhanko_certvalidator.path.ValidationPath objects that failed due
+            A list of candidate paths that failed due
             to no matching issuer before reaching a certificate from the CA
             certs list
         """
@@ -487,7 +506,7 @@ class PathBuilder:
         if isinstance(path.head, TrustAnchor):
             assert path.tail is not None
             certs = list(path.tail)
-            paths.append(ValidationPath(path.head, certs[:-1], certs[-1]))
+            yield ValidationPath(path.head, certs[:-1], certs[-1])
             return
 
         cert = path.head
@@ -504,9 +523,11 @@ class PathBuilder:
                 new_certs_seen = certs_seen.cons(cert_id)
             else:
                 new_certs_seen = certs_seen
-            await self._walk_issuers(
-                path.cons(issuer), new_certs_seen, paths, failed_paths
+            results = self._walk_issuers(
+                path.cons(issuer), new_certs_seen, failed_paths
             )
+            async for result_path in results:
+                yield result_path
             new_branches += 1
 
         if not new_branches:
@@ -518,9 +539,12 @@ class PathBuilder:
                 if cert_id in certs_seen:
                     continue
                 new_certs_seen = certs_seen.cons(cert_id)
-                await self._walk_issuers(
-                    path.cons(issuer), new_certs_seen, paths, failed_paths
+
+                results = self._walk_issuers(
+                    path.cons(issuer), new_certs_seen, failed_paths
                 )
+                async for result_path in results:
+                    yield result_path
                 new_branches += 1
         if not new_branches:
             failed_paths.append(path)
