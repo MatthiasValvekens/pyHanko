@@ -39,15 +39,35 @@ from pyhanko_certvalidator.revinfo.validate_ocsp import (
 )
 from pyhanko_certvalidator.util import ConsList
 
-__all__ = ['time_slide']
+__all__ = ['time_slide', 'ades_gather_prima_facie_revinfo']
 
 
-async def _ades_gather_lta_revocation(
+async def ades_gather_prima_facie_revinfo(
     path: ValidationPath,
     revinfo_manager: RevinfoManager,
     control_time: datetime,
     revocation_checking_rule: RevocationCheckingRule,
 ) -> Tuple[List[CRLOfInterest], List[OCSPResponseOfInterest]]:
+    """
+    Gather potentially relevant revocation information for the leaf
+    certificate of a candidate validation path.
+    Only the scope of the revocation information will be checked, no
+    detailed validation will occur.
+
+    :param path:
+        The candidate validation path.
+    :param revinfo_manager:
+        The revocation info manager.
+    :param control_time:
+        The time horizon that serves as a relevance cutoff.
+    :param revocation_checking_rule:
+        Revocation info rule controlling which kind(s) of revocation
+        information will be fetched.
+    :return:
+        A 2-element tuple containing a list of the fetched CRLs and
+        OCSP responses, respectively.
+    """
+
     cert = path.leaf
     if revocation_checking_rule.ocsp_relevant:
         ocsp_result = await collect_relevant_responses_with_paths(
@@ -173,7 +193,7 @@ async def _time_slide(
     partial_paths = list(reversed(list(_tails(path))))
     poe_manager = revinfo_manager.poe_manager
     for current_path, is_ee in partial_paths:
-        crls, ocsps = await _ades_gather_lta_revocation(
+        crls, ocsps = await ades_gather_prima_facie_revinfo(
             current_path,
             revinfo_manager=revinfo_manager,
             control_time=control_time,
