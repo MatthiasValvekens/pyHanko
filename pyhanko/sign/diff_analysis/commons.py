@@ -76,6 +76,7 @@ def compare_key_refs(key, old: HistoricalResolver,
     Ensure that updating a key in a dictionary has no undesirable side effects.
     The following scenarios are allowed:
 
+    0. replacing a direct value with another direct value
     1. adding a key in new_dict
     2. replacing a direct value in old_dict with a reference in new_dict
     3. the reverse (allowed by default)
