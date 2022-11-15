@@ -129,7 +129,7 @@ class MetadataUpdateRule(WhitelistRule):
 
         old_metadata_ref = grab_metadata(old.root)
 
-        if self.check_xml_syntax:
+        if self.check_xml_syntax and old_metadata_ref is not None:
             MetadataUpdateRule.is_well_formed_xml(old_metadata_ref)
 
         same_ref_ok = (
