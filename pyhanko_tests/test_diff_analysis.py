@@ -2125,3 +2125,32 @@ def test_sign_with_hybrid_sneaky_edit():
         )
     )
     assert status.modification_level == ModificationLevel.OTHER
+
+
+@pytest.mark.parametrize(
+    'fname', [
+        'extensions-direct.pdf',
+        'extensions-indirect.pdf',
+        'extensions-update-indirect.pdf',
+        'extensions-update-direct.pdf',
+    ]
+)
+def test_diff_analysis_add_extensions_dict(fname):
+    testfile = os.path.join(PDF_DATA_DIR, fname)
+    with open(testfile, 'rb') as f:
+        r = PdfFileReader(f)
+        s = r.embedded_signatures[0]
+        status = validate_pdf_signature(s)
+    assert status.modification_level == ModificationLevel.FORM_FILLING
+
+
+def test_diff_analysis_update_indirect_extensions_not_all_paths():
+    testfile = os.path.join(
+        PDF_DATA_DIR, 'extensions-indirect-not-all-paths.pdf'
+    )
+    with open(testfile, 'rb') as f:
+        r = PdfFileReader(f)
+        s = r.embedded_signatures[0]
+        status = validate_pdf_signature(s)
+    assert isinstance(status.diff_result, SuspiciousModification)
+    assert 'DontOverrideMe' in status.diff_result.args[0]

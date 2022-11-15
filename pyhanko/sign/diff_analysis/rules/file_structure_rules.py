@@ -3,7 +3,7 @@ from typing import Iterable, Tuple
 from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
-from ..commons import compare_dicts
+from ..commons import compare_dicts, compare_key_refs, qualify
 from ..constants import ROOT_EXEMPT_STRICT_COMPARISON
 from ..policy_api import ModificationLevel
 from ..rules_api import QualifiedWhitelistRule, ReferenceUpdate, WhitelistRule
@@ -45,10 +45,22 @@ class CatalogModificationRule(QualifiedWhitelistRule):
 
         # As for the keys in the root dictionary that are allowed to change:
         #  - /Extensions requires no further processing since it must consist
-        #    of direct objects anyway.
+        #    of direct objects anyway, BUT the /Extensions entry itself can
+        #    be indirect
         #  - /MarkInfo: if it's an indirect reference (probably not) we can
-        #    whitelist it if the key set makes sense. TODO do this
+        #    whitelist it (but do not process any further)
         #  - /DSS, /AcroForm and /Metadata are dealt with by other rules.
+        for key in ('/Extensions', '/MarkInfo'):
+            yield from qualify(
+                ModificationLevel.LTA_UPDATES,
+                compare_key_refs(
+                    key, old, old_root, new_root
+                ),
+                transform=lambda ref: ReferenceUpdate(
+                    ref, paths_checked=RawPdfPath('/Root', key)
+                )
+            )
+
         yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
             new.root_ref, paths_checked=RawPdfPath('/Root'),
             # Things like /Data in a MDP policy can point to root
