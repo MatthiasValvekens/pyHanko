@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
       - run: pip install isort
       - name: Check import order
         run: isort --profile black --line-length 80 --check .
