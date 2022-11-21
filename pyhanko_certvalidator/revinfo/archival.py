@@ -2,7 +2,7 @@ import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, TypeVar, Union
 
 from asn1crypto import algos, crl, ocsp
 
@@ -41,7 +41,10 @@ class RevinfoContainer(IssuedItemContainer, abc.ABC):
         raise NotImplementedError
 
 
-def sort_freshest_first(lst: Iterable[RevinfoContainer]):
+RevInfoType = TypeVar('RevInfoType', bound=RevinfoContainer)
+
+
+def sort_freshest_first(lst: Iterable[RevInfoType]) -> List[RevInfoType]:
     def _key(container: RevinfoContainer):
         dt = container.issuance_date
         # if dt is None ---> (0, None)
