@@ -1,11 +1,11 @@
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
 from asn1crypto import crl, ocsp, x509
 
 from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
-from pyhanko_certvalidator.ltv.poe import POEManager
+from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import (
     CRLContainer,
@@ -47,11 +47,11 @@ class RevinfoManager:
         self._revocation_certs: Dict[bytes, x509.Certificate] = {}
         self._crl_issuer_map: Dict[bytes, x509.Certificate] = {}
 
-        self._crls = []
+        self._crls: List[CRLContainer] = []
         if crls:
             self._crls = sort_freshest_first(crls)
 
-        self._ocsps = []
+        self._ocsps: List[OCSPContainer] = []
         if ocsps:
             self._ocsps = ocsps = sort_freshest_first(ocsps)
             for ocsp_response in ocsps:
@@ -229,3 +229,31 @@ class RevinfoManager:
                     )
 
         return ocsps + self._ocsps
+
+    def evict_ocsps(self, hashes_to_evict: Set[bytes]):
+        """
+        Internal API to eliminate local OCSP records from consideration.
+
+        :param hashes_to_evict:
+            A collection of OCSP response hashes; see :func:`.digest_for_poe`.
+        """
+
+        def p(container: OCSPContainer):
+            digest = digest_for_poe(container.ocsp_response_data.dump())
+            return digest not in hashes_to_evict
+
+        self._ocsps = list(filter(p, self._ocsps))
+
+    def evict_crls(self, hashes_to_evict: Set[bytes]):
+        """
+        Internal API to eliminate local CRLs from consideration.
+
+        :param hashes_to_evict:
+            A collection of CRL hashes; see :func:`.digest_for_poe`.
+        """
+
+        def p(container: CRLContainer):
+            digest = digest_for_poe(container.crl_data.dump())
+            return digest not in hashes_to_evict
+
+        self._crls = list(filter(p, self._crls))
