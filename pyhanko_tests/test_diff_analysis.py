@@ -1,5 +1,4 @@
 import os
-import struct
 from datetime import datetime
 from io import BytesIO
 from itertools import product
@@ -43,6 +42,7 @@ from pyhanko_tests.signing_commons import (
     DUMMY_TS,
     FROM_CA,
     FROM_ECC_CA,
+    NOTRUST_V_CONTEXT,
     SELF_SIGN,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
@@ -2154,3 +2154,68 @@ def test_diff_analysis_update_indirect_extensions_not_all_paths():
         status = validate_pdf_signature(s)
     assert isinstance(status.diff_result, SuspiciousModification)
     assert 'DontOverrideMe' in status.diff_result.args[0]
+
+
+def test_diff_analysis_modify_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/AcroForm']['/Fields'][1]['/Type'] = pdf_name('/Foo')
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert '/Type of form field altered' in str(val_status.diff_result)
+
+
+def test_diff_analysis_remove_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    del w.root['/AcroForm']['/Fields'][1]['/Type']
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert '/Type of form field deleted' in str(val_status.diff_result)
+
+
+def test_diff_analysis_add_invalid_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    del w.root['/AcroForm']['/Fields'][1]['/Type']
+    w.update_container(w.root['/AcroForm']['/Fields'][1])
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/AcroForm']['/Fields'][1]['/Type'] = pdf_name('/Foo')
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert '/Type of form field set to something other than /Annot' \
+           in str(val_status.diff_result)
+
+
+def test_diff_analysis_add_valid_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    del w.root['/AcroForm']['/Fields'][1]['/Type']
+    w.update_container(w.root['/AcroForm']['/Fields'][1])
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/AcroForm']['/Fields'][1]['/Type'] = pdf_name('/Annot')
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.FORM_FILLING

@@ -439,6 +439,19 @@ class BaseFieldModificationRule(FieldMDPRule):
         compare_dicts(
             old_field, new_field, self.value_update_keys
         )
+        # Be strict about /Type since some processor's behaviour depends on it
+        had_type = '/Type' in old_field
+        has_type = '/Type' in new_field
+        if has_type:
+            type_val = new_field.raw_get('/Type')
+            if not had_type and type_val != '/Annot':
+                raise SuspiciousModification(
+                    "/Type of form field set to something other than /Annot"
+                )
+            elif had_type and type_val != old_field.raw_get('/Type'):
+                raise SuspiciousModification("/Type of form field altered")
+        if had_type and not has_type:
+            raise SuspiciousModification("/Type of form field deleted")
         return compare_dicts(
             old_field, new_field, self.always_modifiable, raise_exc=False
         )
