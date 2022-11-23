@@ -34,7 +34,12 @@ from .rules.form_field_rules import (
     SigFieldModificationRule,
 )
 from .rules.metadata_rules import DocInfoRule, MetadataUpdateRule
-from .rules_api import QualifiedWhitelistRule, ReferenceUpdate
+from .rules_api import (
+    ApprovalType,
+    Context,
+    QualifiedWhitelistRule,
+    ReferenceUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +174,8 @@ class StandardDiffPolicy(DiffPolicy):
             for new_ref in new_xrefs:
                 usages = old._get_usages_of_ref(new_ref)
                 if usages:
-                    yield new_ref, (ModificationLevel.NONE, set(usages))
+                    contexts = {Context.from_absolute(old, p) for p in usages}
+                    yield new_ref, (ModificationLevel.NONE, contexts)
 
         # orphaned objects are cleared at LTA update level
         if self.ignore_orphaned_objects:
@@ -187,17 +193,22 @@ class StandardDiffPolicy(DiffPolicy):
             ref = _upd.updated_ref
             try:
                 current_max_level, usages = old_usages_to_clear[ref]
-                if _upd.blanket_approve:
+                upd_type = _upd.approval_type
+                if upd_type == ApprovalType.BLANKET_APPROVE:
                     # approve all usages at once
                     usages = set()
+                elif upd_type == ApprovalType.APPROVE_RELATIVE_CONTEXT:
+                    # approve all usages that match the relative context,
+                    # keep the rest
+                    usages = set(
+                        ctx for ctx in usages
+                        if ctx.relative_view != _upd.context_checked
+                    )
                 else:
-                    # remove the paths that have just been cleared from
+                    # Last case: path-level approval
+                    # remove the path that has just been cleared from
                     # the checklist
-                    paths_checked = _upd.paths_checked or ()
-                    if isinstance(paths_checked, RawPdfPath):
-                        # single path
-                        paths_checked = paths_checked,
-                    usages.difference_update(paths_checked)
+                    usages.discard(_upd.context_checked)
                 # bump the modification level for this reference if necessary
                 _level = max(current_max_level, _level)
                 old_usages_to_clear[ref] = _level, usages
@@ -257,7 +268,7 @@ class StandardDiffPolicy(DiffPolicy):
                 new.revision, msg
             )
             unexplained_overrides = [
-                f" - {repr(ref)} is also used at "
+                f" - {repr(ref)} is also used in "
                 f"{', '.join(str(p) for p in paths_remaining)} in the prior "
                 f"revision."
                 for ref, (_, paths_remaining) in old_usages_to_clear.items()

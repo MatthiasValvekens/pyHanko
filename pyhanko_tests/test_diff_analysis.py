@@ -30,6 +30,7 @@ from pyhanko.sign.diff_analysis import (
     SuspiciousModification,
     XrefStreamRule,
 )
+from pyhanko.sign.diff_analysis.rules_api import Context
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
@@ -1323,7 +1324,9 @@ def test_sign_reject_freed(forbid_freeing):
         def apply_qualified(self, old: HistoricalResolver,
                             new: HistoricalResolver):
             yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
-                freed.reference, paths_checked=RawPdfPath('/Root', '/Pages')
+                freed.reference, context_checked=Context.from_absolute(
+                    old, RawPdfPath('/Root', '/Pages')
+                )
             )
 
     val_status = validate_pdf_signature(

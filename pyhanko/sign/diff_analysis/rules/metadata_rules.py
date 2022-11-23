@@ -6,7 +6,7 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
 from ..commons import safe_whitelist
 from ..policy_api import SuspiciousModification
-from ..rules_api import ReferenceUpdate, WhitelistRule
+from ..rules_api import Context, ReferenceUpdate, WhitelistRule
 
 __all__ = [
     'DocInfoRule', 'MetadataUpdateRule'
@@ -31,9 +31,12 @@ class DocInfoRule(WhitelistRule):
         old_info = old.trailer_view.get_value_as_reference(
             '/Info', optional=True
         )
-        path = RawPdfPath('/Info')
         yield from map(
-            ReferenceUpdate.curry_ref(paths_checked=path),
+            ReferenceUpdate.curry_ref(
+                context_checked=Context.from_absolute(
+                    old, RawPdfPath('/Info')
+                )
+            ),
             safe_whitelist(old, old_info, new_info)
         )
 
@@ -139,5 +142,7 @@ class MetadataUpdateRule(WhitelistRule):
         if same_ref_ok or old.is_ref_available(new_metadata_ref):
             yield ReferenceUpdate(
                 new_metadata_ref,
-                paths_checked=RawPdfPath('/Root', '/Metadata')
+                context_checked=Context.from_absolute(
+                    old, RawPdfPath('/Root', '/Metadata')
+                )
             )

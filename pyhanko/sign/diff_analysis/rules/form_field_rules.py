@@ -23,7 +23,7 @@ from ..form_rules_api import (
     FormUpdate,
 )
 from ..policy_api import ModificationLevel, SuspiciousModification
-from ..rules_api import ReferenceUpdate, WhitelistRule
+from ..rules_api import Context, ReferenceUpdate, RelativeContext, WhitelistRule
 
 __all__ = [
     'DSSCompareRule', 'SigFieldCreationRule', 'SigFieldModificationRule',
@@ -47,9 +47,11 @@ def _assert_stream_refs(der_obj_type, arr, err_cls, is_vri):
 
 def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
                                old_dict, new_dict, der_stream_keys, is_vri,
-                               path: RawPdfPath):
+                               context: Context):
     for der_obj_type in der_stream_keys:
-        as_update = ReferenceUpdate.curry_ref(paths_checked=path + der_obj_type)
+        as_update = ReferenceUpdate.curry_ref(
+            context_checked=context.descend(der_obj_type)
+        )
         try:
             value = new_dict.raw_get(der_obj_type)
         except KeyError:
@@ -95,10 +97,10 @@ class DSSCompareRule(WhitelistRule):
             -> Iterable[ReferenceUpdate]:
         # TODO refactor these into less ad-hoc rules
 
-        dss_path = RawPdfPath('/Root', '/DSS')
+        dss_context = Context.from_absolute(old, RawPdfPath('/Root', '/DSS'))
         old_dss, new_dss = yield from misc.map_with_return(
             compare_key_refs('/DSS', old, old.root, new.root),
-            ReferenceUpdate.curry_ref(paths_checked=dss_path)
+            ReferenceUpdate.curry_ref(context_checked=dss_context)
         )
         if new_dss is None:
             return
@@ -122,16 +124,19 @@ class DSSCompareRule(WhitelistRule):
 
         yield from _validate_dss_substructure(
             old, new, old_dss, new_dss, dss_der_stream_keys, is_vri=False,
-            path=RawPdfPath('/Root', '/DSS')
+            context=dss_context
         )
 
         # check that the /VRI dictionary still contains all old keys, unchanged.
-        vri_path = RawPdfPath('/Root', '/DSS', '/VRI')
         old_vri, new_vri = yield from misc.map_with_return(
             compare_key_refs(
                 '/VRI', old, old_dss, new_dss,
-            ), ReferenceUpdate.curry_ref(paths_checked=vri_path)
-
+            ),
+            ReferenceUpdate.curry_ref(
+                context_checked=Context.from_absolute(
+                    old, RawPdfPath('/Root', '/DSS', '/VRI')
+                )
+            )
         )
 
         nodict_err = "/VRI is not a dictionary"
@@ -190,7 +195,9 @@ class DSSCompareRule(WhitelistRule):
             yield from _validate_dss_substructure(
                 old, new, generic.DictionaryObject(),
                 new_vri_dict, vri_der_stream_keys, is_vri=True,
-                path=RawPdfPath('/Root', '/DSS', '/VRI', key)
+                context=Context.from_absolute(
+                    old, RawPdfPath('/Root', '/DSS', '/VRI', key)
+                )
             )
 
             # /TS is also a DER stream
@@ -527,14 +534,20 @@ class SigFieldModificationRule(BaseFieldModificationRule):
             # permissible even when the field is locked.
             valid_when_locked = self.compare_fields(spec)
 
-            field_ref_update = FormUpdate(
-                updated_ref=spec.new_field_ref, field_name=fq_name,
-                valid_when_locked=valid_when_locked,
-                paths_checked=spec.expected_paths()
+            field_ref_updates = (
+                FormUpdate(
+                    updated_ref=spec.new_field_ref, field_name=fq_name,
+                    valid_when_locked=valid_when_locked,
+                    context_checked=expected
+                )
+                for expected in spec.expected_contexts()
             )
 
             if not previously_signed and now_signed:
-                yield ModificationLevel.LTA_UPDATES, field_ref_update
+                yield from qualify(
+                    ModificationLevel.LTA_UPDATES,
+                    field_ref_updates
+                )
 
                 # whitelist appearance updates at FORM_FILL level
                 yield from qualify(
@@ -552,7 +565,10 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                 # ... but Acrobat apparently sometimes sets /Ff rather
                 #  liberally, so we have to make some allowances
                 if valid_when_locked:
-                    yield ModificationLevel.LTA_UPDATES, field_ref_update
+                    yield from qualify(
+                        ModificationLevel.LTA_UPDATES,
+                        field_ref_updates
+                    )
                 # Skip the comparison logic on /V. In particular, if
                 # the signature object in question was overridden,
                 # it should trigger a suspicious modification later.
@@ -637,12 +653,15 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
 
         valid_when_locked = self.compare_fields(spec)
 
-        yield (
+        yield from qualify(
             ModificationLevel.FORM_FILLING,
-            FormUpdate(
-                updated_ref=spec.new_field_ref, field_name=fq_name,
-                valid_when_locked=valid_when_locked,
-                paths_checked=spec.expected_paths()
+            (
+                FormUpdate(
+                    updated_ref=spec.new_field_ref, field_name=fq_name,
+                    valid_when_locked=valid_when_locked,
+                    context_checked=expected
+                )
+                for expected in spec.expected_contexts()
             )
         )
         old_field = spec.old_field
@@ -831,22 +850,14 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             compare_dicts(old_kid, new_kid, {'/Annots'})
             # Page objects are often referenced from all sorts of places in the
             # file, and attempting to check all possible paths would probably
-            # create more problems than it solves.
+            # create more problems than it solves -> blanket approve
             yield FormUpdate(
                 updated_ref=new_kid_ref, field_name=field_name,
                 valid_when_locked=valid_when_locked and field_name is not None,
-                blanket_approve=True
+                context_checked=None
             )
             if new_annots_ref:
                 # current /Annots entry is an indirect reference
-
-                # collect paths to this page and append /Annots
-                #  (recall: old_kid_ref and new_kid_ref should be the same
-                #   anyhow)
-                paths_to_annots = {
-                    path + '/Annots'
-                    for path in old._get_usages_of_ref(old_kid_ref)
-                }
 
                 # If the equality check fails,
                 # either the /Annots array got reassigned to another
@@ -861,5 +872,7 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                         valid_when_locked=(
                             valid_when_locked and field_name is not None
                         ),
-                        paths_checked=paths_to_annots
+                        context_checked=RelativeContext(
+                            old_kid_ref, RawPdfPath('/Annots')
+                        )
                     )

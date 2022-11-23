@@ -6,7 +6,12 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 from ..commons import compare_dicts, compare_key_refs, qualify
 from ..constants import ROOT_EXEMPT_STRICT_COMPARISON
 from ..policy_api import ModificationLevel
-from ..rules_api import QualifiedWhitelistRule, ReferenceUpdate, WhitelistRule
+from ..rules_api import (
+    Context,
+    QualifiedWhitelistRule,
+    ReferenceUpdate,
+    WhitelistRule,
+)
 
 __all__ = [
     'CatalogModificationRule', 'ObjectStreamRule',
@@ -57,17 +62,19 @@ class CatalogModificationRule(QualifiedWhitelistRule):
                     key, old, old_root, new_root
                 ),
                 transform=lambda ref: ReferenceUpdate(
-                    ref, paths_checked=RawPdfPath('/Root', key)
+                    ref, context_checked=Context.from_absolute(
+                        old, RawPdfPath('/Root', key)
+                    )
                 )
             )
 
         yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
-            new.root_ref, paths_checked=RawPdfPath('/Root'),
+            new.root_ref,
             # Things like /Data in a MDP policy can point to root
             # and since we checked with compare_dicts, doing a blanket
             # approval is much easier than figuring out all the ways
             # in which /Root can be cross-referenced.
-            blanket_approve=True
+            context_checked=None
         )
 
 
