@@ -415,7 +415,8 @@ class BaseFieldModificationRule(FieldMDPRule):
     to individual form fields.
     """
 
-    def __init__(self, always_modifiable=None, value_update_keys=None):
+    def __init__(self, allow_in_place_appearance_stream_changes: bool = True,
+                 always_modifiable=None, value_update_keys=None):
         self.always_modifiable = (
             always_modifiable if always_modifiable is not None
             else FORMFIELD_ALWAYS_MODIFIABLE
@@ -424,6 +425,8 @@ class BaseFieldModificationRule(FieldMDPRule):
             value_update_keys if value_update_keys is not None
             else VALUE_UPDATE_KEYS
         )
+        self.allow_in_place_appearance_stream_changes = \
+            allow_in_place_appearance_stream_changes
 
     def compare_fields(self, spec: FieldComparisonSpec) -> bool:
         """
@@ -557,6 +560,15 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                     ),
                     transform=FormUpdate.curry_ref(field_name=fq_name)
                 )
+                if self.allow_in_place_appearance_stream_changes:
+                    yield from qualify(
+                        ModificationLevel.FORM_FILLING,
+                        _allow_in_place_appearance_update(
+                            old_field, new_field,
+                            context.old, context.new,
+                            fq_name=fq_name
+                        )
+                    )
             else:
                 # case where the field was already signed, or is still
                 # not signed in the current revision.
@@ -673,6 +685,15 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             ),
             transform=FormUpdate.curry_ref(field_name=fq_name)
         )
+        if self.allow_in_place_appearance_stream_changes:
+            yield from qualify(
+                ModificationLevel.FORM_FILLING,
+                _allow_in_place_appearance_update(
+                    old_field, new_field,
+                    context.old, context.new,
+                    fq_name=fq_name
+                )
+            )
         try:
             new_value = new_field.raw_get('/V')
         except KeyError:
@@ -713,12 +734,11 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
             'AP entry should point to a dictionary'
         )
 
-    # we *never* want to whitelist an update for an existing
+    # we generally *never* want to whitelist an update for an existing
     # stream object (too much potential for abuse), so we insist on
-    # modifying the /N, /R, /D keys to point to new streams
-    # TODO this could be worked around with a reference counter for
-    #  streams, in which case we could allow the stream to be overridden
-    #  on the condition that it isn't used anywhere else.
+    # modifying the /N, /R, /D keys to point to new streams.
+    # Some processors do perform such in-place upgrades, though, and we
+    # optionally make allowances for that (outside the scope of this function)
 
     for key in ('/N', '/R', '/D'):
         try:
@@ -728,6 +748,93 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
         yield from new.collect_dependencies(
             appearance_spec, since_revision=old.revision + 1
         )
+
+
+def _allow_in_place_appearance_update(old_field, new_field,
+                                      old: HistoricalResolver,
+                                      new: HistoricalResolver,
+                                      fq_name: str):
+
+    # We can allow updating appearance streams in-place, but that requires
+    # two conditions to be met
+    #  - The stream is not referenced anywhere else (judging by relative
+    #  contexts)
+    #  - The /AP dictionary itself, if indirect, appears in exactly one
+    #    relative context.
+    #
+    # The first check is implemented by yielding a relative context
+    # as opposed to an absolute path.
+    # The second case is something we check here, explicitly.
+    #
+    # Overwriting appearance streams is inherently more risky, than other
+    # operations, so this check can be disabled.
+
+    try:
+        old_ap_raw = old_field.raw_get('/AP')
+        new_ap_raw = new_field.raw_get('/AP')
+    except KeyError:
+        return
+
+    old_ap_val = old_ap_raw.get_object()
+
+    # For new_ap_val, we checked this in the "regular" validation routine
+    if not isinstance(old_ap_val, generic.DictionaryObject):
+        return
+
+    new_ap_val = new_ap_raw.get_object()
+    checked_ap_references = False
+    for key in ('/N', '/R', '/D'):
+        xrefs = old.reader.xrefs
+        old_rev = old.revision
+        if isinstance(old_ap_val, generic.DictionaryObject):
+            old_ap_stm_ref = old_ap_val.get_value_as_reference(
+                key, optional=True
+            )
+            new_ap_stm_ref = new_ap_val.get_value_as_reference(
+                key, optional=True
+            )
+            # if the refs are distinct or the old ref hasn't changed
+            # don't bother
+            if new_ap_stm_ref != old_ap_stm_ref \
+                    or old_ap_stm_ref is None \
+                    or xrefs.get_last_change(old_ap_stm_ref) == old_rev:
+                continue
+            if not checked_ap_references:
+                if isinstance(old_ap_raw, generic.IndirectObject):
+                    # reference count
+                    contexts = {
+                        Context.from_absolute(old, path).relative_view
+                        for path in old._get_usages_of_ref(old_ap_raw.reference)
+                    }
+                    if len(contexts) > 1:
+                        raise SuspiciousModification(
+                            "Attempted to in-place override an appearance "
+                            "stream in an annotation appearance dictionary, "
+                            "but that appearance dictionary is used in "
+                            f"multiple contexts: {contexts}."
+                        )
+                checked_ap_references = True
+            if isinstance(old_ap_raw, generic.IndirectObject):
+                context = RelativeContext(
+                    old_ap_raw, relative_path=RawPdfPath(key)
+                )
+            else:
+                context = RelativeContext(
+                    old_field.container_ref,
+                    relative_path=RawPdfPath('/AP', key)
+                )
+            yield FormUpdate(
+                new_ap_stm_ref, context_checked=context,
+                field_name=fq_name
+            )
+
+            # pull in the newly added objects beyond the update boundary
+            new_deps = new.collect_dependencies(
+                new_ap_stm_ref.get_object(),
+                since_revision=old.revision + 1
+            )
+            for ref in new_deps:
+                yield FormUpdate(ref, field_name=fq_name)
 
 
 def _arr_to_refs(arr_obj, exc, collector: Callable = list):

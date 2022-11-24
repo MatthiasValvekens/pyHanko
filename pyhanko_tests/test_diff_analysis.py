@@ -2222,3 +2222,44 @@ def test_diff_analysis_add_valid_type_entry():
     s = r.embedded_signatures[0]
     val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
     assert val_status.modification_level == ModificationLevel.FORM_FILLING
+
+
+@pytest.mark.parametrize(
+    'fname', [
+        'form-update-override-appearance-stream.pdf',
+        'form-update-override-appearance-stream-ap-indirect.pdf'
+    ]
+)
+def test_allow_appearance_stream_override(fname):
+
+    # file where the object ID of the appearance stream of an empty form field
+    # (in casu another signature field) was repurposed for the new signature
+    # field. This was previously unsupported by pyHanko's diff analysis checker
+    # since it's impossible to implement securely without a reference tracker.
+    path = os.path.join(PDF_DATA_DIR, fname)
+    with open(path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+        assert val_status.modification_level == ModificationLevel.FORM_FILLING
+
+
+@pytest.mark.parametrize(
+    'fname', [
+        'form-update-override-appearance-stream-sneaky.pdf',
+        'form-update-override-appearance-stream-ap-indirect-sneaky.pdf'
+    ]
+)
+def test_disallow_appearance_stream_override_if_clobbers(fname):
+
+    # ...but updating a stream/ap dictionary that is used elsewhere
+    # should still be forbidden
+    path = os.path.join(
+        PDF_DATA_DIR, fname
+    )
+    with open(path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+        assert val_status.modification_level == ModificationLevel.OTHER
+        assert '.FooBar' in str(val_status.diff_result)
