@@ -740,14 +740,35 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
     # Some processors do perform such in-place upgrades, though, and we
     # optionally make allowances for that (outside the scope of this function)
 
+    checked_ap_references = False
     for key in ('/N', '/R', '/D'):
         try:
-            appearance_spec = new_ap_val.raw_get(key)
+            new_ap_stm_ref = new_ap_val.raw_get(key)
         except KeyError:
             continue
+
         yield from new.collect_dependencies(
-            appearance_spec, since_revision=old.revision + 1
+            new_ap_stm_ref, since_revision=old.revision + 1
         )
+        if isinstance(old_ap_val, generic.DictionaryObject):
+            if not checked_ap_references:
+                # We verify that the value of /AP, if indirect, is only
+                # used once
+                old_ap_raw = old_field.raw_get('/AP')
+                if isinstance(old_ap_raw, generic.IndirectObject):
+                    # reference count
+                    contexts = {
+                        Context.from_absolute(old, path).relative_view
+                        for path in old._get_usages_of_ref(old_ap_raw.reference)
+                    }
+                    if len(contexts) > 1:
+                        raise SuspiciousModification(
+                            "Attempted to update an appearance "
+                            "stream in an annotation appearance dictionary, "
+                            "but that appearance dictionary is used in "
+                            f"multiple contexts: {contexts}."
+                        )
+                checked_ap_references = True
 
 
 def _allow_in_place_appearance_update(old_field, new_field,
@@ -764,7 +785,7 @@ def _allow_in_place_appearance_update(old_field, new_field,
     #
     # The first check is implemented by yielding a relative context
     # as opposed to an absolute path.
-    # The second case is something we check here, explicitly.
+    # The second case is checked in the other /AP update validation routine
     #
     # Overwriting appearance streams is inherently more risky, than other
     # operations, so this check can be disabled.
@@ -782,7 +803,6 @@ def _allow_in_place_appearance_update(old_field, new_field,
         return
 
     new_ap_val = new_ap_raw.get_object()
-    checked_ap_references = False
     for key in ('/N', '/R', '/D'):
         xrefs = old.reader.xrefs
         old_rev = old.revision
@@ -799,21 +819,6 @@ def _allow_in_place_appearance_update(old_field, new_field,
                     or old_ap_stm_ref is None \
                     or xrefs.get_last_change(old_ap_stm_ref) == old_rev:
                 continue
-            if not checked_ap_references:
-                if isinstance(old_ap_raw, generic.IndirectObject):
-                    # reference count
-                    contexts = {
-                        Context.from_absolute(old, path).relative_view
-                        for path in old._get_usages_of_ref(old_ap_raw.reference)
-                    }
-                    if len(contexts) > 1:
-                        raise SuspiciousModification(
-                            "Attempted to in-place override an appearance "
-                            "stream in an annotation appearance dictionary, "
-                            "but that appearance dictionary is used in "
-                            f"multiple contexts: {contexts}."
-                        )
-                checked_ap_references = True
             if isinstance(old_ap_raw, generic.IndirectObject):
                 context = RelativeContext(
                     old_ap_raw, relative_path=RawPdfPath(key)

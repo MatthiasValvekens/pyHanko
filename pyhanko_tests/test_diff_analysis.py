@@ -2226,16 +2226,21 @@ def test_diff_analysis_add_valid_type_entry():
 
 @pytest.mark.parametrize(
     'fname', [
+        # files where the object ID of the appearance stream of an empty form
+        # field (in casu another signature field) was repurposed for the new
+        # signature field. This was previously unsupported by pyHanko's diff
+        # analysis checker since it's impossible to implement even semi-securely
+        # without a reference tracker (which we now have)
         'form-update-override-appearance-stream.pdf',
-        'form-update-override-appearance-stream-ap-indirect.pdf'
+        'form-update-override-appearance-stream-ap-indirect.pdf',
+        'form-update-no-override-appearance-stream-ap-indirect.pdf',
+        # file where the base revision had a nonsensical /AP value which is
+        # then overridden (=> should be allowed)
+        'form-update-original-ap-type-wrong.pdf',
     ]
 )
-def test_allow_appearance_stream_override(fname):
+def test_appearance_update_edge_cases(fname):
 
-    # file where the object ID of the appearance stream of an empty form field
-    # (in casu another signature field) was repurposed for the new signature
-    # field. This was previously unsupported by pyHanko's diff analysis checker
-    # since it's impossible to implement securely without a reference tracker.
     path = os.path.join(PDF_DATA_DIR, fname)
     with open(path, 'rb') as inf:
         r = PdfFileReader(inf)
@@ -2247,7 +2252,8 @@ def test_allow_appearance_stream_override(fname):
 @pytest.mark.parametrize(
     'fname', [
         'form-update-override-appearance-stream-sneaky.pdf',
-        'form-update-override-appearance-stream-ap-indirect-sneaky.pdf'
+        'form-update-override-appearance-stream-ap-indirect-sneaky.pdf',
+        'form-update-no-override-appearance-stream-ap-indirect-sneaky.pdf',
     ]
 )
 def test_disallow_appearance_stream_override_if_clobbers(fname):
