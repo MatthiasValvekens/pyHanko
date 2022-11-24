@@ -6,13 +6,8 @@ import logging
 from collections import defaultdict
 from typing import Iterator, List, Optional, Union
 
-from pyhanko.pdf_utils import misc
-from pyhanko.pdf_utils.generic import PdfObject
-from pyhanko.pdf_utils.reader import (
-    HistoricalResolver,
-    PdfFileReader,
-    RawPdfPath,
-)
+from pyhanko.pdf_utils import generic, misc
+from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
 from .form_rules_api import FormUpdatingRule
@@ -83,7 +78,7 @@ def _find_orphans(hist_rev: HistoricalResolver):
         else:
             updated_old_refs.add(ref)
 
-    def _objs_to_check() -> Iterator[PdfObject]:
+    def _objs_to_check() -> Iterator[generic.PdfObject]:
         # check the trailer too!
         yield hist_rev.trailer_view
         for _ref in updated_old_refs:
@@ -100,6 +95,52 @@ def _find_orphans(hist_rev: HistoricalResolver):
             obj, since_revision=hist_rev.revision
         )
     return candidate_orphans
+
+
+def _is_id(
+        old_object: generic.PdfObject,
+        new_object: generic.PdfObject):
+    primitives = (
+        generic.NumberObject,
+        generic.FloatObject,
+        generic.BooleanObject,
+        generic.NameObject,
+        generic.NullObject,
+        generic.IndirectObject
+    )
+    for prim in primitives:
+        if isinstance(old_object, prim):
+            return isinstance(new_object, prim) and new_object == old_object
+
+    strings = (generic.TextStringObject, generic.ByteStringObject)
+    if isinstance(old_object, strings):
+        return isinstance(new_object, strings) \
+               and old_object.original_bytes == new_object.original_bytes
+
+    if isinstance(old_object, generic.ArrayObject):
+        return isinstance(new_object, generic.ArrayObject) \
+                and len(new_object) == len(old_object) \
+                and all(_is_id(x, y) for x, y in zip(old_object, new_object))
+
+    if isinstance(old_object, generic.StreamObject):
+        # fallthrough to dict case if this check passes
+        if not (
+            isinstance(new_object, generic.StreamObject)
+            and new_object.encoded_data == old_object.encoded_data
+        ):
+            return False
+    if isinstance(old_object, generic.DictionaryObject):
+        if not (
+            isinstance(new_object, generic.DictionaryObject)
+            and new_object.keys() == old_object.keys()
+        ):
+            return False
+
+        return all(
+            _is_id(old_object.raw_get(k), new_object.raw_get(k))
+            for k in new_object.keys()
+        )
+    raise NotImplementedError
 
 
 class StandardDiffPolicy(DiffPolicy):
@@ -131,15 +172,20 @@ class StandardDiffPolicy(DiffPolicy):
         be ignored. If ``True``, newly created orphaned objects will be
         cleared at level :attr:`.ModificationLevel.LTA_UPDATES`.
         Default is ``True``.
+    :param ignore_orphaned_objects:
+        Some PDF writers overwrite objects with identical copies.
+        Pointless and annoying, but also more or less harmless.
     """
 
     def __init__(self, global_rules: List[QualifiedWhitelistRule],
                  form_rule: Optional[FormUpdatingRule],
-                 reject_object_freeing=True, ignore_orphaned_objects=True):
+                 reject_object_freeing=True, ignore_orphaned_objects=True,
+                 ignore_identical_objects=True):
         self.global_rules = global_rules
         self.form_rule = form_rule
         self.reject_object_freeing = reject_object_freeing
         self.ignore_orphaned_objects = ignore_orphaned_objects
+        self.ignore_identical_objects = ignore_identical_objects
 
     def apply(self, old: HistoricalResolver, new: HistoricalResolver,
               field_mdp_spec: Optional[FieldMDPSpec] = None,
@@ -255,6 +301,26 @@ class StandardDiffPolicy(DiffPolicy):
             unexplained_lta - explained[ModificationLevel.FORM_FILLING]
         unexplained_annot = \
             unexplained_formfill - explained[ModificationLevel.ANNOTATIONS]
+
+        xref_cache = old.reader.xrefs
+        if self.ignore_identical_objects:
+            identical_objs = set(
+                unex_ref
+                for unex_ref in unexplained_lta
+                if xref_cache.get_historical_ref(
+                    unex_ref, old.revision
+                ) is not None and _is_id(old(unex_ref), new(unex_ref))
+            )
+            if identical_objs:
+                logger.debug(
+                    f"Found identical overridden objects between revisions "
+                    f"{old.revision} and {new.revision}; following no-op "
+                    f"changes will be ignored: {identical_objs}"
+                )
+                unexplained_annot.difference_update(identical_objs)
+                unexplained_formfill.difference_update(identical_objs)
+                unexplained_lta.difference_update(identical_objs)
+
         if unexplained_annot:
             msg = misc.LazyJoin(
                 '\n', (

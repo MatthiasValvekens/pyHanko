@@ -2098,7 +2098,7 @@ def test_sign_with_hybrid_sneaky_edit():
     # modify our dummy object in said stream, make it point to something else
     #  (location that makes syntactic sense, but with the wrong ID, which is OK
     #   for the purposes of the test as long as we don't actually try to read
-    #   the object)
+    #   the object -> disable identical object filtering...)
     dummy = DummyXrefStream(suffix=b'\x01\x00\x00\x12\x00\x00')
     dummy['/Index'].append(generic.NumberObject(bleh_ref.idnum))
     dummy['/Index'].append(generic.NumberObject(1))
@@ -2124,7 +2124,8 @@ def test_sign_with_hybrid_sneaky_edit():
         diff_policy=StandardDiffPolicy(
             DEFAULT_DIFF_POLICY.global_rules,
             DEFAULT_DIFF_POLICY.form_rule,
-            ignore_orphaned_objects=False
+            ignore_orphaned_objects=False,
+            ignore_identical_objects=False
         )
     )
     assert status.modification_level == ModificationLevel.OTHER
@@ -2269,3 +2270,90 @@ def test_disallow_appearance_stream_override_if_clobbers(fname):
         val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
         assert val_status.modification_level == ModificationLevel.OTHER
         assert '.FooBar' in str(val_status.diff_result)
+
+
+@pytest.mark.parametrize(
+    'obj', [
+        generic.ArrayObject(),
+        generic.DictionaryObject(),
+        generic.ArrayObject([
+            generic.NumberObject(1),
+            generic.FloatObject(0.61243),
+            generic.ByteStringObject(b'1234'),
+            generic.NullObject(),
+            generic.BooleanObject(True),
+            generic.TextStringObject("1234"),
+            generic.NameObject('/Blah'),
+        ]),
+        generic.DictionaryObject({
+            generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+            generic.NameObject('/Baz'): generic.TextStringObject('Quux'),
+        }),
+        generic.StreamObject({
+            generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+            generic.NameObject('/Baz'): generic.TextStringObject('Quux'),
+        }, stream_data=b'hello world'),
+        generic.DictionaryObject({
+            generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+            generic.NameObject('/Baz'): generic.IndirectObject(1, 0, None),
+        }),
+    ]
+)
+def test_allow_identical_object_replacement(obj):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    if isinstance(obj, generic.StreamObject):
+        obj.compress()
+    w.root['/Foo'] = w.add_object(obj)
+    w.update_root()
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.update_container(w.root['/Foo'])
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+def test_stream_and_dict_not_considered_identical():
+    stm = generic.StreamObject({
+        generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+        generic.NameObject('/Baz'): generic.TextStringObject('Quux'),
+    }, stream_data=b'hello')
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    w.root['/Foo'] = ref = w.add_object(stm)
+    w.update_root()
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/Foo'] = obj = generic.DictionaryObject(w.root['/Foo'])
+    w.objects[(ref.generation, ref.idnum)] = obj
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.OTHER
+    assert '.Root.Foo' in str(val_status.diff_result)
+
+
+def test_allow_identical_object_replacement_nonsensical_obj_nonstrict():
+    obj = generic.DictionaryObject({
+        generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+        generic.NameObject('/Baz'): generic.IndirectObject(91299, 0, None),
+    })
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    w.root['/Foo'] = w.add_object(obj)
+    w.update_root()
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out, strict=False)
+    w.update_container(w.root['/Foo'])
+    w.write_in_place()
+
+    r = PdfFileReader(out, strict=False)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.LTA_UPDATES
