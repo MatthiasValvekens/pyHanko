@@ -2255,6 +2255,7 @@ def test_appearance_update_edge_cases(fname):
         'form-update-override-appearance-stream-sneaky.pdf',
         'form-update-override-appearance-stream-ap-indirect-sneaky.pdf',
         'form-update-no-override-appearance-stream-ap-indirect-sneaky.pdf',
+        'form-update-ap-indirect-sneaky-trailer.pdf',
     ]
 )
 def test_disallow_appearance_stream_override_if_clobbers(fname):
