@@ -14,7 +14,7 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 from .commons import compare_dicts, compare_key_refs, qualify
 from .constants import ACROFORM_EXEMPT_STRICT_COMPARISON
 from .policy_api import ModificationLevel, SuspiciousModification
-from .rules_api import ReferenceUpdate
+from .rules_api import Context, ReferenceUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -112,16 +112,29 @@ class FieldComparisonSpec:
         assert isinstance(field, generic.DictionaryObject)
         return field
 
-    def expected_paths(self):
+    def expected_contexts(self):
         # these are the paths where we expect the form field to be referred to
         paths = self._old_annotation_paths()
-        struct_path = self._find_in_structure_tree()
-        if struct_path is not None:
-            paths.add(struct_path)
-        paths.add(self.old_canonical_path)
-        return paths
+        contexts = set(
+            Context.from_absolute(
+                self.old_field_ref.get_pdf_handler(),
+                path
+            )
+            for path in paths
+        )
+        struct_context = self._find_in_structure_tree()
+        if struct_context is not None:
+            contexts.add(struct_context)
+        if self.old_canonical_path:
+            contexts.add(
+                Context.from_absolute(
+                    self.old_field_ref.get_pdf_handler(),
+                    self.old_canonical_path
+                )
+            )
+        return contexts
 
-    def _find_in_structure_tree(self):
+    def _find_in_structure_tree(self) -> Optional[Context]:
         # collect paths (0 or 1) through which this field appears
         #  in the file's structure tree.
 
@@ -129,6 +142,9 @@ class FieldComparisonSpec:
         #  (or something role-mapped to it)
         # TODO if multiple paths exist, we should only whitelist the one
         #  that corresponds to the StructParent entry, not just the first one
+        # Alternatively, we could also return a relative context and verify
+        # that the reference count of the intermediates in the structure tree
+        # is 1?
 
         # Note: the path simplifier suppresses the extra cross-references
         # from parent pointers in the tree and from the /ParentTree index.
@@ -150,8 +166,9 @@ class FieldComparisonSpec:
                 k2, obj = pdf_path.path[-2:]
                 if k1 == k2 == '/K' and obj == '/Obj' and root == '/Root' \
                         and struct_tree_root == '/StructTreeRoot':
-                    return pdf_path
+                    return Context.from_absolute(old, pdf_path)
 
+    # FIXME this is wrong now
     def _old_annotation_paths(self):
         # collect path(s) through which this field is used as an annotation
         # the clean way to accomplish this would be to follow /P
@@ -378,14 +395,16 @@ class FormUpdatingRule:
             The newer revision to be vetted.
         """
 
-        acroform_path = RawPdfPath('/Root', '/AcroForm')
+        acroform_context = Context.from_absolute(
+            old, RawPdfPath('/Root', '/AcroForm')
+        )
         old_acroform, new_acroform = yield from qualify(
             ModificationLevel.LTA_UPDATES,
             compare_key_refs(
                 '/AcroForm', old, old.root, new.root
             ),
             transform=FormUpdate.curry_ref(
-                field_name=None, paths_checked=acroform_path
+                field_name=None, context_checked=acroform_context
             )
         )
 
@@ -398,22 +417,26 @@ class FormUpdatingRule:
         # This is fine: the _list_fields logic checks that it really contains
         # stuff that looks like form fields, and other rules are responsible
         # for vetting the creation of other form fields anyway.
-        fields_path = acroform_path + '/Fields'
+        fields_path = RawPdfPath('/Root', '/AcroForm', '/Fields')
+        fields_context = Context.from_absolute(old, fields_path)
         old_fields, new_fields = yield from qualify(
             ModificationLevel.LTA_UPDATES,
             compare_key_refs('/Fields', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(
-                field_name=None, paths_checked=fields_path
+                field_name=None, context_checked=fields_context
             )
         )
 
         # we also need to deal with the default resource dict, since
         # Acrobat / Adobe Reader sometimes mess with it
+        dr_context = Context.from_absolute(
+            old, RawPdfPath('/Root', '/AcroForm', '/DR')
+        )
         old_dr, new_dr = yield from qualify(
             ModificationLevel.FORM_FILLING,
             compare_key_refs('/DR', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(
-                field_name=None, paths_checked=acroform_path + '/DR'
+                field_name=None, context_checked=dr_context
             )
         )
         if new_dr is not None:

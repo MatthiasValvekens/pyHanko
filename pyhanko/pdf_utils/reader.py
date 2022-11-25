@@ -14,7 +14,7 @@ import os
 import re
 from collections import defaultdict
 from io import BytesIO
-from typing import Optional, Set, Tuple, Union
+from typing import Generator, Optional, Set, Tuple, Union
 
 from . import generic, misc
 from .crypt import (
@@ -28,7 +28,13 @@ from .metadata.info import view_from_info_dict
 from .metadata.model import DocumentMetadata
 from .misc import PdfReadError, PdfStrictReadError
 from .rw_common import PdfHandler
-from .xref import ObjStreamRef, XRefBuilder, XRefCache, read_object_header
+from .xref import (
+    ObjStreamRef,
+    TrailerDictionary,
+    XRefBuilder,
+    XRefCache,
+    read_object_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -649,21 +655,30 @@ class RawPdfPath:
             and (self is other or self._tag() == other._tag())
         )
 
-    def access_on(self, from_obj, dereference_last=True) -> generic.PdfObject:
+    def walk_nodes(self, from_obj, transparent_dereference=True) \
+            -> Generator[
+                Tuple[Union[int, str, None], generic.PdfObject], None, None
+            ]:
         current_obj = from_obj
+        elem = None
         for ix, entry in enumerate(self.path):
-            # we put this here to make dereference_last work
+            if not transparent_dereference:
+                yield elem, current_obj
             if isinstance(current_obj, generic.IndirectObject):
                 current_obj = current_obj.get_object()
+            if transparent_dereference:
+                yield elem, current_obj
             if isinstance(entry, str):
-                if isinstance(current_obj, generic.DictionaryObject):
+                if isinstance(current_obj,
+                              (generic.DictionaryObject, TrailerDictionary)):
                     try:
                         current_obj = current_obj.raw_get(entry)
+                        elem = entry
                         continue
                     except KeyError:
                         raise misc.PdfReadError(
                             f"Encountered missing dictionary "
-                            f"entry {entry} at position {ix} in path {self}"
+                            f"entry {entry} at position {ix} in path {self} "
                             f"from {from_obj}."
                         )
             elif isinstance(entry, int):
@@ -671,19 +686,32 @@ class RawPdfPath:
                     if not (0 <= entry <= len(current_obj)):
                         raise misc.PdfReadError(
                             f"Encountered out-of-range array index "
-                            f"{entry} at position {ix} in path {self}"
+                            f"{entry} at position {ix} in path {self} "
                             f"from {from_obj}."
                         )
                     current_obj = current_obj.raw_get(entry)
+                    elem = entry
                     continue
             # if we get here, there's a typing issue
             raise misc.PdfReadError(
                 f"Type error in path {self} at position {ix}."
             )
-        if isinstance(current_obj, generic.IndirectObject) and dereference_last:
-            return current_obj.get_object()
+        if isinstance(current_obj, generic.IndirectObject) \
+                and transparent_dereference:
+            yield elem, current_obj.get_object()
         else:
-            return current_obj
+            yield elem, current_obj
+
+    def access_on(self, from_obj, dereference_last=True) -> generic.PdfObject:
+        walk = self.walk_nodes(
+            from_obj, transparent_dereference=dereference_last
+        )
+        obj = from_obj
+        try:
+            while True:
+                _, obj = next(walk)
+        except StopIteration:
+            return obj
 
     def access_reference_on(self, from_obj) -> generic.Reference:
         ind_obj = self.access_on(from_obj, dereference_last=False)

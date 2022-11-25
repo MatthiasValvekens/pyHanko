@@ -13,8 +13,9 @@ __all__ = [
 ]
 
 
-# /Ff: Form field flags can always be updated
-FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff'}
+# /Type: dictionary type (can always be added if correct)
+# /Ff: Form field flags
+FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff', '/Type'}
 
 
 # /AP: appearance dictionary

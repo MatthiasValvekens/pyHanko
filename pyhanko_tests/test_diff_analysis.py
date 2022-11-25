@@ -1,5 +1,4 @@
 import os
-import struct
 from datetime import datetime
 from io import BytesIO
 from itertools import product
@@ -10,9 +9,10 @@ from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
-from pyhanko.pdf_utils.generic import Reference, pdf_name
+from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
+from pyhanko.pdf_utils.misc import PdfReadError
 from pyhanko.pdf_utils.reader import (
     HistoricalResolver,
     PdfFileReader,
@@ -31,6 +31,11 @@ from pyhanko.sign.diff_analysis import (
     SuspiciousModification,
     XrefStreamRule,
 )
+from pyhanko.sign.diff_analysis.rules_api import (
+    Context,
+    RelativeContext,
+    _eq_deref,
+)
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
@@ -43,6 +48,7 @@ from pyhanko_tests.signing_commons import (
     DUMMY_TS,
     FROM_CA,
     FROM_ECC_CA,
+    NOTRUST_V_CONTEXT,
     SELF_SIGN,
     SIMPLE_V_CONTEXT,
     live_testing_vc,
@@ -1323,7 +1329,9 @@ def test_sign_reject_freed(forbid_freeing):
         def apply_qualified(self, old: HistoricalResolver,
                             new: HistoricalResolver):
             yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
-                freed.reference, paths_checked=RawPdfPath('/Root', '/Pages')
+                freed.reference, context_checked=Context.from_absolute(
+                    old, RawPdfPath('/Root', '/Pages')
+                )
             )
 
     val_status = validate_pdf_signature(
@@ -2095,7 +2103,7 @@ def test_sign_with_hybrid_sneaky_edit():
     # modify our dummy object in said stream, make it point to something else
     #  (location that makes syntactic sense, but with the wrong ID, which is OK
     #   for the purposes of the test as long as we don't actually try to read
-    #   the object)
+    #   the object -> disable identical object filtering...)
     dummy = DummyXrefStream(suffix=b'\x01\x00\x00\x12\x00\x00')
     dummy['/Index'].append(generic.NumberObject(bleh_ref.idnum))
     dummy['/Index'].append(generic.NumberObject(1))
@@ -2121,7 +2129,8 @@ def test_sign_with_hybrid_sneaky_edit():
         diff_policy=StandardDiffPolicy(
             DEFAULT_DIFF_POLICY.global_rules,
             DEFAULT_DIFF_POLICY.form_rule,
-            ignore_orphaned_objects=False
+            ignore_orphaned_objects=False,
+            ignore_identical_objects=False
         )
     )
     assert status.modification_level == ModificationLevel.OTHER
@@ -2154,3 +2163,251 @@ def test_diff_analysis_update_indirect_extensions_not_all_paths():
         status = validate_pdf_signature(s)
     assert isinstance(status.diff_result, SuspiciousModification)
     assert 'DontOverrideMe' in status.diff_result.args[0]
+
+
+def test_diff_analysis_modify_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/AcroForm']['/Fields'][1]['/Type'] = pdf_name('/Foo')
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert '/Type of form field altered' in str(val_status.diff_result)
+
+
+def test_diff_analysis_remove_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    del w.root['/AcroForm']['/Fields'][1]['/Type']
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert '/Type of form field deleted' in str(val_status.diff_result)
+
+
+def test_diff_analysis_add_invalid_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    del w.root['/AcroForm']['/Fields'][1]['/Type']
+    w.update_container(w.root['/AcroForm']['/Fields'][1])
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/AcroForm']['/Fields'][1]['/Type'] = pdf_name('/Foo')
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert '/Type of form field set to something other than /Annot' \
+           in str(val_status.diff_result)
+
+
+def test_diff_analysis_add_valid_type_entry():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
+    meta1 = signers.PdfSignatureMetadata(field_name='Sig1')
+    meta2 = signers.PdfSignatureMetadata(field_name='Sig2')
+    del w.root['/AcroForm']['/Fields'][1]['/Type']
+    w.update_container(w.root['/AcroForm']['/Fields'][1])
+    out = signers.sign_pdf(w, meta1, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/AcroForm']['/Fields'][1]['/Type'] = pdf_name('/Annot')
+    out = signers.sign_pdf(w, meta2, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.FORM_FILLING
+
+
+@pytest.mark.parametrize(
+    'fname', [
+        # files where the object ID of the appearance stream of an empty form
+        # field (in casu another signature field) was repurposed for the new
+        # signature field. This was previously unsupported by pyHanko's diff
+        # analysis checker since it's impossible to implement even semi-securely
+        # without a reference tracker (which we now have)
+        'form-update-override-appearance-stream.pdf',
+        'form-update-override-appearance-stream-ap-indirect.pdf',
+        'form-update-no-override-appearance-stream-ap-indirect.pdf',
+        # file where the base revision had a nonsensical /AP value which is
+        # then overridden (=> should be allowed)
+        'form-update-original-ap-type-wrong.pdf',
+    ]
+)
+def test_appearance_update_edge_cases(fname):
+
+    path = os.path.join(PDF_DATA_DIR, fname)
+    with open(path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+        assert val_status.modification_level == ModificationLevel.FORM_FILLING
+
+
+@pytest.mark.parametrize(
+    'fname', [
+        'form-update-override-appearance-stream-sneaky.pdf',
+        'form-update-override-appearance-stream-ap-indirect-sneaky.pdf',
+        'form-update-no-override-appearance-stream-ap-indirect-sneaky.pdf',
+        'form-update-ap-indirect-sneaky-trailer.pdf',
+    ]
+)
+def test_disallow_appearance_stream_override_if_clobbers(fname):
+
+    # ...but updating a stream/ap dictionary that is used elsewhere
+    # should still be forbidden
+    path = os.path.join(
+        PDF_DATA_DIR, fname
+    )
+    with open(path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        s = r.embedded_signatures[0]
+        val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+        assert val_status.modification_level == ModificationLevel.OTHER
+        assert '.FooBar' in str(val_status.diff_result)
+
+
+@pytest.mark.parametrize(
+    'obj', [
+        generic.ArrayObject(),
+        generic.DictionaryObject(),
+        generic.ArrayObject([
+            generic.NumberObject(1),
+            generic.FloatObject(0.61243),
+            generic.ByteStringObject(b'1234'),
+            generic.NullObject(),
+            generic.BooleanObject(True),
+            generic.TextStringObject("1234"),
+            generic.NameObject('/Blah'),
+        ]),
+        generic.DictionaryObject({
+            generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+            generic.NameObject('/Baz'): generic.TextStringObject('Quux'),
+        }),
+        generic.StreamObject({
+            generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+            generic.NameObject('/Baz'): generic.TextStringObject('Quux'),
+        }, stream_data=b'hello world'),
+        generic.DictionaryObject({
+            generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+            generic.NameObject('/Baz'): generic.IndirectObject(1, 0, None),
+        }),
+    ]
+)
+def test_allow_identical_object_replacement(obj):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    if isinstance(obj, generic.StreamObject):
+        obj.compress()
+    w.root['/Foo'] = w.add_object(obj)
+    w.update_root()
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.update_container(w.root['/Foo'])
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+def test_stream_and_dict_not_considered_identical():
+    stm = generic.StreamObject({
+        generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+        generic.NameObject('/Baz'): generic.TextStringObject('Quux'),
+    }, stream_data=b'hello')
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    w.root['/Foo'] = ref = w.add_object(stm)
+    w.update_root()
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/Foo'] = obj = generic.DictionaryObject(w.root['/Foo'])
+    w.objects[(ref.generation, ref.idnum)] = obj
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.OTHER
+    assert '.Root.Foo' in str(val_status.diff_result)
+
+
+def test_allow_identical_object_replacement_nonsensical_obj_nonstrict():
+    obj = generic.DictionaryObject({
+        generic.NameObject('/Foo'): generic.NameObject('/Bar'),
+        generic.NameObject('/Baz'): generic.IndirectObject(91299, 0, None),
+    })
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    w.root['/Foo'] = w.add_object(obj)
+    w.update_root()
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    w = IncrementalPdfFileWriter(out, strict=False)
+    w.update_container(w.root['/Foo'])
+    w.write_in_place()
+
+    r = PdfFileReader(out, strict=False)
+    s = r.embedded_signatures[0]
+    val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
+    assert val_status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@pytest.mark.parametrize(
+    'x,y,expected', [
+        (TrailerReference(None), TrailerReference(None), True),
+        (Reference(1, 0, None), Reference(1, 0, None), True),
+        (TrailerReference(None), Reference(1, 0, None), False),
+        (Reference(1, 0, None), TrailerReference(None), False),
+        (Reference(1, 0, None), Reference(1, 1, None), False),
+    ]
+)
+def test_check_eq_deref(x, y, expected):
+    assert _eq_deref(x, y) == expected
+
+
+def test_check_relative_context_set():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    root_rel = RelativeContext(
+        TrailerReference(r), relative_path=RawPdfPath('/Root')
+    )
+    info_rel = RelativeContext(
+        TrailerReference(r), relative_path=RawPdfPath('/Info')
+    )
+    assert len({root_rel, info_rel}) == 2
+
+    assert len({
+        root_rel.descend('/Pages').descend('/Kids').descend(0),
+        root_rel.descend(RawPdfPath('/Pages', '/Kids', 0)),
+        RelativeContext.relative_to(
+            r.root['/Pages'], RawPdfPath('/Kids', 0)
+        ),
+        RelativeContext.relative_to(r.root['/Pages'], '/Kids').descend(0)
+    }) == 1
+
+
+def test_cant_descend_into_non_container():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = copy_into_new_writer(r)
+    w.root['/Foo'] = ref = w.add_object(generic.NameObject('/Bar'))
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    root_rel = RelativeContext(ref, RawPdfPath())
+
+    with pytest.raises(PdfReadError, match='Anchor'):
+        root_rel.descend('/Blah')
