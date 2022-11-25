@@ -2407,7 +2407,9 @@ def test_cant_descend_into_non_container():
     w.write(out)
 
     r = PdfFileReader(out)
-    root_rel = RelativeContext(ref, RawPdfPath())
+    root_rel = RelativeContext(
+        generic.Reference(ref.idnum, ref.generation, r), RawPdfPath()
+    )
 
     with pytest.raises(PdfReadError, match='Anchor'):
         root_rel.descend('/Blah')
