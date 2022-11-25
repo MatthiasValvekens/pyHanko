@@ -20,6 +20,7 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
 from ...pdf_utils import misc
 from ...pdf_utils.rw_common import PdfHandler
+from ...pdf_utils.xref import TrailerDictionary
 from .policy_api import ModificationLevel
 
 logger = logging.getLogger(__name__)
@@ -93,11 +94,12 @@ class RelativeContext(Context):
 
     def descend(self, path: Union[RawPdfPath, int, str]) -> 'RelativeContext':
         root = self.anchor.get_object()
-        if not isinstance(root, (DictionaryObject, ArrayObject)):
+        containers = (DictionaryObject, ArrayObject, TrailerDictionary)
+        if not isinstance(root, containers):
             raise misc.PdfReadError(
                 f"Anchor {self.anchor} is not a container object"
             )
-        return self.__class__.relative_to(root, path)
+        return self.__class__.relative_to(root, self.relative_path + path)
 
     def __hash__(self):
         return hash(('rel', _hash_deref(self.anchor), self.relative_path))

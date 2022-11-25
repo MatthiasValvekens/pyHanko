@@ -28,7 +28,13 @@ from .metadata.info import view_from_info_dict
 from .metadata.model import DocumentMetadata
 from .misc import PdfReadError, PdfStrictReadError
 from .rw_common import PdfHandler
-from .xref import ObjStreamRef, XRefBuilder, XRefCache, read_object_header
+from .xref import (
+    ObjStreamRef,
+    TrailerDictionary,
+    XRefBuilder,
+    XRefCache,
+    read_object_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -663,7 +669,8 @@ class RawPdfPath:
             if transparent_dereference:
                 yield elem, current_obj
             if isinstance(entry, str):
-                if isinstance(current_obj, generic.DictionaryObject):
+                if isinstance(current_obj,
+                              (generic.DictionaryObject, TrailerDictionary)):
                     try:
                         current_obj = current_obj.raw_get(entry)
                         elem = entry
@@ -671,7 +678,7 @@ class RawPdfPath:
                     except KeyError:
                         raise misc.PdfReadError(
                             f"Encountered missing dictionary "
-                            f"entry {entry} at position {ix} in path {self}"
+                            f"entry {entry} at position {ix} in path {self} "
                             f"from {from_obj}."
                         )
             elif isinstance(entry, int):
@@ -679,7 +686,7 @@ class RawPdfPath:
                     if not (0 <= entry <= len(current_obj)):
                         raise misc.PdfReadError(
                             f"Encountered out-of-range array index "
-                            f"{entry} at position {ix} in path {self}"
+                            f"{entry} at position {ix} in path {self} "
                             f"from {from_obj}."
                         )
                     current_obj = current_obj.raw_get(entry)

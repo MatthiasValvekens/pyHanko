@@ -9,9 +9,10 @@ from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.content import RawContent
-from pyhanko.pdf_utils.generic import Reference, pdf_name
+from pyhanko.pdf_utils.generic import Reference, TrailerReference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints
+from pyhanko.pdf_utils.misc import PdfReadError
 from pyhanko.pdf_utils.reader import (
     HistoricalResolver,
     PdfFileReader,
@@ -30,7 +31,11 @@ from pyhanko.sign.diff_analysis import (
     SuspiciousModification,
     XrefStreamRule,
 )
-from pyhanko.sign.diff_analysis.rules_api import Context
+from pyhanko.sign.diff_analysis.rules_api import (
+    Context,
+    RelativeContext,
+    _eq_deref,
+)
 from pyhanko.sign.general import SigningError
 from pyhanko.sign.validation import (
     SignatureCoverageLevel,
@@ -2358,3 +2363,51 @@ def test_allow_identical_object_replacement_nonsensical_obj_nonstrict():
     s = r.embedded_signatures[0]
     val_status = validate_pdf_signature(s, NOTRUST_V_CONTEXT())
     assert val_status.modification_level == ModificationLevel.LTA_UPDATES
+
+
+@pytest.mark.parametrize(
+    'x,y,expected', [
+        (TrailerReference(None), TrailerReference(None), True),
+        (Reference(1, 0, None), Reference(1, 0, None), True),
+        (TrailerReference(None), Reference(1, 0, None), False),
+        (Reference(1, 0, None), TrailerReference(None), False),
+        (Reference(1, 0, None), Reference(1, 1, None), False),
+    ]
+)
+def test_check_eq_deref(x, y, expected):
+    assert _eq_deref(x, y) == expected
+
+
+def test_check_relative_context_set():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    root_rel = RelativeContext(
+        TrailerReference(r), relative_path=RawPdfPath('/Root')
+    )
+    info_rel = RelativeContext(
+        TrailerReference(r), relative_path=RawPdfPath('/Info')
+    )
+    assert len({root_rel, info_rel}) == 2
+
+    assert len({
+        root_rel.descend('/Pages').descend('/Kids').descend(0),
+        root_rel.descend(RawPdfPath('/Pages', '/Kids', 0)),
+        RelativeContext.relative_to(
+            r.root['/Pages'], RawPdfPath('/Kids', 0)
+        ),
+        RelativeContext.relative_to(r.root['/Pages'], '/Kids').descend(0)
+    }) == 1
+
+
+def test_cant_descend_into_non_container():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    w = copy_into_new_writer(r)
+    w.root['/Foo'] = ref = w.add_object(generic.NameObject('/Bar'))
+    w.update_root()
+    out = BytesIO()
+    w.write(out)
+
+    r = PdfFileReader(out)
+    root_rel = RelativeContext(ref, RawPdfPath())
+
+    with pytest.raises(PdfReadError, match='Anchor'):
+        root_rel.descend('/Blah')
