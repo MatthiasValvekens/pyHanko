@@ -37,16 +37,14 @@ jobs:
         SOFTHSM2_CONF: softhsm2.conf
         CERTOMANCER_CONFIG_PATH: pyhanko_tests/data/crypto/certomancer.yml
     - name: Generate coverage report
-      run: |
-        python -c 'import sys, os; print("sys.path: " + str(sys.path)); print("CWD: " + str(os.getcwd()))'
-        python -m pytest --cov=./ --cov-report=xml
+      run: python -m pytest --cov=./ --cov-report=xml
       env:
         PDFTOPPM_PATH: /usr/bin/pdftoppm
         IM_COMPARE_PATH: /usr/bin/compare
         SOFTHSM2_CONF: softhsm2.conf
         PKCS11_TEST_MODULE: /usr/lib/softhsm/libsofthsm2.so
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
         flags: unittests
