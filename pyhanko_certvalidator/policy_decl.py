@@ -9,7 +9,7 @@ from typing import FrozenSet, Optional
 
 from asn1crypto import x509
 
-from .errors import InvalidCertificateError
+from .errors import DisallowedAlgorithmError
 from .name_trees import PKIXSubtrees
 
 DEFAULT_WEAK_HASH_ALGOS = frozenset(['md2', 'md5', 'sha1'])
@@ -388,17 +388,23 @@ class AlgorithmUsagePolicy(abc.ABC):
         self, certificate: x509.Certificate, moment: Optional[datetime]
     ):
 
-        if not self.digest_algorithm_allowed(certificate.hash_algo, moment):
-            raise InvalidCertificateError(
-                f'The X.509 certificate provided has a signature using the '
-                f'disallowed hash algorithm {certificate.hash_algo}'
+        hash_allowed = self.digest_algorithm_allowed(
+            certificate.hash_algo, moment
+        )
+        if not hash_allowed:
+            raise DisallowedAlgorithmError(
+                f"The X.509 certificate provided has a signature using the "
+                f"disallowed hash algorithm {certificate.hash_algo}",
+                banned_since=hash_allowed.not_allowed_after,
             )
-        if not self.signature_algorithm_allowed(
+        sig_allowed = self.signature_algorithm_allowed(
             certificate.signature_algo, moment
-        ):
-            raise InvalidCertificateError(
-                f'The X.509 certificate provided has a signature using the '
-                f'disallowed signature algorithm {certificate.signature_algo}'
+        )
+        if not sig_allowed:
+            raise DisallowedAlgorithmError(
+                f"The X.509 certificate provided has a signature using the "
+                f"disallowed signature algorithm {certificate.signature_algo}",
+                banned_since=sig_allowed.not_allowed_after,
             )
 
 

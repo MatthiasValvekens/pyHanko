@@ -465,33 +465,42 @@ def _check_ac_signature(
     embedded_sd_algo = attr_cert['ac_info']['signature']
     sd_algo_str = sd_algo['algorithm'].native
     use_time = validation_context.best_signature_time
+    digest_allowed = (
+        validation_context.algorithm_policy.digest_algorithm_allowed(
+            sd_algo_str, use_time
+        )
+    )
     if sd_algo.native != embedded_sd_algo.native:
         raise InvalidAttrCertificateError(
             "Signature algorithm declaration in signed portion of AC does not "
             "match the signature algorithm declaration on the envelope."
         )
-    elif not validation_context.algorithm_policy.digest_algorithm_allowed(
-        sd_algo_str, use_time
-    ):
+    elif not digest_allowed:
         raise DisallowedAlgorithmError(
             "The attribute certificate could not be validated because "
             f"the signature uses the disallowed signature algorithm "
             f"{sd_algo_str}. ",
             is_ee_cert=True,
             is_side_validation=False,
+            banned_since=digest_allowed.not_allowed_after,
         )
 
     signature_algo = sd_algo.signature_algo
     hash_algo = attr_cert['signature_algorithm'].hash_algo
 
-    if not validation_context.algorithm_policy.digest_algorithm_allowed(
-        hash_algo, use_time
-    ):
+    signature_digest_allowed = (
+        validation_context.algorithm_policy.digest_algorithm_allowed(
+            hash_algo, use_time
+        )
+    )
+
+    if not signature_digest_allowed:
         raise DisallowedAlgorithmError(
             "The attribute certificate could not be validated because "
             f"the signature uses the disallowed hash algorithm {hash_algo}",
             is_ee_cert=True,
             is_side_validation=False,
+            banned_since=signature_digest_allowed.not_allowed_after,
         )
 
     try:
@@ -969,21 +978,27 @@ class _PathValidationState:
         signature_algo = cert['signature_algorithm'].signature_algo
         hash_algo = cert['signature_algorithm'].hash_algo
 
-        if not algorithm_policy.digest_algorithm_allowed(hash_algo, moment):
+        hash_algo_allowed = algorithm_policy.digest_algorithm_allowed(
+            hash_algo, moment
+        )
+        if not hash_algo_allowed:
             raise DisallowedAlgorithmError.from_state(
                 f"The path could not be validated because the signature of "
                 f"{proc_state.describe_cert()} uses the disallowed hash "
                 f"algorithm {hash_algo}.",
                 proc_state,
+                banned_since=hash_algo_allowed.not_allowed_after,
             )
-        if not algorithm_policy.signature_algorithm_allowed(
+        sig_algo_allowed = algorithm_policy.signature_algorithm_allowed(
             signature_algo, moment
-        ):
+        )
+        if not sig_algo_allowed:
             raise DisallowedAlgorithmError.from_state(
                 f"The path could not be validated because the signature "
                 f"of {proc_state.describe_cert()} uses the disallowed "
                 f"signature algorithm {hash_algo}",
                 proc_state,
+                banned_since=sig_algo_allowed.not_allowed_after,
             )
 
         try:

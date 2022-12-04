@@ -1,6 +1,6 @@
 # coding: utf-8
 from datetime import datetime
-from typing import Type, TypeVar
+from typing import Optional, Type, TypeVar
 
 from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
@@ -146,7 +146,25 @@ class InvalidCertificateError(PathValidationError):
 
 
 class DisallowedAlgorithmError(PathValidationError):
-    pass
+    def __init__(
+        self, *args, banned_since: Optional[datetime] = None, **kwargs
+    ):
+        self.banned_since = banned_since
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def from_state(
+        cls,
+        msg: str,
+        proc_state: ValProcState,
+        banned_since: Optional[datetime] = None,
+    ) -> 'DisallowedAlgorithmError':
+        return cls(
+            msg,
+            is_ee_cert=proc_state.is_ee_cert,
+            is_side_validation=proc_state.is_side_validation,
+            banned_since=banned_since,
+        )
 
 
 class InvalidAttrCertificateError(InvalidCertificateError):

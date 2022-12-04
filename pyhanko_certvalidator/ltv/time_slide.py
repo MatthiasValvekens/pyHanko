@@ -121,6 +121,7 @@ def _apply_algo_policy(
                     f"time constraints",
                     is_ee_cert=False,
                     is_side_validation=True,
+                    banned_since=None,
                 )
     return control_time
 
