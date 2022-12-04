@@ -368,7 +368,7 @@ async def cms_basic_validation(
     time_indic = None
     if validation_context is not None:
         algorithm_policy = validation_context.algorithm_policy
-        time_indic = validation_context.use_poe_time
+        time_indic = validation_context.best_signature_time
     validation_context = validation_context or ValidationContext()
     if algorithm_policy is None:
         algorithm_policy = DEFAULT_ALGORITHM_USAGE_POLICY
@@ -453,7 +453,7 @@ async def validate_cert_usage(
         key_usage_settings.validate(cert)
         if validation_context.algorithm_policy is not None:
             validation_context.algorithm_policy.enforce_for_certificate(
-                cert, validation_context.use_poe_time
+                cert, validation_context.best_signature_time
             )
         path = await find_valid_path(
             cert, paths,

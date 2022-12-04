@@ -515,7 +515,7 @@ async def build_and_past_validate_cert(
                 validation_policy_spec=validation_policy_spec,
                 validation_data_handlers=validation_data_handlers,
                 init_control_time=timing_info.validation_time,
-                use_poe_time=timing_info.use_poe_time,
+                best_signature_time=timing_info.best_signature_time,
             )
             return cand_path, validation_time
         except TimeSlideFailure as e:
@@ -562,7 +562,7 @@ async def ades_past_signature_validation(
     signature_bytes = signed_data['signer_infos'][0]['signature'].native
     timing_info = ValidationTimingInfo(
         validation_time,
-        use_poe_time=validation_data_handlers.poe_manager[signature_bytes],
+        best_signature_time=validation_data_handlers.poe_manager[signature_bytes],
         point_in_time_validation=True
     )
 
@@ -612,7 +612,7 @@ async def ades_past_signature_validation(
                 ades_subindication=status
             )
 
-    if timing_info.use_poe_time <= validation_time:
+    if timing_info.best_signature_time <= validation_time:
         # TODO here the algorithm also relies on revinfo eviction
         if current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE:
             _pass_contingent_on_revinfo_issuance_poe()
@@ -625,12 +625,12 @@ async def ades_past_signature_validation(
             AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
             AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED
         ):
-            if timing_info.use_poe_time < cert.not_valid_before:
+            if timing_info.best_signature_time < cert.not_valid_before:
                 raise errors.SignatureValidationError(
                     failure_message="Signature predates cert validity period",
                     ades_subindication=AdESFailure.NOT_YET_VALID
                 )
-            elif timing_info.use_poe_time <= cert.not_valid_after:
+            elif timing_info.best_signature_time <= cert.not_valid_after:
                 _pass_contingent_on_revinfo_issuance_poe()
                 return
         elif current_time_sub_indic == \
