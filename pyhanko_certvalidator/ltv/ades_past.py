@@ -85,6 +85,13 @@ async def past_validate(
     Execute the ETSI EN 319 102-1 past certificate validation algorithm
     against the given path (ETSI EN 319 102-1, § 5.6.2.1).
 
+    Instead of merely evaluating X.509 validation constraints, the algorithm
+    will perform a full point-in-time reevaluation of the path at the
+    control time mandated by the specification. This implies that a caller
+    implementing the past signature validation algorithm no longer needs to
+    explicitly reevaluate CA certificate revocation times and/or algorithm
+    constraints based on POEs.
+
     .. warning::
         This is incubating internal API.
 
@@ -136,6 +143,16 @@ async def past_validate(
     validation_context = validation_policy_spec.build_validation_context(
         timing_info=ref_time, handlers=validation_data_handlers
     )
+
+    # Maintenance note:
+    #  Doing a full point-in-time re-validation of the path is much more
+    #  heavy-handed than what the AdES spec requires. We really only have to
+    #  evaluate the chain constraints here.
+    #  However, the past signature validation algorithm needs information about
+    #  revocations up the chain and algorithm usage for _all_ operations in
+    #  the validation process which is hard to pass on given the current
+    #  architecture of certvalidator. Reevaluating with a time in the past
+    #  is easier, and the POE enforcement is the same either way.
 
     await async_validate_path(
         validation_context,
