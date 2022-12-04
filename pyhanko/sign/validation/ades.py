@@ -23,9 +23,8 @@ from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
 )
-from pyhanko_certvalidator.errors import PathValidationError, ValidationError
+from pyhanko_certvalidator.errors import ValidationError
 from pyhanko_certvalidator.ltv.ades_past import past_validate
-from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
 from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
@@ -507,48 +506,30 @@ async def build_and_past_validate_cert(
     )
 
     current_subindication = None
-    last_e = None
     async for cand_path in path_builder.async_build_paths_lazy(cert):
-        try:
-            validation_time = await past_validate(
-                path=cand_path,
-                validation_policy_spec=validation_policy_spec,
-                validation_data_handlers=validation_data_handlers,
-                init_control_time=timing_info.validation_time,
-                best_signature_time=timing_info.best_signature_time,
+        current_subindication, revo_details, validation_time = \
+            generic_cms.handle_certvalidator_errors(
+                await past_validate(
+                    path=cand_path,
+                    validation_policy_spec=validation_policy_spec,
+                    validation_data_handlers=validation_data_handlers,
+                    init_control_time=timing_info.validation_time,
+                    best_signature_time=timing_info.best_signature_time,
+                )
             )
+        if current_subindication is None:
             return cand_path, validation_time
-        except TimeSlideFailure as e:
-            current_subindication = AdESIndeterminate.NO_POE
-            last_e = e
-        except errors.DisallowedAlgorithmError as e:
-            # This is not the NO_POE variant, but only triggered for
-            # outright bans
-            current_subindication = \
-                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
-            last_e = e
-        except PathValidationError as e:
-            current_subindication = \
-                AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
-            last_e = e
-        except ValidationError as e:
-            # also covers precheck failures in the past validation algo
-            current_subindication = \
-                AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
-            last_e = e
 
-    subindication = current_subindication \
-                    or AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
     msg = "Unable to construct plausible past validation path"
-    if last_e is not None:
+    if current_subindication is not None:
         raise errors.SignatureValidationError(
             failure_message=msg,
-            ades_subindication=subindication
-        ) from last_e
+            ades_subindication=current_subindication
+        )
     else:
         raise errors.SignatureValidationError(
             failure_message=f"{msg}: no prima facie paths constructed",
-            ades_subindication=subindication
+            ades_subindication=AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
         )
 
 
@@ -600,6 +581,8 @@ async def ades_past_signature_validation(
         timing_info=timing_info
     )
 
+    # TODO revisit this once I have a clearer understanding of why this PoE
+    #  issuance check is only applied to the EE cert.
     def _pass_contingent_on_revinfo_issuance_poe():
         if not bool(leaf_crls or leaf_ocsps):
             status = AdESIndeterminate.REVOCATION_OUT_OF_BOUNDS_NO_POE
@@ -613,14 +596,16 @@ async def ades_past_signature_validation(
             )
 
     if timing_info.best_signature_time <= validation_time:
-        # TODO here the algorithm also relies on revinfo eviction
         if current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE:
             _pass_contingent_on_revinfo_issuance_poe()
             return
-        elif current_time_sub_indic == AdESIndeterminate.REVOKED_CA_NO_POE:
-            # TODO how can we get the revocation date for the CA here?
-            # depends on integration
-            raise NotImplementedError
+        elif current_time_sub_indic in (
+                AdESIndeterminate.REVOKED_CA_NO_POE,
+                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+        ):
+            # This is an automatic pass given that certvalidator checks
+            # these conditions for us as part of past_validate(...)
+            return
         elif current_time_sub_indic in (
             AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
             AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED
@@ -633,13 +618,8 @@ async def ades_past_signature_validation(
             elif timing_info.best_signature_time <= cert.not_valid_after:
                 _pass_contingent_on_revinfo_issuance_poe()
                 return
-        elif current_time_sub_indic == \
-                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE:
-            # TODO how can we get the required date cutoffs here?
-            # depends on integration
-            raise NotImplementedError
 
-    # TODO also here, it would help to preserve more than the sub-indication
+    # TODO here, it would help to preserve more than the sub-indication
     #  from before
     raise errors.SigSeedValueValidationError(
         failure_message=(

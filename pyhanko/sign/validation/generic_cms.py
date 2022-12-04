@@ -18,12 +18,15 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import ValidationContext, find_valid_path
 from pyhanko_certvalidator.errors import (
+    DisallowedAlgorithmError,
     ExpiredError,
     InvalidCertificateError,
     PathBuildingError,
     PathValidationError,
     RevokedError,
+    ValidationError,
 )
+from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsagePolicy,
@@ -444,60 +447,20 @@ async def validate_cert_usage(
     Internal API.
     """
 
-    # TODO use path building & validation API directly and filter candidate
-    #  paths based on criteria in the signature container.
-
-    path = revo_details = None
-    try:
-        # validate usage without going through pyhanko_certvalidator
+    async def _check():
         key_usage_settings.validate(cert)
         if validation_context.algorithm_policy is not None:
             validation_context.algorithm_policy.enforce_for_certificate(
                 cert, validation_context.best_signature_time
             )
-        path = await find_valid_path(
+        return await find_valid_path(
             cert, paths,
             validation_context=validation_context,
             pkix_validation_params=pkix_validation_params
         )
-        ades_status = None
-    except InvalidCertificateError as e:
-        # TODO accumulate these somewhere?
-        logger.warning(e)
-        ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
-    except RevokedError as e:
-        logger.warning(e)
-        if e.is_side_validation:
-            # don't report this as a revocation event
-            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
-        elif e.is_ee_cert:
-            ades_status = AdESIndeterminate.REVOKED_NO_POE
-            revo_details = RevocationDetails(
-                ca_revoked=False, revocation_date=e.revocation_dt,
-                revocation_reason=e.reason
-            )
-        else:
-            ades_status = AdESIndeterminate.REVOKED_CA_NO_POE
-            revo_details = RevocationDetails(
-                ca_revoked=True, revocation_date=e.revocation_dt,
-                revocation_reason=e.reason
-            )
-    except PathBuildingError as e:
-        logger.warning(e)
-        ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
-    except ExpiredError as e:
-        logger.warning(e)
-        if not e.is_side_validation and e.is_ee_cert:
-            # TODO modify certvalidator to perform revinfo checks on
-            #  expired certs, possibly as an option. If this happens, we
-            #  can potentially emit the more accurate status
-            #  OUT_OF_BOUNDS_NOT_REVOKED here in cases where it applies.
-            ades_status = AdESIndeterminate.OUT_OF_BOUNDS_NO_POE
-        else:
-            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
-    except PathValidationError as e:
-        logger.warning(e)
-        ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+    # validate usage without going through pyhanko_certvalidator
+    ades_status, revo_details, path = \
+        await handle_certvalidator_errors(_check())
     if ades_status is not None:
         subj = cert.subject.human_friendly
         logger.warning(f"Chain of trust validation for {subj} failed.")
@@ -919,3 +882,68 @@ async def async_validate_detached_cms(
         )
     )
     return StandardCMSSignatureStatus(**status_kwargs)
+
+
+async def handle_certvalidator_errors(coro):
+    """
+    Internal error handling function that maps certvalidator errors
+    to AdES status indications.
+
+    :param coro:
+    :return:
+    """
+    revo_details = None
+    try:
+        return None, None, await coro
+    except InvalidCertificateError as e:
+        logger.warning(e)
+        ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
+    except TimeSlideFailure as e:
+        logger.warning(e)
+        ades_status = AdESIndeterminate.NO_POE
+    except DisallowedAlgorithmError as e:
+        if e.banned_since is None:
+            # permaban
+            ades_status = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+        else:
+            # could get resolved with more POEs
+            ades_status = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+    except RevokedError as e:
+        logger.warning(e)
+        if e.is_side_validation:
+            # don't report this as a revocation event
+            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+        elif e.is_ee_cert:
+            ades_status = AdESIndeterminate.REVOKED_NO_POE
+            revo_details = RevocationDetails(
+                ca_revoked=False, revocation_date=e.revocation_dt,
+                revocation_reason=e.reason
+            )
+        else:
+            ades_status = AdESIndeterminate.REVOKED_CA_NO_POE
+            revo_details = RevocationDetails(
+                ca_revoked=True, revocation_date=e.revocation_dt,
+                revocation_reason=e.reason
+            )
+    except PathBuildingError as e:
+        logger.warning(e)
+        ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+    except ExpiredError as e:
+        logger.warning(e)
+        if not e.is_side_validation and e.is_ee_cert:
+            # TODO modify certvalidator to perform revinfo checks on
+            #  expired certs, possibly as an option. If this happens, we
+            #  can potentially emit the more accurate status
+            #  OUT_OF_BOUNDS_NOT_REVOKED here in cases where it applies.
+            ades_status = AdESIndeterminate.OUT_OF_BOUNDS_NO_POE
+        else:
+            ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+    except PathValidationError as e:
+        logger.warning(e)
+        # TODO verify whether this is appropriate
+        ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
+    except ValidationError as e:
+        logger.warning(e)
+        ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+
+    return ades_status, revo_details, None
