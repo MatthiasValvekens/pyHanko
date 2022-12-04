@@ -464,7 +464,7 @@ def _check_ac_signature(
     sd_algo = attr_cert['signature_algorithm']
     embedded_sd_algo = attr_cert['ac_info']['signature']
     sd_algo_str = sd_algo['algorithm'].native
-    use_time = validation_context.use_poe_time
+    use_time = validation_context.best_signature_time
     if sd_algo.native != embedded_sd_algo.native:
         raise InvalidAttrCertificateError(
             "Signature algorithm declaration in signed portion of AC does not "
@@ -1103,7 +1103,7 @@ async def intl_validate_path(
             cert,
             validation_context.algorithm_policy,
             proc_state,
-            validation_context.use_poe_time,
+            validation_context.best_signature_time,
         )
 
         # Step 2 a 2

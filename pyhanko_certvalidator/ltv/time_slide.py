@@ -143,7 +143,7 @@ def _update_control_time(
             ValidationTimingParams(
                 timing_info=ValidationTimingInfo(
                     validation_time=control_time,
-                    use_poe_time=control_time,
+                    best_signature_time=control_time,
                     point_in_time_validation=True,
                 ),
                 time_tolerance=time_tolerance,

@@ -128,7 +128,7 @@ class CertificateValidator:
             return self._path
 
         algorithm_policy = self._context.algorithm_policy
-        algo_moment = self._context.use_poe_time
+        algo_moment = self._context.best_signature_time
         certificate = self._certificate
 
         algorithm_policy.enforce_for_certificate(certificate, algo_moment)

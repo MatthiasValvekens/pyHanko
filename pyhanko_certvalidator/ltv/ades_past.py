@@ -50,7 +50,7 @@ async def _past_validate_precheck(
 
     ref_time = ValidationTimingInfo(
         validation_time=upper_bound,
-        use_poe_time=upper_bound,
+        best_signature_time=upper_bound,
         point_in_time_validation=True,
     )
 
@@ -79,7 +79,7 @@ async def past_validate(
     validation_policy_spec: CertValidationPolicySpec,
     validation_data_handlers: ValidationDataHandlers,
     init_control_time: Optional[datetime] = None,
-    use_poe_time: Optional[datetime] = None,
+    best_signature_time: Optional[datetime] = None,
 ) -> datetime:
     """
     Execute the ETSI EN 319 102-1 past certificate validation algorithm
@@ -97,7 +97,7 @@ async def past_validate(
         information and proof-of-existence records.
     :param init_control_time:
         Initial control time; defaults to the current time.
-    :param use_poe_time:
+    :param best_signature_time:
         Usage time to use in freshness computations.
     :return:
         The control time returned by the time sliding algorithm.
@@ -128,7 +128,7 @@ async def past_validate(
 
     ref_time = ValidationTimingInfo(
         validation_time=control_time,
-        use_poe_time=use_poe_time or control_time,
+        best_signature_time=best_signature_time or control_time,
         point_in_time_validation=True,
     )
 

@@ -41,7 +41,7 @@ async def test_cooldown_period_ok():
         crls=[root_crl],
         revinfo_policy=policy,
         moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-        use_poe_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
+        best_signature_time=datetime(2020, 9, 18, tzinfo=timezone.utc),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     await async_validate_path(vc, path)
@@ -69,7 +69,7 @@ async def test_cooldown_period_too_early():
         crls=[root_crl],
         revinfo_policy=policy,
         moment=datetime(2020, 10, 1, tzinfo=timezone.utc),
-        use_poe_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
+        best_signature_time=datetime(2020, 9, 30, tzinfo=timezone.utc),
     )
     (path,) = await vc.path_builder.async_build_paths(alice)
     with pytest.raises(PathValidationError, match='CRL.*recent enough'):

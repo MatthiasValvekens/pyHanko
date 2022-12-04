@@ -105,7 +105,7 @@ def _judge_revinfo(
         )
         if freshness_delta is None:
             return RevinfoUsabilityRating.UNCLEAR
-        signature_poe_time = timing_params.use_poe_time
+        signature_poe_time = timing_params.best_signature_time
         if this_update - signature_poe_time < freshness_delta:
             return RevinfoUsabilityRating.STALE
     elif (

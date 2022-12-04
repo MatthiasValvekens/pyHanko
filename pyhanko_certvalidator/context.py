@@ -73,7 +73,7 @@ class ValidationContext:
         other_certs: Optional[Iterable[x509.Certificate]] = None,
         whitelisted_certs: Optional[Iterable[Union[bytes, str]]] = None,
         moment: Optional[datetime] = None,
-        use_poe_time: Optional[datetime] = None,
+        best_signature_time: Optional[datetime] = None,
         allow_fetching: bool = False,
         crls: Optional[Iterable[Union[bytes, crl.CertificateList]]] = None,
         ocsps: Optional[Iterable[Union[bytes, ocsp.OCSPResponse]]] = None,
@@ -128,7 +128,7 @@ class ValidationContext:
             OCSP and CRL responses is to pass them via the crls and ocsps
             parameters. Can not be combined with allow_fetching=True.
 
-        :param use_poe_time:
+        :param best_signature_time:
             The presumptive time at which the certificate was used.
             Assumed equal to :class:`moment` if unspecified.
 
@@ -230,11 +230,11 @@ class ValidationContext:
         else:
             point_in_time_validation = True
 
-        if use_poe_time is None:
-            use_poe_time = moment
-        elif use_poe_time.utcoffset() is None:
+        if best_signature_time is None:
+            best_signature_time = moment
+        elif best_signature_time.utcoffset() is None:
             raise ValueError(
-                "use_poe_time is a naive datetime object, meaning the tzinfo "
+                "best_signature_time is a naive datetime object, meaning the tzinfo "
                 "attribute is not set to a valid timezone"
             )
 
@@ -315,7 +315,7 @@ class ValidationContext:
         self.timing_params = ValidationTimingParams(
             ValidationTimingInfo(
                 validation_time=moment,
-                use_poe_time=use_poe_time,
+                best_signature_time=best_signature_time,
                 point_in_time_validation=point_in_time_validation,
             ),
             time_tolerance=time_tolerance,
@@ -344,8 +344,8 @@ class ValidationContext:
         return self.timing_params.validation_time
 
     @property
-    def use_poe_time(self) -> datetime:
-        return self.timing_params.use_poe_time
+    def best_signature_time(self) -> datetime:
+        return self.timing_params.best_signature_time
 
     @property
     def fetching_allowed(self) -> bool:
@@ -610,7 +610,7 @@ class CertValidationPolicySpec:
             poe_manager=poe_manager,
             algorithm_usage_policy=self.algorithm_usage_policy,
             moment=timing_info.validation_time,
-            use_poe_time=timing_info.use_poe_time,
+            best_signature_time=timing_info.best_signature_time,
             time_tolerance=self.time_tolerance,
             acceptable_ac_targets=self.acceptable_ac_targets,
             allow_fetching=revinfo_manager.fetching_allowed,

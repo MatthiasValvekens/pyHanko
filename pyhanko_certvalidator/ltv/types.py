@@ -15,7 +15,7 @@ __all__ = [
 @dataclass(frozen=True)
 class ValidationTimingInfo:
     validation_time: datetime
-    use_poe_time: datetime
+    best_signature_time: datetime
     point_in_time_validation: bool
 
 
@@ -29,8 +29,8 @@ class ValidationTimingParams:
         return self.timing_info.validation_time
 
     @property
-    def use_poe_time(self):
-        return self.timing_info.use_poe_time
+    def best_signature_time(self):
+        return self.timing_info.best_signature_time
 
     @property
     def point_in_time_validation(self):
