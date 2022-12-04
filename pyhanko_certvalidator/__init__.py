@@ -1,6 +1,6 @@
 import asyncio
 import warnings
-from typing import AsyncGenerator, Iterable, Optional
+from typing import Iterable, Optional
 
 from asn1crypto import x509
 
@@ -9,6 +9,7 @@ from .context import ValidationContext
 from .errors import InvalidCertificateError, PathBuildingError, ValidationError
 from .path import ValidationPath
 from .policy_decl import PKIXValidationParams
+from .util import CancelableAsyncIterator
 from .validate import async_validate_path, validate_tls_hostname, validate_usage
 from .version import __version__, __version_info__
 
@@ -24,7 +25,7 @@ __all__ = [
 
 async def find_valid_path(
     certificate: x509.Certificate,
-    paths: AsyncGenerator[ValidationPath, None],
+    paths: CancelableAsyncIterator[ValidationPath],
     validation_context: ValidationContext,
     pkix_validation_params: Optional[PKIXValidationParams] = None,
 ):
@@ -45,6 +46,8 @@ async def find_valid_path(
                 f'"{certificate.subject.human_friendly}"'
             )
         raise
+    finally:
+        await paths.cancel()
 
     if len(exceptions) == 1:
         raise exceptions[0]

@@ -3,7 +3,7 @@
 import abc
 import asyncio
 from collections import defaultdict
-from typing import Iterable, Iterator, List, Optional, Union
+from typing import AsyncGenerator, Iterable, Iterator, List, Optional, Union
 
 from asn1crypto import x509
 from oscrypto import trust_list
@@ -12,7 +12,7 @@ from .authority import CertTrustAnchor, TrustAnchor
 from .errors import PathBuildingError
 from .fetchers import CertificateFetcher
 from .path import ValidationPath
-from .util import ConsList
+from .util import CancelableAsyncIterator, ConsList
 
 
 class CertificateCollection(abc.ABC):
@@ -439,7 +439,9 @@ class PathBuilder:
 
         return paths
 
-    async def async_build_paths_lazy(self, end_entity_cert: x509.Certificate):
+    def async_build_paths_lazy(
+        self, end_entity_cert: x509.Certificate
+    ) -> CancelableAsyncIterator[ValidationPath]:
         """
         Builds a list of ValidationPath objects from a certificate in the
         operating system trust store to the end-entity certificate, and emit
@@ -450,104 +452,206 @@ class PathBuilder:
             instance of asn1crypto.x509.Certificate
 
         :return:
-            A list of pyhanko_certvalidator.path.ValidationPath objects that
+            An asynchronous iterator that yields
+            pyhanko_certvalidator.path.ValidationPath objects that
             represent the possible paths from the end-entity certificate to one
-            of the CA certs.
-        :raise PathBuildingError: if no paths could be built
+            of the CA certs, and raises PathBuildingError
+            if no paths could be built
         """
 
-        if self.trust_manager.is_root(end_entity_cert):
-            yield ValidationPath(CertTrustAnchor(end_entity_cert), [], None)
-            return
-
-        path: ConsList[x509.Certificate] = ConsList.sing(end_entity_cert)
-        certs_seen: ConsList[bytes] = ConsList.sing(
-            end_entity_cert.issuer_serial
+        walker = _PathWalker(
+            self,
+            path=ConsList.sing(end_entity_cert),
+            certs_seen=ConsList.sing(end_entity_cert.issuer_serial),
+            failed_paths=[],
         )
-        failed_paths: List[ConsList[x509.Certificate]] = []
+        return LazyPathIterator(walker, end_entity_cert)
 
-        emitted_count = 0
-        async for result in self._walk_issuers(path, certs_seen, failed_paths):
-            yield result
-            emitted_count += 1
 
-        if emitted_count == 0:
-            cert_name = end_entity_cert.subject.human_friendly
-            path_head = failed_paths[0].head
-            assert isinstance(path_head, x509.Certificate)
-            missing_issuer_name = path_head.issuer.human_friendly
-            raise PathBuildingError(
-                f"Unable to build a validation path for the certificate "
-                f"\"{cert_name}\" - no issuer matching "
-                f"\"{missing_issuer_name}\" was found"
+class _IssuerFetcher:
+    def __init__(
+        self,
+        path_builder: 'PathBuilder',
+        cert: x509.Certificate,
+        certs_seen: ConsList[bytes],
+    ):
+        self.cert = cert
+        self.path_builder = path_builder
+        self.certs_seen = certs_seen
+        local_issuers = self.path_builder.registry.find_potential_issuers(
+            cert, self.path_builder.trust_manager
+        )
+        self.local_iss_iter = iter(local_issuers)
+        self.local_issuers_found = 0
+        self.fetched_issuers_found = 0
+        self._fetched_cas: Optional[
+            AsyncGenerator[x509.Certificate, None]
+        ] = None
+        self._fetching_done = False
+
+    @property
+    def issuers_found(self):
+        return self.local_issuers_found + self.fetched_issuers_found
+
+    def __aiter__(self):
+        return self
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> Union[TrustAnchor, x509.Certificate]:
+        for issuer in self.local_iss_iter:
+            if isinstance(issuer, x509.Certificate):
+                cert_id = issuer.issuer_serial
+                if cert_id in self.certs_seen:  # no duplicates
+                    continue
+            self.local_issuers_found += 1
+            return issuer
+        raise StopIteration
+
+    async def __anext__(self) -> Union[TrustAnchor, x509.Certificate]:
+
+        try:
+            return next(self)
+        except StopIteration:
+            pass
+
+        if (
+            self._fetched_cas is None
+            and not self.local_issuers_found
+            and not self._fetching_done
+        ):
+            # attempt to download certs only if we didn't find anything locally
+            self._fetched_cas = (
+                self.path_builder.registry.fetch_missing_potential_issuers(
+                    self.cert
+                )
             )
 
-    async def _walk_issuers(
+        if self._fetched_cas is not None:
+            async for issuer in self._fetched_cas:
+                cert_id = issuer.issuer_serial
+                if cert_id in self.certs_seen:
+                    continue
+                self.fetched_issuers_found += 1
+                return issuer
+            self._fetching_done = True
+        raise StopAsyncIteration
+
+    async def cancel(self):
+        if self._fetched_cas is not None:
+            await self._fetched_cas.aclose()
+            self._fetched_cas = None
+            self._fetching_done = True
+
+
+class _PathWalker:
+    def __init__(
         self,
+        path_builder: 'PathBuilder',
         path: ConsList[x509.Certificate],
         certs_seen: ConsList[bytes],
         failed_paths: List[ConsList[x509.Certificate]],
     ):
-        """
-        Recursively looks through the list of known certificates for the issuer
-        of the certificate specified, stopping once the certificate in question
-        is one contained within the CA certs list
-
-        :param path:
-            A ValidationPath object representing the current traversal of
-            possible paths
-
-        :param failed_paths:
-            A list of candidate paths that failed due
-            to no matching issuer before reaching a certificate from the CA
-            certs list
-        """
-
-        if isinstance(path.head, TrustAnchor):
-            assert path.tail is not None
-            certs = list(path.tail)
-            yield ValidationPath(path.head, certs[:-1], certs[-1])
-            return
-
+        self.path = path
+        self.path_builder = path_builder
+        self.certs_seen = certs_seen
         cert = path.head
         assert isinstance(cert, x509.Certificate)
-        new_branches = 0
-        potential_issuers = self.registry.find_potential_issuers(
-            cert, self.trust_manager
-        )
-        for issuer in potential_issuers:
-            if isinstance(issuer, x509.Certificate):
-                cert_id = issuer.issuer_serial
-                if cert_id in certs_seen:  # no duplicates
-                    continue
-                new_certs_seen = certs_seen.cons(cert_id)
-            else:
-                new_certs_seen = certs_seen
-            results = self._walk_issuers(
-                path.cons(issuer), new_certs_seen, failed_paths
+        self._issuer_fetcher = _IssuerFetcher(path_builder, cert, certs_seen)
+        self.failed_paths = failed_paths
+        self._next_level: Optional[_PathWalker] = None
+
+    async def cancel(self):
+        if self._issuer_fetcher is not None:
+            await self._issuer_fetcher.cancel()
+            self._issuer_fetcher = None
+        if self._next_level is not None:
+            await self._next_level.cancel()
+            self._next_level = None
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._issuer_fetcher is None:
+            raise StopAsyncIteration  # pragma: nocover
+        next_path = None
+        while next_path is None:
+            if self._next_level is None:
+                # Fetch the next candidate issuer in the list
+                try:
+                    next_issuer = await anext(self._issuer_fetcher)
+                except StopAsyncIteration as e:
+                    if not self._issuer_fetcher.issuers_found:
+                        self.failed_paths.append(self.path)
+                    self._issuer_fetcher = None
+                    raise e
+                if isinstance(next_issuer, TrustAnchor):
+                    # We've reached a trust root -> emit path and stop
+                    certs = list(self.path)
+                    return ValidationPath(next_issuer, certs[:-1], certs[-1])
+                else:
+                    # if it's not a trust root, we need a new child _PathWalker
+                    self._next_level = _PathWalker(
+                        self.path_builder,
+                        self.path.cons(next_issuer),
+                        self.certs_seen.cons(next_issuer.issuer_serial),
+                        self.failed_paths,
+                    )
+            # check if next_level has any paths left, if not we clear it
+            # and loop around to look at the next issuer
+            try:
+                next_path = await anext(self._next_level)
+            except StopAsyncIteration:
+                self._next_level = None
+        return next_path
+
+
+class LazyPathIterator(CancelableAsyncIterator[ValidationPath]):
+    _as_root: Optional[ValidationPath] = None
+
+    def __init__(self, walker: _PathWalker, cert: x509.Certificate):
+        # special case for root certs
+        if walker.path_builder.trust_manager.is_root(cert):
+            self._as_root = ValidationPath(CertTrustAnchor(cert), [], None)
+        self._walker: Optional[_PathWalker] = walker
+        self.emitted_count = 0
+        self._name = cert.subject.human_friendly
+
+    async def cancel(self):
+        if self._walker is not None:
+            await self._walker.cancel()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self) -> ValidationPath:
+        if self._walker is None:
+            raise StopAsyncIteration
+        elif self._as_root is not None:
+            self.emitted_count += 1
+            self._walker = None
+            return self._as_root
+
+        try:
+            next_path = await anext(self._walker)
+            self.emitted_count += 1
+            return next_path
+        except StopAsyncIteration:
+            pass
+
+        if self.emitted_count == 0:
+            path_head = self._walker.failed_paths[0].head
+            assert isinstance(path_head, x509.Certificate)
+            missing_issuer_name = path_head.issuer.human_friendly
+            self._walker = None
+            raise PathBuildingError(
+                f"Unable to build a validation path for the certificate "
+                f"\"{self._name}\" - no issuer matching "
+                f"\"{missing_issuer_name}\" was found"
             )
-            async for result_path in results:
-                yield result_path
-            new_branches += 1
-
-        if not new_branches:
-            # attempt to download certs if there's nothing in the context
-            async for issuer in self.registry.fetch_missing_potential_issuers(
-                cert
-            ):
-                cert_id = issuer.issuer_serial
-                if cert_id in certs_seen:
-                    continue
-                new_certs_seen = certs_seen.cons(cert_id)
-
-                results = self._walk_issuers(
-                    path.cons(issuer), new_certs_seen, failed_paths
-                )
-                async for result_path in results:
-                    yield result_path
-                new_branches += 1
-        if not new_branches:
-            failed_paths.append(path)
+        raise StopAsyncIteration
 
 
 class LayeredCertificateStore(CertificateCollection):

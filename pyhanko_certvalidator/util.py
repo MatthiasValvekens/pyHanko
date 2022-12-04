@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import re
-import textwrap
+import abc
 from dataclasses import dataclass
-from typing import Generic, List, Optional, TypeVar, Union
+from typing import AsyncIterator, Generic, List, Optional, TypeVar, Union
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.keys import PublicKeyInfo
@@ -299,3 +298,11 @@ class ConsList(Generic[ListElem]):
 
     def __bool__(self):
         return self.head is not None
+
+
+T = TypeVar('T')
+
+
+class CancelableAsyncIterator(abc.ABC, AsyncIterator[T]):
+    async def cancel(self):
+        raise NotImplementedError
