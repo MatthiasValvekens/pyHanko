@@ -488,6 +488,10 @@ async def validate_cert_usage(
     except ExpiredError as e:
         logger.warning(e)
         if not e.is_side_validation and e.is_ee_cert:
+            # TODO modify certvalidator to perform revinfo checks on
+            #  expired certs, possibly as an option. If this happens, we
+            #  can potentially emit the more accurate status
+            #  OUT_OF_BOUNDS_NOT_REVOKED here in cases where it applies.
             ades_status = AdESIndeterminate.OUT_OF_BOUNDS_NO_POE
         else:
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE

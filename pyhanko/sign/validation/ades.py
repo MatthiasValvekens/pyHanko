@@ -10,18 +10,30 @@ very experimental.
     continually rebasing the branch on which it lives became too much of a drag.
 """
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, TypeVar
+from typing import Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
 
-import tzlocal
-from asn1crypto import cms
+from asn1crypto import cms, x509
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.authority import CertTrustAnchor, TrustAnchor
 from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
 )
+from pyhanko_certvalidator.errors import PathValidationError, ValidationError
+from pyhanko_certvalidator.ltv.ades_past import past_validate
+from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
+from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
+from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.policy_decl import RevocationCheckingRule
+from pyhanko_certvalidator.registry import PathBuilder, TrustManager
+from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
+from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
 
 from pyhanko.sign.ades.report import (
     AdESFailure,
@@ -29,8 +41,8 @@ from pyhanko.sign.ades.report import (
     AdESPassed,
     AdESSubIndic,
 )
-from pyhanko.sign.validation import generic_cms
-from pyhanko.sign.validation.errors import SignatureValidationError
+from pyhanko.sign.general import CMSExtractionError, extract_certificate_info
+from pyhanko.sign.validation import errors, generic_cms
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.sign.validation.status import (
     RevocationDetails,
@@ -38,6 +50,8 @@ from pyhanko.sign.validation.status import (
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
@@ -130,7 +144,6 @@ async def _process_basic_validation(
         signed_data: cms.SignedData, temp_status: SignatureStatus,
         ts_validation_context: ValidationContext,
         signature_not_before_time: Optional[datetime]):
-
     ades_trust_status: Optional[AdESSubIndic] = temp_status.trust_problem_indic
     signer_info = generic_cms.extract_signer_info(signed_data)
     ts_status: Optional[TimestampSignatureStatus] = None
@@ -192,7 +205,6 @@ async def ades_basic_validation(
         raw_digest: Optional[bytes] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESBasicValidationResult:
-
     validation_context = cert_validation_policy.build_validation_context(
         timing_info=timing_info,
         handlers=validation_data_handlers
@@ -220,14 +232,13 @@ async def _ades_basic_validation(
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes],
         signature_not_before_time: Optional[datetime]):
-
     try:
         status_kwargs = await generic_cms.cms_basic_validation(
             signed_data, raw_digest=raw_digest,
             validation_context=validation_context,
             key_usage_settings=key_usage_settings
         )
-    except SignatureValidationError as e:
+    except errors.SignatureValidationError as e:
         return AdESBasicValidationResult(
             ades_subindic=e.ades_subindication, failure_msg=e.failure_message,
             api_status=None
@@ -283,17 +294,15 @@ async def ades_with_time_validation(
         validation_data_handlers: ValidationDataHandlers,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes] = None,
-        signature_not_before_time: Optional[datetime] = None,
-        signature_poe_time: Optional[datetime] = None) \
+        signature_not_before_time: Optional[datetime] = None) \
         -> AdESWithTimeValidationResult:
-
     validation_context = cert_validation_policy.build_validation_context(
         timing_info=timing_info,
         handlers=validation_data_handlers
     )
 
-    signature_poe_time = signature_poe_time \
-                         or datetime.now(tz=tzlocal.get_localzone())
+    sig_bytes = signed_data['signer_infos'][0]['signature'].native
+    signature_poe_time = validation_data_handlers.poe_manager[sig_bytes]
 
     # FIXME instead of passing in validation contexts here, the AdES logic
     #  should take care of that in a spec compliant way (from more basic inputs)
@@ -386,3 +395,257 @@ async def ades_with_time_validation(
         best_signature_time=signature_poe_time,
         signature_not_before_time=signature_not_before_time
     )
+
+
+class _TrustNoOne(TrustManager):
+
+    def is_root(self, cert: x509.Certificate) -> bool:
+        return False
+
+    def find_potential_issuers(self, cert: x509.Certificate) \
+            -> Iterator[TrustAnchor]:
+        return iter(())
+
+
+def _crl_issuer_cert_poe_boundary(
+        crl: CRLOfInterest, cutoff: datetime, poe_manager: POEManager
+):
+    return any(
+        poe_manager[prov_path.path.leaf] <= cutoff
+        for prov_path in crl.prov_paths
+    )
+
+
+def _ocsp_issuer_cert_poe_boundary(
+        ocsp: OCSPResponseOfInterest, cutoff: datetime, poe_manager: POEManager
+):
+    return poe_manager[ocsp.prov_path.leaf] <= cutoff
+
+
+async def _find_revinfo_data_for_leaf_in_past(
+        cert: x509.Certificate,
+        validation_data_handlers: ValidationDataHandlers,
+        control_time: datetime,
+        revocation_checking_rule: RevocationCheckingRule):
+    # Need to find a piece of revinfo for the signing cert, for which we have
+    # POE for the issuer cert, which must be dated before the expiration date of
+    # the cert. (Standard is unclear as to which cert this refers to, but
+    # it's probably the date on the signing cert. Not much point in requiring
+    # PoE for a cert before its self-declared expiration date...)
+    # Since our revinfo gathering logic is based on paths, we gather up all
+    # candidate issuers and work with those "truncated" candidate paths.
+    # Trust is not an issue at this stage.
+    registry = validation_data_handlers.cert_registry
+    candidate_issuers = registry.find_potential_issuers(
+        cert=cert, trust_manager=_TrustNoOne()
+    )
+
+    def _for_candidate_issuer(iss: x509.Certificate):
+        truncated_path = ValidationPath(
+            trust_anchor=CertTrustAnchor(iss),
+            interm=[],
+            leaf=cert
+        )
+        return ades_gather_prima_facie_revinfo(
+            path=truncated_path,
+            revinfo_manager=validation_data_handlers.revinfo_manager,
+            control_time=control_time,
+            revocation_checking_rule=revocation_checking_rule
+        )
+
+    job_futures = asyncio.as_completed(
+        _for_candidate_issuer(iss) for iss in candidate_issuers
+    )
+
+    poe_manager = validation_data_handlers.poe_manager
+
+    crls: List[CRLOfInterest] = []
+    ocsps: List[OCSPResponseOfInterest] = []
+    new_crls: Iterable[CRLOfInterest]
+    new_ocsps: Iterable[OCSPResponseOfInterest]
+    to_evict: Set[bytes] = set()
+    for fut_results in job_futures:
+        new_crls, new_ocsps = await fut_results
+        # Collect the revinfos for which we have POE for the issuer cert
+        # predating the expiration of the signer cert
+        for crl_oi in new_crls:
+            if _crl_issuer_cert_poe_boundary(
+                    crl_oi, cert.not_valid_after, poe_manager
+            ):
+                crls.append(crl_oi)
+            else:
+                revinfo_data = crl_oi.crl.crl_data.dump()
+                to_evict.add(digest_for_poe(revinfo_data))
+
+        for ocsp_oi in new_ocsps:
+            if _ocsp_issuer_cert_poe_boundary(
+                ocsp_oi, cert.not_valid_after, poe_manager
+            ):
+                ocsps.append(ocsp_oi)
+            else:
+                revinfo_data = ocsp_oi.ocsp_response.ocsp_response_data.dump()
+                to_evict.add(digest_for_poe(revinfo_data))
+    # we only run the eviction logic if we found at least one piece of revinfo
+    # that we can actually use (that's what the spec says, shouldn't change
+    # validation result, but the reported error probably makes more sense)
+    if crls or ocsps:
+        validation_data_handlers.revinfo_manager.evict_crls(to_evict)
+        validation_data_handlers.revinfo_manager.evict_ocsps(to_evict)
+    return crls, ocsps
+
+
+async def build_and_past_validate_cert(
+        cert: x509.Certificate,
+        validation_policy_spec: CertValidationPolicySpec,
+        validation_data_handlers: ValidationDataHandlers,
+        timing_info: ValidationTimingInfo,
+) -> Tuple[ValidationPath, datetime]:
+
+    path_builder = PathBuilder(
+        trust_manager=validation_policy_spec.trust_manager,
+        registry=validation_data_handlers.cert_registry
+    )
+
+    current_subindication = None
+    last_e = None
+    async for cand_path in path_builder.async_build_paths_lazy(cert):
+        try:
+            validation_time = await past_validate(
+                path=cand_path,
+                validation_policy_spec=validation_policy_spec,
+                validation_data_handlers=validation_data_handlers,
+                init_control_time=timing_info.validation_time,
+                use_poe_time=timing_info.use_poe_time,
+            )
+            return cand_path, validation_time
+        except TimeSlideFailure as e:
+            current_subindication = AdESIndeterminate.NO_POE
+            last_e = e
+        except errors.DisallowedAlgorithmError as e:
+            # This is not the NO_POE variant, but only triggered for
+            # outright bans
+            current_subindication = \
+                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+            last_e = e
+        except PathValidationError as e:
+            current_subindication = \
+                AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
+            last_e = e
+        except ValidationError as e:
+            # also covers precheck failures in the past validation algo
+            current_subindication = \
+                AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
+            last_e = e
+
+    subindication = current_subindication \
+                    or AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+    msg = "Unable to construct plausible past validation path"
+    if last_e is not None:
+        raise errors.SignatureValidationError(
+            failure_message=msg,
+            ades_subindication=subindication
+        ) from last_e
+    else:
+        raise errors.SignatureValidationError(
+            failure_message=f"{msg}: no prima facie paths constructed",
+            ades_subindication=subindication
+        )
+
+
+async def ades_past_signature_validation(
+        signed_data: cms.SignedData,
+        cert_validation_policy: CertValidationPolicySpec,
+        validation_time: datetime,
+        validation_data_handlers: ValidationDataHandlers,
+        current_time_sub_indic: Optional[AdESIndeterminate]):
+
+    signature_bytes = signed_data['signer_infos'][0]['signature'].native
+    timing_info = ValidationTimingInfo(
+        validation_time,
+        use_poe_time=validation_data_handlers.poe_manager[signature_bytes],
+        point_in_time_validation=True
+    )
+
+    if validation_data_handlers.revinfo_manager.fetching_allowed:
+        raise ValidationError(
+            "Revinfo managers for past validation must have fetching disabled"
+        )
+
+    try:
+        cert_info = extract_certificate_info(signed_data)
+        cert = cert_info.signer_cert
+    except CMSExtractionError:
+        raise errors.SignatureValidationError(
+            'signer certificate not included in signature',
+            ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+        )
+    leaf_crls, leaf_ocsps = await _find_revinfo_data_for_leaf_in_past(
+        cert, validation_data_handlers,
+        control_time=timing_info.validation_time,
+        revocation_checking_rule=(
+            cert_validation_policy
+            .revinfo_policy
+            .revocation_checking_policy
+            .ee_certificate_rule
+        )
+    )
+
+    # Key usage for the signer is not something that varies over time, so
+    # we delegate that to the caller. This is justified both because it's
+    # technically simpler, and because the past signature validation block
+    # in AdES is predicated on delegating the basic integrity checks anyhow.
+    cert_path, validation_time = await build_and_past_validate_cert(
+        cert, validation_policy_spec=cert_validation_policy,
+        validation_data_handlers=validation_data_handlers,
+        timing_info=timing_info
+    )
+
+    def _pass_contingent_on_revinfo_issuance_poe():
+        if not bool(leaf_crls or leaf_ocsps):
+            status = AdESIndeterminate.REVOCATION_OUT_OF_BOUNDS_NO_POE
+            raise errors.SignatureValidationError(
+                failure_message=(
+                    "POE for signature available, but could not obtain "
+                    "sufficient POE for the issuance of the "
+                    "revocation information",
+                ),
+                ades_subindication=status
+            )
+
+    if timing_info.use_poe_time <= validation_time:
+        # TODO here the algorithm also relies on revinfo eviction
+        if current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE:
+            _pass_contingent_on_revinfo_issuance_poe()
+            return
+        elif current_time_sub_indic == AdESIndeterminate.REVOKED_CA_NO_POE:
+            # TODO how can we get the revocation date for the CA here?
+            # depends on integration
+            raise NotImplementedError
+        elif current_time_sub_indic in (
+            AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
+            AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED
+        ):
+            if timing_info.use_poe_time < cert.not_valid_before:
+                raise errors.SignatureValidationError(
+                    failure_message="Signature predates cert validity period",
+                    ades_subindication=AdESFailure.NOT_YET_VALID
+                )
+            elif timing_info.use_poe_time <= cert.not_valid_after:
+                _pass_contingent_on_revinfo_issuance_poe()
+                return
+        elif current_time_sub_indic == \
+                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE:
+            # TODO how can we get the required date cutoffs here?
+            # depends on integration
+            raise NotImplementedError
+
+    # TODO also here, it would help to preserve more than the sub-indication
+    #  from before
+    raise errors.SigSeedValueValidationError(
+        failure_message=(
+            "Past signature validation did not manage "
+            "to improve current time result."
+        ),
+        ades_subindication=current_time_sub_indic
+    )
+

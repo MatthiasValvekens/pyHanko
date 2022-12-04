@@ -40,6 +40,7 @@ class AdESFailure(AdESSubIndic, enum.Enum):
     HASH_FAILURE = enum.auto()
     SIG_CRYPTO_FAILURE = enum.auto()
     REVOKED = enum.auto()
+    NOT_YET_VALID = enum.auto()
 
     @property
     def status(self):
@@ -61,6 +62,8 @@ class AdESIndeterminate(AdESSubIndic, enum.Enum):
     REVOKED_NO_POE = enum.auto()
     REVOKED_CA_NO_POE = enum.auto()
     OUT_OF_BOUNDS_NO_POE = enum.auto()
+    REVOCATION_OUT_OF_BOUNDS_NO_POE = enum.auto()
+    OUT_OF_BOUNDS_NOT_REVOKED = enum.auto()
     CRYPTO_CONSTRAINTS_FAILURE_NO_POE = enum.auto()
     NO_POE = enum.auto()
     TRY_LATER = enum.auto()
