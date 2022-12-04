@@ -581,7 +581,7 @@ class _PathWalker:
             if self._next_level is None:
                 # Fetch the next candidate issuer in the list
                 try:
-                    next_issuer = await anext(self._issuer_fetcher)
+                    next_issuer = await self._issuer_fetcher.__anext__()
                 except StopAsyncIteration as e:
                     if not self._issuer_fetcher.issuers_found:
                         self.failed_paths.append(self.path)
@@ -602,7 +602,7 @@ class _PathWalker:
             # check if next_level has any paths left, if not we clear it
             # and loop around to look at the next issuer
             try:
-                next_path = await anext(self._next_level)
+                next_path = await self._next_level.__anext__()
             except StopAsyncIteration:
                 self._next_level = None
         return next_path
@@ -635,7 +635,7 @@ class LazyPathIterator(CancelableAsyncIterator[ValidationPath]):
             return self._as_root
 
         try:
-            next_path = await anext(self._walker)
+            next_path = await self._walker.__anext__()
             self.emitted_count += 1
             return next_path
         except StopAsyncIteration:
