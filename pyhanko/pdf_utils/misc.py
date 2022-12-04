@@ -13,14 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
-from typing import (
-    AsyncGenerator,
-    Callable,
-    Generator,
-    Iterable,
-    Optional,
-    TypeVar,
-)
+from typing import Callable, Generator, Iterable, Optional, TypeVar
 
 __all__ = [
     'PdfError', 'PdfReadError', 'PdfStrictReadError',
@@ -36,6 +29,7 @@ __all__ = [
 ]
 
 import pytz
+from pyhanko_certvalidator import CancelableAsyncIterator
 
 DEFAULT_CHUNK_SIZE = 4096
 """
@@ -501,6 +495,16 @@ def isoparse(dt_str: str) -> datetime:
     return dt
 
 
-async def lift_iterable_async(i: Iterable[X]) -> AsyncGenerator[X, None]:
-    for x in i:
-        yield x
+class _LiftedIterable(CancelableAsyncIterator[X]):
+    async def __anext__(self) -> X:
+        return next(self.i)
+
+    async def cancel(self):
+        return
+
+    def __init__(self, i: Iterable[X]):
+        self.i = iter(i)
+
+
+async def lift_iterable_async(i: Iterable[X]) -> CancelableAsyncIterator[X]:
+    return _LiftedIterable(i)

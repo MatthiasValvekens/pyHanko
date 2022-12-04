@@ -506,19 +506,23 @@ async def build_and_past_validate_cert(
     )
 
     current_subindication = None
-    async for cand_path in path_builder.async_build_paths_lazy(cert):
-        current_subindication, revo_details, validation_time = \
-            generic_cms.handle_certvalidator_errors(
-                await past_validate(
-                    path=cand_path,
-                    validation_policy_spec=validation_policy_spec,
-                    validation_data_handlers=validation_data_handlers,
-                    init_control_time=timing_info.validation_time,
-                    best_signature_time=timing_info.best_signature_time,
+    paths = path_builder.async_build_paths_lazy(cert)
+    try:
+        async for cand_path in paths:
+            current_subindication, revo_details, validation_time = \
+                generic_cms.handle_certvalidator_errors(
+                    await past_validate(
+                        path=cand_path,
+                        validation_policy_spec=validation_policy_spec,
+                        validation_data_handlers=validation_data_handlers,
+                        init_control_time=timing_info.validation_time,
+                        best_signature_time=timing_info.best_signature_time,
+                    )
                 )
-            )
-        if current_subindication is None:
-            return cand_path, validation_time
+            if current_subindication is None:
+                return cand_path, validation_time
+    finally:
+        await paths.cancel()
 
     msg = "Unable to construct plausible past validation path"
     if current_subindication is not None:

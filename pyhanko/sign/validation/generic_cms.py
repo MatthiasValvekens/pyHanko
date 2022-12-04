@@ -1,22 +1,16 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import (
-    IO,
-    AsyncGenerator,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import IO, Iterable, List, Optional, Tuple, Type, TypeVar, Union
 
 from asn1crypto import cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
-from pyhanko_certvalidator import ValidationContext, find_valid_path
+from pyhanko_certvalidator import (
+    CancelableAsyncIterator,
+    ValidationContext,
+    find_valid_path,
+)
 from pyhanko_certvalidator.errors import (
     DisallowedAlgorithmError,
     ExpiredError,
@@ -412,11 +406,13 @@ async def cms_basic_validation(
         try:
             validation_context.certificate_registry\
                 .register_multiple(other_certs)
+
             if validation_path is not None:
                 paths = lift_iterable_async([validation_path])
             else:
                 paths = validation_context.path_builder\
                     .async_build_paths_lazy(cert)
+
             ades_status, revo_details, path = await validate_cert_usage(
                 cert, validation_context,
                 key_usage_settings=key_usage_settings,
@@ -440,7 +436,7 @@ async def validate_cert_usage(
         cert: x509.Certificate,
         validation_context: ValidationContext,
         key_usage_settings: KeyUsageConstraints,
-        paths: AsyncGenerator[ValidationPath, None],
+        paths: CancelableAsyncIterator[ValidationPath],
         pkix_validation_params: Optional[PKIXValidationParams] = None):
     """
     Low-level certificate validation routine.
