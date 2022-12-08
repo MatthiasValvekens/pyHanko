@@ -53,6 +53,7 @@ from .cms_embedder import (
     SigObjSetup,
 )
 from .pdf_byterange import (
+    BuildProps,
     DocumentTimestamp,
     PreparedByteRangeDigest,
     SignatureObject,
@@ -293,6 +294,14 @@ class PdfSignatureMetadata:
     signing is delegated to a trusted third party).
     """
 
+    app_build_props: Optional[BuildProps] = None
+    """
+    Properties of the application that created the signature.
+    
+    If specified, this data will be recorded in the **Prop_Build**
+    dictionary of the signature.
+    """
+    
     certify: bool = False
     """
     Sign with an author (certification) signature, as opposed to an approval
@@ -1964,6 +1973,7 @@ class PdfSigningSession:
             timestamp=system_time,
             name=name_specified if name_specified else None,
             location=signature_meta.location, reason=signature_meta.reason,
+            app_build_props=signature_meta.app_build_props,
         )
 
         # Pass in the SignatureObject settings

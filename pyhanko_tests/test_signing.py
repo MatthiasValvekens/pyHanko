@@ -32,6 +32,7 @@ from pyhanko.sign.general import (
     load_certs_from_pemder,
 )
 from pyhanko.sign.signers import cms_embedder
+from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.signers.pdf_cms import (
     ExternalSigner,
     PdfCMSSignedAttributes,
@@ -1460,3 +1461,41 @@ def test_rsa_with_sha3():
 
     extn, = r.root['/Extensions']['/ISO_']
     assert extn['/ExtensionLevel'] == 32001
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_build_props_app_name():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+        app_build_props=BuildProps(
+            name='Test Application'
+        )
+    )
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+    build_prop_dict = s.sig_object['/Prop_Build']['/App']
+    assert build_prop_dict['/Name'] == '/Test Application'
+    assert '/REx' not in build_prop_dict
+
+
+@freeze_time('2020-11-01')
+def test_sign_with_build_props_versioned_app_name():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+        app_build_props=BuildProps(
+            name='Test Application',
+            revision='1.2.3'
+        )
+    )
+
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+    build_prop_dict = s.sig_object['/Prop_Build']['/App']
+    assert build_prop_dict['/Name'] == '/Test Application'
+    assert build_prop_dict['/REx'] == '1.2.3'

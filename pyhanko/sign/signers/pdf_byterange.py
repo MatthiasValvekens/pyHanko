@@ -27,7 +27,7 @@ __all__ = [
     'PreparedByteRangeDigest',
     # PDF-level signature containers
     'PdfByteRangeDigest', 'PdfSignedData', 'SignatureObject',
-    'DocumentTimestamp',
+    'DocumentTimestamp', 'BuildProps'
 ]
 
 
@@ -336,6 +336,42 @@ class PdfSignedData(PdfByteRangeDigest):
             self[pdf_name('/M')] = pdf_date(timestamp)
 
 
+@dataclass(frozen=True)
+class BuildProps:
+    """
+    Entries in a signature build properties dictionary; see Adobe PDF Signature
+    Build Dictionary Specification.
+    """
+
+    name: str
+    """
+    The application's name.
+    """
+
+    revision: Optional[str] = None
+    """
+    The application's revision ID string.
+
+    .. note::
+        This corresponds to the **REx** entry in the build properties
+        dictionary.
+    """
+
+    def as_pdf_object(self) -> generic.DictionaryObject:
+        """
+        Render the build properties as a PDF object.
+
+        :return:
+            A PDF dictionary.
+        """
+        props = generic.DictionaryObject({
+            pdf_name("/Name"): pdf_name("/" + self.name)
+        })
+        if self.revision:
+            props['/REx'] = generic.TextStringObject(self.revision)
+        return props
+
+
 class SignatureObject(PdfSignedData):
     """
     Class modelling a (placeholder for) a regular PDF signature.
@@ -363,7 +399,9 @@ class SignatureObject(PdfSignedData):
 
     def __init__(self, timestamp: Optional[datetime] = None,
                  subfilter: SigSeedSubFilter = constants.DEFAULT_SIG_SUBFILTER,
-                 name=None, location=None, reason=None, bytes_reserved=None):
+                 name=None, location=None, reason=None,
+                 app_build_props: Optional[BuildProps] = None,
+                 bytes_reserved=None):
         super().__init__(
             obj_type=pdf_name('/Sig'), subfilter=subfilter,
             timestamp=timestamp, bytes_reserved=bytes_reserved
@@ -375,6 +413,10 @@ class SignatureObject(PdfSignedData):
             self[pdf_name('/Location')] = pdf_string(location)
         if reason:
             self[pdf_name('/Reason')] = pdf_string(reason)
+        if app_build_props:
+            self[pdf_name('/Prop_Build')] = generic.DictionaryObject({
+                pdf_name("/App"): app_build_props.as_pdf_object()
+            })
 
 
 class DocumentTimestamp(PdfSignedData):
