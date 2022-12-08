@@ -37,6 +37,7 @@ from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers, validation
 from pyhanko.sign.general import SigningError, load_certs_from_pemder
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
+from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.validation import RevocationInfoValidationType
@@ -804,7 +805,11 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         certify=certify, subfilter=subfilter,
         embed_validation_info=with_validation_info,
         validation_context=vc, signer_key_usage=key_usage,
-        use_pades_lta=use_pades_lta
+        use_pades_lta=use_pades_lta,
+        app_build_props=BuildProps(
+            name='pyHanko CLI',
+            revision=__version__
+        )
     )
     ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
     ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)
