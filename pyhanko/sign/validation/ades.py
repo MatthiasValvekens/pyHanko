@@ -26,6 +26,7 @@ from typing import (
     TypeVar,
 )
 
+import tzlocal
 from asn1crypto import cms
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto import tsp, x509
@@ -41,7 +42,10 @@ from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
 from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import RevocationCheckingRule
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsagePolicy,
+    RevocationCheckingRule,
+)
 from pyhanko_certvalidator.registry import PathBuilder, TrustManager
 from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
 from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
@@ -129,6 +133,51 @@ async def ades_timestamp_validation(
     return await _ades_timestamp_validation(
         tst_signed_data, validation_context, expected_tst_imprint
     )
+
+
+def _ades_signature_crypto_policy_check(
+        signer_info: cms.SignerInfo,
+        algo_policy: AlgorithmUsagePolicy,
+        control_time: datetime):
+
+    hash_algo = signer_info['digest_algorithm']['algorithm'].native
+    digest_allowed = algo_policy.digest_algorithm_allowed(
+        hash_algo,
+        control_time
+    )
+    if not digest_allowed:
+        msg = (
+            f"Digest algorithm {hash_algo} not allowed as "
+            f"of {control_time}."
+        )
+        raise errors.SignatureValidationError(
+            msg,
+            ades_subindication=(
+                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+                if digest_allowed.not_allowed_after is None
+                else AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+            )
+        )
+    sig_algo: cms.SignedDigestAlgorithm = \
+        signer_info['signature_algorithm']
+    sig_allowed = algo_policy.signature_algorithm_allowed(
+        sig_algo.signature_algo,
+        control_time
+    )
+    if not sig_allowed:
+        msg = (
+            f"Signature algorithm {sig_algo.signature_algo} not allowed as "
+            f"of {control_time}, which is "
+            f"the time of the earliest PoE for the signature."
+        )
+        raise errors.SignatureValidationError(
+            msg,
+            ades_subindication=(
+                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+                if digest_allowed.not_allowed_after is None
+                else AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+            )
+        )
 
 
 async def _ades_timestamp_validation(
@@ -714,7 +763,7 @@ def _get_tst_timestamp(sd: cms.SignedData) -> datetime:
 
 def _build_prima_facie_poe_index_from_pdf_timestamps(
         r: PdfFileReader,
-        include_content_ts: bool = False):
+        include_content_ts: bool):
     # This subroutine implements the POE gathering part of the evidence record
     # processing algorithm in AdES as applied to PDF. For the purposes of this
     # function, the chain of document timestamps is treated as a single evidence
@@ -730,7 +779,7 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
     # TODO take algorithm usage policy into account?
 
     # TODO when ingesting OCSP responses, make an effort to register
-    #  POE for the embedded certs as well? Esp. potiential responder certs.
+    #  POE for the embedded certs as well? Esp. potential responder certs.
 
     # timestamp -> hashes index. We haven't validated the chain of trust
     # of the timestamps yet, so we can't put them in an actual
@@ -866,8 +915,11 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
 async def _validate_prima_facie_poe(
         prima_facie_poe_sets: List[PrimaFaciePOE],
         cert_validation_policy: CertValidationPolicySpec,
+        # TODO this isn't really sound. It should be possible to specify
+        #  different ways of handling/fetching revinfo (since the spec
+        #  doesn't mention any of that, we can't assume one size fits all)
         init_validation_data_handlers: ValidationDataHandlers,
-        cur_timing_info: Optional[ValidationTimingInfo] = None):
+        cur_timing_info: Optional[ValidationTimingInfo] = None) -> POEManager:
 
     # Sort by PDF revision, but in ascending order (!)
     # This is a consequence of the way the ER validation algorithm works
@@ -875,7 +927,9 @@ async def _validate_prima_facie_poe(
         prima_facie_poe_sets, key=lambda p: p.pdf_revision
     )
 
-    cur_timing_info = cur_timing_info or ValidationTimingInfo.now()
+    cur_timing_info = cur_timing_info or ValidationTimingInfo.now(
+        tz=tzlocal.get_localzone()
+    )
 
     # We reuse the same revinfo manager and cert registry throughout,
     # assuming it contains all the stuff extracted from the DSS already
@@ -933,3 +987,237 @@ async def _validate_prima_facie_poe(
                     ades_subindication=sub_indic
                 )
     return resulting_poes
+
+
+_LTA_FURTHER_PROC = frozenset({
+    AdESPassed.OK,
+    AdESIndeterminate.REVOKED_NO_POE,
+    AdESIndeterminate.REVOKED_CA_NO_POE,
+    AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
+    AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED,
+    AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
+    AdESIndeterminate.REVOCATION_OUT_OF_BOUNDS_NO_POE
+})
+
+_LTA_TS_FURTHER_PROC = frozenset({
+    AdESIndeterminate.REVOKED_CA_NO_POE,
+    AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
+    AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED,
+    AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
+    AdESIndeterminate.REVOCATION_OUT_OF_BOUNDS_NO_POE
+})
+
+
+@dataclass(frozen=True)
+class AdESLTAValidationResult(AdESWithTimeValidationResult):
+    oldest_evidence_record_timestamp: Optional[datetime]
+    signature_timestamp_status: Optional[AdESBasicValidationResult]
+
+
+async def _process_signature_ts(
+        embedded_sig: EmbeddedPdfSignature,
+        cert_validation_policy: CertValidationPolicySpec,
+        validation_data_handlers: ValidationDataHandlers,
+        timing_info: Optional[ValidationTimingInfo]) \
+        -> Optional[AdESBasicValidationResult]:
+
+    signature_bytes = embedded_sig.signer_info['signature'].native
+    signature_ts: cms.SignedData = embedded_sig.attached_timestamp_data
+    algo_policy = cert_validation_policy.algorithm_usage_policy
+    if signature_ts is None:
+        return None
+
+    signature_ts_prelim_result = await ades_timestamp_validation(
+        tst_signed_data=signature_ts,
+        cert_validation_policy=cert_validation_policy,
+        timing_info=timing_info,
+        validation_data_handlers=validation_data_handlers,
+        expected_tst_imprint=embedded_sig.tst_signature_digest
+    )
+
+    ts_current_time_sub_indic = signature_ts_prelim_result.ades_subindic
+    if isinstance(ts_current_time_sub_indic, AdESIndeterminate) and \
+            ts_current_time_sub_indic in _LTA_TS_FURTHER_PROC:
+        try:
+            # TODO: in principle, we should also run this if the status is
+            #  PASSED already. Ensure that that is possible.
+            await _ades_past_signature_validation(
+                signed_data=signature_ts,
+                cert_validation_policy=cert_validation_policy,
+                validation_data_handlers=validation_data_handlers,
+                current_time_sub_indic=ts_current_time_sub_indic,
+                init_control_time=timing_info.validation_time
+            )
+            signature_ts_result = AdESBasicValidationResult(
+                ades_subindic=AdESPassed.OK,
+                # TODO update pyHanko status object as well
+                api_status=signature_ts_prelim_result.api_status,
+                failure_msg=None
+            )
+        except errors.SignatureValidationError as e:
+            signature_ts_result = AdESBasicValidationResult(
+                ades_subindic=e.ades_subindication,
+                failure_msg=e.failure_message,
+                api_status=signature_ts_prelim_result.api_status
+            )
+    else:
+        signature_ts_result = signature_ts_prelim_result
+
+    tst_info = signature_ts['encap_content_info']['content'].parsed
+    if algo_policy.digest_algorithm_allowed(
+            tst_info['message_imprint']['hash_algorithm'].native,
+            moment=timing_info.validation_time
+    ):
+        signature_ts_dt = tst_info['gen_time'].native
+        validation_data_handlers.poe_manager.register(
+            signature_bytes, signature_ts_dt
+        )
+    # TODO if/when we fully support signature policies, we should check
+    #  whether the policy requires a valid signature timestamp
+    return signature_ts_result
+
+
+async def ades_lta_validation(
+        embedded_sig: EmbeddedPdfSignature,
+        cert_validation_policy: CertValidationPolicySpec,
+        validation_data_handlers: ValidationDataHandlers,
+        key_usage_settings: KeyUsageConstraints,
+        timing_info: Optional[ValidationTimingInfo] = None,
+        signature_not_before_time: Optional[datetime] = None) \
+        -> AdESLTAValidationResult:
+
+    timing_info = timing_info or ValidationTimingInfo.now(
+        tz=tzlocal.get_localzone()
+    )
+
+    # (1) process DocTSes as ER
+    poe_list = _build_prima_facie_poe_index_from_pdf_timestamps(
+        embedded_sig.reader, include_content_ts=True
+    )
+
+    try:
+        updated_poe_manager = await _validate_prima_facie_poe(
+            poe_list, cert_validation_policy=cert_validation_policy,
+            init_validation_data_handlers=validation_data_handlers,
+            cur_timing_info=timing_info
+        )
+        # The POE list has been validated at this point,
+        # so we just pick out the oldest one
+        oldest_docts_record = min(
+            filter(
+                lambda poe: poe.pdf_revision > embedded_sig.signed_revision,
+                poe_list,
+            ),
+            key=lambda poe: poe.pdf_revision
+        )
+        oldest_evidence_record_timestamp = oldest_docts_record.timestamp_dt
+    except errors.SignatureValidationError as e:
+        logger.warning(
+            "Document timestamp chain failed to validate; proceeding "
+            "without past proof of existence.", e
+        )
+        updated_poe_manager = validation_data_handlers.poe_manager
+        oldest_evidence_record_timestamp = None
+
+    validation_data_handlers = ValidationDataHandlers(
+        revinfo_manager=validation_data_handlers.revinfo_manager,
+        poe_manager=updated_poe_manager,
+        cert_registry=validation_data_handlers.cert_registry
+    )
+
+    # (2) skipped, is automatic in our implementation
+
+    # (3) Run validation for signatures with time
+    signature_prelim_result = await ades_with_time_validation(
+        signed_data=embedded_sig.signed_data,
+        cert_validation_policy=cert_validation_policy,
+        timing_info=timing_info,
+        validation_data_handlers=validation_data_handlers,
+        key_usage_settings=key_usage_settings,
+        raw_digest=embedded_sig.compute_digest(),
+        signature_not_before_time=signature_not_before_time
+    )
+
+    # don't branch on policy here, we always continue as if archival info
+    # is present
+    current_time_sub_indic = signature_prelim_result.ades_subindic
+    if current_time_sub_indic not in _LTA_FURTHER_PROC:
+        raise errors.SignatureValidationError(
+            "Validation of signature at current time failed with "
+            f"indication {current_time_sub_indic}. Past validation not "
+            f"applicable."
+        )
+
+    # (4) Register PoE for the signature based on best_signature_time
+    signature_bytes = embedded_sig.signer_info['signature'].native
+    validation_data_handlers.poe_manager.register(
+        signature_bytes, signature_prelim_result.best_signature_time
+    )
+
+    # (5) process signature TS if present
+    signature_ts_result = await _process_signature_ts(
+        embedded_sig,
+        cert_validation_policy,
+        validation_data_handlers,
+        timing_info
+    )
+
+    # (6) past signature validation
+    if isinstance(current_time_sub_indic, AdESIndeterminate):
+        # TODO: in principle, we should also run this if the status is PASSED
+        #  already. Ensure that that is possible.
+        try:
+            await _ades_past_signature_validation(
+                signed_data=embedded_sig.signed_data,
+                cert_validation_policy=cert_validation_policy,
+                validation_data_handlers=validation_data_handlers,
+                current_time_sub_indic=current_time_sub_indic,
+                init_control_time=timing_info.validation_time
+            )
+        except errors.SignatureValidationError as e:
+            sig_poe = validation_data_handlers.poe_manager[signature_bytes]
+            return AdESLTAValidationResult(
+                ades_subindic=e.ades_subindication,
+                failure_msg=e.failure_message,
+                # TODO rewrite api_status
+                api_status=signature_prelim_result.api_status,
+                best_signature_time=sig_poe,
+                signature_not_before_time=(
+                    signature_prelim_result.signature_not_before_time
+                ),
+                signature_timestamp_status=signature_ts_result,
+                oldest_evidence_record_timestamp=(
+                    oldest_evidence_record_timestamp
+                )
+            )
+
+    # (7) get the oldest PoE for the signature
+    signature_poe_time = validation_data_handlers.poe_manager[signature_bytes]
+
+    # (8) perform SVA (=> only crypto checks)
+    try:
+        _ades_signature_crypto_policy_check(
+            embedded_sig.signer_info,
+            algo_policy=cert_validation_policy.algorithm_usage_policy,
+            control_time=signature_poe_time
+        )
+        ades_subindic = AdESPassed.OK
+        failure_msg = None
+    except errors.SignatureValidationError as e:
+        ades_subindic = e.ades_subindication
+        failure_msg = e.failure_message
+
+    return AdESLTAValidationResult(
+        ades_subindic=ades_subindic,
+        api_status=signature_prelim_result.api_status,
+        failure_msg=failure_msg,
+        best_signature_time=signature_poe_time,
+        signature_not_before_time=(
+            signature_prelim_result.signature_not_before_time
+        ),
+        signature_timestamp_status=signature_ts_result,
+
+        oldest_evidence_record_timestamp=(
+            oldest_evidence_record_timestamp
+        )
+    )
