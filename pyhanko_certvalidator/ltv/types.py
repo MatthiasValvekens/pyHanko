@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Optional
 
 __all__ = [
@@ -17,6 +17,15 @@ class ValidationTimingInfo:
     validation_time: datetime
     best_signature_time: datetime
     point_in_time_validation: bool
+
+    @classmethod
+    def now(cls, tz: Optional[tzinfo] = None):
+        now = datetime.now(tz=tz or timezone.utc)
+        ValidationTimingInfo(
+            validation_time=now,
+            best_signature_time=now,
+            point_in_time_validation=False,
+        )
 
 
 @dataclass(frozen=True)

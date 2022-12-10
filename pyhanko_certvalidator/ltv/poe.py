@@ -99,3 +99,8 @@ class POEManager:
             raise TypeError
         for digest, dt in iter(other):
             self.register_by_digest(digest, dt)
+
+    def __copy__(self):
+        new_instance = POEManager(current_dt_override=self._current_dt_override)
+        new_instance._poes = dict(self._poes)
+        return new_instance
