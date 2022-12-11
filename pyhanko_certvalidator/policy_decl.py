@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import FrozenSet, Optional
 
-from asn1crypto import x509
+from asn1crypto import algos, keys
 
-from .errors import DisallowedAlgorithmError
 from .name_trees import PKIXSubtrees
 
 DEFAULT_WEAK_HASH_ALGOS = frozenset(['md2', 'md5', 'sha1'])
@@ -365,6 +364,7 @@ class PKIXValidationParams:
 class AlgorithmUsageConstraint:
     allowed: bool
     not_allowed_after: Optional[datetime] = None
+    failure_reason: Optional[str] = None
 
     def __bool__(self):
         return self.allowed
@@ -375,37 +375,17 @@ class AlgorithmUsageConstraint:
 
 class AlgorithmUsagePolicy(abc.ABC):
     def digest_algorithm_allowed(
-        self, algo_name: str, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
     ) -> AlgorithmUsageConstraint:
         raise NotImplementedError
 
     def signature_algorithm_allowed(
-        self, algo_name: str, moment: Optional[datetime]
+        self,
+        algo: algos.SignedDigestAlgorithm,
+        moment: Optional[datetime],
+        public_key: Optional[keys.PublicKeyInfo],
     ) -> AlgorithmUsageConstraint:
         raise NotImplementedError
-
-    def enforce_for_certificate(
-        self, certificate: x509.Certificate, moment: Optional[datetime]
-    ):
-
-        hash_allowed = self.digest_algorithm_allowed(
-            certificate.hash_algo, moment
-        )
-        if not hash_allowed:
-            raise DisallowedAlgorithmError(
-                f"The X.509 certificate provided has a signature using the "
-                f"disallowed hash algorithm {certificate.hash_algo}",
-                banned_since=hash_allowed.not_allowed_after,
-            )
-        sig_allowed = self.signature_algorithm_allowed(
-            certificate.signature_algo, moment
-        )
-        if not sig_allowed:
-            raise DisallowedAlgorithmError(
-                f"The X.509 certificate provided has a signature using the "
-                f"disallowed signature algorithm {certificate.signature_algo}",
-                banned_since=sig_allowed.not_allowed_after,
-            )
 
 
 class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
@@ -419,18 +399,64 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
         self,
         weak_hash_algos=DEFAULT_WEAK_HASH_ALGOS,
         weak_signature_algos=frozenset(),
+        rsa_key_size_threshold=2048,
+        # TODO is this a reasonable default?
+        dsa_key_size_threshold=3192,
     ):
         self.weak_hash_algos = weak_hash_algos
         self.weak_signature_algos = weak_signature_algos
+        self.rsa_key_size_threshold = rsa_key_size_threshold
+        self.dsa_key_size_threshold = dsa_key_size_threshold
 
     def digest_algorithm_allowed(
-        self, algo_name: str, moment: Optional[datetime]
-    ) -> AlgorithmUsageConstraint:
-        return AlgorithmUsageConstraint(algo_name not in self.weak_hash_algos)
-
-    def signature_algorithm_allowed(
-        self, algo_name: str, moment: Optional[datetime]
+        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
     ) -> AlgorithmUsageConstraint:
         return AlgorithmUsageConstraint(
-            algo_name not in self.weak_signature_algos
+            algo['algorithm'].native not in self.weak_hash_algos
         )
+
+    def signature_algorithm_allowed(
+        self,
+        algo: algos.SignedDigestAlgorithm,
+        moment: Optional[datetime],
+        public_key: Optional[keys.PublicKeyInfo],
+    ) -> AlgorithmUsageConstraint:
+        algo_name = algo.signature_algo
+        algo_allowed = algo_name not in self.weak_signature_algos
+        is_rsa = algo_name.startswith('rsa')
+        is_dsa = algo_name == 'dsa'
+        if algo_allowed and public_key is not None and (is_rsa or is_dsa):
+            key_sz = public_key.bit_size
+            failed_threshold = None
+            if is_rsa and key_sz < self.rsa_key_size_threshold:
+                failed_threshold = self.rsa_key_size_threshold
+            elif is_dsa and key_sz < self.dsa_key_size_threshold:
+                failed_threshold = self.dsa_key_size_threshold
+            if failed_threshold is not None:
+                return AlgorithmUsageConstraint(
+                    allowed=False,
+                    failure_reason=(
+                        f"Key size {key_sz} for algorithm {algo_name} is "
+                        f"considered too small; "
+                        f"policy mandates >= {failed_threshold}"
+                    ),
+                )
+        try:
+            hash_algo = algo.hash_algo
+        except ValueError:
+            hash_algo = None
+        if algo_allowed and hash_algo is not None:
+            digest_allowed = self.digest_algorithm_allowed(
+                algos.DigestAlgorithm({'algorithm': algo.hash_algo}), moment
+            )
+            if not digest_allowed:
+                return AlgorithmUsageConstraint(
+                    allowed=False,
+                    failure_reason=(
+                        f"Digest algorithm {digest_allowed} is not allowed, "
+                        f"which disqualifies the signature mechanism "
+                        f"{algo['algorithm'].native} as well."
+                    ),
+                    not_allowed_after=digest_allowed.not_allowed_after,
+                )
+        return AlgorithmUsageConstraint(allowed=algo_allowed)

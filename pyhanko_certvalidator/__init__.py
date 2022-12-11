@@ -130,11 +130,7 @@ class CertificateValidator:
         if self._path is not None:
             return self._path
 
-        algorithm_policy = self._context.algorithm_policy
-        algo_moment = self._context.best_signature_time
         certificate = self._certificate
-
-        algorithm_policy.enforce_for_certificate(certificate, algo_moment)
 
         paths = self._context.path_builder.async_build_paths_lazy(certificate)
         self._path = candidate_path = await find_valid_path(

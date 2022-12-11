@@ -31,6 +31,7 @@ from pyhanko_certvalidator.fetchers import (
     requests_fetchers,
 )
 from pyhanko_certvalidator.path import QualifiedPolicy, ValidationPath
+from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
 from pyhanko_certvalidator.validate import async_validate_path, validate_path
 
 from .common import (
@@ -537,7 +538,10 @@ def test_nist_pkits(test_case: PKITSTestCase):
         other_certs=test_case.other_certs,
         crls=test_case.crls,
         revocation_mode=revocation_mode,
-        weak_hash_algos={'md2', 'md5'},
+        # adjust default algo policy to pass NIST tests
+        algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+            weak_hash_algos={'md2', 'md5'}, dsa_key_size_threshold=1024
+        ),
     )
 
     if test_case.path is None:

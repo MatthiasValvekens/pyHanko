@@ -1,11 +1,12 @@
 # coding: utf-8
 
 import asyncio
+import datetime
 import logging
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, Iterable, List, Optional, Set
 
-from asn1crypto import cms, core, x509
+from asn1crypto import algos, cms, core, x509
 from asn1crypto.x509 import Validity
 from cryptography.exceptions import InvalidSignature
 
@@ -40,6 +41,7 @@ from .name_trees import (
 )
 from .path import QualifiedPolicy, ValidationPath
 from .policy_decl import (
+    AlgorithmUsagePolicy,
     PKIXValidationParams,
     RevocationCheckingRule,
     intersect_policy_sets,
@@ -463,11 +465,10 @@ def _check_ac_signature(
 
     sd_algo = attr_cert['signature_algorithm']
     embedded_sd_algo = attr_cert['ac_info']['signature']
-    sd_algo_str = sd_algo['algorithm'].native
     use_time = validation_context.best_signature_time
     digest_allowed = (
-        validation_context.algorithm_policy.digest_algorithm_allowed(
-            sd_algo_str, use_time
+        validation_context.algorithm_policy.signature_algorithm_allowed(
+            sd_algo, use_time, public_key=aa_cert.public_key
         )
     )
     if sd_algo.native != embedded_sd_algo.native:
@@ -479,7 +480,7 @@ def _check_ac_signature(
         raise DisallowedAlgorithmError(
             "The attribute certificate could not be validated because "
             f"the signature uses the disallowed signature algorithm "
-            f"{sd_algo_str}. ",
+            f"{sd_algo['algorithm'].native}. ",
             is_ee_cert=True,
             is_side_validation=False,
             banned_since=digest_allowed.not_allowed_after,
@@ -487,21 +488,6 @@ def _check_ac_signature(
 
     signature_algo = sd_algo.signature_algo
     hash_algo = attr_cert['signature_algorithm'].hash_algo
-
-    signature_digest_allowed = (
-        validation_context.algorithm_policy.digest_algorithm_allowed(
-            hash_algo, use_time
-        )
-    )
-
-    if not signature_digest_allowed:
-        raise DisallowedAlgorithmError(
-            "The attribute certificate could not be validated because "
-            f"the signature uses the disallowed hash algorithm {hash_algo}",
-            is_ee_cert=True,
-            is_side_validation=False,
-            banned_since=signature_digest_allowed.not_allowed_after,
-        )
 
     try:
         validate_sig(
@@ -972,31 +958,28 @@ class _PathValidationState:
             )
 
     def check_certificate_signature(
-        self, cert, algorithm_policy, proc_state: ValProcState, moment
+        self,
+        cert: x509.Certificate,
+        algorithm_policy: AlgorithmUsagePolicy,
+        proc_state: ValProcState,
+        moment: datetime.datetime,
     ):
 
-        signature_algo = cert['signature_algorithm'].signature_algo
-        hash_algo = cert['signature_algorithm'].hash_algo
-
-        hash_algo_allowed = algorithm_policy.digest_algorithm_allowed(
-            hash_algo, moment
-        )
-        if not hash_algo_allowed:
-            raise DisallowedAlgorithmError.from_state(
-                f"The path could not be validated because the signature of "
-                f"{proc_state.describe_cert()} uses the disallowed hash "
-                f"algorithm {hash_algo}.",
-                proc_state,
-                banned_since=hash_algo_allowed.not_allowed_after,
-            )
+        sd_algo: algos.SignedDigestAlgorithm = cert['signature_algorithm']
+        sd_algo_name = sd_algo['algorithm'].native
         sig_algo_allowed = algorithm_policy.signature_algorithm_allowed(
-            signature_algo, moment
+            sd_algo, moment, public_key=self.working_public_key
         )
         if not sig_algo_allowed:
-            raise DisallowedAlgorithmError.from_state(
+            msg = (
                 f"The path could not be validated because the signature "
                 f"of {proc_state.describe_cert()} uses the disallowed "
-                f"signature algorithm {hash_algo}",
+                f"signature mechanism {sd_algo_name}."
+            )
+            if sig_algo_allowed.failure_reason is not None:
+                msg += f" Reason: {sig_algo_allowed.failure_reason}."
+            raise DisallowedAlgorithmError.from_state(
+                msg,
                 proc_state,
                 banned_since=sig_algo_allowed.not_allowed_after,
             )
@@ -1006,8 +989,8 @@ class _PathValidationState:
                 signature=cert['signature_value'].native,
                 signed_data=cert['tbs_certificate'].dump(),
                 public_key_info=self.working_public_key,
-                sig_algo=signature_algo,
-                hash_algo=hash_algo,
+                sig_algo=sd_algo.signature_algo,
+                hash_algo=sd_algo.hash_algo,
                 parameters=cert['signature_algorithm']['parameters'],
             )
         except PSSParameterMismatch:

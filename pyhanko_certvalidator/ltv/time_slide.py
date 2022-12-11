@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import List, Optional, Set, Tuple
 
-from asn1crypto import algos, x509
+from asn1crypto import algos, keys, x509
 
 from pyhanko_certvalidator._state import ValProcState
 from pyhanko_certvalidator.errors import (
@@ -99,30 +99,30 @@ def _apply_algo_policy(
     algo_policy: AlgorithmUsagePolicy,
     algo_used: algos.SignedDigestAlgorithm,
     control_time: datetime,
+    public_key: keys.PublicKeyInfo,
 ):
-    sig_algo = algo_used.signature_algo
     sig_constraint = algo_policy.signature_algorithm_allowed(
-        sig_algo, control_time
+        algo_used, control_time, public_key
     )
-    hash_algo = algo_used.hash_algo
-    digest_constraint = algo_policy.digest_algorithm_allowed(
-        hash_algo, control_time
-    )
-    constraints = ((sig_algo, sig_constraint), (hash_algo, digest_constraint))
-    for algo_name, constraint in constraints:
-        if not constraint.allowed:
-            if constraint.not_allowed_after:
-                # rewind the clock up until the point where the algorithm
-                # was actually permissible
-                control_time = min(control_time, constraint.not_allowed_after)
-            else:
-                raise DisallowedAlgorithmError(
-                    f"Algorithm {algo_name} is banned outright without "
-                    f"time constraints",
-                    is_ee_cert=False,
-                    is_side_validation=True,
-                    banned_since=None,
-                )
+    algo_name = algo_used['algorithm'].native
+    if not sig_constraint.allowed:
+        if sig_constraint.not_allowed_after:
+            # rewind the clock up until the point where the algorithm
+            # was actually permissible
+            control_time = min(control_time, sig_constraint.not_allowed_after)
+        else:
+            msg = (
+                f"Algorithm {algo_name} is banned outright without "
+                f"time constraints."
+            )
+            if sig_constraint.failure_reason is not None:
+                msg += f" Reason: {sig_constraint.failure_reason}"
+            raise DisallowedAlgorithmError(
+                msg,
+                is_ee_cert=False,
+                is_side_validation=True,
+                banned_since=None,
+            )
     return control_time
 
 
@@ -133,6 +133,7 @@ def _update_control_time(
     rev_trust_policy: CertRevTrustPolicy,
     time_tolerance: timedelta,
     algo_policy: Optional[AlgorithmUsagePolicy],
+    issuer_public_key: keys.PublicKeyInfo,
 ):
     if revoked_date:
         # this means we have to update control_time
@@ -165,7 +166,9 @@ def _update_control_time(
 
     algo_used = revinfo_container.revinfo_sig_mechanism_used
     if algo_policy is not None and algo_used is not None:
-        control_time = _apply_algo_policy(algo_policy, algo_used, control_time)
+        control_time = _apply_algo_policy(
+            algo_policy, algo_used, control_time, issuer_public_key
+        )
     return control_time
 
 
@@ -280,6 +283,8 @@ async def _time_slide(
                     delta_certificate_list_cont=candidate_crl_path.delta,
                     errs=_CRLErrs(),
                 )
+                crl_iss_cert = candidate_crl_path.path.leaf
+                assert isinstance(crl_iss_cert, x509.Certificate)
 
                 control_time = _update_control_time(
                     revoked_date,
@@ -288,6 +293,7 @@ async def _time_slide(
                     rev_trust_policy=rev_trust_policy,
                     time_tolerance=time_tolerance,
                     algo_policy=algo_usage_policy,
+                    issuer_public_key=crl_iss_cert.public_key,
                 )
         for ocsp_of_interest in ocsps:
 
@@ -322,6 +328,8 @@ async def _time_slide(
             except RevokedError as e:
                 revoked_date = e.revocation_dt
 
+            ocsp_iss_cert = ocsp_of_interest.prov_path.leaf
+            assert isinstance(ocsp_iss_cert, x509.Certificate)
             control_time = _update_control_time(
                 revoked_date,
                 control_time,
@@ -329,11 +337,16 @@ async def _time_slide(
                 rev_trust_policy=rev_trust_policy,
                 time_tolerance=time_tolerance,
                 algo_policy=algo_usage_policy,
+                issuer_public_key=ocsp_iss_cert.public_key,
             )
         # check the algorithm constraints for the certificate itself
         if algo_usage_policy is not None:
+            leaf_ca = list(current_path.iter_authorities())[-1]
             control_time = _apply_algo_policy(
-                algo_usage_policy, cert['signature_algorithm'], control_time
+                algo_usage_policy,
+                cert['signature_algorithm'],
+                control_time,
+                leaf_ca.public_key,
             )
 
     return control_time
