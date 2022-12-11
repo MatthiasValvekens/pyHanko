@@ -27,7 +27,7 @@ from typing import (
 )
 
 import tzlocal
-from asn1crypto import cms
+from asn1crypto import cms, keys
 from asn1crypto import pdf as asn1_pdf
 from asn1crypto import tsp, x509
 from pyhanko_certvalidator import ValidationContext
@@ -138,31 +138,12 @@ async def ades_timestamp_validation(
 def _ades_signature_crypto_policy_check(
         signer_info: cms.SignerInfo,
         algo_policy: AlgorithmUsagePolicy,
-        control_time: datetime):
+        control_time: datetime,
+        public_key: keys.PublicKeyInfo):
 
-    hash_algo = signer_info['digest_algorithm']['algorithm'].native
-    digest_allowed = algo_policy.digest_algorithm_allowed(
-        hash_algo,
-        control_time
-    )
-    if not digest_allowed:
-        msg = (
-            f"Digest algorithm {hash_algo} not allowed as "
-            f"of {control_time}."
-        )
-        raise errors.SignatureValidationError(
-            msg,
-            ades_subindication=(
-                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
-                if digest_allowed.not_allowed_after is None
-                else AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
-            )
-        )
-    sig_algo: cms.SignedDigestAlgorithm = \
-        signer_info['signature_algorithm']
+    sig_algo: cms.SignedDigestAlgorithm = signer_info['signature_algorithm']
     sig_allowed = algo_policy.signature_algorithm_allowed(
-        sig_algo.signature_algo,
-        control_time
+        sig_algo, control_time, public_key=public_key
     )
     if not sig_allowed:
         msg = (
@@ -174,7 +155,7 @@ def _ades_signature_crypto_policy_check(
             msg,
             ades_subindication=(
                 AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
-                if digest_allowed.not_allowed_after is None
+                if sig_allowed.not_allowed_after is None
                 else AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
             )
         )
@@ -1196,10 +1177,12 @@ async def ades_lta_validation(
 
     # (8) perform SVA (=> only crypto checks)
     try:
+        cert: x509.Certificate = signature_prelim_result.api_status.signing_cert
         _ades_signature_crypto_policy_check(
             embedded_sig.signer_info,
             algo_policy=cert_validation_policy.algorithm_usage_policy,
-            control_time=signature_poe_time
+            control_time=signature_poe_time,
+            public_key=cert.public_key
         )
         ades_subindic = AdESPassed.OK
         failure_msg = None

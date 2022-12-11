@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import IO, List, Optional, Set, Tuple, Union
 
 import tzlocal
-from asn1crypto import cms, crl, keys, ocsp
+from asn1crypto import algos, cms, crl, keys, ocsp
 from asn1crypto import pdf as asn1_pdf
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
@@ -1003,8 +1003,9 @@ class PdfSigner:
         )
         if algorithm_policy is not None:
             now = datetime.now()
+            md_algo_obj = algos.DigestAlgorithm({'algorithm': md_algorithm})
             if not algorithm_policy\
-                    .digest_algorithm_allowed(md_algorithm, now):
+                    .digest_algorithm_allowed(md_algo_obj, now):
                 raise SigningError(
                     f"The hash algorithm {md_algorithm} is not allowed in the "
                     f"specified validation context (usage policy of type "

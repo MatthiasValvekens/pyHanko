@@ -38,10 +38,9 @@ class SignatureValidationError(ValueErrorWithMessage):
 
 
 class DisallowedAlgorithmError(SignatureValidationError):
-    def __init__(self, algo_name):
-        self.algo_name = algo_name
+    def __init__(self, failure_message):
         super().__init__(
-            algo_name,
+            failure_message=failure_message,
             ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
         )
 

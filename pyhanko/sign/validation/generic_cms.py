@@ -221,9 +221,20 @@ def validate_sig_integrity(
         signer_info['signature_algorithm']
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
-    if algorithm_usage_policy is not None and not algorithm_usage_policy\
-            .digest_algorithm_allowed(md_algorithm, time_indic):
-        raise errors.DisallowedAlgorithmError(md_algorithm)
+    if algorithm_usage_policy is not None:
+        algo_allowed = algorithm_usage_policy.signature_algorithm_allowed(
+            signature_algorithm,
+            moment=time_indic,
+            public_key=cert.public_key
+        )
+        if not algo_allowed:
+            msg = (
+                f"The algorithm {signature_algorithm['algorithm'].native} "
+                f"is not allowed by the current usage policy."
+            )
+            if algo_allowed.failure_reason is not None:
+                msg += f" Reason: {algo_allowed.failure_reason}."
+            raise errors.DisallowedAlgorithmError(msg)
     signature = signer_info['signature'].native
 
     signed_attrs_orig: cms.CMSAttributes = signer_info['signed_attrs']
@@ -445,10 +456,6 @@ async def validate_cert_usage(
 
     async def _check():
         key_usage_settings.validate(cert)
-        if validation_context.algorithm_policy is not None:
-            validation_context.algorithm_policy.enforce_for_certificate(
-                cert, validation_context.best_signature_time
-            )
         return await find_valid_path(
             cert, paths,
             validation_context=validation_context,

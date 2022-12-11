@@ -5,6 +5,7 @@ from asn1crypto.algos import DigestAlgorithm, DigestInfo
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.sign import signers, timestamps
@@ -93,7 +94,12 @@ FROM_CA_PKCS12 = signers.SimpleSigner.load_pkcs12(
 NOTRUST_V_CONTEXT = lambda: ValidationContext(trust_roots=[])
 SIMPLE_V_CONTEXT = lambda: ValidationContext(trust_roots=[ROOT_CERT])
 SIMPLE_ECC_V_CONTEXT = lambda: ValidationContext(trust_roots=[ECC_ROOT_CERT])
-SIMPLE_DSA_V_CONTEXT = lambda: ValidationContext(trust_roots=[DSA_ROOT_CERT])
+SIMPLE_DSA_V_CONTEXT = lambda: ValidationContext(
+    trust_roots=[DSA_ROOT_CERT],
+    algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
+        dsa_key_size_threshold=1024
+    )
+)
 SIMPLE_ED25519_V_CONTEXT = lambda: ValidationContext(
     trust_roots=[ED25519_ROOT_CERT]
 )

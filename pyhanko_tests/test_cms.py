@@ -741,13 +741,13 @@ def test_forbidden_signature_algorithm():
             weak_signature_algos={'rsassa_pkcs1v15'}
         )
     )
-    with pytest.raises(DisallowedAlgorithmError, match="rsassa"):
+    with pytest.raises(DisallowedAlgorithmError, match="rsa"):
         val_trusted(r.embedded_signatures[0], vc=rsa_banned_vc)
 
 
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
-async def test_sign_weak_sig_digest():
+async def test_sign_weak_sig_digest_mismatch():
     # We have to jump through some hoops to put together a signature
     # where the signing method's digest is not the same as the "external"
     # digest. This is intentional, since it's bad practice.
@@ -767,7 +767,9 @@ async def test_sign_weak_sig_digest():
     cms_writer.send(cms_embedder.SigObjSetup(sig_placeholder=sig_obj))
 
     prep_digest, output = cms_writer.send(
-        cms_embedder.SigIOSetup(md_algorithm=external_md_algorithm, in_place=True)
+        cms_embedder.SigIOSetup(
+            md_algorithm=external_md_algorithm, in_place=True
+        )
     )
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
@@ -790,18 +792,51 @@ async def test_sign_weak_sig_digest():
     si_obj['signature'] = signer.sign_raw(attrs.untag().dump(), 'md5')
     cms_writer.send(cms_obj)
 
-    # we requested in-place output
-    assert output is input_buf
-
-    r = PdfFileReader(input_buf)
+    r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
-    with pytest.raises(DisallowedAlgorithmError):
-        await async_val_trusted(emb)
 
     lenient_vc = ValidationContext(
         trust_roots=[ROOT_CERT], weak_hash_algos=set()
     )
-    await async_val_trusted(emb, vc=lenient_vc)
+    with pytest.raises(
+            SignatureValidationError, match="sha256 does not match.*md5"
+    ):
+        await async_val_trusted(emb, vc=lenient_vc)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_weak_sig_digest():
+
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='md5'
+    )
+    out = await signers.async_sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    with pytest.raises(DisallowedAlgorithmError):
+        await async_val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_weak_sig_digest_allowed():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', md_algorithm='md5'
+    )
+    out = await signers.async_sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+
+    lenient_vc = ValidationContext(
+        trust_roots=[ROOT_CERT], weak_hash_algos=set()
+    )
+    status = await async_val_trusted(emb, vc=lenient_vc)
+    assert status.trusted
 
 
 @pytest.mark.parametrize("with_issser", [False, True])

@@ -17,6 +17,7 @@ from pyhanko_certvalidator.policy_decl import (
     DisallowWeakAlgorithmsPolicy,
 )
 
+from ..ades.report import AdESIndeterminate
 from ..general import (
     MultivaluedAttributeError,
     NonexistentAttributeError,
@@ -42,20 +43,37 @@ def validate_raw(
     """
     Validate a raw signature. Internal API.
     """
-    try:
-        sig_md_algorithm = signature_algorithm.hash_algo
-    except (ValueError, AttributeError):
-        sig_md_algorithm = None
+    if algorithm_policy is not None:
+        sig_algo_allowed = algorithm_policy.signature_algorithm_allowed(
+            signature_algorithm, moment=time_indic,
+            public_key=cert.public_key
+        )
+        if not sig_algo_allowed:
+            msg = (
+                f"Signature algorithm "
+                f"{signature_algorithm['algorithm'].native} is not allowed "
+                f"by the current usage policy."
+            )
+            if sig_algo_allowed.failure_reason is not None:
+                msg += f" Reason: {sig_algo_allowed.failure_reason}"
+            raise DisallowedAlgorithmError(msg)
 
-    if sig_md_algorithm is not None:
-        if algorithm_policy is not None and not algorithm_policy\
-                .digest_algorithm_allowed(sig_md_algorithm, time_indic):
-            raise DisallowedAlgorithmError(md_algorithm)
-        md_algorithm = sig_md_algorithm.upper()
-    signature_algo = signature_algorithm.signature_algo
-    if algorithm_policy is not None and not algorithm_policy \
-            .signature_algorithm_allowed(signature_algo, time_indic):
-        raise DisallowedAlgorithmError(signature_algo)
+    try:
+        sig_hash_algo = cms.DigestAlgorithm(
+            {'algorithm': signature_algorithm.hash_algo}
+        )
+    except ValueError:
+        sig_hash_algo = None
+
+    hash_algo_obj = cms.DigestAlgorithm({'algorithm': md_algorithm})
+    if sig_hash_algo is not None \
+            and sig_hash_algo.dump() != hash_algo_obj.dump():
+        raise SignatureValidationError(
+            f"Digest algorithm {hash_algo_obj['algorithm'].native} does not "
+            f"match value implied by signature algorithm "
+            f"{signature_algorithm['algorithm'].native}",
+            ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+        )
 
     verify_md = get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
 
