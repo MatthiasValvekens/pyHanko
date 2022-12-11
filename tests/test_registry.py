@@ -4,6 +4,8 @@ import unittest
 import os
 
 from asn1crypto import pem, x509
+
+from pyhanko_certvalidator.fetchers.requests_fetchers import RequestsCertificateFetcher
 from pyhanko_certvalidator.registry import CertificateRegistry
 
 
@@ -62,3 +64,24 @@ class RegistryTests(unittest.IsolatedAsyncioTestCase):
             ],
             [item.subject.sha1 for item in path]
         )
+
+    async def test_basic_certificate_validator_tls_aia(self):
+        #google.com    -> application/pkix-cert
+        #www.cnn.com   -> application/x-x509-ca-cert
+        #microsoft.com -> application/octet-stream (DER)
+        #southwest.com -> application/pkcs7-mime
+        #xuite.net     -> application/x-pkcs7-certificates
+        #icpedu.rnp.br -> application/octet-stream (PEM)
+        AIA_TEST_DOMAIN_LIST = ["google.com", "www.cnn.com", "microsoft.com",
+                                "southwest.com", "xuite.net", "icpedu.rnp.br"]
+        with open(os.path.join(fixtures_dir, 'testing-aia', 'root-icpedu.rnp.br'), 'rb') as f:
+            other_certs = [x509.Certificate.load(f.read())]
+        registry = CertificateRegistry(
+            extra_trust_roots=other_certs,
+            cert_fetcher=RequestsCertificateFetcher()
+        )
+        for domain in AIA_TEST_DOMAIN_LIST:
+            with open(os.path.join(fixtures_dir, 'testing-aia', domain), 'rb') as f:
+                cert = x509.Certificate.load(f.read())
+                paths = await registry.async_build_paths(end_entity_cert=cert)
+                assert len(paths) >= 1
