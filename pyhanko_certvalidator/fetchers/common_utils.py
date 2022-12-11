@@ -24,6 +24,8 @@ __all__ = [
     'gather_aia_issuer_urls',
     'ACCEPTABLE_STRICT_CERT_CONTENT_TYPES',
     'ACCEPTABLE_CERT_PEM_ALIASES',
+    'ACCEPTABLE_PKCS7_DER_ALIASES',
+    'ACCEPTABLE_CERT_DER_ALIASES',
 ]
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ ACCEPTABLE_STRICT_CERT_CONTENT_TYPES = frozenset(
         'application/pkix-cert',
         'application/pkcs7-mime',
         'application/x-x509-ca-cert',
+        'application/x-pkcs7-certificates',
     ]
 )
 
@@ -41,6 +44,23 @@ ACCEPTABLE_CERT_PEM_ALIASES = frozenset(
     [
         'application/x-pem-file',
         'text/plain',
+        'application/octet-stream',
+    ]
+)
+
+ACCEPTABLE_CERT_DER_ALIASES = frozenset(
+    [
+        'application/pkix-cert',
+        'application/x-x509-ca-cert',
+        'application/octet-stream',
+    ]
+)
+
+
+ACCEPTABLE_PKCS7_DER_ALIASES = frozenset(
+    [
+        'application/pkcs7-mime',
+        'application/x-pkcs7-certificates',
     ]
 )
 
@@ -51,9 +71,10 @@ def unpack_cert_content(
     url: str,
     permit_pem: bool,
 ):
-
-    der_types = ('application/pkix-cert', 'application/x-x509-ca-cert')
-    if content_type is None or content_type in der_types:
+    if (
+        content_type is None or content_type in ACCEPTABLE_CERT_DER_ALIASES
+    ) and not pem.detect(response_data):
+        # sometimes we get DER over octet-stream
         if content_type is None:
             logger.warning(
                 f"Response to certificate fetch request to {url} did not "
@@ -61,31 +82,38 @@ def unpack_cert_content(
                 f"DER-encoded X.509 certificate."
             )
         yield x509.Certificate.load(response_data)
+    elif content_type in ACCEPTABLE_PKCS7_DER_ALIASES:
+        yield from _unpack_der_pkcs7(response_data, url)
     elif permit_pem and (content_type in ACCEPTABLE_CERT_PEM_ALIASES):
         # technically, PEM is not allowed here, but of course some people don't
         # bother following the rules
         if pem.detect(response_data):
-            for _, _, data in pem.unarmor(response_data, multiple=True):
-                yield x509.Certificate.load(data)
+            for type_name, _, data in pem.unarmor(response_data, multiple=True):
+                if type_name == 'PKCS7':
+                    yield from _unpack_der_pkcs7(data, url)
+                else:
+                    yield x509.Certificate.load(data)
         else:
             raise ValueError(
                 "Expected PEM data when extracting certs from "
                 f"{content_type} payload. Source URL: {url}."
             )
-    elif content_type == 'application/pkcs7-mime':
-        content_info: cms.ContentInfo = cms.ContentInfo.load(response_data)
-        cms_ct = content_info['content_type'].native
-        if cms_ct != 'signed_data':
-            raise ValueError(
-                "Expected CMS SignedData when extracting certs from "
-                "application/pkcs7-mime payload, but content type was "
-                f"'{cms_ct}'. Source URL: {url}."
-            )
-        signed_data = content_info['content']
-        if isinstance(signed_data['certificates'], cms.CertificateSet):
-            for cert_choice in signed_data['certificates']:
-                if cert_choice.name == 'certificate':
-                    yield cert_choice.chosen
+
+
+def _unpack_der_pkcs7(pkcs7_data: bytes, pkcs7_url: str):
+    content_info: cms.ContentInfo = cms.ContentInfo.load(pkcs7_data)
+    cms_ct = content_info['content_type'].native
+    if cms_ct != 'signed_data':
+        raise ValueError(
+            "Expected CMS SignedData when extracting certs from "
+            "application/pkcs7-mime payload, but content type was "
+            f"'{cms_ct}'. Source URL: {pkcs7_url}."
+        )
+    signed_data = content_info['content']
+    if isinstance(signed_data['certificates'], cms.CertificateSet):
+        for cert_choice in signed_data['certificates']:
+            if cert_choice.name == 'certificate':
+                yield cert_choice.chosen
 
 
 def get_certid(

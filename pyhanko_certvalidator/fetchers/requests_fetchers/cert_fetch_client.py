@@ -7,7 +7,9 @@ from asn1crypto import cms, x509
 from ...errors import CertificateFetchError
 from ..api import CertificateFetcher
 from ..common_utils import (
+    ACCEPTABLE_CERT_DER_ALIASES,
     ACCEPTABLE_CERT_PEM_ALIASES,
+    ACCEPTABLE_PKCS7_DER_ALIASES,
     ACCEPTABLE_STRICT_CERT_CONTENT_TYPES,
     complete_certificate_fetch_jobs,
     gather_aia_issuer_urls,
@@ -103,6 +105,8 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
             acceptable_cts = (
                 ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
                 | ACCEPTABLE_CERT_PEM_ALIASES
+                | ACCEPTABLE_CERT_DER_ALIASES
+                | ACCEPTABLE_PKCS7_DER_ALIASES
             )
         else:
             acceptable_cts = ACCEPTABLE_STRICT_CERT_CONTENT_TYPES
