@@ -1,5 +1,10 @@
 # changelog
 
+
+## 0.19.7
+
+ - Make certificate fetcher more tolerant (see #2)
+
 ## 0.19.6
 
  - Update `asn1crypto` to `1.5.1`
