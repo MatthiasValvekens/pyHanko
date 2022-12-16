@@ -132,12 +132,13 @@ def format_ocsp_request(cert: x509.Certificate, issuer: x509.Certificate,
     })
 
     if request_nonces:
-        nonce_extension = ocsp.TBSRequestExtension({
-            'extn_id': 'nonce',
-            'critical': False,
-            'extn_value': core.OctetString(
-                core.OctetString(os.urandom(16)).dump())
-        })
+        nonce_extension = ocsp.TBSRequestExtension(
+            {
+                'extn_id': 'nonce',
+                'critical': False,
+                'extn_value': core.OctetString(os.urandom(16)),
+            }
+        )
         tbs_request['request_extensions'] = ocsp.TBSRequestExtensions(
             [nonce_extension]
         )
