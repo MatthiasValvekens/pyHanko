@@ -167,9 +167,7 @@ def format_ocsp_request(
             {
                 'extn_id': 'nonce',
                 'critical': False,
-                'extn_value': core.OctetString(
-                    core.OctetString(os.urandom(16)).dump()
-                ),
+                'extn_value': core.OctetString(os.urandom(16)),
             }
         )
         tbs_request['request_extensions'] = ocsp.TBSRequestExtensions(
