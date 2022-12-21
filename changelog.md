@@ -1,6 +1,10 @@
 # changelog
 
 
+## 0.19.8
+
+ - Fix double encoding when generating OCSP nonces
+
 ## 0.19.7
 
  - Make certificate fetcher more tolerant (see #2)
