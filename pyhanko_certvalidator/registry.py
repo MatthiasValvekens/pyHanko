@@ -88,7 +88,7 @@ class CertificateStore(CertificateCollection, abc.ABC):
         """
         raise NotImplementedError
 
-    def register_multiple(self, certs):
+    def register_multiple(self, certs: Iterable[x509.Certificate]):
         """
         Register multiple certificates.
 

@@ -527,6 +527,7 @@ def bootstrap_validation_data_handlers(
     fetchers: Union[Fetchers, FetcherBackend, None] = RequestsFetcherBackend(),
     crls: Iterable[CRLContainer] = (),
     ocsps: Iterable[OCSPContainer] = (),
+    certs: Iterable[x509.Certificate] = (),
 ) -> ValidationDataHandlers:
     """
     Simple bootstrapping method for a :class:`.ValidationDataHandlers`
@@ -541,6 +542,8 @@ def bootstrap_validation_data_handlers(
     :param ocsps:
         Initial collection of OCSP responses to feed to the revocation info
         manager.
+    :param certs:
+        Initial collection of certificates to add to the certificate registry.
     :return:
         A :class:`.ValidationDataHandlers` object.
     """
@@ -557,6 +560,7 @@ def bootstrap_validation_data_handlers(
     cert_registry = CertificateRegistry(
         cert_fetcher=_fetchers.cert_fetcher if _fetchers is not None else None
     )
+    cert_registry.register_multiple(certs)
     revinfo_manager = RevinfoManager(
         certificate_registry=cert_registry,
         poe_manager=poe_manager,
