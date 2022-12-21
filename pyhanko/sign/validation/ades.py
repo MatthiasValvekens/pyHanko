@@ -36,7 +36,6 @@ from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
 )
-from pyhanko_certvalidator.errors import ValidationError
 from pyhanko_certvalidator.ltv.ades_past import past_validate
 from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
 from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
@@ -82,6 +81,11 @@ from pyhanko.sign.validation.status import (
     TimestampSignatureStatus,
 )
 
+from .policy_decl import (
+    SignatureValidationSpec,
+    bootstrap_validation_data_handlers,
+)
+
 logger = logging.getLogger(__name__)
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
@@ -122,15 +126,28 @@ class _InternalBasicValidationResult:
 
 async def ades_timestamp_validation(
         tst_signed_data: cms.SignedData,
-        cert_validation_policy: CertValidationPolicySpec,
         timing_info: ValidationTimingInfo,
-        validation_data_handlers: ValidationDataHandlers,
-        expected_tst_imprint: bytes) -> AdESBasicValidationResult:
+        validation_spec: SignatureValidationSpec,
+        expected_tst_imprint: bytes,
+        validation_data_handlers: Optional[ValidationDataHandlers] = None) \
+        -> AdESBasicValidationResult:
+
+    cert_validation_policy = (
+        validation_spec.ts_cert_validation_policy
+        or validation_spec.cert_validation_policy
+    )
+
+    if validation_data_handlers is None:
+        validation_data_handlers = bootstrap_validation_data_handlers(
+            spec=validation_spec,
+            timing_info=timing_info
+        )
+
     validation_context = cert_validation_policy.build_validation_context(
         timing_info=timing_info,
         handlers=validation_data_handlers
     )
-    return await _ades_timestamp_validation(
+    return await _ades_timestamp_validation_from_context(
         tst_signed_data, validation_context, expected_tst_imprint
     )
 
@@ -161,7 +178,7 @@ def _ades_signature_crypto_policy_check(
         )
 
 
-async def _ades_timestamp_validation(
+async def _ades_timestamp_validation_from_context(
         tst_signed_data: cms.SignedData,
         validation_context: ValidationContext,
         expected_tst_imprint: bytes) -> AdESBasicValidationResult:
@@ -202,7 +219,7 @@ async def _ades_process_attached_ts(signer_info, validation_context,
         -> AdESBasicValidationResult:
     tst_signed_data = generic_cms.extract_tst_data(signer_info, signed=signed)
     if tst_signed_data is not None:
-        return await _ades_timestamp_validation(
+        return await _ades_timestamp_validation_from_context(
             tst_signed_data, validation_context,
             generic_cms.compute_signature_tst_digest(signer_info),
         )
@@ -267,20 +284,22 @@ async def _process_basic_validation(
 
 async def ades_basic_validation(
         signed_data: cms.SignedData,
-        # FIXME: streamline validation context bootstrapping, in particular
-        #  it's not yet clear to me how we should handle init for
-        #  ValidationDataHandlers in the general case
-        cert_validation_policy: CertValidationPolicySpec,
         timing_info: ValidationTimingInfo,
-        validation_data_handlers: ValidationDataHandlers,
+        validation_spec: SignatureValidationSpec,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESBasicValidationResult:
+    cert_validation_policy = validation_spec.cert_validation_policy
+    validation_data_handlers = bootstrap_validation_data_handlers(
+        spec=validation_spec,
+        timing_info=timing_info
+    )
     validation_context = cert_validation_policy.build_validation_context(
         timing_info=timing_info,
         handlers=validation_data_handlers
     )
+
     interm_result = await _ades_basic_validation(
         signed_data=signed_data,
         validation_context=validation_context,
@@ -360,13 +379,20 @@ _WITH_TIME_FURTHER_PROC = frozenset({
 
 async def ades_with_time_validation(
         signed_data: cms.SignedData,
-        cert_validation_policy: CertValidationPolicySpec,
         timing_info: ValidationTimingInfo,
-        validation_data_handlers: ValidationDataHandlers,
+        validation_spec: SignatureValidationSpec,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes] = None,
+        poe_manager: Optional[POEManager] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESWithTimeValidationResult:
+
+    cert_validation_policy = validation_spec.cert_validation_policy
+    validation_data_handlers = bootstrap_validation_data_handlers(
+        spec=validation_spec,
+        timing_info=timing_info,
+        poe_manager_override=poe_manager
+    )
     validation_context = cert_validation_policy.build_validation_context(
         timing_info=timing_info,
         handlers=validation_data_handlers
@@ -561,7 +587,7 @@ async def _find_revinfo_data_for_leaf_in_past(
     return crls, ocsps
 
 
-async def build_and_past_validate_cert(
+async def _build_and_past_validate_cert(
         cert: x509.Certificate,
         validation_policy_spec: CertValidationPolicySpec,
         validation_data_handlers: ValidationDataHandlers,
@@ -606,18 +632,19 @@ async def build_and_past_validate_cert(
 
 async def _ades_past_signature_validation(
         signed_data: cms.SignedData,
-        cert_validation_policy: CertValidationPolicySpec,
-        validation_data_handlers: ValidationDataHandlers,
+        validation_spec: SignatureValidationSpec,
+        poe_manager: POEManager,
         current_time_sub_indic: Optional[AdESIndeterminate],
-        init_control_time: Optional[datetime]):
+        init_control_time: Optional[datetime],
+        is_timestamp: bool):
+
+    validation_data_handlers = bootstrap_validation_data_handlers(
+        validation_spec, is_historical=True,
+        poe_manager_override=poe_manager
+    )
 
     signature_bytes = signed_data['signer_infos'][0]['signature'].native
-    best_signature_time = validation_data_handlers.poe_manager[signature_bytes]
-
-    if validation_data_handlers.revinfo_manager.fetching_allowed:
-        raise ValidationError(
-            "Revinfo managers for past validation must have fetching disabled"
-        )
+    best_signature_time = poe_manager[signature_bytes]
 
     try:
         cert_info = extract_certificate_info(signed_data)
@@ -627,6 +654,14 @@ async def _ades_past_signature_validation(
             'signer certificate not included in signature',
             ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
         )
+
+    if is_timestamp:
+        cert_validation_policy = (
+            validation_spec.ts_cert_validation_policy
+            or validation_spec.cert_validation_policy
+        )
+    else:
+        cert_validation_policy = validation_spec.cert_validation_policy
     leaf_crls, leaf_ocsps = await _find_revinfo_data_for_leaf_in_past(
         cert, validation_data_handlers,
         control_time=init_control_time,
@@ -642,7 +677,7 @@ async def _ades_past_signature_validation(
     # we delegate that to the caller. This is justified both because it's
     # technically simpler, and because the past signature validation block
     # in AdES is predicated on delegating the basic integrity checks anyhow.
-    cert_path, validation_time = await build_and_past_validate_cert(
+    cert_path, validation_time = await _build_and_past_validate_cert(
         cert, validation_policy_spec=cert_validation_policy,
         validation_data_handlers=validation_data_handlers,
     )
@@ -698,18 +733,22 @@ async def _ades_past_signature_validation(
 
 async def ades_past_signature_validation(
         signed_data: cms.SignedData,
-        cert_validation_policy: CertValidationPolicySpec,
-        validation_data_handlers: ValidationDataHandlers,
+        validation_spec: SignatureValidationSpec,
+        poe_manager: POEManager,
         current_time_sub_indic: Optional[AdESIndeterminate],
         init_control_time: Optional[datetime] = None) -> AdESSubIndic:
+
+    eci = signed_data['content']['encap_content_info']
+    is_timestamp = eci['content_type'].native == 'tst_info'
 
     try:
         await _ades_past_signature_validation(
             signed_data=signed_data,
-            cert_validation_policy=cert_validation_policy,
-            validation_data_handlers=validation_data_handlers,
+            validation_spec=validation_spec,
+            poe_manager=poe_manager,
             current_time_sub_indic=current_time_sub_indic,
             init_control_time=init_control_time,
+            is_timestamp=is_timestamp
         )
         return AdESPassed.OK
     except errors.SignatureValidationError as e:
@@ -895,11 +934,10 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
 
 async def _validate_prima_facie_poe(
         prima_facie_poe_sets: List[PrimaFaciePOE],
-        cert_validation_policy: CertValidationPolicySpec,
-        # TODO this isn't really sound. It should be possible to specify
-        #  different ways of handling/fetching revinfo (since the spec
-        #  doesn't mention any of that, we can't assume one size fits all)
-        init_validation_data_handlers: ValidationDataHandlers,
+        # we assume that the validation info extracted from the DSS
+        # has been registered in the revinfo gathering policy object
+        # and/or the known cert list, respectively
+        validation_spec: SignatureValidationSpec,
         cur_timing_info: Optional[ValidationTimingInfo] = None) -> POEManager:
 
     # Sort by PDF revision, but in ascending order (!)
@@ -912,10 +950,8 @@ async def _validate_prima_facie_poe(
         tz=tzlocal.get_localzone()
     )
 
-    # We reuse the same revinfo manager and cert registry throughout,
-    # assuming it contains all the stuff extracted from the DSS already
-    resulting_poes = copy(init_validation_data_handlers.poe_manager)
-    validation_data_handlers = init_validation_data_handlers
+    resulting_poes = POEManager()
+    validation_spec.local_knowledge.add_to_poe_manager(resulting_poes)
 
     for ix, poe in enumerate(candidate_poes):
         temporary_poes = copy(resulting_poes)
@@ -924,17 +960,16 @@ async def _validate_prima_facie_poe(
             next_poe = candidate_poes[ix + 1]
             next_poe.add_to_poe_manager(temporary_poes)
 
-        validation_data_handlers = ValidationDataHandlers(
-            cert_registry=validation_data_handlers.cert_registry,
-            revinfo_manager=validation_data_handlers.revinfo_manager,
-            poe_manager=temporary_poes,
+        validation_data_handlers = bootstrap_validation_data_handlers(
+            validation_spec, timing_info=cur_timing_info,
+            poe_manager_override=temporary_poes
         )
         cur_time_result = await ades_timestamp_validation(
             tst_signed_data=poe.timestamp_token_signed_data,
-            cert_validation_policy=cert_validation_policy,
+            validation_spec=validation_spec,
             timing_info=cur_timing_info,
-            validation_data_handlers=validation_data_handlers,
             expected_tst_imprint=poe.doc_digest,
+            validation_data_handlers=validation_data_handlers
         )
         cur_status = cur_time_result.api_status
         sub_indic = cur_time_result.ades_subindic
@@ -954,8 +989,8 @@ async def _validate_prima_facie_poe(
             assert isinstance(sub_indic, AdESIndeterminate)
             past_result = await ades_past_signature_validation(
                 signed_data=poe.timestamp_token_signed_data,
-                cert_validation_policy=cert_validation_policy,
-                validation_data_handlers=validation_data_handlers,
+                validation_spec=validation_spec,
+                poe_manager=temporary_poes,
                 current_time_sub_indic=sub_indic,
                 init_control_time=cur_timing_info.validation_time,
             )
@@ -997,23 +1032,30 @@ class AdESLTAValidationResult(AdESWithTimeValidationResult):
 
 async def _process_signature_ts(
         embedded_sig: EmbeddedPdfSignature,
-        cert_validation_policy: CertValidationPolicySpec,
-        validation_data_handlers: ValidationDataHandlers,
+        validation_spec: SignatureValidationSpec,
+        poe_manager: POEManager,
         timing_info: Optional[ValidationTimingInfo]) \
         -> Optional[AdESBasicValidationResult]:
 
     signature_bytes = embedded_sig.signer_info['signature'].native
     signature_ts: cms.SignedData = embedded_sig.attached_timestamp_data
+    cert_validation_policy = (
+        validation_spec.ts_cert_validation_policy
+        or validation_spec.cert_validation_policy
+    )
     algo_policy = cert_validation_policy.algorithm_usage_policy
     if signature_ts is None:
         return None
 
     signature_ts_prelim_result = await ades_timestamp_validation(
         tst_signed_data=signature_ts,
-        cert_validation_policy=cert_validation_policy,
+        validation_spec=validation_spec,
         timing_info=timing_info,
-        validation_data_handlers=validation_data_handlers,
-        expected_tst_imprint=embedded_sig.tst_signature_digest
+        expected_tst_imprint=embedded_sig.tst_signature_digest,
+        validation_data_handlers=bootstrap_validation_data_handlers(
+            validation_spec, timing_info=timing_info,
+            poe_manager_override=poe_manager
+        )
     )
 
     ts_current_time_sub_indic = signature_ts_prelim_result.ades_subindic
@@ -1024,10 +1066,11 @@ async def _process_signature_ts(
             #  PASSED already. Ensure that that is possible.
             await _ades_past_signature_validation(
                 signed_data=signature_ts,
-                cert_validation_policy=cert_validation_policy,
-                validation_data_handlers=validation_data_handlers,
+                validation_spec=validation_spec,
+                poe_manager=poe_manager,
                 current_time_sub_indic=ts_current_time_sub_indic,
-                init_control_time=timing_info.validation_time
+                init_control_time=timing_info.validation_time,
+                is_timestamp=True
             )
             signature_ts_result = AdESBasicValidationResult(
                 ades_subindic=AdESPassed.OK,
@@ -1050,7 +1093,7 @@ async def _process_signature_ts(
             moment=timing_info.validation_time
     ):
         signature_ts_dt = tst_info['gen_time'].native
-        validation_data_handlers.poe_manager.register(
+        poe_manager.register(
             signature_bytes, signature_ts_dt
         )
     # TODO if/when we fully support signature policies, we should check
@@ -1060,8 +1103,7 @@ async def _process_signature_ts(
 
 async def ades_lta_validation(
         embedded_sig: EmbeddedPdfSignature,
-        cert_validation_policy: CertValidationPolicySpec,
-        validation_data_handlers: ValidationDataHandlers,
+        validation_spec: SignatureValidationSpec,
         key_usage_settings: KeyUsageConstraints,
         timing_info: Optional[ValidationTimingInfo] = None,
         signature_not_before_time: Optional[datetime] = None) \
@@ -1076,10 +1118,12 @@ async def ades_lta_validation(
         embedded_sig.reader, include_content_ts=True
     )
 
+    # TODO populate known CRLs and OCSPs in validation policy with data from DSS
+
     try:
         updated_poe_manager = await _validate_prima_facie_poe(
-            poe_list, cert_validation_policy=cert_validation_policy,
-            init_validation_data_handlers=validation_data_handlers,
+            poe_list,
+            validation_spec=validation_spec,
             cur_timing_info=timing_info
         )
         # The POE list has been validated at this point,
@@ -1097,23 +1141,18 @@ async def ades_lta_validation(
             "Document timestamp chain failed to validate; proceeding "
             "without past proof of existence.", e
         )
-        updated_poe_manager = validation_data_handlers.poe_manager
+        updated_poe_manager = POEManager()
+        validation_spec.local_knowledge.add_to_poe_manager(updated_poe_manager)
         oldest_evidence_record_timestamp = None
-
-    validation_data_handlers = ValidationDataHandlers(
-        revinfo_manager=validation_data_handlers.revinfo_manager,
-        poe_manager=updated_poe_manager,
-        cert_registry=validation_data_handlers.cert_registry
-    )
 
     # (2) skipped, is automatic in our implementation
 
     # (3) Run validation for signatures with time
     signature_prelim_result = await ades_with_time_validation(
         signed_data=embedded_sig.signed_data,
-        cert_validation_policy=cert_validation_policy,
+        validation_spec=validation_spec,
         timing_info=timing_info,
-        validation_data_handlers=validation_data_handlers,
+        poe_manager=updated_poe_manager,
         key_usage_settings=key_usage_settings,
         raw_digest=embedded_sig.compute_digest(),
         signature_not_before_time=signature_not_before_time
@@ -1131,16 +1170,16 @@ async def ades_lta_validation(
 
     # (4) Register PoE for the signature based on best_signature_time
     signature_bytes = embedded_sig.signer_info['signature'].native
-    validation_data_handlers.poe_manager.register(
+    updated_poe_manager.register(
         signature_bytes, signature_prelim_result.best_signature_time
     )
 
     # (5) process signature TS if present
     signature_ts_result = await _process_signature_ts(
         embedded_sig,
-        cert_validation_policy,
-        validation_data_handlers,
-        timing_info
+        validation_spec=validation_spec,
+        poe_manager=updated_poe_manager,
+        timing_info=timing_info
     )
 
     # (6) past signature validation
@@ -1150,13 +1189,14 @@ async def ades_lta_validation(
         try:
             await _ades_past_signature_validation(
                 signed_data=embedded_sig.signed_data,
-                cert_validation_policy=cert_validation_policy,
-                validation_data_handlers=validation_data_handlers,
+                validation_spec=validation_spec,
+                poe_manager=updated_poe_manager,
                 current_time_sub_indic=current_time_sub_indic,
-                init_control_time=timing_info.validation_time
+                init_control_time=timing_info.validation_time,
+                is_timestamp=False
             )
         except errors.SignatureValidationError as e:
-            sig_poe = validation_data_handlers.poe_manager[signature_bytes]
+            sig_poe = updated_poe_manager[signature_bytes]
             return AdESLTAValidationResult(
                 ades_subindic=e.ades_subindication,
                 failure_msg=e.failure_message,
@@ -1173,14 +1213,15 @@ async def ades_lta_validation(
             )
 
     # (7) get the oldest PoE for the signature
-    signature_poe_time = validation_data_handlers.poe_manager[signature_bytes]
+    signature_poe_time = updated_poe_manager[signature_bytes]
 
     # (8) perform SVA (=> only crypto checks)
+    algo_policy = validation_spec.cert_validation_policy.algorithm_usage_policy
     try:
         cert: x509.Certificate = signature_prelim_result.api_status.signing_cert
         _ades_signature_crypto_policy_check(
             embedded_sig.signer_info,
-            algo_policy=cert_validation_policy.algorithm_usage_policy,
+            algo_policy=algo_policy,
             control_time=signature_poe_time,
             public_key=cert.public_key
         )
