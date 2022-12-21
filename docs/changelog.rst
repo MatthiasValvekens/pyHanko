@@ -3,6 +3,53 @@ Release history
 ***************
 
 
+.. _release-0.16.0:
+
+0.16.0
+======
+
+*Release date:* 2022-12-21
+
+
+Dependency updates
+------------------
+
+ * ``pyhanko-certvalidator`` updated to ``0.19.8``
+
+
+Breaking changes
+----------------
+
+This release includes breaking changes to the difference analysis engine.
+Unless you're implementing your own difference analysis policies, this
+change should break your API usage.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Add support for **Prop_Build** metadata in signatures.
+   See `PR #192 <https://github.com/MatthiasValvekens/pyHanko/issues/192>`_
+
+
+Validation
+^^^^^^^^^^
+
+ * Improvements to the difference analysis engine that allow more
+   nuance to be expressed in the rule system.
+
+
+Bugs fixed
+----------
+
+ * Tolerate an indirect **Extensions** and **MarkInfo** dictionary in
+   difference analysis. See `PR #177 <https://github.com/MatthiasValvekens/pyHanko/issues/177>`_.
+ * Gracefully handle unreadable/undecodable producer strings.
+
+
 .. _release-0.15.1:
 
 0.15.1
