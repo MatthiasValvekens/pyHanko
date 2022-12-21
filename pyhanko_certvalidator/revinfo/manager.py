@@ -173,7 +173,7 @@ class RevinfoManager:
             An asn1crypto.x509.Certificate object
 
         :return:
-            A list of :class:`CRLWithPOE` objects
+            A list of :class:`CRLContainer` objects
         """
         if not self._fetchers:
             return self._crls
@@ -199,7 +199,7 @@ class RevinfoManager:
             The issuing authority for the certificate
 
         :return:
-            A list of :class:`OCSPWithPOE` objects
+            A list of :class:`OCSPContainer` objects
         """
 
         if not self._fetchers:
