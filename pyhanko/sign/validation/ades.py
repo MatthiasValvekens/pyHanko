@@ -89,6 +89,16 @@ from .policy_decl import (
     bootstrap_validation_data_handlers,
 )
 
+__all__ = [
+    'ades_basic_validation',
+    'ades_with_time_validation',
+    'ades_lta_validation',
+    'ades_timestamp_validation',
+    'AdESBasicValidationResult',
+    'AdESWithTimeValidationResult',
+    'AdESLTAValidationResult',
+]
+
 logger = logging.getLogger(__name__)
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
