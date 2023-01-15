@@ -10,6 +10,7 @@ very experimental.
     continually rebasing the branch on which it lives became too much of a drag.
 """
 import asyncio
+import dataclasses
 import itertools
 import logging
 from copy import copy
@@ -46,6 +47,7 @@ from pyhanko_certvalidator.policy_decl import (
     RevocationCheckingRule,
 )
 from pyhanko_certvalidator.registry import PathBuilder, TrustManager
+from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 from pyhanko_certvalidator.revinfo.validate_crl import CRLOfInterest
 from pyhanko_certvalidator.revinfo.validate_ocsp import OCSPResponseOfInterest
 
@@ -82,6 +84,7 @@ from pyhanko.sign.validation.status import (
 )
 
 from .policy_decl import (
+    LocalKnowledge,
     SignatureValidationSpec,
     bootstrap_validation_data_handlers,
 )
@@ -1118,12 +1121,29 @@ async def ades_lta_validation(
         embedded_sig.reader, include_content_ts=True
     )
 
-    # TODO populate known CRLs and OCSPs in validation policy with data from DSS
+    init_local_knowledge = validation_spec.local_knowledge
+    # Ingest CRLs, certs and OCSPs from the DSS
+    # (POE info will be processed separately)
+    dss = DocumentSecurityStore.read_dss(embedded_sig.reader)
+    dss_ocsps = [
+        cont for resp in dss.ocsps
+        for cont in OCSPContainer.load_multi(resp)
+    ]
+    dss_crls = [CRLContainer(crl_data=crl) for crl in dss.crls]
+    local_knowledge = LocalKnowledge(
+        known_ocsps=init_local_knowledge.known_ocsps + dss_ocsps,
+        known_crls=init_local_knowledge.known_crls + dss_crls,
+        known_certs=init_local_knowledge.known_certs + dss.certs,
+        known_poes=init_local_knowledge.known_poes
+    )
+    augmented_validation_spec = dataclasses.replace(
+        validation_spec, local_knowledge=local_knowledge
+    )
 
     try:
         updated_poe_manager = await _validate_prima_facie_poe(
             poe_list,
-            validation_spec=validation_spec,
+            validation_spec=augmented_validation_spec,
             cur_timing_info=timing_info
         )
         # The POE list has been validated at this point,
@@ -1142,7 +1162,7 @@ async def ades_lta_validation(
             "without past proof of existence.", e
         )
         updated_poe_manager = POEManager()
-        validation_spec.local_knowledge.add_to_poe_manager(updated_poe_manager)
+        local_knowledge.add_to_poe_manager(updated_poe_manager)
         oldest_evidence_record_timestamp = None
 
     # (2) skipped, is automatic in our implementation
@@ -1150,7 +1170,7 @@ async def ades_lta_validation(
     # (3) Run validation for signatures with time
     signature_prelim_result = await ades_with_time_validation(
         signed_data=embedded_sig.signed_data,
-        validation_spec=validation_spec,
+        validation_spec=augmented_validation_spec,
         timing_info=timing_info,
         poe_manager=updated_poe_manager,
         key_usage_settings=key_usage_settings,
@@ -1177,7 +1197,7 @@ async def ades_lta_validation(
     # (5) process signature TS if present
     signature_ts_result = await _process_signature_ts(
         embedded_sig,
-        validation_spec=validation_spec,
+        validation_spec=augmented_validation_spec,
         poe_manager=updated_poe_manager,
         timing_info=timing_info
     )
@@ -1189,7 +1209,7 @@ async def ades_lta_validation(
         try:
             await _ades_past_signature_validation(
                 signed_data=embedded_sig.signed_data,
-                validation_spec=validation_spec,
+                validation_spec=augmented_validation_spec,
                 poe_manager=updated_poe_manager,
                 current_time_sub_indic=current_time_sub_indic,
                 init_control_time=timing_info.validation_time,
@@ -1216,7 +1236,8 @@ async def ades_lta_validation(
     signature_poe_time = updated_poe_manager[signature_bytes]
 
     # (8) perform SVA (=> only crypto checks)
-    algo_policy = validation_spec.cert_validation_policy.algorithm_usage_policy
+    algo_policy = augmented_validation_spec\
+        .cert_validation_policy.algorithm_usage_policy
     try:
         cert: x509.Certificate = signature_prelim_result.api_status.signing_cert
         _ades_signature_crypto_policy_check(
