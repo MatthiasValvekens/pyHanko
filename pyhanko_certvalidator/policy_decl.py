@@ -11,6 +11,20 @@ from asn1crypto import algos, keys
 
 from .name_trees import PKIXSubtrees
 
+__all__ = [
+    'RevocationCheckingRule',
+    'RevocationCheckingPolicy',
+    'FreshnessReqType',
+    'CertRevTrustPolicy',
+    'PKIXValidationParams',
+    'AlgorithmUsageConstraint',
+    'AlgorithmUsagePolicy',
+    'DisallowWeakAlgorithmsPolicy',
+    'DEFAULT_WEAK_HASH_ALGOS',
+    'REQUIRE_REVINFO',
+]
+
+
 DEFAULT_WEAK_HASH_ALGOS = frozenset(['md2', 'md5', 'sha1'])
 
 
@@ -152,6 +166,11 @@ class RevocationCheckingPolicy:
         )
 
 
+REQUIRE_REVINFO = RevocationCheckingPolicy(
+    RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+    RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
+)
+
 LEGACY_POLICY_MAP = {
     'soft-fail': RevocationCheckingPolicy(
         RevocationCheckingRule.CHECK_IF_DECLARED_SOFT,
@@ -161,10 +180,7 @@ LEGACY_POLICY_MAP = {
         RevocationCheckingRule.CHECK_IF_DECLARED,
         RevocationCheckingRule.CHECK_IF_DECLARED,
     ),
-    'require': RevocationCheckingPolicy(
-        RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
-        RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
-    ),
+    'require': REQUIRE_REVINFO,
 }
 
 
