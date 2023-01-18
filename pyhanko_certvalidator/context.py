@@ -201,14 +201,9 @@ class ValidationContext:
         self._revinfo_policy = revinfo_policy
 
         rev_essential = revinfo_policy.revocation_checking_policy.essential
-        if moment is not None:
-            if allow_fetching:
-                raise ValueError(
-                    "allow_fetching must be False when moment is specified"
-                )
-
-        elif (
+        if (
             not allow_fetching
+            and not revinfo_manager
             and crls is None
             and ocsps is None
             and rev_essential
