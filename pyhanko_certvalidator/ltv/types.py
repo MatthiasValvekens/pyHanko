@@ -19,9 +19,9 @@ class ValidationTimingInfo:
     point_in_time_validation: bool
 
     @classmethod
-    def now(cls, tz: Optional[tzinfo] = None):
+    def now(cls, tz: Optional[tzinfo] = None) -> 'ValidationTimingInfo':
         now = datetime.now(tz=tz or timezone.utc)
-        ValidationTimingInfo(
+        return ValidationTimingInfo(
             validation_time=now,
             best_signature_time=now,
             point_in_time_validation=False,
