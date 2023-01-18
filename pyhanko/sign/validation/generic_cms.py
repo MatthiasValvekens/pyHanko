@@ -526,7 +526,8 @@ def extract_self_reported_ts(signer_info: cms.SignerInfo) -> Optional[datetime]:
         pass
 
 
-def extract_tst_data(signer_info, signed=False) -> Optional[cms.SignedData]:
+def extract_tst_data(signer_info: cms.SignerInfo, signed: bool = False) \
+        -> Optional[cms.SignedData]:
     """
     Extract signed data associated with a timestamp token.
 

@@ -59,6 +59,7 @@ class RevocationInfoGatheringSpec:
     )
 
 
+@dataclass(frozen=True)
 class KnownPOE:
     digest: bytes
     poe_time: datetime
