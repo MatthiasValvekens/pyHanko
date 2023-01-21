@@ -472,10 +472,11 @@ async def _handle_single_ocsp_resp(
         policy=validation_context.revinfo_policy,
         timing_params=validation_context.timing_params,
     )
-    if freshness_result != RevinfoUsabilityRating.OK:
-        if freshness_result == RevinfoUsabilityRating.STALE:
+    rating = freshness_result.rating
+    if rating != RevinfoUsabilityRating.OK:
+        if rating == RevinfoUsabilityRating.STALE:
             msg = 'OCSP response is not recent enough'
-        elif freshness_result == RevinfoUsabilityRating.TOO_NEW:
+        elif rating == RevinfoUsabilityRating.TOO_NEW:
             msg = 'OCSP response is too recent'
         else:
             msg = 'OCSP response freshness could not be established'

@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
-from typing import List, Optional, Set, Tuple
+from typing import Iterable, List, Optional, Set, Tuple
 
 from asn1crypto import algos, keys, x509
 
@@ -126,44 +126,56 @@ def _apply_algo_policy(
     return control_time
 
 
-def _update_control_time(
-    revoked_date: Optional[datetime],
+def _update_control_time_for_unrevoked(
     control_time: datetime,
     revinfo_container: RevinfoContainer,
     rev_trust_policy: CertRevTrustPolicy,
     time_tolerance: timedelta,
+):
+
+    # if the cert is not on the list, we need the freshness check
+    usability = revinfo_container.usable_at(
+        rev_trust_policy,
+        ValidationTimingParams(
+            timing_info=ValidationTimingInfo(
+                validation_time=control_time,
+                best_signature_time=control_time,
+                point_in_time_validation=True,
+            ),
+            time_tolerance=time_tolerance,
+        ),
+    )
+    issuance_date = revinfo_container.issuance_date
+    if (
+        not usability.rating.usable
+        and usability.rating != RevinfoUsabilityRating.TOO_NEW
+    ):
+        # set the control time to the issuance date / last usable date
+        # (note: the TOO_NEW check is to prevent problems
+        #  with freshness policies involving cooldown periods,
+        #  which aren't really supported in the time sliding
+        #  algorithm, but hey)
+        # NOTE: the spec mandates using the issuance date here, but I believe
+        # that's wrong: the last date at which the revinfo is still considered
+        # fresh should be used instead. This distinction matters, since
+        # (especially when CRLs are used) the issuance date of the revinfo
+        # is often before the signature time.
+        cutoff_date = usability.last_usable_at or issuance_date
+        if cutoff_date is not None:
+            control_time = min(cutoff_date, control_time)
+    return control_time
+
+
+def _update_control_time(
+    revoked_date: Optional[datetime],
+    control_time: datetime,
+    revinfo_container: RevinfoContainer,
     algo_policy: Optional[AlgorithmUsagePolicy],
     issuer_public_key: keys.PublicKeyInfo,
 ):
     if revoked_date:
         # this means we have to update control_time
         control_time = min(revoked_date, control_time)
-    else:
-        # if the cert is not on the list, we need the freshness check
-        rating = revinfo_container.usable_at(
-            rev_trust_policy,
-            ValidationTimingParams(
-                timing_info=ValidationTimingInfo(
-                    validation_time=control_time,
-                    best_signature_time=control_time,
-                    point_in_time_validation=True,
-                ),
-                time_tolerance=time_tolerance,
-            ),
-        )
-        issuance_date = revinfo_container.issuance_date
-        if (
-            not rating.usable
-            and rating != RevinfoUsabilityRating.TOO_NEW
-            and issuance_date is not None
-        ):
-            # set the control time to the issuance date
-            # (note: the TOO_NEW check is to prevent problems
-            #  with freshness policies involving cooldown periods,
-            #  which aren't really supported in the time sliding
-            #  algorithm, but hey)
-            control_time = min(issuance_date, control_time)
-
     algo_used = revinfo_container.revinfo_sig_mechanism_used
     if algo_policy is not None and algo_used is not None:
         control_time = _apply_algo_policy(
@@ -234,6 +246,8 @@ async def _time_slide(
                     proc_state,
                 )
 
+        once_revoked = False
+        most_recent_crl = None
         # We always take the chain of trust of a CRL/OCSP response
         # at face value
         for crl_of_interest in crls:
@@ -286,18 +300,28 @@ async def _time_slide(
                 crl_iss_cert = candidate_crl_path.path.leaf
                 assert isinstance(crl_iss_cert, x509.Certificate)
 
+                once_revoked |= revoked_date is not None
+
+                crl_container = crl_of_interest.crl
+                if (
+                    most_recent_crl is None
+                    or most_recent_crl.issuance_date
+                    < crl_container.issuance_date
+                ):
+                    most_recent_crl = crl_container
                 control_time = _update_control_time(
                     revoked_date,
                     control_time,
-                    revinfo_container=crl_of_interest.crl,
-                    rev_trust_policy=rev_trust_policy,
-                    time_tolerance=time_tolerance,
+                    revinfo_container=crl_container,
                     algo_policy=algo_usage_policy,
                     issuer_public_key=crl_iss_cert.public_key,
                 )
+
+        most_recent_ocsp = None
         for ocsp_of_interest in ocsps:
 
-            issued = ocsp_of_interest.ocsp_response.issuance_date
+            ocsp_container = ocsp_of_interest.ocsp_response
+            issued = ocsp_container.issuance_date
             if (
                 not issued
                 or issued > control_time
@@ -320,7 +344,7 @@ async def _time_slide(
             )
             try:
                 _check_ocsp_status(
-                    ocsp_response=ocsp_of_interest.ocsp_response,
+                    ocsp_response=ocsp_container,
                     proc_state=ValProcState(cert_path_stack=new_path_stack),
                     control_time=control_time,
                 )
@@ -328,14 +352,18 @@ async def _time_slide(
             except RevokedError as e:
                 revoked_date = e.revocation_dt
 
+            once_revoked |= revoked_date is not None
             ocsp_iss_cert = ocsp_of_interest.prov_path.leaf
             assert isinstance(ocsp_iss_cert, x509.Certificate)
+            if (
+                most_recent_ocsp is None
+                or most_recent_ocsp.issuance_date < issued
+            ):
+                most_recent_ocsp = ocsp_container
             control_time = _update_control_time(
                 revoked_date,
                 control_time,
-                revinfo_container=ocsp_of_interest.ocsp_response,
-                rev_trust_policy=rev_trust_policy,
-                time_tolerance=time_tolerance,
+                revinfo_container=ocsp_container,
                 algo_policy=algo_usage_policy,
                 issuer_public_key=ocsp_iss_cert.public_key,
             )
@@ -348,6 +376,25 @@ async def _time_slide(
                 control_time,
                 leaf_ca.public_key,
             )
+
+        # (c) if the certificate was not marked as revoked -> update
+        # based on the freshness of the most recent piece of revinfo
+        if not once_revoked:
+            revinfo_items: Iterable[RevinfoContainer] = [
+                x for x in (most_recent_ocsp, most_recent_crl) if x is not None
+            ]
+            most_recent_revinfo = max(
+                revinfo_items,
+                key=lambda x: x.issuance_date or control_time,
+                default=None,
+            )
+            if most_recent_revinfo is not None:
+                control_time = _update_control_time_for_unrevoked(
+                    control_time=control_time,
+                    revinfo_container=most_recent_revinfo,
+                    rev_trust_policy=rev_trust_policy,
+                    time_tolerance=time_tolerance,
+                )
 
     return control_time
 

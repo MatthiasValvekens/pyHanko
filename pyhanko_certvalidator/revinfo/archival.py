@@ -28,10 +28,16 @@ class RevinfoUsabilityRating(enum.Enum):
         return self == RevinfoUsabilityRating.OK
 
 
+@dataclass(frozen=True)
+class RevinfoUsability:
+    rating: RevinfoUsabilityRating
+    last_usable_at: Optional[datetime] = None
+
+
 class RevinfoContainer(IssuedItemContainer, abc.ABC):
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
-    ) -> RevinfoUsabilityRating:
+    ) -> RevinfoUsability:
         raise NotImplementedError
 
     @property
@@ -74,10 +80,10 @@ def _judge_revinfo(
     next_update: Optional[datetime],
     policy: CertRevTrustPolicy,
     timing_params: ValidationTimingParams,
-) -> RevinfoUsabilityRating:
+) -> RevinfoUsability:
 
     if this_update is None:
-        return RevinfoUsabilityRating.UNCLEAR
+        return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
     # Revinfo issued after the validation time doesn't make any sense
     # to consider, except in the case of the (legacy) default policy
@@ -92,7 +98,7 @@ def _judge_revinfo(
             not policy.retroactive_revinfo
             or policy.freshness_req_type != FreshnessReqType.DEFAULT
         ):
-            return RevinfoUsabilityRating.TOO_NEW
+            return RevinfoUsability(RevinfoUsabilityRating.TOO_NEW)
 
     validation_time = timing_params.validation_time
     time_tolerance = timing_params.time_tolerance
@@ -104,10 +110,13 @@ def _judge_revinfo(
             policy, this_update, next_update, time_tolerance
         )
         if freshness_delta is None:
-            return RevinfoUsabilityRating.UNCLEAR
+            return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
         signature_poe_time = timing_params.best_signature_time
         if this_update - signature_poe_time < freshness_delta:
-            return RevinfoUsabilityRating.STALE
+            return RevinfoUsability(
+                RevinfoUsabilityRating.STALE,
+                last_usable_at=this_update + freshness_delta,
+            )
     elif (
         policy.freshness_req_type
         == FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION
@@ -120,28 +129,34 @@ def _judge_revinfo(
             policy, this_update, next_update, time_tolerance
         )
         if freshness_delta is None:
-            return RevinfoUsabilityRating.UNCLEAR
+            return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
         # See ETSI EN 319 102-1, § 5.2.5.4, item 2)
         #  in particular, "too recent" doesn't seem to apply;
         #  the result is pass/fail
         if this_update < validation_time - freshness_delta:
-            return RevinfoUsabilityRating.STALE
+            return RevinfoUsability(
+                RevinfoUsabilityRating.STALE,
+                last_usable_at=this_update + freshness_delta,
+            )
     elif policy.freshness_req_type == FreshnessReqType.DEFAULT:
         # check whether the validation time falls within the
         # thisUpdate-nextUpdate window (non-AdES!!)
         if next_update is None:
-            return RevinfoUsabilityRating.UNCLEAR
+            return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
         retroactive = policy.retroactive_revinfo
 
         if not retroactive and validation_time < this_update - time_tolerance:
-            return RevinfoUsabilityRating.TOO_NEW
+            return RevinfoUsability(RevinfoUsabilityRating.TOO_NEW)
         if validation_time > next_update + time_tolerance:
-            return RevinfoUsabilityRating.STALE
+            return RevinfoUsability(
+                RevinfoUsabilityRating.STALE,
+                last_usable_at=next_update + time_tolerance,
+            )
     else:  # pragma: nocover
         raise NotImplementedError
-    return RevinfoUsabilityRating.OK
+    return RevinfoUsability(RevinfoUsabilityRating.OK)
 
 
 def _extract_basic_ocsp_response(
@@ -189,11 +204,11 @@ class OCSPContainer(RevinfoContainer):
 
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
-    ) -> RevinfoUsabilityRating:
+    ) -> RevinfoUsability:
 
         cert_response = self.extract_single_response()
         if cert_response is None:
-            return RevinfoUsabilityRating.UNCLEAR
+            return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
         this_update = cert_response['this_update'].native
         next_update = cert_response['next_update'].native
@@ -231,7 +246,7 @@ class CRLContainer(RevinfoContainer):
 
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
-    ) -> RevinfoUsabilityRating:
+    ) -> RevinfoUsability:
         tbs_cert_list = self.crl_data['tbs_cert_list']
         this_update = tbs_cert_list['this_update'].native
         next_update = tbs_cert_list['next_update'].native

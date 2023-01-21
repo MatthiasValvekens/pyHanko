@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -27,6 +28,8 @@ NO_REVOCATION = RevocationCheckingPolicy(
 )
 
 __all__ = ['past_validate']
+
+logger = logging.getLogger(__name__)
 
 
 async def _past_validate_precheck(
@@ -128,9 +131,15 @@ async def past_validate(
             time_tolerance=validation_policy_spec.time_tolerance,
             revinfo_manager=validation_data_handlers.revinfo_manager,
         )
+        logger.info(
+            f"AdES time slide yields %s as the control time for path with "
+            f"leaf {path.describe_leaf()}",
+            control_time,
+        )
     except ValidationError as e:
         raise TimeSlideFailure(
-            "Failed to get control time for point-in-time validation."
+            f"Failed to get control time for point-in-time validation for path "
+            f"with leaf {path.describe_leaf()}"
         ) from e
 
     ref_time = ValidationTimingInfo(

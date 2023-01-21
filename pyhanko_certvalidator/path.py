@@ -103,6 +103,15 @@ class ValidationPath:
         # __init__ ensures that leaf None -> there are no intermediate certs
         return None
 
+    def describe_leaf(self) -> Optional[str]:
+        leaf = self.leaf
+        if isinstance(leaf, x509.Certificate):
+            return leaf.subject.human_friendly
+        elif isinstance(leaf, cms.AttributeCertificateV2):
+            return '<Attribute certificate>'
+        else:
+            return None
+
     def get_ee_cert_safe(self) -> Optional[x509.Certificate]:
         """
         Returns the current leaf certificate if it is an X.509 public-key
