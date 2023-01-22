@@ -220,6 +220,8 @@ def _instantiate_ltv_vc(emb_timestamp: EmbeddedPdfSignature,
         )
         return dss.as_validation_context(validation_context_kwargs)
     except NoDSSFoundError:
+        validation_context_kwargs.setdefault('crls', ())
+        validation_context_kwargs.setdefault('ocsps', ())
         return ValidationContext(**validation_context_kwargs)
 
 
