@@ -42,10 +42,14 @@ class SignatureValidationError(ValueErrorWithMessage):
 
 
 class DisallowedAlgorithmError(SignatureValidationError):
-    def __init__(self, failure_message):
+    def __init__(self, failure_message, permanent: bool):
+        if permanent:
+            subindic = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+        else:
+            subindic = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
         super().__init__(
             failure_message=failure_message,
-            ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+            ades_subindication=subindic
         )
 
 

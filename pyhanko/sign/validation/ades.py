@@ -172,7 +172,7 @@ def _ades_signature_crypto_policy_check(
         signer_info: cms.SignerInfo,
         algo_policy: AlgorithmUsagePolicy,
         control_time: datetime,
-        public_key: keys.PublicKeyInfo):
+        public_key: Optional[keys.PublicKeyInfo]):
 
     sig_algo: cms.SignedDigestAlgorithm = signer_info['signature_algorithm']
     sig_allowed = algo_policy.signature_algorithm_allowed(
@@ -430,7 +430,6 @@ async def ades_with_time_validation(
         key_usage_settings=key_usage_settings, raw_digest=raw_digest,
         signature_not_before_time=signature_not_before_time
     )
-    signature_not_before_time = interm_result.signature_not_before_time
     if isinstance(interm_result, AdESBasicValidationResult):
         return AdESWithTimeValidationResult(
             ades_subindic=interm_result.ades_subindic,
@@ -441,6 +440,7 @@ async def ades_with_time_validation(
         )
     elif interm_result.ades_subindic not in _WITH_TIME_FURTHER_PROC:
         assert isinstance(interm_result, _InternalBasicValidationResult)
+        signature_not_before_time = interm_result.signature_not_before_time
         api_status = interm_result.update(
             SignatureStatus, with_ts=True
         )
@@ -1235,10 +1235,23 @@ async def ades_lta_validation(
     # is present
     current_time_sub_indic = signature_prelim_result.ades_subindic
     if current_time_sub_indic not in _LTA_FURTHER_PROC:
-        raise errors.SignatureValidationError(
+        failure_msg = (
             "Validation of signature at current time failed with "
             f"indication {current_time_sub_indic}. Past validation not "
             f"applicable."
+        )
+        return AdESLTAValidationResult(
+            ades_subindic=current_time_sub_indic,
+            api_status=signature_prelim_result.api_status,
+            failure_msg=failure_msg,
+            best_signature_time=signature_prelim_result.best_signature_time,
+            signature_not_before_time=(
+                signature_prelim_result.signature_not_before_time
+            ),
+            oldest_evidence_record_timestamp=(
+                oldest_evidence_record_timestamp
+            ),
+            signature_timestamp_status=None
         )
 
     # (4) Register PoE for the signature based on best_signature_time
@@ -1273,7 +1286,7 @@ async def ades_lta_validation(
             return AdESLTAValidationResult(
                 ades_subindic=e.ades_subindication,
                 failure_msg=e.failure_message,
-                # TODO rewrite api_status
+                # FIXME rewrite api_status!
                 api_status=signature_prelim_result.api_status,
                 best_signature_time=sig_poe,
                 signature_not_before_time=(
@@ -1292,7 +1305,7 @@ async def ades_lta_validation(
     algo_policy = augmented_validation_spec\
         .cert_validation_policy.algorithm_usage_policy
     try:
-        cert: x509.Certificate = signature_prelim_result.api_status.signing_cert
+        cert: x509.Certificate = embedded_sig.signer_cert
         _ades_signature_crypto_policy_check(
             embedded_sig.signer_info,
             algo_policy=algo_policy,

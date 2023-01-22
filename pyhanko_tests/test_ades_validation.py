@@ -1,14 +1,19 @@
 import datetime
 from io import BytesIO
+from typing import Optional
 
 import pytest
-from asn1crypto import cms
+from asn1crypto import algos, cms, keys
 from freezegun import freeze_time
 from pyhanko_certvalidator import policy_decl as certv_policy_decl
 from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import CertValidationPolicySpec
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import FreshnessReqType
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsageConstraint,
+    AlgorithmUsagePolicy,
+    FreshnessReqType,
+)
 from pyhanko_certvalidator.registry import SimpleTrustManager
 from pyhanko_certvalidator.validate import async_validate_path
 
@@ -252,3 +257,133 @@ async def test_pades_lta_happy_path_past_time_with_chain(requests_mock):
         assert result.best_signature_time == datetime.datetime(
             2020, 11, 20, tzinfo=datetime.timezone.utc
         )
+
+
+class NoSha512AfterSomeTime(AlgorithmUsagePolicy):
+
+    # Algo policy for tests
+
+    def __init__(self, year):
+        self.cutoff = datetime.datetime(
+            year, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc
+        )
+
+    def signature_algorithm_allowed(
+            self, algo: algos.SignedDigestAlgorithm,
+            moment: Optional[datetime.datetime],
+            public_key: Optional[keys.PublicKeyInfo]) \
+            -> AlgorithmUsageConstraint:
+
+        try:
+            h = algo.hash_algo
+        except ValueError:
+            h = None
+
+        if h == 'sha512':
+            if moment is None or moment > self.cutoff:
+                return AlgorithmUsageConstraint(
+                    allowed=False, not_allowed_after=self.cutoff,
+                    failure_reason='just because'
+                )
+        return AlgorithmUsageConstraint(allowed=True)
+
+    def digest_algorithm_allowed(
+            self, algo: algos.DigestAlgorithm,
+            moment: Optional[datetime.datetime]) -> AlgorithmUsageConstraint:
+        if algo['algorithm'].native == 'sha512':
+            if moment is None or moment > self.cutoff:
+                return AlgorithmUsageConstraint(
+                    allowed=False, not_allowed_after=self.cutoff,
+                    failure_reason='just because'
+                )
+        return AlgorithmUsageConstraint(allowed=True)
+
+
+class BanAllTheThings(AlgorithmUsagePolicy):
+
+    def signature_algorithm_allowed(
+            self, algo: algos.SignedDigestAlgorithm,
+            moment: Optional[datetime.datetime],
+            public_key: Optional[keys.PublicKeyInfo]) \
+            -> AlgorithmUsageConstraint:
+
+        return AlgorithmUsageConstraint(allowed=False)
+
+    def digest_algorithm_allowed(
+            self, algo: algos.DigestAlgorithm,
+            moment: Optional[datetime.datetime]) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(allowed=False)
+
+
+@pytest.mark.asyncio
+async def test_pades_lta_hash_algorithm_banned_but_poe_ok(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(
+            requests_mock, md_algorithm='sha512'
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = DEFAULT_VALIDATION_SPEC \
+            .cert_validation_policy.revinfo_policy
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
+                algorithm_usage_policy=NoSha512AfterSomeTime(2025),
+                revinfo_policy=revinfo_policy
+            )
+        )
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0], validation_spec=spec
+        )
+        assert result.ades_subindic == AdESPassed.OK
+
+
+@pytest.mark.asyncio
+async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(
+            requests_mock, md_algorithm='sha512'
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = DEFAULT_VALIDATION_SPEC \
+            .cert_validation_policy.revinfo_policy
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
+                algorithm_usage_policy=NoSha512AfterSomeTime(2019),
+                revinfo_policy=revinfo_policy
+            )
+        )
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0], validation_spec=spec
+        )
+        assert result.ades_subindic == \
+               AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+
+
+@pytest.mark.asyncio
+async def test_pades_lta_algo_permaban(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(
+            requests_mock, md_algorithm='sha512'
+        )
+
+    with freeze_time('2029-11-20'):
+        revinfo_policy = DEFAULT_VALIDATION_SPEC \
+            .cert_validation_policy.revinfo_policy
+        spec = SignatureValidationSpec(
+            cert_validation_policy=CertValidationPolicySpec(
+                trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
+                algorithm_usage_policy=BanAllTheThings(),
+                revinfo_policy=revinfo_policy
+            )
+        )
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0], validation_spec=spec
+        )
+        assert result.ades_subindic == \
+               AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE

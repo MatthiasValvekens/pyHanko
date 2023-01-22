@@ -56,7 +56,9 @@ def validate_raw(
             )
             if sig_algo_allowed.failure_reason is not None:
                 msg += f" Reason: {sig_algo_allowed.failure_reason}"
-            raise DisallowedAlgorithmError(msg)
+            raise DisallowedAlgorithmError(
+                msg, permanent=sig_algo_allowed.not_allowed_after is None
+            )
 
     try:
         sig_hash_algo = cms.DigestAlgorithm(

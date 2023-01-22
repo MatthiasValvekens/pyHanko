@@ -234,7 +234,9 @@ def validate_sig_integrity(
             )
             if algo_allowed.failure_reason is not None:
                 msg += f" Reason: {algo_allowed.failure_reason}."
-            raise errors.DisallowedAlgorithmError(msg)
+            raise errors.DisallowedAlgorithmError(
+                msg, permanent=algo_allowed.not_allowed_after is None
+            )
     signature = signer_info['signature'].native
 
     signed_attrs_orig: cms.CMSAttributes = signer_info['signed_attrs']
