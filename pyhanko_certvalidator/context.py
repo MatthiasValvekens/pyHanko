@@ -523,6 +523,7 @@ def bootstrap_validation_data_handlers(
     crls: Iterable[CRLContainer] = (),
     ocsps: Iterable[OCSPContainer] = (),
     certs: Iterable[x509.Certificate] = (),
+    poe_manager: Optional[POEManager] = None,
 ) -> ValidationDataHandlers:
     """
     Simple bootstrapping method for a :class:`.ValidationDataHandlers`
@@ -539,6 +540,8 @@ def bootstrap_validation_data_handlers(
         manager.
     :param certs:
         Initial collection of certificates to add to the certificate registry.
+    :param poe_manager:
+        Explicit POE manager. Will instantiate an empty one if left unspecified.
     :return:
         A :class:`.ValidationDataHandlers` object.
     """
@@ -551,7 +554,7 @@ def bootstrap_validation_data_handlers(
     else:
         _fetchers = None
 
-    poe_manager = POEManager()
+    poe_manager = poe_manager or POEManager()
     cert_registry = CertificateRegistry(
         cert_fetcher=_fetchers.cert_fetcher if _fetchers is not None else None
     )
