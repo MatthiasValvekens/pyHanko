@@ -122,10 +122,7 @@ def bootstrap_validation_data_handlers(
         fetchers=fetcher_backend,
         crls=knowledge.known_crls,
         ocsps=knowledge.known_ocsps,
-        certs=knowledge.known_certs
+        certs=knowledge.known_certs,
+        poe_manager=poe_manager_override
     )
-    if poe_manager_override is not None:
-        handlers = dataclasses.replace(
-            handlers, poe_manager=poe_manager_override
-        )
     return handlers
