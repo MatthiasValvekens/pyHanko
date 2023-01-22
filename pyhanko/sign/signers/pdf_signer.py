@@ -1619,8 +1619,8 @@ class PdfSigningSession:
                 await validator.async_validate_usage(key_usage)
         except (PathBuildingError, PathValidationError) as e:
             raise SigningError(
-                "The signer's certificate could not be validated", e
-            )
+                "The signer's certificate could not be validated"
+            ) from e
         return signer_cert_validation_path
 
     async def _perform_prev_ts_validation(self, validation_context,

@@ -900,10 +900,10 @@ async def handle_certvalidator_errors(coro):
     try:
         return None, None, await coro
     except InvalidCertificateError as e:
-        logger.warning(e)
+        logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
     except TimeSlideFailure as e:
-        logger.warning(e)
+        logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.NO_POE
     except DisallowedAlgorithmError as e:
         if e.banned_since is None:
@@ -913,7 +913,7 @@ async def handle_certvalidator_errors(coro):
             # could get resolved with more POEs
             ades_status = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
     except RevokedError as e:
-        logger.warning(e)
+        logger.warning(e.failure_msg)
         if e.is_side_validation:
             # don't report this as a revocation event
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
@@ -930,10 +930,10 @@ async def handle_certvalidator_errors(coro):
                 revocation_reason=e.reason
             )
     except PathBuildingError as e:
-        logger.warning(e)
+        logger.warning("Failed to build path", exc_info=e)
         ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
     except ExpiredError as e:
-        logger.warning(e)
+        logger.warning(e.failure_msg)
         if not e.is_side_validation and e.is_ee_cert:
             # TODO modify certvalidator to perform revinfo checks on
             #  expired certs, possibly as an option. If this happens, we
@@ -943,11 +943,11 @@ async def handle_certvalidator_errors(coro):
         else:
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     except PathValidationError as e:
-        logger.warning(e)
+        logger.warning(e.failure_msg, exc_info=e)
         # TODO verify whether this is appropriate
         ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
     except ValidationError as e:
-        logger.warning(e)
+        logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
     return ades_status, revo_details, None
