@@ -300,13 +300,14 @@ async def _process_basic_validation(
 
 async def ades_basic_validation(
         signed_data: cms.SignedData,
-        timing_info: ValidationTimingInfo,
         validation_spec: SignatureValidationSpec,
-        key_usage_settings: KeyUsageConstraints,
+        timing_info: Optional[ValidationTimingInfo] = None,
+        key_usage_settings: KeyUsageConstraints = KeyUsageConstraints(),
         raw_digest: Optional[bytes] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESBasicValidationResult:
     cert_validation_policy = validation_spec.cert_validation_policy
+    timing_info = timing_info or ValidationTimingInfo.now()
     validation_data_handlers = bootstrap_validation_data_handlers(
         spec=validation_spec,
         timing_info=timing_info
@@ -396,14 +397,15 @@ _WITH_TIME_FURTHER_PROC = frozenset({
 
 async def ades_with_time_validation(
         signed_data: cms.SignedData,
-        timing_info: ValidationTimingInfo,
         validation_spec: SignatureValidationSpec,
-        key_usage_settings: KeyUsageConstraints,
+        timing_info: Optional[ValidationTimingInfo] = None,
+        key_usage_settings: KeyUsageConstraints = KeyUsageConstraints(),
         raw_digest: Optional[bytes] = None,
         poe_manager: Optional[POEManager] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESWithTimeValidationResult:
 
+    timing_info = timing_info or ValidationTimingInfo.now()
     cert_validation_policy = validation_spec.cert_validation_policy
     validation_data_handlers = bootstrap_validation_data_handlers(
         spec=validation_spec,
