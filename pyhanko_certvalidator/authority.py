@@ -13,6 +13,8 @@ from .policy_decl import PKIXValidationParams
 @dataclass(frozen=True)
 class TrustQualifiers:
     """
+    .. versionadded 0.20.0
+
     Parameters that allow a trust root to be qualified.
     """
 
@@ -37,6 +39,8 @@ class TrustQualifiers:
 
 class Authority(abc.ABC):
     """
+    .. versionadded:: 0.20.0
+
     Abstract authority, i.e. a named key.
     """
 
@@ -189,6 +193,8 @@ def derive_quals_from_cert(cert: x509.Certificate) -> TrustQualifiers:
 
 class AuthorityWithCert(Authority):
     """
+    .. versionadded:: 0.20.0
+
     Authority provisioned as a certificate.
 
     :param cert:
@@ -230,6 +236,8 @@ class AuthorityWithCert(Authority):
 
 class CertTrustAnchor(TrustAnchor):
     """
+    .. versionadded:: 0.20.0
+
     Trust anchor provisioned as a certificate.
 
     :param cert:

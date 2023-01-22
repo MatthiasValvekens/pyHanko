@@ -513,9 +513,31 @@ class ValidationContext:
 
 @dataclass(frozen=True)
 class ValidationDataHandlers:
+    """
+    Value class to hold 'manager'/'registry' objects. These are responsible for
+    accumulating and exposing various data collections that are relevant
+    for certificate validation.
+    """
+
     revinfo_manager: RevinfoManager
+    """
+    The revocation information manager.
+    """
+
     poe_manager: POEManager
+    """
+    The proof-of-existence record manager.
+    """
+
     cert_registry: CertificateRegistry
+    """
+    The certificate registry.
+
+    .. note::
+        The certificate registry is a trustless construct. It only holds
+        certificates, but does mark them as trusted or store information
+        related to how the certificates fit together.
+    """
 
 
 def bootstrap_validation_data_handlers(
@@ -575,20 +597,74 @@ def bootstrap_validation_data_handlers(
 
 @dataclass(frozen=True)
 class CertValidationPolicySpec:
+    """
+    Policy object describing how to validate certificates at a high
+    level.
+
+    .. note::
+        A certificate validation policy differs from a validation context
+        in that :class:`ValidationContext` objects keep state as well.
+        This is not the case for a certificate validation policy, which makes
+        them suitable for reuse in complex validation workflows where the
+        same policy needs to be applied independently in multiple steps.
+
+    .. warning::
+        While a certification policy spec is intended to be stateless,
+        some of its fields are abstract classes. As such, the true behaviour
+        may depend on the underlying implementation.
+    """
+
     trust_manager: TrustManager
+    """
+    The trust manager that defines this policy's trust anchors.
+    """
+
     revinfo_policy: CertRevTrustPolicy
+    """
+    The policy describing how to handle certificate revocation and associated
+    revocation information.
+    """
+
     time_tolerance: timedelta = timedelta(seconds=1)
+    """
+    The time drift tolerated during validation. Defaults to one second.
+    """
+
     acceptable_ac_targets: Optional[ACTargetDescription] = None
+    """
+    Targets to accept when evaluating the scope of an attribute certificate.
+    """
+
     algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = field(
         default=DisallowWeakAlgorithmsPolicy()
     )
+    """
+    Policy on cryptographic algorithm usage. If left unspecified, a
+    default will be used.
+    """
+
     pkix_validation_params: Optional[PKIXValidationParams] = None
+    """
+    The PKIX validation parameters to use, as defined in :rfc:`5280`.
+    """
 
     def build_validation_context(
         self,
         timing_info: ValidationTimingInfo,
         handlers: Optional[ValidationDataHandlers],
     ) -> ValidationContext:
+        """
+        Build a validation context from this policy, validation timing info
+        and a set of validation data handlers.
+
+        :param timing_info:
+            Timing settings.
+        :param handlers:
+            Optionally specify validation data handlers. A reasonable default
+            will be supplied if absent.
+        :return:
+            A new :class:`ValidationContext` reflecting the parameters.
+        """
 
         if handlers is None:
             cert_registry = CertificateRegistry()
