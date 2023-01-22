@@ -231,13 +231,12 @@ async def _ades_timestamp_validation_from_context(
 
 
 async def _ades_process_attached_ts(signer_info, validation_context,
-                                    signed: bool) \
+                                    signed: bool, tst_digest: bytes) \
         -> AdESBasicValidationResult:
     tst_signed_data = generic_cms.extract_tst_data(signer_info, signed=signed)
     if tst_signed_data is not None:
         return await _ades_timestamp_validation_from_context(
-            tst_signed_data, validation_context,
-            generic_cms.compute_signature_tst_digest(signer_info),
+            tst_signed_data, validation_context, tst_digest,
         )
     return AdESBasicValidationResult(
         ades_subindic=AdESIndeterminate.GENERIC,
@@ -256,8 +255,14 @@ async def _process_basic_validation(
                              AdESIndeterminate.OUT_OF_BOUNDS_NO_POE):
         # check content timestamp
         # TODO allow selecting one of multiple here
+        # FIXME here and in a few other places we presume that the message
+        #  imprint algorithm agrees with the TS's algorithm. This is a fairly
+        #  safe assumption, but not an airtight one.
         content_ts_result = await _ades_process_attached_ts(
-            signer_info, ts_validation_context, signed=True
+            signer_info, ts_validation_context, signed=True,
+            tst_digest=generic_cms.find_unique_cms_attribute(
+                signer_info['signed_attrs'], 'message_digest'
+            ).native
         )
         if content_ts_result.ades_subindic == AdESPassed.OK:
             ts_status = content_ts_result.api_status
@@ -452,7 +457,8 @@ async def ades_with_time_validation(
     # process signature timestamps
     # TODO allow selecting one of multiple timestamps here?
     sig_ts_result = await _ades_process_attached_ts(
-        signer_info, validation_context, signed=False
+        signer_info, validation_context, signed=False,
+        tst_digest=generic_cms.compute_signature_tst_digest(signer_info)
     )
     temp_status = interm_result.update(SignatureStatus, with_ts=False)
 
