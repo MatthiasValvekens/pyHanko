@@ -47,6 +47,14 @@ class ValidationTimingParams:
 
 
 class IssuedItemContainer(abc.ABC):
+    """
+    A container for some data object issued by an entity (e.g. a certificate).
+    """
+
     @property
     def issuance_date(self) -> Optional[datetime]:
+        """
+        The issuance date of the item.
+        """
+
         raise NotImplementedError

@@ -21,10 +21,7 @@ from pyhanko_certvalidator.policy_decl import (
     CertRevTrustPolicy,
     RevocationCheckingRule,
 )
-from pyhanko_certvalidator.revinfo.archival import (
-    RevinfoContainer,
-    RevinfoUsabilityRating,
-)
+from pyhanko_certvalidator.revinfo.archival import RevinfoContainer
 from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.revinfo.validate_crl import (
     CRLOfInterest,
@@ -146,10 +143,7 @@ def _update_control_time_for_unrevoked(
         ),
     )
     issuance_date = revinfo_container.issuance_date
-    if (
-        not usability.rating.usable
-        and usability.rating != RevinfoUsabilityRating.TOO_NEW
-    ):
+    if not usability.rating.usable_ades:
         # set the control time to the issuance date / last usable date
         # (note: the TOO_NEW check is to prevent problems
         #  with freshness policies involving cooldown periods,

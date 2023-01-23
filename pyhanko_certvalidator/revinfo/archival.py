@@ -16,34 +16,109 @@ from pyhanko_certvalidator.policy_decl import (
     FreshnessReqType,
 )
 
+__all__ = [
+    'RevinfoUsabilityRating',
+    'RevinfoUsability',
+    'RevinfoContainer',
+    'OCSPContainer',
+    'CRLContainer',
+    'sort_freshest_first',
+    'process_legacy_crl_input',
+    'process_legacy_ocsp_input',
+]
+
 
 class RevinfoUsabilityRating(enum.Enum):
+    """
+    Description of whether a piece of revocation information
+    is considered usable in the circumstances provided.
+    """
+
     OK = enum.auto()
+    """
+    The revocation information is usable.
+    """
+
     STALE = enum.auto()
+    """
+    The revocation information is stale/too old.
+    """
+
     TOO_NEW = enum.auto()
+    """
+    The revocation information is too recent.
+
+    .. note::
+        This is never an issue in the AdES validation model.
+    """
+
     UNCLEAR = enum.auto()
+    """
+    The usability of the revocation information could not be
+    assessed unambiguously.
+    """
 
     @property
-    def usable(self) -> bool:
-        return self == RevinfoUsabilityRating.OK
+    def usable_ades(self) -> bool:
+        """
+        Boolean indicating whether the assigned rating corresponds to
+        a "fresh" judgment in AdES.
+        """
+
+        return self in (
+            RevinfoUsabilityRating.OK,
+            RevinfoUsabilityRating.TOO_NEW,
+        )
 
 
 @dataclass(frozen=True)
 class RevinfoUsability:
+    """
+    Usability rating and cutoff date for a particular piece of
+    revocation information.
+    """
+
     rating: RevinfoUsabilityRating
+    """
+    The rating assigned.
+    """
+
     last_usable_at: Optional[datetime] = None
+    """
+    The last date at which the revocation infromation could have been
+    considered usable, if applicable.
+    """
 
 
 class RevinfoContainer(IssuedItemContainer, abc.ABC):
+    """
+    A container for a piece of revocation information.
+    """
+
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
     ) -> RevinfoUsability:
+        """
+        Assess the usability of the revocation information given a
+        revocation information trust policy and timing parameters.
+
+        :param policy:
+            The revocation information trust policy.
+        :param timing_params:
+            Timing-related information.
+        :return:
+            A :class:`.RevinfoUsability` judgment.
+        """
         raise NotImplementedError
 
     @property
     def revinfo_sig_mechanism_used(
         self,
     ) -> Optional[algos.SignedDigestAlgorithm]:
+        """
+        Extract the signature mechanism used to guarantee the authenticity
+        of the revocation information, if applicable.
+        """
         raise NotImplementedError
 
 
@@ -51,6 +126,18 @@ RevInfoType = TypeVar('RevInfoType', bound=RevinfoContainer)
 
 
 def sort_freshest_first(lst: Iterable[RevInfoType]) -> List[RevInfoType]:
+    """
+    Sort a list of revocation information containers in freshest-first order.
+
+    Revocation information that does not have a well-defined issuance date
+    will be grouped at the end.
+
+    :param lst:
+        A list of :class:`.RevinfoContainer` objects of the same type.
+    :return:
+        The same list sorted from fresh to stale.
+    """
+
     def _key(container: RevinfoContainer):
         dt = container.issuance_date
         # if dt is None ---> (0, None)
@@ -177,13 +264,38 @@ def _extract_basic_ocsp_response(
 
 @dataclass(frozen=True)
 class OCSPContainer(RevinfoContainer):
+    """
+    Container for an OCSP response.
+    """
+
     ocsp_response_data: ocsp.OCSPResponse
+    """
+    The OCSP response value.
+    """
+
     index: int = 0
+    """
+    The index of the ``SingleResponse`` payload in the original OCSP
+    response object retrieved from the server, if applicable.
+    """
 
     @classmethod
     def load_multi(
         cls, ocsp_response: ocsp.OCSPResponse
     ) -> List['OCSPContainer']:
+        """
+        Turn an OCSP response object into one or more :class:`.OCSPContainer`
+        objects. If a :class:`.OCSPContainer` contains more than one
+        ``SingleResponse``, then the same OCSP response will be duplicated
+        into multiple containers, each with a different ``index`` value.
+
+        :param ocsp_response:
+            An OCSP response.
+        :return:
+            A list of :class:`.OCSPContainer` objects, one for each
+            ``SingleResponse`` value.
+        """
+
         basic_ocsp_response = _extract_basic_ocsp_response(ocsp_response)
         if basic_ocsp_response is None:
             return []
@@ -220,9 +332,19 @@ class OCSPContainer(RevinfoContainer):
         )
 
     def extract_basic_ocsp_response(self) -> Optional[ocsp.BasicOCSPResponse]:
+        """
+        Extract the ``BasicOCSPResponse``, assuming there is one (i.e.
+        the OCSP response is a standard, non-error response).
+        """
+
         return _extract_basic_ocsp_response(self.ocsp_response_data)
 
     def extract_single_response(self) -> Optional[ocsp.SingleResponse]:
+        """
+        Extract the unique ``SingleResponse`` value identified by the
+        index.
+        """
+
         basic_ocsp_response = self.extract_basic_ocsp_response()
         if basic_ocsp_response is None:
             return None
@@ -242,7 +364,14 @@ class OCSPContainer(RevinfoContainer):
 
 @dataclass(frozen=True)
 class CRLContainer(RevinfoContainer):
+    """
+    Container for a certificate revocation list (CRL).
+    """
+
     crl_data: crl.CertificateList
+    """
+    The CRL data.
+    """
 
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
@@ -271,6 +400,16 @@ LegacyCompatOCSP = Union[bytes, ocsp.OCSPResponse, OCSPContainer]
 def process_legacy_crl_input(
     crls: Iterable[LegacyCompatCRL],
 ) -> List[CRLContainer]:
+    """
+    Internal function to process legacy CRL data into one or more
+    :class:`.CRLContainer`.
+
+    :param crls:
+        Legacy CRL input data.
+    :return:
+        A list of :class:`.CRLContainer` objects.
+    """
+
     new_crls = []
     for crl_ in crls:
         if isinstance(crl_, bytes):
@@ -290,6 +429,16 @@ def process_legacy_crl_input(
 def process_legacy_ocsp_input(
     ocsps: Iterable[LegacyCompatOCSP],
 ) -> List[OCSPContainer]:
+    """
+    Internal function to process legacy OCSP data into one or more
+    :class:`.OCSPContainer`.
+
+    :param ocsps:
+        Legacy OCSP input data.
+    :return:
+        A list of :class:`.OCSPContainer` objects.
+    """
+
     new_ocsps = []
     for ocsp_ in ocsps:
         if isinstance(ocsp_, bytes):

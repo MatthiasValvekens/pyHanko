@@ -15,17 +15,8 @@ from pyhanko_certvalidator.ltv.errors import (
 from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import (
-    CertRevTrustPolicy,
-    RevocationCheckingPolicy,
-    RevocationCheckingRule,
-)
+from pyhanko_certvalidator.policy_decl import NO_REVOCATION, CertRevTrustPolicy
 from pyhanko_certvalidator.validate import async_validate_path
-
-NO_REVOCATION = RevocationCheckingPolicy(
-    ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
-    intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK,
-)
 
 __all__ = ['past_validate']
 

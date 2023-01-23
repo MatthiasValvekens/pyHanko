@@ -22,10 +22,14 @@ __all__ = [
     'DisallowWeakAlgorithmsPolicy',
     'DEFAULT_WEAK_HASH_ALGOS',
     'REQUIRE_REVINFO',
+    'NO_REVOCATION',
 ]
 
 
 DEFAULT_WEAK_HASH_ALGOS = frozenset(['md2', 'md5', 'sha1'])
+"""
+Digest algorithms considered weak by default.
+"""
 
 
 @enum.unique
@@ -170,6 +174,20 @@ REQUIRE_REVINFO = RevocationCheckingPolicy(
     RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
     RevocationCheckingRule.CRL_OR_OCSP_REQUIRED,
 )
+"""
+Policy indicating that revocation information is always required, but either
+OCSP or CRL-based revocation information is OK.
+"""
+
+
+NO_REVOCATION = RevocationCheckingPolicy(
+    ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
+    intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK,
+)
+"""
+Policy indicating that revocation information is never required.
+"""
+
 
 LEGACY_POLICY_MAP = {
     'soft-fail': RevocationCheckingPolicy(
@@ -182,13 +200,38 @@ LEGACY_POLICY_MAP = {
     ),
     'require': REQUIRE_REVINFO,
 }
+"""
+Mapping of legacy ``certvalidator`` revocation modes to
+:class:`RevocationCheckingPolicy` objects.
+"""
 
 
 @enum.unique
 class FreshnessReqType(enum.Enum):
+    """
+    Freshness requirement type.
+    """
+
     DEFAULT = enum.auto()
+    """
+    The default freshness policy, i.e. the ``certvalidator`` legacy policy.
+    This policy considers revocation info valid between its ``thisUpdate``
+    and ``nextUpdate`` times, but not outside of that window.
+    """
+
     MAX_DIFF_REVOCATION_VALIDATION = enum.auto()
+    """
+    Freshness policy requiring that the validation time, if later than the
+    issuance date of the revocation info, be sufficiently close to that
+    issuance date.
+    """
+
     TIME_AFTER_SIGNATURE = enum.auto()
+    """
+    Freshness policy requiring that the revocation info be issued after a
+    predetermined "cooldown period" after the certificate was used to produce
+    a signature.
+    """
 
 
 @dataclass(frozen=True)
@@ -378,21 +421,51 @@ class PKIXValidationParams:
 
 @dataclass(frozen=True)
 class AlgorithmUsageConstraint:
+    """
+    Expression of a constraint on the usage of an algorithm (possibly with
+    parameter choices).
+    """
+
     allowed: bool
+    """
+    Flag indicating whether the algorithm can be used.
+    """
+
     not_allowed_after: Optional[datetime] = None
+    """
+    Date indicating when the algorithm became unavailable (given the relevant
+    choice of parameters, if applicable).
+    """
+
     failure_reason: Optional[str] = None
+    """
+    A human-readable description of the failure reason, if applicable.
+    """
 
     def __bool__(self):
         return self.allowed
 
 
-# TODO document
-
-
 class AlgorithmUsagePolicy(abc.ABC):
+    """
+    Abstract interface defining a usage policy for cryptographic algorithms.
+    """
+
     def digest_algorithm_allowed(
         self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
     ) -> AlgorithmUsageConstraint:
+        """
+        Determine if the indicated digest algorithm can be used at the point
+        in time indicated.
+
+        :param algo:
+            A digest algorithm description in ASN.1 form.
+        :param moment:
+            The point in time at which the algorithm should be usable.
+            If ``None``, then the returned judgment applies at all times.
+        :return:
+            A :class:`.AlgorithmUsageConstraint` expressing the judgment.
+        """
         raise NotImplementedError
 
     def signature_algorithm_allowed(
@@ -401,6 +474,25 @@ class AlgorithmUsagePolicy(abc.ABC):
         moment: Optional[datetime],
         public_key: Optional[keys.PublicKeyInfo],
     ) -> AlgorithmUsageConstraint:
+        """
+        Determine if the indicated signature algorithm (including the associated
+        digest function and any parameters, if applicable) can be used at the
+        point in time indicated.
+
+        :param algo:
+            A signature mechanism description in ASN.1 form.
+        :param moment:
+            The point in time at which the algorithm should be usable.
+            If ``None``, then the returned judgment applies at all times.
+        :param public_key:
+            The public key associated with the operation, if available.
+
+            .. note::
+                This parameter can be used to enforce key size limits or
+                to filter out keys with known structural weaknesses.
+        :return:
+            A :class:`.AlgorithmUsageConstraint` expressing the judgment.
+        """
         raise NotImplementedError
 
 
@@ -409,6 +501,24 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
     Primitive usage policy that forbids a list of user-specified
     "weak" algorithms and allows everything else.
     It also ignores the time parameter completely.
+
+    .. note::
+        This denial-based strategy is supplied to provide a backwards-compatible
+        default.
+        In many scenarios, an explicit allow-based strategy is more appropriate.
+        Users with specific security requirements are encouraged to implement
+        :class:`.AlgorithmUsagePolicy` themselves.
+
+    :param weak_hash_algos:
+        The list of digest algorithms considered weak.
+        Defaults to :const:`.DEFAULT_WEAK_HASH_ALGOS`.
+    :param weak_signature_algos:
+        The list of digest algorithms considered weak.
+        Defaults to the empty set.
+    :param rsa_key_size_threshold:
+        The key length threshold for RSA keys, in bits.
+    :param dsa_key_size_threshold:
+        The key length threshold for DSA keys, in bits.
     """
 
     def __init__(
