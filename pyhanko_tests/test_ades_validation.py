@@ -24,7 +24,10 @@ from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate, AdESPassed
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.validation import ades
-from pyhanko.sign.validation.policy_decl import SignatureValidationSpec
+from pyhanko.sign.validation.policy_decl import (
+    PdfSignatureValidationSpec,
+    SignatureValidationSpec,
+)
 from pyhanko_tests.samples import MINIMAL_ONE_FIELD
 from pyhanko_tests.signing_commons import (
     DUMMY_TS,
@@ -58,7 +61,7 @@ async def _update_pades_test_doc(requests_mock, out):
     await PdfTimeStamper(DUMMY_TS2).async_update_archival_timestamp_chain(r, vc)
 
 
-DEFAULT_VALIDATION_SPEC = SignatureValidationSpec(
+DEFAULT_SIG_VALIDATION_SPEC = SignatureValidationSpec(
     cert_validation_policy=CertValidationPolicySpec(
         trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
         revinfo_policy=certv_policy_decl.CertRevTrustPolicy(
@@ -66,6 +69,9 @@ DEFAULT_VALIDATION_SPEC = SignatureValidationSpec(
             freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION
         )
     )
+)
+DEFAULT_PDF_VALIDATION_SPEC = PdfSignatureValidationSpec(
+    signature_validation_spec=DEFAULT_SIG_VALIDATION_SPEC
 )
 
 
@@ -85,7 +91,7 @@ async def test_pades_basic_happy_path(requests_mock):
         live_testing_vc(requests_mock)
         result = await ades.ades_basic_validation(
             r.embedded_signatures[0].signed_data,
-            validation_spec=DEFAULT_VALIDATION_SPEC,
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
             raw_digest=r.embedded_signatures[0].compute_digest()
         )
         assert result.ades_subindic == AdESPassed.OK
@@ -104,7 +110,7 @@ async def test_embedded_cades_happy_path(requests_mock):
         live_testing_vc(requests_mock)
         result = await ades.ades_basic_validation(
             signature['content'],
-            validation_spec=DEFAULT_VALIDATION_SPEC,
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
         )
         assert result.ades_subindic == AdESPassed.OK
 
@@ -122,7 +128,7 @@ async def test_embedded_cades_with_time_happy_path(requests_mock):
         live_testing_vc(requests_mock)
         result = await ades.ades_with_time_validation(
             signature['content'],
-            validation_spec=DEFAULT_VALIDATION_SPEC,
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
@@ -145,7 +151,7 @@ async def test_embedded_cades_provably_revoked(requests_mock):
         live_testing_vc(requests_mock)
         result = await ades.ades_basic_validation(
             signature['content'],
-            validation_spec=DEFAULT_VALIDATION_SPEC,
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
         )
         assert result.ades_subindic == AdESFailure.REVOKED
 
@@ -165,7 +171,7 @@ async def test_embedded_cades_revoked_no_poe(requests_mock):
         live_testing_vc(requests_mock)
         result = await ades.ades_basic_validation(
             signature['content'],
-            validation_spec=DEFAULT_VALIDATION_SPEC,
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
         )
         assert result.ades_subindic == AdESIndeterminate.REVOKED_NO_POE
 
@@ -191,7 +197,7 @@ async def test_embedded_cades_pre_revoke_with_poe(requests_mock):
     with freeze_time('2020-12-25'):
         result = await ades.ades_with_time_validation(
             signature['content'],
-            validation_spec=DEFAULT_VALIDATION_SPEC,
+            validation_spec=DEFAULT_SIG_VALIDATION_SPEC,
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
@@ -205,7 +211,8 @@ async def test_pades_lta_happy_path_current_time(requests_mock):
     out = await _generate_pades_test_doc(requests_mock)
     r = PdfFileReader(out)
     result = await ades.ades_lta_validation(
-        r.embedded_signatures[0], validation_spec=DEFAULT_VALIDATION_SPEC
+        r.embedded_signatures[0],
+        pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC
     )
     assert result.ades_subindic == AdESPassed.OK
 
@@ -218,7 +225,8 @@ async def test_pades_lta_happy_path_past_time(requests_mock):
     with freeze_time('2021-11-20'):
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
-            r.embedded_signatures[0], validation_spec=DEFAULT_VALIDATION_SPEC
+            r.embedded_signatures[0],
+            pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
@@ -235,7 +243,8 @@ async def test_pades_lta_expired_timestamp(requests_mock, with_dts):
     with freeze_time('2080-11-20'):
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
-            r.embedded_signatures[0], validation_spec=DEFAULT_VALIDATION_SPEC
+            r.embedded_signatures[0],
+            pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC
         )
         assert result.ades_subindic == AdESIndeterminate.NO_POE
 
@@ -251,7 +260,8 @@ async def test_pades_lta_happy_path_past_time_with_chain(requests_mock):
     with freeze_time('2035-11-20'):
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
-            r.embedded_signatures[0], validation_spec=DEFAULT_VALIDATION_SPEC
+            r.embedded_signatures[0],
+            pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC
         )
         assert result.ades_subindic == AdESPassed.OK
         assert result.best_signature_time == datetime.datetime(
@@ -323,7 +333,7 @@ async def test_pades_lta_hash_algorithm_banned_but_poe_ok(requests_mock):
         )
 
     with freeze_time('2029-11-20'):
-        revinfo_policy = DEFAULT_VALIDATION_SPEC \
+        revinfo_policy = DEFAULT_SIG_VALIDATION_SPEC \
             .cert_validation_policy.revinfo_policy
         spec = SignatureValidationSpec(
             cert_validation_policy=CertValidationPolicySpec(
@@ -334,7 +344,8 @@ async def test_pades_lta_hash_algorithm_banned_but_poe_ok(requests_mock):
         )
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
-            r.embedded_signatures[0], validation_spec=spec
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(spec)
         )
         assert result.ades_subindic == AdESPassed.OK
 
@@ -347,7 +358,7 @@ async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock):
         )
 
     with freeze_time('2029-11-20'):
-        revinfo_policy = DEFAULT_VALIDATION_SPEC \
+        revinfo_policy = DEFAULT_SIG_VALIDATION_SPEC \
             .cert_validation_policy.revinfo_policy
         spec = SignatureValidationSpec(
             cert_validation_policy=CertValidationPolicySpec(
@@ -358,7 +369,8 @@ async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock):
         )
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
-            r.embedded_signatures[0], validation_spec=spec
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(spec)
         )
         assert result.ades_subindic == \
                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
@@ -372,7 +384,7 @@ async def test_pades_lta_algo_permaban(requests_mock):
         )
 
     with freeze_time('2029-11-20'):
-        revinfo_policy = DEFAULT_VALIDATION_SPEC \
+        revinfo_policy = DEFAULT_SIG_VALIDATION_SPEC \
             .cert_validation_policy.revinfo_policy
         spec = SignatureValidationSpec(
             cert_validation_policy=CertValidationPolicySpec(
@@ -383,7 +395,8 @@ async def test_pades_lta_algo_permaban(requests_mock):
         )
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
-            r.embedded_signatures[0], validation_spec=spec
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(spec)
         )
         assert result.ades_subindic == \
                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE

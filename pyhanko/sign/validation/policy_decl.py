@@ -20,8 +20,12 @@ from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
+from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
+from pyhanko.sign.validation import KeyUsageConstraints
+
 __all__ = [
     'SignatureValidationSpec',
+    'PdfSignatureValidationSpec',
     'RevinfoOnlineFetchingRule',
     'LocalKnowledge',
     'RevocationInfoGatheringSpec',
@@ -84,6 +88,13 @@ class SignatureValidationSpec:
         RevocationInfoGatheringSpec()
     ts_cert_validation_policy: Optional[CertValidationPolicySpec] = None
     local_knowledge: LocalKnowledge = LocalKnowledge()
+    key_usage_settings: KeyUsageConstraints = KeyUsageConstraints()
+
+
+@dataclass(frozen=True)
+class PdfSignatureValidationSpec:
+    signature_validation_spec: SignatureValidationSpec
+    diff_policy: Optional[DiffPolicy] = DEFAULT_DIFF_POLICY
 
 
 def _backend_if_necessary(

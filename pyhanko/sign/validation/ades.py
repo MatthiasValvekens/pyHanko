@@ -17,6 +17,8 @@ from copy import copy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
+    Any,
+    Dict,
     FrozenSet,
     Iterable,
     Iterator,
@@ -24,6 +26,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    Type,
     TypeVar,
     Union,
 )
@@ -79,6 +82,8 @@ from pyhanko.sign.validation import (
 )
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.sign.validation.status import (
+    DocumentTimestampStatus,
+    PdfSignatureStatus,
     RevocationDetails,
     SignatureCoverageLevel,
     SignatureStatus,
@@ -86,8 +91,10 @@ from pyhanko.sign.validation.status import (
     TimestampSignatureStatus,
 )
 
+from ..diff_analysis import DiffPolicy, DiffResult, SuspiciousModification
 from .policy_decl import (
     LocalKnowledge,
+    PdfSignatureValidationSpec,
     SignatureValidationSpec,
     bootstrap_validation_data_handlers,
 )
@@ -145,7 +152,9 @@ async def ades_timestamp_validation(
         timing_info: ValidationTimingInfo,
         validation_spec: SignatureValidationSpec,
         expected_tst_imprint: bytes,
-        validation_data_handlers: Optional[ValidationDataHandlers] = None) \
+        validation_data_handlers: Optional[ValidationDataHandlers] = None,
+        extra_status_kwargs: Optional[Dict[str, Any]] = None,
+        status_cls: Type[StatusType] = TimestampSignatureStatus) \
         -> AdESBasicValidationResult:
 
     cert_validation_policy = (
@@ -164,7 +173,8 @@ async def ades_timestamp_validation(
         handlers=validation_data_handlers
     )
     return await _ades_timestamp_validation_from_context(
-        tst_signed_data, validation_context, expected_tst_imprint
+        tst_signed_data, validation_context, expected_tst_imprint,
+        extra_status_kwargs=extra_status_kwargs, status_cls=status_cls
     )
 
 
@@ -197,12 +207,17 @@ def _ades_signature_crypto_policy_check(
 async def _ades_timestamp_validation_from_context(
         tst_signed_data: cms.SignedData,
         validation_context: ValidationContext,
-        expected_tst_imprint: bytes) -> AdESBasicValidationResult:
-    status_kwargs = await generic_cms.validate_tst_signed_data(
+        expected_tst_imprint: bytes,
+        extra_status_kwargs: Optional[Dict[str, Any]] = None,
+        status_cls: Type[StatusType] = TimestampSignatureStatus) \
+        -> AdESBasicValidationResult:
+    status_kwargs = dict(extra_status_kwargs or {})
+    status_kwargs_from_validation = await generic_cms.validate_tst_signed_data(
         tst_signed_data, validation_context=validation_context,
         expected_tst_imprint=expected_tst_imprint
     )
-    status = TimestampSignatureStatus(**status_kwargs)
+    status_kwargs.update(status_kwargs_from_validation)
+    status = status_cls(**status_kwargs)
     if not status.intact:
         return AdESBasicValidationResult(
             ades_subindic=AdESFailure.HASH_FAILURE,
@@ -223,9 +238,7 @@ async def _ades_timestamp_validation_from_context(
     interm_result.status_kwargs = status_kwargs
     return AdESBasicValidationResult(
         ades_subindic=interm_result.ades_subindic,
-        api_status=interm_result.update(
-            TimestampSignatureStatus, with_ts=False
-        ),
+        api_status=interm_result.update(status_cls, with_ts=False),
         failure_msg=None
     )
 
@@ -307,9 +320,10 @@ async def ades_basic_validation(
         signed_data: cms.SignedData,
         validation_spec: SignatureValidationSpec,
         timing_info: Optional[ValidationTimingInfo] = None,
-        key_usage_settings: KeyUsageConstraints = KeyUsageConstraints(),
         raw_digest: Optional[bytes] = None,
-        signature_not_before_time: Optional[datetime] = None) \
+        signature_not_before_time: Optional[datetime] = None,
+        extra_status_kwargs: Optional[Dict[str, Any]] = None,
+        status_cls: Type[StatusType] = SignatureStatus) \
         -> AdESBasicValidationResult:
     cert_validation_policy = validation_spec.cert_validation_policy
     timing_info = timing_info or ValidationTimingInfo.now()
@@ -325,9 +339,11 @@ async def ades_basic_validation(
     interm_result = await _ades_basic_validation(
         signed_data=signed_data,
         validation_context=validation_context,
-        key_usage_settings=key_usage_settings,
+        key_usage_settings=validation_spec.key_usage_settings,
         raw_digest=raw_digest,
-        signature_not_before_time=signature_not_before_time
+        signature_not_before_time=signature_not_before_time,
+        extra_status_kwargs=extra_status_kwargs,
+        status_cls=status_cls
     )
     if isinstance(interm_result, AdESBasicValidationResult):
         return interm_result
@@ -344,14 +360,18 @@ async def _ades_basic_validation(
         validation_context: ValidationContext,
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes],
-        signature_not_before_time: Optional[datetime]) \
+        signature_not_before_time: Optional[datetime],
+        extra_status_kwargs: Optional[Dict[str, Any]],
+        status_cls: Type[StatusType]) \
         -> Union[AdESBasicValidationResult, _InternalBasicValidationResult]:
+    status_kwargs = dict(extra_status_kwargs or {})
     try:
-        status_kwargs = await generic_cms.cms_basic_validation(
+        status_kwargs_from_validation = await generic_cms.cms_basic_validation(
             signed_data, raw_digest=raw_digest,
             validation_context=validation_context,
             key_usage_settings=key_usage_settings
         )
+        status_kwargs.update(status_kwargs_from_validation)
     except errors.SignatureValidationError as e:
         return AdESBasicValidationResult(
             ades_subindic=e.ades_subindication, failure_msg=e.failure_message,
@@ -359,7 +379,7 @@ async def _ades_basic_validation(
         )
 
     # put the temp status into a SignatureStatus object for convenience
-    status: SignatureStatus = SignatureStatus(**status_kwargs)
+    status: SignatureStatus = status_cls(**status_kwargs)
     if not status.intact:
         return AdESBasicValidationResult(
             ades_subindic=AdESFailure.HASH_FAILURE,
@@ -404,10 +424,11 @@ async def ades_with_time_validation(
         signed_data: cms.SignedData,
         validation_spec: SignatureValidationSpec,
         timing_info: Optional[ValidationTimingInfo] = None,
-        key_usage_settings: KeyUsageConstraints = KeyUsageConstraints(),
         raw_digest: Optional[bytes] = None,
         poe_manager: Optional[POEManager] = None,
-        signature_not_before_time: Optional[datetime] = None) \
+        signature_not_before_time: Optional[datetime] = None,
+        extra_status_kwargs: Optional[Dict[str, Any]] = None,
+        status_cls: Type[StatusType] = StandardCMSSignatureStatus) \
         -> AdESWithTimeValidationResult:
 
     timing_info = timing_info or ValidationTimingInfo.now()
@@ -427,8 +448,11 @@ async def ades_with_time_validation(
 
     interm_result = await _ades_basic_validation(
         signed_data, validation_context=validation_context,
-        key_usage_settings=key_usage_settings, raw_digest=raw_digest,
-        signature_not_before_time=signature_not_before_time
+        key_usage_settings=validation_spec.key_usage_settings,
+        raw_digest=raw_digest,
+        signature_not_before_time=signature_not_before_time,
+        extra_status_kwargs=extra_status_kwargs,
+        status_cls=status_cls
     )
     if isinstance(interm_result, AdESBasicValidationResult):
         return AdESWithTimeValidationResult(
@@ -441,9 +465,7 @@ async def ades_with_time_validation(
     elif interm_result.ades_subindic not in _WITH_TIME_FURTHER_PROC:
         assert isinstance(interm_result, _InternalBasicValidationResult)
         signature_not_before_time = interm_result.signature_not_before_time
-        api_status = interm_result.update(
-            SignatureStatus, with_ts=True
-        )
+        api_status = interm_result.update(status_cls, with_ts=True)
         return AdESWithTimeValidationResult(
             ades_subindic=interm_result.ades_subindic,
             api_status=api_status,
@@ -460,7 +482,7 @@ async def ades_with_time_validation(
         signer_info, validation_context, signed=False,
         tst_digest=generic_cms.compute_signature_tst_digest(signer_info)
     )
-    temp_status = interm_result.update(SignatureStatus, with_ts=False)
+    temp_status = interm_result.update(status_cls, with_ts=False)
 
     if sig_ts_result.ades_subindic != AdESPassed.OK:
         return AdESWithTimeValidationResult(
@@ -517,7 +539,7 @@ async def ades_with_time_validation(
     interm_result.trust_subindic_update = None
     interm_result.status_kwargs['trust_problem_indic'] = None
 
-    status = interm_result.update(StandardCMSSignatureStatus, with_ts=True)
+    status = interm_result.update(status_cls, with_ts=True)
     return AdESWithTimeValidationResult(
         ades_subindic=AdESPassed.OK,
         api_status=status, failure_msg=None,
@@ -799,6 +821,7 @@ class PrimaFaciePOE:
     digests_covered: FrozenSet[bytes]
     timestamp_token_signed_data: cms.SignedData
     doc_digest: bytes
+    diff_result: Union[DiffResult, SuspiciousModification, None]
 
     def add_to_poe_manager(self, manager: POEManager):
         for thing in self.digests_covered:
@@ -819,7 +842,8 @@ def _get_tst_timestamp(sd: cms.SignedData) -> datetime:
 
 def _build_prima_facie_poe_index_from_pdf_timestamps(
         r: PdfFileReader,
-        include_content_ts: bool):
+        include_content_ts: bool,
+        diff_policy: Optional[DiffPolicy]):
     # This subroutine implements the POE gathering part of the evidence record
     # processing algorithm in AdES as applied to PDF. For the purposes of this
     # function, the chain of document timestamps is treated as a single evidence
@@ -859,6 +883,11 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
     embedded_sig: EmbeddedPdfSignature
 
     for ix, embedded_sig in enumerate(r.embedded_signatures):
+
+        embedded_sig.compute_integrity_info(
+            # different None handling convention
+            diff_policy, skip_diff=diff_policy is None
+        )
 
         hist_handler = HistoricalResolver(
             r, revision=embedded_sig.signed_revision
@@ -907,6 +936,7 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
                         digests_covered=frozenset(collected_so_far),
                         timestamp_token_signed_data=ts_signed_data,
                         doc_digest=doc_digest,
+                        diff_result=embedded_sig.diff_result
                     )
                 )
                 # reset for_next_ts
@@ -1007,7 +1037,9 @@ async def _validate_prima_facie_poe(
             validation_spec=validation_spec,
             timing_info=cur_timing_info,
             expected_tst_imprint=poe.doc_digest,
-            validation_data_handlers=validation_data_handlers
+            validation_data_handlers=validation_data_handlers,
+            extra_status_kwargs={'diff_result': poe.diff_result},
+            status_cls=DocumentTimestampStatus
         )
         sub_indic = cur_time_result.ades_subindic
         if sub_indic.status == AdESStatus.PASSED:
@@ -1140,8 +1172,7 @@ async def _process_signature_ts(
 
 async def ades_lta_validation(
         embedded_sig: EmbeddedPdfSignature,
-        validation_spec: SignatureValidationSpec,
-        key_usage_settings: KeyUsageConstraints = KeyUsageConstraints(),
+        pdf_validation_spec: PdfSignatureValidationSpec,
         timing_info: Optional[ValidationTimingInfo] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESLTAValidationResult:
@@ -1152,9 +1183,11 @@ async def ades_lta_validation(
 
     # (1) process DocTSes as ER
     poe_list = _build_prima_facie_poe_index_from_pdf_timestamps(
-        embedded_sig.reader, include_content_ts=True
+        embedded_sig.reader, include_content_ts=True,
+        diff_policy=pdf_validation_spec.diff_policy
     )
 
+    validation_spec = pdf_validation_spec.signature_validation_spec
     init_local_knowledge = validation_spec.local_knowledge
     # Ingest CRLs, certs and OCSPs from the DSS
     # (POE info will be processed separately)
@@ -1226,9 +1259,10 @@ async def ades_lta_validation(
         validation_spec=augmented_validation_spec,
         timing_info=timing_info,
         poe_manager=updated_poe_manager,
-        key_usage_settings=key_usage_settings,
         raw_digest=embedded_sig.compute_digest(),
-        signature_not_before_time=signature_not_before_time
+        signature_not_before_time=signature_not_before_time,
+        extra_status_kwargs={'diff_result': embedded_sig.diff_result},
+        status_cls=PdfSignatureStatus
     )
 
     # don't branch on policy here, we always continue as if archival info
