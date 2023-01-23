@@ -1,5 +1,31 @@
 # changelog
 
+## 0.20.0
+
+This is a big release, with many breaking changes in the "deeper" APIs.
+The impact on the high-level API should be small to nonexistent, but caution when upgrading is advised.
+
+ - More uniform and machine-processable errors.
+ - Move towards a setup using "policy objects" that can be used to
+   construct `ValidationContext`s in a systematic way.
+ - Move revinfo gathering to a separate revinfo manager class. Some arguably
+   internal methods on `ValidationContext` were moved to the `RevinfoManager` class.
+ - Incubating API for AdES validation primitives (freshness, POE handling, more
+   sophisticated revinfo gathering, time slide) and some certificate-related
+   validation routines.
+ - Introduce a more fully-fledged API to manage permissible algorithms.
+ - Broaden trust root provisioning beyond certificates: trust roots
+   can now have qualifiers, and be provisioned as a name-key pair as opposed
+   to a (self-signed) certificate. This implies breaking changes for
+   `ValidationPath`.
+   In general, issuance semantics in the internals are now expressed through
+   the `Authority` API as much as possible.
+ - In the same vein, `CertificateRegistry` was refactored into `TrustManager`,
+   `CertificateRegistry` and `PathBuilder`. These are respectively responsible
+   for managing trust, maintaining the certificate cache, and building paths.
+ - Thorough clean-up of legacy dev tooling; put in place `mypy` and `black`,
+   move to `pytest`, get rid of `pretty_message` in favour of f-strings.
+
 
 ## 0.19.8
 
