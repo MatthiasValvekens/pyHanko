@@ -87,6 +87,7 @@ class SignatureValidationSpec:
     revinfo_gathering_policy: RevocationInfoGatheringSpec = \
         RevocationInfoGatheringSpec()
     ts_cert_validation_policy: Optional[CertValidationPolicySpec] = None
+    ac_validation_policy: Optional[CertValidationPolicySpec] = None
     local_knowledge: LocalKnowledge = LocalKnowledge()
     key_usage_settings: KeyUsageConstraints = KeyUsageConstraints()
 

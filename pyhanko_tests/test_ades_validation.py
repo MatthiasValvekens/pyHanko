@@ -4,22 +4,33 @@ from typing import Optional
 
 import pytest
 from asn1crypto import algos, cms, keys
+from certomancer.integrations.illusionist import Illusionist
+from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import policy_decl as certv_policy_decl
 from pyhanko_certvalidator.authority import CertTrustAnchor
-from pyhanko_certvalidator.context import CertValidationPolicySpec
+from pyhanko_certvalidator.context import (
+    CertValidationPolicySpec,
+    ValidationContext,
+)
+from pyhanko_certvalidator.fetchers.requests_fetchers import (
+    RequestsFetcherBackend,
+)
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsageConstraint,
     AlgorithmUsagePolicy,
     FreshnessReqType,
 )
-from pyhanko_certvalidator.registry import SimpleTrustManager
+from pyhanko_certvalidator.registry import (
+    SimpleCertificateStore,
+    SimpleTrustManager,
+)
 from pyhanko_certvalidator.validate import async_validate_path
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign import PdfTimeStamper, signers
+from pyhanko.sign import PdfTimeStamper, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate, AdESPassed
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
@@ -28,7 +39,7 @@ from pyhanko.sign.validation.policy_decl import (
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
 )
-from pyhanko_tests.samples import MINIMAL_ONE_FIELD
+from pyhanko_tests.samples import CERTOMANCER, MINIMAL_ONE_FIELD
 from pyhanko_tests.signing_commons import (
     DUMMY_TS,
     DUMMY_TS2,
@@ -400,3 +411,89 @@ async def test_pades_lta_algo_permaban(requests_mock):
         )
         assert result.ades_subindic == \
                AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+
+
+@pytest.mark.asyncio
+async def test_pades_lta_live_ac_validation(requests_mock):
+
+    with freeze_time('2020-11-01'):
+        pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
+        authorities = [
+            pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+            pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
+            pki_arch.get_cert('leaf-aa')
+        ]
+        signer = signers.SimpleSigner(
+            signing_cert=pki_arch.get_cert(CertLabel('signer1')),
+            signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+            cert_registry=SimpleCertificateStore.from_certs(authorities),
+            attribute_certs=[
+                pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+            ]
+        )
+        dummy_ts = timestamps.DummyTimeStamper(
+            tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
+            tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
+            certs_to_embed=SimpleCertificateStore.from_certs(
+                [pki_arch.get_cert('root')]
+            )
+        )
+
+        fetchers = RequestsFetcherBackend().get_fetchers()
+        vc = ValidationContext(
+            trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
+            other_certs=authorities, fetchers=fetchers,
+            revocation_mode='require'
+        )
+        ac_vc = ValidationContext(
+            trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
+            other_certs=authorities, fetchers=fetchers,
+            revocation_mode='require'
+        )
+
+        Illusionist(pki_arch).register(requests_mock)
+
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+        out = await signers.async_sign_pdf(
+            w, signers.PdfSignatureMetadata(
+                validation_context=vc,
+                ac_validation_context=ac_vc,
+                subfilter=PADES, embed_validation_info=True,
+                use_pades_lta=True
+            ), signer=signer, timestamper=dummy_ts,
+            existing_fields_only=True
+        )
+
+
+    revinfo_policy = certv_policy_decl.CertRevTrustPolicy(
+        revocation_checking_policy=certv_policy_decl.REQUIRE_REVINFO,
+        freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION
+    )
+    sig_validation_spec = SignatureValidationSpec(
+        cert_validation_policy=CertValidationPolicySpec(
+            trust_manager=SimpleTrustManager.build([
+                pki_arch.get_cert('root')
+            ]),
+            revinfo_policy=revinfo_policy
+        ),
+
+        ac_validation_policy=CertValidationPolicySpec(
+            trust_manager=SimpleTrustManager.build([
+                pki_arch.get_cert('root-aa')
+            ]),
+            revinfo_policy=revinfo_policy
+        )
+    )
+    with freeze_time('2028-02-01'):
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(sig_validation_spec)
+        )
+        assert result.ades_subindic == AdESPassed.OK
+
+        roles = list(result.api_status.ac_attrs['role'].attr_values)
+        role = roles[0]
+        assert isinstance(role, cms.RoleSyntax)
+        assert len(result.api_status.ac_attrs) == 1
+        assert role['role_name'].native == 'bigboss@example.com'

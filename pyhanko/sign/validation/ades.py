@@ -87,6 +87,7 @@ from pyhanko.sign.validation.status import (
     RevocationDetails,
     SignatureCoverageLevel,
     SignatureStatus,
+    SignerAttributeStatus,
     StandardCMSSignatureStatus,
     TimestampSignatureStatus,
 )
@@ -132,7 +133,9 @@ class _InternalBasicValidationResult:
     signature_ts_validity: Optional[TimestampSignatureStatus] = None
     content_ts_validity: Optional[TimestampSignatureStatus] = None
 
-    def update(self, status_cls, with_ts):
+    signer_attr_status: Optional[SignerAttributeStatus] = None
+
+    def update(self, status_cls, with_ts, with_attrs):
         status_kwargs = self.status_kwargs
         if self.trust_subindic_update:
             status_kwargs['trust_problem_indic'] = self.trust_subindic_update
@@ -142,6 +145,12 @@ class _InternalBasicValidationResult:
         if with_ts and self.content_ts_validity:
             status_kwargs['content_timestamp_validity'] \
                 = self.content_ts_validity
+        if with_attrs and self.signer_attr_status:
+            status_kwargs['ac_attrs'] = self.signer_attr_status.ac_attrs
+            status_kwargs['cades_signer_attrs'] \
+                = self.signer_attr_status.cades_signer_attrs
+            status_kwargs['ac_validation_errs'] \
+                = self.signer_attr_status.ac_validation_errs
         return status_cls(**status_kwargs)
 
 
@@ -233,12 +242,15 @@ async def _ades_timestamp_validation_from_context(
 
     interm_result = await _process_basic_validation(
         tst_signed_data, status, validation_context,
-        signature_not_before_time=None
+        ac_validation_context=None,
+        signature_not_before_time=None,
     )
     interm_result.status_kwargs = status_kwargs
     return AdESBasicValidationResult(
         ades_subindic=interm_result.ades_subindic,
-        api_status=interm_result.update(status_cls, with_ts=False),
+        api_status=interm_result.update(
+            status_cls, with_ts=False, with_attrs=False
+        ),
         failure_msg=None
     )
 
@@ -260,6 +272,7 @@ async def _ades_process_attached_ts(signer_info, validation_context,
 async def _process_basic_validation(
         signed_data: cms.SignedData, temp_status: SignatureStatus,
         ts_validation_context: ValidationContext,
+        ac_validation_context: Optional[ValidationContext],
         signature_not_before_time: Optional[datetime]):
     ades_trust_status: Optional[AdESSubIndic] = temp_status.trust_problem_indic
     signer_info = generic_cms.extract_signer_info(signed_data)
@@ -302,19 +315,64 @@ async def _process_basic_validation(
 
             if signature_not_before_time >= cutoff:
                 ades_trust_status = perm_status
-    # TODO process all attributes in signature acceptance validation step!!
 
+    # TODO process signature policy attr once we can
+
+    cert_info = generic_cms.extract_certificate_info(signed_data)
+
+    # FIXME this is not entirely correct, we need past validation
+    #  for attr certs as well
+    attr_status_kwargs = await generic_cms.collect_signer_attr_status(
+        sd_attr_certificates=cert_info.attribute_certs,
+        signer_cert=cert_info.signer_cert,
+        validation_context=ac_validation_context,
+        sd_signed_attrs=signer_info['signed_attrs']
+    )
     ades_subindic = ades_trust_status or AdESPassed.OK
     return _InternalBasicValidationResult(
         ades_subindic=ades_subindic,
         trust_subindic_update=ades_trust_status,
         content_ts_validity=ts_status,
         signature_not_before_time=signature_not_before_time,
+        signer_attr_status=SignerAttributeStatus(**attr_status_kwargs),
         signature_poe_time=None
     )
 
 
+def _init_vcs(
+        validation_spec: SignatureValidationSpec,
+        timing_info: ValidationTimingInfo,
+        validation_data_handlers: ValidationDataHandlers
+):
+
+    validation_context = validation_spec.cert_validation_policy\
+        .build_validation_context(
+            timing_info=timing_info,
+            handlers=validation_data_handlers
+        )
+    if validation_spec.ts_cert_validation_policy is not None:
+        ts_validation_context = validation_spec.ts_cert_validation_policy \
+            .build_validation_context(
+                timing_info=timing_info,
+                handlers=validation_data_handlers
+            )
+    else:
+        ts_validation_context = validation_context
+
+    if validation_spec.ac_validation_policy is not None:
+        ac_validation_context = validation_spec.ac_validation_policy \
+            .build_validation_context(
+                timing_info=timing_info,
+                handlers=validation_data_handlers
+            )
+    else:
+        ac_validation_context = None
+
+    return validation_context, ts_validation_context, ac_validation_context
+
+
 # ETSI EN 319 102-1 § 5.3
+
 
 async def ades_basic_validation(
         signed_data: cms.SignedData,
@@ -323,22 +381,21 @@ async def ades_basic_validation(
         raw_digest: Optional[bytes] = None,
         signature_not_before_time: Optional[datetime] = None,
         extra_status_kwargs: Optional[Dict[str, Any]] = None,
-        status_cls: Type[StatusType] = SignatureStatus) \
+        status_cls: Type[StatusType] = StandardCMSSignatureStatus) \
         -> AdESBasicValidationResult:
-    cert_validation_policy = validation_spec.cert_validation_policy
     timing_info = timing_info or ValidationTimingInfo.now()
     validation_data_handlers = bootstrap_validation_data_handlers(
         spec=validation_spec,
         timing_info=timing_info
     )
-    validation_context = cert_validation_policy.build_validation_context(
-        timing_info=timing_info,
-        handlers=validation_data_handlers
-    )
+    validation_context, ts_validation_context, ac_validation_context = \
+        _init_vcs(validation_spec, timing_info, validation_data_handlers)
 
     interm_result = await _ades_basic_validation(
         signed_data=signed_data,
         validation_context=validation_context,
+        ts_validation_context=ts_validation_context,
+        ac_validation_context=ac_validation_context,
         key_usage_settings=validation_spec.key_usage_settings,
         raw_digest=raw_digest,
         signature_not_before_time=signature_not_before_time,
@@ -350,7 +407,10 @@ async def ades_basic_validation(
 
     return AdESBasicValidationResult(
         ades_subindic=interm_result.ades_subindic,
-        api_status=interm_result.update(SignatureStatus, with_ts=False),
+        api_status=interm_result.update(
+            StandardCMSSignatureStatus, with_ts=False,
+            with_attrs=True
+        ),
         failure_msg=None
     )
 
@@ -358,6 +418,8 @@ async def ades_basic_validation(
 async def _ades_basic_validation(
         signed_data: cms.SignedData,
         validation_context: ValidationContext,
+        ts_validation_context: ValidationContext,
+        ac_validation_context: Optional[ValidationContext],
         key_usage_settings: KeyUsageConstraints,
         raw_digest: Optional[bytes],
         signature_not_before_time: Optional[datetime],
@@ -394,8 +456,9 @@ async def _ades_basic_validation(
         )
 
     interm_result = await _process_basic_validation(
-        signed_data, status, validation_context,
-        signature_not_before_time=signature_not_before_time
+        signed_data, status, ts_validation_context,
+        ac_validation_context=ac_validation_context,
+        signature_not_before_time=signature_not_before_time,
     )
     interm_result.status_kwargs = status_kwargs
     return interm_result
@@ -432,22 +495,21 @@ async def ades_with_time_validation(
         -> AdESWithTimeValidationResult:
 
     timing_info = timing_info or ValidationTimingInfo.now()
-    cert_validation_policy = validation_spec.cert_validation_policy
     validation_data_handlers = bootstrap_validation_data_handlers(
         spec=validation_spec,
         timing_info=timing_info,
         poe_manager_override=poe_manager
     )
-    validation_context = cert_validation_policy.build_validation_context(
-        timing_info=timing_info,
-        handlers=validation_data_handlers
-    )
+    validation_context, ts_validation_context, ac_validation_context = \
+        _init_vcs(validation_spec, timing_info, validation_data_handlers)
 
     sig_bytes = signed_data['signer_infos'][0]['signature'].native
     signature_poe_time = validation_data_handlers.poe_manager[sig_bytes]
 
     interm_result = await _ades_basic_validation(
         signed_data, validation_context=validation_context,
+        ts_validation_context=ts_validation_context,
+        ac_validation_context=ac_validation_context,
         key_usage_settings=validation_spec.key_usage_settings,
         raw_digest=raw_digest,
         signature_not_before_time=signature_not_before_time,
@@ -465,7 +527,9 @@ async def ades_with_time_validation(
     elif interm_result.ades_subindic not in _WITH_TIME_FURTHER_PROC:
         assert isinstance(interm_result, _InternalBasicValidationResult)
         signature_not_before_time = interm_result.signature_not_before_time
-        api_status = interm_result.update(status_cls, with_ts=True)
+        api_status = interm_result.update(
+            status_cls, with_ts=True, with_attrs=True
+        )
         return AdESWithTimeValidationResult(
             ades_subindic=interm_result.ades_subindic,
             api_status=api_status,
@@ -482,7 +546,9 @@ async def ades_with_time_validation(
         signer_info, validation_context, signed=False,
         tst_digest=generic_cms.compute_signature_tst_digest(signer_info)
     )
-    temp_status = interm_result.update(status_cls, with_ts=False)
+    temp_status = interm_result.update(
+        status_cls, with_ts=False, with_attrs=True
+    )
 
     if sig_ts_result.ades_subindic != AdESPassed.OK:
         return AdESWithTimeValidationResult(
@@ -539,7 +605,7 @@ async def ades_with_time_validation(
     interm_result.trust_subindic_update = None
     interm_result.status_kwargs['trust_problem_indic'] = None
 
-    status = interm_result.update(status_cls, with_ts=True)
+    status = interm_result.update(status_cls, with_ts=True, with_attrs=True)
     return AdESWithTimeValidationResult(
         ades_subindic=AdESPassed.OK,
         api_status=status, failure_msg=None,
@@ -1361,7 +1427,6 @@ async def ades_lta_validation(
             signature_prelim_result.signature_not_before_time
         ),
         signature_timestamp_status=signature_ts_result,
-
         oldest_evidence_record_timestamp=(
             oldest_evidence_record_timestamp
         )

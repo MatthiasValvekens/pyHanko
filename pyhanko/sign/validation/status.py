@@ -428,30 +428,7 @@ class CAdESSignerAttributeAssertions:
 
 
 @dataclass(frozen=True)
-class StandardCMSSignatureStatus(SignatureStatus):
-    """
-    Status of a standard "end-entity" CMS signature, potentially with
-    timing information embedded inside.
-    """
-
-    signer_reported_dt: Optional[datetime] = None
-    """
-    Signer-reported signing time, if present in the signature.
-
-    Generally speaking, this timestamp should not be taken as fact.
-    """
-
-    timestamp_validity: Optional[TimestampSignatureStatus] = None
-    """
-    Validation status of the signature timestamp token embedded in this
-    signature, if present.
-    """
-
-    content_timestamp_validity: Optional[TimestampSignatureStatus] = None
-    """
-    Validation status of the content timestamp token embedded in this
-    signature, if present.
-    """
+class SignerAttributeStatus:
 
     ac_attrs: Optional[CertifiedAttributes] = None
     """
@@ -488,6 +465,33 @@ class StandardCMSSignatureStatus(SignatureStatus):
     """
     Information extracted and validated from the signed ``signer-attrs-v2``
     attribute defined in CAdES.
+    """
+
+
+@dataclass(frozen=True)
+class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
+    """
+    Status of a standard "end-entity" CMS signature, potentially with
+    timing information embedded inside.
+    """
+
+    signer_reported_dt: Optional[datetime] = None
+    """
+    Signer-reported signing time, if present in the signature.
+
+    Generally speaking, this timestamp should not be taken as fact.
+    """
+
+    timestamp_validity: Optional[TimestampSignatureStatus] = None
+    """
+    Validation status of the signature timestamp token embedded in this
+    signature, if present.
+    """
+
+    content_timestamp_validity: Optional[TimestampSignatureStatus] = None
+    """
+    Validation status of the content timestamp token embedded in this
+    signature, if present.
     """
 
     @property
