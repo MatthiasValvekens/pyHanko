@@ -12,6 +12,14 @@ This page lists some TODOs and known limitations of pyHanko.
   interpretation of the validity of the chain of trust based on the validation
   info present in the file, not as a final judgment on whether the signature
   complies with any particular PAdES profile.
+
+  .. note::
+    Starting from version ``0.17.0``, pyHanko ships with an experimental
+    implementation of AdES validation according to ETSI EN 319 102-1.
+    Relevant entry points can be found in :mod:`pyhanko.sign.validation.ades`.
+    Note that the API is currently incubating, and the implementation is still
+    incomplete in several respects.
+
 * The most lenient document modification policy (i.e. addition of comments and
   annotations) is not supported.
   Comments added to a signed PDF will therefore be considered "unsafe" changes,

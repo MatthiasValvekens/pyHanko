@@ -3,6 +3,84 @@ Release history
 ***************
 
 
+.. _release-0.17.0:
+
+0.17.0
+======
+
+
+*Release date:* 2023-01-31
+
+
+Note
+----
+
+This is a bit of an odd release. It comes with relatively few functional
+changes or enhancements to existing features, but it has nevertheless been
+in the works for quite a long time.
+
+In early 2022, I decided that the time was right to equip pyHanko with its
+own AdES validation engine, implementing the machinery specified by
+ETSI EN 319 102-1. I knew ahead of time that this would not be an easy task:
+
+ * PyHanko's own validation code was put together in a fairly ad-hoc manner
+   starting from the provisions in the CMS specification, so some refactoring
+   would be necessary.
+ * ``pyhanko-certvalidator`` also was never designed to be anything more than an
+   RFC 5280 validation engine, and retrofitting the fine-tuning required by the
+   AdES spec definitely wasn't easy.
+
+Initially, I estimated that this effort would take a few months tops. Yet here
+we are, approximately one year down the road: :mod:`pyhanko.sign.validation.ades`.
+
+Truth be told, the implementation isn't yet ready for prime time, but it is in
+a state where it's at least useful for experimentation purposes, and can be
+iterated on.
+Also, given the volume of subtle changes and far-reaching refactoring in the
+internals of both the ``pyhanko`` and ``pyhanko-certvalidator`` packages,
+continually rebasing the ``feature/ades-validation`` feature branch turned
+into a chore quite quickly.
+
+So, if you're keen to start playing around with AdES validation: please do so,
+and let me know what you think. If standards-based validation is not something
+you care about, feel free to disregard everything I wrote above, it almost
+certainly won't affect any of your code.
+
+My plan is to incrementally build upon and polish the code in
+:mod:`pyhanko.sign.validation.ades`, and eventually deprecate the current
+ad-hoc LTV validation logic in
+:func:`pyhanko.sign.validation.ltv.async_validate_pdf_ltv_signature`.
+That's still a ways off from now, though.
+
+
+Dependency updates
+------------------
+
+ * ``pyhanko-certvalidator`` updated to ``0.20.0``
+
+
+Breaking changes
+----------------
+
+ * There are various changes in the validation internals that are not
+   backwards compatible, but all of those concern internal APIs.
+ * There are some noteworthy changes to the ``pyhanko-certvalidator`` API.
+   Those are documented in
+   `the change log <https://github.com/MatthiasValvekens/certvalidator/blob/master/changelog.md#0200>`_.
+   Most of these do not affect basic usage.
+
+
+New features and enhancements
+-----------------------------
+
+Validation
+^^^^^^^^^^
+
+ * Experimental AdES validation engine :mod:`pyhanko.sign.validation.ades`.
+ * In the status API, make a more meaningful distinction between ``valid`` and
+   ``intact``, and document that distinction.
+
+
 .. _release-0.16.0:
 
 0.16.0
