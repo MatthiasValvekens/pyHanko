@@ -63,7 +63,7 @@ setup(
         'pytz>=2020.1',
         'qrcode>=6.1',
         'tzlocal>=2.1',
-        'pyhanko-certvalidator~=0.19.8',
+        'pyhanko-certvalidator==0.20.*',
         'click>=7.1.2',
         'requests>=2.24.0',
         'pyyaml>=5.3.1',
