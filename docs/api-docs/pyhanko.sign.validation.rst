@@ -1,9 +1,10 @@
-pyhanko.sign.validation module
-==============================
+pyhanko.sign.validation package
+===============================
 
 .. toctree::
    :maxdepth: 4
 
+   pyhanko.sign.validation.ades
    pyhanko.sign.validation.dss
    pyhanko.sign.validation.errors
    pyhanko.sign.validation.generic_cms

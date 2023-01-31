@@ -1,13 +1,11 @@
 """
-This module contains a number of primitives to handle AdES signature validation
-at some point in the future.
+This module contains a number of functions to handle AdES signature validation.
 
-It's highly volatile, buggy internal API at this point, and should be considered
-very experimental.
 
-.. note::
-    The only reason why this is even in the main tree at all is because
-    continually rebasing the branch on which it lives became too much of a drag.
+.. danger::
+    This API is incubating, and not all features of the spec have been fully
+    implemented at this stage. There will be bugs, and API changes may still
+    occur.
 """
 import asyncio
 import dataclasses
@@ -117,9 +115,29 @@ StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 @dataclass(frozen=True)
 class AdESBasicValidationResult:
+    """
+    Result of validation of basic signatures.
+
+    ETSI EN 319 102-1, § 5.3
+    """
+
     ades_subindic: AdESSubIndic
+    """
+    AdES subindication.
+    """
+
     api_status: Optional[StatusType]
+    """
+    A status descriptor object from pyHanko's own validation API.
+    Will be an instance of :class:`.SignatureStatus` or a subclass
+    thereof.
+    """
+
     failure_msg: Optional[str]
+    """
+    A string describing the reason why validation failed,
+    if applicable.
+    """
 
 
 @dataclass
@@ -154,18 +172,40 @@ class _InternalBasicValidationResult:
         return status_cls(**status_kwargs)
 
 
-# ETSI EN 319 102-1 § 5.4
-
 async def ades_timestamp_validation(
         tst_signed_data: cms.SignedData,
-        timing_info: ValidationTimingInfo,
         validation_spec: SignatureValidationSpec,
         expected_tst_imprint: bytes,
+        timing_info: Optional[ValidationTimingInfo] = None,
         validation_data_handlers: Optional[ValidationDataHandlers] = None,
         extra_status_kwargs: Optional[Dict[str, Any]] = None,
         status_cls: Type[StatusType] = TimestampSignatureStatus) \
         -> AdESBasicValidationResult:
+    """
+    Validate a timestamp token according to ETSI EN 319 102-1 § 5.4.
 
+    :param tst_signed_data:
+        The ``SignedData`` value of the timestamp.
+    :param validation_spec:
+        Validation settings to apply.
+    :param expected_tst_imprint:
+        The expected message imprint in the timestamp token.
+    :param timing_info:
+        Data object describing the timing of the validation.
+        Defaults to :meth:`.ValidationTimingInfo.now`.
+    :param validation_data_handlers:
+        Data handlers to manage validation data.
+    :param extra_status_kwargs:
+        Extra keyword arguments to pass to the signature status object's
+        ``__init__`` function.
+    :param status_cls:
+        The class of the resulting status object in pyHanko's internal
+        validation API.
+    :return:
+        A :class:`.AdESBasicValidationResult`.
+    """
+
+    timing_info = timing_info or ValidationTimingInfo.now()
     cert_validation_policy = (
         validation_spec.ts_cert_validation_policy
         or validation_spec.cert_validation_policy
@@ -379,15 +419,43 @@ async def ades_basic_validation(
         validation_spec: SignatureValidationSpec,
         timing_info: Optional[ValidationTimingInfo] = None,
         raw_digest: Optional[bytes] = None,
+        validation_data_handlers: Optional[ValidationDataHandlers] = None,
         signature_not_before_time: Optional[datetime] = None,
         extra_status_kwargs: Optional[Dict[str, Any]] = None,
         status_cls: Type[StatusType] = StandardCMSSignatureStatus) \
         -> AdESBasicValidationResult:
+    """
+    Validate a CMS signature according to ETSI EN 319 102-1 § 5.3.
+
+    :param signed_data:
+        The ``SignedData`` value.
+    :param validation_spec:
+        Validation settings to apply.
+    :param raw_digest:
+        The expected message digest attribute value.
+    :param timing_info:
+        Data object describing the timing of the validation.
+        Defaults to :meth:`.ValidationTimingInfo.now`.
+    :param validation_data_handlers:
+        Data handlers to manage validation data.
+    :param extra_status_kwargs:
+        Extra keyword arguments to pass to the signature status object's
+        ``__init__`` function.
+    :param status_cls:
+        The class of the resulting status object in pyHanko's internal
+        validation API.
+    :param signature_not_before_time:
+        Time when the signature was known _not_ to exist.
+    :return:
+        A :class:`.AdESBasicValidationResult`.
+    """
+
     timing_info = timing_info or ValidationTimingInfo.now()
-    validation_data_handlers = bootstrap_validation_data_handlers(
-        spec=validation_spec,
-        timing_info=timing_info
-    )
+    if validation_data_handlers is None:
+        validation_data_handlers = bootstrap_validation_data_handlers(
+            spec=validation_spec,
+            timing_info=timing_info
+        )
     validation_context, ts_validation_context, ac_validation_context = \
         _init_vcs(validation_spec, timing_info, validation_data_handlers)
 
@@ -481,25 +549,49 @@ _WITH_TIME_FURTHER_PROC = frozenset({
 })
 
 
-# ETSI EN 319 102-1 § 5.5
-
 async def ades_with_time_validation(
         signed_data: cms.SignedData,
         validation_spec: SignatureValidationSpec,
         timing_info: Optional[ValidationTimingInfo] = None,
         raw_digest: Optional[bytes] = None,
-        poe_manager: Optional[POEManager] = None,
+        validation_data_handlers: Optional[ValidationDataHandlers] = None,
         signature_not_before_time: Optional[datetime] = None,
         extra_status_kwargs: Optional[Dict[str, Any]] = None,
         status_cls: Type[StatusType] = StandardCMSSignatureStatus) \
         -> AdESWithTimeValidationResult:
+    """
+    Validate a CMS signature with time according to ETSI EN 319 102-1 § 5.5.
+
+    :param signed_data:
+        The ``SignedData`` value.
+    :param validation_spec:
+        Validation settings to apply.
+    :param raw_digest:
+        The expected message digest attribute value.
+    :param timing_info:
+        Data object describing the timing of the validation.
+        Defaults to :meth:`.ValidationTimingInfo.now`.
+    :param validation_data_handlers:
+        Data handlers to manage validation data.
+    :param extra_status_kwargs:
+        Extra keyword arguments to pass to the signature status object's
+        ``__init__`` function.
+    :param status_cls:
+        The class of the resulting status object in pyHanko's internal
+        validation API.
+    :param signature_not_before_time:
+        Time when the signature was known _not_ to exist.
+    :return:
+        A :class:`.AdESBasicValidationResult`.
+    """
 
     timing_info = timing_info or ValidationTimingInfo.now()
-    validation_data_handlers = bootstrap_validation_data_handlers(
-        spec=validation_spec,
-        timing_info=timing_info,
-        poe_manager_override=poe_manager
-    )
+    if validation_data_handlers is None:
+        validation_data_handlers = bootstrap_validation_data_handlers(
+            spec=validation_spec,
+            timing_info=timing_info
+        )
+
     validation_context, ts_validation_context, ac_validation_context = \
         _init_vcs(validation_spec, timing_info, validation_data_handlers)
 
@@ -861,6 +953,32 @@ async def ades_past_signature_validation(
         poe_manager: POEManager,
         current_time_sub_indic: Optional[AdESIndeterminate],
         init_control_time: Optional[datetime] = None) -> AdESSubIndic:
+    """
+    Validate a CMS signature in the past according
+    to ETSI EN 319 102-1 § 5.6.2.4.
+
+    This is internal API.
+
+    .. danger::
+        The notion of "past validation" used here is only valid in the
+        narrow technical sense in which it is used within AdES.
+        It should _never_ be relied upon as a standalone validation routine.
+
+    :param signed_data:
+        The ``SignedData`` value.
+    :param validation_spec:
+        Validation settings to apply.
+    :param poe_manager:
+        The POE manager from which to source existence proofs.
+    :param current_time_sub_indic:
+        The AdES subindication from validating the signature
+        at the current time with the relevant settings.
+    :param init_control_time:
+        Initial value for the control time parameter.
+    :return:
+        An AdES subindication indicating the validation result
+        after going through the past validation process.
+    """
 
     eci = signed_data['encap_content_info']
     is_timestamp = eci['content_type'].native == 'tst_info'
@@ -1161,8 +1279,25 @@ _LTA_TS_FURTHER_PROC = frozenset({
 
 @dataclass(frozen=True)
 class AdESLTAValidationResult(AdESWithTimeValidationResult):
+    """
+    Result of a PAdES validation for a signature providing long-term
+    availability and integrity of validation material.
+    See ETSI EN 319 102-1, § 5.6.3.
+    """
+
     oldest_evidence_record_timestamp: Optional[datetime]
+    """
+    The oldest timestamp in the evidence record, after validation.
+
+    .. note::
+        For PAdES, this refers to the chain of document timestamp signatures
+        after signing.
+    """
+
     signature_timestamp_status: Optional[AdESBasicValidationResult]
+    """
+    The validation result for the signature time stamp, if applicable.
+    """
 
 
 async def _process_signature_ts(
@@ -1242,6 +1377,25 @@ async def ades_lta_validation(
         timing_info: Optional[ValidationTimingInfo] = None,
         signature_not_before_time: Optional[datetime] = None) \
         -> AdESLTAValidationResult:
+    """
+    Validate a PAdES signature providing long-term availability and integrity
+    of validation material. See ETSI EN 319 102-1, § 5.6.3.
+
+    For the purposes of PAdES validation, the chain of document time stamps
+    in the document serves as the unique Evidence Record (ER).
+
+    :param embedded_sig:
+        The PDF signature to validate.
+    :param pdf_validation_spec:
+        PDF signature validation settings.
+    :param timing_info:
+        Data object describing the timing of the validation.
+        Defaults to :meth:`.ValidationTimingInfo.now`.
+    :param signature_not_before_time:
+        Time when the signature was known _not_ to exist.
+    :return:
+        A validation result.
+    """
 
     timing_info = timing_info or ValidationTimingInfo.now(
         tz=tzlocal.get_localzone()
@@ -1320,11 +1474,17 @@ async def ades_lta_validation(
     # (2) skipped, is automatic in our implementation
 
     # (3) Run validation for signatures with time
+
+    with_time_data_handlers = bootstrap_validation_data_handlers(
+        spec=augmented_validation_spec,
+        timing_info=timing_info,
+        poe_manager_override=updated_poe_manager
+    )
     signature_prelim_result = await ades_with_time_validation(
         signed_data=embedded_sig.signed_data,
         validation_spec=augmented_validation_spec,
         timing_info=timing_info,
-        poe_manager=updated_poe_manager,
+        validation_data_handlers=with_time_data_handlers,
         raw_digest=embedded_sig.compute_digest(),
         signature_not_before_time=signature_not_before_time,
         extra_status_kwargs={'diff_result': embedded_sig.diff_result},

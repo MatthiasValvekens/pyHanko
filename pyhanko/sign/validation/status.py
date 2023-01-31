@@ -28,7 +28,7 @@ __all__ = [
     'StandardCMSSignatureStatus',
     'SignatureCoverageLevel', 'ModificationInfo',
     'PdfSignatureStatus', 'DocumentTimestampStatus',
-    'RevocationDetails'
+    'RevocationDetails', 'SignerAttributeStatus'
 ]
 
 logger = logging.getLogger(__name__)
