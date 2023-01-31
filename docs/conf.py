@@ -33,7 +33,7 @@ def get_version():
 # -- Project information -----------------------------------------------------
 
 project = 'pyHanko'
-copyright = '2020-2021, Matthias Valvekens'
+copyright = '2020-2023, Matthias Valvekens'
 author = 'Matthias Valvekens'
 
 # The full version, including alpha/beta/rc tags
