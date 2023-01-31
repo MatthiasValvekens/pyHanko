@@ -4,7 +4,10 @@ from typing import Dict, Optional
 from pyhanko.pdf_utils import generic
 
 __all__ = [
-    'ShapeResult', 'FontEngine', 'FontSubsetCollection', 'FontEngineFactory'
+    'ShapeResult',
+    'FontEngine',
+    'FontSubsetCollection',
+    'FontEngineFactory',
 ]
 
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
@@ -14,6 +17,7 @@ ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 def generate_subset_prefix():
     import random
+
     return ''.join(ALPHABET[random.randint(0, 25)] for _ in range(6))
 
 
@@ -40,6 +44,7 @@ class FontSubsetCollection:
 @dataclass(frozen=True)
 class ShapeResult:
     """Result of shaping a Unicode string."""
+
     graphics_ops: bytes
     """
     PDF graphics operators to render the glyphs.
@@ -55,8 +60,13 @@ class ShapeResult:
 class FontEngine:
     """General interface for text shaping and font metrics."""
 
-    def __init__(self, writer: BasePdfFileWriter, base_postscript_name: str,
-                 embedded_subset: bool, obj_stream=None):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        base_postscript_name: str,
+        embedded_subset: bool,
+        obj_stream=None,
+    ):
         fsc = writer.get_subset_collection(base_postscript_name)
         if embedded_subset:
             self.subset_prefix = prefix = fsc.add_subset()
@@ -121,7 +131,7 @@ class FontEngine:
 
 
 class FontEngineFactory:
-
-    def create_font_engine(self, writer: 'BasePdfFileWriter',
-                           obj_stream=None) -> FontEngine:
+    def create_font_engine(
+        self, writer: 'BasePdfFileWriter', obj_stream=None
+    ) -> FontEngine:
         raise NotImplementedError

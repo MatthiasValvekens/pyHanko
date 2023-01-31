@@ -87,22 +87,22 @@ def test_read_qr_config():
     default_qr_style = cli_config.get_stamp_style()
     assert isinstance(default_qr_style, QRStampStyle)
     assert default_qr_style.background is stamp.STAMP_ART_CONTENT
-    assert isinstance(default_qr_style.text_box_style.font,
-                      GlyphAccumulatorFactory)
+    assert isinstance(
+        default_qr_style.text_box_style.font, GlyphAccumulatorFactory
+    )
     assert default_qr_style.qr_position == stamp.QRPosition.RIGHT_OF_TEXT
 
     expected_layout = layout.SimpleBoxLayoutRule(
         x_align=layout.AxisAlignment.ALIGN_MID,
         y_align=layout.AxisAlignment.ALIGN_MIN,
-        margins=layout.Margins(left=10, right=10)
+        margins=layout.Margins(left=10, right=10),
     )
     assert default_qr_style.inner_content_layout == expected_layout
 
     alternative1 = cli_config.get_stamp_style('alternative1')
     assert isinstance(alternative1, QRStampStyle)
     assert isinstance(alternative1.background, PdfImage)
-    assert isinstance(alternative1.text_box_style.font,
-                      GlyphAccumulatorFactory)
+    assert isinstance(alternative1.text_box_style.font, GlyphAccumulatorFactory)
     assert alternative1.qr_position == stamp.QRPosition.LEFT_OF_TEXT
 
     alternative2 = cli_config.get_stamp_style('alternative2')
@@ -194,19 +194,23 @@ def test_read_logging_config():
 
 
 def test_read_logging_config_defaults():
-    cli_config: config.CLIConfig = config.parse_cli_config("""
+    cli_config: config.CLIConfig = config.parse_cli_config(
+        """
         logging:
             root-level: DEBUG
-    """)
+    """
+    )
 
     assert cli_config.log_config[None].output == StdLogOutput.STDERR
     assert cli_config.log_config[None].level == 'DEBUG'
     assert list(cli_config.log_config.keys()) == [None]
 
-    cli_config: config.CLIConfig = config.parse_cli_config("""
+    cli_config: config.CLIConfig = config.parse_cli_config(
+        """
         logging:
             root-output: 'test.log'
-    """)
+    """
+    )
 
     assert cli_config.log_config[None].output == 'test.log'
     assert cli_config.log_config[None].level == DEFAULT_ROOT_LOGGER_LEVEL
@@ -253,7 +257,7 @@ WRONG_CONFIGS = [
         by-module:
             test.example:
                 output: 'abc.log'
-    """
+    """,
 ]
 
 
@@ -263,12 +267,17 @@ def test_read_logging_config_errors(config_str):
         config.parse_cli_config(config_str)
 
 
-@pytest.mark.parametrize('key_usage_str, key_usages', [
-    ('non_repudiation', {'non_repudiation'}),
-    ('[non_repudiation, digital_signature]',
-     {'non_repudiation', 'digital_signature'}),
-    ('[]', set()),
-])
+@pytest.mark.parametrize(
+    'key_usage_str, key_usages',
+    [
+        ('non_repudiation', {'non_repudiation'}),
+        (
+            '[non_repudiation, digital_signature]',
+            {'non_repudiation', 'digital_signature'},
+        ),
+        ('[]', set()),
+    ],
+)
 def test_read_key_usage(key_usage_str, key_usages):
     config_string = f"""
     validation-contexts:
@@ -282,18 +291,24 @@ def test_read_key_usage(key_usage_str, key_usages):
     assert key_usage_settings.extd_key_usage is None
 
 
-@pytest.mark.parametrize('key_usage_str, key_usages', [
-    ('piv_content_signing', {'piv_content_signing'}),
-    ('[piv_content_signing, code_signing]',
-     {'piv_content_signing', 'code_signing'}),
-    ('[]', set()),
-    ('[2.16.840.1.101.3.6.7, code_signing]',
-     {'piv_content_signing', 'code_signing'}),
-    ('[2.16.840.1.101.3.6.7, "2.999"]',
-     {'piv_content_signing', '2.999'}),
-    ('2.16.840.1.101.3.6.7', {'piv_content_signing'}),
-    ('"2.999"', {'2.999'}),
-])
+@pytest.mark.parametrize(
+    'key_usage_str, key_usages',
+    [
+        ('piv_content_signing', {'piv_content_signing'}),
+        (
+            '[piv_content_signing, code_signing]',
+            {'piv_content_signing', 'code_signing'},
+        ),
+        ('[]', set()),
+        (
+            '[2.16.840.1.101.3.6.7, code_signing]',
+            {'piv_content_signing', 'code_signing'},
+        ),
+        ('[2.16.840.1.101.3.6.7, "2.999"]', {'piv_content_signing', '2.999'}),
+        ('2.16.840.1.101.3.6.7', {'piv_content_signing'}),
+        ('"2.999"', {'2.999'}),
+    ],
+)
 def test_read_extd_key_usage(key_usage_str, key_usages):
     config_string = f"""
     validation-contexts:
@@ -319,8 +334,10 @@ def test_read_key_usage_policy_1():
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
-    assert key_usage_settings.key_usage \
-           == {'digital_signature', 'non_repudiation'}
+    assert key_usage_settings.key_usage == {
+        'digital_signature',
+        'non_repudiation',
+    }
     assert key_usage_settings.key_usage_forbidden is None
     assert key_usage_settings.extd_key_usage is None
     assert key_usage_settings.match_all_key_usages
@@ -338,8 +355,10 @@ def test_read_key_usage_policy_2():
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
-    assert key_usage_settings.key_usage \
-           == {'digital_signature', 'non_repudiation'}
+    assert key_usage_settings.key_usage == {
+        'digital_signature',
+        'non_repudiation',
+    }
     assert key_usage_settings.extd_key_usage == {'2.999'}
     assert key_usage_settings.explicit_extd_key_usage_required
 
@@ -355,17 +374,25 @@ def test_read_key_usage_policy_3():
     """
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
-    assert key_usage_settings.key_usage \
-           == {'digital_signature', 'non_repudiation'}
+    assert key_usage_settings.key_usage == {
+        'digital_signature',
+        'non_repudiation',
+    }
     assert key_usage_settings.key_usage_forbidden == {'data_encipherment'}
     assert key_usage_settings.extd_key_usage is None
     assert not key_usage_settings.match_all_key_usages
 
 
-@pytest.mark.parametrize('key_usage_str', [
-    '0', '["non_repudiation", 2]', "[1, 2, 3]", "abcdef",
-    '["no_such_key_usage"]',
-])
+@pytest.mark.parametrize(
+    'key_usage_str',
+    [
+        '0',
+        '["non_repudiation", 2]',
+        "[1, 2, 3]",
+        "abcdef",
+        '["no_such_key_usage"]',
+    ],
+)
 def test_extd_key_usage_errors(key_usage_str):
     config_string = f"""
     validation-contexts:
@@ -378,10 +405,16 @@ def test_extd_key_usage_errors(key_usage_str):
         cli_config.get_signer_key_usages()
 
 
-@pytest.mark.parametrize('key_usage_str', [
-    '0', '["non_repudiation", 2]', "[1, 2, 3]", "abcdef",
-    '["no_such_key_usage"]',
-])
+@pytest.mark.parametrize(
+    'key_usage_str',
+    [
+        '0',
+        '["non_repudiation", 2]',
+        "[1, 2, 3]",
+        "abcdef",
+        '["no_such_key_usage"]',
+    ],
+)
 def test_key_usage_errors(key_usage_str):
     config_string = f"""
     validation-contexts:
@@ -394,37 +427,51 @@ def test_key_usage_errors(key_usage_str):
         cli_config.get_signer_key_usages()
 
 
-@pytest.mark.parametrize('config_string, result', [
-    (f"""
+@pytest.mark.parametrize(
+    'config_string, result',
+    [
+        (
+            f"""
     time-tolerance: 5
     validation-contexts:
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, 5),
-    (f"""
+    """,
+            5,
+        ),
+        (
+            f"""
     time-tolerance: 5
     validation-contexts:
         default:
             time-tolerance: 7
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, 7),
-    (f"""
+    """,
+            7,
+        ),
+        (
+            f"""
     validation-contexts:
         default:
             time-tolerance: 7
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, 7),
-
-    (f"""
+    """,
+            7,
+        ),
+        (
+            f"""
     validation-contexts:
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, DEFAULT_TIME_TOLERANCE)
-])
+    """,
+            DEFAULT_TIME_TOLERANCE,
+        ),
+    ],
+)
 def test_read_time_tolerance(config_string, result):
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
@@ -461,51 +508,72 @@ def test_read_time_tolerance_input_issues():
     )
 
 
-@pytest.mark.parametrize('config_string, result', [
-    (f"""
+@pytest.mark.parametrize(
+    'config_string, result',
+    [
+        (
+            f"""
     retroactive-revinfo: true
     validation-contexts:
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, True),
-    (f"""
+    """,
+            True,
+        ),
+        (
+            f"""
     retroactive-revinfo: true
     validation-contexts:
         default:
             retroactive-revinfo: false
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, False),
-    (f"""
+    """,
+            False,
+        ),
+        (
+            f"""
     retroactive-revinfo: false
     validation-contexts:
         default:
             retroactive-revinfo: true
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, True),
-    (f"""
+    """,
+            True,
+        ),
+        (
+            f"""
     validation-contexts:
         default:
             retroactive-revinfo: true
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, True),
-    (f"""
+    """,
+            True,
+        ),
+        (
+            f"""
     validation-contexts:
         default:
             retroactive-revinfo: "yes"
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, True),
-    (f"""
+    """,
+            True,
+        ),
+        (
+            f"""
     validation-contexts:
         default:
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
-    """, False)
-])
+    """,
+            False,
+        ),
+    ],
+)
 def test_read_retroactive_revinfo(config_string, result):
     cli_config: config.CLIConfig = config.parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
@@ -665,8 +733,9 @@ def test_read_pkcs11_config_bad_criteria_type():
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
-    with pytest.raises(ConfigurationError,
-                       match="TokenCriteria requires a dictionary"):
+    with pytest.raises(
+        ConfigurationError, match="TokenCriteria requires a dictionary"
+    ):
         cli_config.get_pkcs11_config('foo')
 
 
@@ -682,8 +751,7 @@ def test_read_pkcs11_config_bad_serial():
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
-    with pytest.raises(ConfigurationError,
-                       match="Failed to parse.*hex"):
+    with pytest.raises(ConfigurationError, match="Failed to parse.*hex"):
         cli_config.get_pkcs11_config('foo')
 
 
@@ -701,16 +769,19 @@ def test_read_pkcs11_config_no_cert_spec():
         cli_config.get_pkcs11_config('foo')
 
 
-@pytest.mark.parametrize('literal,exp_val', [
-    ('prompt', config.PKCS11PinEntryMode.PROMPT),
-    ('skip', config.PKCS11PinEntryMode.SKIP),
-    ('defer', config.PKCS11PinEntryMode.DEFER),
-    # fallbacks
-    ('true', config.PKCS11PinEntryMode.PROMPT),
-    ('false', config.PKCS11PinEntryMode.SKIP),
-    ('1', config.PKCS11PinEntryMode.PROMPT),
-    ('0', config.PKCS11PinEntryMode.SKIP),
-])
+@pytest.mark.parametrize(
+    'literal,exp_val',
+    [
+        ('prompt', config.PKCS11PinEntryMode.PROMPT),
+        ('skip', config.PKCS11PinEntryMode.SKIP),
+        ('defer', config.PKCS11PinEntryMode.DEFER),
+        # fallbacks
+        ('true', config.PKCS11PinEntryMode.PROMPT),
+        ('false', config.PKCS11PinEntryMode.SKIP),
+        ('1', config.PKCS11PinEntryMode.PROMPT),
+        ('0', config.PKCS11PinEntryMode.SKIP),
+    ],
+)
 def test_read_pkcs11_prompt_pin(literal, exp_val):
     cli_config = config.parse_cli_config(
         f"""
@@ -763,9 +834,12 @@ def _signer_sanity_check(signer):
     with pytest.deprecated_call():
         sig = signer.sign(digest, digest_algorithm='sha256')
     from pyhanko.sign.validation.generic_cms import validate_sig_integrity
+
     intact, valid = validate_sig_integrity(
-        sig['content']['signer_infos'][0], cert=signer.signing_cert,
-        expected_content_type='data', actual_digest=digest
+        sig['content']['signer_infos'][0],
+        cert=signer.signing_cert,
+        expected_content_type='data',
+        actual_digest=digest,
     )
     assert intact and valid
 
@@ -872,77 +946,85 @@ def test_read_pkcs12_config_wrong_passphrase():
         setup.instantiate()
 
 
-@pytest.mark.parametrize('cfg_str,expected_result', [
-    (
-        "x-align: left", layout.SimpleBoxLayoutRule(
-            x_align=layout.AxisAlignment.ALIGN_MIN,
-            y_align=layout.AxisAlignment.ALIGN_MID,
-        )
-    ),
-    (
-        "y-align: bottom", layout.SimpleBoxLayoutRule(
-            x_align=layout.AxisAlignment.ALIGN_MID,
-            y_align=layout.AxisAlignment.ALIGN_MIN,
-        )
-    ),
-    (
-        f"""
+@pytest.mark.parametrize(
+    'cfg_str,expected_result',
+    [
+        (
+            "x-align: left",
+            layout.SimpleBoxLayoutRule(
+                x_align=layout.AxisAlignment.ALIGN_MIN,
+                y_align=layout.AxisAlignment.ALIGN_MID,
+            ),
+        ),
+        (
+            "y-align: bottom",
+            layout.SimpleBoxLayoutRule(
+                x_align=layout.AxisAlignment.ALIGN_MID,
+                y_align=layout.AxisAlignment.ALIGN_MIN,
+            ),
+        ),
+        (
+            f"""
         y-align: bottom
         x-align: mid
         margins:
             left: 10
             right: 10
         """,
-        layout.SimpleBoxLayoutRule(
-            x_align=layout.AxisAlignment.ALIGN_MID,
-            y_align=layout.AxisAlignment.ALIGN_MIN,
-            margins=layout.Margins(left=10, right=10)
-        )
-    ),
-    (
-        f"""
+            layout.SimpleBoxLayoutRule(
+                x_align=layout.AxisAlignment.ALIGN_MID,
+                y_align=layout.AxisAlignment.ALIGN_MIN,
+                margins=layout.Margins(left=10, right=10),
+            ),
+        ),
+        (
+            f"""
         y-align: bottom
         x-align: mid
         margins: [10, 10, 0, 0]
         """,
-        layout.SimpleBoxLayoutRule(
-            x_align=layout.AxisAlignment.ALIGN_MID,
-            y_align=layout.AxisAlignment.ALIGN_MIN,
-            margins=layout.Margins(left=10, right=10)
-        )
-    ),
-    (
-        f"""
+            layout.SimpleBoxLayoutRule(
+                x_align=layout.AxisAlignment.ALIGN_MID,
+                y_align=layout.AxisAlignment.ALIGN_MIN,
+                margins=layout.Margins(left=10, right=10),
+            ),
+        ),
+        (
+            f"""
         y-align: bottom
         x-align: mid
         inner-content-scaling: none
         """,
-        layout.SimpleBoxLayoutRule(
-            x_align=layout.AxisAlignment.ALIGN_MID,
-            y_align=layout.AxisAlignment.ALIGN_MIN,
-            inner_content_scaling=layout.InnerScaling.NO_SCALING
-        )
-    ),
-    (
-        "inner-content-scaling: stretch-to-fit",
-        layout.SimpleBoxLayoutRule(
-            x_align=layout.AxisAlignment.ALIGN_MID,
-            y_align=layout.AxisAlignment.ALIGN_MID,
-            inner_content_scaling=layout.InnerScaling.STRETCH_TO_FIT
-        )
-    ),
-])
+            layout.SimpleBoxLayoutRule(
+                x_align=layout.AxisAlignment.ALIGN_MID,
+                y_align=layout.AxisAlignment.ALIGN_MIN,
+                inner_content_scaling=layout.InnerScaling.NO_SCALING,
+            ),
+        ),
+        (
+            "inner-content-scaling: stretch-to-fit",
+            layout.SimpleBoxLayoutRule(
+                x_align=layout.AxisAlignment.ALIGN_MID,
+                y_align=layout.AxisAlignment.ALIGN_MID,
+                inner_content_scaling=layout.InnerScaling.STRETCH_TO_FIT,
+            ),
+        ),
+    ],
+)
 def test_read_simple_layout_config(cfg_str, expected_result):
     config_dict = yaml.safe_load(cfg_str)
     result = layout.SimpleBoxLayoutRule.from_config(config_dict)
     assert result == expected_result
 
 
-@pytest.mark.parametrize('cfg_str,error', [
-    ("x-align: bottom", "is not a valid horizontal"),
-    ("y-align: right", "is not a valid vertical"),
-    ("inner-content-scaling: foobar", "is not a valid inner scaling"),
-])
+@pytest.mark.parametrize(
+    'cfg_str,error',
+    [
+        ("x-align: bottom", "is not a valid horizontal"),
+        ("y-align: right", "is not a valid vertical"),
+        ("inner-content-scaling: foobar", "is not a valid inner scaling"),
+    ],
+)
 def test_read_simple_layout_config_failures(cfg_str, error):
     config_dict = yaml.safe_load(cfg_str)
     with pytest.raises(ConfigurationError, match=error):
@@ -964,75 +1046,83 @@ class DemoConfigurableB(ConfigurableMixin):
     some_field: Optional[DemoConfigurableA] = None
 
 
-@pytest.mark.parametrize('cfg_str, expected_field_val', [
-    (
-        """
+@pytest.mark.parametrize(
+    'cfg_str, expected_field_val',
+    [
+        (
+            """
         some_field:
             field1: 1
             field2: [1,2]
         """,
-        DemoConfigurableA(field1=1, field2=[1, 2])
-    ),
-    (
-        """
+            DemoConfigurableA(field1=1, field2=[1, 2]),
+        ),
+        (
+            """
         some_field:
             field1: 1
             field2: [1,2]
             field3: 5
         """,
-        DemoConfigurableA(field1=1, field2=[1, 2], field3=5)
-    ),
-    (
-        """
+            DemoConfigurableA(field1=1, field2=[1, 2], field3=5),
+        ),
+        (
+            """
         some_field:
             field1: 1
             field2: [1,2]
             field3: 5
             field4: [6,7,8]
         """,
-        DemoConfigurableA(field1=1, field2=[1, 2], field3=5, field4=[6, 7, 8])
-    ),
-    (
-        """
+            DemoConfigurableA(
+                field1=1, field2=[1, 2], field3=5, field4=[6, 7, 8]
+            ),
+        ),
+        (
+            """
         some_field:
             field1: 1
             field2: [1,2]
             field5: xyz
         """,
-        DemoConfigurableA(field1=1, field2=[1, 2], field5='xyz')
-    ),
-    (
-        """
+            DemoConfigurableA(field1=1, field2=[1, 2], field5='xyz'),
+        ),
+        (
+            """
         some_field:
             field1: 1
             field2: [1,2]
             field5: 8
             field6: xyz
         """,
-        DemoConfigurableA(field1=1, field2=[1, 2], field5=8, field6='xyz')
-    ),
-    ("{}", None)
-])
+            DemoConfigurableA(field1=1, field2=[1, 2], field5=8, field6='xyz'),
+        ),
+        ("{}", None),
+    ],
+)
 def test_configurable_recurse(cfg_str, expected_field_val):
     config_dict = yaml.safe_load(cfg_str)
     b = DemoConfigurableB.from_config(config_dict)
     assert b.some_field == expected_field_val
 
 
-@pytest.mark.parametrize("cfg_str", [
-    """
+@pytest.mark.parametrize(
+    "cfg_str",
+    [
+        """
     field2: [1,2]
     field3: 5
     """,
-    """
+        """
     field1: 1
     field3: 5
     """,
-    """
+        """
     field3: 5
     """,
-    "{}"
-])
+        "{}",
+    ],
+)
 def test_enforce_required(cfg_str):
     config_dict = yaml.safe_load(cfg_str)
     with pytest.raises(ConfigurationError, match="Missing required key"):
@@ -1046,8 +1136,9 @@ def test_enforce_required_recursive():
             field2: [1,2]
         """
     )
-    with pytest.raises(ConfigurationError,
-                       match="Error while processing configurable field"):
+    with pytest.raises(
+        ConfigurationError, match="Error while processing configurable field"
+    ):
         DemoConfigurableB.from_config(config_dict)
 
 
@@ -1066,4 +1157,5 @@ def test_default_stamp_style_fetch():
 
     result = cli_config.get_stamp_style(None)
     from pyhanko.sign import DEFAULT_SIGNING_STAMP_STYLE
+
     assert result == DEFAULT_SIGNING_STAMP_STYLE

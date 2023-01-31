@@ -20,13 +20,14 @@ def test_image_direct_embed(infile):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     image_ref = images.pil_image(img, w)
     page_ref, resources = w.find_page_for_modification(0)
-    resources[pdf_name('/XObject')] = generic.DictionaryObject({
-        pdf_name('/Img'): image_ref
-    })
+    resources[pdf_name('/XObject')] = generic.DictionaryObject(
+        {pdf_name('/Img'): image_ref}
+    )
     w.update_container(resources)
     content_stream: generic.StreamObject = page_ref.get_object()['/Contents']
-    content_stream._data = \
+    content_stream._data = (
         content_stream.data + b' q 50 0 0 50 5 5 cm /Img Do Q'
+    )
     content_stream._encoded_data = None
     w.update_container(content_stream)
     w.write_in_place()
@@ -46,7 +47,9 @@ def test_image_content_embed(infile):
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     img_content = images.PdfImage(
-        image=path, writer=w, opacity=0.6,
+        image=path,
+        writer=w,
+        opacity=0.6,
     )
     w.add_content_to_page(0, img_content, prepend=True)
 

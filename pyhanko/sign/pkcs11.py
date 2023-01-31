@@ -44,44 +44,48 @@ except ImportError as e:  # pragma: nocover
     raise ImportError(
         "pyhanko.sign.pkcs11 requires pyHanko to be installed with "
         "the [pkcs11] option. You can install missing "
-        "dependencies by running \"pip install 'pyHanko[pkcs11]'\".", e
+        "dependencies by running \"pip install 'pyHanko[pkcs11]'\".",
+        e,
     )
 
 
 __all__ = [
-    'PKCS11Signer', 'open_pkcs11_session', 'PKCS11SigningContext', 'find_token',
-    'select_pkcs11_signing_params'
+    'PKCS11Signer',
+    'open_pkcs11_session',
+    'PKCS11SigningContext',
+    'find_token',
+    'select_pkcs11_signing_params',
 ]
 
 logger = logging.getLogger(__name__)
 
 
-def criteria_mismatches(criteria: TokenCriteria, token: p11_types.Token) \
-        -> List[Tuple[str, str]]:
+def criteria_mismatches(
+    criteria: TokenCriteria, token: p11_types.Token
+) -> List[Tuple[str, str]]:
     if criteria is None:
         return []
 
     err_items = []
 
     if criteria.label is not None and token.label != criteria.label:
-        err_items.append(
-            ('label', criteria.label)
-        )
+        err_items.append(('label', criteria.label))
     if criteria.serial is not None and token.serial != criteria.serial:
-        err_items.append(
-            ('serial', criteria.serial.hex())
-        )
+        err_items.append(('serial', criteria.serial.hex()))
     return err_items
 
 
-def criteria_satisfied_by(criteria: TokenCriteria, token: p11_types.Token) \
-        -> bool:
+def criteria_satisfied_by(
+    criteria: TokenCriteria, token: p11_types.Token
+) -> bool:
     return not criteria_mismatches(criteria, token)
 
 
-def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
-               token_criteria: Optional[TokenCriteria] = None) \
-        -> Optional[p11_types.Token]:
+def find_token(
+    slots: List[p11_types.Slot],
+    slot_no: Optional[int] = None,
+    token_criteria: Optional[TokenCriteria] = None,
+) -> Optional[p11_types.Token]:
     """
     Internal helper method to find a token.
 
@@ -122,8 +126,7 @@ def find_token(slots: List[p11_types.Slot], slot_no: Optional[int] = None,
         errors = criteria_mismatches(token_criteria, token)
         if errors:
             err_str = ", ".join(
-                f"{field} is not {val!r}"
-                for field, val in errors
+                f"{field} is not {val!r}" for field, val in errors
             )
             raise PKCS11Error(
                 f"Token in slot {slot_no} does not satisfy criteria; {err_str}."
@@ -177,7 +180,7 @@ MGF_MECH_MAP = {
     'sha224': MGF.SHA224,
     'sha256': MGF.SHA256,
     'sha384': MGF.SHA384,
-    'sha512': MGF.SHA512
+    'sha512': MGF.SHA512,
 }
 
 
@@ -213,9 +216,10 @@ DIGEST_MECH_MAP = {
 
 
 def select_pkcs11_signing_params(
-        signature_mechanism: algos.SignedDigestAlgorithm,
-        digest_algorithm: str,
-        use_raw_mechanism: bool) -> PKCS11SignatureOperationSpec:
+    signature_mechanism: algos.SignedDigestAlgorithm,
+    digest_algorithm: str,
+    use_raw_mechanism: bool,
+) -> PKCS11SignatureOperationSpec:
     """
     Internal helper function to set up a PKCS #11 signing operation.
 
@@ -268,12 +272,9 @@ def select_pkcs11_signing_params(
         post_sign_transform = encode_ecdsa_signature
     elif signature_algo == 'rsassa_pss':
         if use_raw_mechanism:
-            raise NotImplementedError(
-                "RSASSA-PSS not available in raw mode"
-            )
+            raise NotImplementedError("RSASSA-PSS not available in raw mode")
         params: RSASSAPSSParams = signature_mechanism['parameters']
-        assert digest_algorithm == \
-               params['hash_algorithm']['algorithm'].native
+        assert digest_algorithm == params['hash_algorithm']['algorithm'].native
 
         # unpack PSS parameters into PKCS#11 language
         kwargs['mechanism'] = RSASSA_PSS_MECH_MAP[digest_algorithm]
@@ -285,7 +286,9 @@ def select_pkcs11_signing_params(
         pss_salt_len = params['salt_length'].native
 
         kwargs['mechanism_param'] = (
-            pss_digest_param, pss_mgf_param, pss_salt_len
+            pss_digest_param,
+            pss_mgf_param,
+            pss_salt_len,
         )
     elif signature_algo == 'ed25519':
         if use_raw_mechanism:
@@ -316,14 +319,17 @@ def select_pkcs11_signing_params(
     return PKCS11SignatureOperationSpec(
         sign_kwargs=kwargs,
         pre_sign_transform=pre_sign_transform,
-        post_sign_transform=post_sign_transform
+        post_sign_transform=post_sign_transform,
     )
 
 
-def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
-                        token_label: Optional[str] = None,
-                        token_criteria: Optional[TokenCriteria] = None,
-                        user_pin: Union[str, object, None] = None) -> Session:
+def open_pkcs11_session(
+    lib_location: str,
+    slot_no: Optional[int] = None,
+    token_label: Optional[str] = None,
+    token_criteria: Optional[TokenCriteria] = None,
+    user_pin: Union[str, object, None] = None,
+) -> Session:
     """
     Open a PKCS#11 session
 
@@ -356,7 +362,7 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
     if token_criteria is None and token_label is not None:
         warnings.warn(
             "'token_label' is deprecated, use 'token_criteria' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
         token_criteria = TokenCriteria(label=token_label)
 
@@ -365,7 +371,8 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
     if token is None:
         raise PKCS11Error(
             f'No token matching criteria {token_criteria!r} found'
-            if token_criteria is not None else 'No token found'
+            if token_criteria is not None
+            else 'No token found'
         )
 
     kwargs = {}
@@ -376,17 +383,16 @@ def open_pkcs11_session(lib_location: str, slot_no: Optional[int] = None,
 
 
 def _format_pull_err_msg(
-        no_results: bool,
-        label: Optional[str] = None,
-        cert_id: Optional[bytes] = None):
+    no_results: bool,
+    label: Optional[str] = None,
+    cert_id: Optional[bytes] = None,
+):
 
     info_strs = []
     if label is not None:
         info_strs.append(f"label '{label}'")
     if cert_id is not None:
-        info_strs.append(
-            f"ID '{binascii.hexlify(cert_id).decode('ascii')}'"
-        )
+        info_strs.append(f"ID '{binascii.hexlify(cert_id).decode('ascii')}'")
     qualifier = f" with {', '.join(info_strs)}" if info_strs else ""
     if no_results:
         err = f"Could not find cert{qualifier}."
@@ -395,12 +401,13 @@ def _format_pull_err_msg(
     return err
 
 
-def _pull_cert(pkcs11_session: Session, label: Optional[str] = None,
-               cert_id: Optional[bytes] = None):
+def _pull_cert(
+    pkcs11_session: Session,
+    label: Optional[str] = None,
+    cert_id: Optional[bytes] = None,
+):
 
-    query_params = {
-        Attribute.CLASS: ObjectClass.CERTIFICATE
-    }
+    query_params = {Attribute.CLASS: ObjectClass.CERTIFICATE}
     if label is not None:
         query_params[Attribute.LABEL] = label
     if cert_id is not None:
@@ -428,13 +435,15 @@ def _hash_fully(digest_algorithm: str, *, wrap_digest_info: bool):
         h.update(data)
         digest = h.finalize()
         if wrap_digest_info:
-            return algos.DigestInfo({
-                'digest_algorithm': {
-                    'algorithm': digest_algorithm.lower(),
-                    'parameters': core.Null()
-                },
-                'digest': digest
-            }).dump()
+            return algos.DigestInfo(
+                {
+                    'digest_algorithm': {
+                        'algorithm': digest_algorithm.lower(),
+                        'parameters': core.Null(),
+                    },
+                    'digest': digest,
+                }
+            ).dump()
         else:
             return digest
 
@@ -442,6 +451,7 @@ def _hash_fully(digest_algorithm: str, *, wrap_digest_info: bool):
 
 
 # TODO: perhaps attempt automatic key discovery if the labels aren't provided?
+
 
 class PKCS11Signer(Signer):
     """
@@ -492,15 +502,21 @@ class PKCS11Signer(Signer):
             basis.
     """
 
-    def __init__(self, pkcs11_session: Session,
-                 cert_label: Optional[str] = None,
-                 signing_cert: x509.Certificate = None,
-                 ca_chain=None, key_label: Optional[str] = None,
-                 prefer_pss=False, embed_roots=True,
-                 other_certs_to_pull=(), bulk_fetch=True,
-                 key_id: Optional[bytes] = None,
-                 cert_id: Optional[bytes] = None,
-                 use_raw_mechanism=False):
+    def __init__(
+        self,
+        pkcs11_session: Session,
+        cert_label: Optional[str] = None,
+        signing_cert: x509.Certificate = None,
+        ca_chain=None,
+        key_label: Optional[str] = None,
+        prefer_pss=False,
+        embed_roots=True,
+        other_certs_to_pull=(),
+        bulk_fetch=True,
+        key_id: Optional[bytes] = None,
+        cert_id: Optional[bytes] = None,
+        use_raw_mechanism=False,
+    ):
         """
         Initialise a PKCS11 signer.
         """
@@ -557,17 +573,19 @@ class PKCS11Signer(Signer):
         self._load_objects()
         return self._signing_cert
 
-    def _select_pkcs11_signing_params(self, digest_algorithm: str) \
-            -> PKCS11SignatureOperationSpec:
+    def _select_pkcs11_signing_params(
+        self, digest_algorithm: str
+    ) -> PKCS11SignatureOperationSpec:
         digest_algorithm = digest_algorithm.lower()
         return select_pkcs11_signing_params(
             self.get_signature_mechanism(digest_algorithm),
             digest_algorithm,
-            use_raw_mechanism=self.use_raw_mechanism
+            use_raw_mechanism=self.use_raw_mechanism,
         )
 
-    async def async_sign_raw(self, data: bytes,
-                             digest_algorithm: str, dry_run=False) -> bytes:
+    async def async_sign_raw(
+        self, data: bytes, digest_algorithm: str, dry_run=False
+    ) -> bytes:
         if dry_run:
             # allocate 4096 bits for the fake signature
             return b'0' * 512
@@ -603,9 +621,9 @@ class PKCS11Signer(Signer):
             return
         if other_cert_labels is None or self.bulk_fetch:
             # first, query all certs
-            q = self.pkcs11_session.get_objects({
-                Attribute.CLASS: ObjectClass.CERTIFICATE
-            })
+            q = self.pkcs11_session.get_objects(
+                {Attribute.CLASS: ObjectClass.CERTIFICATE}
+            )
             logger.debug("Pulling all certificates from PKCS#11 token...")
             for cert_obj in q:
                 label = cert_obj[Attribute.LABEL]
@@ -666,8 +684,7 @@ class PKCS11Signer(Signer):
         self._init_cert_registry()
         if self._signing_cert is None:
             self._signing_cert = _pull_cert(
-                self.pkcs11_session, label=self.cert_label,
-                cert_id=self.cert_id
+                self.pkcs11_session, label=self.cert_label, cert_id=self.cert_id
             )
 
         kh = self.pkcs11_session.get_key(
@@ -681,8 +698,9 @@ class PKCS11Signer(Signer):
 class PKCS11SigningContext:
     """Context manager for PKCS#11 configurations."""
 
-    def __init__(self, config: PKCS11SignatureConfig,
-                 user_pin: Optional[str] = None):
+    def __init__(
+        self, config: PKCS11SignatureConfig, user_pin: Optional[str] = None
+    ):
         self.config = config
         self._session = None
         self._user_pin = user_pin
@@ -703,18 +721,23 @@ class PKCS11SigningContext:
         pin = self._handle_pin()
 
         self._session = session = open_pkcs11_session(
-            config.module_path, slot_no=config.slot_no,
+            config.module_path,
+            slot_no=config.slot_no,
             token_criteria=config.token_criteria,
-            user_pin=pin
+            user_pin=pin,
         )
         return PKCS11Signer(
-            session, config.cert_label, ca_chain=config.other_certs,
-            key_label=config.key_label, prefer_pss=config.prefer_pss,
+            session,
+            config.cert_label,
+            ca_chain=config.other_certs,
+            key_label=config.key_label,
+            prefer_pss=config.prefer_pss,
             use_raw_mechanism=config.raw_mechanism,
             other_certs_to_pull=config.other_certs_to_pull,
             bulk_fetch=config.bulk_fetch,
-            key_id=config.key_id, cert_id=config.cert_id,
-            signing_cert=config.signing_certificate
+            key_id=config.key_id,
+            cert_id=config.cert_id,
+            signing_cert=config.signing_certificate,
         )
 
     def __enter__(self):

@@ -61,12 +61,18 @@ from .utils import (
 )
 
 __all__ = [
-    'validate_sig_integrity', 'async_validate_cms_signature',
-    'collect_timing_info', 'validate_tst_signed_data',
-    'async_validate_detached_cms', 'cms_basic_validation',
-    'compute_signature_tst_digest', 'extract_tst_data',
-    'extract_self_reported_ts', 'extract_certs_for_validation',
-    'collect_signer_attr_status', 'validate_algorithm_protection'
+    'validate_sig_integrity',
+    'async_validate_cms_signature',
+    'collect_timing_info',
+    'validate_tst_signed_data',
+    'async_validate_detached_cms',
+    'cms_basic_validation',
+    'compute_signature_tst_digest',
+    'extract_tst_data',
+    'extract_self_reported_ts',
+    'extract_certs_for_validation',
+    'collect_signer_attr_status',
+    'validate_algorithm_protection',
 ]
 
 from ...pdf_utils.misc import lift_iterable_async
@@ -94,12 +100,13 @@ def _grab_signing_cert_attr(signed_attrs, v2: bool):
         err = AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
         raise errors.SignatureValidationError(
             "Wrong cardinality for signing certificate attribute",
-            ades_subindication=err
+            ades_subindication=err,
         ) from e
 
 
-def _check_signing_certificate(cert: x509.Certificate,
-                               signed_attrs: cms.CMSAttributes):
+def _check_signing_certificate(
+    cert: x509.Certificate, signed_attrs: cms.CMSAttributes
+):
     # TODO check certificate policies, enforce restrictions on chain of trust
     # TODO document and/or mark as internal API explicitly
 
@@ -121,14 +128,15 @@ def _check_signing_certificate(cert: x509.Certificate,
             f"Signing certificate attribute does not match selected "
             f"signer's certificate for subject"
             f"\"{cert.subject.human_friendly}\".",
-            ades_subindication=err
+            ades_subindication=err,
         )
 
 
 def validate_algorithm_protection(
-        attrs: cms.CMSAttributes,
-        claimed_digest_algorithm_obj: cms.DigestAlgorithm,
-        claimed_signature_algorithm_obj: cms.SignedDigestAlgorithm):
+    attrs: cms.CMSAttributes,
+    claimed_digest_algorithm_obj: cms.DigestAlgorithm,
+    claimed_signature_algorithm_obj: cms.SignedDigestAlgorithm,
+):
     """
     Internal API to validate the CMS algorithm protection attribute
     defined in :rfc:`6211`, if present.
@@ -157,15 +165,15 @@ def validate_algorithm_protection(
             "Multiple CMS algorithm protection attributes present",
         )
     if cms_algid_protection is not None:
-        auth_digest_algorithm = \
-            cms_algid_protection['digest_algorithm'].native
+        auth_digest_algorithm = cms_algid_protection['digest_algorithm'].native
         if auth_digest_algorithm != claimed_digest_algorithm_obj.native:
             raise errors.CMSAlgorithmProtectionError(
                 "Digest algorithm does not match CMS algorithm protection "
                 "attribute.",
             )
-        signed_sig_algorithm = \
-            cms_algid_protection['signature_algorithm'].native
+        signed_sig_algorithm = cms_algid_protection[
+            'signature_algorithm'
+        ].native
         if signed_sig_algorithm is None:
             raise errors.CMSAlgorithmProtectionError(
                 "CMS algorithm protection attribute not valid for signed "
@@ -179,13 +187,13 @@ def validate_algorithm_protection(
 
 
 def validate_sig_integrity(
-        signer_info: cms.SignerInfo,
-        cert: x509.Certificate,
-        expected_content_type: str,
-        actual_digest: bytes,
-        algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
-        time_indic: Optional[datetime] = None) \
-        -> Tuple[bool, bool]:
+    signer_info: cms.SignerInfo,
+    cert: x509.Certificate,
+    expected_content_type: str,
+    actual_digest: bytes,
+    algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
+    time_indic: Optional[datetime] = None,
+) -> Tuple[bool, bool]:
     """
     Validate the integrity of a signature for a particular signerInfo object
     inside a CMS signed data container.
@@ -217,15 +225,14 @@ def validate_sig_integrity(
         The second indicates whether the signature of the digest is valid.
     """
 
-    signature_algorithm: cms.SignedDigestAlgorithm = \
-        signer_info['signature_algorithm']
+    signature_algorithm: cms.SignedDigestAlgorithm = signer_info[
+        'signature_algorithm'
+    ]
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
     if algorithm_usage_policy is not None:
         algo_allowed = algorithm_usage_policy.signature_algorithm_allowed(
-            signature_algorithm,
-            moment=time_indic,
-            public_key=cert.public_key
+            signature_algorithm, moment=time_indic, public_key=cert.public_key
         )
         if not algo_allowed:
             msg = (
@@ -264,7 +271,7 @@ def validate_sig_integrity(
             validate_algorithm_protection(
                 signed_attrs,
                 claimed_digest_algorithm_obj=digest_algorithm_obj,
-                claimed_signature_algorithm_obj=signature_algorithm
+                claimed_signature_algorithm_obj=signature_algorithm,
             )
         except CMSStructuralError as e:
             raise errors.SignatureValidationError(
@@ -276,7 +283,7 @@ def validate_sig_integrity(
                 # these are conceptually failures, but AdES doesn't have
                 # them in its validation model, so 'GENERIC' it is.
                 #  (same applies to other such cases)
-                ades_subindication=AdESIndeterminate.GENERIC
+                ades_subindication=AdESIndeterminate.GENERIC,
             )
 
         # check the signing-certificate or signing-certificate-v2 attr
@@ -295,23 +302,28 @@ def validate_sig_integrity(
             raise errors.SignatureValidationError(
                 'Content type not found in signature, or multiple content-type '
                 'attributes present.',
-                ades_subindication=AdESFailure.FORMAT_FAILURE
+                ades_subindication=AdESFailure.FORMAT_FAILURE,
             )
         content_type = content_type.native
         if content_type != expected_content_type:
             raise errors.SignatureValidationError(
                 f'Content type {content_type} did not match expected value '
                 f'{expected_content_type}',
-                ades_subindication=AdESFailure.FORMAT_FAILURE
+                ades_subindication=AdESFailure.FORMAT_FAILURE,
             )
 
         embedded_digest = extract_message_digest(signer_info)
 
     try:
         validate_raw(
-            signature, signed_data, cert, signature_algorithm, md_algorithm,
-            prehashed=prehashed, algorithm_policy=algorithm_usage_policy,
-            time_indic=time_indic
+            signature,
+            signed_data,
+            cert,
+            signature_algorithm,
+            md_algorithm,
+            prehashed=prehashed,
+            algorithm_policy=algorithm_usage_policy,
+            time_indic=time_indic,
         )
         valid = True
     except InvalidSignature:
@@ -319,14 +331,16 @@ def validate_sig_integrity(
 
     intact = (
         actual_digest == embedded_digest
-        if embedded_digest is not None else valid
+        if embedded_digest is not None
+        else valid
     )
 
     return intact, valid
 
 
-def extract_certs_for_validation(signed_data: cms.SignedData) \
-        -> SignedDataCerts:
+def extract_certs_for_validation(
+    signed_data: cms.SignedData,
+) -> SignedDataCerts:
     """
     Extract certificates from a CMS signed data object for validation purposes,
     identifying the signer's certificate in accordance with ETSI EN 319 102-1,
@@ -346,7 +360,7 @@ def extract_certs_for_validation(signed_data: cms.SignedData) \
     except CMSExtractionError:
         raise errors.SignatureValidationError(
             'signer certificate not included in signature',
-            ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+            ades_subindication=AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND,
         )
     signer_info = extract_signer_info(signed_data)
     signed_attrs = signer_info['signed_attrs']
@@ -356,13 +370,15 @@ def extract_certs_for_validation(signed_data: cms.SignedData) \
 
 
 async def cms_basic_validation(
-        signed_data: cms.SignedData,
-        raw_digest: bytes = None,
-        validation_context: Optional[ValidationContext] = None,
-        status_kwargs: dict = None,
-        validation_path: Optional[ValidationPath] = None,
-        pkix_validation_params: Optional[PKIXValidationParams] = None,
-        *, key_usage_settings: KeyUsageConstraints):
+    signed_data: cms.SignedData,
+    raw_digest: bytes = None,
+    validation_context: Optional[ValidationContext] = None,
+    status_kwargs: dict = None,
+    validation_path: Optional[ValidationPath] = None,
+    pkix_validation_params: Optional[PKIXValidationParams] = None,
+    *,
+    key_usage_settings: KeyUsageConstraints,
+):
     """
     Perform basic validation of CMS and PKCS#7 signatures in isolation
     (i.e. integrity and trust checks).
@@ -383,8 +399,9 @@ async def cms_basic_validation(
     if algorithm_policy is None:
         algorithm_policy = DEFAULT_ALGORITHM_USAGE_POLICY
 
-    signature_algorithm: cms.SignedDigestAlgorithm = \
-        signer_info['signature_algorithm']
+    signature_algorithm: cms.SignedDigestAlgorithm = signer_info[
+        'signature_algorithm'
+    ]
     mechanism = signature_algorithm['algorithm'].native
     md_algorithm = signer_info['digest_algorithm']['algorithm'].native
     eci = signed_data['encap_content_info']
@@ -403,33 +420,40 @@ async def cms_basic_validation(
     #  (let alone DSA with inherited parameters), that's just a "nice to have".
     try:
         intact, valid = validate_sig_integrity(
-            signer_info, cert, expected_content_type=expected_content_type,
-            actual_digest=raw_digest, algorithm_usage_policy=algorithm_policy,
-            time_indic=time_indic
+            signer_info,
+            cert,
+            expected_content_type=expected_content_type,
+            actual_digest=raw_digest,
+            algorithm_usage_policy=algorithm_policy,
+            time_indic=time_indic,
         )
     except CMSStructuralError as e:
         raise errors.SignatureValidationError(
             "CMS structural error: " + e.failure_message,
-            ades_subindication=AdESFailure.FORMAT_FAILURE
+            ades_subindication=AdESFailure.FORMAT_FAILURE,
         ) from e
 
     # next, validate trust
     ades_status = path = revo_details = None
     if valid:
         try:
-            validation_context.certificate_registry\
-                .register_multiple(other_certs)
+            validation_context.certificate_registry.register_multiple(
+                other_certs
+            )
 
             if validation_path is not None:
                 paths = lift_iterable_async([validation_path])
             else:
-                paths = validation_context.path_builder\
-                    .async_build_paths_lazy(cert)
+                paths = validation_context.path_builder.async_build_paths_lazy(
+                    cert
+                )
 
             ades_status, revo_details, path = await validate_cert_usage(
-                cert, validation_context,
+                cert,
+                validation_context,
                 key_usage_settings=key_usage_settings,
-                paths=paths, pkix_validation_params=pkix_validation_params,
+                paths=paths,
+                pkix_validation_params=pkix_validation_params,
             )
         except ValueError as e:
             logger.error("Processing error in validation process", exc_info=e)
@@ -437,20 +461,25 @@ async def cms_basic_validation(
 
     status_kwargs = status_kwargs or {}
     status_kwargs.update(
-        intact=intact, valid=valid, signing_cert=cert,
-        md_algorithm=md_algorithm, pkcs7_signature_mechanism=mechanism,
-        trust_problem_indic=ades_status, validation_path=path,
-        revocation_details=revo_details
+        intact=intact,
+        valid=valid,
+        signing_cert=cert,
+        md_algorithm=md_algorithm,
+        pkcs7_signature_mechanism=mechanism,
+        trust_problem_indic=ades_status,
+        validation_path=path,
+        revocation_details=revo_details,
     )
     return status_kwargs
 
 
 async def validate_cert_usage(
-        cert: x509.Certificate,
-        validation_context: ValidationContext,
-        key_usage_settings: KeyUsageConstraints,
-        paths: CancelableAsyncIterator[ValidationPath],
-        pkix_validation_params: Optional[PKIXValidationParams] = None):
+    cert: x509.Certificate,
+    validation_context: ValidationContext,
+    key_usage_settings: KeyUsageConstraints,
+    paths: CancelableAsyncIterator[ValidationPath],
+    pkix_validation_params: Optional[PKIXValidationParams] = None,
+):
     """
     Low-level certificate validation routine.
     Internal API.
@@ -459,13 +488,16 @@ async def validate_cert_usage(
     async def _check():
         key_usage_settings.validate(cert)
         return await find_valid_path(
-            cert, paths,
+            cert,
+            paths,
             validation_context=validation_context,
-            pkix_validation_params=pkix_validation_params
+            pkix_validation_params=pkix_validation_params,
         )
+
     # validate usage without going through pyhanko_certvalidator
-    ades_status, revo_details, path = \
-        await handle_certvalidator_errors(_check())
+    ades_status, revo_details, path = await handle_certvalidator_errors(
+        _check()
+    )
     if ades_status is not None:
         subj = cert.subject.human_friendly
         logger.warning(f"Chain of trust validation for {subj} failed.")
@@ -473,12 +505,13 @@ async def validate_cert_usage(
 
 
 async def async_validate_cms_signature(
-                           signed_data: cms.SignedData,
-                           status_cls: Type[StatusType] = SignatureStatus,
-                           raw_digest: bytes = None,
-                           validation_context: ValidationContext = None,
-                           status_kwargs: dict = None,
-                           key_usage_settings: KeyUsageConstraints = None):
+    signed_data: cms.SignedData,
+    status_cls: Type[StatusType] = SignatureStatus,
+    raw_digest: bytes = None,
+    validation_context: ValidationContext = None,
+    status_kwargs: dict = None,
+    key_usage_settings: KeyUsageConstraints = None,
+):
     """
     Validate a CMS signature (i.e. a ``SignedData`` object).
 
@@ -499,11 +532,15 @@ async def async_validate_cms_signature(
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
-    key_usage_settings = \
-        status_cls.default_usage_constraints(key_usage_settings)
+    key_usage_settings = status_cls.default_usage_constraints(
+        key_usage_settings
+    )
     status_kwargs = await cms_basic_validation(
-        signed_data, raw_digest, validation_context,
-        status_kwargs, key_usage_settings=key_usage_settings
+        signed_data,
+        raw_digest,
+        validation_context,
+        status_kwargs,
+        key_usage_settings=key_usage_settings,
     )
     return status_cls(**status_kwargs)
 
@@ -528,8 +565,9 @@ def extract_self_reported_ts(signer_info: cms.SignerInfo) -> Optional[datetime]:
         pass
 
 
-def extract_tst_data(signer_info: cms.SignerInfo, signed: bool = False) \
-        -> Optional[cms.SignedData]:
+def extract_tst_data(
+    signer_info: cms.SignerInfo, signed: bool = False
+) -> Optional[cms.SignedData]:
     """
     Extract signed data associated with a timestamp token.
 
@@ -557,8 +595,9 @@ def extract_tst_data(signer_info: cms.SignerInfo, signed: bool = False) \
         pass
 
 
-def compute_signature_tst_digest(signer_info: cms.SignerInfo) \
-        -> Optional[bytes]:
+def compute_signature_tst_digest(
+    signer_info: cms.SignerInfo,
+) -> Optional[bytes]:
     """
     Compute the digest of the signature according to the message imprint
     algorithm information in a signature timestamp token.
@@ -585,12 +624,15 @@ def compute_signature_tst_digest(signer_info: cms.SignerInfo) \
     md.update(signature_bytes)
     return md.finalize()
 
+
 # TODO support signerInfo with multivalued timestamp attributes
 
 
-async def collect_timing_info(signer_info: cms.SignerInfo,
-                              ts_validation_context: ValidationContext,
-                              raw_digest: bytes):
+async def collect_timing_info(
+    signer_info: cms.SignerInfo,
+    ts_validation_context: ValidationContext,
+    raw_digest: bytes,
+):
     """
     Collect and validate timing information in a ``SignerInfo`` value.
     This includes the ``signingTime`` attribute, content timestamp information
@@ -615,7 +657,8 @@ async def collect_timing_info(signer_info: cms.SignerInfo,
     tst_signed_data = extract_tst_data(signer_info, signed=False)
     if tst_signed_data is not None:
         tst_validity_kwargs = await validate_tst_signed_data(
-            tst_signed_data, ts_validation_context,
+            tst_signed_data,
+            ts_validation_context,
             compute_signature_tst_digest(signer_info),
         )
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
@@ -624,8 +667,9 @@ async def collect_timing_info(signer_info: cms.SignerInfo,
     content_tst_signed_data = extract_tst_data(signer_info, signed=True)
     if content_tst_signed_data is not None:
         content_tst_validity_kwargs = await validate_tst_signed_data(
-            content_tst_signed_data, ts_validation_context,
-            expected_tst_imprint=raw_digest
+            content_tst_signed_data,
+            ts_validation_context,
+            expected_tst_imprint=raw_digest,
         )
         content_tst_validity = TimestampSignatureStatus(
             **content_tst_validity_kwargs
@@ -636,9 +680,10 @@ async def collect_timing_info(signer_info: cms.SignerInfo,
 
 
 async def validate_tst_signed_data(
-        tst_signed_data: cms.SignedData,
-        validation_context: Optional[ValidationContext],
-        expected_tst_imprint: bytes):
+    tst_signed_data: cms.SignedData,
+    validation_context: Optional[ValidationContext],
+    expected_tst_imprint: bytes,
+):
     """
     Validate the ``SignedData`` of a time stamp token.
 
@@ -661,15 +706,16 @@ async def validate_tst_signed_data(
     if not isinstance(tst_info, tsp.TSTInfo):
         raise errors.SignatureValidationError(
             "SignedData does not encapsulate TSTInfo",
-            ades_subindication=AdESFailure.FORMAT_FAILURE
+            ades_subindication=AdESFailure.FORMAT_FAILURE,
         )
     timestamp = tst_info['gen_time'].native
 
     ku_settings = TimestampSignatureStatus.default_usage_constraints()
     status_kwargs = await cms_basic_validation(
-        tst_signed_data, validation_context=validation_context,
+        tst_signed_data,
+        validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
-        key_usage_settings=ku_settings
+        key_usage_settings=ku_settings,
     )
     # compare the expected TST digest against the message imprint
     # inside the signed data
@@ -684,10 +730,10 @@ async def validate_tst_signed_data(
 
 
 async def process_certified_attrs(
-        acs: Iterable[cms.AttributeCertificateV2],
-        signer_cert: x509.Certificate,
-        validation_context: ValidationContext) \
-        -> Tuple[List[ACValidationResult], List[Exception]]:
+    acs: Iterable[cms.AttributeCertificateV2],
+    signer_cert: x509.Certificate,
+    validation_context: ValidationContext,
+) -> Tuple[List[ACValidationResult], List[Exception]]:
     jobs = [
         async_validate_ac(ac, validation_context, holder_cert=signer_cert)
         for ac in acs
@@ -703,14 +749,16 @@ async def process_certified_attrs(
 
 
 async def collect_signer_attr_status(
-        sd_attr_certificates: Iterable[cms.AttributeCertificateV2],
-        signer_cert: x509.Certificate,
-        validation_context: Optional[ValidationContext],
-        sd_signed_attrs: cms.CMSAttributes):
+    sd_attr_certificates: Iterable[cms.AttributeCertificateV2],
+    signer_cert: x509.Certificate,
+    validation_context: Optional[ValidationContext],
+    sd_signed_attrs: cms.CMSAttributes,
+):
     # check if we need to process signer-attrs-v2 first
     try:
-        signer_attrs = \
-            find_unique_cms_attribute(sd_signed_attrs, 'signer_attributes_v2')
+        signer_attrs = find_unique_cms_attribute(
+            sd_signed_attrs, 'signer_attributes_v2'
+        )
     except NonexistentAttributeError:
         signer_attrs = None
     except MultivaluedAttributeError as e:
@@ -739,7 +787,8 @@ async def collect_signer_attr_status(
             # if there are certified attributes but validation_context is None,
             # then cades_ac_results remains None
             cades_acs = [
-                attr.chosen for attr in certified_asn1
+                attr.chosen
+                for attr in certified_asn1
                 if attr.name == 'attr_cert'
             ]
             # record if there were other types of certified attributes
@@ -747,7 +796,9 @@ async def collect_signer_attr_status(
             if validation_context is not None:
                 # validate retrieved AC's
                 val_job = process_certified_attrs(
-                    cades_acs, signer_cert, validation_context,
+                    cades_acs,
+                    signer_cert,
+                    validation_context,
                 )
                 cades_ac_results, cades_ac_errors = await val_job
 
@@ -763,9 +814,8 @@ async def collect_signer_attr_status(
         # If there's a validation context (i.e. the caller cares about attribute
         #  validation semantics), then log a warning message in case there were
         # signed assertions or certified attributes that we didn't understand.
-        unknown_attrs = (
-            unknown_cert_attrs or
-            not isinstance(signer_attrs['signed_assertions'], core.Void)
+        unknown_attrs = unknown_cert_attrs or not isinstance(
+            signer_attrs['signed_assertions'], core.Void
         )
         if validation_context is not None and unknown_attrs:
             logger.warning(
@@ -776,9 +826,10 @@ async def collect_signer_attr_status(
 
         # store the result of the signer-attrs-v2 processing step
         result['cades_signer_attrs'] = CAdESSignerAttributeAssertions(
-            claimed_attrs=claimed, certified_attrs=certified,
+            claimed_attrs=claimed,
+            certified_attrs=certified,
             ac_validation_errs=cades_ac_errors,
-            unknown_attrs_present=unknown_attrs
+            unknown_attrs_present=unknown_attrs,
         )
 
     if validation_context is not None:
@@ -799,15 +850,15 @@ async def collect_signer_attr_status(
 
 
 async def async_validate_detached_cms(
-        input_data: Union[bytes, IO,
-                          cms.ContentInfo, cms.EncapsulatedContentInfo],
-        signed_data: cms.SignedData,
-        signer_validation_context: ValidationContext = None,
-        ts_validation_context: ValidationContext = None,
-        ac_validation_context: ValidationContext = None,
-        key_usage_settings: KeyUsageConstraints = None,
-        chunk_size=misc.DEFAULT_CHUNK_SIZE,
-        max_read=None) -> StandardCMSSignatureStatus:
+    input_data: Union[bytes, IO, cms.ContentInfo, cms.EncapsulatedContentInfo],
+    signed_data: cms.SignedData,
+    signer_validation_context: ValidationContext = None,
+    ts_validation_context: ValidationContext = None,
+    ac_validation_context: ValidationContext = None,
+    key_usage_settings: KeyUsageConstraints = None,
+    chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    max_read=None,
+) -> StandardCMSSignatureStatus:
     """
     .. versionadded: 0.9.0
 
@@ -863,16 +914,19 @@ async def async_validate_detached_cms(
     digest_bytes = h.finalize()
 
     status_kwargs = await collect_timing_info(
-        signer_info, ts_validation_context=ts_validation_context,
-        raw_digest=digest_bytes
+        signer_info,
+        ts_validation_context=ts_validation_context,
+        raw_digest=digest_bytes,
     )
-    key_usage_settings = \
-        StandardCMSSignatureStatus.default_usage_constraints(key_usage_settings)
+    key_usage_settings = StandardCMSSignatureStatus.default_usage_constraints(
+        key_usage_settings
+    )
     status_kwargs = await cms_basic_validation(
-        signed_data, raw_digest=digest_bytes,
+        signed_data,
+        raw_digest=digest_bytes,
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs,
-        key_usage_settings=key_usage_settings
+        key_usage_settings=key_usage_settings,
     )
     cert_info = extract_certificate_info(signed_data)
     if ac_validation_context is not None:
@@ -884,7 +938,7 @@ async def async_validate_detached_cms(
             sd_attr_certificates=cert_info.attribute_certs,
             signer_cert=cert_info.signer_cert,
             validation_context=ac_validation_context,
-            sd_signed_attrs=signer_info['signed_attrs']
+            sd_signed_attrs=signer_info['signed_attrs'],
         )
     )
     return StandardCMSSignatureStatus(**status_kwargs)
@@ -922,14 +976,16 @@ async def handle_certvalidator_errors(coro):
         elif e.is_ee_cert:
             ades_status = AdESIndeterminate.REVOKED_NO_POE
             revo_details = RevocationDetails(
-                ca_revoked=False, revocation_date=e.revocation_dt,
-                revocation_reason=e.reason
+                ca_revoked=False,
+                revocation_date=e.revocation_dt,
+                revocation_reason=e.reason,
             )
         else:
             ades_status = AdESIndeterminate.REVOKED_CA_NO_POE
             revo_details = RevocationDetails(
-                ca_revoked=True, revocation_date=e.revocation_dt,
-                revocation_reason=e.reason
+                ca_revoked=True,
+                revocation_date=e.revocation_dt,
+                revocation_reason=e.reason,
             )
     except PathBuildingError as e:
         logger.warning("Failed to build path", exc_info=e)

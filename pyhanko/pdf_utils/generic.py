@@ -32,12 +32,28 @@ from .misc import (
 )
 
 __all__ = [
-    'Dereferenceable', 'Reference', 'TrailerReference',
-    'PdfObject', 'IndirectObject', 'NullObject', 'BooleanObject', 'FloatObject',
-    'NumberObject', 'ByteStringObject', 'TextStringObject', 'NameObject',
-    'ArrayObject', 'DictionaryObject', 'StreamObject',
-    'read_object', 'pdf_name', 'pdf_string', 'pdf_date',
-    'TextStringEncoding', 'EncryptedObjAccess', 'DecryptedObjectProxy'
+    'Dereferenceable',
+    'Reference',
+    'TrailerReference',
+    'PdfObject',
+    'IndirectObject',
+    'NullObject',
+    'BooleanObject',
+    'FloatObject',
+    'NumberObject',
+    'ByteStringObject',
+    'TextStringObject',
+    'NameObject',
+    'ArrayObject',
+    'DictionaryObject',
+    'StreamObject',
+    'read_object',
+    'pdf_name',
+    'pdf_string',
+    'pdf_date',
+    'TextStringEncoding',
+    'EncryptedObjAccess',
+    'DecryptedObjectProxy',
 ]
 
 OBJECT_PREFIXES = b'/<[tf(n%'
@@ -178,6 +194,7 @@ class Reference(Dereferenceable):
         if self.pdf is None:
             return NullObject()
         from pyhanko.pdf_utils.rw_common import PdfHandler
+
         assert isinstance(self.pdf, PdfHandler)
         return self.pdf.get_object(self).get_object()
 
@@ -185,8 +202,9 @@ class Reference(Dereferenceable):
         return self.pdf
 
 
-def read_object(stream, container_ref: 'Dereferenceable',
-                as_metadata_stream: bool = False) -> 'PdfObject':
+def read_object(
+    stream, container_ref: 'Dereferenceable', as_metadata_stream: bool = False
+) -> 'PdfObject':
     """
     Read a PDF object from an input stream.
 
@@ -227,9 +245,7 @@ def read_object(stream, container_ref: 'Dereferenceable',
             result = read_hex_string_from_stream(stream)
     elif idx == 2:
         # array object
-        result = ArrayObject.read_from_stream(
-            stream, container_ref
-        )
+        result = ArrayObject.read_from_stream(stream, container_ref)
     elif idx == 3 or idx == 4:
         # boolean object
         result = BooleanObject.read_from_stream(stream)
@@ -313,8 +329,9 @@ class PdfObject:
         """
         return self
 
-    def write_to_stream(self, stream, handler=None,
-                        container_ref: Reference = None):
+    def write_to_stream(
+        self, stream, handler=None, container_ref: Reference = None
+    ):
         """
         Abstract method to render this object to an output stream.
 
@@ -382,8 +399,9 @@ class BooleanObject(PdfObject):
         return bool(self.value)
 
     def __eq__(self, other):
-        return isinstance(other, (BooleanObject, bool)) \
-               and bool(self) == bool(other)
+        return isinstance(other, (BooleanObject, bool)) and bool(self) == bool(
+            other
+        )
 
     def __str__(self):
         return str(bool(self))
@@ -413,8 +431,11 @@ class ArrayObject(list, PdfObject):
     def __getitem__(self, index):
         return self.raw_get(index).get_object()
 
-    def raw_get(self, index,
-                decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT):
+    def raw_get(
+        self,
+        index,
+        decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT,
+    ):
         """
         .. versionchanged:: 0.14.0
 
@@ -518,9 +539,9 @@ class IndirectObject(PdfObject, Dereferenceable):
 
     def __eq__(self, other):
         return (
-            other is not None and
-            isinstance(other, IndirectObject) and
-            self.reference == other.reference
+            other is not None
+            and isinstance(other, IndirectObject)
+            and self.reference == other.reference
         )
 
     def __ne__(self, other):
@@ -597,6 +618,7 @@ class NumberObject(int, PdfObject):
     """
     PDF number object. This is the PDF type for integer values.
     """
+
     NumberPattern = re.compile(b'[^+-.0-9]')
     ByteDot = b"."
 
@@ -620,9 +642,10 @@ class NumberObject(int, PdfObject):
     @staticmethod
     def read_from_stream(stream):
         num = read_until_regex(
-            stream, regex=NumberObject.NumberPattern,
+            stream,
+            regex=NumberObject.NumberPattern,
             # for consistency with other read_object() output
-            ignore_eof=True
+            ignore_eof=True,
         )
         if num.find(NumberObject.ByteDot) != -1:
             return FloatObject(num.decode('ascii'))
@@ -632,8 +655,10 @@ class NumberObject(int, PdfObject):
 
 # TODO: not sure I like this behaviour of PyPDF2. Review.
 
-def pdf_string(string: Union[str, bytes, bytearray]) \
-        -> Union['ByteStringObject', 'TextStringObject']:
+
+def pdf_string(
+    string: Union[str, bytes, bytearray]
+) -> Union['ByteStringObject', 'TextStringObject']:
     """
     Encode a string as a :class:`.TextStringObject` if possible,
     or a :class:`.ByteStringObject` otherwise.
@@ -658,8 +683,9 @@ def pdf_string(string: Union[str, bytes, bytearray]) \
 HEX_DIGITS = b'0123456789abcdefABCDEF'
 
 
-def read_hex_string_from_stream(stream) \
-        -> Union['ByteStringObject', 'TextStringObject']:
+def read_hex_string_from_stream(
+    stream,
+) -> Union['ByteStringObject', 'TextStringObject']:
     """
     Read a hex string from a stream into a PDF string object.
 
@@ -682,6 +708,7 @@ def read_hex_string_from_stream(stream) \
                 )
             yield tok
             odd = not odd
+
     result = binascii.unhexlify(
         b''.join(read_tokens()) + (b'0' if odd else b'')
     )
@@ -750,8 +777,9 @@ def _read_string_literal_bytes(stream) -> bytes:
     return txt.getvalue()
 
 
-def read_string_from_stream(stream) -> Union['ByteStringObject',
-                                             'TextStringObject']:
+def read_string_from_stream(
+    stream,
+) -> Union['ByteStringObject', 'TextStringObject']:
     """
     Read a PDF string literal from a stream. Attempt to decode it into a text
     string by autodetecting the encoding, or failing that, return it as a byte
@@ -849,8 +877,7 @@ class TextStringEncoding(enum.Enum):
             return string.decode('utf-16')
 
 
-def _guess_enc_by_bom(encoded: Union[bytes, bytearray]) \
-        -> TextStringEncoding:
+def _guess_enc_by_bom(encoded: Union[bytes, bytearray]) -> TextStringEncoding:
     if encoded.startswith(codecs.BOM_UTF16_BE):
         return TextStringEncoding.UTF16BE
     elif encoded.startswith(codecs.BOM_UTF16_LE):
@@ -974,14 +1001,13 @@ def _decode_name(name_bytes: bytes) -> 'NameObject':
                     )
 
                 cur_byte = _as_hex_digit(digit1) * 16 + _as_hex_digit(digit2)
-            elif not (0x21 <= cur_byte <= 0x7e) or \
-                    not is_regular_character(cur_byte):
+            elif not (0x21 <= cur_byte <= 0x7E) or not is_regular_character(
+                cur_byte
+            ):
                 raise PdfReadError(
                     f"Byte (0x{cur_byte:02x}) must be escaped in a PDF name"
                 )
-            result.write(
-                bytes((cur_byte,))
-            )
+            result.write(bytes((cur_byte,)))
     except StopIteration:
         pass
     name_bytes = result.getvalue()
@@ -1020,15 +1046,18 @@ class NameObject(str, PdfObject):
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
         byte_iter = iter(self.encode('utf8'))
-        if not next(byte_iter) == 0x2f:
+        if not next(byte_iter) == 0x2F:
             raise PdfWriteError(
                 f"Could not serialise name object {repr(self)}, "
                 f"must start with /"
             )
         stream.write(b'/')
         for cur_byte in byte_iter:
-            if cur_byte == 0x23 or not (0x21 <= cur_byte <= 0x7e) or \
-                    not is_regular_character(cur_byte):
+            if (
+                cur_byte == 0x23
+                or not (0x21 <= cur_byte <= 0x7E)
+                or not is_regular_character(cur_byte)
+            ):
                 stream.write('#{:X}'.format(cur_byte).encode('ascii'))
             else:
                 # no convenient syntax for writing a single byte...
@@ -1073,8 +1102,9 @@ class DictionaryObject(dict, PdfObject):
         else:
             super().__init__()
 
-    def raw_get(self, key,
-                decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT):
+    def raw_get(
+        self, key, decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT
+    ):
         """
         .. versionchanged:: 0.14.0
 
@@ -1116,6 +1146,7 @@ class DictionaryObject(dict, PdfObject):
         raw_obj = dict.__getitem__(self, key)
         if key == '/Metadata' and isinstance(raw_obj, IndirectObject):
             from pyhanko.pdf_utils.rw_common import PdfHandler
+
             handler = raw_obj.get_pdf_handler()
             assert isinstance(handler, PdfHandler)
             return handler.get_object(
@@ -1124,8 +1155,14 @@ class DictionaryObject(dict, PdfObject):
         else:
             return raw_obj.get_object()
 
-    def get_and_apply(self, key, function: Callable[[PdfObject], Any], *,
-                      raw=False, default=None):
+    def get_and_apply(
+        self,
+        key,
+        function: Callable[[PdfObject], Any],
+        *,
+        raw=False,
+        default=None,
+    ):
         try:
             value = self.raw_get(key) if raw else self[key]
         except KeyError:
@@ -1153,8 +1190,11 @@ class DictionaryObject(dict, PdfObject):
         stream.write(b">>")
 
     @staticmethod
-    def read_from_stream(stream, container_ref: 'Dereferenceable',
-                         as_metadata_stream: bool = False):
+    def read_from_stream(
+        stream,
+        container_ref: 'Dereferenceable',
+        as_metadata_stream: bool = False,
+    ):
         tmp = stream.read(2)
         if tmp != b"<<":
             raise PdfReadError(
@@ -1232,6 +1272,7 @@ class DictionaryObject(dict, PdfObject):
                     from pyhanko.pdf_utils.metadata.xmp_xml import (
                         MetadataStream,
                     )
+
                     stm_cls = MetadataStream
                 except ImportError:  # pragma: nocover
                     pass
@@ -1279,15 +1320,17 @@ class StreamObject(DictionaryObject):
         This is only necessary if the stream requires crypt filters.
     """
 
-    def __init__(self, dict_data=None, stream_data=None, encoded_data=None,
-                 handler=None):
+    def __init__(
+        self, dict_data=None, stream_data=None, encoded_data=None, handler=None
+    ):
         super().__init__(dict_data)
         self._data = stream_data
         self._encoded_data = encoded_data
         self._handler = handler
 
-    def _implicit_decrypt_stream_content(self, handler, ref: Reference,
-                                         decrypted_entries: dict):
+    def _implicit_decrypt_stream_content(
+        self, handler, ref: Reference, decrypted_entries: dict
+    ):
         """
         Internal method to handle decrypting streams that are encrypted
         with the document's default encryption handler for streams and/or
@@ -1320,16 +1363,16 @@ class StreamObject(DictionaryObject):
             decrypted_data = cf.decrypt(local_key, self.encoded_data)
 
         return self.__class__(
-            decrypted_entries, encoded_data=decrypted_data,
-            handler=handler
+            decrypted_entries, encoded_data=decrypted_data, handler=handler
         )
 
     @property
     def _has_crypt_filter(self) -> bool:
         return '/Crypt' in (name for name, _ in self._filters())
 
-    def add_crypt_filter(self, name=NameObject('/Identity'),
-                         params=None, handler=None):
+    def add_crypt_filter(
+        self, name=NameObject('/Identity'), params=None, handler=None
+    ):
         if handler is not None:
             self._handler = handler
 
@@ -1452,8 +1495,9 @@ class StreamObject(DictionaryObject):
             self._encoded_data = data
         return self._encoded_data
 
-    def apply_filter(self, filter_name, params=None,
-                     allow_duplicates: Optional[bool] = True):
+    def apply_filter(
+        self, filter_name, params=None, allow_duplicates: Optional[bool] = True
+    ):
         """
         Apply a new filter to this stream. This filter will be prepended
         to any existing filters.
@@ -1513,10 +1557,12 @@ class StreamObject(DictionaryObject):
             )
 
             if params or any(param_sets):
+
                 def _params():
                     yield params or NullObject()
                     for param_set in param_sets:
                         yield param_set or NullObject()
+
                 self[pdf_name('/DecodeParms')] = ArrayObject(_params())
         self._encoded_data = None
         self._data = data
@@ -1539,8 +1585,11 @@ class StreamObject(DictionaryObject):
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
         data = self.encoded_data
-        if handler is not None and container_ref is not None and \
-                not self._has_crypt_filter:
+        if (
+            handler is not None
+            and container_ref is not None
+            and not self._has_crypt_filter
+        ):
             cf = handler.get_stream_filter()
             local_key = cf.derive_object_key(
                 container_ref.idnum, container_ref.generation
@@ -1562,9 +1611,13 @@ def encode_pdfdocencoding(unicode_string):
                 yield _pdfDocEncoding_rev[c]
             except KeyError:
                 raise UnicodeEncodeError(
-                    "pdfdocencoding", c, -1, -1,
-                    "does not exist in translation table"
+                    "pdfdocencoding",
+                    c,
+                    -1,
+                    -1,
+                    "does not exist in translation table",
                 )
+
     return bytes(_build())
 
 
@@ -1574,46 +1627,274 @@ def decode_pdfdocencoding(byte_array):
             c = _pdfDocEncoding[b]
             if c == '\u0000':
                 raise UnicodeDecodeError(
-                    "pdfdocencoding", bytes((b,)), -1, -1,
-                    "does not exist in translation table"
+                    "pdfdocencoding",
+                    bytes((b,)),
+                    -1,
+                    -1,
+                    "does not exist in translation table",
                 )
             yield c
+
     return ''.join(_build())
 
 
 _pdfDocEncoding = (
- '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
- '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
- '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000', '\u0000',
- '\u02d8', '\u02c7', '\u02c6', '\u02d9', '\u02dd', '\u02db', '\u02da', '\u02dc',
- '\u0020', '\u0021', '\u0022', '\u0023', '\u0024', '\u0025', '\u0026', '\u0027',
- '\u0028', '\u0029', '\u002a', '\u002b', '\u002c', '\u002d', '\u002e', '\u002f',
- '\u0030', '\u0031', '\u0032', '\u0033', '\u0034', '\u0035', '\u0036', '\u0037',
- '\u0038', '\u0039', '\u003a', '\u003b', '\u003c', '\u003d', '\u003e', '\u003f',
- '\u0040', '\u0041', '\u0042', '\u0043', '\u0044', '\u0045', '\u0046', '\u0047',
- '\u0048', '\u0049', '\u004a', '\u004b', '\u004c', '\u004d', '\u004e', '\u004f',
- '\u0050', '\u0051', '\u0052', '\u0053', '\u0054', '\u0055', '\u0056', '\u0057',
- '\u0058', '\u0059', '\u005a', '\u005b', '\u005c', '\u005d', '\u005e', '\u005f',
- '\u0060', '\u0061', '\u0062', '\u0063', '\u0064', '\u0065', '\u0066', '\u0067',
- '\u0068', '\u0069', '\u006a', '\u006b', '\u006c', '\u006d', '\u006e', '\u006f',
- '\u0070', '\u0071', '\u0072', '\u0073', '\u0074', '\u0075', '\u0076', '\u0077',
- '\u0078', '\u0079', '\u007a', '\u007b', '\u007c', '\u007d', '\u007e', '\u0000',
- '\u2022', '\u2020', '\u2021', '\u2026', '\u2014', '\u2013', '\u0192', '\u2044',
- '\u2039', '\u203a', '\u2212', '\u2030', '\u201e', '\u201c', '\u201d', '\u2018',
- '\u2019', '\u201a', '\u2122', '\ufb01', '\ufb02', '\u0141', '\u0152', '\u0160',
- '\u0178', '\u017d', '\u0131', '\u0142', '\u0153', '\u0161', '\u017e', '\u0000',
- '\u20ac', '\u00a1', '\u00a2', '\u00a3', '\u00a4', '\u00a5', '\u00a6', '\u00a7',
- '\u00a8', '\u00a9', '\u00aa', '\u00ab', '\u00ac', '\u0000', '\u00ae', '\u00af',
- '\u00b0', '\u00b1', '\u00b2', '\u00b3', '\u00b4', '\u00b5', '\u00b6', '\u00b7',
- '\u00b8', '\u00b9', '\u00ba', '\u00bb', '\u00bc', '\u00bd', '\u00be', '\u00bf',
- '\u00c0', '\u00c1', '\u00c2', '\u00c3', '\u00c4', '\u00c5', '\u00c6', '\u00c7',
- '\u00c8', '\u00c9', '\u00ca', '\u00cb', '\u00cc', '\u00cd', '\u00ce', '\u00cf',
- '\u00d0', '\u00d1', '\u00d2', '\u00d3', '\u00d4', '\u00d5', '\u00d6', '\u00d7',
- '\u00d8', '\u00d9', '\u00da', '\u00db', '\u00dc', '\u00dd', '\u00de', '\u00df',
- '\u00e0', '\u00e1', '\u00e2', '\u00e3', '\u00e4', '\u00e5', '\u00e6', '\u00e7',
- '\u00e8', '\u00e9', '\u00ea', '\u00eb', '\u00ec', '\u00ed', '\u00ee', '\u00ef',
- '\u00f0', '\u00f1', '\u00f2', '\u00f3', '\u00f4', '\u00f5', '\u00f6', '\u00f7',
- '\u00f8', '\u00f9', '\u00fa', '\u00fb', '\u00fc', '\u00fd', '\u00fe', '\u00ff'
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u0000',
+    '\u02d8',
+    '\u02c7',
+    '\u02c6',
+    '\u02d9',
+    '\u02dd',
+    '\u02db',
+    '\u02da',
+    '\u02dc',
+    '\u0020',
+    '\u0021',
+    '\u0022',
+    '\u0023',
+    '\u0024',
+    '\u0025',
+    '\u0026',
+    '\u0027',
+    '\u0028',
+    '\u0029',
+    '\u002a',
+    '\u002b',
+    '\u002c',
+    '\u002d',
+    '\u002e',
+    '\u002f',
+    '\u0030',
+    '\u0031',
+    '\u0032',
+    '\u0033',
+    '\u0034',
+    '\u0035',
+    '\u0036',
+    '\u0037',
+    '\u0038',
+    '\u0039',
+    '\u003a',
+    '\u003b',
+    '\u003c',
+    '\u003d',
+    '\u003e',
+    '\u003f',
+    '\u0040',
+    '\u0041',
+    '\u0042',
+    '\u0043',
+    '\u0044',
+    '\u0045',
+    '\u0046',
+    '\u0047',
+    '\u0048',
+    '\u0049',
+    '\u004a',
+    '\u004b',
+    '\u004c',
+    '\u004d',
+    '\u004e',
+    '\u004f',
+    '\u0050',
+    '\u0051',
+    '\u0052',
+    '\u0053',
+    '\u0054',
+    '\u0055',
+    '\u0056',
+    '\u0057',
+    '\u0058',
+    '\u0059',
+    '\u005a',
+    '\u005b',
+    '\u005c',
+    '\u005d',
+    '\u005e',
+    '\u005f',
+    '\u0060',
+    '\u0061',
+    '\u0062',
+    '\u0063',
+    '\u0064',
+    '\u0065',
+    '\u0066',
+    '\u0067',
+    '\u0068',
+    '\u0069',
+    '\u006a',
+    '\u006b',
+    '\u006c',
+    '\u006d',
+    '\u006e',
+    '\u006f',
+    '\u0070',
+    '\u0071',
+    '\u0072',
+    '\u0073',
+    '\u0074',
+    '\u0075',
+    '\u0076',
+    '\u0077',
+    '\u0078',
+    '\u0079',
+    '\u007a',
+    '\u007b',
+    '\u007c',
+    '\u007d',
+    '\u007e',
+    '\u0000',
+    '\u2022',
+    '\u2020',
+    '\u2021',
+    '\u2026',
+    '\u2014',
+    '\u2013',
+    '\u0192',
+    '\u2044',
+    '\u2039',
+    '\u203a',
+    '\u2212',
+    '\u2030',
+    '\u201e',
+    '\u201c',
+    '\u201d',
+    '\u2018',
+    '\u2019',
+    '\u201a',
+    '\u2122',
+    '\ufb01',
+    '\ufb02',
+    '\u0141',
+    '\u0152',
+    '\u0160',
+    '\u0178',
+    '\u017d',
+    '\u0131',
+    '\u0142',
+    '\u0153',
+    '\u0161',
+    '\u017e',
+    '\u0000',
+    '\u20ac',
+    '\u00a1',
+    '\u00a2',
+    '\u00a3',
+    '\u00a4',
+    '\u00a5',
+    '\u00a6',
+    '\u00a7',
+    '\u00a8',
+    '\u00a9',
+    '\u00aa',
+    '\u00ab',
+    '\u00ac',
+    '\u0000',
+    '\u00ae',
+    '\u00af',
+    '\u00b0',
+    '\u00b1',
+    '\u00b2',
+    '\u00b3',
+    '\u00b4',
+    '\u00b5',
+    '\u00b6',
+    '\u00b7',
+    '\u00b8',
+    '\u00b9',
+    '\u00ba',
+    '\u00bb',
+    '\u00bc',
+    '\u00bd',
+    '\u00be',
+    '\u00bf',
+    '\u00c0',
+    '\u00c1',
+    '\u00c2',
+    '\u00c3',
+    '\u00c4',
+    '\u00c5',
+    '\u00c6',
+    '\u00c7',
+    '\u00c8',
+    '\u00c9',
+    '\u00ca',
+    '\u00cb',
+    '\u00cc',
+    '\u00cd',
+    '\u00ce',
+    '\u00cf',
+    '\u00d0',
+    '\u00d1',
+    '\u00d2',
+    '\u00d3',
+    '\u00d4',
+    '\u00d5',
+    '\u00d6',
+    '\u00d7',
+    '\u00d8',
+    '\u00d9',
+    '\u00da',
+    '\u00db',
+    '\u00dc',
+    '\u00dd',
+    '\u00de',
+    '\u00df',
+    '\u00e0',
+    '\u00e1',
+    '\u00e2',
+    '\u00e3',
+    '\u00e4',
+    '\u00e5',
+    '\u00e6',
+    '\u00e7',
+    '\u00e8',
+    '\u00e9',
+    '\u00ea',
+    '\u00eb',
+    '\u00ec',
+    '\u00ed',
+    '\u00ee',
+    '\u00ef',
+    '\u00f0',
+    '\u00f1',
+    '\u00f2',
+    '\u00f3',
+    '\u00f4',
+    '\u00f5',
+    '\u00f6',
+    '\u00f7',
+    '\u00f8',
+    '\u00f9',
+    '\u00fa',
+    '\u00fb',
+    '\u00fc',
+    '\u00fd',
+    '\u00fe',
+    '\u00ff',
 )
 
 assert len(_pdfDocEncoding) == 256
@@ -1695,8 +1976,9 @@ class DecryptedObjectProxy(PdfObject):
                 "Proxyable objects must have a container ref pointing to a "
                 f"numbered object, not '{container_ref}'."
             )  # pragma: nocover
-        if isinstance(obj, ByteStringObject) or \
-                isinstance(obj, TextStringObject):
+        if isinstance(obj, ByteStringObject) or isinstance(
+            obj, TextStringObject
+        ):
             cf = handler.get_string_filter()
             local_key = cf.derive_object_key(
                 container_ref.idnum, container_ref.generation
@@ -1714,9 +1996,7 @@ class DecryptedObjectProxy(PdfObject):
             else:
                 decrypted = DictionaryObject(decrypted_entries)
         elif isinstance(obj, ArrayObject):
-            decrypted_map = map(
-                lambda v: proxy_encrypted_obj(v, handler), obj
-            )
+            decrypted_map = map(lambda v: proxy_encrypted_obj(v, handler), obj)
             decrypted = ArrayObject(decrypted_map)
         else:  # pragma: nocover
             raise TypeError(f'Object of type {type(obj)} is not proxyable.')
@@ -1743,8 +2023,10 @@ class DecryptedObjectProxy(PdfObject):
         #  descendants! The diff_analysis module is aware of this restriction,
         #  but you probably shouldn't use this __eq__ method to compare
         #  arbitrary objects in a PDF file.
-        return isinstance(other, DecryptedObjectProxy) \
-               and other.decrypted == self.decrypted
+        return (
+            isinstance(other, DecryptedObjectProxy)
+            and other.decrypted == self.decrypted
+        )
 
 
 ASN_DT_FORMAT = "D:%Y%m%d%H%M%S"
@@ -1829,15 +2111,19 @@ def parse_pdf_date(date_str: str) -> datetime:
             if sgn == '-':
                 tz_offset = -tz_offset
         else:
-            raise PdfReadError(
-                f"Improper trailing characters in {date_str}."
-            )
+            raise PdfReadError(f"Improper trailing characters in {date_str}.")
         tz_info = timezone(tz_offset)
 
     try:
         return datetime(
-            year=year, month=month, day=day, hour=hour, minute=minute,
-            second=second, microsecond=0, tzinfo=tz_info
+            year=year,
+            month=month,
+            day=day,
+            hour=hour,
+            minute=minute,
+            second=second,
+            microsecond=0,
+            tzinfo=tz_info,
         )
     except ValueError as e:
         raise PdfReadError("Improper date value", e)

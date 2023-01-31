@@ -12,16 +12,30 @@ Note: not all of these are applicable in PAdES.
 """
 
 __all__ = [
-    'CommitmentTypeIdentifier', 'CommitmentTypeQualifier',
-    'CommitmentTypeQualifiers', 'CommitmentTypeIndication',
-    'SigPolicyQualifierId', 'NoticeNumbers', 'NoticeReference',
-    'SPUserNotice', 'SPDocSpecification', 'SigPolicyQualifierInfo',
-    'SigPolicyQualifierInfos', 'SignaturePolicyId', 'SignaturePolicyIdentifier',
-    'SignaturePolicyDocument', 'SignaturePolicyStore',
+    'CommitmentTypeIdentifier',
+    'CommitmentTypeQualifier',
+    'CommitmentTypeQualifiers',
+    'CommitmentTypeIndication',
+    'SigPolicyQualifierId',
+    'NoticeNumbers',
+    'NoticeReference',
+    'SPUserNotice',
+    'SPDocSpecification',
+    'SigPolicyQualifierInfo',
+    'SigPolicyQualifierInfos',
+    'SignaturePolicyId',
+    'SignaturePolicyIdentifier',
+    'SignaturePolicyDocument',
+    'SignaturePolicyStore',
     'DisplayText',
-    'SignerAttributesV2', 'CertifiedAttributesV2', 'CertifiedAttributeChoices',
-    'OtherAttrCert', 'OtherAttrCertId', 'SignedAssertions', 'SignedAssertion',
-    'SignedAssertionId'
+    'SignerAttributesV2',
+    'CertifiedAttributesV2',
+    'CertifiedAttributeChoices',
+    'OtherAttrCert',
+    'OtherAttrCertId',
+    'SignedAssertions',
+    'SignedAssertion',
+    'SignedAssertionId',
 ]
 
 
@@ -40,7 +54,7 @@ class CommitmentTypeIdentifier(core.ObjectIdentifier):
 class CommitmentTypeQualifier(core.Sequence):
     _fields = [
         ('commitment_type_identifier', CommitmentTypeIdentifier),
-        ('qualifier', core.Any)
+        ('qualifier', core.Any),
     ]
 
     _oid_pair = ('commitment_type_identifier', 'qualifier')
@@ -56,8 +70,11 @@ class CommitmentTypeQualifiers(core.SequenceOf):
 class CommitmentTypeIndication(core.Sequence):
     _fields = [
         ('commitment_type_id', CommitmentTypeIdentifier),
-        ('commitment_type_qualifier',
-         CommitmentTypeQualifiers, {'optional': True})
+        (
+            'commitment_type_qualifier',
+            CommitmentTypeQualifiers,
+            {'optional': True},
+        ),
     ]
 
 
@@ -67,7 +84,7 @@ class SigPolicyQualifierId(core.ObjectIdentifier):
         '1.2.840.113549.1.9.16.5.1': 'sp_uri',
         '1.2.840.113549.1.9.16.5.2': 'sp_unotice',
         # ETSI EN 319 122-1
-        '0.4.0.19122.2.1': 'sp_doc_specification'
+        '0.4.0.19122.2.1': 'sp_doc_specification',
     }
 
 
@@ -77,7 +94,7 @@ class DisplayText(core.Choice):
     _alternatives = [
         ('visible_string', core.VisibleString),
         ('bmp_string', core.BMPString),
-        ('utf8_string', core.UTF8String)
+        ('utf8_string', core.UTF8String),
     ]
 
 
@@ -86,10 +103,7 @@ class NoticeNumbers(core.SequenceOf):
 
 
 class NoticeReference(core.Sequence):
-    _fields = [
-        ('organization', DisplayText),
-        ('notice_numbers', NoticeNumbers)
-    ]
+    _fields = [('organization', DisplayText), ('notice_numbers', NoticeNumbers)]
 
 
 class SPUserNotice(core.Sequence):
@@ -100,16 +114,13 @@ class SPUserNotice(core.Sequence):
 
 
 class SPDocSpecification(core.Sequence):
-    _fields = [
-        ('oid', core.ObjectIdentifier),
-        ('uri', core.IA5String)
-    ]
+    _fields = [('oid', core.ObjectIdentifier), ('uri', core.IA5String)]
 
 
 class SigPolicyQualifierInfo(core.Sequence):
     _fields = [
         ('sig_policy_qualifier_id', SigPolicyQualifierId),
-        ('sig_qualifier', core.Any)
+        ('sig_qualifier', core.Any),
     ]
 
     _oid_pair = ('sig_policy_qualifier_id', 'sig_qualifier')
@@ -118,7 +129,7 @@ class SigPolicyQualifierInfo(core.Sequence):
         'sp_uri': core.IA5String,
         'sp_unotice': SPUserNotice,
         # ETSI EN 319 122-1
-        'sp_doc_specification': SPDocSpecification
+        'sp_doc_specification': SPDocSpecification,
     }
 
 
@@ -130,14 +141,14 @@ class SignaturePolicyId(core.Sequence):
     _fields = [
         ('sig_policy_id', core.ObjectIdentifier),
         ('sig_policy_hash', algos.DigestInfo),
-        ('sig_policy_qualifiers', SigPolicyQualifierInfos, {'optional': True})
+        ('sig_policy_qualifiers', SigPolicyQualifierInfos, {'optional': True}),
     ]
 
 
 class SignaturePolicyIdentifier(core.Choice):
     _alternatives = [
         ('signature_policy_id', SignaturePolicyId),
-        ('signature_policy_implied', core.Null)
+        ('signature_policy_implied', core.Null),
     ]
 
 
@@ -153,7 +164,7 @@ class SignaturePolicyDocument(core.Sequence):
 class SignaturePolicyStore(core.Sequence):
     _fields = [
         ('sp_doc_spec', SPDocSpecification),
-        ('sp_document', SignaturePolicyDocument)
+        ('sp_document', SignaturePolicyDocument),
     ]
 
 
@@ -206,12 +217,21 @@ class SignerAttributesV2(core.Sequence):
         # asn1crypto defines this in two different places, but the "canonical"
         # one in x509.Attribute doesn't supply any concrete attribute
         # definitions, so we use the definition in cms.AttCertAttribute instead
-        ('claimed_attributes', cms.AttCertAttributes,
-         {'optional': True, 'explicit': 0}),
-        ('certified_attributes_v2', CertifiedAttributesV2,
-         {'optional': True, 'explicit': 1}),
-        ('signed_assertions', SignedAssertions,
-         {'optional': True, 'explicit': 2}),
+        (
+            'claimed_attributes',
+            cms.AttCertAttributes,
+            {'optional': True, 'explicit': 0},
+        ),
+        (
+            'certified_attributes_v2',
+            CertifiedAttributesV2,
+            {'optional': True, 'explicit': 1},
+        ),
+        (
+            'signed_assertions',
+            SignedAssertions,
+            {'optional': True, 'explicit': 2},
+        ),
     ]
 
 
@@ -220,8 +240,9 @@ class SignerAttributesV2(core.Sequence):
 #  (non-PAdES, more or less replaced by DSS in PDF)
 
 register_cms_attribute(
-    '1.2.840.113549.1.9.16.2.15', 'signature_policy_identifier',
-    SignaturePolicyIdentifier
+    '1.2.840.113549.1.9.16.2.15',
+    'signature_policy_identifier',
+    SignaturePolicyIdentifier,
 )
 register_cms_attribute(
     '1.2.840.113549.1.9.16.2.16', 'commitment_type', CommitmentTypeIndication
@@ -233,9 +254,7 @@ register_cms_attribute('0.4.0.1733.2.1', 'mime_type', core.UTF8String)
 register_cms_attribute(
     '0.4.0.19122.1.1', 'signer_attributes_v2', SignerAttributesV2
 )
-register_cms_attribute(
-    '0.4.0.19122.1.2', 'claimed_saml', core.OctetString
-)
+register_cms_attribute('0.4.0.19122.1.2', 'claimed_saml', core.OctetString)
 register_cms_attribute(
     '0.4.0.19122.1.3', 'signature_policy_store', SignaturePolicyStore
 )

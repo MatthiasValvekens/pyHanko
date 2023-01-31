@@ -8,9 +8,7 @@ from ..commons import safe_whitelist
 from ..policy_api import SuspiciousModification
 from ..rules_api import Context, ReferenceUpdate, WhitelistRule
 
-__all__ = [
-    'DocInfoRule', 'MetadataUpdateRule'
-]
+__all__ = ['DocInfoRule', 'MetadataUpdateRule']
 
 
 class DocInfoRule(WhitelistRule):
@@ -18,8 +16,9 @@ class DocInfoRule(WhitelistRule):
     Rule that allows the ``/Info`` dictionary in the trailer to be updated.
     """
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[ReferenceUpdate]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[ReferenceUpdate]:
         # updates to /Info are always OK (and must be through indirect objects)
         # Removing the /Info dictionary is no big deal, since most readers
         # will fall back to older revisions regardless
@@ -33,11 +32,9 @@ class DocInfoRule(WhitelistRule):
         )
         yield from map(
             ReferenceUpdate.curry_ref(
-                context_checked=Context.from_absolute(
-                    old, RawPdfPath('/Info')
-                )
+                context_checked=Context.from_absolute(old, RawPdfPath('/Info'))
             ),
-            safe_whitelist(old, old_info, new_info)
+            safe_whitelist(old, old_info, new_info),
         )
 
 
@@ -68,8 +65,9 @@ class MetadataUpdateRule(WhitelistRule):
             to ``True``.
     """
 
-    def __init__(self, check_xml_syntax=True,
-                 always_refuse_stream_override=False):
+    def __init__(
+        self, check_xml_syntax=True, always_refuse_stream_override=False
+    ):
         self.check_xml_syntax = check_xml_syntax
         self.always_refuse_stream_override = always_refuse_stream_override
 
@@ -105,8 +103,9 @@ class MetadataUpdateRule(WhitelistRule):
                 "/Metadata XML syntax could not be validated", e
             )
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[ReferenceUpdate]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[ReferenceUpdate]:
 
         # /Metadata points to a stream, so we have to be careful allowing
         # object overrides!
@@ -144,5 +143,5 @@ class MetadataUpdateRule(WhitelistRule):
                 new_metadata_ref,
                 context_checked=Context.from_absolute(
                     old, RawPdfPath('/Root', '/Metadata')
-                )
+                ),
             )

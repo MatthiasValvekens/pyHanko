@@ -25,12 +25,15 @@ class DummyTimeStamper(TimeStamper):
     Used for testing purposes.
     """
 
-    def __init__(self, tsa_cert: x509.Certificate,
-                 tsa_key: keys.PrivateKeyInfo,
-                 certs_to_embed: CertificateStore = None,
-                 fixed_dt: datetime = None,
-                 include_nonce=True,
-                 override_md=None):
+    def __init__(
+        self,
+        tsa_cert: x509.Certificate,
+        tsa_key: keys.PrivateKeyInfo,
+        certs_to_embed: CertificateStore = None,
+        fixed_dt: datetime = None,
+        include_nonce=True,
+        override_md=None,
+    ):
         self.tsa_cert = tsa_cert
         self.tsa_key = tsa_key
         self.certs_to_embed = list(certs_to_embed or ())
@@ -38,8 +41,7 @@ class DummyTimeStamper(TimeStamper):
         self.override_md = override_md
         super().__init__(include_nonce=include_nonce)
 
-    def request_tsa_response(self, req: tsp.TimeStampReq) \
-            -> tsp.TimeStampResp:
+    def request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
         # We pretend that certReq is always true in the request
 
         # TODO generalise my detached signature logic to include cases like this
@@ -50,9 +52,9 @@ class DummyTimeStamper(TimeStamper):
         md_algorithm = self.override_md
         if md_algorithm is None:
             md_algorithm = message_imprint['hash_algorithm']['algorithm'].native
-        digest_algorithm_obj = algos.DigestAlgorithm({
-            'algorithm': md_algorithm
-        })
+        digest_algorithm_obj = algos.DigestAlgorithm(
+            {'algorithm': md_algorithm}
+        )
         dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
         tst_info = {
             'version': 'v1',
@@ -65,7 +67,7 @@ class DummyTimeStamper(TimeStamper):
             'gen_time': dt,
             'tsa': x509.GeneralName(
                 name='directory_name', value=self.tsa_cert.subject
-            )
+            ),
         }
         if req['nonce'].native is not None:
             tst_info['nonce'] = req['nonce']
@@ -76,61 +78,75 @@ class DummyTimeStamper(TimeStamper):
         md = hashes.Hash(md_spec)
         md.update(tst_info_data)
         message_digest_value = md.finalize()
-        signed_attrs = cms.CMSAttributes([
-            simple_cms_attribute('content_type', 'tst_info'),
-            simple_cms_attribute(
-                'signing_time', cms.Time({'utc_time': core.UTCTime(dt)})
-            ),
-            simple_cms_attribute(
-                'signing_certificate',
-                general.as_signing_certificate(self.tsa_cert)
-            ),
-            simple_cms_attribute('message_digest', message_digest_value),
-        ])
+        signed_attrs = cms.CMSAttributes(
+            [
+                simple_cms_attribute('content_type', 'tst_info'),
+                simple_cms_attribute(
+                    'signing_time', cms.Time({'utc_time': core.UTCTime(dt)})
+                ),
+                simple_cms_attribute(
+                    'signing_certificate',
+                    general.as_signing_certificate(self.tsa_cert),
+                ),
+                simple_cms_attribute('message_digest', message_digest_value),
+            ]
+        )
         priv_key = serialization.load_der_private_key(
             self.tsa_key.dump(), password=None
         )
         if not isinstance(priv_key, RSAPrivateKey):
             raise NotImplementedError("Dummy timestamper is RSA-only.")
         signature = priv_key.sign(
-            signed_attrs.dump(), PKCS1v15(),
-            get_pyca_cryptography_hash(md_algorithm.upper())
+            signed_attrs.dump(),
+            PKCS1v15(),
+            get_pyca_cryptography_hash(md_algorithm.upper()),
         )
-        sig_info = cms.SignerInfo({
-            'version': 'v1',
-            'sid': cms.SignerIdentifier({
-                'issuer_and_serial_number': cms.IssuerAndSerialNumber({
-                    'issuer': self.tsa_cert.issuer,
-                    'serial_number': self.tsa_cert.serial_number,
-                })
-            }),
-            'digest_algorithm': digest_algorithm_obj,
-            'signature_algorithm': algos.SignedDigestAlgorithm(
-                {'algorithm': 'rsassa_pkcs1v15'}
-            ),
-            'signed_attrs': signed_attrs,
-            'signature': signature
-        })
+        sig_info = cms.SignerInfo(
+            {
+                'version': 'v1',
+                'sid': cms.SignerIdentifier(
+                    {
+                        'issuer_and_serial_number': cms.IssuerAndSerialNumber(
+                            {
+                                'issuer': self.tsa_cert.issuer,
+                                'serial_number': self.tsa_cert.serial_number,
+                            }
+                        )
+                    }
+                ),
+                'digest_algorithm': digest_algorithm_obj,
+                'signature_algorithm': algos.SignedDigestAlgorithm(
+                    {'algorithm': 'rsassa_pkcs1v15'}
+                ),
+                'signed_attrs': signed_attrs,
+                'signature': signature,
+            }
+        )
         certs = set(self.certs_to_embed)
         certs.add(self.tsa_cert)
         signed_data = {
             # must use v3 to get access to the EncapsulatedContentInfo construct
             'version': 'v3',
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
-            'encap_content_info': cms.EncapsulatedContentInfo({
-                'content_type': cms.ContentType('tst_info'),
-                'content': cms.ParsableOctetString(tst_info_data)
-            }),
+            'encap_content_info': cms.EncapsulatedContentInfo(
+                {
+                    'content_type': cms.ContentType('tst_info'),
+                    'content': cms.ParsableOctetString(tst_info_data),
+                }
+            ),
             'certificates': certs,
-            'signer_infos': [sig_info]
+            'signer_infos': [sig_info],
         }
-        tst = cms.ContentInfo({
-            'content_type': cms.ContentType('signed_data'),
-            'content': cms.SignedData(signed_data)
-        })
+        tst = cms.ContentInfo(
+            {
+                'content_type': cms.ContentType('signed_data'),
+                'content': cms.SignedData(signed_data),
+            }
+        )
         return tsp.TimeStampResp({'status': status, 'time_stamp_token': tst})
 
-    async def async_request_tsa_response(self, req: tsp.TimeStampReq) \
-            -> tsp.TimeStampResp:
+    async def async_request_tsa_response(
+        self, req: tsp.TimeStampReq
+    ) -> tsp.TimeStampResp:
         # just do it synchronously
         return self.request_tsa_response(req)

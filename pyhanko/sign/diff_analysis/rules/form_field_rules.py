@@ -26,8 +26,11 @@ from ..policy_api import ModificationLevel, SuspiciousModification
 from ..rules_api import Context, ReferenceUpdate, RelativeContext, WhitelistRule
 
 __all__ = [
-    'DSSCompareRule', 'SigFieldCreationRule', 'SigFieldModificationRule',
-    'GenericFieldModificationRule', 'BaseFieldModificationRule'
+    'DSSCompareRule',
+    'SigFieldCreationRule',
+    'SigFieldModificationRule',
+    'GenericFieldModificationRule',
+    'BaseFieldModificationRule',
 ]
 
 
@@ -45,9 +48,15 @@ def _assert_stream_refs(der_obj_type, arr, err_cls, is_vri):
         )
 
 
-def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
-                               old_dict, new_dict, der_stream_keys, is_vri,
-                               context: Context):
+def _validate_dss_substructure(
+    old: HistoricalResolver,
+    new: HistoricalResolver,
+    old_dict,
+    new_dict,
+    der_stream_keys,
+    is_vri,
+    context: Context,
+):
     for der_obj_type in der_stream_keys:
         as_update = ReferenceUpdate.curry_ref(
             context_checked=context.descend(der_obj_type)
@@ -64,7 +73,7 @@ def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
                 if isinstance(old_value, generic.IndirectObject):
                     yield from map(
                         as_update,
-                        safe_whitelist(old, old_value.reference, new_ref)
+                        safe_whitelist(old, old_value.reference, new_ref),
                     )
                 _assert_stream_refs(
                     der_obj_type, old_value, misc.PdfReadError, is_vri
@@ -75,9 +84,10 @@ def _validate_dss_substructure(old: HistoricalResolver, new: HistoricalResolver,
             except KeyError:
                 pass
 
-        yield from map(as_update, new.collect_dependencies(
-            value, since_revision=old.revision + 1
-        ))
+        yield from map(
+            as_update,
+            new.collect_dependencies(value, since_revision=old.revision + 1),
+        )
 
 
 class DSSCompareRule(WhitelistRule):
@@ -93,14 +103,15 @@ class DSSCompareRule(WhitelistRule):
     This is also allowed by PAdES.
     """
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[ReferenceUpdate]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[ReferenceUpdate]:
         # TODO refactor these into less ad-hoc rules
 
         dss_context = Context.from_absolute(old, RawPdfPath('/Root', '/DSS'))
         old_dss, new_dss = yield from misc.map_with_return(
             compare_key_refs('/DSS', old, old.root, new.root),
-            ReferenceUpdate.curry_ref(context_checked=dss_context)
+            ReferenceUpdate.curry_ref(context_checked=dss_context),
         )
         if new_dss is None:
             return
@@ -123,20 +134,28 @@ class DSSCompareRule(WhitelistRule):
             )
 
         yield from _validate_dss_substructure(
-            old, new, old_dss, new_dss, dss_der_stream_keys, is_vri=False,
-            context=dss_context
+            old,
+            new,
+            old_dss,
+            new_dss,
+            dss_der_stream_keys,
+            is_vri=False,
+            context=dss_context,
         )
 
         # check that the /VRI dictionary still contains all old keys, unchanged.
         old_vri, new_vri = yield from misc.map_with_return(
             compare_key_refs(
-                '/VRI', old, old_dss, new_dss,
+                '/VRI',
+                old,
+                old_dss,
+                new_dss,
             ),
             ReferenceUpdate.curry_ref(
                 context_checked=Context.from_absolute(
                     old, RawPdfPath('/Root', '/DSS', '/VRI')
                 )
-            )
+            ),
         )
 
         nodict_err = "/VRI is not a dictionary"
@@ -176,8 +195,9 @@ class DSSCompareRule(WhitelistRule):
                 )
 
             new_vri_dict = new_vri.raw_get(key)
-            if isinstance(new_vri_dict, generic.IndirectObject) \
-                    and old.is_ref_available(new_vri_dict.reference):
+            if isinstance(
+                new_vri_dict, generic.IndirectObject
+            ) and old.is_ref_available(new_vri_dict.reference):
                 yield ReferenceUpdate(new_vri_dict.reference)
                 new_vri_dict = new_vri_dict.get_object()
             assert_not_stream(new_vri_dict)
@@ -193,11 +213,15 @@ class DSSCompareRule(WhitelistRule):
                     f"{new_vri_value_keys - vri_expected_keys}."
                 )
             yield from _validate_dss_substructure(
-                old, new, generic.DictionaryObject(),
-                new_vri_dict, vri_der_stream_keys, is_vri=True,
+                old,
+                new,
+                generic.DictionaryObject(),
+                new_vri_dict,
+                vri_der_stream_keys,
+                is_vri=True,
                 context=Context.from_absolute(
                     old, RawPdfPath('/Root', '/DSS', '/VRI', key)
-                )
+                ),
             )
 
             # /TS is also a DER stream
@@ -252,16 +276,21 @@ class SigFieldCreationRule(FieldMDPRule):
         associated with approved new fields.
     """
 
-    def __init__(self, approve_widget_bindings=True,
-                 allow_new_visible_after_certify=False):
+    def __init__(
+        self,
+        approve_widget_bindings=True,
+        allow_new_visible_after_certify=False,
+    ):
         self.approve_widget_bindings = approve_widget_bindings
         self.allow_new_visible_after_certify = allow_new_visible_after_certify
 
-    def apply(self, context: FieldComparisonContext) \
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def apply(
+        self, context: FieldComparisonContext
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         deleted = set(
-            fq_name for fq_name, spec in context.field_specs.items()
+            fq_name
+            for fq_name, spec in context.field_specs.items()
             if spec.old_field_ref and not spec.new_field_ref
         )
         if deleted:
@@ -282,7 +311,8 @@ class SigFieldCreationRule(FieldMDPRule):
         # up the names of new fields
         approved_new_fields = set(all_new_refs.keys())
         actual_new_fields = set(
-            fq_name for fq_name, spec in context.field_specs.items()
+            fq_name
+            for fq_name, spec in context.field_specs.items()
             if spec.old_field_ref is None
         )
 
@@ -312,15 +342,17 @@ class SigFieldCreationRule(FieldMDPRule):
             visible = is_field_visible(sigfield)
             mod_level = (
                 ModificationLevel.FORM_FILLING
-                if visible else ModificationLevel.LTA_UPDATES
+                if visible
+                else ModificationLevel.LTA_UPDATES
             )
             if context.old.is_ref_available(sigfield_ref):
                 yield mod_level, FormUpdate(
-                    updated_ref=sigfield_ref, field_name=fq_name,
+                    updated_ref=sigfield_ref,
+                    field_name=fq_name,
                     valid_when_locked=not visible,
                     valid_when_certifying=(
                         not visible or self.allow_new_visible_after_certify
-                    )
+                    ),
                 )
             # checked by field listing routine already
             assert isinstance(sigfield, generic.DictionaryObject)
@@ -330,13 +362,12 @@ class SigFieldCreationRule(FieldMDPRule):
                     raw_value = pdf_dict.raw_get(_key)
 
                     deps = context.new.collect_dependencies(
-                        raw_value,
-                        since_revision=context.old.revision + 1
+                        raw_value, since_revision=context.old.revision + 1
                     )
                     yield from qualify(
                         ModificationLevel.FORM_FILLING,
                         misc._as_gen(deps),
-                        transform=FormUpdate.curry_ref(field_name=fq_name)
+                        transform=FormUpdate.curry_ref(field_name=fq_name),
                     )
                 except KeyError:
                     pass
@@ -349,11 +380,13 @@ class SigFieldCreationRule(FieldMDPRule):
             try:
                 kids_arr_ref = sigfield.raw_get('/Kids')
                 old = context.old
-                if isinstance(kids_arr_ref, generic.IndirectObject) \
-                        and old.is_ref_available(kids_arr_ref.reference):
+                if isinstance(
+                    kids_arr_ref, generic.IndirectObject
+                ) and old.is_ref_available(kids_arr_ref.reference):
                     yield mod_level, FormUpdate(
-                        updated_ref=kids_arr_ref.reference, field_name=fq_name,
-                        valid_when_locked=not visible
+                        updated_ref=kids_arr_ref.reference,
+                        field_name=fq_name,
+                        valid_when_locked=not visible,
                     )
                 kid_refs = _arr_to_refs(
                     kids_arr_ref.get_object(), SuspiciousModification
@@ -367,8 +400,9 @@ class SigFieldCreationRule(FieldMDPRule):
                         field_ref_reverse[kid] = fq_name
                         if old.is_ref_available(kid):
                             yield mod_level, FormUpdate(
-                                updated_ref=kid, field_name=fq_name,
-                                valid_when_locked=not visible
+                                updated_ref=kid,
+                                field_name=fq_name,
+                                valid_when_locked=not visible,
                             )
                         # pull in appearance dependencies
                         yield from _handle_deps(kid.get_object(), '/AP')
@@ -401,11 +435,13 @@ class SigFieldCreationRule(FieldMDPRule):
         yield from qualify(
             ModificationLevel.LTA_UPDATES,
             _walk_page_tree_annots(
-                old_page_root, new_page_root,
-                field_ref_reverse, context.old,
+                old_page_root,
+                new_page_root,
+                field_ref_reverse,
+                context.old,
                 valid_when_locked=True,
-                refs_seen=set()
-            )
+                refs_seen=set(),
+            ),
         )
 
 
@@ -415,18 +451,25 @@ class BaseFieldModificationRule(FieldMDPRule):
     to individual form fields.
     """
 
-    def __init__(self, allow_in_place_appearance_stream_changes: bool = True,
-                 always_modifiable=None, value_update_keys=None):
+    def __init__(
+        self,
+        allow_in_place_appearance_stream_changes: bool = True,
+        always_modifiable=None,
+        value_update_keys=None,
+    ):
         self.always_modifiable = (
-            always_modifiable if always_modifiable is not None
+            always_modifiable
+            if always_modifiable is not None
             else FORMFIELD_ALWAYS_MODIFIABLE
         )
         self.value_update_keys = (
-            value_update_keys if value_update_keys is not None
+            value_update_keys
+            if value_update_keys is not None
             else VALUE_UPDATE_KEYS
         )
-        self.allow_in_place_appearance_stream_changes = \
+        self.allow_in_place_appearance_stream_changes = (
             allow_in_place_appearance_stream_changes
+        )
 
     def compare_fields(self, spec: FieldComparisonSpec) -> bool:
         """
@@ -446,9 +489,7 @@ class BaseFieldModificationRule(FieldMDPRule):
         # be OK on a locked field.
         old_field = spec.old_field
         new_field = spec.new_field
-        compare_dicts(
-            old_field, new_field, self.value_update_keys
-        )
+        compare_dicts(old_field, new_field, self.value_update_keys)
         # Be strict about /Type since some processor's behaviour depends on it
         had_type = '/Type' in old_field
         has_type = '/Type' in new_field
@@ -466,15 +507,19 @@ class BaseFieldModificationRule(FieldMDPRule):
             old_field, new_field, self.always_modifiable, raise_exc=False
         )
 
-    def apply(self, context: FieldComparisonContext) \
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def apply(
+        self, context: FieldComparisonContext
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         for fq_name, spec in context.field_specs.items():
             yield from self.check_form_field(fq_name, spec, context)
 
-    def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
-                         context: FieldComparisonContext) \
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def check_form_field(
+        self,
+        fq_name: str,
+        spec: FieldComparisonSpec,
+        context: FieldComparisonContext,
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
         """
         Investigate updates to a particular form field.
         This function is called by :meth:`apply` for every form field in
@@ -510,9 +555,12 @@ class SigFieldModificationRule(BaseFieldModificationRule):
     :class:`.ModificationLevel.FORM_FILLING`.
     """
 
-    def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
-                         context: FieldComparisonContext) \
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def check_form_field(
+        self,
+        fq_name: str,
+        spec: FieldComparisonSpec,
+        context: FieldComparisonContext,
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
         # deal with "freshly signed" signature fields,
         # i.e. those that are filled now, but weren't previously
@@ -539,17 +587,17 @@ class SigFieldModificationRule(BaseFieldModificationRule):
 
             field_ref_updates = (
                 FormUpdate(
-                    updated_ref=spec.new_field_ref, field_name=fq_name,
+                    updated_ref=spec.new_field_ref,
+                    field_name=fq_name,
                     valid_when_locked=valid_when_locked,
-                    context_checked=expected
+                    context_checked=expected,
                 )
                 for expected in spec.expected_contexts()
             )
 
             if not previously_signed and now_signed:
                 yield from qualify(
-                    ModificationLevel.LTA_UPDATES,
-                    field_ref_updates
+                    ModificationLevel.LTA_UPDATES, field_ref_updates
                 )
 
                 # whitelist appearance updates at FORM_FILL level
@@ -558,16 +606,18 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                     _allow_appearance_update(
                         old_field, new_field, context.old, context.new
                     ),
-                    transform=FormUpdate.curry_ref(field_name=fq_name)
+                    transform=FormUpdate.curry_ref(field_name=fq_name),
                 )
                 if self.allow_in_place_appearance_stream_changes:
                     yield from qualify(
                         ModificationLevel.FORM_FILLING,
                         _allow_in_place_appearance_update(
-                            old_field, new_field,
-                            context.old, context.new,
-                            fq_name=fq_name
-                        )
+                            old_field,
+                            new_field,
+                            context.old,
+                            context.new,
+                            fq_name=fq_name,
+                        ),
                     )
             else:
                 # case where the field was already signed, or is still
@@ -578,8 +628,7 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                 #  liberally, so we have to make some allowances
                 if valid_when_locked:
                     yield from qualify(
-                        ModificationLevel.LTA_UPDATES,
-                        field_ref_updates
+                        ModificationLevel.LTA_UPDATES, field_ref_updates
                     )
                 # Skip the comparison logic on /V. In particular, if
                 # the signature object in question was overridden,
@@ -622,8 +671,9 @@ class SigFieldModificationRule(BaseFieldModificationRule):
 
         # first, whitelist the actual signature object
         yield sig_whitelist, FormUpdate(
-            updated_ref=current_value_ref, field_name=fq_name,
-            valid_when_locked=valid_when_locked
+            updated_ref=current_value_ref,
+            field_name=fq_name,
+            valid_when_locked=valid_when_locked,
         )
 
         # since apparently Acrobat didn't get the memo about not having
@@ -638,7 +688,7 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                         sig_whitelist,
                         FormUpdate(
                             updated_ref=tp.reference, field_name=fq_name
-                        )
+                        ),
                     )
                 except (KeyError, AttributeError):
                     continue
@@ -655,12 +705,18 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
     :class:`.FieldComparisonContext` includes a :class:`.FieldMDPSpec`.
     """
 
-    def check_form_field(self, fq_name: str, spec: FieldComparisonSpec,
-                         context: FieldComparisonContext) \
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def check_form_field(
+        self,
+        fq_name: str,
+        spec: FieldComparisonSpec,
+        context: FieldComparisonContext,
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
 
-        if spec.field_type == '/Sig' or \
-                not spec.new_field_ref or not spec.old_field_ref:
+        if (
+            spec.field_type == '/Sig'
+            or not spec.new_field_ref
+            or not spec.old_field_ref
+        ):
             return
 
         valid_when_locked = self.compare_fields(spec)
@@ -669,12 +725,13 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             ModificationLevel.FORM_FILLING,
             (
                 FormUpdate(
-                    updated_ref=spec.new_field_ref, field_name=fq_name,
+                    updated_ref=spec.new_field_ref,
+                    field_name=fq_name,
                     valid_when_locked=valid_when_locked,
-                    context_checked=expected
+                    context_checked=expected,
                 )
                 for expected in spec.expected_contexts()
-            )
+            ),
         )
         old_field = spec.old_field
         new_field = spec.new_field
@@ -683,16 +740,18 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             _allow_appearance_update(
                 old_field, new_field, context.old, context.new
             ),
-            transform=FormUpdate.curry_ref(field_name=fq_name)
+            transform=FormUpdate.curry_ref(field_name=fq_name),
         )
         if self.allow_in_place_appearance_stream_changes:
             yield from qualify(
                 ModificationLevel.FORM_FILLING,
                 _allow_in_place_appearance_update(
-                    old_field, new_field,
-                    context.old, context.new,
-                    fq_name=fq_name
-                )
+                    old_field,
+                    new_field,
+                    context.old,
+                    context.new,
+                    fq_name=fq_name,
+                ),
             )
         try:
             new_value = new_field.raw_get('/V')
@@ -708,19 +767,18 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
         # TODO is this sufficient?
         if new_value != old_value:
             deps = context.new.collect_dependencies(
-                new_value,
-                since_revision=context.old.revision + 1
+                new_value, since_revision=context.old.revision + 1
             )
             yield from qualify(
                 ModificationLevel.FORM_FILLING,
                 misc._as_gen(deps),
-                transform=FormUpdate.curry_ref(field_name=fq_name)
+                transform=FormUpdate.curry_ref(field_name=fq_name),
             )
 
 
-def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
-                             new: HistoricalResolver) \
-        -> Generator[Reference, None, None]:
+def _allow_appearance_update(
+    old_field, new_field, old: HistoricalResolver, new: HistoricalResolver
+) -> Generator[Reference, None, None]:
 
     old_ap_val, new_ap_val = yield from compare_key_refs(
         '/AP', old, old_field, new_field
@@ -730,9 +788,7 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
         return
 
     if not isinstance(new_ap_val, generic.DictionaryObject):
-        raise SuspiciousModification(
-            'AP entry should point to a dictionary'
-        )
+        raise SuspiciousModification('AP entry should point to a dictionary')
 
     # we generally *never* want to whitelist an update for an existing
     # stream object (too much potential for abuse), so we insist on
@@ -771,10 +827,13 @@ def _allow_appearance_update(old_field, new_field, old: HistoricalResolver,
                 checked_ap_references = True
 
 
-def _allow_in_place_appearance_update(old_field, new_field,
-                                      old: HistoricalResolver,
-                                      new: HistoricalResolver,
-                                      fq_name: str):
+def _allow_in_place_appearance_update(
+    old_field,
+    new_field,
+    old: HistoricalResolver,
+    new: HistoricalResolver,
+    fq_name: str,
+):
 
     # We can allow updating appearance streams in-place, but that requires
     # two conditions to be met
@@ -815,9 +874,11 @@ def _allow_in_place_appearance_update(old_field, new_field,
             )
             # if the refs are distinct or the old ref hasn't changed
             # don't bother
-            if new_ap_stm_ref != old_ap_stm_ref \
-                    or old_ap_stm_ref is None \
-                    or xrefs.get_last_change(old_ap_stm_ref) == old_rev:
+            if (
+                new_ap_stm_ref != old_ap_stm_ref
+                or old_ap_stm_ref is None
+                or xrefs.get_last_change(old_ap_stm_ref) == old_rev
+            ):
                 continue
             if isinstance(old_ap_raw, generic.IndirectObject):
                 context = RelativeContext(
@@ -826,17 +887,15 @@ def _allow_in_place_appearance_update(old_field, new_field,
             else:
                 context = RelativeContext(
                     old_field.container_ref,
-                    relative_path=RawPdfPath('/AP', key)
+                    relative_path=RawPdfPath('/AP', key),
                 )
             yield FormUpdate(
-                new_ap_stm_ref, context_checked=context,
-                field_name=fq_name
+                new_ap_stm_ref, context_checked=context, field_name=fq_name
             )
 
             # pull in the newly added objects beyond the update boundary
             new_deps = new.collect_dependencies(
-                new_ap_stm_ref.get_object(),
-                since_revision=old.revision + 1
+                new_ap_stm_ref.get_object(), since_revision=old.revision + 1
             )
             for ref in new_deps:
                 yield FormUpdate(ref, field_name=fq_name)
@@ -874,9 +933,14 @@ def _extract_annots_from_page(page, exc):
         raise
 
 
-def _walk_page_tree_annots(old_page_root, new_page_root,
-                           field_name_dict, old: HistoricalResolver,
-                           valid_when_locked, refs_seen):
+def _walk_page_tree_annots(
+    old_page_root,
+    new_page_root,
+    field_name_dict,
+    old: HistoricalResolver,
+    valid_when_locked,
+    refs_seen,
+):
     def get_kids(page_root, exc):
         try:
             return _arr_to_refs(page_root['/Kids'], exc)
@@ -905,8 +969,12 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             raise misc.PdfReadError from e
         if node_type == '/Pages':
             yield from _walk_page_tree_annots(
-                old_kid, new_kid, field_name_dict, old,
-                valid_when_locked, refs_seen | {old_kid_ref},
+                old_kid,
+                new_kid,
+                field_name_dict,
+                old,
+                valid_when_locked,
+                refs_seen | {old_kid_ref},
             )
         elif node_type == '/Page':
             try:
@@ -952,7 +1020,7 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             # not much we can do.
             field_name = None
             if len(added_annots) == 1:
-                uniq_annot_ref, = added_annots
+                (uniq_annot_ref,) = added_annots
                 field_name = field_name_dict[uniq_annot_ref]
 
             # Make sure the page dictionaries are the same, so that we
@@ -964,9 +1032,10 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
             # file, and attempting to check all possible paths would probably
             # create more problems than it solves -> blanket approve
             yield FormUpdate(
-                updated_ref=new_kid_ref, field_name=field_name,
+                updated_ref=new_kid_ref,
+                field_name=field_name,
                 valid_when_locked=valid_when_locked and field_name is not None,
-                context_checked=None
+                context_checked=None,
             )
             if new_annots_ref:
                 # current /Annots entry is an indirect reference
@@ -977,14 +1046,16 @@ def _walk_page_tree_annots(old_page_root, new_page_root,
                 # indirect one, or the /Annots entry was newly created.
                 # This is all fine, provided that the new  object
                 # ID doesn't clobber an existing one.
-                if old_annots_ref == new_annots_ref or \
-                        old.is_ref_available(new_annots_ref):
+                if old_annots_ref == new_annots_ref or old.is_ref_available(
+                    new_annots_ref
+                ):
                     yield FormUpdate(
-                        updated_ref=new_annots_ref, field_name=field_name,
+                        updated_ref=new_annots_ref,
+                        field_name=field_name,
                         valid_when_locked=(
                             valid_when_locked and field_name is not None
                         ),
                         context_checked=RelativeContext(
                             old_kid_ref, RawPdfPath('/Annots')
-                        )
+                        ),
                     )

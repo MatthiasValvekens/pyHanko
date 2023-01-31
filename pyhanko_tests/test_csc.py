@@ -61,118 +61,156 @@ kS0gHz5+cFMDBZxeP5Oq5UFvFtU=
 
 
 def test_proc_cert_info_response():
-    cred_info = csc_signer._process_certificate_info_response({
-        'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-        'key': {
-            'algo': ['1.2.840.113549.1.1.11'],
-            'len': 2048,
-        },
-        'multisign': 10,
-        'authMode': 'implicit',
-        'SCAL': 2,
-    })
+    cred_info = csc_signer._process_certificate_info_response(
+        {
+            'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+            'key': {
+                'algo': ['1.2.840.113549.1.1.11'],
+                'len': 2048,
+            },
+            'multisign': 10,
+            'authMode': 'implicit',
+            'SCAL': 2,
+        }
+    )
     assert cred_info.max_batch_size == 10
     assert cred_info.hash_pinning_required
     assert 'sha256_rsa' in cred_info.supported_mechanisms
     assert 'Alice' in cred_info.signing_cert.subject.human_friendly
 
 
-@pytest.mark.parametrize('response_data,err_msg', [
-    ({
-        'cert': {},
-        'key': {
-            'algo': ['1.2.840.113549.1.1.11'],
-            'len': 2048,
-        }, 'multisign': 10, 'authMode': 'implicit', 'SCAL': 2,
-    }, "Could not retrieve certificates from response"),
-    ({
-         'key': {
-             'algo': ['1.2.840.113549.1.1.11'],
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': 2,
-     }, "Could not retrieve certificates from response"),
-    ({
-         'cert': {'certificates': [SIGNER_B64.replace('M', 'Z')]},
-         'key': {
-             'algo': ['1.2.840.113549.1.1.11'],
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': 2,
-     }, "Could not decode certificates in response"),
-    ({
-         'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-         'key': {
-             'algo': '1.2.840.113549.1.1.11',
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': 2,
-     }, "Could not retrieve supported signing mechanisms"),
-    ({
-         'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-         'key': {
-             'algo': ['zzz1.2.840.113549.1.1.11'],
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': 2,
-     }, "Could not retrieve supported signing mechanisms"),
-    ({
-         'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-         'key': {
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': 2,
-     }, "Could not retrieve supported signing mechanisms"),
-    ({
-        'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-        'key': {
-            'algo': ['1.2.840.113549.1.1.11'],
-            'len': 2048,
-        },
-        'authMode': 'implicit',
-        'SCAL': 2,
-    }, "Could not retrieve max batch size"),
-    ({
-         'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-         'key': {
-             'algo': ['1.2.840.113549.1.1.11'],
-             'len': 2048,
-         },
-         'multisign': 'foobar',
-         'authMode': 'implicit',
-         'SCAL': 2,
-     }, "Could not retrieve max batch size"),
-    ({
-         'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-         'key': {
-             'algo': ['1.2.840.113549.1.1.11'],
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': 3,
-     }, "SCAL value must be"),
-    ({
-         'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
-         'key': {
-             'algo': ['1.2.840.113549.1.1.11'],
-             'len': 2048,
-         },
-         'multisign': 10,
-         'authMode': 'implicit',
-         'SCAL': "zzz",
-     }, "SCAL value must be"),
-])
+@pytest.mark.parametrize(
+    'response_data,err_msg',
+    [
+        (
+            {
+                'cert': {},
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve certificates from response",
+        ),
+        (
+            {
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve certificates from response",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64.replace('M', 'Z')]},
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not decode certificates in response",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'algo': '1.2.840.113549.1.1.11',
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve supported signing mechanisms",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'algo': ['zzz1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve supported signing mechanisms",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve supported signing mechanisms",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve max batch size",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 'foobar',
+                'authMode': 'implicit',
+                'SCAL': 2,
+            },
+            "Could not retrieve max batch size",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': 3,
+            },
+            "SCAL value must be",
+        ),
+        (
+            {
+                'cert': {'certificates': [SIGNER_B64, INTERM_B64]},
+                'key': {
+                    'algo': ['1.2.840.113549.1.1.11'],
+                    'len': 2048,
+                },
+                'multisign': 10,
+                'authMode': 'implicit',
+                'SCAL': "zzz",
+            },
+            "SCAL value must be",
+        ),
+    ],
+)
 def test_proc_cert_info_response_errors(response_data, err_msg):
     with pytest.raises(SigningError, match=err_msg):
         csc_signer._process_certificate_info_response(response_data)
@@ -186,30 +224,35 @@ def test_format_csc_auth_request():
         ),
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset(),
+            chain=[],
+            supported_mechanisms=frozenset(),
             max_batch_size=10,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
     result = auth_man.format_csc_auth_request(
-        pin='1234', otp='123456',
+        pin='1234',
+        otp='123456',
         hash_b64s=[
             'Sa6Tcy/PjWP+HM51lmSYLb1bIxYfAH26hWGGKtyW0GM=',
-            'Sa6Tcy/PjWP+HM51lmSYLb1bIxYfAH26hWGGKtyW0GM='
+            'Sa6Tcy/PjWP+HM51lmSYLb1bIxYfAH26hWGGKtyW0GM=',
         ],
-        description='baz', client_data='quux'
+        description='baz',
+        client_data='quux',
     )
     assert result == {
         'credentialID': 'foobar',
         'numSignatures': 2,
         'hash': [
             'Sa6Tcy/PjWP+HM51lmSYLb1bIxYfAH26hWGGKtyW0GM=',
-            'Sa6Tcy/PjWP+HM51lmSYLb1bIxYfAH26hWGGKtyW0GM='
+            'Sa6Tcy/PjWP+HM51lmSYLb1bIxYfAH26hWGGKtyW0GM=',
         ],
-        'PIN': '1234', 'OTP': '123456',
+        'PIN': '1234',
+        'OTP': '123456',
         'description': 'baz',
-        'clientData': 'quux'
+        'clientData': 'quux',
     }
 
 
@@ -219,8 +262,9 @@ def test_parse_csc_auth_response():
 
     expires_at = datetime.fromisoformat('2021-11-01T00:05:00+00:00')
 
-    result = csc_signer.CSCAuthorizationManager\
-        .parse_csc_auth_response(response_data)
+    result = csc_signer.CSCAuthorizationManager.parse_csc_auth_response(
+        response_data
+    )
     assert result == csc_signer.CSCAuthorizationInfo(
         sad='foobar', expires_at=expires_at
     )
@@ -232,21 +276,29 @@ def test_parse_csc_auth_response_default_expiry():
 
     expires_at = datetime.fromisoformat('2021-11-01T01:00:00+00:00')
 
-    result = csc_signer.CSCAuthorizationManager \
-        .parse_csc_auth_response(response_data)
+    result = csc_signer.CSCAuthorizationManager.parse_csc_auth_response(
+        response_data
+    )
     assert result == csc_signer.CSCAuthorizationInfo(
         sad='foobar', expires_at=expires_at
     )
 
 
-@pytest.mark.parametrize('response_data,err_msg', [
-    ({}, "Could not extract SAD"),
-    ({'SAD': 'foobar', 'expiresIn': 'nonsense'}, "Could not process expiresIn"),
-])
+@pytest.mark.parametrize(
+    'response_data,err_msg',
+    [
+        ({}, "Could not extract SAD"),
+        (
+            {'SAD': 'foobar', 'expiresIn': 'nonsense'},
+            "Could not process expiresIn",
+        ),
+    ],
+)
 def test_parse_csc_auth_response_error(response_data, err_msg):
     with pytest.raises(SigningError, match=err_msg):
-        csc_signer.CSCAuthorizationManager \
-            .parse_csc_auth_response(response_data)
+        csc_signer.CSCAuthorizationManager.parse_csc_auth_response(
+            response_data
+        )
 
 
 # network failure tests
@@ -258,7 +310,7 @@ async def test_cert_provision_fail():
     with pytest.raises(SigningError, match='Credential info request failed'):
         async with aiohttp.ClientSession() as session:
             await csc_signer.fetch_certs_in_csc_credential(
-                 session, csc_session_info=csc_session_info
+                session, csc_session_info=csc_session_info
             )
 
 
@@ -271,11 +323,13 @@ async def test_sign_mechanism_not_supported():
         csc_session_info=csc_session_info,
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset({'is_nonsense'}),
+            chain=[],
+            supported_mechanisms=frozenset({'is_nonsense'}),
             max_batch_size=10,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
     # check expected failure for a signing attempt
     with pytest.raises(SigningError, match='No signing results available'):
@@ -292,8 +346,9 @@ async def test_sign_mechanism_not_supported():
     # ...but overrides should still work
     # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(None, auth_manager=auth_man)
-    signer.signature_mechanism = mech \
-        = algos.SignedDigestAlgorithm({'algorithm': 'sha256_rsa'})
+    signer.signature_mechanism = mech = algos.SignedDigestAlgorithm(
+        {'algorithm': 'sha256_rsa'}
+    )
     assert signer.get_signature_mechanism(digest_algorithm='sha256') == mech
 
 
@@ -306,11 +361,13 @@ async def test_sign_network_fail():
         csc_session_info=csc_session_info,
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset({'sha256_rsa'}),
+            chain=[],
+            supported_mechanisms=frozenset({'sha256_rsa'}),
             max_batch_size=10,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
 
     with pytest.raises(SigningError, match='No signing results available'):
@@ -326,24 +383,30 @@ async def test_sign_wrong_number_of_sigs(aiohttp_client):
         csc_session_info=csc_session_info,
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset({'sha256_rsa'}),
+            chain=[],
+            supported_mechanisms=frozenset({'sha256_rsa'}),
             max_batch_size=2,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
 
     async def fake_return(_request):
-        return web.json_response({
-            'signatures': [base64.b64encode(bytes(512)).decode('ascii'), ]
-        })
+        return web.json_response(
+            {
+                'signatures': [
+                    base64.b64encode(bytes(512)).decode('ascii'),
+                ]
+            }
+        )
+
     app = web.Application()
-    app.router.add_post('/csc/v1/signatures/signHash',  fake_return)
+    app.router.add_post('/csc/v1/signatures/signHash', fake_return)
     client = await aiohttp_client(app)
     # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(
-        client, auth_manager=auth_man, batch_size=2,
-        batch_autocommit=False
+        client, auth_manager=auth_man, batch_size=2, batch_autocommit=False
     )
     result = asyncio.gather(
         signer.async_sign_raw(b'foobarbaz', 'sha256'),
@@ -368,23 +431,28 @@ async def test_sign_unreadable_sig(aiohttp_client, response_obj):
         csc_session_info=csc_session_info,
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset({'sha256_rsa'}),
+            chain=[],
+            supported_mechanisms=frozenset({'sha256_rsa'}),
             max_batch_size=1,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
 
     async def fake_return(_request):
         return web.json_response(response_obj)
 
     app = web.Application()
-    app.router.add_post('/csc/v1/signatures/signHash',  fake_return)
+    app.router.add_post('/csc/v1/signatures/signHash', fake_return)
     client = await aiohttp_client(app)
     # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(
-        client, auth_manager=auth_man, batch_size=1,
-        batch_autocommit=False, client_data='Some client data, because why not'
+        client,
+        auth_manager=auth_man,
+        batch_size=1,
+        batch_autocommit=False,
+        client_data='Some client data, because why not',
     )
     result = asyncio.create_task(signer.async_sign_raw(b'foobarbaz', 'sha256'))
     with pytest.raises(SigningError, match='Expected response with b64'):
@@ -405,11 +473,13 @@ async def test_fail_different_digest():
         csc_session_info=csc_session_info,
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset({'sha256_rsa'}),
+            chain=[],
+            supported_mechanisms=frozenset({'sha256_rsa'}),
             max_batch_size=2,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
     # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(None, auth_manager=auth_man, batch_size=2)
@@ -429,16 +499,17 @@ async def _set_up_dummy_client(aiohttp_client, require_hash_pinning=True):
         certomancer_config=CERTOMANCER,
         service_params=DummyServiceParams(
             hash_pinning_required=require_hash_pinning
-        )
+        ),
     )
     csc_dummy.register_routes()
     client = await aiohttp_client(csc_dummy.app)
 
     auth_man = CSCDummyClientAuthManager(
-        client, session_info=csc_session_info,
+        client,
+        session_info=csc_session_info,
         credential_info=await csc_signer.fetch_certs_in_csc_credential(
             client, csc_session_info
-        )
+        ),
     )
     return client, auth_man, csc_dummy
 
@@ -450,6 +521,7 @@ async def test_submit_job_during_commit(aiohttp_client):
 
     class SlowCommitter(csc_signer.CSCSigner):
         _committed_once = False
+
         async def _do_commit(self, batch):
             # waste time
             if not self._committed_once:
@@ -458,8 +530,10 @@ async def test_submit_job_during_commit(aiohttp_client):
             await super()._do_commit(batch)
 
     signer = SlowCommitter(
-        session=client, auth_manager=auth_man,
-        batch_autocommit=True, batch_size=2
+        session=client,
+        auth_manager=auth_man,
+        batch_autocommit=True,
+        batch_size=2,
     )
 
     async def make_first_sig():
@@ -483,11 +557,13 @@ async def test_submit_job_during_commit(aiohttp_client):
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     for ix, sig in enumerate([sig1, *others]):
         validate_raw(
-            sig, b'foobar%d' % (ix + 1), signer_cert,
-            signature_algorithm=algos.SignedDigestAlgorithm({
-                'algorithm': 'sha256_rsa'
-            }),
-            md_algorithm='sha256'
+            sig,
+            b'foobar%d' % (ix + 1),
+            signer_cert,
+            signature_algorithm=algos.SignedDigestAlgorithm(
+                {'algorithm': 'sha256_rsa'}
+            ),
+            md_algorithm='sha256',
         )
     assert auth_man.authorizations_requested == 2
 
@@ -500,7 +576,7 @@ async def test_multi_commit_failure(aiohttp_client):
     auth_man = csc_signer.PrefetchedSADAuthorizationManager(
         csc_session_info=auth_man.csc_session_info,
         credential_info=auth_man.credential_info,
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
 
     class SlowCommitter(csc_signer.CSCSigner):
@@ -510,8 +586,10 @@ async def test_multi_commit_failure(aiohttp_client):
             await super()._do_commit(batch)
 
     signer = SlowCommitter(
-        session=client, auth_manager=auth_man,
-        batch_autocommit=False, batch_size=1
+        session=client,
+        auth_manager=auth_man,
+        batch_autocommit=False,
+        batch_size=1,
     )
 
     async def produce_signature():
@@ -528,6 +606,7 @@ async def test_multi_commit_failure(aiohttp_client):
         with pytest.raises(SigningError, match='Commit failed'):
             await asyncio.sleep(2)
             await signer.commit()
+
     await asyncio.gather(produce_signature(), commit_again())
     # this should now return immediately as there is no batch
     await signer.commit()
@@ -540,9 +619,11 @@ async def test_csc_with_parameters(aiohttp_client):
     client, auth_man, csc_dummy = await _set_up_dummy_client(aiohttp_client)
 
     signer = csc_signer.CSCSigner(
-        session=client, auth_manager=auth_man,
-        batch_autocommit=True, batch_size=1,
-        prefer_pss=True
+        session=client,
+        auth_manager=auth_man,
+        batch_autocommit=True,
+        batch_size=1,
+        prefer_pss=True,
     )
 
     result = await signer.async_sign_raw(b'foobar', digest_algorithm='sha256')
@@ -550,8 +631,11 @@ async def test_csc_with_parameters(aiohttp_client):
     mech = signer.get_signature_mechanism('sha256')
     assert mech.signature_algo == 'rsassa_pss'
     validate_raw(
-        result, b'foobar', signer_cert,
-        signature_algorithm=mech, md_algorithm='sha256'
+        result,
+        b'foobar',
+        signer_cert,
+        signature_algorithm=mech,
+        md_algorithm='sha256',
     )
 
 
@@ -562,28 +646,35 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
     )
 
     # prefetch SAD that is not bound to any hashes
-    async with client.post('/csc/v1/credentials/authorize',
-                           json=auth_man.format_csc_auth_request(),
-                           raise_for_status=True) as resp:
+    async with client.post(
+        '/csc/v1/credentials/authorize',
+        json=auth_man.format_csc_auth_request(),
+        raise_for_status=True,
+    ) as resp:
         sad = (await resp.json())['SAD']
     auth_man = csc_signer.PrefetchedSADAuthorizationManager(
         csc_session_info=auth_man.csc_session_info,
         credential_info=auth_man.credential_info,
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=sad)
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=sad),
     )
 
     signer = csc_signer.CSCSigner(
-        session=client, auth_manager=auth_man,
-        batch_autocommit=True, batch_size=1,
+        session=client,
+        auth_manager=auth_man,
+        batch_autocommit=True,
+        batch_size=1,
     )
 
     result = await signer.async_sign_raw(b'foobar', digest_algorithm='sha256')
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
     validate_raw(
-        result, b'foobar', signer_cert,
-        signature_algorithm=algos.SignedDigestAlgorithm({
-            'algorithm': 'sha256_rsa'
-        }), md_algorithm='sha256'
+        result,
+        b'foobar',
+        signer_cert,
+        signature_algorithm=algos.SignedDigestAlgorithm(
+            {'algorithm': 'sha256_rsa'}
+        ),
+        md_algorithm='sha256',
     )
 
     # but a second attempt should fail
@@ -593,6 +684,7 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
 
 # The API docs say that the placeholder will be 512 bytes, so we record
 # that in a test here
+
 
 @pytest.mark.asyncio
 async def test_csc_placeholder_sig_size():
@@ -604,11 +696,13 @@ async def test_csc_placeholder_sig_size():
         csc_session_info=csc_session_info,
         credential_info=csc_signer.CSCCredentialInfo(
             signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
-            chain=[], supported_mechanisms=frozenset({'is_nonsense'}),
+            chain=[],
+            supported_mechanisms=frozenset({'is_nonsense'}),
             max_batch_size=10,
-            hash_pinning_required=False, response_data={}
+            hash_pinning_required=False,
+            response_data={},
         ),
-        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad='')
+        csc_auth_info=csc_signer.CSCAuthorizationInfo(sad=''),
     )
     # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(None, auth_manager=auth_man)

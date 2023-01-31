@@ -35,13 +35,14 @@ from pyhanko_tests.test_signing import sign_test_files
 
 def field_with_lock_sp(include_docmdp):
     return fields.SigFieldSpec(
-        'SigNew', box=(10, 74, 140, 134),
+        'SigNew',
+        box=(10, 74, 140, 134),
         field_mdp_spec=fields.FieldMDPSpec(
             fields.FieldMDPAction.INCLUDE, fields=['blah']
         ),
         doc_mdp_update_value=(
             fields.MDPPerm.NO_CHANGES if include_docmdp else None
-        )
+        ),
     )
 
 
@@ -66,8 +67,7 @@ def test_append_sigfield_ap():
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
     spec = fields.SigFieldSpec(
-        sig_field_name='Sig1', empty_field_appearance=True,
-        box=(20, 20, 80, 40)
+        sig_field_name='Sig1', empty_field_appearance=True, box=(20, 20, 80, 40)
     )
     fields.append_signature_field(w, sig_field_spec=spec)
     w.write_in_place()
@@ -105,7 +105,9 @@ def test_add_sigfield_with_lock(include_docmdp):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     fields.append_signature_field(w, field_with_lock_sp(include_docmdp))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        w,
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -133,14 +135,18 @@ def test_sign_field_unclear():
 
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-            existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='SigExtra'),
-            signer=FROM_CA, existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(field_name='SigExtra'),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
 
@@ -157,14 +163,18 @@ async def test_sign_field_unclear_async():
 
     with pytest.raises(SigningError):
         await signers.async_sign_pdf(
-            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-            existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
     with pytest.raises(SigningError):
         await signers.async_sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='SigExtra'),
-            signer=FROM_CA, existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(field_name='SigExtra'),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
 
@@ -176,8 +186,10 @@ def test_sign_field_infer():
         signers.sign_pdf(w, signers.PdfSignatureMetadata(), signer=FROM_CA)
 
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-        existing_fields_only=True
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
 
     r = PdfFileReader(out)
@@ -190,8 +202,10 @@ def test_sign_field_infer():
     # shouldn't work now since all fields are taken
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-            existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
 
@@ -200,16 +214,20 @@ def test_sign_field_filled():
     w1 = IncrementalPdfFileWriter(BytesIO(MINIMAL_TWO_FIELDS))
 
     out1 = signers.sign_pdf(
-        w1, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
-        existing_fields_only=True
+        w1,
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
 
     # can't sign the same field twice
     w2 = IncrementalPdfFileWriter(out1)
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w2, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
-            existing_fields_only=True
+            w2,
+            signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
     out1.seek(0)
 
@@ -226,16 +244,20 @@ def test_sign_field_filled():
     w2 = IncrementalPdfFileWriter(out1)
     # autodetect remaining open field
     out2 = signers.sign_pdf(
-        w2, signers.PdfSignatureMetadata(), signer=FROM_CA,
-        existing_fields_only=True
+        w2,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
     val2(out2)
 
     out1.seek(0)
     w2 = IncrementalPdfFileWriter(out1)
     out2 = signers.sign_pdf(
-        w2, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
-        existing_fields_only=True
+        w2,
+        signers.PdfSignatureMetadata(field_name='Sig2'),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
     val2(out2)
 
@@ -245,7 +267,9 @@ def test_sign_field_filled():
 def test_sign_new(file):
     w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        w,
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     e = r.embedded_signatures[0]
@@ -278,13 +302,17 @@ def test_double_sign_lock_second():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     fields.append_signature_field(w, field_with_lock_sp(True))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='SigFirst'), signer=FROM_CA,
+        w,
+        signers.PdfSignatureMetadata(field_name='SigFirst'),
+        signer=FROM_CA,
     )
     w = IncrementalPdfFileWriter(out)
 
     # now sign the locked field
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        w,
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -301,8 +329,10 @@ def test_sign_new_existingonly(file):
     w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='SigNew'),
-            signer=FROM_CA, existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(field_name='SigNew'),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
 
@@ -312,8 +342,10 @@ async def test_async_sign_new_existingonly(file):
     w = IncrementalPdfFileWriter(BytesIO(sign_test_files[file]))
     with pytest.raises(SigningError):
         await signers.async_sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='SigNew'),
-            signer=FROM_CA, existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(field_name='SigNew'),
+            signer=FROM_CA,
+            existing_fields_only=True,
         )
 
 
@@ -322,8 +354,10 @@ def test_sign_with_new_field_spec():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     spec = fields.SigFieldSpec(sig_field_name='Sig1', box=(20, 20, 80, 40))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
-        new_field_spec=spec
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=FROM_CA,
+        new_field_spec=spec,
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -335,14 +369,19 @@ def test_sign_with_new_field_spec():
 
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='Sig2'), signer=FROM_CA,
-            new_field_spec=spec
+            w,
+            signers.PdfSignatureMetadata(field_name='Sig2'),
+            signer=FROM_CA,
+            new_field_spec=spec,
         )
 
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=FROM_CA,
-            new_field_spec=spec, existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA,
+            new_field_spec=spec,
+            existing_fields_only=True,
         )
 
 
@@ -367,9 +406,7 @@ def test_append_simple_sig_field():
 def test_append_visible_sig_field():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
 
-    sp = fields.SigFieldSpec(
-        'VisibleSig', box=(10, 0, 50, 8)
-    )
+    sp = fields.SigFieldSpec('VisibleSig', box=(10, 0, 50, 8))
     fields.append_signature_field(w, sp)
     assert len(w.root['/AcroForm']['/Fields']) == 1
     out = BytesIO()
@@ -387,9 +424,9 @@ def test_append_visible_sig_field():
 def test_append_sig_field_acro_update():
     # test different configurations of the AcroForm
     w = PdfFileWriter()
-    w.root['/AcroForm'] = generic.DictionaryObject({
-        pdf_name('/Fields'): generic.ArrayObject()
-    })
+    w.root['/AcroForm'] = generic.DictionaryObject(
+        {pdf_name('/Fields'): generic.ArrayObject()}
+    )
     w.insert_page(simple_page(w, 'Hello world'))
     out = BytesIO()
     w.write(out)
@@ -422,9 +459,9 @@ def test_circular_form_tree_sign():
     with open(fname, 'rb') as inf:
         w = IncrementalPdfFileWriter(inf)
         out = signers.sign_pdf(
-            w, signature_meta=signers.PdfSignatureMetadata(
-                field_name='Sig'
-            ), signer=FROM_CA
+            w,
+            signature_meta=signers.PdfSignatureMetadata(field_name='Sig'),
+            signer=FROM_CA,
         )
     r = PdfFileReader(out)
     with pytest.raises(PdfReadError, match='Circular.*form tree'):
@@ -437,9 +474,11 @@ def test_circular_form_tree_sign_deep():
         w = IncrementalPdfFileWriter(inf)
         with pytest.raises(PdfReadError, match='Circular.*form tree'):
             signers.sign_pdf(
-                w, signature_meta=signers.PdfSignatureMetadata(
+                w,
+                signature_meta=signers.PdfSignatureMetadata(
                     field_name='TextInput.Sig'
-                ), signer=FROM_CA
+                ),
+                signer=FROM_CA,
             )
 
 
@@ -447,9 +486,10 @@ def test_visible_field_flags():
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
     fields.append_signature_field(
-        w, sig_field_spec=fields.SigFieldSpec(
+        w,
+        sig_field_spec=fields.SigFieldSpec(
             sig_field_name='Sig1', box=(20, 20, 80, 40)
-        )
+        ),
     )
     w.write_in_place()
 
@@ -464,24 +504,25 @@ def test_visible_field_flags():
     [
         (InvisSigSettings(), 0b10000100, [0, 0, 0, 0]),
         (
-                InvisSigSettings(set_hidden_flag=True, set_print_flag=False),
-                0b10000010,
-                [0, 0, 0, 0]
+            InvisSigSettings(set_hidden_flag=True, set_print_flag=False),
+            0b10000010,
+            [0, 0, 0, 0],
         ),
         (
-                InvisSigSettings(box_out_of_bounds=True),
-                0b10000100,
-                [-9999, -9999, -9999, -9999]
+            InvisSigSettings(box_out_of_bounds=True),
+            0b10000100,
+            [-9999, -9999, -9999, -9999],
         ),
-    ]
+    ],
 )
 def test_invisible_field_flags(settings, flags, box):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
     fields.append_signature_field(
-        w, sig_field_spec=fields.SigFieldSpec(
+        w,
+        sig_field_spec=fields.SigFieldSpec(
             sig_field_name='Sig1', invis_sig_settings=settings
-        )
+        ),
     )
     w.write_in_place()
 
@@ -497,8 +538,9 @@ def test_append_sigfield_tu():
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
     spec = fields.SigFieldSpec(
-        sig_field_name='Sig1', empty_field_appearance=True,
-        readable_field_name="Test test"
+        sig_field_name='Sig1',
+        empty_field_appearance=True,
+        readable_field_name="Test test",
     )
     fields.append_signature_field(w, sig_field_spec=spec)
     w.write_in_place()
@@ -520,11 +562,10 @@ async def test_sign_with_cert_no_common_name_appearance():
         ),
         cert_registry=SimpleCertificateStore.from_certs(
             [ROOT_CERT, INTERM_CERT]
-        )
+        ),
     )
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(),
-        signer=sg, existing_fields_only=True
+        w, signers.PdfSignatureMetadata(), signer=sg, existing_fields_only=True
     )
     r = PdfFileReader(out)
 
@@ -552,21 +593,24 @@ async def test_sign_with_cert_no_common_name_appearance():
         ),
         (
             VisibleSigSettings(
-                print_signature=False, scale_with_page_zoom=False,
-                rotate_with_page=False
+                print_signature=False,
+                scale_with_page_zoom=False,
+                rotate_with_page=False,
             ),
             0b10011000,
         ),
-    ]
+    ],
 )
 def test_visible_field_flags(settings, flags):
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
     fields.append_signature_field(
-        w, sig_field_spec=fields.SigFieldSpec(
-            sig_field_name='Sig1', visible_sig_settings=settings,
-            box=[10, 10, 100, 100]
-        )
+        w,
+        sig_field_spec=fields.SigFieldSpec(
+            sig_field_name='Sig1',
+            visible_sig_settings=settings,
+            box=[10, 10, 100, 100],
+        ),
     )
     w.write_in_place()
 

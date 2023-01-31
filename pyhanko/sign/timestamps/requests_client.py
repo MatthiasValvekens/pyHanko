@@ -45,24 +45,31 @@ class HTTPTimeStamper(TimeStamper):
         """
         return set_tsp_headers(self.headers or {})
 
-    async def async_request_tsa_response(self, req: tsp.TimeStampReq) \
-            -> tsp.TimeStampResp:
+    async def async_request_tsa_response(
+        self, req: tsp.TimeStampReq
+    ) -> tsp.TimeStampResp:
         def task():
             try:
                 raw_res = requests.post(
-                    self.url, req.dump(), headers=self.request_headers(),
-                    auth=self.auth, timeout=self.timeout
+                    self.url,
+                    req.dump(),
+                    headers=self.request_headers(),
+                    auth=self.auth,
+                    timeout=self.timeout,
                 )
             except IOError as e:
                 raise TimestampRequestError(
                     'Error in communication with timestamp server',
                 ) from e
 
-            if raw_res.headers.get('Content-Type') \
-                    != 'application/timestamp-reply':
+            if (
+                raw_res.headers.get('Content-Type')
+                != 'application/timestamp-reply'
+            ):
                 raise TimestampRequestError(
                     'Timestamp server response is malformed.', raw_res
                 )
             return tsp.TimeStampResp.load(raw_res.content)
+
         response = await to_thread(task)
         return response

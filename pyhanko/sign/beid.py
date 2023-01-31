@@ -44,11 +44,17 @@ class BEIDSigner(sign_pkcs11.PKCS11Signer):
     certificate of the appropriate intermediate CA.
     """
 
-    def __init__(self, pkcs11_session: Session, use_auth_cert: bool = False,
-                 bulk_fetch: bool = False, embed_roots=True):
+    def __init__(
+        self,
+        pkcs11_session: Session,
+        use_auth_cert: bool = False,
+        bulk_fetch: bool = False,
+        embed_roots=True,
+    ):
         super().__init__(
             pkcs11_session=pkcs11_session,
             cert_label='Authentication' if use_auth_cert else 'Signature',
-            other_certs_to_pull=('Root', 'CA'), bulk_fetch=bulk_fetch,
-            embed_roots=embed_roots
+            other_certs_to_pull=('Root', 'CA'),
+            bulk_fetch=bulk_fetch,
+            embed_roots=embed_roots,
         )

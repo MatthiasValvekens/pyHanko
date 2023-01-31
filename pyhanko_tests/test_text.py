@@ -11,7 +11,9 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_tests.samples import MINIMAL, MINIMAL_XREF
 
 
-@pytest.mark.parametrize('with_border, natural_size', [[True, True], [False, False], [True, False]])
+@pytest.mark.parametrize(
+    'with_border, natural_size', [[True, True], [False, False], [True, False]]
+)
 def test_simple_textbox_render(with_border, natural_size):
     tbs = text.TextBoxStyle(border_width=1 if with_border else 0)
     bc = None if natural_size else BoxConstraints(width=1600, height=900)
@@ -86,11 +88,15 @@ def test_write_embedded_string():
     )
     stream_ref = w.add_object(stream)
     w.add_stream_to_page(
-        0, stream_ref, resources=generic.DictionaryObject({
-            pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/FEmb'): ga.as_resource()
-            })
-        })
+        0,
+        stream_ref,
+        resources=generic.DictionaryObject(
+            {
+                pdf_name('/Font'): generic.DictionaryObject(
+                    {pdf_name('/FEmb'): ga.as_resource()}
+                )
+            }
+        ),
     )
     out = BytesIO()
     w.write(out)
@@ -119,11 +125,15 @@ def test_write_embedded_string_objstream():
     )
     stream_ref = w.add_object(stream)
     w.add_stream_to_page(
-        0, stream_ref, resources=generic.DictionaryObject({
-            pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/FEmb'): font_ref
-            })
-        })
+        0,
+        stream_ref,
+        resources=generic.DictionaryObject(
+            {
+                pdf_name('/Font'): generic.DictionaryObject(
+                    {pdf_name('/FEmb'): font_ref}
+                )
+            }
+        ),
     )
     out = BytesIO()
     w.write(out)

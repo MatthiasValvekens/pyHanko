@@ -33,7 +33,8 @@ except ImportError as e:  # pragma: nocover
         "pyhanko.pdf_utils.images requires pyHanko to be installed with "
         "the [image-support] option. You can install missing "
         "dependencies by running "
-        "\"pip install 'pyHanko[image-support]'\".", e
+        "\"pip install 'pyHanko[image-support]'\".",
+        e,
     )
 
 
@@ -74,8 +75,9 @@ def pil_image(img: Image.Image, writer: BasePdfFileWriter):
         # finally, convert to RBG or L as appropriate
         img = img.convert(img.mode[:-1])
 
-    clr_space = \
+    clr_space = (
         pdf_name('/DeviceGray') if img.mode == 'L' else pdf_name('/DeviceRGB')
+    )
     if img.mode == 'P':
         palette: ImagePalette = img.palette
         palette_arr = palette.palette
@@ -85,11 +87,14 @@ def pil_image(img: Image.Image, writer: BasePdfFileWriter):
         # declare an indexed colour space based on /DeviceRGB
         # with 'palette_size' colours, with mapping defined as
         # a byte string
-        clr_space = generic.ArrayObject([
-            pdf_name('/Indexed'), pdf_name('/DeviceRGB'),
-            generic.NumberObject(palette_size - 1),
-            generic.ByteStringObject(palette_arr)
-        ])
+        clr_space = generic.ArrayObject(
+            [
+                pdf_name('/Indexed'),
+                pdf_name('/DeviceRGB'),
+                generic.NumberObject(palette_size - 1),
+                generic.ByteStringObject(palette_arr),
+            ]
+        )
 
     if smask_image is not None:
         dict_data[pdf_name('/SMask')] = smask_image
@@ -102,9 +107,7 @@ def pil_image(img: Image.Image, writer: BasePdfFileWriter):
     #   (and 12, 16, but those aren't allowed by PIL anyway in this context)
     image_bytes = img.tobytes()
 
-    stream = generic.StreamObject(
-        dict_data, stream_data=image_bytes
-    )
+    stream = generic.StreamObject(dict_data, stream_data=image_bytes)
     stream.compress()
     return writer.add_object(stream)
 
@@ -121,11 +124,15 @@ class PdfImage(PdfContent):
 
     """
 
-    def __init__(self, image: Union[Image.Image, str],
-                 writer: BasePdfFileWriter = None,
-                 resources: PdfResources = None,
-                 name: str = None,
-                 opacity=None, box: BoxConstraints = None):
+    def __init__(
+        self,
+        image: Union[Image.Image, str],
+        writer: BasePdfFileWriter = None,
+        resources: PdfResources = None,
+        name: str = None,
+        opacity=None,
+        box: BoxConstraints = None,
+    ):
 
         if isinstance(image, str):
             image = Image.open(image)
@@ -153,26 +160,30 @@ class PdfImage(PdfContent):
         """
         assert self.writer is not None
         # cache is invalidated if the writer changed
-        if self._image_ref is None or \
-                self._image_ref.get_pdf_handler() is not self.writer:
+        if (
+            self._image_ref is None
+            or self._image_ref.get_pdf_handler() is not self.writer
+        ):
             self._image_ref = pil_image(self.image, self.writer)
         return self._image_ref
 
     def render(self) -> bytes:
         img_ref_name = '/Img' + self.name
         self.set_resource(
-            category=ResourceType.XOBJECT, name=pdf_name(img_ref_name),
-            value=self.image_ref
+            category=ResourceType.XOBJECT,
+            name=pdf_name(img_ref_name),
+            value=self.image_ref,
         )
 
         opacity = b''
         if self.opacity is not None:
             gs_name = '/GS' + str(uuid.uuid4())
             self.set_resource(
-                category=ResourceType.EXT_G_STATE, name=pdf_name(gs_name),
-                value=generic.DictionaryObject({
-                    pdf_name('/ca'): generic.FloatObject(self.opacity)
-                })
+                category=ResourceType.EXT_G_STATE,
+                name=pdf_name(gs_name),
+                value=generic.DictionaryObject(
+                    {pdf_name('/ca'): generic.FloatObject(self.opacity)}
+                ),
             )
             opacity = gs_name.encode('ascii') + b' gs'
 
@@ -185,6 +196,8 @@ class PdfImage(PdfContent):
             self.box.width = self.image.width
 
         draw = b'%g 0 0 %g 0 0 cm %s Do' % (
-            self.box.width, self.box.height, img_ref_name.encode('ascii')
+            self.box.width,
+            self.box.height,
+            img_ref_name.encode('ascii'),
         )
         return b'q %s %s Q' % (opacity, draw)

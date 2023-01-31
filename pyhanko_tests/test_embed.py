@@ -16,15 +16,19 @@ from pyhanko_tests.samples import *
 def _embed_test(w, fname, ufname, data, created=None, modified=None):
 
     ef_obj = embed.EmbeddedFileObject.from_file_data(
-        w, data=data, mime_type='application/pdf',
+        w,
+        data=data,
+        mime_type='application/pdf',
         params=embed.EmbeddedFileParams(
             creation_date=created, modification_date=modified
-        )
+        ),
     )
 
     spec = embed.FileSpec(
-        file_spec_string=fname, file_name=ufname,
-        embedded_data=ef_obj, description='Embedding test'
+        file_spec_string=fname,
+        file_name=ufname,
+        embedded_data=ef_obj,
+        description='Embedding test',
     )
     embed.embed_file(w, spec)
 
@@ -41,9 +45,12 @@ def test_simple_embed(incremental):
     modified = datetime.now(tz=tzlocal.get_localzone())
     created = modified - timedelta(days=1)
     _embed_test(
-        w, fname='vector-test.pdf', ufname='テスト.pdf',
+        w,
+        fname='vector-test.pdf',
+        ufname='テスト.pdf',
         data=VECTOR_IMAGE_PDF,
-        created=created, modified=modified
+        created=created,
+        modified=modified,
     )
 
     out = BytesIO()
@@ -62,8 +69,9 @@ def test_simple_embed(incremental):
 
     assert stream['/Subtype'] == '/application/pdf'
 
-    assert stream['/Params']['/CheckSum'] \
-           == binascii.unhexlify('caaf24354fd2e68c08826d65b309b404')
+    assert stream['/Params']['/CheckSum'] == binascii.unhexlify(
+        'caaf24354fd2e68c08826d65b309b404'
+    )
     assert generic.parse_pdf_date(stream['/Params']['/ModDate']) == modified
     assert generic.parse_pdf_date(stream['/Params']['/CreationDate']) == created
 
@@ -79,9 +87,12 @@ def test_embed_twice(incremental):
     modified = datetime.now(tz=tzlocal.get_localzone())
     created = modified - timedelta(days=1)
     _embed_test(
-        w, fname='vector-test.pdf', ufname='テスト.pdf',
+        w,
+        fname='vector-test.pdf',
+        ufname='テスト.pdf',
         data=VECTOR_IMAGE_PDF,
-        created=created, modified=modified
+        created=created,
+        modified=modified,
     )
 
     if incremental:
@@ -90,9 +101,12 @@ def test_embed_twice(incremental):
         w = IncrementalPdfFileWriter(out)
 
     _embed_test(
-        w, fname='some-other-file.pdf', ufname='テスト2.pdf',
+        w,
+        fname='some-other-file.pdf',
+        ufname='テスト2.pdf',
         data=MINIMAL_AES256,
-        created=created, modified=modified
+        created=created,
+        modified=modified,
     )
 
     out = BytesIO()
@@ -126,16 +140,18 @@ def test_embed_with_af(incremental):
     modified = datetime.now(tz=tzlocal.get_localzone())
     created = modified - timedelta(days=1)
     ef_obj = embed.EmbeddedFileObject.from_file_data(
-        w, data=VECTOR_IMAGE_PDF,
+        w,
+        data=VECTOR_IMAGE_PDF,
         params=embed.EmbeddedFileParams(
             creation_date=created, modification_date=modified
-        )
+        ),
     )
 
     spec = embed.FileSpec(
         file_spec_string='vector-test.pdf',
-        embedded_data=ef_obj, description='Embedding test /w assoc file',
-        af_relationship=generic.pdf_name('/Unspecified')
+        embedded_data=ef_obj,
+        description='Embedding test /w assoc file',
+        af_relationship=generic.pdf_name('/Unspecified'),
     )
     embed.embed_file(w, spec)
     out = BytesIO()
@@ -162,7 +178,7 @@ def test_embed_without_ef_stream():
     spec = embed.FileSpec(
         file_spec_string='vector-test.pdf',
         description='Embedding test /w assoc file',
-        af_relationship=generic.pdf_name('/Unspecified')
+        af_relationship=generic.pdf_name('/Unspecified'),
     )
     err_msg = "File spec does not have an embedded file stream"
     with pytest.raises(misc.PdfWriteError, match=err_msg):
@@ -175,32 +191,36 @@ def test_encrypt_efs():
     cf = crypt.StandardAESCryptFilter(keylen=32)
     cf.set_embedded_only()
     sh = crypt.StandardSecurityHandler.build_from_pw(
-        'secret', crypt_filter_config=crypt.CryptFilterConfiguration(
+        'secret',
+        crypt_filter_config=crypt.CryptFilterConfiguration(
             {crypt.STD_CF: cf},
             default_stream_filter=crypt.IDENTITY,
             default_string_filter=crypt.IDENTITY,
-            default_file_filter=crypt.STD_CF
+            default_file_filter=crypt.STD_CF,
         ),
-        encrypt_metadata=False
+        encrypt_metadata=False,
     )
     w._assign_security_handler(sh)
     modified = datetime.now(tz=tzlocal.get_localzone())
     created = modified - timedelta(days=1)
     _embed_test(
-        w, fname='vector-test.pdf', ufname='テスト.pdf',
+        w,
+        fname='vector-test.pdf',
+        ufname='テスト.pdf',
         data=VECTOR_IMAGE_PDF,
-        created=created, modified=modified
+        created=created,
+        modified=modified,
     )
 
     out = BytesIO()
     w.write(out)
 
-
     r = PdfFileReader(out)
     # should be able to access this without authenticating
     assert b'Hello' in r.root['/Pages']['/Kids'][0]['/Contents'].data
-    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF']\
-        .raw_get('/F')
+    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'].raw_get(
+        '/F'
+    )
 
     result = r.decrypt('secret')
     assert result.status == AuthStatus.OWNER
@@ -215,8 +235,9 @@ def test_decrypt_ef_without_explicit_crypt_filter():
 
     with open(PDF_DATA_DIR + '/embedded-encrypted-nocf.pdf', 'rb') as inf:
         r = PdfFileReader(inf)
-        ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'] \
-            .raw_get('/F')
+        ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'].raw_get(
+            '/F'
+        )
         r.decrypt('secret')
         assert not ef_stm.get_object()._has_crypt_filter
         assert ef_stm.get_object().data == VECTOR_IMAGE_PDF
@@ -231,9 +252,7 @@ def test_wrapper_doc_underspecified():
 
 
 def test_wrapper_doc():
-    w = embed.wrap_encrypted_payload(
-        VECTOR_IMAGE_PDF, password='secret'
-    )
+    w = embed.wrap_encrypted_payload(VECTOR_IMAGE_PDF, password='secret')
     out = BytesIO()
     w.write(out)
 
@@ -242,8 +261,9 @@ def test_wrapper_doc():
 
     assert r.root['/Collection']['/D'] == 'attachment.pdf'
     assert r.root['/Collection']['/View'] == '/H'
-    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'] \
-        .raw_get('/F')
+    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'].raw_get(
+        '/F'
+    )
 
     result = r.decrypt('secret')
     assert result.status == AuthStatus.OWNER
@@ -264,8 +284,9 @@ def test_wrapper_doc_pubkey():
 
     assert r.root['/Collection']['/D'] == 'attachment.pdf'
     assert r.root['/Collection']['/View'] == '/H'
-    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'] \
-        .raw_get('/F')
+    ef_stm = r.root['/Names']['/EmbeddedFiles']['/Names'][1]['/EF'].raw_get(
+        '/F'
+    )
 
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
     assert result.status == AuthStatus.USER

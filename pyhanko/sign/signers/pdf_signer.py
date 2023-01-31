@@ -61,12 +61,18 @@ from .pdf_byterange import (
 from .pdf_cms import PdfCMSSignedAttributes, Signer, select_suitable_signing_md
 
 __all__ = [
-    'PdfSignatureMetadata', 'DSSContentSettings',
-    'TimestampDSSContentSettings', 'GeneralDSSContentSettings',
-    'SigDSSPlacementPreference', 'PdfTimeStamper',
-    'PdfSigner', 'PdfSigningSession', 'PdfTBSDocument',
+    'PdfSignatureMetadata',
+    'DSSContentSettings',
+    'TimestampDSSContentSettings',
+    'GeneralDSSContentSettings',
+    'SigDSSPlacementPreference',
+    'PdfTimeStamper',
+    'PdfSigner',
+    'PdfSigningSession',
+    'PdfTBSDocument',
     'PdfPostSignatureDocument',
-    'PreSignValidationStatus', 'PostSignInstructions'
+    'PreSignValidationStatus',
+    'PostSignInstructions',
 ]
 
 from ...pdf_utils.crypt import SerialisedCredential
@@ -199,8 +205,9 @@ class DSSContentSettings(GeneralDSSContentSettings):
     Settings for a DSS update with validation information for a signature.
     """
 
-    placement: SigDSSPlacementPreference = \
+    placement: SigDSSPlacementPreference = (
         SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS
+    )
     """
     Preference for where to perform a DSS update with validation information
     for a specific signature. See :class:`.SigDSSPlacementPreference`.
@@ -236,7 +243,7 @@ class DSSContentSettings(GeneralDSSContentSettings):
         return TimestampDSSContentSettings(
             include_vri=self.include_vri,
             skip_if_unneeded=self.skip_if_unneeded,
-            update_before_ts=update_before_ts
+            update_before_ts=update_before_ts,
         )
 
     def assert_viable(self):
@@ -301,7 +308,7 @@ class PdfSignatureMetadata:
     If specified, this data will be recorded in the **Prop_Build**
     dictionary of the signature.
     """
-    
+
     certify: bool = False
     """
     Sign with an author (certification) signature, as opposed to an approval
@@ -466,10 +473,13 @@ class PdfTimeStamper:
     PDF files.
     """
 
-    def __init__(self, timestamper: TimeStamper,
-                 field_name: Optional[str] = None,
-                 invis_settings: InvisSigSettings = InvisSigSettings(),
-                 readable_field_name: str = "Timestamp"):
+    def __init__(
+        self,
+        timestamper: TimeStamper,
+        field_name: Optional[str] = None,
+        invis_settings: InvisSigSettings = InvisSigSettings(),
+        readable_field_name: str = "Timestamp",
+    ):
         self.default_timestamper = timestamper
         self._field_name = field_name
         self._readable_field_name = readable_field_name
@@ -491,15 +501,21 @@ class PdfTimeStamper:
     #  different certificate (e.g. due to load balancing), which would require
     #  validation regardless.
 
-    def timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                      md_algorithm, validation_context=None,
-                      bytes_reserved=None, validation_paths=None,
-                      timestamper: Optional[TimeStamper] = None, *,
-                      in_place=False, output=None,
-                      dss_settings: TimestampDSSContentSettings =
-                      TimestampDSSContentSettings(),
-                      chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                      tight_size_estimates: bool = False):
+    def timestamp_pdf(
+        self,
+        pdf_out: IncrementalPdfFileWriter,
+        md_algorithm,
+        validation_context=None,
+        bytes_reserved=None,
+        validation_paths=None,
+        timestamper: Optional[TimeStamper] = None,
+        *,
+        in_place=False,
+        output=None,
+        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        tight_size_estimates: bool = False,
+    ):
         """
         .. versionchanged:: 0.9.0
             Wrapper around :meth:`async_timestamp_pdf`.
@@ -555,26 +571,37 @@ class PdfTimeStamper:
         """
         result = asyncio.run(
             self.async_timestamp_pdf(
-                pdf_out, md_algorithm, validation_context=validation_context,
+                pdf_out,
+                md_algorithm,
+                validation_context=validation_context,
                 bytes_reserved=bytes_reserved,
-                validation_paths=validation_paths, timestamper=timestamper,
-                in_place=in_place, output=output, chunk_size=chunk_size,
+                validation_paths=validation_paths,
+                timestamper=timestamper,
+                in_place=in_place,
+                output=output,
+                chunk_size=chunk_size,
                 dss_settings=dss_settings,
-                tight_size_estimates=tight_size_estimates
+                tight_size_estimates=tight_size_estimates,
             )
         )
         return result
 
-    async def async_timestamp_pdf(self, pdf_out: IncrementalPdfFileWriter,
-                                  md_algorithm, validation_context=None,
-                                  bytes_reserved=None, validation_paths=None,
-                                  timestamper: Optional[TimeStamper] = None, *,
-                                  in_place=False, output=None,
-                                  dss_settings: TimestampDSSContentSettings =
-                                  TimestampDSSContentSettings(),
-                                  chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                                  tight_size_estimates: bool = False,
-                                  embed_roots: bool = True):
+    async def async_timestamp_pdf(
+        self,
+        pdf_out: IncrementalPdfFileWriter,
+        md_algorithm,
+        validation_context=None,
+        bytes_reserved=None,
+        validation_paths=None,
+        timestamper: Optional[TimeStamper] = None,
+        *,
+        in_place=False,
+        output=None,
+        dss_settings: TimestampDSSContentSettings = TimestampDSSContentSettings(),
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        tight_size_estimates: bool = False,
+        embed_roots: bool = True,
+    ):
         """
         .. versionadded:: 0.9.0
 
@@ -640,6 +667,7 @@ class PdfTimeStamper:
 
         _ensure_esic_ext(pdf_out)
         from pyhanko.sign import validation
+
         timestamper = timestamper or self.default_timestamper
         if validation_context is not None:
             paths_coro = timestamper.validation_paths(validation_context)
@@ -651,15 +679,18 @@ class PdfTimeStamper:
             if dss_settings.update_before_ts:
                 # NOTE: we have to disable VRI in this scenario
                 validation.DocumentSecurityStore.supply_dss_in_writer(
-                    pdf_out, sig_contents=None, paths=validation_paths,
+                    pdf_out,
+                    sig_contents=None,
+                    paths=validation_paths,
                     validation_context=validation_context,
-                    embed_roots=embed_roots
+                    embed_roots=embed_roots,
                 )
 
         field_name = self.field_name
         if bytes_reserved is None:
-            test_signature_cms = \
-                await timestamper.async_dummy_response(md_algorithm)
+            test_signature_cms = await timestamper.async_dummy_response(
+                md_algorithm
+            )
             test_len = len(test_signature_cms.dump()) * 2
             if tight_size_estimates:
                 bytes_reserved = test_len
@@ -675,11 +706,12 @@ class PdfTimeStamper:
             readable_field_name=self._readable_field_name,
         )
         cms_writer = PdfCMSEmbedder(new_field_spec=field_spec).write_cms(
-            field_name=field_name, writer=pdf_out,
+            field_name=field_name,
+            writer=pdf_out,
             # for LTA, requiring existing_fields_only doesn't make sense
             # since we should in principle be able to add document timestamps
             # ad infinitum.
-            existing_fields_only=False
+            existing_fields_only=False,
         )
 
         next(cms_writer)
@@ -687,7 +719,9 @@ class PdfTimeStamper:
 
         sig_io = SigIOSetup(
             md_algorithm=md_algorithm,
-            in_place=in_place, output=output, chunk_size=chunk_size
+            in_place=in_place,
+            output=output,
+            chunk_size=chunk_size,
         )
         prep_digest: PreparedByteRangeDigest
         prep_digest, res_output = cms_writer.send(sig_io)
@@ -701,8 +735,10 @@ class PdfTimeStamper:
             if not dss_settings.include_vri:
                 sig_contents = None
             validation.DocumentSecurityStore.add_dss(
-                output_stream=res_output, sig_contents=sig_contents,
-                paths=validation_paths, validation_context=validation_context,
+                output_stream=res_output,
+                sig_contents=sig_contents,
+                paths=validation_paths,
+                validation_context=validation_context,
                 force_write=not dss_settings.skip_if_unneeded,
                 embed_roots=embed_roots,
                 # FIXME in this case, the ser/deser step is unnecessary
@@ -710,16 +746,22 @@ class PdfTimeStamper:
                 #  using supply_dss_in_writer
                 file_credential=(
                     pdf_out.security_handler.extract_credential().serialise()
-                    if pdf_out.security_handler else None
-                )
+                    if pdf_out.security_handler
+                    else None
+                ),
             )
 
         return misc.finalise_output(output, res_output)
 
     def update_archival_timestamp_chain(
-            self, reader: PdfFileReader, validation_context, in_place=True,
-            output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
-            default_md_algorithm=constants.DEFAULT_MD):
+        self,
+        reader: PdfFileReader,
+        validation_context,
+        in_place=True,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        default_md_algorithm=constants.DEFAULT_MD,
+    ):
         """
         .. versionchanged:: 0.9.0
             Wrapper around :meth:`async_update_archival_timestamp_chain`.
@@ -750,17 +792,25 @@ class PdfTimeStamper:
             The output stream containing the signed output.
         """
         coro = self.async_update_archival_timestamp_chain(
-            reader=reader, validation_context=validation_context,
-            in_place=in_place, output=output, chunk_size=chunk_size,
-            default_md_algorithm=default_md_algorithm
+            reader=reader,
+            validation_context=validation_context,
+            in_place=in_place,
+            output=output,
+            chunk_size=chunk_size,
+            default_md_algorithm=default_md_algorithm,
         )
         return asyncio.run(coro)
 
     async def async_update_archival_timestamp_chain(
-            self, reader: PdfFileReader, validation_context, in_place=True,
-            output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE,
-            default_md_algorithm=constants.DEFAULT_MD,
-            embed_roots: bool = True):
+        self,
+        reader: PdfFileReader,
+        validation_context,
+        in_place=True,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        default_md_algorithm=constants.DEFAULT_MD,
+        embed_roots: bool = True,
+    ):
         """
         .. versionadded:: 0.9.0
 
@@ -848,16 +898,20 @@ class PdfTimeStamper:
         if last_timestamp is not None:
             # update the DSS
             validation.DocumentSecurityStore.supply_dss_in_writer(
-                pdf_out, last_timestamp.pkcs7_content,
+                pdf_out,
+                last_timestamp.pkcs7_content,
                 paths=(tst_status.validation_path,),
                 validation_context=validation_context,
-                embed_roots=embed_roots
+                embed_roots=embed_roots,
             )
 
         # append a new timestamp
         await self.async_timestamp_pdf(
-            pdf_out, md_algorithm, validation_context, in_place=True,
-            embed_roots=embed_roots
+            pdf_out,
+            md_algorithm,
+            validation_context,
+            in_place=True,
+            embed_roots=embed_roots,
         )
         return misc.finalise_output(output, res_output)
 
@@ -895,16 +949,23 @@ class PdfSigner:
         :class:`.SigFieldSpec`. This parameter is only meaningful if
         ``existing_fields_only`` is ``False``.
     """
+
     _ignore_sv = False
 
-    def __init__(self, signature_meta: PdfSignatureMetadata,
-                 signer: Signer, *,
-                 timestamper: TimeStamper = None,
-                 stamp_style: Optional[BaseStampStyle] = None,
-                 new_field_spec: Optional[SigFieldSpec] = None):
+    def __init__(
+        self,
+        signature_meta: PdfSignatureMetadata,
+        signer: Signer,
+        *,
+        timestamper: TimeStamper = None,
+        stamp_style: Optional[BaseStampStyle] = None,
+        new_field_spec: Optional[SigFieldSpec] = None,
+    ):
         self.signature_meta = signature_meta
-        if new_field_spec is not None and \
-                new_field_spec.sig_field_name != signature_meta.field_name:
+        if (
+            new_field_spec is not None
+            and new_field_spec.sig_field_name != signature_meta.field_name
+        ):
             raise SigningError(
                 "Field names specified in SigFieldSpec and "
                 "PdfSignatureMetadata do not agree."
@@ -948,6 +1009,7 @@ class PdfSigner:
             )
 
         from pyhanko.sign.validation import read_certification_data
+
         cd = read_certification_data(reader)
         # if there is no author signature, we don't have to do anything
         if cd is None:
@@ -955,8 +1017,9 @@ class PdfSigner:
         if cd.permission == MDPPerm.NO_CHANGES:
             raise SigningError("Author signature forbids all changes")
 
-    def _retrieve_seed_value_spec(self, sig_field) \
-            -> Optional[SigSeedValueSpec]:
+    def _retrieve_seed_value_spec(
+        self, sig_field
+    ) -> Optional[SigSeedValueSpec]:
         # for testing & debugging
         if self._ignore_sv:
             return None
@@ -1004,8 +1067,7 @@ class PdfSigner:
         if algorithm_policy is not None:
             now = datetime.now()
             md_algo_obj = algos.DigestAlgorithm({'algorithm': md_algorithm})
-            if not algorithm_policy\
-                    .digest_algorithm_allowed(md_algo_obj, now):
+            if not algorithm_policy.digest_algorithm_allowed(md_algo_obj, now):
                 raise SigningError(
                     f"The hash algorithm {md_algorithm} is not allowed in the "
                     f"specified validation context (usage policy of type "
@@ -1013,8 +1075,9 @@ class PdfSigner:
                 )
         return md_algorithm
 
-    def register_extensions(self, pdf_out: BasePdfFileWriter, *,
-                            md_algorithm: str):
+    def register_extensions(
+        self, pdf_out: BasePdfFileWriter, *, md_algorithm: str
+    ):
 
         if self.signature_meta.subfilter == SigSeedSubFilter.PADES:
             _ensure_esic_ext(pdf_out)
@@ -1036,12 +1099,14 @@ class PdfSigner:
         else:
             if md_algorithm.startswith('sha3') or md_algorithm == 'shake256':
                 _ensure_iso32001_ext(pdf_out)
-            if sig_algo == 'ecdsa' and \
-                    _is_iso32002_curve(self.signer.signing_cert.public_key):
+            if sig_algo == 'ecdsa' and _is_iso32002_curve(
+                self.signer.signing_cert.public_key
+            ):
                 _ensure_iso32002_ext(pdf_out)
 
-    def init_signing_session(self, pdf_out: BasePdfFileWriter,
-                             existing_fields_only=False) -> 'PdfSigningSession':
+    def init_signing_session(
+        self, pdf_out: BasePdfFileWriter, existing_fields_only=False
+    ) -> 'PdfSigningSession':
         """
         Initialise a signing session with this :class:`.PdfSigner` for a
         specified PDF file writer.
@@ -1080,8 +1145,9 @@ class PdfSigner:
         cms_writer = PdfCMSEmbedder(
             new_field_spec=self.new_field_spec
         ).write_cms(
-            field_name=signature_meta.field_name, writer=pdf_out,
-            existing_fields_only=existing_fields_only
+            field_name=signature_meta.field_name,
+            writer=pdf_out,
+            existing_fields_only=existing_fields_only,
         )
 
         # let the CMS writer put in a field for us, if necessary
@@ -1113,18 +1179,29 @@ class PdfSigner:
                 subfilter = SigSeedSubFilter.ADOBE_PKCS7_DETACHED
 
         session = PdfSigningSession(
-            self, pdf_out, cms_writer, sig_field, md_algorithm, timestamper,
-            subfilter, sv_spec=sv_spec
+            self,
+            pdf_out,
+            cms_writer,
+            sig_field,
+            md_algorithm,
+            timestamper,
+            subfilter,
+            sv_spec=sv_spec,
         )
 
         return session
 
-    def digest_doc_for_signing(self, pdf_out: BasePdfFileWriter,
-                               existing_fields_only=False, bytes_reserved=None,
-                               *, appearance_text_params=None,
-                               in_place=False, output=None,
-                               chunk_size=misc.DEFAULT_CHUNK_SIZE)\
-            -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
+    def digest_doc_for_signing(
+        self,
+        pdf_out: BasePdfFileWriter,
+        existing_fields_only=False,
+        bytes_reserved=None,
+        *,
+        appearance_text_params=None,
+        in_place=False,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ) -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
         """
         .. deprecated:: 0.9.0
             Use :meth:`async_digest_doc_for_signing` instead.
@@ -1180,25 +1257,32 @@ class PdfSigner:
         warnings.warn(
             "'digest_doc_for_signing' is deprecated, use "
             "'async_digest_doc_for_signing' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
         result = asyncio.run(
             self.async_digest_doc_for_signing(
-                pdf_out, existing_fields_only=existing_fields_only,
+                pdf_out,
+                existing_fields_only=existing_fields_only,
                 bytes_reserved=bytes_reserved,
                 appearance_text_params=appearance_text_params,
-                in_place=in_place, output=output, chunk_size=chunk_size
+                in_place=in_place,
+                output=output,
+                chunk_size=chunk_size,
             )
         )
         return result
 
-    async def async_digest_doc_for_signing(self, pdf_out: BasePdfFileWriter,
-                                           existing_fields_only=False,
-                                           bytes_reserved=None,
-                                           *, appearance_text_params=None,
-                                           in_place=False, output=None,
-                                           chunk_size=misc.DEFAULT_CHUNK_SIZE) \
-            -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
+    async def async_digest_doc_for_signing(
+        self,
+        pdf_out: BasePdfFileWriter,
+        existing_fields_only=False,
+        bytes_reserved=None,
+        *,
+        appearance_text_params=None,
+        in_place=False,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ) -> Tuple[PreparedByteRangeDigest, 'PdfTBSDocument', IO]:
         """
         .. versionadded:: 0.9.0
 
@@ -1251,34 +1335,44 @@ class PdfSigner:
             document in its current state has been written.
         """
         signing_session = self.init_signing_session(
-            pdf_out, existing_fields_only=existing_fields_only,
+            pdf_out,
+            existing_fields_only=existing_fields_only,
         )
-        validation_info \
-            = await signing_session.perform_presign_validation(pdf_out)
+        validation_info = await signing_session.perform_presign_validation(
+            pdf_out
+        )
         if bytes_reserved is None:
             estimation = signing_session.estimate_signature_container_size(
                 validation_info=validation_info,
-                tight=self.signature_meta.tight_size_estimates
+                tight=self.signature_meta.tight_size_estimates,
             )
             bytes_reserved = await estimation
 
         tbs_document = signing_session.prepare_tbs_document(
             validation_info=validation_info,
             bytes_reserved=bytes_reserved,
-            appearance_text_params=appearance_text_params
+            appearance_text_params=appearance_text_params,
         )
         prepared_br_digest, res_output = tbs_document.digest_tbs_document(
             in_place=in_place, chunk_size=chunk_size, output=output
         )
         return (
-            prepared_br_digest, tbs_document,
-            misc.finalise_output(output, res_output)
+            prepared_br_digest,
+            tbs_document,
+            misc.finalise_output(output, res_output),
         )
 
-    def sign_pdf(self, pdf_out: BasePdfFileWriter,
-                 existing_fields_only=False, bytes_reserved=None, *,
-                 appearance_text_params=None, in_place=False,
-                 output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    def sign_pdf(
+        self,
+        pdf_out: BasePdfFileWriter,
+        existing_fields_only=False,
+        bytes_reserved=None,
+        *,
+        appearance_text_params=None,
+        in_place=False,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ):
         """
         .. versionchanged:: 0.9.0
             Wrapper around :meth:`async_sign_pdf`.
@@ -1315,18 +1409,28 @@ class PdfSigner:
         """
         result = asyncio.run(
             self.async_sign_pdf(
-                pdf_out, existing_fields_only=existing_fields_only,
+                pdf_out,
+                existing_fields_only=existing_fields_only,
                 bytes_reserved=bytes_reserved,
                 appearance_text_params=appearance_text_params,
-                in_place=in_place, output=output, chunk_size=chunk_size
+                in_place=in_place,
+                output=output,
+                chunk_size=chunk_size,
             )
         )
         return result
 
-    async def async_sign_pdf(self, pdf_out: BasePdfFileWriter,
-                             existing_fields_only=False, bytes_reserved=None, *,
-                             appearance_text_params=None, in_place=False,
-                             output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    async def async_sign_pdf(
+        self,
+        pdf_out: BasePdfFileWriter,
+        existing_fields_only=False,
+        bytes_reserved=None,
+        *,
+        appearance_text_params=None,
+        in_place=False,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ):
         """
         .. versionadded:: 0.9.0
 
@@ -1362,10 +1466,12 @@ class PdfSigner:
         """
 
         signing_session = self.init_signing_session(
-            pdf_out, existing_fields_only=existing_fields_only,
+            pdf_out,
+            existing_fields_only=existing_fields_only,
         )
-        validation_info = \
-            await signing_session.perform_presign_validation(pdf_out)
+        validation_info = await signing_session.perform_presign_validation(
+            pdf_out
+        )
         if bytes_reserved is None:
             estimation = signing_session.estimate_signature_container_size(
                 validation_info, tight=self.signature_meta.tight_size_estimates
@@ -1374,7 +1480,7 @@ class PdfSigner:
         tbs_document = signing_session.prepare_tbs_document(
             validation_info=validation_info,
             bytes_reserved=bytes_reserved,
-            appearance_text_params=appearance_text_params
+            appearance_text_params=appearance_text_params,
         )
         prepared_br_digest, res_output = tbs_document.digest_tbs_document(
             in_place=in_place, chunk_size=chunk_size, output=output
@@ -1385,11 +1491,12 @@ class PdfSigner:
             pdf_cms_signed_attrs=PdfCMSSignedAttributes(
                 signing_time=signing_session.system_time,
                 adobe_revinfo_attr=(
-                    None if validation_info is None else
-                    validation_info.adobe_revinfo_attr
+                    None
+                    if validation_info is None
+                    else validation_info.adobe_revinfo_attr
                 ),
-                cades_signed_attrs=self.signature_meta.cades_signed_attr_spec
-            )
+                cades_signed_attrs=self.signature_meta.cades_signed_attr_spec,
+            ),
         )
 
         await post_signing_doc.post_signature_processing(
@@ -1457,11 +1564,18 @@ class PdfSigningSession:
     :meth:`.PdfSigner.init_signing_session`.
     """
 
-    def __init__(self, pdf_signer: PdfSigner, pdf_out: BasePdfFileWriter,
-                 cms_writer, sig_field, md_algorithm: str,
-                 timestamper: TimeStamper,
-                 subfilter: SigSeedSubFilter, system_time: datetime = None,
-                 sv_spec: Optional[SigSeedValueSpec] = None):
+    def __init__(
+        self,
+        pdf_signer: PdfSigner,
+        pdf_out: BasePdfFileWriter,
+        cms_writer,
+        sig_field,
+        md_algorithm: str,
+        timestamper: TimeStamper,
+        subfilter: SigSeedSubFilter,
+        system_time: datetime = None,
+        sv_spec: Optional[SigSeedValueSpec] = None,
+    ):
         self.pdf_signer = pdf_signer
         self.pdf_out = pdf_out
         self.sig_field = sig_field
@@ -1470,13 +1584,14 @@ class PdfSigningSession:
         self.timestamper = timestamper
         self.subfilter = subfilter
         self.use_pades = subfilter == SigSeedSubFilter.PADES
-        self.system_time = \
-            system_time or datetime.now(tz=tzlocal.get_localzone())
+        self.system_time = system_time or datetime.now(
+            tz=tzlocal.get_localzone()
+        )
         self.sv_spec = sv_spec
 
     async def perform_presign_validation(
-            self, pdf_out: Optional[BasePdfFileWriter] = None)\
-            -> Optional[PreSignValidationStatus]:
+        self, pdf_out: Optional[BasePdfFileWriter] = None
+    ) -> Optional[PreSignValidationStatus]:
         """
         Perform certificate validation checks for the signer's certificate,
         including any necessary revocation checks.
@@ -1532,8 +1647,9 @@ class PdfSigningSession:
         # if the original document already included a document timestamp,
         # we need to collect revocation information for it, to preserve
         # the integrity of the timestamp chain
-        if signature_meta.use_pades_lta \
-                and isinstance(pdf_out, IncrementalPdfFileWriter):
+        if signature_meta.use_pades_lta and isinstance(
+            pdf_out, IncrementalPdfFileWriter
+        ):
             prev_tsa_path = await self._perform_prev_ts_validation(
                 validation_context, pdf_out.prev
             )
@@ -1569,7 +1685,7 @@ class PdfSigningSession:
             assert validation_context is not None  # checked earlier
             revinfo = Signer.format_revinfo(
                 ocsp_responses=validation_context.ocsps,
-                crls=validation_context.crls
+                crls=validation_context.crls,
             )
         else:
             # PAdES prescribes another mechanism for embedding revocation info
@@ -1581,7 +1697,7 @@ class PdfSigningSession:
             adobe_revinfo_attr=revinfo,
             ocsps_to_embed=validation_context.ocsps,
             crls_to_embed=validation_context.crls,
-            ac_validation_paths=aa_paths
+            ac_validation_paths=aa_paths,
         )
 
     async def _perform_presign_ac_validation(self, validation_context):
@@ -1591,40 +1707,46 @@ class PdfSigningSession:
         # also make sure to pull in the validation chains for all attribute
         # certificates included in the signer-attributes-v2 attr, if there is
         # one.
-        if cades_attr_spec is not None and \
-                cades_attr_spec.signer_attributes is not None:
+        if (
+            cades_attr_spec is not None
+            and cades_attr_spec.signer_attributes is not None
+        ):
             attr_certs.extend(cades_attr_spec.signer_attributes.certified_attrs)
         ac_jobs = [
             async_validate_ac(
-                ac, validation_context,
-                holder_cert=signer.signing_cert
-            ) for ac in attr_certs
+                ac, validation_context, holder_cert=signer.signing_cert
+            )
+            for ac in attr_certs
         ]
         for ac_job in asyncio.as_completed(ac_jobs):
             result: ACValidationResult = await ac_job
             yield result.aa_path
 
-    async def _perform_presign_signer_validation(self, validation_context,
-                                                 key_usage):
+    async def _perform_presign_signer_validation(
+        self, validation_context, key_usage
+    ):
 
         signer = self.pdf_signer.signer
         # validate cert
         # (this also keeps track of any validation data automagically)
         validator = CertificateValidator(
-            signer.signing_cert, intermediate_certs=signer.cert_registry,
-            validation_context=validation_context
+            signer.signing_cert,
+            intermediate_certs=signer.cert_registry,
+            validation_context=validation_context,
         )
         try:
-            signer_cert_validation_path = \
-                await validator.async_validate_usage(key_usage)
+            signer_cert_validation_path = await validator.async_validate_usage(
+                key_usage
+            )
         except (PathBuildingError, PathValidationError) as e:
             raise SigningError(
                 "The signer's certificate could not be validated"
             ) from e
         return signer_cert_validation_path
 
-    async def _perform_prev_ts_validation(self, validation_context,
-                                          prev_reader):
+    async def _perform_prev_ts_validation(
+        self, validation_context, prev_reader
+    ):
         signer = self.pdf_signer.signer
         from pyhanko.sign.validation import get_timestamp_chain
 
@@ -1639,7 +1761,7 @@ class PdfSigningSession:
             ts_validator = CertificateValidator(
                 last_ts.signer_cert,
                 intermediate_certs=signer.cert_registry,
-                validation_context=validation_context
+                validation_context=validation_context,
             )
             try:
                 validate_coro = ts_validator.async_validate_usage(
@@ -1650,7 +1772,8 @@ class PdfSigningSession:
                 raise SigningError(
                     "Requested a PAdES-LTA signature on an existing "
                     "document, but the most recent timestamp "
-                    "could not be validated.", e
+                    "could not be validated.",
+                    e,
                 )
         return last_ts_validation_path
 
@@ -1669,13 +1792,14 @@ class PdfSigningSession:
         signature_meta = self.pdf_signer.signature_meta
         if sv_spec is not None:
             sv_lock_values = {
-                SeedLockDocument.LOCK:
-                    (MDPPerm.NO_CHANGES,),
-                SeedLockDocument.DO_NOT_LOCK:
-                    (MDPPerm.FILL_FORMS, MDPPerm.ANNOTATE),
+                SeedLockDocument.LOCK: (MDPPerm.NO_CHANGES,),
+                SeedLockDocument.DO_NOT_LOCK: (
+                    MDPPerm.FILL_FORMS,
+                    MDPPerm.ANNOTATE,
+                ),
             }.get(sv_spec.lock_document, None)
             sv_lock_value_req = sv_lock_values is not None and (
-                    sv_spec.flags & SigSeedValFlags.LOCK_DOCUMENT
+                sv_spec.flags & SigSeedValFlags.LOCK_DOCUMENT
             )
         else:
             sv_lock_values = None
@@ -1710,15 +1834,18 @@ class PdfSigningSession:
         # cert sig, or there already is some other docmdp_perms value available.
         # (in other words, if there's no SV dict or /Lock, and we're not
         # certifying, this will be skipped)
-        if meta_perms is not None \
-                and (meta_certify or docmdp_perms is not None):
+        if meta_perms is not None and (
+            meta_certify or docmdp_perms is not None
+        ):
             if sv_lock_value_req and meta_perms not in sv_lock_values:
                 # in this case, we have to override
                 docmdp_perms = sv_lock_values[0]
             else:
                 # choose the stricter option if both are available
-                docmdp_perms = meta_perms if docmdp_perms is None else (
-                    min(docmdp_perms, meta_perms)
+                docmdp_perms = (
+                    meta_perms
+                    if docmdp_perms is None
+                    else (min(docmdp_perms, meta_perms))
                 )
             if docmdp_perms != meta_perms:
                 logger.warning(
@@ -1732,15 +1859,19 @@ class PdfSigningSession:
         if not meta_certify and docmdp_perms is not None:
             if lock_dict is None:
                 # set a field lock that doesn't do anything
-                sig_field['/Lock'] = lock_dict = generic.DictionaryObject({
-                    pdf_name('/Action'): pdf_name('/Include'),
-                    pdf_name('/Fields'): generic.ArrayObject()
-                })
+                sig_field['/Lock'] = lock_dict = generic.DictionaryObject(
+                    {
+                        pdf_name('/Action'): pdf_name('/Include'),
+                        pdf_name('/Fields'): generic.ArrayObject(),
+                    }
+                )
             lock_dict['/P'] = generic.NumberObject(docmdp_perms.value)
 
         return SigMDPSetup(
-            certify=meta_certify, field_lock=lock, docmdp_perms=docmdp_perms,
-            md_algorithm=self.md_algorithm
+            certify=meta_certify,
+            field_lock=lock,
+            docmdp_perms=docmdp_perms,
+            md_algorithm=self.md_algorithm,
         )
 
     def _enforce_seed_value_constraints(self, validation_path):
@@ -1766,6 +1897,7 @@ class PdfSigningSession:
         if sv_spec.seed_signature_type is not None:
             sv_certify = sv_spec.seed_signature_type.certification_signature()
             if sv_certify != signature_meta.certify:
+
                 def _type(certify):
                     return 'a certification' if certify else 'an approval'
 
@@ -1776,8 +1908,7 @@ class PdfSigningSession:
                     "was requested."
                 )
             sv_mdp_perm = sv_spec.seed_signature_type.mdp_perm
-            if sv_certify \
-                    and sv_mdp_perm != signature_meta.docmdp_permissions:
+            if sv_certify and sv_mdp_perm != signature_meta.docmdp_permissions:
                 raise SigningError(
                     "The seed value dictionary specified that this "
                     "certification signature should use the MDP policy "
@@ -1790,8 +1921,9 @@ class PdfSigningSession:
             return sv_spec
 
         selected_sf = signature_meta.subfilter
-        if (flags & SigSeedValFlags.SUBFILTER) \
-                and sv_spec.subfilters is not None:
+        if (
+            flags & SigSeedValFlags.SUBFILTER
+        ) and sv_spec.subfilters is not None:
             # empty array = no supported subfilters
             if not sv_spec.subfilters:
                 raise NotImplementedError(
@@ -1803,41 +1935,44 @@ class PdfSigningSession:
             if selected_sf is not None and mandated_sf != selected_sf:
                 raise SigningError(
                     "The seed value dictionary mandates subfilter '%s', "
-                    "but '%s' was requested." % (
-                        mandated_sf.value, selected_sf.value
-                    )
+                    "but '%s' was requested."
+                    % (mandated_sf.value, selected_sf.value)
                 )
 
         # SV dict serves as a source of defaults as well
         if selected_sf is None and sv_spec.subfilters is not None:
             selected_sf = sv_spec.subfilters[0]
 
-        if (flags & SigSeedValFlags.APPEARANCE_FILTER) \
-                and sv_spec.appearance is not None:
+        if (
+            flags & SigSeedValFlags.APPEARANCE_FILTER
+        ) and sv_spec.appearance is not None:
             raise SigningError(
                 "pyHanko does not define any named appearances, but "
                 "the seed value dictionary requires that the named appearance "
                 f"'{sv_spec.appearance}' be used."
             )
 
-        if (flags & SigSeedValFlags.ADD_REV_INFO) \
-                and sv_spec.add_rev_info is not None:
+        if (
+            flags & SigSeedValFlags.ADD_REV_INFO
+        ) and sv_spec.add_rev_info is not None:
             if sv_spec.add_rev_info != signature_meta.embed_validation_info:
                 raise SigningError(
                     "The seed value dict mandates that revocation info %sbe "
                     "added; adjust PdfSignatureMetadata settings accordingly."
                     % ("" if sv_spec.add_rev_info else "not ")
                 )
-            if sv_spec.add_rev_info and \
-                    selected_sf != SigSeedSubFilter.ADOBE_PKCS7_DETACHED:
+            if (
+                sv_spec.add_rev_info
+                and selected_sf != SigSeedSubFilter.ADOBE_PKCS7_DETACHED
+            ):
                 raise SigningError(
                     "The seed value dict mandates that Adobe-style revocation "
-                    "info be added; this requires subfilter '%s'" % (
-                        SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value
-                    )
+                    "info be added; this requires subfilter '%s'"
+                    % (SigSeedSubFilter.ADOBE_PKCS7_DETACHED.value)
                 )
-        if (flags & SigSeedValFlags.DIGEST_METHOD) \
-                and sv_spec.digest_methods is not None:
+        if (
+            flags & SigSeedValFlags.DIGEST_METHOD
+        ) and sv_spec.digest_methods is not None:
             selected_md = pdf_signer.default_md_for_signer
             if selected_md is not None:
                 selected_md = selected_md.lower()
@@ -1861,14 +1996,16 @@ class PdfSigningSession:
             if not must_omit and reason_given not in sv_spec.reasons:
                 raise SigningError(
                     "Reason \"%s\" is not a valid reason for signing, "
-                    "please choose one of the following: %s." % (
+                    "please choose one of the following: %s."
+                    % (
                         reason_given,
-                        ", ".join("\"%s\"" % s for s in sv_spec.reasons)
+                        ", ".join("\"%s\"" % s for s in sv_spec.reasons),
                     )
                 )
 
     async def estimate_signature_container_size(
-            self, validation_info: PreSignValidationStatus, tight=False):
+        self, validation_info: PreSignValidationStatus, tight=False
+    ):
         md_algorithm = self.md_algorithm
         signature_meta = self.pdf_signer.signature_meta
         signer = self.pdf_signer.signer
@@ -1885,15 +2022,19 @@ class PdfSigningSession:
         signed_attrs = PdfCMSSignedAttributes(
             signing_time=self.system_time,
             adobe_revinfo_attr=(
-                None if validation_info is None else
-                validation_info.adobe_revinfo_attr
+                None
+                if validation_info is None
+                else validation_info.adobe_revinfo_attr
             ),
-            cades_signed_attrs=signature_meta.cades_signed_attr_spec
+            cades_signed_attrs=signature_meta.cades_signed_attr_spec,
         )
         test_signature_cms = await signer.async_sign(
-            test_md, md_algorithm, use_pades=self.use_pades,
-            dry_run=True, timestamper=self.timestamper,
-            signed_attr_settings=signed_attrs
+            test_md,
+            md_algorithm,
+            use_pades=self.use_pades,
+            dry_run=True,
+            timestamper=self.timestamper,
+            signed_attr_settings=signed_attrs,
         )
 
         # Note: multiply by 2 to account for the fact that this byte dump
@@ -1910,9 +2051,12 @@ class PdfSigningSession:
             bytes_reserved = test_len + 2 * (test_len // 4)
         return bytes_reserved
 
-    def prepare_tbs_document(self, validation_info: PreSignValidationStatus,
-                             bytes_reserved, appearance_text_params=None) \
-            -> 'PdfTBSDocument':
+    def prepare_tbs_document(
+        self,
+        validation_info: PreSignValidationStatus,
+        bytes_reserved,
+        appearance_text_params=None,
+    ) -> 'PdfTBSDocument':
         """
         Set up the signature appearance (if necessary) and signature dictionary
         in the PDF file, to put the document in its final pre-signing state.
@@ -1933,8 +2077,7 @@ class PdfSigningSession:
         if self.sv_spec is not None:
             # process the field's seed value constraints
             self._enforce_seed_value_constraints(
-                None if validation_info is None else
-                validation_info.signer_path
+                None if validation_info is None else validation_info.signer_path
             )
 
         signer = pdf_signer.signer
@@ -1944,19 +2087,23 @@ class PdfSigningSession:
         if self.use_pades and validation_info is not None:
             # Check consistency of settings
             dss_settings.assert_viable()
-            if dss_settings.placement \
-                    == SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE:
+            if (
+                dss_settings.placement
+                == SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
+            ):
                 from pyhanko.sign import validation
+
                 pdf_out = self.pdf_out
                 # source info directly from the validation_info object
                 # for consistency
                 # NOTE: we have to disable VRI in this scenario
                 validation.DocumentSecurityStore.supply_dss_in_writer(
-                    pdf_out, sig_contents=None,
+                    pdf_out,
+                    sig_contents=None,
                     paths=validation_info.validation_paths,
                     ocsps=validation_info.ocsps_to_embed,
                     crls=validation_info.crls_to_embed,
-                    embed_roots=embed_roots
+                    embed_roots=embed_roots,
                 )
 
         md_algorithm = self.md_algorithm
@@ -1970,22 +2117,27 @@ class PdfSigningSession:
         sig_appearance = SigAppearanceSetup(
             style=pdf_signer.stamp_style,
             name=name_specified or signer.subject_name,
-            timestamp=system_time, text_params=appearance_text_params
+            timestamp=system_time,
+            text_params=appearance_text_params,
         )
         sig_obj = SignatureObject(
-            bytes_reserved=bytes_reserved, subfilter=self.subfilter,
+            bytes_reserved=bytes_reserved,
+            subfilter=self.subfilter,
             timestamp=system_time,
             name=name_specified if name_specified else None,
-            location=signature_meta.location, reason=signature_meta.reason,
+            location=signature_meta.location,
+            reason=signature_meta.reason,
             app_build_props=signature_meta.app_build_props,
         )
 
         # Pass in the SignatureObject settings
-        self.cms_writer.send(SigObjSetup(
-            sig_placeholder=sig_obj,
-            mdp_setup=sig_mdp_setup,
-            appearance_setup=sig_appearance
-        ))
+        self.cms_writer.send(
+            SigObjSetup(
+                sig_placeholder=sig_obj,
+                mdp_setup=sig_mdp_setup,
+                appearance_setup=sig_appearance,
+            )
+        )
 
         # At this point, the document is in its final pre-signing state
 
@@ -2015,14 +2167,16 @@ class PdfSigningSession:
                 dss_settings=signature_meta.dss_settings,
                 tight_size_estimates=signature_meta.tight_size_estimates,
                 embed_roots=embed_roots,
-                file_credential=credential
+                file_credential=credential,
             )
         return PdfTBSDocument(
-            cms_writer=self.cms_writer, signer=pdf_signer.signer,
-            md_algorithm=md_algorithm, timestamper=self.timestamper,
+            cms_writer=self.cms_writer,
+            signer=pdf_signer.signer,
+            md_algorithm=md_algorithm,
+            timestamper=self.timestamper,
             use_pades=self.use_pades,
             post_sign_instructions=post_signing_instr,
-            validation_context=validation_context
+            validation_context=validation_context,
         )
 
 
@@ -2119,11 +2273,16 @@ class PdfTBSDocument:
     :class:`.PdfTBSDocument` object.
     """
 
-    def __init__(self, cms_writer, signer: Signer,
-                 md_algorithm: str, use_pades: bool,
-                 timestamper: Optional[TimeStamper] = None,
-                 post_sign_instructions: Optional[PostSignInstructions] = None,
-                 validation_context: Optional[ValidationContext] = None):
+    def __init__(
+        self,
+        cms_writer,
+        signer: Signer,
+        md_algorithm: str,
+        use_pades: bool,
+        timestamper: Optional[TimeStamper] = None,
+        post_sign_instructions: Optional[PostSignInstructions] = None,
+        validation_context: Optional[ValidationContext] = None,
+    ):
         self.cms_writer = cms_writer
         self.signer = signer
         self.md_algorithm = md_algorithm
@@ -2132,10 +2291,13 @@ class PdfTBSDocument:
         self.post_sign_instructions = post_sign_instructions
         self.validation_context = validation_context
 
-    def digest_tbs_document(self, *, output: Optional[IO] = None,
-                            in_place: bool = False,
-                            chunk_size=misc.DEFAULT_CHUNK_SIZE) \
-            -> Tuple[PreparedByteRangeDigest, IO]:
+    def digest_tbs_document(
+        self,
+        *,
+        output: Optional[IO] = None,
+        in_place: bool = False,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ) -> Tuple[PreparedByteRangeDigest, IO]:
         """
         Write the document to an output stream and compute the digest, while
         keeping track of the (future) location of the signature contents in the
@@ -2163,14 +2325,20 @@ class PdfTBSDocument:
         """
 
         # pass in I/O parameters, get back a hash
-        return self.cms_writer.send(SigIOSetup(
-            md_algorithm=self.md_algorithm,
-            in_place=in_place, chunk_size=chunk_size, output=output
-        ))
+        return self.cms_writer.send(
+            SigIOSetup(
+                md_algorithm=self.md_algorithm,
+                in_place=in_place,
+                chunk_size=chunk_size,
+                output=output,
+            )
+        )
 
-    async def perform_signature(self, document_digest: bytes,
-                                pdf_cms_signed_attrs: PdfCMSSignedAttributes) \
-            -> 'PdfPostSignatureDocument':
+    async def perform_signature(
+        self,
+        document_digest: bytes,
+        pdf_cms_signed_attrs: PdfCMSSignedAttributes,
+    ) -> 'PdfPostSignatureDocument':
         """
         Perform the relevant cryptographic signing operations on the document
         digest, and write the resulting CMS object to the appropriate location
@@ -2190,24 +2358,29 @@ class PdfTBSDocument:
         """
         signer = self.signer
         signature_cms = await signer.async_sign(
-            document_digest, self.md_algorithm,
-            use_pades=self.use_pades, timestamper=self.timestamper,
-            signed_attr_settings=pdf_cms_signed_attrs
+            document_digest,
+            self.md_algorithm,
+            use_pades=self.use_pades,
+            timestamper=self.timestamper,
+            signed_attr_settings=pdf_cms_signed_attrs,
         )
         # ... and feed it to the CMS writer
         sig_contents = self.cms_writer.send(signature_cms)
         return PdfPostSignatureDocument(
-            sig_contents, post_sign_instr=self.post_sign_instructions,
-            validation_context=self.validation_context
+            sig_contents,
+            post_sign_instr=self.post_sign_instructions,
+            validation_context=self.validation_context,
         )
 
     @classmethod
-    def resume_signing(cls, output: IO,
-                       prepared_digest: PreparedByteRangeDigest,
-                       signature_cms: Union[bytes, cms.ContentInfo],
-                       post_sign_instr: Optional[PostSignInstructions] = None,
-                       validation_context: Optional[ValidationContext] = None)\
-            -> 'PdfPostSignatureDocument':
+    def resume_signing(
+        cls,
+        output: IO,
+        prepared_digest: PreparedByteRangeDigest,
+        signature_cms: Union[bytes, cms.ContentInfo],
+        post_sign_instr: Optional[PostSignInstructions] = None,
+        validation_context: Optional[ValidationContext] = None,
+    ) -> 'PdfPostSignatureDocument':
         """
         Resume signing after obtaining a CMS object from an external source.
 
@@ -2234,21 +2407,23 @@ class PdfTBSDocument:
             A :class:`PdfPostSignatureDocument`.
         """
 
-        sig_contents = prepared_digest.fill_with_cms(
-            output, signature_cms
-        )
+        sig_contents = prepared_digest.fill_with_cms(output, signature_cms)
         return PdfPostSignatureDocument(
-            sig_contents, post_sign_instr=post_sign_instr,
-            validation_context=validation_context
+            sig_contents,
+            post_sign_instr=post_sign_instr,
+            validation_context=validation_context,
         )
 
     @classmethod
-    def finish_signing(cls, output: IO,
-                       prepared_digest: PreparedByteRangeDigest,
-                       signature_cms: Union[bytes, cms.ContentInfo],
-                       post_sign_instr: Optional[PostSignInstructions] = None,
-                       validation_context: Optional[ValidationContext] = None,
-                       chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    def finish_signing(
+        cls,
+        output: IO,
+        prepared_digest: PreparedByteRangeDigest,
+        signature_cms: Union[bytes, cms.ContentInfo],
+        post_sign_instr: Optional[PostSignInstructions] = None,
+        validation_context: Optional[ValidationContext] = None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ):
         """
         Finish signing after obtaining a CMS object from an external source, and
         perform any required post-signature processing.
@@ -2277,22 +2452,25 @@ class PdfTBSDocument:
         """
         asyncio.run(
             cls.async_finish_signing(
-                output, prepared_digest, signature_cms,
+                output,
+                prepared_digest,
+                signature_cms,
                 post_sign_instr=post_sign_instr,
                 validation_context=validation_context,
-                chunk_size=chunk_size
+                chunk_size=chunk_size,
             )
         )
 
     @classmethod
-    async def async_finish_signing(cls, output: IO,
-                                   prepared_digest: PreparedByteRangeDigest,
-                                   signature_cms: Union[bytes, cms.ContentInfo],
-                                   post_sign_instr:
-                                   Optional[PostSignInstructions] = None,
-                                   validation_context:
-                                   Optional[ValidationContext] = None,
-                                   chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    async def async_finish_signing(
+        cls,
+        output: IO,
+        prepared_digest: PreparedByteRangeDigest,
+        signature_cms: Union[bytes, cms.ContentInfo],
+        post_sign_instr: Optional[PostSignInstructions] = None,
+        validation_context: Optional[ValidationContext] = None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ):
         """
         Finish signing after obtaining a CMS object from an external source, and
         perform any required post-signature processing.
@@ -2324,8 +2502,10 @@ class PdfTBSDocument:
         #  Might want to factor that out for speed at some point.
         rw_output = misc.prepare_rw_output_stream(output)
         post_sign = cls.resume_signing(
-            rw_output, prepared_digest=prepared_digest,
-            signature_cms=signature_cms, post_sign_instr=post_sign_instr,
+            rw_output,
+            prepared_digest=prepared_digest,
+            signature_cms=signature_cms,
+            post_sign_instr=post_sign_instr,
             validation_context=validation_context,
         )
         await post_sign.post_signature_processing(
@@ -2340,15 +2520,19 @@ class PdfPostSignatureDocument:
     Represents the final phase of the PDF signing process
     """
 
-    def __init__(self, sig_contents: bytes,
-                 post_sign_instr: Optional[PostSignInstructions] = None,
-                 validation_context: Optional[ValidationContext] = None):
+    def __init__(
+        self,
+        sig_contents: bytes,
+        post_sign_instr: Optional[PostSignInstructions] = None,
+        validation_context: Optional[ValidationContext] = None,
+    ):
         self.sig_contents = sig_contents
         self.post_sign_instructions = post_sign_instr
         self.validation_context = validation_context
 
-    async def post_signature_processing(self, output: IO,
-                                        chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    async def post_signature_processing(
+        self, output: IO, chunk_size=misc.DEFAULT_CHUNK_SIZE
+    ):
         """
         Handle DSS updates and LTA timestamps, if applicable.
 
@@ -2379,7 +2563,7 @@ class PdfPostSignatureDocument:
             validation_context=validation_context,
             ocsps=validation_info.ocsps_to_embed,
             crls=validation_info.crls_to_embed,
-            embed_roots=instr.embed_roots
+            embed_roots=instr.embed_roots,
         )
         if dss_settings.include_vri:
             dss_op_kwargs['sig_contents'] = self.sig_contents
@@ -2399,14 +2583,17 @@ class PdfPostSignatureDocument:
             if not dss_settings.skip_if_unneeded:
                 dss_op_kwargs['force_write'] = True
             validation.DocumentSecurityStore.add_dss(
-                output_stream=output, **dss_op_kwargs,
-                file_credential=instr.file_credential
+                output_stream=output,
+                **dss_op_kwargs,
+                file_credential=instr.file_credential,
             )
         if timestamper is not None:
             # append a document timestamp after the DSS update
             w = IncrementalPdfFileWriter(output)
-            if w.security_handler is not None \
-                    and self.post_sign_instructions.file_credential is not None:
+            if (
+                w.security_handler is not None
+                and self.post_sign_instructions.file_credential is not None
+            ):
                 w.security_handler.authenticate(
                     self.post_sign_instructions.file_credential
                 )
@@ -2419,11 +2606,14 @@ class PdfPostSignatureDocument:
                     w, **dss_op_kwargs
                 )
             await pdf_timestamper.async_timestamp_pdf(
-                w, instr.timestamp_md_algorithm or constants.DEFAULT_MD,
+                w,
+                instr.timestamp_md_algorithm or constants.DEFAULT_MD,
                 validation_context,
                 validation_paths=validation_info.validation_paths,
-                in_place=True, timestamper=timestamper, chunk_size=chunk_size,
+                in_place=True,
+                timestamper=timestamper,
+                chunk_size=chunk_size,
                 dss_settings=dss_settings.get_settings_for_ts(),
                 tight_size_estimates=instr.tight_size_estimates,
-                embed_roots=instr.embed_roots
+                embed_roots=instr.embed_roots,
             )

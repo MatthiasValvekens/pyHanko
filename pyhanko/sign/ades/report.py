@@ -8,8 +8,11 @@ clause 5.1.3.
 import enum
 
 __all__ = [
-    'AdESStatus', 'AdESSubIndic', 'AdESPassed',
-    'AdESFailure', 'AdESIndeterminate'
+    'AdESStatus',
+    'AdESSubIndic',
+    'AdESPassed',
+    'AdESFailure',
+    'AdESIndeterminate',
 ]
 
 # TODO document these

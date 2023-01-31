@@ -29,14 +29,26 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import SigningError, UnacceptableSignerError
 
 __all__ = [
-    'SigFieldSpec', 'SigSeedValFlags', 'SigCertConstraints',
-    'SigSeedValueSpec', 'SigCertConstraintFlags', 'SigSeedSubFilter',
-    'SeedValueDictVersion', 'SeedLockDocument', 'SigCertKeyUsage',
-    'MDPPerm', 'FieldMDPAction', 'FieldMDPSpec',
-    'SignatureFormField', 'InvisSigSettings', 'VisibleSigSettings',
-    'enumerate_sig_fields', 'append_signature_field',
-    'ensure_sig_flags', 'prepare_sig_field',
-    'apply_sig_field_spec_properties'
+    'SigFieldSpec',
+    'SigSeedValFlags',
+    'SigCertConstraints',
+    'SigSeedValueSpec',
+    'SigCertConstraintFlags',
+    'SigSeedSubFilter',
+    'SeedValueDictVersion',
+    'SeedLockDocument',
+    'SigCertKeyUsage',
+    'MDPPerm',
+    'FieldMDPAction',
+    'FieldMDPSpec',
+    'SignatureFormField',
+    'InvisSigSettings',
+    'VisibleSigSettings',
+    'enumerate_sig_fields',
+    'append_signature_field',
+    'ensure_sig_flags',
+    'prepare_sig_field',
+    'apply_sig_field_spec_properties',
 ]
 
 logger = logging.getLogger(__name__)
@@ -288,6 +300,7 @@ class SigCertKeyUsage:
                 return '0'
             else:
                 return 'X'
+
         return ''.join(fmt_bit(bit) for bit in range(9))
 
     @classmethod
@@ -308,7 +321,7 @@ class SigCertKeyUsage:
 
         return SigCertKeyUsage(
             must_have=KeyUsage(_as_tuple('1')),
-            forbidden=KeyUsage(_as_tuple('0'))
+            forbidden=KeyUsage(_as_tuple('0')),
         )
 
     @classmethod
@@ -327,7 +340,7 @@ class SigCertKeyUsage:
         """
         return SigCertKeyUsage(
             must_have=KeyUsage(set() if must_have is None else must_have),
-            forbidden=KeyUsage(set() if forbidden is None else forbidden)
+            forbidden=KeyUsage(set() if forbidden is None else forbidden),
         )
 
     def must_have_set(self) -> Set[str]:
@@ -362,9 +375,7 @@ name_type_abbrevs = {
     '2.5.4.11': 'OU',
 }
 
-name_type_abbrevs_rev = {
-    v: k for k, v in name_type_abbrevs.items()
-}
+name_type_abbrevs_rev = {v: k for k, v in name_type_abbrevs.items()}
 
 
 def x509_name_keyval_pairs(name: x509.Name, abbreviate_oids=False):
@@ -460,12 +471,12 @@ class SigCertConstraints:
             pass
         flags = SigCertConstraintFlags(pdf_dict.get('/Ff', 0))
         subjects = [
-            x509.Certificate.load(cert.original_bytes) for cert in
-            pdf_dict.get('/Subject', ())
+            x509.Certificate.load(cert.original_bytes)
+            for cert in pdf_dict.get('/Subject', ())
         ]
         issuers = [
-            x509.Certificate.load(cert.original_bytes) for cert in
-            pdf_dict.get('/Issuer', ())
+            x509.Certificate.load(cert.original_bytes)
+            for cert in pdf_dict.get('/Issuer', ())
         ]
 
         def format_attr(attr):
@@ -475,23 +486,28 @@ class SigCertConstraints:
             # takes OIDs
             return name_type_abbrevs_rev.get(attr.upper(), attr)
 
-        subject_dns = x509.Name.build({
-            format_attr(attr): value
-            for dn_dir in pdf_dict.get('/SubjectDN', ())
-            for attr, value in dn_dir.items()
-        })
+        subject_dns = x509.Name.build(
+            {
+                format_attr(attr): value
+                for dn_dir in pdf_dict.get('/SubjectDN', ())
+                for attr, value in dn_dir.items()
+            }
+        )
 
         def parse_key_usage(val):
             return [SigCertKeyUsage.read_from_sv_string(ku) for ku in val]
+
         key_usage = get_and_apply(pdf_dict, '/KeyUsage', parse_key_usage)
 
         url = pdf_dict.get('/URL')
         url_type = pdf_dict.get('/URLType')
         kwargs = {
-            'flags': flags, 'subjects': subjects or None,
+            'flags': flags,
+            'subjects': subjects or None,
             'subject_dn': subject_dns or None,
-            'issuers': issuers or None, 'info_url': url,
-            'key_usage': key_usage
+            'issuers': issuers or None,
+            'info_url': url,
+            'key_usage': key_usage,
         }
         if url is not None and url_type is not None:
             kwargs['url_type'] = url_type
@@ -505,30 +521,34 @@ class SigCertConstraints:
             A :class:`~.generic.DictionaryObject`.
         """
 
-        result = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/SVCert'),
-            pdf_name('/Ff'): generic.NumberObject(self.flags.value),
-        })
+        result = generic.DictionaryObject(
+            {
+                pdf_name('/Type'): pdf_name('/SVCert'),
+                pdf_name('/Ff'): generic.NumberObject(self.flags.value),
+            }
+        )
         if self.subjects is not None:
             result[pdf_name('/Subject')] = generic.ArrayObject(
-                generic.ByteStringObject(cert.dump())
-                for cert in self.subjects
+                generic.ByteStringObject(cert.dump()) for cert in self.subjects
             )
         if self.subject_dn:
             # FIXME Adobe Reader seems to ignore this for some reason.
             #  Should try to figure out what I'm doing wrong
-            result[pdf_name('/SubjectDN')] = generic.ArrayObject([
-                generic.DictionaryObject({
-                    pdf_name('/' + key): pdf_string(value)
-                    for key, value in x509_name_keyval_pairs(
-                        self.subject_dn, abbreviate_oids=True
+            result[pdf_name('/SubjectDN')] = generic.ArrayObject(
+                [
+                    generic.DictionaryObject(
+                        {
+                            pdf_name('/' + key): pdf_string(value)
+                            for key, value in x509_name_keyval_pairs(
+                                self.subject_dn, abbreviate_oids=True
+                            )
+                        }
                     )
-                })
-            ])
+                ]
+            )
         if self.issuers is not None:
             result[pdf_name('/Issuer')] = generic.ArrayObject(
-                generic.ByteStringObject(cert.dump())
-                for cert in self.issuers
+                generic.ByteStringObject(cert.dump()) for cert in self.issuers
             )
         if self.info_url is not None:
             result[pdf_name('/URL')] = pdf_string(self.info_url)
@@ -541,8 +561,11 @@ class SigCertConstraints:
 
         return result
 
-    def satisfied_by(self, signer: x509.Certificate,
-                     validation_path: Optional[ValidationPath]):
+    def satisfied_by(
+        self,
+        signer: x509.Certificate,
+        validation_path: Optional[ValidationPath],
+    ):
         """
         Evaluate whether a signing certificate satisfies the required
         constraints of this :class:`.SigCertConstraints` object.
@@ -562,8 +585,9 @@ class SigCertConstraints:
                 "Certificate constraint flags include mandatory constraints "
                 "that are not supported."
             )
-        if (flags & SigCertConstraintFlags.SUBJECT) \
-                and self.subjects is not None:
+        if (
+            flags & SigCertConstraintFlags.SUBJECT
+        ) and self.subjects is not None:
             # Explicit whitelist of approved signer certificates
             # compare using issuer_serial
             acceptable = (s.issuer_serial for s in self.subjects)
@@ -571,8 +595,7 @@ class SigCertConstraints:
                 raise UnacceptableSignerError(
                     "Signer certificate not on SVCert whitelist."
                 )
-        if (flags & SigCertConstraintFlags.ISSUER) \
-                and self.issuers is not None:
+        if (flags & SigCertConstraintFlags.ISSUER) and self.issuers is not None:
             if validation_path is None:
                 raise UnacceptableSignerError("Validation path not provided.")
             # Here, we need to match any issuer in the chain of trust to
@@ -581,8 +604,8 @@ class SigCertConstraints:
             # To do so, we collect all issuer_serial identifiers in the chain
             # for all certificates except the last one (i.e. the current signer)
             path_iss_serials = {
-                authority.certificate.issuer_serial for authority
-                in validation_path.iter_authorities()
+                authority.certificate.issuer_serial
+                for authority in validation_path.iter_authorities()
                 if isinstance(authority, AuthorityWithCert)
             }
             for issuer in self.issuers:
@@ -610,16 +633,18 @@ class SigCertConstraints:
                     "Subject does not have some of the following required "
                     "attributes: " + self.subject_dn.human_friendly
                 )
-        if (flags & SigCertConstraintFlags.KEY_USAGE) \
-                and self.key_usage is not None:
+        if (
+            flags & SigCertConstraintFlags.KEY_USAGE
+        ) and self.key_usage is not None:
             from .validation.settings import KeyUsageConstraints
+
             for ku in self.key_usage:
                 try:
                     KeyUsageConstraints(
                         key_usage=ku.must_have_set(),
                         key_usage_forbidden=ku.forbidden_set(),
                         # This is the way ISO 32k does things
-                        match_all_key_usages=True
+                        match_all_key_usages=True,
                     ).validate(signer)
                     break
                 except InvalidCertificateError:
@@ -823,10 +848,12 @@ class SigSeedValueSpec:
             A :class:`~.generic.DictionaryObject`.
         """
         min_version = SeedValueDictVersion.PDF_1_5
-        result = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/SV'),
-            pdf_name('/Ff'): generic.NumberObject(self.flags.value),
-        })
+        result = generic.DictionaryObject(
+            {
+                pdf_name('/Type'): pdf_name('/SV'),
+                pdf_name('/Ff'): generic.NumberObject(self.flags.value),
+            }
+        )
 
         if self.subfilters is not None:
             result[pdf_name('/SubFilter')] = generic.ArrayObject(
@@ -848,21 +875,25 @@ class SigSeedValueSpec:
             )
         if self.timestamp_server_url is not None:
             min_version = SeedValueDictVersion.PDF_1_7
-            result[pdf_name('/TimeStamp')] = generic.DictionaryObject({
-                pdf_name('/URL'): pdf_string(self.timestamp_server_url),
-                pdf_name('/Ff'): generic.NumberObject(
-                    1 if self.timestamp_required else 0
-                )
-            })
+            result[pdf_name('/TimeStamp')] = generic.DictionaryObject(
+                {
+                    pdf_name('/URL'): pdf_string(self.timestamp_server_url),
+                    pdf_name('/Ff'): generic.NumberObject(
+                        1 if self.timestamp_required else 0
+                    ),
+                }
+            )
         if self.cert is not None:
             result[pdf_name('/Cert')] = self.cert.as_pdf_object()
         if self.seed_signature_type is not None:
             mdp_perm = self.seed_signature_type.mdp_perm
-            result[pdf_name('/MDP')] = generic.DictionaryObject({
-                pdf_name('/P'): generic.NumberObject(
-                    mdp_perm.value if mdp_perm is not None else 0
-                )
-            })
+            result[pdf_name('/MDP')] = generic.DictionaryObject(
+                {
+                    pdf_name('/P'): generic.NumberObject(
+                        mdp_perm.value if mdp_perm is not None else 0
+                    )
+                }
+            )
         if self.legal_attestations is not None:
             result[pdf_name('/LegalAttestation')] = generic.ArrayObject(
                 pdf_string(att) for att in self.legal_attestations
@@ -905,8 +936,9 @@ class SigSeedValueSpec:
         flags = SigSeedValFlags(pdf_dict.get('/Ff', 0))
         try:
             sig_filter = pdf_dict['/Filter']
-            if (flags & SigSeedValFlags.FILTER) and \
-                    (sig_filter != '/Adobe.PPKLite'):
+            if (flags & SigSeedValFlags.FILTER) and (
+                sig_filter != '/Adobe.PPKLite'
+            ):
                 raise SigningError(
                     "Signature handler '%s' is not available, only the "
                     "default /Adobe.PPKLite is supported." % sig_filter
@@ -934,12 +966,14 @@ class SigSeedValueSpec:
         subfilter_reqs = pdf_dict.get('/SubFilter', None)
         subfilters = None
         if subfilter_reqs is not None:
+
             def _subfilters():
                 for s in subfilter_reqs:
                     try:
                         yield SigSeedSubFilter(s)
                     except ValueError:
                         pass
+
             subfilters = list(_subfilters())
 
         try:
@@ -959,6 +993,7 @@ class SigSeedValueSpec:
                     f"/MDP entry {mdp} in seed value dictionary is not "
                     "correctly formatted."
                 )
+
         signature_type = get_and_apply(pdf_dict, '/MDP', read_mdp_dict)
 
         def read_lock_document(val):
@@ -980,14 +1015,19 @@ class SigSeedValueSpec:
                 cert_constraints
             )
         return cls(
-            flags=flags, reasons=reasons,
+            flags=flags,
+            reasons=reasons,
             timestamp_server_url=timestamp_server_url,
-            cert=cert_constraints, subfilters=subfilters,
-            digest_methods=digest_methods, add_rev_info=add_rev_info,
+            cert=cert_constraints,
+            subfilters=subfilters,
+            digest_methods=digest_methods,
+            add_rev_info=add_rev_info,
             timestamp_required=timestamp_required,
             legal_attestations=legal_attestations,
-            seed_signature_type=signature_type, sv_dict_version=min_version,
-            lock_document=lock_document, appearance=appearance_filter
+            seed_signature_type=signature_type,
+            sv_dict_version=min_version,
+            lock_document=lock_document,
+            appearance=appearance_filter,
         )
 
     def build_timestamper(self):
@@ -999,6 +1039,7 @@ class SigSeedValueSpec:
             A :class:`~.pyhanko.sign.timestamps.HTTPTimeStamper`.
         """
         from pyhanko.sign.timestamps import HTTPTimeStamper
+
         if self.timestamp_server_url:
             return HTTPTimeStamper(self.timestamp_server_url)
 
@@ -1051,9 +1092,11 @@ class FieldMDPSpec:
         :return:
             A :class:`~.generic.DictionaryObject`.
         """
-        result = generic.DictionaryObject({
-            pdf_name('/Action'): self.action.value,
-        })
+        result = generic.DictionaryObject(
+            {
+                pdf_name('/Action'): self.action.value,
+            }
+        )
         if self.action != FieldMDPAction.ALL:
             result['/Fields'] = generic.ArrayObject(
                 map(pdf_string, self.fields)
@@ -1206,6 +1249,7 @@ class VisibleSigSettings:
 
 # TODO deal with fully qualified field names for the signature field
 
+
 @dataclass(frozen=True)
 class SigFieldSpec:
     """Description of a signature field to be created."""
@@ -1311,8 +1355,14 @@ class SigFieldSpec:
         return result
 
 
-def _insert_or_get_field_at(writer: BasePdfFileWriter, fields, path,
-                            parent_ref=None, modified=False, field_obj=None):
+def _insert_or_get_field_at(
+    writer: BasePdfFileWriter,
+    fields,
+    path,
+    parent_ref=None,
+    modified=False,
+    field_obj=None,
+):
 
     current_partial, tail = path[0], path[1:]
 
@@ -1348,8 +1398,12 @@ def _insert_or_get_field_at(writer: BasePdfFileWriter, fields, path,
 
     # recurse in to /Kids array
     return _insert_or_get_field_at(
-        writer, kids, tail, parent_ref=field_ref,
-        modified=modified, field_obj=field_obj
+        writer,
+        kids,
+        tail,
+        parent_ref=field_ref,
+        modified=modified,
+        field_obj=field_obj,
     )
 
 
@@ -1376,9 +1430,13 @@ def ensure_sig_flags(writer: BasePdfFileWriter, lock_sig_flags: bool = True):
         form.setdefault(pdf_name('/SigFlags'), generic.NumberObject(1))
 
 
-def prepare_sig_field(sig_field_name, root,
-                      update_writer: BasePdfFileWriter,
-                      existing_fields_only=False, **kwargs):
+def prepare_sig_field(
+    sig_field_name,
+    root,
+    update_writer: BasePdfFileWriter,
+    existing_fields_only=False,
+    **kwargs,
+):
     """
     Returns a tuple of a boolean and a reference to a signature field.
     The boolean is ``True`` if the field was created, and ``False`` otherwise.
@@ -1437,8 +1495,10 @@ def prepare_sig_field(sig_field_name, root,
     sig_form_kwargs.update(**kwargs)
     sig_field = SignatureFormField(sig_field_name, **sig_form_kwargs)
     created, sig_field_ref = _insert_or_get_field_at(
-        update_writer, fields, path=sig_field_name.split('.'),
-        field_obj=sig_field
+        update_writer,
+        fields,
+        path=sig_field_name.split('.'),
+        field_obj=sig_field,
     )
     sig_field.register_widget_annotation(update_writer, sig_field_ref)
 
@@ -1470,8 +1530,15 @@ def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
     yield from enumerate_sig_fields_in(fields, filled_status, refs_seen=set())
 
 
-def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
-                            parent_name="", parents=None, *, refs_seen):
+def enumerate_sig_fields_in(
+    field_list,
+    filled_status=None,
+    with_name=None,
+    parent_name="",
+    parents=None,
+    *,
+    refs_seen,
+):
     if not isinstance(field_list, generic.ArrayObject):
         logger.warning(
             f"Values of type {type(field_list)} are not valid as field "
@@ -1502,8 +1569,10 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
             field_name = field['/T']
         except KeyError:
             continue
-        fq_name = field_name if not parent_name else (
-                "%s.%s" % (parent_name, field_name)
+        fq_name = (
+            field_name
+            if not parent_name
+            else ("%s.%s" % (parent_name, field_name))
         )
         explicitly_requested = with_name is not None and fq_name == with_name
         child_requested = explicitly_requested or (
@@ -1538,16 +1607,20 @@ def enumerate_sig_fields_in(field_list, filled_status=None, with_name=None,
         if with_name is None or (child_requested and not explicitly_requested):
             try:
                 yield from enumerate_sig_fields_in(
-                    field['/Kids'], parent_name=fq_name, parents=current_path,
-                    with_name=with_name, filled_status=filled_status,
-                    refs_seen=refs_seen | {field_ref.reference}
+                    field['/Kids'],
+                    parent_name=fq_name,
+                    parents=current_path,
+                    with_name=with_name,
+                    filled_status=filled_status,
+                    refs_seen=refs_seen | {field_ref.reference},
                 )
             except KeyError:
                 continue
 
 
-def append_signature_field(pdf_out: BasePdfFileWriter,
-                           sig_field_spec: SigFieldSpec):
+def append_signature_field(
+    pdf_out: BasePdfFileWriter, sig_field_spec: SigFieldSpec
+):
     """
     Append signature fields to a PDF file.
 
@@ -1561,12 +1634,15 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 
     page_ref = pdf_out.find_page_for_modification(sig_field_spec.on_page)[0]
     field_created, sig_field_ref = prepare_sig_field(
-        sig_field_spec.sig_field_name, root, update_writer=pdf_out,
+        sig_field_spec.sig_field_name,
+        root,
+        update_writer=pdf_out,
         existing_fields_only=False,
-        box=sig_field_spec.box, include_on_page=page_ref,
+        box=sig_field_spec.box,
+        include_on_page=page_ref,
         combine_annotation=sig_field_spec.combine_annotation,
         invis_settings=sig_field_spec.invis_sig_settings,
-        visible_settings=sig_field_spec.visible_sig_settings
+        visible_settings=sig_field_spec.visible_sig_settings,
     )
     ensure_sig_flags(writer=pdf_out, lock_sig_flags=False)
     if not field_created:
@@ -1594,11 +1670,11 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
                     b'q 0.95 0.95 0.95 rg 0 0 %g %g re f Q' % (w, h),
                     # border
                     b'0.5 w 0 0 %g %g re S' % (w, h),
-                    b'Q'
+                    b'Q',
                 ]
                 ap_stream = RawContent(
                     b' '.join(appearance_cmds),
-                    box=BoxConstraints(width=w, height=h)
+                    box=BoxConstraints(width=w, height=h),
                 ).as_form_xobject()
             else:
                 ap_stream = RawContent(
@@ -1608,15 +1684,18 @@ def append_signature_field(pdf_out: BasePdfFileWriter,
 
 
 def apply_sig_field_spec_properties(
-        pdf_out: BasePdfFileWriter, sig_field: generic.DictionaryObject,
-        sig_field_spec: SigFieldSpec):
+    pdf_out: BasePdfFileWriter,
+    sig_field: generic.DictionaryObject,
+    sig_field_spec: SigFieldSpec,
+):
     """
     Internal function to apply field spec properties to a newly created field.
     """
 
     if sig_field_spec.readable_field_name is not None:
-        sig_field[pdf_name('/TU')] \
-            = generic.TextStringObject(sig_field_spec.readable_field_name)
+        sig_field[pdf_name('/TU')] = generic.TextStringObject(
+            sig_field_spec.readable_field_name
+        )
     if sig_field_spec.seed_value_dict is not None:
         # /SV must be an indirect reference as per the spec
         sv_ref = pdf_out.add_object(
@@ -1630,11 +1709,17 @@ def apply_sig_field_spec_properties(
 
 
 class SignatureFormField(generic.DictionaryObject):
-    def __init__(self, field_name, *, box=None, include_on_page=None,
-                 combine_annotation=True,
-                 invis_settings: InvisSigSettings = InvisSigSettings(),
-                 visible_settings: VisibleSigSettings = VisibleSigSettings(),
-                 annot_flags=None):
+    def __init__(
+        self,
+        field_name,
+        *,
+        box=None,
+        include_on_page=None,
+        combine_annotation=True,
+        invis_settings: InvisSigSettings = InvisSigSettings(),
+        visible_settings: VisibleSigSettings = VisibleSigSettings(),
+        annot_flags=None,
+    ):
 
         if box is not None:
             rect = [generic.FloatObject(rd(x)) for x in box]
@@ -1644,11 +1729,13 @@ class SignatureFormField(generic.DictionaryObject):
             rect = [generic.FloatObject(coord)] * 4
             invisible = True
 
-        super().__init__({
-            # Signature field properties
-            pdf_name('/FT'): pdf_name('/Sig'),
-            pdf_name('/T'): pdf_string(field_name),
-        })
+        super().__init__(
+            {
+                # Signature field properties
+                pdf_name('/FT'): pdf_name('/Sig'),
+                pdf_name('/T'): pdf_string(field_name),
+            }
+        )
 
         self.combine_annotation = combine_annotation
         if combine_annotation:
@@ -1685,8 +1772,9 @@ class SignatureFormField(generic.DictionaryObject):
 
         self.annot_dict = annot_dict
 
-    def register_widget_annotation(self, writer: BasePdfFileWriter,
-                                   sig_field_ref):
+    def register_widget_annotation(
+        self, writer: BasePdfFileWriter, sig_field_ref
+    ):
         annot_dict = self.annot_dict
         if not self.combine_annotation:
             annot_ref = writer.add_object(annot_dict)

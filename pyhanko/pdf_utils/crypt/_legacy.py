@@ -12,8 +12,9 @@ _encryption_padding = (
 )
 
 
-def derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
-                           id1_entry, encrypt_metadata):
+def derive_legacy_file_key(
+    password, rev, keylen, owner_entry, p_entry, id1_entry, encrypt_metadata
+):
     """
     Implementation of algorithm 3.2 of the PDF standard security handler,
     section 3.5.2 of the PDF 1.6 reference.
@@ -129,8 +130,9 @@ def compute_u_value_r2(password, owner_entry, p_entry, id1_entry):
     """
     # 1. Create an encryption key based on the user password string, as
     # described in algorithm 3.2.
-    key = derive_legacy_file_key(password, 2, 5, owner_entry, p_entry,
-                                 id1_entry, encrypt_metadata=True)
+    key = derive_legacy_file_key(
+        password, 2, 5, owner_entry, p_entry, id1_entry, encrypt_metadata=True
+    )
     # 2. Encrypt the 32-byte padding string shown in step 1 of algorithm 3.2,
     # using an RC4 encryption function with the encryption key from the
     # preceding step.
@@ -140,8 +142,15 @@ def compute_u_value_r2(password, owner_entry, p_entry, id1_entry):
     return u, key
 
 
-def compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
-                        id1_entry, encrypt_metadata: bool):
+def compute_u_value_r34(
+    password,
+    rev,
+    keylen,
+    owner_entry,
+    p_entry,
+    id1_entry,
+    encrypt_metadata: bool,
+):
     """
     Implementation of algorithm 3.4 of the PDF standard security handler,
     section 3.5.2 of the PDF 1.6 reference.
@@ -149,8 +158,15 @@ def compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
 
     # 1. Create an encryption key based on the user password string, as
     # described in Algorithm 3.2.
-    key = derive_legacy_file_key(password, rev, keylen, owner_entry, p_entry,
-                                 id1_entry, encrypt_metadata=encrypt_metadata)
+    key = derive_legacy_file_key(
+        password,
+        rev,
+        keylen,
+        owner_entry,
+        p_entry,
+        id1_entry,
+        encrypt_metadata=encrypt_metadata,
+    )
     # 2. Initialize the MD5 hash function and pass the 32-byte padding string
     # shown in step 1 of Algorithm 3.2 as input to this function.
     m = md5()
@@ -182,8 +198,9 @@ def compute_u_value_r34(password, rev, keylen, owner_entry, p_entry,
     return val + (b'\x00' * 16), key
 
 
-def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
-                             use_aes=False) -> bytes:
+def legacy_derive_object_key(
+    shared_key: bytes, idnum: int, generation: int, use_aes=False
+) -> bytes:
     """
     Function that does the key derivation for PDF's legacy security handlers.
 
@@ -204,4 +221,4 @@ def legacy_derive_object_key(shared_key: bytes, idnum: int, generation: int,
     if use_aes:
         key += b'sAlT'
     md5_hash = md5(key).digest()
-    return md5_hash[:min(16, len(shared_key) + 5)]
+    return md5_hash[: min(16, len(shared_key) + 5)]

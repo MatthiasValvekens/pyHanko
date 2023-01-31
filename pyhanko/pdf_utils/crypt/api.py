@@ -46,6 +46,7 @@ class SecurityHandlerVersion(misc.VersionEnum):
     The enum constants are named more or less in accordance with the
     cryptographic algorithms they permit.
     """
+
     RC4_40 = 1
     RC4_LONGER_KEYS = 2
     RC4_OR_AES128 = 4
@@ -58,8 +59,9 @@ class SecurityHandlerVersion(misc.VersionEnum):
 
     def as_pdf_object(self) -> generic.PdfObject:
         val = self.value
-        return generic.NullObject() if val is None \
-            else generic.NumberObject(val)
+        return (
+            generic.NullObject() if val is None else generic.NumberObject(val)
+        )
 
     @classmethod
     def from_number(cls, value) -> 'SecurityHandlerVersion':
@@ -73,8 +75,10 @@ class SecurityHandlerVersion(misc.VersionEnum):
             return 5
         elif self == SecurityHandlerVersion.AES256:
             return 32
-        elif not (5 <= key_length <= 16) \
-                and self <= SecurityHandlerVersion.RC4_OR_AES128:
+        elif (
+            not (5 <= key_length <= 16)
+            and self <= SecurityHandlerVersion.RC4_OR_AES128
+        ):
             raise misc.PdfError("Key length must be between 5 and 16")
         return key_length
 
@@ -118,9 +122,14 @@ class SecurityHandler:
     __registered_subclasses: Dict[str, Type['SecurityHandler']] = dict()
     _known_crypt_filters = dict()
 
-    def __init__(self, version: SecurityHandlerVersion, legacy_keylen,
-                 crypt_filter_config: 'CryptFilterConfiguration',
-                 encrypt_metadata=True, compat_entries=True):
+    def __init__(
+        self,
+        version: SecurityHandlerVersion,
+        legacy_keylen,
+        crypt_filter_config: 'CryptFilterConfiguration',
+        encrypt_metadata=True,
+        compat_entries=True,
+    ):
         self.version = version
         crypt_filter_config.set_security_handler(self)
 
@@ -191,7 +200,8 @@ class SecurityHandler:
                 )
             try:
                 cls = next(
-                    h for h in SecurityHandler.__registered_subclasses.values()
+                    h
+                    for h in SecurityHandler.__registered_subclasses.values()
                     if subfilter in h.support_generic_subfilters()
                 )
             except StopIteration:
@@ -246,8 +256,9 @@ class SecurityHandler:
         return set()
 
     @classmethod
-    def instantiate_from_pdf_object(cls,
-                                    encrypt_dict: generic.DictionaryObject):
+    def instantiate_from_pdf_object(
+        cls, encrypt_dict: generic.DictionaryObject
+    ):
         """
         Instantiate an object of this class using a PDF encryption dictionary
         as input.
@@ -337,8 +348,9 @@ class SecurityHandler:
         raise NotImplementedError
 
     @classmethod
-    def read_cf_dictionary(cls, cfdict: generic.DictionaryObject,
-                           acts_as_default: bool) -> Optional['CryptFilter']:
+    def read_cf_dictionary(
+        cls, cfdict: generic.DictionaryObject, acts_as_default: bool
+    ) -> Optional['CryptFilter']:
         """
         Interpret a crypt filter dictionary for this type of security handler.
 
@@ -359,8 +371,9 @@ class SecurityHandler:
         )
 
     @classmethod
-    def process_crypt_filters(cls, encrypt_dict: generic.DictionaryObject) \
-            -> Optional['CryptFilterConfiguration']:
+    def process_crypt_filters(
+        cls, encrypt_dict: generic.DictionaryObject
+    ) -> Optional['CryptFilterConfiguration']:
 
         stmf = encrypt_dict.get('/StmF', IDENTITY)
         strf = encrypt_dict.get('/StrF', IDENTITY)
@@ -376,13 +389,16 @@ class SecurityHandler:
             for name, cfdict in cf_config_dict.items()
         }
         return CryptFilterConfiguration(
-            crypt_filters=crypt_filters, default_stream_filter=stmf,
-            default_string_filter=strf, default_file_filter=eff
+            crypt_filters=crypt_filters,
+            default_stream_filter=stmf,
+            default_string_filter=strf,
+            default_file_filter=eff,
         )
 
     @classmethod
-    def register_crypt_filter(cls, method: generic.NameObject,
-                              factory: 'CryptFilterBuilder'):
+    def register_crypt_filter(
+        cls, method: generic.NameObject, factory: 'CryptFilterBuilder'
+    ):
         cls._known_crypt_filters[method] = factory
 
     def get_min_pdf_version(self) -> Optional[Tuple[int, int]]:
@@ -504,14 +520,17 @@ class CryptFilter:
         :return:
             A PDF crypt filter dictionary.
         """
-        result = generic.DictionaryObject({
-            # TODO handle /AuthEvent properly
-            generic.NameObject('/AuthEvent'): (
-                generic.NameObject('/EFOpen') if self._embedded_only
-                else generic.NameObject('/DocOpen')
-            ),
-            generic.NameObject('/CFM'): self.method
-        })
+        result = generic.DictionaryObject(
+            {
+                # TODO handle /AuthEvent properly
+                generic.NameObject('/AuthEvent'): (
+                    generic.NameObject('/EFOpen')
+                    if self._embedded_only
+                    else generic.NameObject('/DocOpen')
+                ),
+                generic.NameObject('/CFM'): self.method,
+            }
+        )
         return result
 
     def derive_shared_encryption_key(self) -> bytes:
@@ -661,12 +680,17 @@ class CryptFilterConfiguration:
             is the API user's responsibility.
     """
 
-    def __init__(self, crypt_filters: Dict[str, CryptFilter] = None,
-                 default_stream_filter=IDENTITY, default_string_filter=IDENTITY,
-                 default_file_filter=None):
+    def __init__(
+        self,
+        crypt_filters: Dict[str, CryptFilter] = None,
+        default_stream_filter=IDENTITY,
+        default_string_filter=IDENTITY,
+        default_file_filter=None,
+    ):
         def _select(name) -> CryptFilter:
             return (
-                IdentityCryptFilter() if name == IDENTITY
+                IdentityCryptFilter()
+                if name == IDENTITY
                 else crypt_filters[name]
             )
 
@@ -764,10 +788,13 @@ class CryptFilterConfiguration:
         result['/StrF'] = self._default_string_filter_name
         if self._default_file_filter_name is not None:
             result['/EFF'] = self._default_file_filter_name
-        result['/CF'] = generic.DictionaryObject({
-            generic.NameObject(key): value.as_pdf_object()
-            for key, value in self._crypt_filters.items() if key != IDENTITY
-        })
+        result['/CF'] = generic.DictionaryObject(
+            {
+                generic.NameObject(key): value.as_pdf_object()
+                for key, value in self._crypt_filters.items()
+                if key != IDENTITY
+            }
+        )
         return result
 
     def standard_filters(self):
@@ -790,9 +817,11 @@ class CryptFilterConfiguration:
 CryptFilterBuilder = Callable[[generic.DictionaryObject, bool], CryptFilter]
 
 
-def build_crypt_filter(reg: Dict[generic.NameObject, CryptFilterBuilder],
-                       cfdict: generic.DictionaryObject,
-                       acts_as_default: bool) -> Optional[CryptFilter]:
+def build_crypt_filter(
+    reg: Dict[generic.NameObject, CryptFilterBuilder],
+    cfdict: generic.DictionaryObject,
+    acts_as_default: bool,
+) -> Optional[CryptFilter]:
     """
     Interpret a crypt filter dictionary for a security handler.
 

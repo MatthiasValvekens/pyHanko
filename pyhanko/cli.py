@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import pkcs11  # lgtm [py/unused-import]
+
     pkcs11_available = True
 except ImportError:
     pkcs11 = None
@@ -147,19 +148,30 @@ def _warn_empty_passphrase():
         click.style(
             "WARNING: passphrase is empty. If you intended to sign with an "
             "unencrypted private key, use --no-pass instead.",
-            bold=True
+            bold=True,
         )
     )
 
+
 @click.group()
 @click.version_option(prog_name='pyHanko', version=__version__)
-@click.option('--config',
-              help=(
-                  'YAML file to load configuration from'
-                  f'[default: {DEFAULT_CONFIG_FILE}]'
-              ), required=False, type=click.File('r'))
-@click.option('--verbose', help='Run in verbose mode', required=False,
-              default=False, type=bool, is_flag=True)
+@click.option(
+    '--config',
+    help=(
+        'YAML file to load configuration from'
+        f'[default: {DEFAULT_CONFIG_FILE}]'
+    ),
+    required=False,
+    type=click.File('r'),
+)
+@click.option(
+    '--verbose',
+    help='Run in verbose mode',
+    required=False,
+    default=False,
+    type=bool,
+    is_flag=True,
+)
 @click.pass_context
 def cli(ctx, config, verbose):
     config_text = None
@@ -228,9 +240,15 @@ def signing():
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
-def _build_vc_kwargs(ctx, validation_context, trust,
-                     trust_replace, other_certs, retroactive_revinfo,
-                     allow_fetching=None):
+def _build_vc_kwargs(
+    ctx,
+    validation_context,
+    trust,
+    trust_replace,
+    other_certs,
+    retroactive_revinfo,
+    allow_fetching=None,
+):
     cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
     try:
         if validation_context is not None:
@@ -257,18 +275,17 @@ def _build_vc_kwargs(ctx, validation_context, trust,
         elif trust or other_certs:
             # load a validation profile using command line kwargs
             result = init_validation_context_kwargs(
-                trust=trust, trust_replace=trust_replace,
+                trust=trust,
+                trust_replace=trust_replace,
                 other_certs=other_certs,
-                retroactive_revinfo=retroactive_revinfo
+                retroactive_revinfo=retroactive_revinfo,
             )
         elif cli_config is not None:
             # load the default settings from the CLI config
             try:
                 result = cli_config.get_validation_context(as_dict=True)
             except ConfigurationError as e:
-                msg = (
-                    "Failed to load default validation context."
-                )
+                msg = "Failed to load default validation context."
                 logger.error(msg, exc_info=e)
                 raise click.ClickException(msg)
         else:
@@ -310,22 +327,33 @@ def _get_key_usage_settings(ctx, validation_context):
 
 def trust_options(f):
     f = click.option(
-        '--validation-context', help='use validation context from config',
-        required=False, type=str
+        '--validation-context',
+        help='use validation context from config',
+        required=False,
+        type=str,
     )(f)
     f = click.option(
-        '--trust', help='list trust roots (multiple allowed)',
-        required=False, multiple=True, type=readable_file
+        '--trust',
+        help='list trust roots (multiple allowed)',
+        required=False,
+        multiple=True,
+        type=readable_file,
     )(f)
     f = click.option(
         '--trust-replace',
         help='listed trust roots supersede OS-provided trust store',
-        required=False, type=bool, is_flag=True, default=False,
-        show_default=True
+        required=False,
+        type=bool,
+        is_flag=True,
+        default=False,
+        show_default=True,
     )(f)
     f = click.option(
-        '--other-certs', help='other certs relevant for validation',
-        required=False, multiple=True, type=readable_file
+        '--other-certs',
+        help='other certs relevant for validation',
+        required=False,
+        multiple=True,
+        type=readable_file,
     )(f)
     return f
 
@@ -365,8 +393,7 @@ def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
 
     if soft_revocation_check and force_revinfo:
         raise click.ClickException(
-            "--soft-revocation-check is incompatible with "
-            "--force-revinfo"
+            "--soft-revocation-check is incompatible with " "--force-revinfo"
         )
     if force_revinfo:
         rev_mode = 'require'
@@ -378,28 +405,37 @@ def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
     return vc_kwargs
 
 
-def _signature_status(ltv_profile, vc_kwargs, force_revinfo, key_usage_settings,
-                      embedded_sig, skip_diff=False):
+def _signature_status(
+    ltv_profile,
+    vc_kwargs,
+    force_revinfo,
+    key_usage_settings,
+    embedded_sig,
+    skip_diff=False,
+):
     if ltv_profile is None:
         vc = ValidationContext(**vc_kwargs)
         status = pyhanko.sign.validation.validate_pdf_signature(
-            embedded_sig, key_usage_settings=key_usage_settings,
+            embedded_sig,
+            key_usage_settings=key_usage_settings,
             signer_validation_context=vc,
-            skip_diff=skip_diff
+            skip_diff=skip_diff,
         )
     else:
         status = validation.validate_pdf_ltv_signature(
-            embedded_sig, ltv_profile,
+            embedded_sig,
+            ltv_profile,
             key_usage_settings=key_usage_settings,
             force_revinfo=force_revinfo,
             validation_context_kwargs=vc_kwargs,
-            skip_diff=skip_diff
+            skip_diff=skip_diff,
         )
     return status
 
 
-def _validate_detached(infile, sig_infile, validation_context,
-                       key_usage_settings):
+def _validate_detached(
+    infile, sig_infile, validation_context, key_usage_settings
+):
     sig_bytes = sig_infile.read()
     try:
         if pem.detect(sig_bytes):
@@ -411,9 +447,10 @@ def _validate_detached(infile, sig_infile, validation_context,
         raise click.ClickException("Could not parse CMS object") from e
 
     validation_coro = validation.async_validate_detached_cms(
-        infile, signed_data=content_info['content'],
+        infile,
+        signed_data=content_info['content'],
         signer_validation_context=validation_context,
-        key_usage_settings=key_usage_settings
+        key_usage_settings=key_usage_settings,
     )
     return asyncio.run(validation_coro)
 
@@ -422,7 +459,10 @@ def _signature_status_str(status_callback, pretty_print, executive_summary):
     try:
         status = status_callback()
         if executive_summary and not pretty_print:
-            return 'VALID' if status.bottom_line else 'INVALID', status.bottom_line
+            return (
+                'VALID' if status.bottom_line else 'INVALID',
+                status.bottom_line,
+            )
         elif pretty_print:
             return status.pretty_print_details(), status.bottom_line
         else:
@@ -457,65 +497,129 @@ def _attempt_iso_dt_parse(dt_str) -> datetime:
 # TODO add an option to do LTV, but guess the profile
 @signing.command(name='validate', help='validate signatures')
 @click.argument('infile', type=click.File('rb'))
-@click.option('--executive-summary',
-              help='only print final judgment on signature validity',
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--pretty-print',
-              help='render a prettier summary for the signatures in the file',
-              type=bool, is_flag=True, default=False, show_default=True)
-@trust_options
-@click.option('--ltv-profile',
-              help='LTV signature validation profile',
-              type=click.Choice(RevocationInfoValidationType.as_tuple()),
-              required=False)
-@click.option('--force-revinfo',
-              help='Fail trust validation if a certificate has no known CRL '
-                   'or OCSP endpoints.',
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--soft-revocation-check',
-              help='Do not fail validation on revocation checking failures '
-                   '(only applied to on-line revocation checks)',
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--no-revocation-check',
-              help='Do not attempt to check revocation status '
-                   '(meaningless for LTV validation)',
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--retroactive-revinfo',
-              help='Treat revocation info as retroactively valid '
-                   '(i.e. ignore thisUpdate timestamp)',
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--validation-time',
-              help=(
-                   'Override the validation time (ISO 8601 date). '
-                   'The special value \'claimed\' causes the validation time '
-                   'claimed by the signer to be used. Revocation checking '
-                   'will be disabled. Option ignored in LTV mode.'
-              ),
-              type=str, required=False)
-@click.option('--password', required=False, type=str,
-              help='password to access the file (can also be read from stdin)')
-@click.option('--no-diff-analysis', default=False, type=bool, is_flag=True,
-              help='disable incremental update analysis')
 @click.option(
-    '--detached', type=click.File('rb'),
+    '--executive-summary',
+    help='only print final judgment on signature validity',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--pretty-print',
+    help='render a prettier summary for the signatures in the file',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@trust_options
+@click.option(
+    '--ltv-profile',
+    help='LTV signature validation profile',
+    type=click.Choice(RevocationInfoValidationType.as_tuple()),
+    required=False,
+)
+@click.option(
+    '--force-revinfo',
+    help='Fail trust validation if a certificate has no known CRL '
+    'or OCSP endpoints.',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--soft-revocation-check',
+    help='Do not fail validation on revocation checking failures '
+    '(only applied to on-line revocation checks)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--no-revocation-check',
+    help='Do not attempt to check revocation status '
+    '(meaningless for LTV validation)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--retroactive-revinfo',
+    help='Treat revocation info as retroactively valid '
+    '(i.e. ignore thisUpdate timestamp)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--validation-time',
+    help=(
+        'Override the validation time (ISO 8601 date). '
+        'The special value \'claimed\' causes the validation time '
+        'claimed by the signer to be used. Revocation checking '
+        'will be disabled. Option ignored in LTV mode.'
+    ),
+    type=str,
+    required=False,
+)
+@click.option(
+    '--password',
+    required=False,
+    type=str,
+    help='password to access the file (can also be read from stdin)',
+)
+@click.option(
+    '--no-diff-analysis',
+    default=False,
+    type=bool,
+    is_flag=True,
+    help='disable incremental update analysis',
+)
+@click.option(
+    '--detached',
+    type=click.File('rb'),
     help=(
         'Read signature CMS object from the indicated file; '
         'this can be used to verify signatures on non-PDF files'
-    )
+    ),
 )
-@click.option('--no-strict-syntax',
-              help='Attempt to ignore syntactical problems in the input file '
-                   'and enable signature validation in hybrid-reference files.'
-                   '(warning: this may affect validation results in unexpected '
-                   'ways.)',
-              type=bool, is_flag=True, default=False, show_default=True)
+@click.option(
+    '--no-strict-syntax',
+    help='Attempt to ignore syntactical problems in the input file '
+    'and enable signature validation in hybrid-reference files.'
+    '(warning: this may affect validation results in unexpected '
+    'ways.)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
 @click.pass_context
-def validate_signatures(ctx, infile, executive_summary,
-                        pretty_print, validation_context, trust, trust_replace,
-                        other_certs, ltv_profile, force_revinfo,
-                        soft_revocation_check, no_revocation_check, password,
-                        retroactive_revinfo, detached, no_diff_analysis,
-                        validation_time, no_strict_syntax):
+def validate_signatures(
+    ctx,
+    infile,
+    executive_summary,
+    pretty_print,
+    validation_context,
+    trust,
+    trust_replace,
+    other_certs,
+    ltv_profile,
+    force_revinfo,
+    soft_revocation_check,
+    no_revocation_check,
+    password,
+    retroactive_revinfo,
+    detached,
+    no_diff_analysis,
+    validation_time,
+    no_strict_syntax,
+):
 
     no_revocation_check |= validation_time is not None
 
@@ -535,9 +639,13 @@ def validate_signatures(ctx, infile, executive_summary,
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
     vc_kwargs = _build_vc_kwargs(
-        ctx, validation_context, trust, trust_replace, other_certs,
+        ctx,
+        validation_context,
+        trust,
+        trust_replace,
+        other_certs,
         retroactive_revinfo,
-        allow_fetching=False if no_revocation_check else None
+        allow_fetching=False if no_revocation_check else None,
     )
 
     use_claimed_validation_time = False
@@ -548,17 +656,21 @@ def validate_signatures(ctx, infile, executive_summary,
 
     key_usage_settings = _get_key_usage_settings(ctx, validation_context)
     vc_kwargs = _prepare_vc(
-        vc_kwargs, soft_revocation_check=soft_revocation_check,
-        force_revinfo=force_revinfo
+        vc_kwargs,
+        soft_revocation_check=soft_revocation_check,
+        force_revinfo=force_revinfo,
     )
     with pyhanko_exception_manager():
         if detached is not None:
             (status_str, signature_ok) = _signature_status_str(
                 status_callback=lambda: _validate_detached(
-                    infile, detached, ValidationContext(**vc_kwargs),
-                    key_usage_settings
+                    infile,
+                    detached,
+                    ValidationContext(**vc_kwargs),
+                    key_usage_settings,
                 ),
-                pretty_print=pretty_print, executive_summary=executive_summary
+                pretty_print=pretty_print,
+                executive_summary=executive_summary,
             )
             if signature_ok:
                 print(status_str)
@@ -594,11 +706,15 @@ def validate_signatures(ctx, infile, executive_summary,
                 vc_kwargs['moment'] = embedded_sig.self_reported_timestamp
             (status_str, signature_ok) = _signature_status_str(
                 status_callback=lambda: _signature_status(
-                    ltv_profile=ltv_profile, force_revinfo=force_revinfo,
-                    vc_kwargs=vc_kwargs, key_usage_settings=key_usage_settings,
-                    embedded_sig=embedded_sig, skip_diff=no_diff_analysis
+                    ltv_profile=ltv_profile,
+                    force_revinfo=force_revinfo,
+                    vc_kwargs=vc_kwargs,
+                    key_usage_settings=key_usage_settings,
+                    embedded_sig=embedded_sig,
+                    skip_diff=no_diff_analysis,
                 ),
-                pretty_print=pretty_print, executive_summary=executive_summary
+                pretty_print=pretty_print,
+                executive_summary=executive_summary,
             )
             name = embedded_sig.field_name
 
@@ -619,8 +735,15 @@ def validate_signatures(ctx, infile, executive_summary,
 
 @signing.command(name='list', help='list signature fields')
 @click.argument('infile', type=click.File('rb'))
-@click.option('--skip-status', help='do not print status', required=False,
-              type=bool, is_flag=True, default=False, show_default=True)
+@click.option(
+    '--skip-status',
+    help='do not print status',
+    required=False,
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
 def list_sigfields(infile, skip_status):
 
     with pyhanko_exception_manager():
@@ -635,20 +758,42 @@ def list_sigfields(infile, skip_status):
 
 @signing.command(name='ltaupdate', help='update LTA timestamp')
 @click.argument('infile', type=click.File('r+b'))
-@click.option('--timestamp-url', help='URL for timestamp server',
-              required=True, type=str, default=None)
-@click.option('--retroactive-revinfo',
-              help='Treat revocation info as retroactively valid '
-                   '(i.e. ignore thisUpdate timestamp)',
-              type=bool, is_flag=True, default=False, show_default=True)
+@click.option(
+    '--timestamp-url',
+    help='URL for timestamp server',
+    required=True,
+    type=str,
+    default=None,
+)
+@click.option(
+    '--retroactive-revinfo',
+    help='Treat revocation info as retroactively valid '
+    '(i.e. ignore thisUpdate timestamp)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
 @trust_options
 @click.pass_context
-def lta_update(ctx, infile, validation_context, trust, trust_replace,
-               other_certs, timestamp_url, retroactive_revinfo):
+def lta_update(
+    ctx,
+    infile,
+    validation_context,
+    trust,
+    trust_replace,
+    other_certs,
+    timestamp_url,
+    retroactive_revinfo,
+):
     with pyhanko_exception_manager():
         vc_kwargs = _build_vc_kwargs(
-            ctx, validation_context, trust, trust_replace, other_certs,
-            retroactive_revinfo
+            ctx,
+            validation_context,
+            trust,
+            trust_replace,
+            other_certs,
+            retroactive_revinfo,
         )
         timestamper = HTTPTimeStamper(timestamp_url)
         r = PdfFileReader(infile)
@@ -660,28 +805,54 @@ def lta_update(ctx, infile, validation_context, trust, trust_replace,
 # TODO perhaps add an option here to fix the lack of a timestamp and/or
 #  warn if none is present
 
-@signing.command(name='ltvfix',
-                 help='add revocation information for a signature to the DSS')
+
+@signing.command(
+    name='ltvfix', help='add revocation information for a signature to the DSS'
+)
 @click.argument('infile', type=click.File('r+b'))
 @click.option('--field', help='name of the signature field', required=True)
-@click.option('--timestamp-url', help='URL for timestamp server',
-              required=False, type=str, default=None)
-@click.option('--apply-lta-timestamp',
-              help='Apply a document timestamp after adding revocation info.',
-              required=False, type=bool, default=False, is_flag=True,
-              show_default=True)
+@click.option(
+    '--timestamp-url',
+    help='URL for timestamp server',
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
+    '--apply-lta-timestamp',
+    help='Apply a document timestamp after adding revocation info.',
+    required=False,
+    type=bool,
+    default=False,
+    is_flag=True,
+    show_default=True,
+)
 @trust_options
 @click.pass_context
-def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
-            validation_context, trust_replace, trust, other_certs):
+def ltv_fix(
+    ctx,
+    infile,
+    field,
+    timestamp_url,
+    apply_lta_timestamp,
+    validation_context,
+    trust_replace,
+    trust,
+    other_certs,
+):
     if apply_lta_timestamp and not timestamp_url:
         raise click.ClickException(
             "Please specify a timestamp server using --timestamp-url."
         )
 
     vc_kwargs = _build_vc_kwargs(
-        ctx, validation_context, trust, trust_replace, other_certs,
-        retroactive_revinfo=False, allow_fetching=True
+        ctx,
+        validation_context,
+        trust,
+        trust_replace,
+        other_certs,
+        retroactive_revinfo=False,
+        allow_fetching=True,
     )
     vc_kwargs['revocation_mode'] = 'hard-fail'
     r = PdfFileReader(infile)
@@ -702,8 +873,10 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
     if apply_lta_timestamp:
         timestamper = HTTPTimeStamper(timestamp_url)
         signers.PdfTimeStamper(timestamper).timestamp_pdf(
-            IncrementalPdfFileWriter(output), signers.DEFAULT_MD,
-            ValidationContext(**vc_kwargs), in_place=True
+            IncrementalPdfFileWriter(output),
+            signers.DEFAULT_MD,
+            ValidationContext(**vc_kwargs),
+            in_place=True,
         )
 
 
@@ -712,59 +885,139 @@ def ltv_fix(ctx, infile, field, timestamp_url, apply_lta_timestamp,
 @click.option('--name', help='explicitly specify signer name', required=False)
 @click.option('--reason', help='reason for signing', required=False)
 @click.option('--location', help='location of signing', required=False)
-@click.option('--certify', help='add certification signature', required=False, 
-              default=False, is_flag=True, type=bool, show_default=True)
-@click.option('--existing-only', help='never create signature fields', 
-              required=False, default=False, is_flag=True, type=bool, 
-              show_default=True)
-@click.option('--timestamp-url', help='URL for timestamp server',
-              required=False, type=str, default=None)
-@click.option('--use-pades', help='sign PAdES-style [level B/B-T/B-LT/B-LTA]',
-              required=False, default=False, is_flag=True, type=bool,
-              show_default=True)
-@click.option('--use-pades-lta', help='produce PAdES-B-LTA signature',
-              required=False, default=False, is_flag=True, type=bool,
-              show_default=True)
-@click.option('--prefer-pss', is_flag=True, default=False, type=bool,
-              help='prefer RSASSA-PSS to PKCS#1 v1.5 padding, if available')
-@click.option('--with-validation-info', help='embed revocation info',
-              required=False, default=False, is_flag=True, type=bool,
-              show_default=True)
 @click.option(
-    '--style-name', help='stamp style name for signature appearance',
-    required=False, type=str
+    '--certify',
+    help='add certification signature',
+    required=False,
+    default=False,
+    is_flag=True,
+    type=bool,
+    show_default=True,
 )
 @click.option(
-    '--stamp-url', help='QR code URL to use in QR stamp style',
-    required=False, type=str
+    '--existing-only',
+    help='never create signature fields',
+    required=False,
+    default=False,
+    is_flag=True,
+    type=bool,
+    show_default=True,
+)
+@click.option(
+    '--timestamp-url',
+    help='URL for timestamp server',
+    required=False,
+    type=str,
+    default=None,
+)
+@click.option(
+    '--use-pades',
+    help='sign PAdES-style [level B/B-T/B-LT/B-LTA]',
+    required=False,
+    default=False,
+    is_flag=True,
+    type=bool,
+    show_default=True,
+)
+@click.option(
+    '--use-pades-lta',
+    help='produce PAdES-B-LTA signature',
+    required=False,
+    default=False,
+    is_flag=True,
+    type=bool,
+    show_default=True,
+)
+@click.option(
+    '--prefer-pss',
+    is_flag=True,
+    default=False,
+    type=bool,
+    help='prefer RSASSA-PSS to PKCS#1 v1.5 padding, if available',
+)
+@click.option(
+    '--with-validation-info',
+    help='embed revocation info',
+    required=False,
+    default=False,
+    is_flag=True,
+    type=bool,
+    show_default=True,
+)
+@click.option(
+    '--style-name',
+    help='stamp style name for signature appearance',
+    required=False,
+    type=str,
+)
+@click.option(
+    '--stamp-url',
+    help='QR code URL to use in QR stamp style',
+    required=False,
+    type=str,
 )
 @trust_options
 @click.option(
-    '--detach', type=bool, is_flag=True, default=False,
+    '--detach',
+    type=bool,
+    is_flag=True,
+    default=False,
     help=(
         'write only the signature CMS object to the output file; '
         'this can be used to sign non-PDF files'
-    )
+    ),
 )
 @click.option(
-    '--detach-pem', help='output PEM data instead of DER when using --detach',
-    type=bool, is_flag=True, default=False
+    '--detach-pem',
+    help='output PEM data instead of DER when using --detach',
+    type=bool,
+    is_flag=True,
+    default=False,
 )
-@click.option('--retroactive-revinfo',
-              help='Treat revocation info as retroactively valid '
-                   '(i.e. ignore thisUpdate timestamp)',
-              type=bool, is_flag=True, default=False, show_default=True)
-@click.option('--no-strict-syntax',
-              help='Attempt to ignore syntactical problems in the input file '
-                   'and enable signature creation in hybrid-reference files.'
-                   '(warning: such documents may behave in unexpected ways)',
-              type=bool, is_flag=True, default=False, show_default=True)
+@click.option(
+    '--retroactive-revinfo',
+    help='Treat revocation info as retroactively valid '
+    '(i.e. ignore thisUpdate timestamp)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+@click.option(
+    '--no-strict-syntax',
+    help='Attempt to ignore syntactical problems in the input file '
+    'and enable signature creation in hybrid-reference files.'
+    '(warning: such documents may behave in unexpected ways)',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
 @click.pass_context
-def addsig(ctx, field, name, reason, location, certify, existing_only,
-           timestamp_url, use_pades, use_pades_lta, with_validation_info,
-           validation_context, trust_replace, trust, other_certs,
-           style_name, stamp_url, prefer_pss, retroactive_revinfo,
-           detach, detach_pem, no_strict_syntax):
+def addsig(
+    ctx,
+    field,
+    name,
+    reason,
+    location,
+    certify,
+    existing_only,
+    timestamp_url,
+    use_pades,
+    use_pades_lta,
+    with_validation_info,
+    validation_context,
+    trust_replace,
+    trust,
+    other_certs,
+    style_name,
+    stamp_url,
+    prefer_pss,
+    retroactive_revinfo,
+    detach,
+    detach_pem,
+    no_strict_syntax,
+):
     ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
     ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
     ctx.obj[Ctx.PREFER_PSS] = prefer_pss
@@ -788,8 +1041,13 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
     key_usage = DEFAULT_SIGNER_KEY_USAGE
     if with_validation_info:
         vc_kwargs = _build_vc_kwargs(
-            ctx, validation_context, trust, trust_replace, other_certs,
-            retroactive_revinfo, allow_fetching=True
+            ctx,
+            validation_context,
+            trust,
+            trust_replace,
+            other_certs,
+            retroactive_revinfo,
+            allow_fetching=True,
         )
         vc = ValidationContext(**vc_kwargs)
         key_usage_sett = _get_key_usage_settings(ctx, validation_context)
@@ -801,15 +1059,17 @@ def addsig(ctx, field, name, reason, location, certify, existing_only,
         field, require_full_spec=False
     )
     ctx.obj[Ctx.SIG_META] = signers.PdfSignatureMetadata(
-        field_name=field_name, location=location, reason=reason, name=name,
-        certify=certify, subfilter=subfilter,
+        field_name=field_name,
+        location=location,
+        reason=reason,
+        name=name,
+        certify=certify,
+        subfilter=subfilter,
         embed_validation_info=with_validation_info,
-        validation_context=vc, signer_key_usage=key_usage,
+        validation_context=vc,
+        signer_key_usage=key_usage,
         use_pades_lta=use_pades_lta,
-        app_build_props=BuildProps(
-            name='pyHanko CLI',
-            revision=__version__
-        )
+        app_build_props=BuildProps(name='pyHanko CLI', revision=__version__),
     )
     ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
     ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)
@@ -830,8 +1090,10 @@ def _open_for_signing(infile_path, lenient, signer_cert=None, signer_key=None):
                 prompt='Password for encrypted file \'%s\': ' % infile_path
             )
             writer.encrypt(pdf_pass)
-        elif isinstance(sh, crypt.PubKeySecurityHandler) \
-                and signer_key is not None:
+        elif (
+            isinstance(sh, crypt.PubKeySecurityHandler)
+            and signer_key is not None
+        ):
             # attempt to decrypt using signer's credentials
             cred = crypt.SimpleEnvelopeKeyDecrypter(signer_cert, signer_key)
             logger.warning(
@@ -860,16 +1122,18 @@ def get_text_params(ctx):
     return text_params
 
 
-def detached_sig(signer: signers.Signer, infile_path, outfile,
-                 timestamp_url, use_pem):
+def detached_sig(
+    signer: signers.Signer, infile_path, outfile, timestamp_url, use_pem
+):
     coro = async_detached_sig(
         signer, infile_path, outfile, timestamp_url, use_pem
     )
     return asyncio.run(coro)
 
 
-async def async_detached_sig(signer: signers.Signer, infile_path, outfile,
-                             timestamp_url, use_pem):
+async def async_detached_sig(
+    signer: signers.Signer, infile_path, outfile, timestamp_url, use_pem
+):
 
     with pyhanko_exception_manager():
         if timestamp_url is not None:
@@ -882,10 +1146,12 @@ async def async_detached_sig(signer: signers.Signer, infile_path, outfile,
 
         with open(infile_path, 'rb') as inf:
             signature = await signer.async_sign_general_data(
-                inf, signers.DEFAULT_MD, timestamper=timestamper,
+                inf,
+                signers.DEFAULT_MD,
+                timestamper=timestamper,
                 signed_attr_settings=PdfCMSSignedAttributes(
                     signing_time=timestamp
-                )
+                ),
             )
 
         output_bytes = signature.dump()
@@ -896,35 +1162,65 @@ async def async_detached_sig(signer: signers.Signer, infile_path, outfile,
         outfile.write(output_bytes)
 
 
-def addsig_simple_signer(signer: signers.SimpleSigner, infile_path, outfile,
-                         timestamp_url, signature_meta, existing_fields_only,
-                         style, text_params, new_field_spec, lenient):
+def addsig_simple_signer(
+    signer: signers.SimpleSigner,
+    infile_path,
+    outfile,
+    timestamp_url,
+    signature_meta,
+    existing_fields_only,
+    style,
+    text_params,
+    new_field_spec,
+    lenient,
+):
     with pyhanko_exception_manager():
         if timestamp_url is not None:
             timestamper = HTTPTimeStamper(timestamp_url)
         else:
             timestamper = None
         writer = _open_for_signing(
-            infile_path, signer_cert=signer.signing_cert,
-            signer_key=signer.signing_key, lenient=lenient
+            infile_path,
+            signer_cert=signer.signing_cert,
+            signer_key=signer.signing_key,
+            lenient=lenient,
         )
 
         generic_sign_pdf(
-            writer=writer, outfile=outfile,
-            signature_meta=signature_meta, signer=signer,
-            timestamper=timestamper, style=style, new_field_spec=new_field_spec,
-            existing_fields_only=existing_fields_only, text_params=text_params
+            writer=writer,
+            outfile=outfile,
+            signature_meta=signature_meta,
+            signer=signer,
+            timestamper=timestamper,
+            style=style,
+            new_field_spec=new_field_spec,
+            existing_fields_only=existing_fields_only,
+            text_params=text_params,
         )
 
 
-def generic_sign_pdf(*, writer, outfile, signature_meta, signer, timestamper,
-                     style, new_field_spec, existing_fields_only, text_params):
+def generic_sign_pdf(
+    *,
+    writer,
+    outfile,
+    signature_meta,
+    signer,
+    timestamper,
+    style,
+    new_field_spec,
+    existing_fields_only,
+    text_params,
+):
     result = signers.PdfSigner(
-        signature_meta, signer=signer, timestamper=timestamper,
-        stamp_style=style, new_field_spec=new_field_spec
+        signature_meta,
+        signer=signer,
+        timestamper=timestamper,
+        stamp_style=style,
+        new_field_spec=new_field_spec,
     ).sign_pdf(
-        writer, existing_fields_only=existing_fields_only,
-        appearance_text_params=text_params
+        writer,
+        existing_fields_only=existing_fields_only,
+        appearance_text_params=text_params,
     )
 
     buf = result.getbuffer()
@@ -948,28 +1244,54 @@ def grab_certs(files):
 @addsig.command(name='pemder', help='read key material from PEM/DER files')
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
-@click.option('--key', help='file containing the private key (PEM/DER)', 
-              type=readable_file, required=False)
-@click.option('--cert', help='file containing the signer\'s certificate '
-              '(PEM/DER)', type=readable_file, required=False)
-@click.option('--chain', type=readable_file, multiple=True,
-              help='file(s) containing the chain of trust for the '
-                   'signer\'s certificate (PEM/DER). May be '
-                   'passed multiple times.')
-@click.option('--pemder-setup', type=str, required=False,
-              help='name of preconfigured PEM/DER profile (overrides all '
-                   'other options)')
+@click.option(
+    '--key',
+    help='file containing the private key (PEM/DER)',
+    type=readable_file,
+    required=False,
+)
+@click.option(
+    '--cert',
+    help='file containing the signer\'s certificate ' '(PEM/DER)',
+    type=readable_file,
+    required=False,
+)
+@click.option(
+    '--chain',
+    type=readable_file,
+    multiple=True,
+    help='file(s) containing the chain of trust for the '
+    'signer\'s certificate (PEM/DER). May be '
+    'passed multiple times.',
+)
+@click.option(
+    '--pemder-setup',
+    type=str,
+    required=False,
+    help='name of preconfigured PEM/DER profile (overrides all '
+    'other options)',
+)
 # TODO allow reading the passphrase from a specific file descriptor
 #  (for advanced scripting setups)
-@click.option('--passfile', help='file containing the passphrase '
-              'for the private key', required=False, type=click.File('r'),
-              show_default='stdin')
-@click.option('--no-pass',
-              help='assume the private key file is unencrypted',
-              type=bool, is_flag=True, default=False, show_default=True)
+@click.option(
+    '--passfile',
+    help='file containing the passphrase ' 'for the private key',
+    required=False,
+    type=click.File('r'),
+    show_default='stdin',
+)
+@click.option(
+    '--no-pass',
+    help='assume the private key file is unencrypted',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
 @click.pass_context
-def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup,
-                  passfile, no_pass):
+def addsig_pemder(
+    ctx, infile, outfile, key, cert, chain, pemder_setup, passfile, no_pass
+):
     signature_meta = ctx.obj[Ctx.SIG_META]
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
@@ -993,8 +1315,10 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup,
         )
     else:
         pemder_config = PemDerSignatureConfig(
-            key_file=key, cert_file=cert, other_certs=grab_certs(chain),
-            prefer_pss=ctx.obj[Ctx.PREFER_PSS]
+            key_file=key,
+            cert_file=cert,
+            other_certs=grab_certs(chain),
+            prefer_pss=ctx.obj[Ctx.PREFER_PSS],
         )
 
     if pemder_config.key_passphrase is not None:
@@ -1012,16 +1336,23 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup,
     signer = pemder_config.instantiate(provided_key_passphrase=passphrase)
     if ctx.obj[Ctx.SIG_META] is None:
         detached_sig(
-            signer, infile, outfile, timestamp_url=timestamp_url,
-            use_pem=ctx.obj[Ctx.DETACH_PEM]
+            signer,
+            infile,
+            outfile,
+            timestamp_url=timestamp_url,
+            use_pem=ctx.obj[Ctx.DETACH_PEM],
         )
     addsig_simple_signer(
-        signer, infile, outfile, timestamp_url=timestamp_url,
+        signer,
+        infile,
+        outfile,
+        timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE], text_params=get_text_params(ctx),
+        style=ctx.obj[Ctx.STAMP_STYLE],
+        text_params=get_text_params(ctx),
         new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-        lenient=ctx.obj.get(Ctx.LENIENT, False)
+        lenient=ctx.obj.get(Ctx.LENIENT, False),
     )
 
 
@@ -1029,17 +1360,28 @@ def addsig_pemder(ctx, infile, outfile, key, cert, chain, pemder_setup,
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
 @click.argument('pfx', type=readable_file, required=False)
-@click.option('--p12-setup', type=str, required=False,
-              help='name of preconfigured PKCS#12 profile (overrides all '
-                   'other options)')
-@click.option('--chain', type=readable_file, multiple=True,
-              help='PEM/DER file(s) containing extra certificates to embed '
-                   '(e.g. chain of trust not embedded in the PKCS#12 file)'
-                   'May be passed multiple times.')
-@click.option('--passfile', help='file containing the passphrase '
-                                 'for the PKCS#12 file.', required=False,
-              type=click.File('r'),
-              show_default='stdin')
+@click.option(
+    '--p12-setup',
+    type=str,
+    required=False,
+    help='name of preconfigured PKCS#12 profile (overrides all '
+    'other options)',
+)
+@click.option(
+    '--chain',
+    type=readable_file,
+    multiple=True,
+    help='PEM/DER file(s) containing extra certificates to embed '
+    '(e.g. chain of trust not embedded in the PKCS#12 file)'
+    'May be passed multiple times.',
+)
+@click.option(
+    '--passfile',
+    help='file containing the passphrase ' 'for the PKCS#12 file.',
+    required=False,
+    type=click.File('r'),
+    show_default='stdin',
+)
 @click.pass_context
 def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile, p12_setup):
     # TODO add sanity check in case the user gets the arg order wrong
@@ -1068,8 +1410,9 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile, p12_setup):
         )
     else:
         pkcs12_config = PKCS12SignatureConfig(
-            pfx_file=pfx, other_certs=grab_certs(chain),
-            prefer_pss=ctx.obj[Ctx.PREFER_PSS]
+            pfx_file=pfx,
+            other_certs=grab_certs(chain),
+            prefer_pss=ctx.obj[Ctx.PREFER_PSS],
         )
 
     if pkcs12_config.pfx_passphrase is not None:
@@ -1078,24 +1421,32 @@ def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile, p12_setup):
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
     elif pkcs12_config.prompt_passphrase:
-        passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ')\
-                        .encode('utf-8')
+        passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ').encode(
+            'utf-8'
+        )
     else:
         passphrase = None
 
     signer = pkcs12_config.instantiate(provided_pfx_passphrase=passphrase)
     if ctx.obj[Ctx.SIG_META] is None:
         detached_sig(
-            signer, infile, outfile, timestamp_url=timestamp_url,
-            use_pem=ctx.obj[Ctx.DETACH_PEM]
+            signer,
+            infile,
+            outfile,
+            timestamp_url=timestamp_url,
+            use_pem=ctx.obj[Ctx.DETACH_PEM],
         )
     addsig_simple_signer(
-        signer, infile, outfile, timestamp_url=timestamp_url,
+        signer,
+        infile,
+        outfile,
+        timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE], text_params=get_text_params(ctx),
+        style=ctx.obj[Ctx.STAMP_STYLE],
+        text_params=get_text_params(ctx),
         new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-        lenient=ctx.obj.get(Ctx.LENIENT, False)
+        lenient=ctx.obj.get(Ctx.LENIENT, False),
     )
 
 
@@ -1103,8 +1454,11 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
     with pyhanko_exception_manager():
         if ctx.obj[Ctx.SIG_META] is None:
             return detached_sig(
-                signer, infile, outfile, timestamp_url=timestamp_url,
-                use_pem=ctx.obj[Ctx.DETACH_PEM]
+                signer,
+                infile,
+                outfile,
+                timestamp_url=timestamp_url,
+                use_pem=ctx.obj[Ctx.DETACH_PEM],
             )
 
         if timestamp_url is not None:
@@ -1115,39 +1469,74 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
         generic_sign_pdf(
             writer=_open_for_signing(infile, ctx.obj.get(Ctx.LENIENT, False)),
             outfile=outfile,
-            signature_meta=ctx.obj[Ctx.SIG_META], signer=signer,
-            timestamper=timestamper, style=ctx.obj[Ctx.STAMP_STYLE],
+            signature_meta=ctx.obj[Ctx.SIG_META],
+            signer=signer,
+            timestamper=timestamper,
+            style=ctx.obj[Ctx.STAMP_STYLE],
             new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
             existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
-            text_params=get_text_params(ctx)
+            text_params=get_text_params(ctx),
         )
 
 
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
-@click.option('--lib', help='path to PKCS#11 module',
-              type=readable_file, required=False)
-@click.option('--token-label', help='PKCS#11 token label', type=str,
-              required=False)
-@click.option('--cert-label', help='certificate label', type=str,
-              required=False)
-@click.option('--raw-mechanism',
-              help='invoke raw PKCS#11 mechanism',
-              type=bool, is_flag=True, required=False)
+@click.option(
+    '--lib', help='path to PKCS#11 module', type=readable_file, required=False
+)
+@click.option(
+    '--token-label', help='PKCS#11 token label', type=str, required=False
+)
+@click.option(
+    '--cert-label', help='certificate label', type=str, required=False
+)
+@click.option(
+    '--raw-mechanism',
+    help='invoke raw PKCS#11 mechanism',
+    type=bool,
+    is_flag=True,
+    required=False,
+)
 @click.option('--key-label', help='key label', type=str, required=False)
-@click.option('--slot-no', help='specify PKCS#11 slot to use',
-              required=False, type=int, default=None)
-@click.option('--skip-user-pin', type=bool, show_default=True,
-              default=False, required=False, is_flag=True,
-              help='do not prompt for PIN (e.g. if the token has a PIN pad)')
-@click.option('--p11-setup', type=str, required=False,
-              help='name of preconfigured PKCS#11 profile (overrides all '
-                   'other options)')
+@click.option(
+    '--slot-no',
+    help='specify PKCS#11 slot to use',
+    required=False,
+    type=int,
+    default=None,
+)
+@click.option(
+    '--skip-user-pin',
+    type=bool,
+    show_default=True,
+    default=False,
+    required=False,
+    is_flag=True,
+    help='do not prompt for PIN (e.g. if the token has a PIN pad)',
+)
+@click.option(
+    '--p11-setup',
+    type=str,
+    required=False,
+    help='name of preconfigured PKCS#11 profile (overrides all '
+    'other options)',
+)
 @click.pass_context
-def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
-                  cert_label, key_label, slot_no, skip_user_pin, p11_setup,
-                  raw_mechanism):
+def addsig_pkcs11(
+    ctx,
+    infile,
+    outfile,
+    lib,
+    token_label,
+    cert_label,
+    key_label,
+    slot_no,
+    skip_user_pin,
+    p11_setup,
+    raw_mechanism,
+):
     from pyhanko.sign import pkcs11
+
     timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
 
     if p11_setup:
@@ -1169,16 +1558,20 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
             )
 
         pinentry_mode = (
-            PKCS11PinEntryMode.SKIP if skip_user_pin
+            PKCS11PinEntryMode.SKIP
+            if skip_user_pin
             else PKCS11PinEntryMode.PROMPT
         )
 
         pkcs11_config = PKCS11SignatureConfig(
-            module_path=lib, cert_label=cert_label, key_label=key_label,
-            slot_no=slot_no, token_criteria=TokenCriteria(token_label),
+            module_path=lib,
+            cert_label=cert_label,
+            key_label=key_label,
+            slot_no=slot_no,
+            token_criteria=TokenCriteria(token_label),
             # for now, DEFER requires a config file
             prompt_pin=pinentry_mode,
-            raw_mechanism=raw_mechanism
+            raw_mechanism=raw_mechanism,
         )
 
     pin = pkcs11_config.user_pin
@@ -1189,8 +1582,9 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
         if pin_env:
             pin = pin_env.strip()
 
-    if pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT \
-            and pin is None:  # pragma: nocover
+    if (
+        pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT and pin is None
+    ):  # pragma: nocover
         pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
     try:
         with pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin) as signer:
@@ -1205,16 +1599,32 @@ def addsig_pkcs11(ctx, infile, outfile, lib, token_label,
 
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.File('wb'))
-@click.option('--lib', help='path to libbeidpkcs11 library file',
-              type=readable_file, required=False)
-@click.option('--use-auth-cert', type=bool, show_default=True,
-              default=False, required=False, is_flag=True,
-              help='use Authentication cert instead')
-@click.option('--slot-no', help='specify PKCS#11 slot to use', 
-              required=False, type=int, default=None)
+@click.option(
+    '--lib',
+    help='path to libbeidpkcs11 library file',
+    type=readable_file,
+    required=False,
+)
+@click.option(
+    '--use-auth-cert',
+    type=bool,
+    show_default=True,
+    default=False,
+    required=False,
+    is_flag=True,
+    help='use Authentication cert instead',
+)
+@click.option(
+    '--slot-no',
+    help='specify PKCS#11 slot to use',
+    required=False,
+    type=int,
+    default=None,
+)
 @click.pass_context
 def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
     from pyhanko.sign import beid
+
     if not lib:
         cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
         if cli_config is None or cli_config.beid_module_path is None:
@@ -1242,7 +1652,7 @@ def _pkcs11_cmd(name, hlp, fun):
 
 PKCS11_COMMANDS = [
     ('pkcs11', 'use generic PKCS#11 device to sign', addsig_pkcs11),
-    ('beid', 'use Belgian eID to sign', addsig_beid)
+    ('beid', 'use Belgian eID to sign', addsig_beid),
 ]
 
 
@@ -1251,10 +1661,12 @@ def _process_pkcs11_commands():
         for args in PKCS11_COMMANDS:
             _pkcs11_cmd(*args)
     else:
+
         def _unavailable():
             raise click.ClickException(
                 "This subcommand requires python-pkcs11 to be installed."
             )
+
         for name, hlp, fun in PKCS11_COMMANDS:
             _pkcs11_cmd(name, hlp + ' [dependencies missing]', _unavailable)
 
@@ -1318,8 +1730,9 @@ def parse_field_location_spec(spec, require_full_spec=True):
 )
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
-@click.option('--field', metavar='PAGE/X1,Y1,X2,Y2/NAME', multiple=True,
-              required=True)
+@click.option(
+    '--field', metavar='PAGE/X1,Y1,X2,Y2/NAME', multiple=True, required=True
+)
 def add_sig_field(infile, outfile, field):
     with pyhanko_exception_manager():
         writer = IncrementalPdfFileWriter(infile)
@@ -1336,22 +1749,31 @@ def add_sig_field(infile, outfile, field):
 
 # TODO: text_params support
 
+
 @cli.command(help='stamp PDF files', name='stamp')
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
 @click.argument('x', type=int)
 @click.argument('y', type=int)
 @click.option(
-    '--style-name', help='stamp style name for stamp appearance',
-    required=False, type=str
+    '--style-name',
+    help='stamp style name for stamp appearance',
+    required=False,
+    type=str,
 )
 @click.option(
-    '--page', help='page on which the stamp should be applied',
-    required=False, type=int, default=1, show_default=True
+    '--page',
+    help='page on which the stamp should be applied',
+    required=False,
+    type=int,
+    default=1,
+    show_default=True,
 )
 @click.option(
-    '--stamp-url', help='QR code URL to use in QR stamp style',
-    required=False, type=str
+    '--stamp-url',
+    help='QR code URL to use in QR stamp style',
+    required=False,
+    type=str,
 )
 @click.pass_context
 def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
@@ -1360,8 +1782,13 @@ def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
         page_ix = _index_page(page)
         if stamp_url:
             qr_stamp_file(
-                infile, outfile, stamp_style, dest_page=page_ix, x=x, y=y,
-                url=stamp_url
+                infile,
+                outfile,
+                stamp_style,
+                dest_page=page_ix,
+                x=x,
+                y=y,
+                url=stamp_url,
             )
         else:
             text_stamp_file(
@@ -1373,14 +1800,18 @@ def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
 @click.option(
-    '--password', help='password to encrypt the file with', required=False,
-    type=str
+    '--password',
+    help='password to encrypt the file with',
+    required=False,
+    type=str,
 )
 @click.option(
-    '--recipient', required=False, multiple=True,
+    '--recipient',
+    required=False,
+    multiple=True,
     help='certificate(s) corresponding to entities that '
-         'can decrypt the output file',
-    type=click.Path(readable=True, dir_okay=False)
+    'can decrypt the output file',
+    type=click.Path(readable=True, dir_okay=False),
 )
 def encrypt_file(infile, outfile, password, recipient):
     if password and recipient:
@@ -1392,9 +1823,7 @@ def encrypt_file(infile, outfile, password, recipient):
 
     recipient_certs = None
     if recipient:
-        recipient_certs = list(
-            load_certs_from_pemder(cert_files=recipient)
-        )
+        recipient_certs = list(load_certs_from_pemder(cert_files=recipient))
 
     with pyhanko_exception_manager():
         with open(infile, 'rb') as inf:
@@ -1410,15 +1839,21 @@ def encrypt_file(infile, outfile, password, recipient):
                 w.write(outf)
 
 
-@cli.group(help='decrypt PDF files (any standard PDF encryption scheme)',
-           name='decrypt')
+@cli.group(
+    help='decrypt PDF files (any standard PDF encryption scheme)',
+    name='decrypt',
+)
 def decrypt():
     pass
 
 
 decrypt_force_flag = click.option(
-    '--force', help='ignore access restrictions (use at your own risk)',
-    required=False, type=bool, is_flag=True, default=False
+    '--force',
+    help='ignore access restrictions (use at your own risk)',
+    required=False,
+    type=bool,
+    is_flag=True,
+    default=False,
 )
 
 
@@ -1426,8 +1861,10 @@ decrypt_force_flag = click.option(
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
 @click.option(
-    '--password', help='password to decrypt the file with', required=False,
-    type=str
+    '--password',
+    help='password to decrypt the file with',
+    required=False,
+    type=str,
 )
 @decrypt_force_flag
 def decrypt_with_password(infile, outfile, password, force):
@@ -1455,16 +1892,33 @@ def decrypt_with_password(infile, outfile, password, force):
 @decrypt.command(help='decrypt using private key (PEM/DER)', name='pemder')
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
-@click.option('--key', type=readable_file, required=True,
-              help='file containing the recipient\'s private key (PEM/DER)')
-@click.option('--cert', help='file containing the recipient\'s certificate '
-                             '(PEM/DER)', type=readable_file, required=True)
-@click.option('--passfile', required=False, type=click.File('rb'),
-              help='file containing the passphrase for the private key',
-              show_default='stdin')
-@click.option('--no-pass',
-              help='assume the private key file is unencrypted',
-              type=bool, is_flag=True, default=False, show_default=True)
+@click.option(
+    '--key',
+    type=readable_file,
+    required=True,
+    help='file containing the recipient\'s private key (PEM/DER)',
+)
+@click.option(
+    '--cert',
+    help='file containing the recipient\'s certificate ' '(PEM/DER)',
+    type=readable_file,
+    required=True,
+)
+@click.option(
+    '--passfile',
+    required=False,
+    type=click.File('rb'),
+    help='file containing the passphrase for the private key',
+    show_default='stdin',
+)
+@click.option(
+    '--no-pass',
+    help='assume the private key file is unencrypted',
+    type=bool,
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
 @decrypt_force_flag
 def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
     if passfile is not None:
@@ -1484,8 +1938,9 @@ def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
     _decrypt_pubkey(sedk, infile, outfile, force)
 
 
-def _decrypt_pubkey(sedk: crypt.SimpleEnvelopeKeyDecrypter, infile, outfile,
-                    force):
+def _decrypt_pubkey(
+    sedk: crypt.SimpleEnvelopeKeyDecrypter, infile, outfile, force
+):
     with pyhanko_exception_manager():
         with open(infile, 'rb') as inf:
             r = PdfFileReader(inf)
@@ -1515,9 +1970,13 @@ def _decrypt_pubkey(sedk: crypt.SimpleEnvelopeKeyDecrypter, infile, outfile,
 @click.argument('infile', type=readable_file)
 @click.argument('outfile', type=click.Path(writable=True, dir_okay=False))
 @click.argument('pfx', type=readable_file)
-@click.option('--passfile', required=False, type=click.File('r'),
-              help='file containing the passphrase for the PKCS#12 file',
-              show_default='stdin')
+@click.option(
+    '--passfile',
+    required=False,
+    type=click.File('r'),
+    help='file containing the passphrase for the PKCS#12 file',
+    show_default='stdin',
+)
 @decrypt_force_flag
 def decrypt_with_pkcs12(infile, outfile, pfx, passfile, force):
     if passfile is None:

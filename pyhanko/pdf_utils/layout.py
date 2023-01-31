@@ -7,9 +7,14 @@ from fractions import Fraction
 from typing import Optional
 
 __all__ = [
-    'LayoutError', 'BoxSpecificationError', 'BoxConstraints',
-    'AxisAlignment', 'Margins', 'InnerScaling',
-    'SimpleBoxLayoutRule', 'Positioning'
+    'LayoutError',
+    'BoxSpecificationError',
+    'BoxConstraints',
+    'AxisAlignment',
+    'Margins',
+    'InnerScaling',
+    'SimpleBoxLayoutRule',
+    'Positioning',
 ]
 
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
@@ -27,6 +32,7 @@ class LayoutError(ValueError):
 
 class BoxSpecificationError(LayoutError):
     """Raised when a box constraint is over/underspecified."""
+
     def __init__(self, msg: Optional[str] = None):
         super().__init__(msg=msg or "box constraint is over/underspecified")
 
@@ -200,7 +206,7 @@ class InnerScaling(enum.Enum):
                 'none': InnerScaling.NO_SCALING,
                 'stretch-fill': InnerScaling.STRETCH_FILL,
                 'stretch-to-fit': InnerScaling.STRETCH_TO_FIT,
-                'shrink-to-fit': InnerScaling.SHRINK_TO_FIT
+                'shrink-to-fit': InnerScaling.SHRINK_TO_FIT,
             }[config_str.lower()]
         except KeyError:
             raise ConfigurationError(
@@ -243,7 +249,7 @@ class AxisAlignment(enum.Enum):
             return {
                 'left': AxisAlignment.ALIGN_MIN,
                 'mid': AxisAlignment.ALIGN_MID,
-                'right': AxisAlignment.ALIGN_MAX
+                'right': AxisAlignment.ALIGN_MAX,
             }[align_str.lower()]
         except KeyError:
             raise ConfigurationError(
@@ -266,7 +272,7 @@ class AxisAlignment(enum.Enum):
             return {
                 'bottom': AxisAlignment.ALIGN_MIN,
                 'mid': AxisAlignment.ALIGN_MID,
-                'top': AxisAlignment.ALIGN_MAX
+                'top': AxisAlignment.ALIGN_MAX,
             }[align_str.lower()]
         except KeyError:
             raise ConfigurationError(
@@ -278,8 +284,9 @@ class AxisAlignment(enum.Enum):
     def flipped(self):
         return _alignment_opposites[self]
 
-    def align(self, container_len: int, inner_len: int,
-              pre_margin, post_margin) -> int:
+    def align(
+        self, container_len: int, inner_len: int, pre_margin, post_margin
+    ) -> int:
 
         effective_max_len = Margins.effective(
             'length', container_len, pre_margin, post_margin
@@ -310,7 +317,7 @@ class AxisAlignment(enum.Enum):
 _alignment_opposites = {
     AxisAlignment.ALIGN_MID: AxisAlignment.ALIGN_MID,
     AxisAlignment.ALIGN_MIN: AxisAlignment.ALIGN_MAX,
-    AxisAlignment.ALIGN_MAX: AxisAlignment.ALIGN_MIN
+    AxisAlignment.ALIGN_MAX: AxisAlignment.ALIGN_MIN,
 }
 
 
@@ -342,12 +349,20 @@ class Positioning(ConfigurableMixin):
             to this :class:`.Positioning`.
         """
         return b'%g 0 0 %g %g %g cm' % (
-            self.x_scale, self.y_scale, self.x_pos, self.y_pos
+            self.x_scale,
+            self.y_scale,
+            self.x_pos,
+            self.y_pos,
         )
 
 
-def _aln_width(alignment: AxisAlignment, container_box: BoxConstraints,
-               inner_nat_width: int, pre_margin: int, post_margin: int):
+def _aln_width(
+    alignment: AxisAlignment,
+    container_box: BoxConstraints,
+    inner_nat_width: int,
+    pre_margin: int,
+    post_margin: int,
+):
     if container_box.width_defined:
         return alignment.align(
             container_box.width, inner_nat_width, pre_margin, post_margin
@@ -357,8 +372,13 @@ def _aln_width(alignment: AxisAlignment, container_box: BoxConstraints,
         return pre_margin
 
 
-def _aln_height(alignment: AxisAlignment, container_box: BoxConstraints,
-                inner_nat_height: int, pre_margin: int, post_margin: int):
+def _aln_height(
+    alignment: AxisAlignment,
+    container_box: BoxConstraints,
+    inner_nat_height: int,
+    pre_margin: int,
+    post_margin: int,
+):
     if container_box.height_defined:
         return alignment.align(
             container_box.height, inner_nat_height, pre_margin, post_margin
@@ -481,18 +501,24 @@ class SimpleBoxLayoutRule(ConfigurableMixin):
 
         scaling = config_dict.get('inner_content_scaling', None)
         if scaling is not None:
-            config_dict['inner_content_scaling'] \
-                = InnerScaling.from_config(scaling)
+            config_dict['inner_content_scaling'] = InnerScaling.from_config(
+                scaling
+            )
 
     def substitute_margins(self, new_margins: Margins) -> 'SimpleBoxLayoutRule':
         return SimpleBoxLayoutRule(
-            x_align=self.x_align, y_align=self.y_align,
+            x_align=self.x_align,
+            y_align=self.y_align,
             margins=new_margins,
-            inner_content_scaling=self.inner_content_scaling
+            inner_content_scaling=self.inner_content_scaling,
         )
 
-    def fit(self, container_box: BoxConstraints,
-            inner_nat_width: int, inner_nat_height: int) -> Positioning:
+    def fit(
+        self,
+        container_box: BoxConstraints,
+        inner_nat_width: int,
+        inner_nat_height: int,
+    ) -> Positioning:
         """
         Position and possibly scale a box within a container, according
         to this layout rule.
@@ -511,15 +537,20 @@ class SimpleBoxLayoutRule(ConfigurableMixin):
         margins = self.margins
         scaling = self.inner_content_scaling
         x_scale = y_scale = 1
-        if scaling != InnerScaling.NO_SCALING and \
-                container_box.width_defined and container_box.height_defined:
+        if (
+            scaling != InnerScaling.NO_SCALING
+            and container_box.width_defined
+            and container_box.height_defined
+        ):
             eff_width = margins.effective_width(container_box.width)
             eff_height = margins.effective_height(container_box.height)
 
-            x_scale = (eff_width / inner_nat_width) \
-                if inner_nat_width != 0 else 1
-            y_scale = (eff_height / inner_nat_height) \
-                if inner_nat_height != 0 else 1
+            x_scale = (
+                (eff_width / inner_nat_width) if inner_nat_width != 0 else 1
+            )
+            y_scale = (
+                (eff_height / inner_nat_height) if inner_nat_height != 0 else 1
+            )
             if scaling == InnerScaling.STRETCH_TO_FIT:
                 x_scale = y_scale = min(x_scale, y_scale)
             elif scaling == InnerScaling.SHRINK_TO_FIT:
@@ -528,14 +559,18 @@ class SimpleBoxLayoutRule(ConfigurableMixin):
                 x_scale = y_scale = min(x_scale, y_scale, 1)
 
         x_pos = _aln_width(
-            self.x_align, container_box,
+            self.x_align,
+            container_box,
             inner_nat_width * x_scale,
-            margins.left, margins.right
+            margins.left,
+            margins.right,
         )
         y_pos = _aln_height(
-            self.y_align, container_box,
+            self.y_align,
+            container_box,
             inner_nat_height * y_scale,
-            margins.bottom, margins.top
+            margins.bottom,
+            margins.top,
         )
         return Positioning(
             x_pos=x_pos, y_pos=y_pos, x_scale=x_scale, y_scale=y_scale

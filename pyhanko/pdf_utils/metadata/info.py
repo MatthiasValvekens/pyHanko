@@ -13,9 +13,12 @@ __all__ = ['update_info_dict', 'view_from_info_dict']
 logger = logging.getLogger(__name__)
 
 
-def _write_meta_string(dictionary: generic.DictionaryObject,
-                       key: str, meta_str: model.MetaString,
-                       existing_only: bool) -> bool:
+def _write_meta_string(
+    dictionary: generic.DictionaryObject,
+    key: str,
+    meta_str: model.MetaString,
+    existing_only: bool,
+) -> bool:
 
     if isinstance(meta_str, misc.StringWithLanguage):
         # don't bother with embedding language codes in strings,
@@ -37,9 +40,12 @@ def _write_meta_string(dictionary: generic.DictionaryObject,
     return mod
 
 
-def _write_meta_date(dictionary: generic.DictionaryObject,
-                     key: str, meta_date: Union[datetime, str, None],
-                     existing_only: bool) -> bool:
+def _write_meta_date(
+    dictionary: generic.DictionaryObject,
+    key: str,
+    meta_date: Union[datetime, str, None],
+    existing_only: bool,
+) -> bool:
     if isinstance(meta_date, datetime):
         value = meta_date
     elif meta_date == 'now':
@@ -54,20 +60,22 @@ def _write_meta_date(dictionary: generic.DictionaryObject,
         return False
 
 
-def update_info_dict(meta: model.DocumentMetadata,
-                     info: generic.DictionaryObject,
-                     only_update_existing: bool = False) -> bool:
+def update_info_dict(
+    meta: model.DocumentMetadata,
+    info: generic.DictionaryObject,
+    only_update_existing: bool = False,
+) -> bool:
 
     mod = _write_meta_date(
-        info, "/ModDate", meta.last_modified,
-        existing_only=only_update_existing
+        info, "/ModDate", meta.last_modified, existing_only=only_update_existing
     )
     producer = model.VENDOR
     try:
         producer_string = info['/Producer']
         if producer not in producer_string:
-            producer_string = \
-                generic.TextStringObject(f"{producer_string}; {producer}")
+            producer_string = generic.TextStringObject(
+                f"{producer_string}; {producer}"
+            )
             mod = True
     except (KeyError, TypeError):
         producer_string = generic.TextStringObject(producer)
@@ -79,24 +87,19 @@ def update_info_dict(meta: model.DocumentMetadata,
         return mod
 
     mod |= _write_meta_string(
-        info, "/Title", meta.title,
-        existing_only=only_update_existing
+        info, "/Title", meta.title, existing_only=only_update_existing
     )
     mod |= _write_meta_string(
-        info, "/Author", meta.author,
-        existing_only=only_update_existing
+        info, "/Author", meta.author, existing_only=only_update_existing
     )
     mod |= _write_meta_string(
-        info, "/Subject", meta.subject,
-        existing_only=only_update_existing
+        info, "/Subject", meta.subject, existing_only=only_update_existing
     )
     mod |= _write_meta_string(
-        info, "/Creator", meta.creator,
-        existing_only=only_update_existing
+        info, "/Creator", meta.creator, existing_only=only_update_existing
     )
     mod |= _write_meta_date(
-        info, "/CreationDate", meta.created,
-        existing_only=only_update_existing
+        info, "/CreationDate", meta.created, existing_only=only_update_existing
     )
 
     if meta.keywords:
@@ -106,29 +109,33 @@ def update_info_dict(meta: model.DocumentMetadata,
     return mod
 
 
-def _read_date_from_dict(info_dict: generic.DictionaryObject,
-                         key: str) -> Optional[datetime]:
+def _read_date_from_dict(
+    info_dict: generic.DictionaryObject, key: str
+) -> Optional[datetime]:
     try:
         date_str = info_dict[key]
     except KeyError:
         return None
 
     try:
-        if isinstance(date_str,
-                      (generic.TextStringObject, generic.ByteStringObject)):
+        if isinstance(
+            date_str, (generic.TextStringObject, generic.ByteStringObject)
+        ):
             return generic.parse_pdf_date(date_str)
     except misc.PdfReadError:
         pass
 
     logger.warning(
         "Key %s in info dict has value %s, which is not a valid date string",
-        key, repr(date_str)
+        key,
+        repr(date_str),
     )
     return None
 
 
-def view_from_info_dict(info_dict: generic.DictionaryObject) \
-        -> model.DocumentMetadata:
+def view_from_info_dict(
+    info_dict: generic.DictionaryObject,
+) -> model.DocumentMetadata:
     kwargs = {}
     for s_entry in ('title', 'author', 'subject', 'creator'):
         try:

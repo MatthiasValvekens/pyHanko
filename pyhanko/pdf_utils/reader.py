@@ -40,8 +40,11 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    'PdfFileReader', 'HistoricalResolver', 'parse_catalog_version',
-    'RawPdfPath', 'process_data_at_eof',
+    'PdfFileReader',
+    'HistoricalResolver',
+    'parse_catalog_version',
+    'RawPdfPath',
+    'process_data_at_eof',
 ]
 
 header_regex = re.compile(b'%PDF-(\\d).(\\d)')
@@ -86,6 +89,7 @@ def read_next_end_line(stream):
             stream.seek(-2, os.SEEK_CUR)
         # if using CR+LF, go back 2 bytes, else 1
         stream.seek(2 if crlf else 1, os.SEEK_CUR)
+
     return bytes(reversed(tuple(_build())))
 
 
@@ -165,6 +169,7 @@ class PdfFileReader(PdfHandler):
     def _xmp_meta_view(self) -> Optional[DocumentMetadata]:
         try:
             from pyhanko.pdf_utils.metadata import xmp_xml
+
             meta_obj = self.root['/Metadata']
         except (ImportError, KeyError):
             return
@@ -240,7 +245,8 @@ class PdfFileReader(PdfHandler):
             stream_data.seek(obj_start)
             try:
                 obj = generic.read_object(
-                    stream_data, generic.Reference(idnum, 0, self),
+                    stream_data,
+                    generic.Reference(idnum, 0, self),
                 )
             except (misc.PdfStreamError, misc.PdfReadError) as e:
                 # Stream object cannot be read. Normally, a critical error, but
@@ -318,8 +324,14 @@ class PdfFileReader(PdfHandler):
         """
         return self.xrefs.total_revisions
 
-    def get_object(self, ref, revision=None, never_decrypt=False,
-                   transparent_decrypt=True, as_metadata_stream=False):
+    def get_object(
+        self,
+        ref,
+        revision=None,
+        never_decrypt=False,
+        transparent_decrypt=True,
+        as_metadata_stream=False,
+    ):
         """
         Read an object from the input stream.
 
@@ -357,8 +369,10 @@ class PdfFileReader(PdfHandler):
             obj = self.cache_get_indirect_object(ref.generation, ref.idnum)
             if obj is None:
                 obj = self._read_object(
-                    ref, self.xrefs[ref], never_decrypt=never_decrypt,
-                    as_metadata_stream=as_metadata_stream
+                    ref,
+                    self.xrefs[ref],
+                    never_decrypt=never_decrypt,
+                    as_metadata_stream=as_metadata_stream,
                 )
                 # cache before (potential) decrypting
                 self.cache_indirect_object(ref.generation, ref.idnum, obj)
@@ -371,18 +385,22 @@ class PdfFileReader(PdfHandler):
                     f'in history at revision {revision}.'
                 )
             obj = self._read_object(
-                ref, marker, never_decrypt=never_decrypt,
-                as_metadata_stream=as_metadata_stream
+                ref,
+                marker,
+                never_decrypt=never_decrypt,
+                as_metadata_stream=as_metadata_stream,
             )
 
-        if transparent_decrypt and \
-                isinstance(obj, generic.DecryptedObjectProxy):
+        if transparent_decrypt and isinstance(
+            obj, generic.DecryptedObjectProxy
+        ):
             obj = obj.decrypted
 
         return obj
 
-    def _read_object(self, ref, marker, never_decrypt=False,
-                     as_metadata_stream=False):
+    def _read_object(
+        self, ref, marker, never_decrypt=False, as_metadata_stream=False
+    ):
         if marker is None:
             if self.strict:
                 raise PdfStrictReadError(
@@ -415,8 +433,9 @@ class PdfFileReader(PdfHandler):
                     f"does not match actual ({idnum} {generation})."
                 )
             retval = generic.read_object(
-                self.stream, generic.Reference(idnum, generation, self),
-                as_metadata_stream=as_metadata_stream
+                self.stream,
+                generic.Reference(idnum, generation, self),
+                as_metadata_stream=as_metadata_stream,
             )
             generic.read_non_whitespace(self.stream, seek_back=True)
             obj_data_end = self.stream.tell() - 1
@@ -432,8 +451,11 @@ class PdfFileReader(PdfHandler):
 
         # override encryption is used for the /Encrypt dictionary
         # and objects inside object streams should also remain unencrypted
-        if not never_decrypt and not isinstance(marker, ObjStreamRef) \
-                and self.encrypted:
+        if (
+            not never_decrypt
+            and not isinstance(marker, ObjStreamRef)
+            and self.encrypted
+        ):
             sh: SecurityHandler = self.security_handler
             # make sure the object that lands in the cache is always
             # a proxy object
@@ -478,8 +500,9 @@ class PdfFileReader(PdfHandler):
         # Read the xref table
         xref_builder = XRefBuilder(
             handler=self,
-            stream=stream, strict=self.strict,
-            last_startxref=last_startxref
+            stream=stream,
+            strict=self.strict,
+            last_startxref=last_startxref,
         )
         xref_sections = xref_builder.read_xrefs()
         xref_cache = XRefCache(self, xref_sections)
@@ -588,13 +611,15 @@ class PdfFileReader(PdfHandler):
         from pyhanko.sign.fields import enumerate_sig_fields
 
         from ..sign.validation import EmbeddedPdfSignature
+
         sig_fields = enumerate_sig_fields(self, filled_status=True)
 
         result = sorted(
             (
                 EmbeddedPdfSignature(self, sig_field, fq_name)
                 for fq_name, sig_obj, sig_field in sig_fields
-            ), key=lambda emb: emb.signed_revision
+            ),
+            key=lambda emb: emb.signed_revision,
         )
         self._embedded_signatures = result
         return result
@@ -608,7 +633,8 @@ class PdfFileReader(PdfHandler):
             see :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`.
         """
         return [
-            emb_sig for emb_sig in self.embedded_signatures
+            emb_sig
+            for emb_sig in self.embedded_signatures
             if emb_sig.sig_object_type == '/Sig'
         ]
 
@@ -621,7 +647,8 @@ class PdfFileReader(PdfHandler):
             see :class:`~pyhanko.sign.validation.EmbeddedPdfSignature`.
         """
         return [
-            emb_sig for emb_sig in self.embedded_signatures
+            emb_sig
+            for emb_sig in self.embedded_signatures
             if emb_sig.sig_object_type == '/DocTimeStamp'
         ]
 
@@ -650,15 +677,13 @@ class RawPdfPath:
         return hash(self._tag())
 
     def __eq__(self, other):
-        return (
-            isinstance(other, RawPdfPath)
-            and (self is other or self._tag() == other._tag())
+        return isinstance(other, RawPdfPath) and (
+            self is other or self._tag() == other._tag()
         )
 
-    def walk_nodes(self, from_obj, transparent_dereference=True) \
-            -> Generator[
-                Tuple[Union[int, str, None], generic.PdfObject], None, None
-            ]:
+    def walk_nodes(
+        self, from_obj, transparent_dereference=True
+    ) -> Generator[Tuple[Union[int, str, None], generic.PdfObject], None, None]:
         current_obj = from_obj
         elem = None
         for ix, entry in enumerate(self.path):
@@ -669,8 +694,9 @@ class RawPdfPath:
             if transparent_dereference:
                 yield elem, current_obj
             if isinstance(entry, str):
-                if isinstance(current_obj,
-                              (generic.DictionaryObject, TrailerDictionary)):
+                if isinstance(
+                    current_obj, (generic.DictionaryObject, TrailerDictionary)
+                ):
                     try:
                         current_obj = current_obj.raw_get(entry)
                         elem = entry
@@ -696,8 +722,10 @@ class RawPdfPath:
             raise misc.PdfReadError(
                 f"Type error in path {self} at position {ix}."
             )
-        if isinstance(current_obj, generic.IndirectObject) \
-                and transparent_dereference:
+        if (
+            isinstance(current_obj, generic.IndirectObject)
+            and transparent_dereference
+        ):
             yield elem, current_obj.get_object()
         else:
             yield elem, current_obj
@@ -797,8 +825,9 @@ class HistoricalResolver(PdfHandler):
     def trailer_view(self) -> generic.DictionaryObject:
         return self._trailer
 
-    def get_object(self, ref: generic.Reference,
-                   as_metadata_stream: bool = False):
+    def get_object(
+        self, ref: generic.Reference, as_metadata_stream: bool = False
+    ):
         cache = self.cache
         try:
             obj = cache[ref]
@@ -816,13 +845,16 @@ class HistoricalResolver(PdfHandler):
                 last_change = None
             if last_change is not None and last_change <= revision:
                 obj = reader.get_object(
-                    ref, transparent_decrypt=False,
-                    as_metadata_stream=as_metadata_stream
+                    ref,
+                    transparent_decrypt=False,
+                    as_metadata_stream=as_metadata_stream,
                 )
             else:
                 obj = reader.get_object(
-                    ref, revision, transparent_decrypt=False,
-                    as_metadata_stream=as_metadata_stream
+                    ref,
+                    revision,
+                    transparent_decrypt=False,
+                    as_metadata_stream=as_metadata_stream,
                 )
 
             # replace all PDF handler references in the object with references
@@ -857,7 +889,7 @@ class HistoricalResolver(PdfHandler):
         container_ref = generic.Reference(
             idnum=container_ref.idnum,
             generation=container_ref.generation,
-            pdf=self
+            pdf=self,
         )
 
         if isinstance(obj, generic.DecryptedObjectProxy):
@@ -867,8 +899,7 @@ class HistoricalResolver(PdfHandler):
             #  encryption (the Encrypt dictionary itself, signature contents,
             #  etc.).
             result = generic.DecryptedObjectProxy(
-                raw_object=raw_obj_replacement,
-                handler=obj.handler
+                raw_object=raw_obj_replacement, handler=obj.handler
             )
             raw_obj_replacement.container_ref = container_ref
             return result
@@ -878,17 +909,16 @@ class HistoricalResolver(PdfHandler):
                 idnum=obj.idnum, generation=obj.generation, pdf=self
             )
         elif isinstance(obj, generic.StreamObject):
-            result = generic.StreamObject({
-                k: self._subsume_object(v) for k, v in obj.items()
-            }, encoded_data=obj.encoded_data)
-        elif isinstance(obj, generic.DictionaryObject):
-            result = generic.DictionaryObject({
-                k: self._subsume_object(v) for k, v in obj.items()
-            })
-        elif isinstance(obj, generic.ArrayObject):
-            result = generic.ArrayObject(
-                self._subsume_object(v) for v in obj
+            result = generic.StreamObject(
+                {k: self._subsume_object(v) for k, v in obj.items()},
+                encoded_data=obj.encoded_data,
             )
+        elif isinstance(obj, generic.DictionaryObject):
+            result = generic.DictionaryObject(
+                {k: self._subsume_object(v) for k, v in obj.items()}
+            )
+        elif isinstance(obj, generic.ArrayObject):
+            result = generic.ArrayObject(self._subsume_object(v) for v in obj)
         else:
             # in this case, we _never_ set the container_ref, and just
             # reuse the object from the "parent" reader.
@@ -998,10 +1028,16 @@ class HistoricalResolver(PdfHandler):
         # internally, _compute_paths_to_refs works with singly linked lists
         # to avoid having to create & destroy lots of list objects
         # We flatten everything when we're done
-        def _compute_paths_to_refs(obj, cur_path: misc.ConsList,
-                                   seen_in_path: misc.ConsList, *,
-                                   is_page_tree, page_tree_objs,
-                                   is_struct_tree, struct_tree_objs):
+        def _compute_paths_to_refs(
+            obj,
+            cur_path: misc.ConsList,
+            seen_in_path: misc.ConsList,
+            *,
+            is_page_tree,
+            page_tree_objs,
+            is_struct_tree,
+            struct_tree_objs,
+        ):
 
             # optimisation: page tree gets special treatment
             # to prevent unnecessary paths from being generated when the
@@ -1034,9 +1070,13 @@ class HistoricalResolver(PdfHandler):
                         continue
 
                     _compute_paths_to_refs(
-                        v, cur_path.cons(k), seen_in_path,
-                        is_page_tree=is_page_tree or (
-                            cur_path.head == '/Root' and k == '/Pages'
+                        v,
+                        cur_path.cons(k),
+                        seen_in_path,
+                        is_page_tree=is_page_tree
+                        or (
+                            cur_path.head == '/Root'
+                            and k == '/Pages'
                             and cur_path.tail == misc.ConsList.empty()
                         ),
                         page_tree_objs=page_tree_objs,
@@ -1047,20 +1087,24 @@ class HistoricalResolver(PdfHandler):
                         # purposes so they don't add any extra information
                         # (in the sense that recursing into them accomplishes
                         # nothing)
-                        is_struct_tree=is_struct_tree or (
-                            cur_path.head == '/StructTreeRoot' and k == '/K'
+                        is_struct_tree=is_struct_tree
+                        or (
+                            cur_path.head == '/StructTreeRoot'
+                            and k == '/K'
                             and cur_path.tail == misc.ConsList.sing('/Root')
                         ),
-                        struct_tree_objs=struct_tree_objs
+                        struct_tree_objs=struct_tree_objs,
                     )
             elif isinstance(obj, generic.ArrayObject):
                 for ix, v in enumerate(obj):
                     _compute_paths_to_refs(
-                        v, cur_path.cons(ix), seen_in_path,
+                        v,
+                        cur_path.cons(ix),
+                        seen_in_path,
                         is_page_tree=is_page_tree,
                         page_tree_objs=page_tree_objs,
                         is_struct_tree=is_struct_tree,
-                        struct_tree_objs=struct_tree_objs
+                        struct_tree_objs=struct_tree_objs,
                     )
 
         def _collect_page_tree_refs(pages_obj):
@@ -1080,7 +1124,7 @@ class HistoricalResolver(PdfHandler):
 
             # if there's only one child, /K need not be an array
             if not isinstance(children, generic.ArrayObject):
-                children = children,
+                children = (children,)
 
             for child in children:
                 child_ref = None
@@ -1126,9 +1170,13 @@ class HistoricalResolver(PdfHandler):
         except KeyError:
             pass
         _compute_paths_to_refs(
-            self.trailer_view, misc.ConsList.empty(), misc.ConsList.empty(),
-            is_page_tree=False, page_tree_objs=page_tree_nodes,
-            is_struct_tree=False, struct_tree_objs=struct_tree_nodes
+            self.trailer_view,
+            misc.ConsList.empty(),
+            misc.ConsList.empty(),
+            is_page_tree=False,
+            page_tree_objs=page_tree_nodes,
+            is_struct_tree=False,
+            struct_tree_objs=struct_tree_nodes,
         )
 
         self._indirect_object_access_cache = {

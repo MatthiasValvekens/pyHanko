@@ -14,18 +14,37 @@ from pyhanko import __version__
 from pyhanko.pdf_utils.misc import StringWithLanguage
 
 __all__ = [
-    'DocumentMetadata', 'VENDOR', 'MetaString',
-    'ExpandedName', 'Qualifiers', 'XmpValue',
-    'XmpStructure', 'XmpArrayType', 'XmpArray',
+    'DocumentMetadata',
+    'VENDOR',
+    'MetaString',
+    'ExpandedName',
+    'Qualifiers',
+    'XmpValue',
+    'XmpStructure',
+    'XmpArrayType',
+    'XmpArray',
     'NS',
     'XML_LANG',
-    'RDF_RDF', 'RDF_SEQ', 'RDF_BAG', 'RDF_ALT', 'RDF_LI',
-    'RDF_VALUE', 'RDF_RESOURCE', 'RDF_PARSE_TYPE', 'RDF_ABOUT',
+    'RDF_RDF',
+    'RDF_SEQ',
+    'RDF_BAG',
+    'RDF_ALT',
+    'RDF_LI',
+    'RDF_VALUE',
+    'RDF_RESOURCE',
+    'RDF_PARSE_TYPE',
+    'RDF_ABOUT',
     'RDF_DESCRIPTION',
-    'DC_TITLE', 'DC_CREATOR', 'DC_DESCRIPTION',
-    'PDF_PRODUCER', 'PDF_KEYWORDS',
-    'X_XMPMETA', 'X_XMPTK',
-    'XMP_CREATORTOOL', 'XMP_CREATEDATE', 'XMP_MODDATE'
+    'DC_TITLE',
+    'DC_CREATOR',
+    'DC_DESCRIPTION',
+    'PDF_PRODUCER',
+    'PDF_KEYWORDS',
+    'X_XMPMETA',
+    'X_XMPTK',
+    'XMP_CREATORTOOL',
+    'XMP_CREATEDATE',
+    'XMP_MODDATE',
 ]
 
 VENDOR = 'pyHanko ' + __version__
@@ -115,7 +134,7 @@ class DocumentMetadata:
             keywords=list(self.keywords or base.keywords),
             creator=self.creator or base.creator,
             created=self.created or base.created,
-            last_modified=self.last_modified
+            last_modified=self.last_modified,
         )
 
 
@@ -155,7 +174,7 @@ NS = {
     'pdfaSchema': 'http://www.aiim.org/pdfa/ns/schema#',
     'pdfaExtension': 'http://www.aiim.org/pdfa/ns/extension/',
     'pdfaProperty': 'http://www.aiim.org/pdfa/ns/property#',
-    'x': 'adobe:ns:meta/'
+    'x': 'adobe:ns:meta/',
 }
 """
 Known namespaces and their customary prefixes.
@@ -323,8 +342,9 @@ class Qualifiers:
     def __getitem__(self, item):
         return self._quals[item]
 
-    def iter_quals(self, with_lang: bool = True) \
-            -> Iterable[Tuple[ExpandedName, 'XmpValue']]:
+    def iter_quals(
+        self, with_lang: bool = True
+    ) -> Iterable[Tuple[ExpandedName, 'XmpValue']]:
         """
         Iterate over all qualifiers.
 
@@ -360,9 +380,11 @@ class Qualifiers:
         return f"Qualifiers({q!r})"
 
     def __eq__(self, other):
-        return isinstance(other, Qualifiers) \
-                and self._lang == other._lang \
-                and self._quals == other._quals
+        return (
+            isinstance(other, Qualifiers)
+            and self._lang == other._lang
+            and self._quals == other._quals
+        )
 
 
 @dataclass(frozen=True)
@@ -430,8 +452,7 @@ class XmpStructure:
         return f"XmpStructure({self._fields!r})"
 
     def __eq__(self, other):
-        return isinstance(other, XmpStructure) \
-                and self._fields == other._fields
+        return isinstance(other, XmpStructure) and self._fields == other._fields
 
 
 @enum.unique
@@ -515,11 +536,14 @@ class XmpArray:
         return cls(XmpArrayType.ALTERNATIVE, list(lst))
 
     def __eq__(self, other):
-        if not isinstance(other, XmpArray) or \
-                self.array_type != other.array_type:
+        if (
+            not isinstance(other, XmpArray)
+            or self.array_type != other.array_type
+        ):
             return False
         if self.array_type == XmpArrayType.UNORDERED:
-            return all(e in self.entries for e in other.entries) and \
-                    all(e in other.entries for e in self.entries)
+            return all(e in self.entries for e in other.entries) and all(
+                e in other.entries for e in self.entries
+            )
         else:
             return self.entries == other.entries

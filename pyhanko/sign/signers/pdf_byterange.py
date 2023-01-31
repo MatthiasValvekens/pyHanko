@@ -26,8 +26,11 @@ __all__ = [
     # part of PdfCMSEmbedder / PdfSigner protocol
     'PreparedByteRangeDigest',
     # PDF-level signature containers
-    'PdfByteRangeDigest', 'PdfSignedData', 'SignatureObject',
-    'DocumentTimestamp', 'BuildProps'
+    'PdfByteRangeDigest',
+    'PdfSignedData',
+    'SignatureObject',
+    'DocumentTimestamp',
+    'BuildProps',
 ]
 
 
@@ -68,8 +71,10 @@ class SigByteRangeObject(generic.PdfObject):
         if self._range_object_offset is None:
             self._range_object_offset = stream.tell()
         string_repr = "[ %08d %08d %08d %08d ]" % (
-            0, self.first_region_len,
-            self.second_region_offset, self.second_region_len,
+            0,
+            self.first_region_len,
+            self.second_region_offset,
+            self.second_region_len,
         )
         stream.write(string_repr.encode('ascii'))
 
@@ -134,8 +139,9 @@ class PreparedByteRangeDigest:
     ``/ByteRange``.
     """
 
-    def fill_with_cms(self, output: IO,
-                      cms_data: Union[bytes, cms.ContentInfo]):
+    def fill_with_cms(
+        self, output: IO, cms_data: Union[bytes, cms.ContentInfo]
+    ):
         """
         Write a DER-encoded CMS object to the reserved region indicated
         by :attr:`reserved_region_start` and :attr:`reserved_region_end` in the
@@ -231,8 +237,14 @@ class PdfByteRangeDigest(generic.DictionaryObject):
         byte_range = SigByteRangeObject()
         self[pdf_name('/ByteRange')] = self.byte_range = byte_range
 
-    def fill(self, writer: BasePdfFileWriter, md_algorithm,
-             in_place=False, output=None, chunk_size=misc.DEFAULT_CHUNK_SIZE):
+    def fill(
+        self,
+        writer: BasePdfFileWriter,
+        md_algorithm,
+        in_place=False,
+        output=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    ):
         """
         Generator coroutine that handles the document hash computation and
         the actual filling of the placeholder data.
@@ -290,12 +302,13 @@ class PdfByteRangeDigest(generic.DictionaryObject):
             output.seek(0)
             misc.chunked_digest(temp_buffer, output, md, max_read=sig_start)
             output.seek(sig_end)
-            misc.chunked_digest(temp_buffer, output, md, max_read=eof-sig_end)
+            misc.chunked_digest(temp_buffer, output, md, max_read=eof - sig_end)
 
         digest_value = md.finalize()
         prepared_br_digest = PreparedByteRangeDigest(
             document_digest=digest_value,
-            reserved_region_start=sig_start, reserved_region_end=sig_end
+            reserved_region_start=sig_start,
+            reserved_region_end=sig_end,
         )
         cms_data = yield prepared_br_digest, output
         yield prepared_br_digest.fill_with_cms(output, cms_data)
@@ -322,15 +335,21 @@ class PdfSignedData(PdfByteRangeDigest):
             in the DER-encoded version of the CMS object.
     """
 
-    def __init__(self, obj_type,
-                 subfilter: SigSeedSubFilter = constants.DEFAULT_SIG_SUBFILTER,
-                 timestamp: datetime = None, bytes_reserved=None):
+    def __init__(
+        self,
+        obj_type,
+        subfilter: SigSeedSubFilter = constants.DEFAULT_SIG_SUBFILTER,
+        timestamp: datetime = None,
+        bytes_reserved=None,
+    ):
         super().__init__(bytes_reserved=bytes_reserved)
-        self.update({
-            pdf_name('/Type'): obj_type,
-            pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
-            pdf_name('/SubFilter'): subfilter.value,
-        })
+        self.update(
+            {
+                pdf_name('/Type'): obj_type,
+                pdf_name('/Filter'): pdf_name('/Adobe.PPKLite'),
+                pdf_name('/SubFilter'): subfilter.value,
+            }
+        )
 
         if timestamp is not None:
             self[pdf_name('/M')] = pdf_date(timestamp)
@@ -364,9 +383,9 @@ class BuildProps:
         :return:
             A PDF dictionary.
         """
-        props = generic.DictionaryObject({
-            pdf_name("/Name"): pdf_name("/" + self.name)
-        })
+        props = generic.DictionaryObject(
+            {pdf_name("/Name"): pdf_name("/" + self.name)}
+        )
         if self.revision:
             props['/REx'] = generic.TextStringObject(self.revision)
         return props
@@ -397,14 +416,21 @@ class SignatureObject(PdfSignedData):
         Optional signing reason. May be restricted by seed values.
     """
 
-    def __init__(self, timestamp: Optional[datetime] = None,
-                 subfilter: SigSeedSubFilter = constants.DEFAULT_SIG_SUBFILTER,
-                 name=None, location=None, reason=None,
-                 app_build_props: Optional[BuildProps] = None,
-                 bytes_reserved=None):
+    def __init__(
+        self,
+        timestamp: Optional[datetime] = None,
+        subfilter: SigSeedSubFilter = constants.DEFAULT_SIG_SUBFILTER,
+        name=None,
+        location=None,
+        reason=None,
+        app_build_props: Optional[BuildProps] = None,
+        bytes_reserved=None,
+    ):
         super().__init__(
-            obj_type=pdf_name('/Sig'), subfilter=subfilter,
-            timestamp=timestamp, bytes_reserved=bytes_reserved
+            obj_type=pdf_name('/Sig'),
+            subfilter=subfilter,
+            timestamp=timestamp,
+            bytes_reserved=bytes_reserved,
         )
 
         if name:
@@ -414,9 +440,9 @@ class SignatureObject(PdfSignedData):
         if reason:
             self[pdf_name('/Reason')] = pdf_string(reason)
         if app_build_props:
-            self[pdf_name('/Prop_Build')] = generic.DictionaryObject({
-                pdf_name("/App"): app_build_props.as_pdf_object()
-            })
+            self[pdf_name('/Prop_Build')] = generic.DictionaryObject(
+                {pdf_name("/App"): app_build_props.as_pdf_object()}
+            )
 
 
 class DocumentTimestamp(PdfSignedData):
@@ -437,7 +463,7 @@ class DocumentTimestamp(PdfSignedData):
         super().__init__(
             obj_type=pdf_name('/DocTimeStamp'),
             subfilter=SigSeedSubFilter.ETSI_RFC3161,
-            bytes_reserved=bytes_reserved
+            bytes_reserved=bytes_reserved,
         )
 
         # use of Name/Location/Reason is discouraged in document timestamps by

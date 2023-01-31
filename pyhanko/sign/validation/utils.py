@@ -29,24 +29,29 @@ from .errors import DisallowedAlgorithmError, SignatureValidationError
 
 DEFAULT_WEAK_HASH_ALGORITHMS = frozenset({'sha1', 'md5', 'md2'})
 
-DEFAULT_ALGORITHM_USAGE_POLICY = \
-    DisallowWeakAlgorithmsPolicy(DEFAULT_WEAK_HASH_ALGORITHMS)
+DEFAULT_ALGORITHM_USAGE_POLICY = DisallowWeakAlgorithmsPolicy(
+    DEFAULT_WEAK_HASH_ALGORITHMS
+)
 
 
 def validate_raw(
-        signature: bytes, signed_data: bytes, cert: x509.Certificate,
-        signature_algorithm: cms.SignedDigestAlgorithm,
-        md_algorithm: str, prehashed=False,
-        algorithm_policy: Optional[AlgorithmUsagePolicy]
-        = DEFAULT_ALGORITHM_USAGE_POLICY,
-        time_indic: Optional[datetime] = None):
+    signature: bytes,
+    signed_data: bytes,
+    cert: x509.Certificate,
+    signature_algorithm: cms.SignedDigestAlgorithm,
+    md_algorithm: str,
+    prehashed=False,
+    algorithm_policy: Optional[
+        AlgorithmUsagePolicy
+    ] = DEFAULT_ALGORITHM_USAGE_POLICY,
+    time_indic: Optional[datetime] = None,
+):
     """
     Validate a raw signature. Internal API.
     """
     if algorithm_policy is not None:
         sig_algo_allowed = algorithm_policy.signature_algorithm_allowed(
-            signature_algorithm, moment=time_indic,
-            public_key=cert.public_key
+            signature_algorithm, moment=time_indic, public_key=cert.public_key
         )
         if not sig_algo_allowed:
             msg = (
@@ -68,20 +73,20 @@ def validate_raw(
         sig_hash_algo = None
 
     hash_algo_obj = cms.DigestAlgorithm({'algorithm': md_algorithm})
-    if sig_hash_algo is not None \
-            and sig_hash_algo.dump() != hash_algo_obj.dump():
+    if (
+        sig_hash_algo is not None
+        and sig_hash_algo.dump() != hash_algo_obj.dump()
+    ):
         raise SignatureValidationError(
             f"Digest algorithm {hash_algo_obj['algorithm'].native} does not "
             f"match value implied by signature algorithm "
             f"{signature_algorithm['algorithm'].native}",
-            ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
+            ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE,
         )
 
     verify_md = get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
 
-    pub_key = serialization.load_der_public_key(
-        cert.public_key.dump()
-    )
+    pub_key = serialization.load_der_public_key(cert.public_key.dump())
 
     sig_algo = signature_algorithm.signature_algo
     if sig_algo == 'rsassa_pkcs1v15':
@@ -90,8 +95,7 @@ def validate_raw(
     elif sig_algo == 'rsassa_pss':
         assert isinstance(pub_key, RSAPublicKey)
         pss_padding, hash_algo = process_pss_params(
-            signature_algorithm['parameters'], md_algorithm,
-            prehashed=prehashed
+            signature_algorithm['parameters'], md_algorithm, prehashed=prehashed
         )
         pub_key.verify(signature, signed_data, pss_padding, hash_algo)
     elif sig_algo == 'dsa':

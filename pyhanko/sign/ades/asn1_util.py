@@ -11,7 +11,8 @@ def as_set_of(asn1_type: Type):
     )
 
 
-def register_cms_attribute(dotted_oid: str, readable_name: str,
-                           asn1_type: Type):
+def register_cms_attribute(
+    dotted_oid: str, readable_name: str, asn1_type: Type
+):
     cms.CMSAttributeType._map[dotted_oid] = readable_name
     cms.CMSAttribute._oid_specs[readable_name] = as_set_of(asn1_type)

@@ -56,10 +56,17 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             See :class:`.SecurityHandler` for some background on the
             way pyHanko interprets this value.
     """
+
     _handler: 'PubKeySecurityHandler' = None
 
-    def __init__(self, *, recipients=None, acts_as_default=False,
-                 encrypt_metadata=True, **kwargs):
+    def __init__(
+        self,
+        *,
+        recipients=None,
+        acts_as_default=False,
+        encrypt_metadata=True,
+        **kwargs,
+    ):
         self.recipients = recipients
         self.acts_as_default = acts_as_default
         self.encrypt_metadata = encrypt_metadata
@@ -77,8 +84,12 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         super()._set_security_handler(handler)
         self._shared_key = self._recp_key_seed = None
 
-    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS,
-                       ignore_key_usage=False):
+    def add_recipients(
+        self,
+        certs: List[x509.Certificate],
+        perms=ALL_PERMS,
+        ignore_key_usage=False,
+    ):
         """
         Add recipients to this crypt filter.
         This always adds one full CMS object to the Recipients array
@@ -108,9 +119,11 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
                 "before authenticating is not possible."
             )
         new_cms = construct_recipient_cms(
-            certs, self._recp_key_seed, as_signed(perms),
+            certs,
+            self._recp_key_seed,
+            as_signed(perms),
             include_permissions=self.acts_as_default,
-            ignore_key_usage=ignore_key_usage
+            ignore_key_usage=ignore_key_usage,
         )
         self.recipients.append(new_cms)
 
@@ -145,22 +158,22 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             md.update(recp.dump())
         if not self.encrypt_metadata and self.acts_as_default:
             md.update(b'\xff\xff\xff\xff')
-        return md.digest()[:self.keylen]
+        return md.digest()[: self.keylen]
 
     def as_pdf_object(self):
         result = super().as_pdf_object()
         result['/Length'] = generic.NumberObject(self.keylen * 8)
         recipients = generic.ArrayObject(
-            generic.ByteStringObject(recp.dump())
-            for recp in self.recipients
+            generic.ByteStringObject(recp.dump()) for recp in self.recipients
         )
         if self.acts_as_default:
             result['/Recipients'] = recipients
         else:
             # non-default crypt filters can only have one recipient object
             result['/Recipients'] = recipients[0]
-        result['/EncryptMetadata'] \
-            = generic.BooleanObject(self.encrypt_metadata)
+        result['/EncryptMetadata'] = generic.BooleanObject(
+            self.encrypt_metadata
+        )
         return result
 
 
@@ -168,6 +181,7 @@ class PubKeyAESCryptFilter(PubKeyCryptFilter, AESCryptFilterMixin):
     """
     AES crypt filter for public key security handlers.
     """
+
     pass
 
 
@@ -175,6 +189,7 @@ class PubKeyRC4CryptFilter(PubKeyCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for public key security handlers.
     """
+
     pass
 
 
@@ -202,23 +217,31 @@ Name of the identity crypt filter.
 
 def _pubkey_rc4_config(keylen, recipients=None, encrypt_metadata=True):
     return CryptFilterConfiguration(
-        {DEFAULT_CRYPT_FILTER: PubKeyRC4CryptFilter(
-            keylen=keylen, acts_as_default=True, recipients=recipients,
-            encrypt_metadata=encrypt_metadata
-        )},
+        {
+            DEFAULT_CRYPT_FILTER: PubKeyRC4CryptFilter(
+                keylen=keylen,
+                acts_as_default=True,
+                recipients=recipients,
+                encrypt_metadata=encrypt_metadata,
+            )
+        },
         default_stream_filter=DEFAULT_CRYPT_FILTER,
-        default_string_filter=DEFAULT_CRYPT_FILTER
+        default_string_filter=DEFAULT_CRYPT_FILTER,
     )
 
 
 def _pubkey_aes_config(keylen, recipients=None, encrypt_metadata=True):
     return CryptFilterConfiguration(
-        {DEFAULT_CRYPT_FILTER: PubKeyAESCryptFilter(
-            keylen=keylen, acts_as_default=True, recipients=recipients,
-            encrypt_metadata=encrypt_metadata
-        )},
+        {
+            DEFAULT_CRYPT_FILTER: PubKeyAESCryptFilter(
+                keylen=keylen,
+                acts_as_default=True,
+                recipients=recipients,
+                encrypt_metadata=encrypt_metadata,
+            )
+        },
         default_stream_filter=DEFAULT_CRYPT_FILTER,
-        default_string_filter=DEFAULT_CRYPT_FILTER
+        default_string_filter=DEFAULT_CRYPT_FILTER,
     )
 
 
@@ -233,19 +256,22 @@ class PubKeyAdbeSubFilter(enum.Enum):
     Enum describing the different subfilters that can be used for public key
     encryption in the PDF specification.
     """
+
     S3 = generic.NameObject('/adbe.pkcs7.s3')
     S4 = generic.NameObject('/adbe.pkcs7.s4')
     S5 = generic.NameObject('/adbe.pkcs7.s5')
 
 
-def construct_envelope_content(seed: bytes, perms: int,
-                               include_permissions=True):
+def construct_envelope_content(
+    seed: bytes, perms: int, include_permissions=True
+):
     assert len(seed) == 20
     return seed + (struct.pack('<i', perms) if include_permissions else b'')
 
 
-def _recipient_info(envelope_key: bytes, cert: x509.Certificate,
-                    ignore_key_usage=False):
+def _recipient_info(
+    envelope_key: bytes, cert: x509.Certificate, ignore_key_usage=False
+):
     pubkey = cert.public_key
     pubkey_algo_info: PublicKeyAlgorithm = pubkey['algorithm']
     algorithm_name = pubkey_algo_info['algorithm'].native
@@ -265,9 +291,7 @@ def _recipient_info(envelope_key: bytes, cert: x509.Certificate,
                 f"not have the 'key_encipherment' key usage bit set."
             )
 
-    pub_key = serialization.load_der_public_key(
-        cert.public_key.dump()
-    )
+    pub_key = serialization.load_der_public_key(cert.public_key.dump())
 
     assert isinstance(pub_key, RSAPublicKey)
     # having support for OAEP here would be cool, but I have it on good
@@ -276,26 +300,37 @@ def _recipient_info(envelope_key: bytes, cert: x509.Certificate,
     encrypted_data = pub_key.encrypt(envelope_key, padding=PKCS1v15())
 
     # TODO support subjectKeyIdentifier here (requiring version 2)
-    rid = cms.RecipientIdentifier({
-        'issuer_and_serial_number': cms.IssuerAndSerialNumber({
-            'issuer': cert.issuer, 'serial_number': cert.serial_number
-        })
-    })
-    algo = cms.KeyEncryptionAlgorithm({
-        'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_pkcs1v15')
-    })
-    return cms.RecipientInfo({
-        'ktri': cms.KeyTransRecipientInfo({
-            'version': 0, 'rid': rid, 'key_encryption_algorithm': algo,
-            'encrypted_key': encrypted_data
-        })
-    })
+    rid = cms.RecipientIdentifier(
+        {
+            'issuer_and_serial_number': cms.IssuerAndSerialNumber(
+                {'issuer': cert.issuer, 'serial_number': cert.serial_number}
+            )
+        }
+    )
+    algo = cms.KeyEncryptionAlgorithm(
+        {'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_pkcs1v15')}
+    )
+    return cms.RecipientInfo(
+        {
+            'ktri': cms.KeyTransRecipientInfo(
+                {
+                    'version': 0,
+                    'rid': rid,
+                    'key_encryption_algorithm': algo,
+                    'encrypted_key': encrypted_data,
+                }
+            )
+        }
+    )
 
 
-def construct_recipient_cms(certificates: List[x509.Certificate], seed: bytes,
-                            perms: int, include_permissions=True,
-                            ignore_key_usage=False) \
-        -> cms.ContentInfo:
+def construct_recipient_cms(
+    certificates: List[x509.Certificate],
+    seed: bytes,
+    perms: int,
+    include_permissions=True,
+    ignore_key_usage=False,
+) -> cms.ContentInfo:
 
     # The content of the generated ContentInfo object
     # is an object of type EnvelopedData, containing a 20 byte seed (+ perms).
@@ -328,28 +363,37 @@ def construct_recipient_cms(certificates: List[x509.Certificate], seed: bytes,
         for cert in certificates
     ]
 
-    algo = cms.EncryptionAlgorithm({
-        'algorithm': algos.EncryptionAlgorithmId('aes256_cbc'),
-        'parameters': iv
-    })
-    encrypted_content_info = cms.EncryptedContentInfo({
-        'content_type': cms.ContentType('data'),
-        'content_encryption_algorithm': algo,
-        'encrypted_content': encrypted_envelope_content
-    })
+    algo = cms.EncryptionAlgorithm(
+        {
+            'algorithm': algos.EncryptionAlgorithmId('aes256_cbc'),
+            'parameters': iv,
+        }
+    )
+    encrypted_content_info = cms.EncryptedContentInfo(
+        {
+            'content_type': cms.ContentType('data'),
+            'content_encryption_algorithm': algo,
+            'encrypted_content': encrypted_envelope_content,
+        }
+    )
 
     # version 0 because no originatorInfo, no attribute certs
     # and all recipientinfo structures have version 0 (and aren't' pwri)
-    enveloped_data = cms.EnvelopedData({
-        'version': 0, 'recipient_infos': rec_infos,
-        'encrypted_content_info': encrypted_content_info
-    })
+    enveloped_data = cms.EnvelopedData(
+        {
+            'version': 0,
+            'recipient_infos': rec_infos,
+            'encrypted_content_info': encrypted_content_info,
+        }
+    )
 
     # finally, package up the whole thing into a ContentInfo object
-    return cms.ContentInfo({
-        'content_type': cms.ContentType('enveloped_data'),
-        'content': enveloped_data
-    })
+    return cms.ContentInfo(
+        {
+            'content_type': cms.ContentType('enveloped_data'),
+            'content': enveloped_data,
+        }
+    )
 
 
 # TODO implement a PKCS#11 version of this interface
@@ -367,8 +411,9 @@ class EnvelopeKeyDecrypter:
     def __init__(self, cert: x509.Certificate):
         self.cert = cert
 
-    def decrypt(self, encrypted_key: bytes,
-                algo_params: cms.KeyEncryptionAlgorithm) -> bytes:
+    def decrypt(
+        self, encrypted_key: bytes, algo_params: cms.KeyEncryptionAlgorithm
+    ) -> bytes:
         """
         Invoke the actual key decryption algorithm.
 
@@ -442,6 +487,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
                 key_file, passphrase=key_passphrase
             )
             from pyhanko.sign.general import load_cert_from_pemder
+
             cert = load_cert_from_pemder(cert_file)
         except (IOError, ValueError, TypeError) as e:  # pragma: nocover
             logger.error('Could not load cryptographic material', exc_info=e)
@@ -472,6 +518,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
                 _translate_pyca_cryptography_cert_to_asn1,
                 _translate_pyca_cryptography_key_to_asn1,
             )
+
             cert = _translate_pyca_cryptography_cert_to_asn1(cert)
             private_key = _translate_pyca_cryptography_key_to_asn1(private_key)
         except (IOError, ValueError, TypeError) as e:  # pragma: nocover
@@ -480,8 +527,9 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
 
         return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=private_key)
 
-    def decrypt(self, encrypted_key: bytes,
-                algo_params: cms.KeyEncryptionAlgorithm) -> bytes:
+    def decrypt(
+        self, encrypted_key: bytes, algo_params: cms.KeyEncryptionAlgorithm
+    ) -> bytes:
         """
         Decrypt the payload using RSA with PKCS#1 v1.5 padding.
         Other schemes are not (currently) supported by this implementation.
@@ -509,9 +557,9 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
 SerialisableCredential.register(SimpleEnvelopeKeyDecrypter)
 
 
-def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
-                                 decrypter: EnvelopeKeyDecrypter) \
-        -> Tuple[Optional[bytes], Optional[int]]:
+def read_seed_from_recipient_cms(
+    recipient_cms: cms.ContentInfo, decrypter: EnvelopeKeyDecrypter
+) -> Tuple[Optional[bytes], Optional[int]]:
     content_type = recipient_cms['content_type'].native
     if content_type != 'enveloped_data':
         raise misc.PdfReadError(
@@ -534,15 +582,17 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
             )
         issuer = issuer_and_serial['issuer']
         serial = issuer_and_serial['serial_number'].native
-        if decrypter.cert.issuer == issuer and \
-                decrypter.cert.serial_number == serial:
+        if (
+            decrypter.cert.issuer == issuer
+            and decrypter.cert.serial_number == serial
+        ):
             # we have a match!
             # use the decrypter passed in to decrypt the envelope key
             # for this recipient.
             try:
                 envelope_key = decrypter.decrypt(
                     ktri['encrypted_key'].native,
-                    ktri['key_encryption_algorithm']
+                    ktri['key_encryption_algorithm'],
                 )
             except Exception as e:
                 raise misc.PdfReadError("Failed to decrypt envelope key") from e
@@ -553,10 +603,12 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
     # we have the envelope key
     # next up: decrypting the envelope
 
-    algo: cms.EncryptionAlgorithm = \
-        encrypted_content_info['content_encryption_algorithm']
-    encrypted_envelope_content = \
-        encrypted_content_info['encrypted_content'].native
+    algo: cms.EncryptionAlgorithm = encrypted_content_info[
+        'content_encryption_algorithm'
+    ]
+    encrypted_envelope_content = encrypted_content_info[
+        'encrypted_content'
+    ].native
 
     # the spec says that we have to support rc4 (<=256 bits),
     # des, triple des, rc2 (<=128 bits)
@@ -575,11 +627,13 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
         # doesn't offer implementations.
         # (DES and 3DES have fortunately gone out of style, but some libraries
         #  still rely on RC2)
-        with_iv.update({
-            'des': symmetric.des_cbc_pkcs5_decrypt,
-            'tripledes': symmetric.tripledes_cbc_pkcs5_decrypt,
-            'rc2': symmetric.rc2_cbc_pkcs5_decrypt
-        })
+        with_iv.update(
+            {
+                'des': symmetric.des_cbc_pkcs5_decrypt,
+                'tripledes': symmetric.tripledes_cbc_pkcs5_decrypt,
+                'rc2': symmetric.rc2_cbc_pkcs5_decrypt,
+            }
+        )
     except ImportError:  # pragma: nocover
         if cipher_name in ('des', 'tripledes', 'rc2'):
             raise NotImplementedError(
@@ -591,9 +645,7 @@ def read_seed_from_recipient_cms(recipient_cms: cms.ContentInfo,
         iv = algo.encryption_iv
         content = decryption_fun(envelope_key, encrypted_envelope_content, iv)
     elif cipher_name == 'rc4':
-        content = rc4_encrypt(
-            envelope_key, encrypted_envelope_content
-        )
+        content = rc4_encrypt(envelope_key, encrypted_envelope_content)
     else:
         raise misc.PdfReadError(
             f"Cipher {cipher_name} is not allowed in PDF 2.0."
@@ -615,7 +667,7 @@ def _read_generic_pubkey_cf_info(cfdict: generic.DictionaryObject):
             "PubKey CF dictionary must have /Recipients key"
         )
     if isinstance(recipients, generic.ByteStringObject):
-        recipients = recipients,
+        recipients = (recipients,)
     recipient_objs = [
         cms.ContentInfo.load(x.original_bytes) for x in recipients
     ]
@@ -626,22 +678,25 @@ def _read_generic_pubkey_cf_info(cfdict: generic.DictionaryObject):
 def _build_legacy_pubkey_cf(cfdict, acts_as_default):
     keylen_bits = cfdict.get('/Length', 40)
     return PubKeyRC4CryptFilter(
-        keylen=keylen_bits // 8, acts_as_default=acts_as_default,
-        **_read_generic_pubkey_cf_info(cfdict)
+        keylen=keylen_bits // 8,
+        acts_as_default=acts_as_default,
+        **_read_generic_pubkey_cf_info(cfdict),
     )
 
 
 def _build_aes128_pubkey_cf(cfdict, acts_as_default):
     return PubKeyAESCryptFilter(
-        keylen=16, acts_as_default=acts_as_default,
-        ** _read_generic_pubkey_cf_info(cfdict)
+        keylen=16,
+        acts_as_default=acts_as_default,
+        **_read_generic_pubkey_cf_info(cfdict),
     )
 
 
 def _build_aes256_pubkey_cf(cfdict, acts_as_default):
     return PubKeyAESCryptFilter(
-        keylen=32, acts_as_default=acts_as_default,
-        ** _read_generic_pubkey_cf_info(cfdict)
+        keylen=32,
+        acts_as_default=acts_as_default,
+        **_read_generic_pubkey_cf_info(cfdict),
     )
 
 
@@ -658,17 +713,22 @@ class PubKeySecurityHandler(SecurityHandler):
         '/V2': _build_legacy_pubkey_cf,
         '/AESV2': _build_aes128_pubkey_cf,
         '/AESV3': _build_aes256_pubkey_cf,
-        '/Identity': lambda _, __: IdentityCryptFilter()
+        '/Identity': lambda _, __: IdentityCryptFilter(),
     }
 
     @classmethod
-    def build_from_certs(cls, certs: List[x509.Certificate],
-                         keylen_bytes=16,
-                         version=SecurityHandlerVersion.AES256,
-                         use_aes=True, use_crypt_filters=True,
-                         perms: int = ALL_PERMS,
-                         encrypt_metadata=True, ignore_key_usage=False,
-                         **kwargs) -> 'PubKeySecurityHandler':
+    def build_from_certs(
+        cls,
+        certs: List[x509.Certificate],
+        keylen_bytes=16,
+        version=SecurityHandlerVersion.AES256,
+        use_aes=True,
+        use_crypt_filters=True,
+        perms: int = ALL_PERMS,
+        encrypt_metadata=True,
+        ignore_key_usage=False,
+        **kwargs,
+    ) -> 'PubKeySecurityHandler':
         """
         Create a new public key security handler.
 
@@ -705,7 +765,8 @@ class PubKeySecurityHandler(SecurityHandler):
             An instance of :class:`.PubKeySecurityHandler`.
         """
         subfilter = (
-            PubKeyAdbeSubFilter.S5 if use_crypt_filters
+            PubKeyAdbeSubFilter.S5
+            if use_crypt_filters
             else PubKeyAdbeSubFilter.S4
         )
         cfc = None
@@ -714,35 +775,45 @@ class PubKeySecurityHandler(SecurityHandler):
             # takes care of it
             if use_aes:
                 cfc = _pubkey_aes_config(
-                    16, encrypt_metadata=encrypt_metadata,
-                    recipients=None
+                    16, encrypt_metadata=encrypt_metadata, recipients=None
                 )
             else:
                 cfc = _pubkey_rc4_config(
-                    keylen_bytes, recipients=None,
-                    encrypt_metadata=encrypt_metadata
+                    keylen_bytes,
+                    recipients=None,
+                    encrypt_metadata=encrypt_metadata,
                 )
         # noinspection PyArgumentList
         sh = cls(
-            version, subfilter, keylen_bytes,
-            encrypt_metadata=encrypt_metadata, crypt_filter_config=cfc,
-            recipient_objs=None, **kwargs
+            version,
+            subfilter,
+            keylen_bytes,
+            encrypt_metadata=encrypt_metadata,
+            crypt_filter_config=cfc,
+            recipient_objs=None,
+            **kwargs,
         )
         sh.add_recipients(certs, perms=perms, ignore_key_usage=ignore_key_usage)
         return sh
 
-    def __init__(self, version: SecurityHandlerVersion,
-                 pubkey_handler_subfilter: PubKeyAdbeSubFilter,
-                 legacy_keylen, encrypt_metadata=True,
-                 crypt_filter_config: 'CryptFilterConfiguration' = None,
-                 recipient_objs: list = None,
-                 compat_entries=True):
+    def __init__(
+        self,
+        version: SecurityHandlerVersion,
+        pubkey_handler_subfilter: PubKeyAdbeSubFilter,
+        legacy_keylen,
+        encrypt_metadata=True,
+        crypt_filter_config: 'CryptFilterConfiguration' = None,
+        recipient_objs: list = None,
+        compat_entries=True,
+    ):
 
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
         # principle, but Adobe Reader rejects that combination, so meh.
-        if version >= SecurityHandlerVersion.RC4_OR_AES128 and \
-                pubkey_handler_subfilter != PubKeyAdbeSubFilter.S5:
+        if (
+            version >= SecurityHandlerVersion.RC4_OR_AES128
+            and pubkey_handler_subfilter != PubKeyAdbeSubFilter.S5
+        ):
             raise misc.PdfError(
                 "Subfilter /adbe.pkcs7.s5 is required for security handlers "
                 "beyond V4."
@@ -751,24 +822,30 @@ class PubKeySecurityHandler(SecurityHandler):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
                 crypt_filter_config = _pubkey_rc4_config(
-                    keylen=5, encrypt_metadata=encrypt_metadata,
-                    recipients=recipient_objs
+                    keylen=5,
+                    encrypt_metadata=encrypt_metadata,
+                    recipients=recipient_objs,
                 )
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
                 crypt_filter_config = _pubkey_rc4_config(
-                    keylen=legacy_keylen, encrypt_metadata=encrypt_metadata,
-                    recipients=recipient_objs
+                    keylen=legacy_keylen,
+                    encrypt_metadata=encrypt_metadata,
+                    recipients=recipient_objs,
                 )
             elif version >= SecurityHandlerVersion.AES256:
                 # there's a reasonable default config that we can fall back to
                 # here
                 crypt_filter_config = _pubkey_aes_config(
-                    keylen=32, encrypt_metadata=encrypt_metadata,
-                    recipients=recipient_objs
+                    keylen=32,
+                    encrypt_metadata=encrypt_metadata,
+                    recipients=recipient_objs,
                 )
         super().__init__(
-            version, legacy_keylen, crypt_filter_config,
-            encrypt_metadata=encrypt_metadata, compat_entries=compat_entries
+            version,
+            legacy_keylen,
+            crypt_filter_config,
+            encrypt_metadata=encrypt_metadata,
+            compat_entries=compat_entries,
         )
         self.subfilter = pubkey_handler_subfilter
         self.encrypt_metadata = encrypt_metadata
@@ -783,8 +860,9 @@ class PubKeySecurityHandler(SecurityHandler):
         return {x.value for x in PubKeyAdbeSubFilter}
 
     @classmethod
-    def read_cf_dictionary(cls, cfdict: generic.DictionaryObject,
-                           acts_as_default: bool) -> CryptFilter:
+    def read_cf_dictionary(
+        cls, cfdict: generic.DictionaryObject, acts_as_default: bool
+    ) -> CryptFilter:
 
         cf = build_crypt_filter(
             cls._known_crypt_filters, cfdict, acts_as_default
@@ -797,8 +875,9 @@ class PubKeySecurityHandler(SecurityHandler):
         return cf
 
     @classmethod
-    def process_crypt_filters(cls, encrypt_dict: generic.DictionaryObject) \
-            -> Optional['CryptFilterConfiguration']:
+    def process_crypt_filters(
+        cls, encrypt_dict: generic.DictionaryObject
+    ) -> Optional['CryptFilterConfiguration']:
         cfc = super().process_crypt_filters(encrypt_dict)
         subfilter = cls._determine_subfilter(encrypt_dict)
 
@@ -821,8 +900,9 @@ class PubKeySecurityHandler(SecurityHandler):
         keylen = keylen_bits // 8
 
         recipients = misc.get_and_apply(
-            encrypt_dict, '/Recipients',
-            lambda lst: [cms.ContentInfo.load(x.original_bytes) for x in lst]
+            encrypt_dict,
+            '/Recipients',
+            lambda lst: [cms.ContentInfo.load(x.original_bytes) for x in lst],
         )
 
         # TODO get encrypt_metadata handling in line with ISO 32k
@@ -831,18 +911,23 @@ class PubKeySecurityHandler(SecurityHandler):
             '/EncryptMetadata', bool, default=True
         )
         return dict(
-            legacy_keylen=keylen, recipient_objs=recipients,
-            encrypt_metadata=encrypt_metadata
+            legacy_keylen=keylen,
+            recipient_objs=recipients,
+            encrypt_metadata=encrypt_metadata,
         )
 
     @classmethod
     def _determine_subfilter(cls, encrypt_dict: generic.DictionaryObject):
         try:
             return misc.get_and_apply(
-                encrypt_dict, '/SubFilter', PubKeyAdbeSubFilter, default=(
-                    PubKeyAdbeSubFilter.S5 if '/CF' in encrypt_dict
+                encrypt_dict,
+                '/SubFilter',
+                PubKeyAdbeSubFilter,
+                default=(
+                    PubKeyAdbeSubFilter.S5
+                    if '/CF' in encrypt_dict
                     else PubKeyAdbeSubFilter.S4
-                )
+                ),
             )
         except ValueError:
             raise misc.PdfReadError(
@@ -851,15 +936,16 @@ class PubKeySecurityHandler(SecurityHandler):
             )
 
     @classmethod
-    def instantiate_from_pdf_object(cls,
-                                    encrypt_dict: generic.DictionaryObject):
+    def instantiate_from_pdf_object(
+        cls, encrypt_dict: generic.DictionaryObject
+    ):
         v = SecurityHandlerVersion.from_number(encrypt_dict['/V'])
 
         return PubKeySecurityHandler(
             version=v,
             pubkey_handler_subfilter=cls._determine_subfilter(encrypt_dict),
             crypt_filter_config=cls.process_crypt_filters(encrypt_dict),
-            **cls.gather_pub_key_metadata(encrypt_dict)
+            **cls.gather_pub_key_metadata(encrypt_dict),
         )
 
     def as_pdf_object(self):
@@ -867,12 +953,15 @@ class PubKeySecurityHandler(SecurityHandler):
         result['/Filter'] = generic.NameObject(self.get_name())
         result['/SubFilter'] = self.subfilter.value
         result['/V'] = self.version.as_pdf_object()
-        if self._compat_entries or \
-                self.version == SecurityHandlerVersion.RC4_LONGER_KEYS:
+        if (
+            self._compat_entries
+            or self.version == SecurityHandlerVersion.RC4_LONGER_KEYS
+        ):
             result['/Length'] = generic.NumberObject(self.keylen * 8)
         if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
-            result['/EncryptMetadata'] \
-                = generic.BooleanObject(self.encrypt_metadata)
+            result['/EncryptMetadata'] = generic.BooleanObject(
+                self.encrypt_metadata
+            )
         if self.subfilter == PubKeyAdbeSubFilter.S5:
             # include crypt filter config
             result.update(self.crypt_filter_config.as_pdf_object())
@@ -887,8 +976,12 @@ class PubKeySecurityHandler(SecurityHandler):
             )
         return result
 
-    def add_recipients(self, certs: List[x509.Certificate], perms=ALL_PERMS,
-                       ignore_key_usage=False):
+    def add_recipients(
+        self,
+        certs: List[x509.Certificate],
+        perms=ALL_PERMS,
+        ignore_key_usage=False,
+    ):
         # add recipients to all *default* crypt filters
         # callers that want to do this more granularly are welcome to, but
         # then they have to do the legwork themselves.
@@ -900,8 +993,9 @@ class PubKeySecurityHandler(SecurityHandler):
                 certs, perms=perms, ignore_key_usage=ignore_key_usage
             )
 
-    def authenticate(self, credential: EnvelopeKeyDecrypter, id1=None) \
-            -> AuthResult:
+    def authenticate(
+        self, credential: EnvelopeKeyDecrypter, id1=None
+    ) -> AuthResult:
         """
         Authenticate a user to this security handler.
 
@@ -924,7 +1018,7 @@ class PubKeySecurityHandler(SecurityHandler):
                 f"EnvelopeKeyDecrypter, not {type(credential)}."
             )
 
-        perms = 0xffffffff
+        perms = 0xFFFFFFFF
         for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue

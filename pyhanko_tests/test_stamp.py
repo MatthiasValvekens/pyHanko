@@ -49,8 +49,12 @@ EXPECTED_OUTPUT_DIR = 'pyhanko_tests/data/pdf/layout-tests'
 def test_simple_text_stamp(tmp_path):
     outfile: Path = tmp_path / "test-out.pdf"
     text_stamp_file(
-        MINIMAL_PATH, str(outfile),
-        TextStampStyle(stamp_text="Hi, it's\n%(ts)s"), dest_page=0, x=70, y=50
+        MINIMAL_PATH,
+        str(outfile),
+        TextStampStyle(stamp_text="Hi, it's\n%(ts)s"),
+        dest_page=0,
+        x=70,
+        y=50,
     )
 
 
@@ -59,18 +63,25 @@ def test_simple_text_stamp_missing_params(tmp_path):
     msg = "Stamp text parameter 'foo' is missing"
     with pytest.raises(LayoutError, match=msg):
         text_stamp_file(
-            MINIMAL_PATH, str(outfile),
+            MINIMAL_PATH,
+            str(outfile),
             TextStampStyle(stamp_text="%(foo)s missing"),
-            dest_page=0, x=70, y=50
+            dest_page=0,
+            x=70,
+            y=50,
         )
 
 
 def test_simple_qr_stamp(tmp_path):
     outfile: Path = tmp_path / "test-out.pdf"
     qr_stamp_file(
-        MINIMAL_PATH, str(outfile),
+        MINIMAL_PATH,
+        str(outfile),
         QRStampStyle(stamp_text="Hi, it's\n%(ts)s"),
-        dest_page=0, x=70, y=50, url='https://example.com'
+        dest_page=0,
+        x=70,
+        y=50,
+        url='https://example.com',
     )
 
 
@@ -79,10 +90,16 @@ def test_simple_qr_noto_stamp(tmp_path):
 
     ga_factory = GlyphAccumulatorFactory(NOTO_SERIF_JP)
     qr_stamp_file(
-        MINIMAL_PATH, str(outfile),
-        QRStampStyle(stamp_text="Hi, it's\n%(ts)s",
-                     text_box_style=TextBoxStyle(font=ga_factory)),
-        dest_page=0, x=70, y=50, url='https://example.com',
+        MINIMAL_PATH,
+        str(outfile),
+        QRStampStyle(
+            stamp_text="Hi, it's\n%(ts)s",
+            text_box_style=TextBoxStyle(font=ga_factory),
+        ),
+        dest_page=0,
+        x=70,
+        y=50,
+        url='https://example.com',
     )
 
 
@@ -90,7 +107,7 @@ def empty_page(stream_xrefs=False):
     w = writer.PdfFileWriter(stream_xrefs=stream_xrefs)
     page = writer.PageObject(
         contents=w.add_object(generic.StreamObject(stream_data=b'')),
-        media_box=generic.ArrayObject([0, 0, 595, 842])
+        media_box=generic.ArrayObject([0, 0, 595, 842]),
     )
     w.insert_page(page)
     return w
@@ -107,8 +124,8 @@ def _arabic_text_page(stream_xrefs):
             x_align=layout.AxisAlignment.ALIGN_MID,
             y_align=layout.AxisAlignment.ALIGN_MID,
             inner_content_scaling=layout.InnerScaling.STRETCH_TO_FIT,
-            margins=layout.Margins.uniform(5)
-        )
+            margins=layout.Margins.uniform(5),
+        ),
     )
     ts = TextStamp(
         writer=w, style=style, box=layout.BoxConstraints(width=300, height=200)
@@ -159,8 +176,9 @@ def test_four_qr_stamps(fixed_size):
         style = QRStampStyle(
             stamp_text='Test stamp text\nAnother line of text',
             text_box_style=TextBoxStyle(font=gaf),
-            qr_position=qr_pos, background=STAMP_ART_CONTENT,
-            background_opacity=0.4
+            qr_position=qr_pos,
+            background=STAMP_ART_CONTENT,
+            background_opacity=0.4,
         )
         if fixed_size:
             if qr_pos.horizontal_flow:
@@ -169,9 +187,7 @@ def test_four_qr_stamps(fixed_size):
                 box = layout.BoxConstraints(width=100, height=300)
         else:
             box = None
-        ts = QRStamp(
-            writer=w, style=style, box=box, url='https://example.com'
-        )
+        ts = QRStamp(writer=w, style=style, box=box, url='https://example.com')
         ts.apply(0, x=x, y=y)
     postfix = 'fixed' if fixed_size else 'natural'
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/four-stamps-{postfix}.pdf')
@@ -185,9 +201,9 @@ def test_fancy_qr_stamp():
         qr_inner_content=STAMP_ART_CONTENT,
     )
     box = layout.BoxConstraints(width=300, height=100)
-    QRStamp(
-        writer=w, style=style, box=box, url='https://example.com'
-    ).apply(0, x=10, y=500)
+    QRStamp(writer=w, style=style, box=box, url='https://example.com').apply(
+        0, x=10, y=500
+    )
 
     compare_output(w, f'{EXPECTED_OUTPUT_DIR}/fancy-qr-stamp-test.pdf')
 
@@ -199,14 +215,11 @@ def test_japanese_vertical_text_stamp():
     )
     w = empty_page()
     style = QRStampStyle(
-        stamp_text=(
-            'テスト\n縦書きテスト\n改行してみましょう（括弧）\nPDF\n'
-            'ちょっと長めの文を書いてみた。'
-        ),
+        stamp_text=('テスト\n縦書きテスト\n改行してみましょう（括弧）\nPDF\n' 'ちょっと長めの文を書いてみた。'),
         text_box_style=TextBoxStyle(font=gaf, vertical_text=True),
         qr_position=QRPosition.ABOVE_TEXT,
         background=STAMP_ART_CONTENT,
-        background_opacity=0.4
+        background_opacity=0.4,
     )
     box = layout.BoxConstraints(width=100, height=300)
     ts = QRStamp(writer=w, style=style, box=box, url='https://example.com')
@@ -241,8 +254,7 @@ def test_stamp_with_scaled_bitmap_bg():
     w = empty_page()
 
     text = '\n'.join(
-        'Test test test test on a bitmap background!'
-        for _ in range(3)
+        'Test test test test on a bitmap background!' for _ in range(3)
     )
     style = TextStampStyle(
         stamp_text=text,
@@ -266,10 +278,7 @@ def test_stamp_with_undefined_bg_size():
         'on an ill-defined background!'
         for _ in range(60)
     )
-    style = TextStampStyle(
-        stamp_text=long_text,
-        background=undef_bg
-    )
+    style = TextStampStyle(stamp_text=long_text, background=undef_bg)
 
     ts = TextStamp(w, style)
     ts.apply(0, x=30, y=120)
@@ -282,8 +291,7 @@ def test_stamp_with_scaled_pdf_bg():
     w = empty_page()
 
     text = '\n'.join(
-        'Test test test test on a PDF background!'
-        for _ in range(3)
+        'Test test test test on a PDF background!' for _ in range(3)
     )
     style = TextStampStyle(
         stamp_text=text,
@@ -315,12 +323,14 @@ def test_stamp_with_fixed_pdf_content():
 
 
 @pytest.mark.parametrize(
-    'box', [
-        None, layout.BoxConstraints(width=200),
+    'box',
+    [
+        None,
+        layout.BoxConstraints(width=200),
         layout.BoxConstraints(height=50),
         layout.BoxConstraints(aspect_ratio=Fraction(4, 1)),
-        layout.BoxConstraints()
-    ]
+        layout.BoxConstraints(),
+    ],
 )
 def test_static_stamp_enforce_box_defined(box):
     w = empty_page()
@@ -377,19 +387,16 @@ def test_zero_width_error():
     zero_margins = SimpleBoxLayoutRule(
         x_align=AxisAlignment.ALIGN_MID,
         y_align=AxisAlignment.ALIGN_MID,
-        margins=Margins()
+        margins=Margins(),
     )
     style = TextStampStyle(
-        stamp_text='', border_width=0,
+        stamp_text='',
+        border_width=0,
         inner_content_layout=zero_margins,
-        text_box_style=TextBoxStyle(
-            box_layout_rule=zero_margins
-        )
+        text_box_style=TextBoxStyle(box_layout_rule=zero_margins),
     )
     box = layout.BoxConstraints(width=100, height=100)
-    stamp = TextStamp(
-        writer=w, style=style, box=box
-    )
+    stamp = TextStamp(writer=w, style=style, box=box)
 
     inn_commands, (inn_width, inn_height) = stamp._inner_layout_natural_size()
     assert inn_width == 0

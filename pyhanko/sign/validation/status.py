@@ -21,14 +21,20 @@ from .errors import SignatureValidationError, SigSeedValueValidationError
 from .settings import KeyUsageConstraints
 
 __all__ = [
-    'SignatureStatus', 'TimestampSignatureStatus',
-    'X509AttributeInfo', 'CertifiedAttributeInfo',
-    'ClaimedAttributes', 'CertifiedAttributes',
+    'SignatureStatus',
+    'TimestampSignatureStatus',
+    'X509AttributeInfo',
+    'CertifiedAttributeInfo',
+    'ClaimedAttributes',
+    'CertifiedAttributes',
     'CAdESSignerAttributeAssertions',
     'StandardCMSSignatureStatus',
-    'SignatureCoverageLevel', 'ModificationInfo',
-    'PdfSignatureStatus', 'DocumentTimestampStatus',
-    'RevocationDetails', 'SignerAttributeStatus'
+    'SignatureCoverageLevel',
+    'ModificationInfo',
+    'PdfSignatureStatus',
+    'DocumentTimestampStatus',
+    'RevocationDetails',
+    'SignerAttributeStatus',
 ]
 
 logger = logging.getLogger(__name__)
@@ -167,19 +173,21 @@ class SignatureStatus:
 
     @classmethod
     def default_usage_constraints(
-                cls, key_usage_settings: Optional[KeyUsageConstraints] = None) \
-            -> KeyUsageConstraints:
+        cls, key_usage_settings: Optional[KeyUsageConstraints] = None
+    ) -> KeyUsageConstraints:
 
         key_usage_settings = key_usage_settings or KeyUsageConstraints()
         key_usage_settings = KeyUsageConstraints(
             key_usage=(
-                cls.key_usage if key_usage_settings.key_usage is None
+                cls.key_usage
+                if key_usage_settings.key_usage is None
                 else key_usage_settings.key_usage
             ),
             extd_key_usage=(
-                cls.extd_key_usage if key_usage_settings.extd_key_usage is None
+                cls.extd_key_usage
+                if key_usage_settings.extd_key_usage is None
                 else key_usage_settings.extd_key_usage
-            )
+            ),
         )
         return key_usage_settings
 
@@ -197,6 +205,7 @@ class TimestampSignatureStatus(SignatureStatus):
     """
     Signature status class used when validating timestamp tokens.
     """
+
     key_usage = set()
     """
     There are no (non-extended) key usage requirements for TSA certificates.
@@ -260,12 +269,11 @@ class CertifiedAttributeInfo(X509AttributeInfo):
     """
 
 
-def _handle_attr_err(attr_type: Optional[str], attr_kind: str,
-                     err: ValueError, fatal: bool):
+def _handle_attr_err(
+    attr_type: Optional[str], attr_kind: str, err: ValueError, fatal: bool
+):
     attr_type_str = "unknown type" if not attr_type else f"type '{attr_type}'"
-    msg = (
-        f"Failed to parse {attr_kind} of {attr_type_str}: {err.args[0]}"
-    )
+    msg = f"Failed to parse {attr_kind} of {attr_type_str}: {err.args[0]}"
     if fatal:
         raise SignatureValidationError(
             msg, ades_subindication=AdESFailure.FORMAT_FAILURE
@@ -280,8 +288,9 @@ class CertifiedAttributes:
     """
 
     @classmethod
-    def from_results(cls, results: Iterable[ACValidationResult],
-                     parse_error_fatal=False):
+    def from_results(
+        cls, results: Iterable[ACValidationResult], parse_error_fatal=False
+    ):
         # first, classify the attributes and results by type
         by_type = defaultdict(lambda: ([], []))
         for result in results:
@@ -292,8 +301,10 @@ class CertifiedAttributes:
                     values = list(attr['values'])  # force a surface-level parse
                 except ValueError as e:
                     _handle_attr_err(
-                        attr_type, "certified attribute", e,
-                        fatal=parse_error_fatal
+                        attr_type,
+                        "certified attribute",
+                        e,
+                        fatal=parse_error_fatal,
                     )
                     continue
                 type_values, type_results = by_type[attr_type]
@@ -306,7 +317,7 @@ class CertifiedAttributes:
                 attr_type=cms.AttCertAttributeType(attr_type),
                 # (shallow) immutability
                 attr_values=tuple(type_values),
-                validation_results=tuple(type_results)
+                validation_results=tuple(type_results),
             )
         return infos
 
@@ -336,8 +347,9 @@ class ClaimedAttributes:
     """
 
     @classmethod
-    def from_iterable(cls, attrs: Iterable[cms.AttCertAttribute],
-                      parse_error_fatal=False):
+    def from_iterable(
+        cls, attrs: Iterable[cms.AttCertAttribute], parse_error_fatal=False
+    ):
         infos = ClaimedAttributes()
         by_type = defaultdict(list)
         for attr in attrs:
@@ -347,8 +359,7 @@ class ClaimedAttributes:
                 values = list(attr['values'])  # force a surface-level parse
             except ValueError as e:
                 _handle_attr_err(
-                    attr_type, "claimed attribute", e,
-                    fatal=parse_error_fatal
+                    attr_type, "claimed attribute", e, fatal=parse_error_fatal
                 )
                 continue
             by_type[attr_type].extend(values)
@@ -402,9 +413,9 @@ class CAdESSignerAttributeAssertions:
     even if there are no attribute certificates present.
     """
 
-    ac_validation_errs: \
-        Optional[Collection[Union[PathValidationError, PathBuildingError]]] \
-        = None
+    ac_validation_errs: Optional[
+        Collection[Union[PathValidationError, PathBuildingError]]
+    ] = None
     """
     Attribute certificate validation errors.
 
@@ -449,9 +460,9 @@ class SignerAttributeStatus:
         in the AC. See also :attr:`cades_signer_attrs`.
     """
 
-    ac_validation_errs: \
-        Optional[Collection[Union[PathValidationError, PathBuildingError]]] \
-        = None
+    ac_validation_errs: Optional[
+        Collection[Union[PathValidationError, PathBuildingError]]
+    ] = None
     """
     Errors encountered while validating attribute certificates embedded into
     the ``SignedData``'s ``certificates`` field and the CAdES-style
@@ -516,12 +527,16 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
         if content_ts is None:
             content_timestamp_ok = True
         else:
-            content_timestamp_ok = \
+            content_timestamp_ok = (
                 content_ts.valid and content_ts.intact and content_ts.trusted
+            )
 
         return (
-                self.intact and self.valid and self.trusted and timestamp_ok
-                and content_timestamp_ok
+            self.intact
+            and self.valid
+            and self.trusted
+            and timestamp_ok
+            and content_timestamp_ok
         )
 
     def summary_fields(self):
@@ -535,23 +550,22 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
             yield 'CONTENT_TIMESTAMP_TOKEN<%s>' % (
                 self.content_timestamp_validity.summary(delimiter='|')
             )
-        if self.cades_signer_attrs is not None \
-                and not self.cades_signer_attrs.valid:
+        if (
+            self.cades_signer_attrs is not None
+            and not self.cades_signer_attrs.valid
+        ):
             yield 'CERTIFIED_SIGNER_ATTRS_INVALID'
 
     def pretty_print_details(self):
         def fmt_section(hdr, body):
-            return '\n'.join(
-                (hdr, '-' * len(hdr), body, '\n')
-            )
+            return '\n'.join((hdr, '-' * len(hdr), body, '\n'))
+
         sections = self.pretty_print_sections()
         bottom_line = (
             f"The signature is judged {'' if self.bottom_line else 'IN'}VALID."
         )
         sections.append(("Bottom line", bottom_line))
-        return '\n'.join(
-            fmt_section(hdr, body) for hdr, body in sections
-        )
+        return '\n'.join(fmt_section(hdr, body) for hdr, body in sections)
 
     def pretty_print_sections(self):
         cert: x509.Certificate = self.signing_cert
@@ -579,8 +593,9 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
             f"'{self.pkcs7_signature_mechanism}'."
         )
         if 'ecdsa' in self.pkcs7_signature_mechanism:
-            ec_params: keys.ECDomainParameters = \
-                cert.public_key['algorithm']['parameters']
+            ec_params: keys.ECDomainParameters = cert.public_key['algorithm'][
+                'parameters'
+            ]
             if ec_params.name == 'named':
                 curve_oid: core.ObjectIdentifier = ec_params.chosen
                 validity_info += (
@@ -614,10 +629,12 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
             )
         timing_info = (
             "No available information about the signing time."
-            if not timing_infos else '\n\n'.join(timing_infos)
+            if not timing_infos
+            else '\n\n'.join(timing_infos)
         )
         return [
-            ("Signer info", about_signer), ("Integrity", validity_info),
+            ("Signer info", about_signer),
+            ("Integrity", validity_info),
             ("Signing time", timing_info),
         ]
 
@@ -743,9 +760,9 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
         generic_checks_ok = super().bottom_line
 
         return (
-                generic_checks_ok
-                and self.seed_value_ok
-                and (self.docmdp_ok or self.modification_level is None)
+            generic_checks_ok
+            and self.seed_value_ok
+            and (self.docmdp_ok or self.modification_level is None)
         )
 
     @property
@@ -788,8 +805,9 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
         else:
             if self.modification_level is not None:
                 if self.modification_level == ModificationLevel.LTA_UPDATES:
-                    modlvl_string = \
+                    modlvl_string = (
                         "All modifications relate to signature maintenance"
+                    )
                 elif self.modification_level == ModificationLevel.FORM_FILLING:
                     modlvl_string = (
                         "All modifications relate to signing and form filling "
@@ -812,9 +830,9 @@ class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
                 sv_info = "There were no SV issues detected for this signature."
             else:
                 sv_info = (
-                        "The signature did not satisfy the SV constraints on "
-                        "the signature field.\nError message: "
-                        + self.seed_value_constraint_error.failure_message
+                    "The signature did not satisfy the SV constraints on "
+                    "the signature field.\nError message: "
+                    + self.seed_value_constraint_error.failure_message
                 )
             sections.append(("Seed value constraints", sv_info))
 

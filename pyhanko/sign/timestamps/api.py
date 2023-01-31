@@ -54,14 +54,16 @@ class TimeStamper:
         """
         req = {
             'version': 1,
-            'message_imprint': tsp.MessageImprint({
-                'hash_algorithm': algos.DigestAlgorithm({
-                    'algorithm': md_algorithm
-                }),
-                'hashed_message': message_digest
-            }),
+            'message_imprint': tsp.MessageImprint(
+                {
+                    'hash_algorithm': algos.DigestAlgorithm(
+                        {'algorithm': md_algorithm}
+                    ),
+                    'hashed_message': message_digest,
+                }
+            ),
             # we want the server to send along its certs
-            'cert_req': True
+            'cert_req': True,
         }
         if self.include_nonce:
             nonce = get_nonce()
@@ -88,7 +90,7 @@ class TimeStamper:
             validator = CertificateValidator(
                 cert,
                 intermediate_certs=self.cert_registry,
-                validation_context=validation_context
+                validation_context=validation_context,
             )
             return validator.async_validate_usage(set(), {"time_stamping"})
 
@@ -106,6 +108,7 @@ class TimeStamper:
         # if no dummy responses are available, fetch some
         if not self._dummy_response_cache:
             from pyhanko.sign import DEFAULT_MD
+
             await self.async_dummy_response(DEFAULT_MD)
 
     async def async_dummy_response(self, md_algorithm) -> cms.ContentInfo:
@@ -135,8 +138,9 @@ class TimeStamper:
         self._register_dummy(md_algorithm, dummy)
         return dummy
 
-    async def async_request_tsa_response(self, req: tsp.TimeStampReq) \
-            -> tsp.TimeStampResp:
+    async def async_request_tsa_response(
+        self, req: tsp.TimeStampReq
+    ) -> tsp.TimeStampResp:
         """
         Submit the specified timestamp request to the server.
 
@@ -150,8 +154,9 @@ class TimeStamper:
         """
         raise NotImplementedError
 
-    async def async_timestamp(self, message_digest, md_algorithm) \
-            -> cms.ContentInfo:
+    async def async_timestamp(
+        self, message_digest, md_algorithm
+    ) -> cms.ContentInfo:
         """
         Request a timestamp for the given message digest.
 

@@ -74,6 +74,7 @@ class RC4CryptFilterMixin(CryptFilter, abc.ABC):
 
 class AESCryptFilterMixin(CryptFilter, abc.ABC):
     """Mixin for AES-based crypt filters."""
+
     keylen = None
     method = None
 
@@ -82,8 +83,9 @@ class AESCryptFilterMixin(CryptFilter, abc.ABC):
             raise NotImplementedError("Only AES-128 and AES-256 are supported")
         self.keylen = keylen
         self.method = (
-            generic.NameObject('/AESV2') if keylen == 16 else
-            generic.NameObject('/AESV3')
+            generic.NameObject('/AESV2')
+            if keylen == 16
+            else generic.NameObject('/AESV3')
         )
         super().__init__(**kwargs)
 

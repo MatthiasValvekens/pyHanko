@@ -15,9 +15,15 @@ except ImportError as _e:  # pragma: nocover
 
 
 class AIOHttpTimeStamper(TimeStamper):
-    def __init__(self, url, session: Union[aiohttp.ClientSession, LazySession],
-                 https=False, timeout=5, headers=None,
-                 auth: Optional[aiohttp.BasicAuth] = None):
+    def __init__(
+        self,
+        url,
+        session: Union[aiohttp.ClientSession, LazySession],
+        https=False,
+        timeout=5,
+        headers=None,
+        auth: Optional[aiohttp.BasicAuth] = None,
+    ):
         """
         Initialise the timestamp client.
 
@@ -59,21 +65,27 @@ class AIOHttpTimeStamper(TimeStamper):
         else:
             return session
 
-    async def async_timestamp(self, message_digest, md_algorithm) \
-            -> cms.ContentInfo:
+    async def async_timestamp(
+        self, message_digest, md_algorithm
+    ) -> cms.ContentInfo:
         return await super().async_timestamp(message_digest, md_algorithm)
 
-    async def async_request_tsa_response(self, req: tsp.TimeStampReq) \
-            -> tsp.TimeStampResp:
+    async def async_request_tsa_response(
+        self, req: tsp.TimeStampReq
+    ) -> tsp.TimeStampResp:
         session = await self.get_session()
 
         cl_timeout = aiohttp.ClientTimeout(total=self.timeout)
         headers = await self.async_request_headers()
         try:
-            async with session.post(url=self.url, headers=headers,
-                                    data=req.dump(), auth=self.auth,
-                                    raise_for_status=True,
-                                    timeout=cl_timeout) as response:
+            async with session.post(
+                url=self.url,
+                headers=headers,
+                data=req.dump(),
+                auth=self.auth,
+                raise_for_status=True,
+                timeout=cl_timeout,
+            ) as response:
                 response_data = await response.read()
                 ct = response.headers.get('Content-Type')
                 if ct != 'application/timestamp-reply':
@@ -82,8 +94,10 @@ class AIOHttpTimeStamper(TimeStamper):
                         f'application/timestamp-reply,but got {ct}.'
                     )
                     raise aiohttp.ContentTypeError(
-                        response.request_info, response.history,
-                        message=msg, headers=response.headers,
+                        response.request_info,
+                        response.history,
+                        message=msg,
+                        headers=response.headers,
                     )
         except aiohttp.ClientError as e:
             raise TimestampRequestError(
