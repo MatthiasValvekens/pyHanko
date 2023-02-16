@@ -350,7 +350,6 @@ async def test_async_sign_new_existingonly(file):
 
 
 def test_sign_with_new_field_spec():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     spec = fields.SigFieldSpec(sig_field_name='Sig1', box=(20, 20, 80, 40))
     out = signers.sign_pdf(

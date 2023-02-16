@@ -12,7 +12,6 @@ from pyhanko.pdf_utils.config_utils import (
 
 
 def _match_usages(required: set, present: set, need_all: bool):
-
     if need_all:
         return not (required - present)
     else:

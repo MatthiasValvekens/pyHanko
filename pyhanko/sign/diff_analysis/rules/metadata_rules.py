@@ -106,7 +106,6 @@ class MetadataUpdateRule(WhitelistRule):
     def apply(
         self, old: HistoricalResolver, new: HistoricalResolver
     ) -> Iterable[ReferenceUpdate]:
-
         # /Metadata points to a stream, so we have to be careful allowing
         # object overrides!
         # we only approve the change if the metadata consists of well-formed xml

@@ -144,7 +144,6 @@ class StandardSecuritySettingsRevision(misc.VersionEnum):
 
 
 class _PasswordCredential(core.Sequence, SerialisableCredential):
-
     _fields = [
         ('pwd_bytes', core.OctetString),
         ('id1', core.OctetString, {'optional': True}),
@@ -471,7 +470,6 @@ class StandardSecurityHandler(SecurityHandler):
 
     @staticmethod
     def _check_r6_values(udata, odata, oeseed, ueseed, encrypted_perms, rev=6):
-
         if not (len(udata) == len(odata) == 48):
             raise misc.PdfError(
                 "/U and /O entries must be 48 bytes long in a "

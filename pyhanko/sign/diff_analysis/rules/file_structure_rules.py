@@ -40,7 +40,6 @@ class CatalogModificationRule(QualifiedWhitelistRule):
     def apply_qualified(
         self, old: HistoricalResolver, new: HistoricalResolver
     ) -> Iterable[Tuple[ModificationLevel, Reference]]:
-
         old_root = old.root
         new_root = new.root
         # first, check if the keys in the document catalog are unchanged

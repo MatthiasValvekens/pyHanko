@@ -109,7 +109,6 @@ class PdfCMSSignedAttributes(CMSSignedAttributes):
 
 
 def _ensure_content_type(encap_content_info):
-
     encap_content_info = encap_content_info or {'content_type': 'data'}
     if isinstance(encap_content_info, core.Sequence):
         # could be cms.ContentInfo or cms.EncapsulatedContentInfo depending
@@ -124,7 +123,6 @@ def _ensure_content_type(encap_content_info):
 def _cms_version(
     content_type: Union[str, core.ObjectIdentifier], has_attribute_certs
 ):
-
     if has_attribute_certs:
         return 'v4'
 
@@ -145,7 +143,6 @@ def _prepare_encap_content(
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
     max_read=None,
 ):
-
     h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
     encap_content_info = None
     if isinstance(input_data, (cms.ContentInfo, cms.EncapsulatedContentInfo)):
@@ -579,7 +576,6 @@ class Signer:
         unsigned_attrs: cms.CMSAttributes,
         encap_content_info,
     ) -> cms.ContentInfo:
-
         encap_content_info = encap_content_info or {'content_type': 'data'}
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
@@ -632,7 +628,6 @@ class Signer:
         )
 
     def _check_digest_algorithm(self, digest_algorithm: str):
-
         implied_hash_algo = None
         try:
             # Just using self.signature_mechanism is not good enough,
@@ -820,7 +815,6 @@ class Signer:
         is_pdf_sig=True,
         encap_content_info=None,
     ) -> cms.ContentInfo:
-
         """
         .. versionadded:: 0.9.0
 
@@ -1058,7 +1052,6 @@ class Signer:
         cades_signed_attr_meta: CAdESSignedAttrSpec = None,
         encap_content_info=None,
     ) -> cms.ContentInfo:
-
         """
         .. deprecated:: 0.9.0
             Use :meth:`async_sign` instead.
@@ -1717,7 +1710,6 @@ class CAdESSignedAttributeProviderSpec(SignedAttributeProviderSpec):
     def signed_attr_providers(
         self, data_digest: bytes, digest_algorithm: str
     ) -> Iterable[CMSAttributeProvider]:
-
         yield attributes.SigningCertificateV2Provider(
             signing_cert=self.signing_cert
         )

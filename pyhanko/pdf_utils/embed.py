@@ -112,7 +112,6 @@ class EmbeddedFileObject(generic.StreamObject):
         params: EmbeddedFileParams = None,
         mime_type: str = None,
     ):
-
         super().__init__(
             dict_data=dict_data,
             stream_data=stream_data,

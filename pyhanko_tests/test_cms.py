@@ -153,7 +153,6 @@ def test_generic_data_sign_legacy():
 )
 @pytest.mark.asyncio
 async def test_generic_data_sign(input_data, detached):
-
     signature = await FROM_CA.async_sign_general_data(
         input_data, 'sha256', detached=detached
     )
@@ -860,7 +859,6 @@ async def test_sign_weak_sig_digest_mismatch():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_sign_weak_sig_digest():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='md5')
     out = await signers.async_sign_pdf(w, meta, signer=FROM_CA)
@@ -906,7 +904,6 @@ def test_old_style_signing_cert_attr_ok(with_issser):
 @pytest.mark.parametrize("with_issser", [False, True])
 @freeze_time('2020-11-01')
 def test_old_style_signing_cert_attr_mismatch(with_issser):
-
     if with_issser:
         # this file has an old-style signing cert attr with issuerSerial
         fname = 'pades-with-old-style-signing-cert-attr-issser.pdf'

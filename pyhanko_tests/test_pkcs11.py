@@ -70,7 +70,6 @@ SIGNER_LABEL = 'signer1'
 )
 @freeze_time('2020-11-01')
 def test_simple_sign(bulk_fetch, pss):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
@@ -92,7 +91,6 @@ def test_simple_sign(bulk_fetch, pss):
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @freeze_time('2020-11-01')
 def test_simple_sign_legacy_open_session_by_token_label():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with pytest.deprecated_call():
@@ -152,7 +150,6 @@ def test_sign_external_certs(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_sign_multiple_cert_sources(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
@@ -177,7 +174,6 @@ def test_sign_multiple_cert_sources(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_wrong_key_label(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
@@ -196,7 +192,6 @@ def test_wrong_key_label(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_wrong_cert(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
@@ -214,7 +209,6 @@ def test_wrong_cert(bulk_fetch):
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @freeze_time('2020-11-01')
 def test_provided_certs():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
@@ -242,7 +236,6 @@ def test_provided_certs():
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_signer_provided_others_pulled(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
@@ -266,7 +259,6 @@ def test_signer_provided_others_pulled(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_signer_pulled_others_provided(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
@@ -316,7 +308,6 @@ def test_unclear_signer_cert():
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_dsa(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1', md_algorithm='sha256'
@@ -340,7 +331,6 @@ def test_simple_sign_dsa(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ecdsa(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1', md_algorithm='sha256'
@@ -365,7 +355,6 @@ def test_simple_sign_ecdsa(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ed25519(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess(token='tested25519') as sess:
@@ -387,7 +376,6 @@ def test_simple_sign_ed25519(bulk_fetch):
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ed448(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess(token='tested448') as sess:
@@ -408,7 +396,6 @@ def test_simple_sign_ed448(bulk_fetch):
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @freeze_time('2020-11-01')
 def test_simple_sign_from_config():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
@@ -431,7 +418,6 @@ def test_simple_sign_from_config():
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @freeze_time('2020-11-01')
 def test_sign_skip_login_fail():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
@@ -458,7 +444,6 @@ def test_sign_skip_login_fail():
 )
 @freeze_time('2020-11-01')
 def test_sign_deferred_auth():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
@@ -479,7 +464,6 @@ def test_sign_deferred_auth():
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @freeze_time('2020-11-01')
 def test_simple_sign_with_raw_rsa():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
@@ -504,7 +488,6 @@ def test_simple_sign_with_raw_rsa():
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_with_raw_dsa(bulk_fetch):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
         field_name='Sig1', md_algorithm='sha256'
@@ -596,7 +579,6 @@ def test_pull_err_fmt(label, cert_id, no_results, exp_err):
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_simple_sign_from_config_async(bulk_fetch, pss):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     config = PKCS11SignatureConfig(
@@ -626,7 +608,6 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
 )
 @pytest.mark.asyncio
 async def test_async_sign_many_concurrent(bulk_fetch, pss):
-
     concurrent_count = 10
     config = PKCS11SignatureConfig(
         module_path=pkcs11_test_module,
@@ -703,14 +684,12 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 def test_token_does_not_exist():
-
     with pytest.raises(PKCS11Error, match='No token matching criteria'):
         _simple_sess(token='aintnosuchtoken')
 
 
 @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 def test_token_unclear():
-
     with pytest.raises(PKCS11Error, match='more than 1'):
         return pkcs11.open_pkcs11_session(
             pkcs11_test_module, user_pin='1234', token_label=None

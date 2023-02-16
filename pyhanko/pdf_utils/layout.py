@@ -287,7 +287,6 @@ class AxisAlignment(enum.Enum):
     def align(
         self, container_len: int, inner_len: int, pre_margin, post_margin
     ) -> int:
-
         effective_max_len = Margins.effective(
             'length', container_len, pre_margin, post_margin
         )

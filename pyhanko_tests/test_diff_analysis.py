@@ -932,7 +932,6 @@ def test_form_field_postsign_fill_pades_lt(requests_mock):
 
 @freeze_time('2020-11-01')
 def test_fieldmdp_all_pades_lta(requests_mock):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     vc = live_testing_vc(requests_mock)
     sp = fields.SigFieldSpec(
@@ -1429,7 +1428,6 @@ def test_rogue_backreferences():
 @freeze_time("2020-11-01")
 @pytest.mark.parametrize('forbid_freeing', [True, False])
 def test_sign_reject_freed(forbid_freeing):
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     w.root['/Blah'] = freed = w.add_object(generic.pdf_string('Hi there!'))
     out = signers.sign_pdf(
@@ -1499,7 +1497,6 @@ def test_sign_reject_freed(forbid_freeing):
 
 @freeze_time("2020-11-01")
 def test_not_all_paths_cleared():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     # make /Fields indirect
     fields_arr = w.root['/AcroForm'].raw_get('/Fields')
@@ -1607,7 +1604,6 @@ def test_orphan(ignored):
 
 
 def test_is_field_visible():
-
     from pyhanko.sign.diff_analysis.rules.form_field_rules import (
         is_annot_visible,
         is_field_visible,
@@ -1764,7 +1760,6 @@ def test_signed_file_diff_proxied_objs():
 
 @freeze_time('2020-11-01')
 def test_pades_sign_twice_indirect_arrs(requests_mock):
-
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test.pdf'
     live_testing_vc(requests_mock)
     with open(testfile, 'rb') as f:
@@ -1789,7 +1784,6 @@ def test_pades_sign_twice_indirect_arrs(requests_mock):
 
 @freeze_time('2020-11-01')
 def test_pades_sign_update_dss(requests_mock):
-
     testfile = PDF_DATA_DIR + '/pades-lta-dss-indirect-arrs-test-2.pdf'
     live_testing_vc(requests_mock)
     with open(testfile, 'rb') as f:
@@ -2264,7 +2258,6 @@ class DummyXrefStream(generic.StreamObject):
 
 @freeze_time('2020-11-01')
 def test_sign_with_hybrid():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w,
@@ -2311,7 +2304,6 @@ def test_sign_with_hybrid():
 
 @freeze_time('2020-11-01')
 def test_sign_with_hybrid_sneaky_edit():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     w.root['/Bleh'] = bleh_ref = w.add_object(pdf_name('/Bleh'))
     out = signers.sign_pdf(
@@ -2477,7 +2469,6 @@ def test_diff_analysis_add_valid_type_entry():
     ],
 )
 def test_appearance_update_edge_cases(fname):
-
     path = os.path.join(PDF_DATA_DIR, fname)
     with open(path, 'rb') as inf:
         r = PdfFileReader(inf)
@@ -2496,7 +2487,6 @@ def test_appearance_update_edge_cases(fname):
     ],
 )
 def test_disallow_appearance_stream_override_if_clobbers(fname):
-
     # ...but updating a stream/ap dictionary that is used elsewhere
     # should still be forbidden
     path = os.path.join(PDF_DATA_DIR, fname)

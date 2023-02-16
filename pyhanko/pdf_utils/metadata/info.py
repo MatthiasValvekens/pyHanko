@@ -19,7 +19,6 @@ def _write_meta_string(
     meta_str: model.MetaString,
     existing_only: bool,
 ) -> bool:
-
     if isinstance(meta_str, misc.StringWithLanguage):
         # don't bother with embedding language codes in strings,
         # too few people implement escapes anyway, so meh
@@ -65,7 +64,6 @@ def update_info_dict(
     info: generic.DictionaryObject,
     only_update_existing: bool = False,
 ) -> bool:
-
     mod = _write_meta_date(
         info, "/ModDate", meta.last_modified, existing_only=only_update_existing
     )

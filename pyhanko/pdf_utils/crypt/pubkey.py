@@ -331,7 +331,6 @@ def construct_recipient_cms(
     include_permissions=True,
     ignore_key_usage=False,
 ) -> cms.ContentInfo:
-
     # The content of the generated ContentInfo object
     # is an object of type EnvelopedData, containing a 20 byte seed (+ perms).
     #
@@ -806,7 +805,6 @@ class PubKeySecurityHandler(SecurityHandler):
         recipient_objs: list = None,
         compat_entries=True,
     ):
-
         # I don't see how it would be possible to handle V4 without
         # crypt filters in an unambiguous way. V5 should be possible in
         # principle, but Adobe Reader rejects that combination, so meh.
@@ -863,7 +861,6 @@ class PubKeySecurityHandler(SecurityHandler):
     def read_cf_dictionary(
         cls, cfdict: generic.DictionaryObject, acts_as_default: bool
     ) -> CryptFilter:
-
         cf = build_crypt_filter(
             cls._known_crypt_filters, cfdict, acts_as_default
         )

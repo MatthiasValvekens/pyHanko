@@ -374,7 +374,6 @@ class SecurityHandler:
     def process_crypt_filters(
         cls, encrypt_dict: generic.DictionaryObject
     ) -> Optional['CryptFilterConfiguration']:
-
         stmf = encrypt_dict.get('/StmF', IDENTITY)
         strf = encrypt_dict.get('/StrF', IDENTITY)
         eff = encrypt_dict.get('/EFF', stmf)

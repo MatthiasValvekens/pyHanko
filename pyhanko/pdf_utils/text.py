@@ -195,7 +195,6 @@ class TextBox(PdfContent):
         return style.font_size if style.leading is None else style.leading
 
     def render(self):
-
         style = self.style
 
         self.set_resource(

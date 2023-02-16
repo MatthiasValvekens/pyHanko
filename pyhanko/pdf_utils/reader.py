@@ -1038,7 +1038,6 @@ class HistoricalResolver(PdfHandler):
             is_struct_tree,
             struct_tree_objs,
         ):
-
             # optimisation: page tree gets special treatment
             # to prevent unnecessary paths from being generated when the
             # tree is entered from the outside (e.g. by following /P on a form

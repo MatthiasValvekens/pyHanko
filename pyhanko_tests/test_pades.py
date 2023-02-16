@@ -106,7 +106,6 @@ PADES = fields.SigSeedSubFilter.PADES
 
 
 def test_pades_flag():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w,
@@ -123,7 +122,6 @@ def test_pades_flag():
 
 
 def test_pades_pdf2():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     w.ensure_output_version(version=(2, 0))
     out = signers.sign_pdf(
@@ -1190,7 +1188,6 @@ def test_dss_setting_validation():
 
 @freeze_time('2020-11-01')
 def test_pades_one_revision(requests_mock):
-
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,
@@ -1275,7 +1272,6 @@ def test_pades_ltv_legacy_policy_sufficient(requests_mock):
 
 @freeze_time('2020-11-01')
 def test_pades_ltv_upgrade_soft_fail(requests_mock):
-
     out = _lazy_pades_signature(requests_mock)
     r = PdfFileReader(out)
     # soft fail should not apply to the internal timestamp, so we expect
@@ -1323,7 +1319,6 @@ def test_pades_ltv_upgrade_lax_policy(requests_mock):
     ],
 )
 def test_pades_two_revisions(requests_mock, dss_settings):
-
     w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
         w,

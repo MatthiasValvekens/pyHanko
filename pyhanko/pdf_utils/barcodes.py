@@ -92,7 +92,6 @@ class BarcodeBox(PdfContent):
     """
 
     def __init__(self, barcode_type, code):
-
         self.barcode_type = barcode_type
         self.code = code
 

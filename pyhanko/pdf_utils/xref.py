@@ -338,7 +338,6 @@ class XRefSectionData:
     def try_resolve(
         self, ref: Union[generic.Reference, generic.IndirectObject]
     ) -> Optional[Union[int, ObjStreamRef]]:
-
         # The lookups are ordered more or less in the order we expect
         # them to be queried most frequently in a given file.
 
@@ -447,7 +446,6 @@ class XRefSection:
 
 
 def _check_freed_refs(ix, section, all_sections):
-
     # Prevent xref stream objects from being overwritten.
     # (stricter than the spec, but it makes our lives easier at the cost
     # of rejecting some theoretically valid files)
@@ -467,7 +465,6 @@ def _check_freed_refs(ix, section, all_sections):
     # For all free refs, check that _if_ redefined, they're
     # redefined with a proper generation number
     for idnum, expected_next_generation in section.xref_data.freed.items():
-
         # When rewriting files & removing dead objects, Acrobat will
         # enter the deleted reference into the Xref table/stream with
         # a 'next generation' ID of 0. It doesn't contradict the spec
@@ -628,7 +625,6 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
 
 
 class XRefBuilder:
-
     err_limit = 10
 
     def __init__(

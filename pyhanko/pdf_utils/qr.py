@@ -60,7 +60,6 @@ class PdfStreamQRImage(BaseImage):
 
 
 class PdfFancyQRImage(PdfStreamQRImage):
-
     centerpiece_corner_radius = 0.2
 
     def __init__(

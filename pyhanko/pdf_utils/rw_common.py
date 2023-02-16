@@ -70,7 +70,6 @@ class PdfHandler:
 
     # TODO write tests specifically for this helper function
     def _walk_page_tree(self, page_ix, retrieve_parent):
-
         # the spec says that this will always be an indirect reference
         page_tree_root_ref = self.root.raw_get('/Pages')
         assert isinstance(page_tree_root_ref, generic.IndirectObject)

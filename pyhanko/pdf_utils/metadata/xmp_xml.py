@@ -192,7 +192,6 @@ LANG_X_DEFAULT = model.Qualifiers.of(
 def _meta_string_as_value(
     meta_str: model.MetaString, lang_xdefault=False
 ) -> Optional[model.XmpValue]:
-
     if isinstance(meta_str, misc.StringWithLanguage):
         if meta_str.lang_code == "DEFAULT":
             quals = LANG_X_DEFAULT if lang_xdefault else model.Qualifiers.of()
@@ -212,7 +211,6 @@ def _write_meta_string(
     key: model.ExpandedName,
     meta_str: model.MetaString,
 ):
-
     val = _meta_string_as_value(meta_str, lang_xdefault=False)
     if val is not None:
         fields[key] = val
@@ -223,7 +221,6 @@ def _write_lang_alternative(
     key: model.ExpandedName,
     meta_str: model.MetaString,
 ):
-
     val = _meta_string_as_value(meta_str, lang_xdefault=True)
     if val is not None:
         fields[key] = model.XmpValue(model.XmpArray.alternative([val]))
@@ -234,7 +231,6 @@ def _write_meta_date(
     key: model.ExpandedName,
     meta_date: Union[datetime, str, None],
 ) -> bool:
-
     if isinstance(meta_date, datetime):
         value = meta_date
     elif meta_date == 'now':
@@ -462,7 +458,6 @@ HTTP_URI_RE = re.compile("^https?://")
 def _proc_xmp_value(
     elem: ElementTree.Element, lang: Optional[str]
 ) -> model.XmpValue:
-
     lang = _check_lang(elem) or lang
     # Step 1: check for parseType=Resource
     parse_type = elem.get(_tag(model.RDF_PARSE_TYPE), None)

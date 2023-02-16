@@ -302,7 +302,6 @@ async def test_pades_lta_happy_path_past_time_with_chain(requests_mock):
 
 
 class NoSha512AfterSomeTime(AlgorithmUsagePolicy):
-
     # Algo policy for tests
 
     def __init__(self, year):
@@ -316,7 +315,6 @@ class NoSha512AfterSomeTime(AlgorithmUsagePolicy):
         moment: Optional[datetime.datetime],
         public_key: Optional[keys.PublicKeyInfo],
     ) -> AlgorithmUsageConstraint:
-
         try:
             h = algo.hash_algo
         except ValueError:
@@ -351,7 +349,6 @@ class BanAllTheThings(AlgorithmUsagePolicy):
         moment: Optional[datetime.datetime],
         public_key: Optional[keys.PublicKeyInfo],
     ) -> AlgorithmUsageConstraint:
-
         return AlgorithmUsageConstraint(allowed=False)
 
     def digest_algorithm_allowed(
@@ -445,7 +442,6 @@ async def test_pades_lta_algo_permaban(requests_mock):
 
 @pytest.mark.asyncio
 async def test_pades_lta_live_ac_validation(requests_mock):
-
     with freeze_time('2020-11-01'):
         pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
         authorities = [

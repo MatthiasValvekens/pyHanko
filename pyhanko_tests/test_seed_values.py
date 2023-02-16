@@ -247,7 +247,6 @@ def test_cert_constraint_key_usage_not_ok(ku_strs):
 
 
 def test_cert_constraint_subject_dn():
-
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.SUBJECT_DN,
         subject_dn=x509.Name.build({'common_name': 'Alice'}),
@@ -285,7 +284,6 @@ def test_cert_constraint_subject_dn():
 
 
 def test_cert_constraint_subject():
-
     scc = fields.SigCertConstraints(
         flags=fields.SigCertConstraintFlags.SUBJECT,
         subjects=[FROM_CA.signing_cert],
@@ -719,7 +717,6 @@ async def test_sv_flag_appearance_required():
 
 @pytest.mark.asyncio
 async def test_sv_mdp_no_certify():
-
     sv = fields.SigSeedValueSpec(
         seed_signature_type=fields.SeedSignatureType(),
     )
@@ -736,7 +733,6 @@ async def test_sv_mdp_no_certify():
 
 @pytest.mark.asyncio
 async def test_sv_mdp_must_certify():
-
     sv = fields.SigSeedValueSpec(
         seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.FILL_FORMS),
     )
@@ -760,7 +756,6 @@ async def test_sv_mdp_must_certify():
 
 @pytest.mark.asyncio
 async def test_sv_mdp_must_certify_wrong_docmdp():
-
     sv = fields.SigSeedValueSpec(
         seed_signature_type=fields.SeedSignatureType(fields.MDPPerm.FILL_FORMS),
     )
@@ -1056,7 +1051,6 @@ def test_cert_constraint_deserialisation():
 
 @pytest.mark.asyncio
 async def test_sign_with_sv_missing_cert():
-
     w = IncrementalPdfFileWriter(
         prepare_sv_field(
             fields.SigSeedValueSpec(

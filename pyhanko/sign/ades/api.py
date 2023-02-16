@@ -108,7 +108,6 @@ class CAdESSignedAttrSpec:
         md_algorithm,
         timestamper: Optional[TimeStamper] = None,
     ):
-
         if self.timestamp_content and timestamper is not None:
             yield TSTProvider(
                 digest_algorithm=md_algorithm,

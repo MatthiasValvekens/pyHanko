@@ -287,7 +287,6 @@ class SigFieldCreationRule(FieldMDPRule):
     def apply(
         self, context: FieldComparisonContext
     ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
-
         deleted = set(
             fq_name
             for fq_name, spec in context.field_specs.items()
@@ -329,7 +328,6 @@ class SigFieldCreationRule(FieldMDPRule):
         field_ref_reverse = {}
 
         for fq_name, sigfield_ref in all_new_refs.items():
-
             # New field, so all its dependencies are good to go
             # that said, only the field itself is cleared at LTA update level,
             # (and only if it is invisible)
@@ -510,7 +508,6 @@ class BaseFieldModificationRule(FieldMDPRule):
     def apply(
         self, context: FieldComparisonContext
     ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
-
         for fq_name, spec in context.field_specs.items():
             yield from self.check_form_field(fq_name, spec, context)
 
@@ -561,7 +558,6 @@ class SigFieldModificationRule(BaseFieldModificationRule):
         spec: FieldComparisonSpec,
         context: FieldComparisonContext,
     ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
-
         # deal with "freshly signed" signature fields,
         # i.e. those that are filled now, but weren't previously
         #  + newly created ones
@@ -711,7 +707,6 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
         spec: FieldComparisonSpec,
         context: FieldComparisonContext,
     ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
-
         if (
             spec.field_type == '/Sig'
             or not spec.new_field_ref
@@ -779,7 +774,6 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
 def _allow_appearance_update(
     old_field, new_field, old: HistoricalResolver, new: HistoricalResolver
 ) -> Generator[Reference, None, None]:
-
     old_ap_val, new_ap_val = yield from compare_key_refs(
         '/AP', old, old_field, new_field
     )
@@ -834,7 +828,6 @@ def _allow_in_place_appearance_update(
     new: HistoricalResolver,
     fq_name: str,
 ):
-
     # We can allow updating appearance streams in-place, but that requires
     # two conditions to be met
     #  - The stream is not referenced anywhere else (judging by relative

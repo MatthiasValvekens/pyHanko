@@ -1363,7 +1363,6 @@ def _insert_or_get_field_at(
     modified=False,
     field_obj=None,
 ):
-
     current_partial, tail = path[0], path[1:]
 
     for field_ref in fields:
@@ -1720,7 +1719,6 @@ class SignatureFormField(generic.DictionaryObject):
         visible_settings: VisibleSigSettings = VisibleSigSettings(),
         annot_flags=None,
     ):
-
         if box is not None:
             rect = [generic.FloatObject(rd(x)) for x in box]
             invisible = not (abs(box[0] - box[2]) and abs(box[1] - box[3]))

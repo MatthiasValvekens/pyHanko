@@ -516,7 +516,6 @@ async def _set_up_dummy_client(aiohttp_client, require_hash_pinning=True):
 
 @pytest.mark.asyncio
 async def test_submit_job_during_commit(aiohttp_client):
-
     client, auth_man, csc_dummy = await _set_up_dummy_client(aiohttp_client)
 
     class SlowCommitter(csc_signer.CSCSigner):
@@ -570,7 +569,6 @@ async def test_submit_job_during_commit(aiohttp_client):
 
 @pytest.mark.asyncio
 async def test_multi_commit_failure(aiohttp_client):
-
     client, auth_man, csc_dummy = await _set_up_dummy_client(aiohttp_client)
     # deliberately pass a bogus SAD to make the commit fail
     auth_man = csc_signer.PrefetchedSADAuthorizationManager(
@@ -688,7 +686,6 @@ async def test_prefetched_sad_not_twice(aiohttp_client):
 
 @pytest.mark.asyncio
 async def test_csc_placeholder_sig_size():
-
     csc_session_info = csc_signer.CSCServiceSessionInfo(
         'https://example.com', 'foobar'
     )

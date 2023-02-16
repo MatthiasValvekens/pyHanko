@@ -129,7 +129,6 @@ def test_wrong_password(legacy):
 
 
 def test_identity_crypt_filter_api():
-
     # confirm that the CryptFilter API of the identity filter doesn't do
     # anything unexpected, even though we typically don't invoke it explicitly.
     idf: IdentityCryptFilter = IdentityCryptFilter()
@@ -681,7 +680,6 @@ def test_empty_user_pass():
 
 
 def test_load_pkcs12():
-
     sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(
         "pyhanko_tests/data/crypto/selfsigned.pfx", b'exportsecret'
     )
@@ -1035,7 +1033,6 @@ def test_ser_deser_credential_pubkey_corrupted():
 
 
 def test_ser_deser_credential_wrong_cert():
-
     wrong_cert_cred_data = SimpleEnvelopeKeyDecrypter(
         cert=PUBKEY_SELFSIGNED_DECRYPTER.cert,
         private_key=PUBKEY_TEST_DECRYPTER.private_key,
@@ -1050,7 +1047,6 @@ def test_ser_deser_credential_wrong_cert():
 
 
 def test_ser_deser_credential_wrong_key():
-
     wrong_key_cred_data = SimpleEnvelopeKeyDecrypter(
         cert=PUBKEY_TEST_DECRYPTER.cert,
         private_key=PUBKEY_SELFSIGNED_DECRYPTER.private_key,
@@ -1238,7 +1234,6 @@ def test_r6_values(enc_entry, delete, err):
 
 @pytest.mark.parametrize('entry', ["/U", "/O"])
 def test_legacy_o_u_values(entry):
-
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw_legacy(

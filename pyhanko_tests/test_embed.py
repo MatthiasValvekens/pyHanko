@@ -14,7 +14,6 @@ from pyhanko_tests.samples import *
 
 
 def _embed_test(w, fname, ufname, data, created=None, modified=None):
-
     ef_obj = embed.EmbeddedFileObject.from_file_data(
         w,
         data=data,

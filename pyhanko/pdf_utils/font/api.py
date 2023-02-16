@@ -23,7 +23,6 @@ def generate_subset_prefix():
 
 @dataclass(frozen=True)
 class FontSubsetCollection:
-
     base_postscript_name: str
     """
     Base postscript name of the font.

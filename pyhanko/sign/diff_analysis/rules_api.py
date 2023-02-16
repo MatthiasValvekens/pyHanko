@@ -67,7 +67,6 @@ class Context:
         start: Union[DictionaryObject, ArrayObject],
         path: Union[RawPdfPath, int, str],
     ) -> 'RelativeContext':
-
         cur_ref: Dereferenceable = start.container_ref
         if isinstance(path, (int, str)):
             path = RawPdfPath(path)
@@ -152,7 +151,6 @@ class ApprovalType(misc.OrderedEnum):
 
 @dataclass(frozen=True)
 class ReferenceUpdate:
-
     updated_ref: Reference
     """
     Reference that was (potentially) updated.

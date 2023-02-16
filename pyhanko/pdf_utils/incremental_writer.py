@@ -219,7 +219,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.trailer[key] = value
 
     def write(self, stream):
-
         if not self.objects and not self._force_write_when_empty:
             # just write the original and then bail
             self._write_header(stream)

@@ -237,7 +237,6 @@ def _ades_signature_crypto_policy_check(
     control_time: datetime,
     public_key: Optional[keys.PublicKeyInfo],
 ):
-
     sig_algo: cms.SignedDigestAlgorithm = signer_info['signature_algorithm']
     sig_allowed = algo_policy.signature_algorithm_allowed(
         sig_algo, control_time, public_key=public_key
@@ -401,7 +400,6 @@ def _init_vcs(
     timing_info: ValidationTimingInfo,
     validation_data_handlers: ValidationDataHandlers,
 ):
-
     validation_context = (
         validation_spec.cert_validation_policy.build_validation_context(
             timing_info=timing_info, handlers=validation_data_handlers
@@ -842,7 +840,6 @@ async def _build_and_past_validate_cert(
     validation_data_handlers: ValidationDataHandlers,
     init_control_time: Optional[datetime] = None,
 ) -> Tuple[ValidationPath, datetime]:
-
     path_builder = PathBuilder(
         trust_manager=validation_policy_spec.trust_manager,
         registry=validation_data_handlers.cert_registry,
@@ -889,7 +886,6 @@ async def _ades_past_signature_validation(
     init_control_time: Optional[datetime],
     is_timestamp: bool,
 ):
-
     validation_data_handlers = bootstrap_validation_data_handlers(
         validation_spec, is_historical=True, poe_manager_override=poe_manager
     )
@@ -1103,7 +1099,6 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
     embedded_sig: EmbeddedPdfSignature
 
     for ix, embedded_sig in enumerate(r.embedded_signatures):
-
         embedded_sig.compute_integrity_info(
             # different None handling convention
             diff_policy,
@@ -1231,7 +1226,6 @@ async def _validate_prima_facie_poe(
     validation_spec: SignatureValidationSpec,
     cur_timing_info: Optional[ValidationTimingInfo] = None,
 ) -> POEManager:
-
     # Sort by PDF revision, but in ascending order (!)
     # This is a consequence of the way the ER validation algorithm works
     candidate_poes = sorted(prima_facie_poe_sets, key=lambda p: p.pdf_revision)
@@ -1349,7 +1343,6 @@ async def _process_signature_ts(
     poe_manager: POEManager,
     timing_info: Optional[ValidationTimingInfo],
 ) -> Optional[AdESBasicValidationResult]:
-
     signature_bytes = embedded_sig.signer_info['signature'].native
     signature_ts: cms.SignedData = embedded_sig.attached_timestamp_data
     cert_validation_policy = (

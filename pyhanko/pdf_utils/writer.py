@@ -748,7 +748,6 @@ class BasePdfFileWriter(PdfHandler):
     def _import_object(
         self, obj: generic.PdfObject, reference_map: dict, obj_stream
     ) -> generic.PdfObject:
-
         # TODO check the spec for guidance on fonts. Do font identifiers have
         #  to be globally unique?
 

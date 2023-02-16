@@ -243,7 +243,6 @@ def process_oid(
 
 
 def _ensure_strings(strings, param_name):
-
     err_msg = (
         f"'{param_name}' must be specified as a "
         "list of strings, or a string."

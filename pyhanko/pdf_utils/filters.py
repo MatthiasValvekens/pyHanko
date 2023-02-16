@@ -62,7 +62,6 @@ class Decoder:
 
 
 def _png_decode(data: memoryview, columns):
-
     output = BytesIO()
     # PNG prediction can vary from row to row
     rowlength = columns + 1

@@ -390,7 +390,6 @@ def _select_style(ctx, style_name, url):
 
 
 def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
-
     if soft_revocation_check and force_revinfo:
         raise click.ClickException(
             "--soft-revocation-check is incompatible with " "--force-revinfo"
@@ -620,7 +619,6 @@ def validate_signatures(
     validation_time,
     no_strict_syntax,
 ):
-
     no_revocation_check |= validation_time is not None
 
     if no_revocation_check:
@@ -745,7 +743,6 @@ def validate_signatures(
     show_default=True,
 )
 def list_sigfields(infile, skip_status):
-
     with pyhanko_exception_manager():
         r = PdfFileReader(infile)
         field_info = fields.enumerate_sig_fields(r)
@@ -1134,7 +1131,6 @@ def detached_sig(
 async def async_detached_sig(
     signer: signers.Signer, infile_path, outfile, timestamp_url, use_pem
 ):
-
     with pyhanko_exception_manager():
         if timestamp_url is not None:
             timestamper = HTTPTimeStamper(timestamp_url)

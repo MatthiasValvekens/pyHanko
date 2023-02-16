@@ -175,7 +175,6 @@ class SignatureStatus:
     def default_usage_constraints(
         cls, key_usage_settings: Optional[KeyUsageConstraints] = None
     ) -> KeyUsageConstraints:
-
         key_usage_settings = key_usage_settings or KeyUsageConstraints()
         key_usage_settings = KeyUsageConstraints(
             key_usage=(
@@ -440,7 +439,6 @@ class CAdESSignerAttributeAssertions:
 
 @dataclass(frozen=True)
 class SignerAttributeStatus:
-
     ac_attrs: Optional[CertifiedAttributes] = None
     """
     Certified attributes sourced from valid attribute certificates embedded into

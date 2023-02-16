@@ -133,7 +133,6 @@ class PdfImage(PdfContent):
         opacity=None,
         box: BoxConstraints = None,
     ):
-
         if isinstance(image, str):
             image = Image.open(image)
 

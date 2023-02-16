@@ -1029,7 +1029,6 @@ class PdfSigner:
         return SigSeedValueSpec.from_pdf_object(sv_dict)
 
     def _select_md_algorithm(self, sv_spec: Optional[SigSeedValueSpec]) -> str:
-
         signature_meta = self.signature_meta
 
         # priority order for the message digest algorithm
@@ -1078,7 +1077,6 @@ class PdfSigner:
     def register_extensions(
         self, pdf_out: BasePdfFileWriter, *, md_algorithm: str
     ):
-
         if self.signature_meta.subfilter == SigSeedSubFilter.PADES:
             _ensure_esic_ext(pdf_out)
 
@@ -1725,7 +1723,6 @@ class PdfSigningSession:
     async def _perform_presign_signer_validation(
         self, validation_context, key_usage
     ):
-
         signer = self.pdf_signer.signer
         # validate cert
         # (this also keeps track of any validation data automagically)
@@ -1875,7 +1872,6 @@ class PdfSigningSession:
         )
 
     def _enforce_seed_value_constraints(self, validation_path):
-
         sv_spec = self.sv_spec
         pdf_signer = self.pdf_signer
         signature_meta = pdf_signer.signature_meta

@@ -178,7 +178,6 @@ def _build_type0_font_from_cidfont(
     vertical,
     obj_stream=None,
 ):
-
     # take the Identity-* encoding to inherit from the /Encoding
     # entry specified in our CIDSystemInfo dict
     encoding = 'Identity-V' if vertical else 'Identity-H'
@@ -356,7 +355,6 @@ class GlyphAccumulator(FontEngine):
         bcp47_lang_code=None,
         obj_stream=None,
     ):
-
         # harfbuzz expects bytes
         font_handle.seek(0)
         font_bytes = font_handle.read()
@@ -650,7 +648,6 @@ class CIDFont(generic.DictionaryObject):
         base_ps_name,
         subset_prefix,
     ):
-
         self._tt = tt
 
         self.subset_prefix = subset_prefix

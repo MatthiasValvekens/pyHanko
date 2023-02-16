@@ -813,7 +813,6 @@ def test_version_enum():
 
 
 def test_ensure_version_newfile():
-
     r = PdfFileReader(BytesIO(MINIMAL))
 
     w = writer.copy_into_new_writer(r)

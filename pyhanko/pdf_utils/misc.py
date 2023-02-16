@@ -59,7 +59,6 @@ rd = lambda x: round(x, 4)
 
 
 def instance_test(cls):
-
     return lambda x: isinstance(x, cls)
 
 

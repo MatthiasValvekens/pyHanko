@@ -201,7 +201,6 @@ class StandardDiffPolicy(DiffPolicy):
         field_mdp_spec: Optional[FieldMDPSpec] = None,
         doc_mdp: Optional[MDPPerm] = None,
     ) -> DiffResult:
-
         if doc_mdp == MDPPerm.ANNOTATE:
             logger.warning(
                 "StandardDiffPolicy was not designed to support "

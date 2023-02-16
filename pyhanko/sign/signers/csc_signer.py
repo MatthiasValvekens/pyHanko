@@ -275,7 +275,6 @@ async def fetch_certs_in_csc_credential(
 
 
 def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
-
     try:
         b64_certs = response_data['cert']['certificates']
     except KeyError as e:
@@ -637,7 +636,6 @@ class CSCSigner(Signer):
         batch_size: Optional[int] = None,
         est_raw_signature_size=512,
     ):
-
         credential_info = auth_manager.credential_info
         self.auth_manager = auth_manager
         self.signing_cert = credential_info.signing_cert

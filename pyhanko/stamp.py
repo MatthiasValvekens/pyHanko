@@ -219,7 +219,6 @@ class StaticStampStyle(BaseStampStyle):
         box: layout.BoxConstraints,
         text_params: dict,
     ) -> 'StaticContentStamp':
-
         return StaticContentStamp(writer=writer, style=self, box=box)
 
 
@@ -268,7 +267,6 @@ class TextStampStyle(BaseStampStyle):
         box: layout.BoxConstraints,
         text_params: dict,
     ) -> 'TextStamp':
-
         return TextStamp(
             writer=writer, style=self, box=box, text_params=text_params
         )
@@ -396,7 +394,6 @@ class QRStampStyle(TextStampStyle):
         box: layout.BoxConstraints,
         text_params: dict,
     ) -> 'QRStamp':
-
         # extract the URL parameter
         try:
             url = text_params.pop('url')
@@ -422,7 +419,6 @@ class BaseStamp(content.PdfContent):
         self._stamp_ref = None
 
     def _render_background(self):
-
         bg = self.style.background
         bg.set_writer(self.writer)
         bg_content = bg.render()  # render first, in case the BBox is lazy
@@ -686,7 +682,6 @@ class QRStamp(TextStamp):
         return style.qr_position.value
 
     def _inner_layout_natural_size(self):
-
         text_commands, (
             text_width,
             text_height,
@@ -860,7 +855,6 @@ def _stamp_file(
     y: int,
     **stamp_kwargs,
 ):
-
     with open(input_name, 'rb') as fin:
         pdf_out = IncrementalPdfFileWriter(fin)
         stamp = stamp_class(writer=pdf_out, style=style, **stamp_kwargs)

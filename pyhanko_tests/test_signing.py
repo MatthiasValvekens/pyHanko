@@ -101,7 +101,6 @@ def test_der_detect(tmp_path):
 
 
 def test_enforce_one_cert():
-
     fname = CRYPTO_DATA_DIR + '/some-chain.cert.pem'
 
     assert len(list(load_certs_from_pemder([fname]))) == 2
@@ -301,7 +300,6 @@ def test_sign_with_later_revoked_nots(requests_mock):
     # there's no way to do a timestamp validation check here, so the checker
     # should assume the timestamp to be invalid
     with freeze_time('2020-12-05'):
-
         r = PdfFileReader(out)
         s = r.embedded_signatures[0]
         vc = live_testing_vc(requests_mock)
@@ -340,7 +338,6 @@ sign_test_files = (MINIMAL, MINIMAL_ONE_FIELD)
 
 
 def test_enumerate_empty():
-
     with pytest.raises(StopIteration):
         next(fields.enumerate_sig_fields(PdfFileReader(BytesIO(MINIMAL))))
 
@@ -413,7 +410,6 @@ def test_no_certify_after_sign():
 
 @freeze_time('2020-11-01')
 def test_approval_sig():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
         w,
@@ -447,7 +443,6 @@ def test_approval_sig():
 
 @freeze_time('2020-11-01')
 def test_ocsp_embed():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
         w,
@@ -608,7 +603,6 @@ def test_name_location():
 
 
 def test_no_email():
-
     # just sign with any cert, don't care about validation etc.
     # This is simply to test the name generation logic if no email address
     # is available

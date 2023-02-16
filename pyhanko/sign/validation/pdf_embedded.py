@@ -593,7 +593,6 @@ def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
 def _validate_sv_constraints(
     emb_sig: EmbeddedPdfSignature, validation_path, timestamp_found
 ):
-
     sv_spec = emb_sig.seed_value_spec
     signing_cert = emb_sig.signer_cert
     if sv_spec.cert is not None:
@@ -792,7 +791,6 @@ def report_seed_value_validation(
 
 
 def _validate_subfilter(subfilter_str, permitted_subfilters, err_msg):
-
     try:
         from pyhanko.sign.fields import SigSeedSubFilter
 

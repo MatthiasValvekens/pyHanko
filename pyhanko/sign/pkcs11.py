@@ -387,7 +387,6 @@ def _format_pull_err_msg(
     label: Optional[str] = None,
     cert_id: Optional[bytes] = None,
 ):
-
     info_strs = []
     if label is not None:
         info_strs.append(f"label '{label}'")
@@ -406,7 +405,6 @@ def _pull_cert(
     label: Optional[str] = None,
     cert_id: Optional[bytes] = None,
 ):
-
     query_params = {Attribute.CLASS: ObjectClass.CERTIFICATE}
     if label is not None:
         query_params[Attribute.LABEL] = label
@@ -612,7 +610,6 @@ class PKCS11Signer(Signer):
         return set(self.__pull())
 
     def __pull(self):
-
         other_cert_labels = self.other_certs
         if other_cert_labels is not None and len(other_cert_labels) == 0:
             # if there's nothing to fetch, bail.

@@ -430,7 +430,6 @@ def test_free_unexpected_jump():
 
 
 def test_tagged_path_count():
-
     r = PdfFileReader(BytesIO(MINIMAL_TWO_FIELDS_TAGGED))
     r = r.get_historical_resolver(0)
     r._load_reverse_xref_cache()
