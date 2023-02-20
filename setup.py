@@ -36,6 +36,7 @@ setup(
     description='Tools for stamping and signing PDF files',
     long_description=long_description,
     long_description_content_type='text/markdown',
+    package_data={'pyhanko': ['py.typed']},
     classifiers=[
         'Development Status :: 3 - Alpha',
 
