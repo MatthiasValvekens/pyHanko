@@ -9,7 +9,7 @@ user-provided configuration (e.g. from a Yaml file).
 
 import dataclasses
 import re
-from typing import Optional, Set, Type, Union
+from typing import Any, Optional, Set, Tuple, Type, Union
 
 from asn1crypto.core import BitString, ObjectIdentifier
 
@@ -34,13 +34,13 @@ def _unwrap_type_annot(thing) -> Optional[type]:
             from typing import get_args, get_origin
         except ImportError:  # pragma: nocover
             # backwards compatibility with Python 3.7
-            def get_args(tp):
+            def get_args(tp: Any) -> Tuple[Any, ...]:
                 try:
                     return tp.__args__
                 except AttributeError:
                     return ()
 
-            def get_origin(tp):
+            def get_origin(tp: Any) -> Optional[Any]:
                 try:
                     return tp.__origin__
                 except AttributeError:

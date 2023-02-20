@@ -13,7 +13,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
-from typing import Callable, Generator, Iterable, Optional, TypeVar
+from typing import Callable, Generator, Iterable, Optional, TypeVar, Union
+
+from pyhanko_certvalidator.util import ConsList
 
 __all__ = [
     'PdfError',
@@ -363,7 +365,9 @@ def _as_gen(x: Iterable[X]) -> Generator[X, None, None]:
     yield from x
 
 
-def chunk_stream(temp_buffer: bytearray, stream, max_read=None):
+def chunk_stream(
+    temp_buffer: Union[bytearray, memoryview], stream, max_read=None
+) -> Iterable[Union[bytearray, memoryview]]:
     total_read = 0
     while max_read is None or total_read < max_read:
         # clamp the input buffer if necessary
@@ -378,6 +382,7 @@ def chunk_stream(temp_buffer: bytearray, stream, max_read=None):
             return
 
         # clamp the output as well, if necessary
+        to_feed: Union[bytearray, memoryview]
         if bytes_read < len(read_buffer):
             to_feed = memoryview(read_buffer)[:bytes_read]
         else:
@@ -401,32 +406,6 @@ class Singleton(type):
         instance = type.__call__(cls)
         cls.__new__ = lambda _: instance
         return cls
-
-
-@dataclass(frozen=True)
-class ConsList:
-    head: object
-    tail: 'ConsList' = None
-
-    @staticmethod
-    def empty() -> 'ConsList':
-        return ConsList(head=None)
-
-    @staticmethod
-    def sing(value) -> 'ConsList':
-        return ConsList(value, ConsList.empty())
-
-    def __iter__(self):
-        cur = self
-        while cur.head is not None:
-            yield cur.head
-            cur = cur.tail
-
-    def cons(self, head):
-        return ConsList(head, self)
-
-    def __repr__(self):  # pragma: nocover
-        return f"ConsList({list(reversed(list(self)))})"
 
 
 def assert_writable_and_random_access(output):
@@ -494,15 +473,20 @@ def finalise_output(orig_output, returned_output):
     return returned_output
 
 
-def isoparse(dt_str: str) -> datetime:
+def _get_isoparse() -> Callable[[str], datetime]:
     try:
         # Try to import the ISO parser from dateutil, if available
         from dateutil.parser import isoparse as parse
+
+        return parse
     except ImportError:  # pragma: nocover
         # if not, call fromisoformat in the standard library
         # (only implements a subset of ISO 8601)
-        parse = datetime.fromisoformat
+        return datetime.fromisoformat
 
+
+def isoparse(dt_str: str) -> datetime:
+    parse: Callable[[str], datetime] = _get_isoparse()
     dt = parse(dt_str)
     if dt.tzinfo is None:
         # assume UTC
@@ -521,5 +505,5 @@ class _LiftedIterable(CancelableAsyncIterator[X]):
         self.i = iter(i)
 
 
-async def lift_iterable_async(i: Iterable[X]) -> CancelableAsyncIterator[X]:
+def lift_iterable_async(i: Iterable[X]) -> CancelableAsyncIterator[X]:
     return _LiftedIterable(i)

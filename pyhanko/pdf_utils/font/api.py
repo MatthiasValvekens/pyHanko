@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from pyhanko.pdf_utils import generic
+from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 __all__ = [
     'ShapeResult',
@@ -9,8 +10,6 @@ __all__ = [
     'FontSubsetCollection',
     'FontEngineFactory',
 ]
-
-from pyhanko.pdf_utils.writer import BasePdfFileWriter
 
 ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 

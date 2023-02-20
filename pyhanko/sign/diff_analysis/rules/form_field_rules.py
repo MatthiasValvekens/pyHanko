@@ -9,6 +9,7 @@ from ..commons import (
     compare_dicts,
     compare_key_refs,
     qualify,
+    qualify_transforming,
     safe_whitelist,
 )
 from ..constants import (
@@ -362,7 +363,7 @@ class SigFieldCreationRule(FieldMDPRule):
                     deps = context.new.collect_dependencies(
                         raw_value, since_revision=context.old.revision + 1
                     )
-                    yield from qualify(
+                    yield from qualify_transforming(
                         ModificationLevel.FORM_FILLING,
                         misc._as_gen(deps),
                         transform=FormUpdate.curry_ref(field_name=fq_name),
@@ -488,6 +489,7 @@ class BaseFieldModificationRule(FieldMDPRule):
         old_field = spec.old_field
         new_field = spec.new_field
         compare_dicts(old_field, new_field, self.value_update_keys)
+        assert old_field is not None and new_field is not None
         # Be strict about /Type since some processor's behaviour depends on it
         had_type = '/Type' in old_field
         has_type = '/Type' in new_field
@@ -566,6 +568,7 @@ class SigFieldModificationRule(BaseFieldModificationRule):
 
         old_field = spec.old_field
         new_field = spec.new_field
+        assert new_field
 
         previously_signed = old_field is not None and '/V' in old_field
         now_signed = '/V' in new_field
@@ -597,7 +600,7 @@ class SigFieldModificationRule(BaseFieldModificationRule):
                 )
 
                 # whitelist appearance updates at FORM_FILL level
-                yield from qualify(
+                yield from qualify_transforming(
                     ModificationLevel.FORM_FILLING,
                     _allow_appearance_update(
                         old_field, new_field, context.old, context.new
@@ -730,7 +733,9 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
         )
         old_field = spec.old_field
         new_field = spec.new_field
-        yield from qualify(
+        # we already checked this further up
+        assert old_field and new_field
+        yield from qualify_transforming(
             ModificationLevel.FORM_FILLING,
             _allow_appearance_update(
                 old_field, new_field, context.old, context.new
@@ -764,7 +769,7 @@ class GenericFieldModificationRule(BaseFieldModificationRule):
             deps = context.new.collect_dependencies(
                 new_value, since_revision=context.old.revision + 1
             )
-            yield from qualify(
+            yield from qualify_transforming(
                 ModificationLevel.FORM_FILLING,
                 misc._as_gen(deps),
                 transform=FormUpdate.curry_ref(field_name=fq_name),
@@ -959,7 +964,7 @@ def _walk_page_tree_annots(
         try:
             node_type = old_kid['/Type']
         except (KeyError, TypeError) as e:  # pragma: nocover
-            raise misc.PdfReadError from e
+            raise misc.PdfReadError("Invalid page tree node") from e
         if node_type == '/Pages':
             yield from _walk_page_tree_annots(
                 old_kid,
@@ -1020,7 +1025,7 @@ def _walk_page_tree_annots(
             #  can safely clear them for modification across ALL paths
             #  (not necessary if both /Annots entries are indirect references,
             #   but adding even more cases is pushing things)
-            compare_dicts(old_kid, new_kid, {'/Annots'})
+            compare_dicts(old_kid, new_kid, frozenset(['/Annots']))
             # Page objects are often referenced from all sorts of places in the
             # file, and attempting to check all possible paths would probably
             # create more problems than it solves -> blanket approve

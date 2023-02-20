@@ -65,8 +65,8 @@ class EmbeddedFileObject(generic.StreamObject):
         pdf_writer: writer.BasePdfFileWriter,
         data: bytes,
         compress=True,
-        params: EmbeddedFileParams = None,
-        mime_type: str = None,
+        params: Optional[EmbeddedFileParams] = None,
+        mime_type: Optional[str] = None,
     ) -> 'EmbeddedFileObject':
         """
         Construct an embedded file object from file data.
@@ -109,8 +109,8 @@ class EmbeddedFileObject(generic.StreamObject):
         dict_data=None,
         stream_data=None,
         encoded_data=None,
-        params: EmbeddedFileParams = None,
-        mime_type: str = None,
+        params: Optional[EmbeddedFileParams] = None,
+        mime_type: Optional[str] = None,
     ):
         super().__init__(
             dict_data=dict_data,
@@ -235,12 +235,12 @@ class FileSpec:
     Associated file relationship specifier.
     """
 
-    f_related_files: List[RelatedFileSpec] = None
+    f_related_files: Optional[List[RelatedFileSpec]] = None
     """
     Related files with PDFDocEncoded names.
     """
 
-    uf_related_files: List[RelatedFileSpec] = None
+    uf_related_files: Optional[List[RelatedFileSpec]] = None
     """
     Related files with Unicode-encoded names.
     """
@@ -358,11 +358,11 @@ def embed_file(pdf_writer: writer.BasePdfFileWriter, spec: FileSpec):
 def wrap_encrypted_payload(
     plaintext_payload: bytes,
     *,
-    password: str = None,
-    certs: List[x509.Certificate] = None,
-    security_handler: crypt.SecurityHandler = None,
+    password: Optional[str] = None,
+    certs: Optional[List[x509.Certificate]] = None,
+    security_handler: Optional[crypt.SecurityHandler] = None,
     file_spec_string: str = 'attachment.pdf',
-    params: EmbeddedFileParams = None,
+    params: Optional[EmbeddedFileParams] = None,
     file_name: Optional[str] = None,
     description='Wrapped document',
     include_explanation_page=True
@@ -435,30 +435,31 @@ def wrap_encrypted_payload(
                 "exactly one of 'password' or 'cert' must be."
             )
         if password is None:
+            assert certs is not None
             # set up pubkey security handler
-            cf = crypt.PubKeyAESCryptFilter(
+            pubkey_cf = crypt.PubKeyAESCryptFilter(
                 keylen=32, acts_as_default=False, encrypt_metadata=False
             )
-            cf.set_embedded_only()
+            pubkey_cf.set_embedded_only()
             security_handler = crypt.PubKeySecurityHandler(
                 version=crypt.SecurityHandlerVersion.AES256,
                 pubkey_handler_subfilter=crypt.PubKeyAdbeSubFilter.S5,
                 legacy_keylen=None,
                 encrypt_metadata=False,
                 crypt_filter_config=crypt.CryptFilterConfiguration(
-                    {crypt.DEF_EMBEDDED_FILE: cf},
+                    {crypt.DEF_EMBEDDED_FILE: pubkey_cf},
                     default_file_filter=crypt.DEF_EMBEDDED_FILE,
                 ),
             )
-            cf.add_recipients(certs)
+            pubkey_cf.add_recipients(certs)
         else:
             # set up standard security handler
-            cf = crypt.StandardAESCryptFilter(keylen=32)
-            cf.set_embedded_only()
+            std_cf = crypt.StandardAESCryptFilter(keylen=32)
+            std_cf.set_embedded_only()
             security_handler = crypt.StandardSecurityHandler.build_from_pw(
                 password,
                 crypt_filter_config=crypt.CryptFilterConfiguration(
-                    {crypt.STD_CF: cf}, default_file_filter=crypt.STD_CF
+                    {crypt.STD_CF: std_cf}, default_file_filter=crypt.STD_CF
                 ),
                 encrypt_metadata=False,
             )

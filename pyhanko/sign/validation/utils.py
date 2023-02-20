@@ -22,7 +22,7 @@ from ..general import (
     MultivaluedAttributeError,
     NonexistentAttributeError,
     find_unique_cms_attribute,
-    get_pyca_cryptography_hash,
+    get_pyca_cryptography_hash_for_signing,
     process_pss_params,
 )
 from .errors import DisallowedAlgorithmError, SignatureValidationError
@@ -84,7 +84,9 @@ def validate_raw(
             ades_subindication=AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE,
         )
 
-    verify_md = get_pyca_cryptography_hash(md_algorithm, prehashed=prehashed)
+    verify_md = get_pyca_cryptography_hash_for_signing(
+        md_algorithm, prehashed=prehashed
+    )
 
     pub_key = serialization.load_der_public_key(cert.public_key.dump())
 

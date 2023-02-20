@@ -88,7 +88,7 @@ import base64
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 import tzlocal
 from asn1crypto import algos, x509
@@ -438,7 +438,9 @@ class CSCAuthorizationManager(abc.ABC):
             A dict that, when encoded as a JSON object, be used as the request
             body for a call to ``credentials/authorize``.
         """
-        result = {'credentialID': self.csc_session_info.credential_id}
+        result: Dict[str, Any] = {
+            'credentialID': self.csc_session_info.credential_id
+        }
 
         if hash_b64s is not None:
             # make num_signatures congruent with the number of hashes passed in
@@ -579,7 +581,10 @@ class _CSCBatchInfo:
     Flag indicating whether the commit process has been started.
     """
 
-    results: List[bytes] = None
+    results: Optional[List[bytes]] = None
+    """
+    Signature(s) returned by the API.
+    """
 
     def add(self, b64_hash: str) -> int:
         ix = len(self.b64_hashes)
@@ -638,8 +643,6 @@ class CSCSigner(Signer):
     ):
         credential_info = auth_manager.credential_info
         self.auth_manager = auth_manager
-        self.signing_cert = credential_info.signing_cert
-        self.cert_registry = credential_info.as_cert_store()
         self.session = session
         self.est_raw_signature_size = est_raw_signature_size
         self.sign_timeout = sign_timeout
@@ -647,12 +650,17 @@ class CSCSigner(Signer):
         self.batch_autocommit = batch_autocommit
         self._current_batch: Optional[_CSCBatchInfo] = None
         self.batch_size = batch_size or 1
-        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
+        super().__init__(
+            prefer_pss=prefer_pss,
+            embed_roots=embed_roots,
+            signing_cert=credential_info.signing_cert,
+            cert_registry=credential_info.as_cert_store(),
+        )
 
-    def get_signature_mechanism(self, digest_algorithm):
+    def get_signature_mechanism_for_digest(self, digest_algorithm):
         if self.signature_mechanism is not None:
             return self.signature_mechanism
-        result = super().get_signature_mechanism(digest_algorithm)
+        result = super().get_signature_mechanism_for_digest(digest_algorithm)
         result_algo = result['algorithm']
         supported = self.auth_manager.credential_info.supported_mechanisms
         if result_algo.native not in supported:
@@ -677,7 +685,7 @@ class CSCSigner(Signer):
             body for a call to ``signatures/signHash``.
         """
 
-        mechanism = self.get_signature_mechanism(digest_algorithm)
+        mechanism = self.get_signature_mechanism_for_digest(digest_algorithm)
         session_info = self.auth_manager.csc_session_info
         # SAD can be bound to specific hashes, but the authorization
         # process typically takes more wall clock time (esp. when

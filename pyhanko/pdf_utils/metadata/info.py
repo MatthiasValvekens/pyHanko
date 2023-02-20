@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import tzlocal
 
@@ -116,9 +116,7 @@ def _read_date_from_dict(
         return None
 
     try:
-        if isinstance(
-            date_str, (generic.TextStringObject, generic.ByteStringObject)
-        ):
+        if isinstance(date_str, generic.TextStringObject):
             return generic.parse_pdf_date(date_str)
     except misc.PdfReadError:
         pass
@@ -134,7 +132,7 @@ def _read_date_from_dict(
 def view_from_info_dict(
     info_dict: generic.DictionaryObject,
 ) -> model.DocumentMetadata:
-    kwargs = {}
+    kwargs: Dict[str, Any] = {}
     for s_entry in ('title', 'author', 'subject', 'creator'):
         try:
             kwargs[s_entry] = str(info_dict[f"/{s_entry.title()}"])

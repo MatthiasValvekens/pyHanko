@@ -300,7 +300,7 @@ class StandardDiffPolicy(DiffPolicy):
                             f"Update of {fu.updated_ref} is not allowed "
                             f"because the form field {field_name} is locked."
                         )
-                    changed_form_fields.add(fu.field_name)
+                    changed_form_fields.add(field_name)
                 if doc_mdp is not None and not fu.valid_when_certifying:
                     raise SuspiciousModification(
                         f"Update of {fu.updated_ref} is only allowed "
@@ -397,9 +397,10 @@ class StandardDiffPolicy(DiffPolicy):
         current_max = ModificationLevel.NONE
         if isinstance(base_revision, int):
             base_rev_resolver = reader.get_historical_resolver(base_revision)
+            base_revision_no = base_revision
         else:
             base_rev_resolver = base_revision
-            base_revision = base_rev_resolver.revision
+            base_revision_no = base_rev_resolver.revision
 
         # Note: there's a pragmatic reason why we iterate over all revisions
         # instead of just asking for all updated objects between the signed
@@ -416,7 +417,7 @@ class StandardDiffPolicy(DiffPolicy):
         # performance problems that may or may not be worse), I don't really
         # see a good way around this issue other than diffing every intermediate
         # version separately.
-        for revision in range(base_revision + 1, rev_count):
+        for revision in range(base_revision_no + 1, rev_count):
             try:
                 diff_result = self.apply(
                     old=base_rev_resolver,
@@ -427,7 +428,7 @@ class StandardDiffPolicy(DiffPolicy):
             except SuspiciousModification as e:
                 logger.warning(
                     'Error in diff operation between revision '
-                    f'{base_revision} and {revision}',
+                    f'{base_revision_no} and {revision}',
                     exc_info=e,
                 )
                 return e

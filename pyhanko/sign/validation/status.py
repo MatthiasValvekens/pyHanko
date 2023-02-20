@@ -3,7 +3,18 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from enum import unique
-from typing import ClassVar, Collection, Dict, Iterable, Optional, Set, Union
+from typing import (
+    Any,
+    ClassVar,
+    Collection,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 from asn1crypto import cms, core, crl, keys, x509
 from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
@@ -162,7 +173,7 @@ class SignatureStatus:
         return self.valid and self.intact and self.trust_problem_indic is None
 
     # TODO explain in more detail.
-    def summary(self, delimiter=','):
+    def summary(self, delimiter=',') -> str:
         """
         Provide a textual but machine-parsable summary of the validity.
         """
@@ -191,7 +202,7 @@ class SignatureStatus:
         return key_usage_settings
 
     @property
-    def _trust_anchor(self):
+    def _trust_anchor(self) -> str:
         if self.validation_path is not None:
             trust_anchor: x509.Certificate = self.validation_path[0]
             return trust_anchor.subject.human_friendly
@@ -205,7 +216,7 @@ class TimestampSignatureStatus(SignatureStatus):
     Signature status class used when validating timestamp tokens.
     """
 
-    key_usage = set()
+    key_usage: ClassVar[Set[str]] = set()
     """
     There are no (non-extended) key usage requirements for TSA certificates.
     """
@@ -291,12 +302,13 @@ class CertifiedAttributes:
         cls, results: Iterable[ACValidationResult], parse_error_fatal=False
     ):
         # first, classify the attributes and results by type
-        by_type = defaultdict(lambda: ([], []))
+        by_type: Dict[
+            str, Tuple[List[Any], List[ACValidationResult]]
+        ] = defaultdict(lambda: ([], []))
         for result in results:
-            for attr_type, attr in result.approved_attributes.items():
-                attr_type = None
+            for attr in result.approved_attributes.values():
+                attr_type = attr['type'].native
                 try:
-                    attr_type = attr['type'].native
                     values = list(attr['values'])  # force a surface-level parse
                 except ValueError as e:
                     _handle_attr_err(
@@ -320,7 +332,7 @@ class CertifiedAttributes:
             )
         return infos
 
-    def __init__(self):
+    def __init__(self: 'CertifiedAttributes'):
         self._attrs: Dict[str, CertifiedAttributeInfo] = {}
 
     def __getitem__(self, item: str) -> CertifiedAttributeInfo:
@@ -371,7 +383,7 @@ class ClaimedAttributes:
             )
         return infos
 
-    def __init__(self):
+    def __init__(self: 'ClaimedAttributes'):
         self._attrs: Dict[str, X509AttributeInfo] = {}
 
     def __getitem__(self, item: str) -> X509AttributeInfo:
@@ -565,7 +577,7 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
         sections.append(("Bottom line", bottom_line))
         return '\n'.join(fmt_section(hdr, body) for hdr, body in sections)
 
-    def pretty_print_sections(self):
+    def pretty_print_sections(self) -> List[Tuple[str, str]]:
         cert: x509.Certificate = self.signing_cert
 
         # TODO add section about ACs
@@ -617,8 +629,8 @@ class StandardCMSSignatureStatus(SignerAttributeStatus, SignatureStatus):
                 f"The token is guaranteed to be newer than the signature.\n"
                 f"{tst_status.describe_timestamp_trust()}"
             )
-        content_tst_status = self.timestamp_validity
-        if tst_status is not None:
+        content_tst_status = self.content_timestamp_validity
+        if content_tst_status is not None:
             ts = content_tst_status.timestamp
             timing_infos.append(
                 f"Content timestamp token: {ts.isoformat()}\n"
@@ -676,7 +688,7 @@ class SignatureCoverageLevel(OrderedEnum):
 
 @dataclass(frozen=True)
 class ModificationInfo:
-    coverage: SignatureCoverageLevel = None
+    coverage: Optional[SignatureCoverageLevel] = None
     """
     Indicates how much of the document is covered by the signature.
     """

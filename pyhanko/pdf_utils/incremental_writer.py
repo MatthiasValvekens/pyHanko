@@ -39,7 +39,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
     IO_CHUNK_SIZE = 4096
     _force_write_when_empty = False
 
-    def __init__(self, input_stream, prev: PdfFileReader = None, strict=True):
+    def __init__(
+        self, input_stream, prev: Optional[PdfFileReader] = None, strict=True
+    ):
         self.input_stream = input_stream
         if prev is None:
             prev = PdfFileReader(input_stream, strict=strict)

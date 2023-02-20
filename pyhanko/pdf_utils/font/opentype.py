@@ -7,6 +7,7 @@ import logging
 from binascii import hexlify
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.font.api import (
@@ -42,7 +43,16 @@ pdf_name = generic.NameObject
 pdf_string = generic.pdf_string
 
 
-def _format_simple_glyphline_from_buffer(buf, cid_width_callback):
+def _format_simple_glyphline_from_buffer(
+    buf, cid_width_callback: Callable[[int], Tuple[int, int]]
+):
+    total_len = 0
+    info: hb.GlyphInfo
+    pos: hb.GlyphPosition
+    subsgmt_cids: List[int] = []
+    tj_adjust = 0
+    current_tj_segments: List[str] = []
+
     def _emit_subsegment():
         nonlocal subsgmt_cids
         current_tj_segments.append(
@@ -51,13 +61,6 @@ def _format_simple_glyphline_from_buffer(buf, cid_width_callback):
         subsgmt_cids = []
         if tj_adjust:
             current_tj_segments.append(str(tj_adjust))
-
-    total_len = 0
-    info: hb.GlyphInfo
-    pos: hb.GlyphPosition
-    subsgmt_cids = []
-    tj_adjust = 0
-    current_tj_segments = []
 
     # Horizontal text with horizontal kerning
     for info, pos in zip(buf.glyph_infos, buf.glyph_positions):
@@ -87,7 +90,11 @@ def _format_simple_glyphline_from_buffer(buf, cid_width_callback):
 
 
 def _format_cid_glyphline_from_buffer(
-    buf, cid_width_callback, units_per_em, font_size, vertical
+    buf,
+    cid_width_callback: Callable[[int], Tuple[int, int]],
+    units_per_em: int,
+    font_size: float,
+    vertical: bool,
 ):
     no_complex_positioning = not vertical and all(
         not pos.y_offset for pos in buf.glyph_positions
@@ -155,11 +162,11 @@ def _format_cid_glyphline_from_buffer(
     return b' '.join(commands), (total_x_len, total_y_len)
 
 
-def _gids_by_cluster(buf):
+def _gids_by_cluster(buf) -> Iterable[Tuple[int, Optional[int], List[int]]]:
     # assumes that the first cluster is 0
 
     cur_cluster = 0
-    cur_cluster_glyphs = []
+    cur_cluster_glyphs: List[int] = []
     gi: hb.GlyphInfo
     for gi in buf.glyph_infos:
         if gi.cluster != cur_cluster:
@@ -368,6 +375,7 @@ class GlyphAccumulator(FontEngine):
             writer, base_ps_name, embedded_subset=True, obj_stream=obj_stream
         )
         self._font_ref = writer.allocate_placeholder()
+        self.cidfont_obj: CIDFont
         try:
             cff = self.tt['CFF ']
             self.cff_charset = cff.cff[0].charset
@@ -390,10 +398,10 @@ class GlyphAccumulator(FontEngine):
         # the 'head' table is mandatory
         self.units_per_em = tt['head'].unitsPerEm
 
-        self._glyphs = {}
+        self._glyphs: Dict[int, Tuple[int, int]] = {}
         self._glyph_set = tt.getGlyphSet(preferCFF=True)
 
-        self._cid_to_unicode = {}
+        self._cid_to_unicode: Dict[int, str] = {}
         self.__reverse_cmap = None
         self.ot_language_tag = _check_ot_tag(ot_language_tag)
         self.ot_script_tag = _check_ot_tag(ot_script_tag)
@@ -416,7 +424,7 @@ class GlyphAccumulator(FontEngine):
             self.__reverse_cmap = self.tt['cmap'].buildReversed()
         return self.__reverse_cmap
 
-    def _get_cid_and_width(self, glyph_id):
+    def _get_cid_and_width(self, glyph_id: int) -> Tuple[int, int]:
         try:
             return self._glyphs[glyph_id]
         except KeyError:
@@ -572,7 +580,7 @@ class GlyphAccumulator(FontEngine):
         stream.compress()
         return stream
 
-    def _extract_subset(self, options=None):
+    def _extract_subset(self, options: Optional[subset.Options] = None):
         if options is None:
             options = subset.Options(layout_closure=False)
             options.drop_tables += ['GPOS', 'GDEF', 'GSUB']
@@ -822,19 +830,19 @@ class GlyphAccumulatorFactory(FontEngineFactory):
     Font size.
     """
 
-    ot_script_tag: str = None
+    ot_script_tag: Optional[str] = None
     """
     OpenType script tag to use. Will be guessed by HarfBuzz if not
     specified.
     """
 
-    ot_language_tag: str = None
+    ot_language_tag: Optional[str] = None
     """
     OpenType language tag to use. Defaults to the default language system
     for the current script.
     """
 
-    writing_direction: str = None
+    writing_direction: Optional[str] = None
     """
     Writing direction, one of 'ltr', 'rtl', 'ttb' or 'btt'.
     Will be guessed by HarfBuzz if not specified.

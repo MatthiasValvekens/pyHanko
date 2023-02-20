@@ -24,7 +24,7 @@ def sign_pdf(
     pdf_out: BasePdfFileWriter,
     signature_meta: PdfSignatureMetadata,
     signer: Signer,
-    timestamper: TimeStamper = None,
+    timestamper: Optional[TimeStamper] = None,
     new_field_spec: Optional[SigFieldSpec] = None,
     existing_fields_only=False,
     bytes_reserved=None,
@@ -73,13 +73,13 @@ def sign_pdf(
             "existing_fields_only=True."
         )
 
-    signer = PdfSigner(
+    pdf_signer = PdfSigner(
         signature_meta,
         signer,
         timestamper=timestamper,
         new_field_spec=new_field_spec,
     )
-    return signer.sign_pdf(
+    return pdf_signer.sign_pdf(
         pdf_out,
         existing_fields_only=existing_fields_only,
         bytes_reserved=bytes_reserved,
@@ -92,7 +92,7 @@ async def async_sign_pdf(
     pdf_out: BasePdfFileWriter,
     signature_meta: PdfSignatureMetadata,
     signer: Signer,
-    timestamper: TimeStamper = None,
+    timestamper: Optional[TimeStamper] = None,
     new_field_spec: Optional[SigFieldSpec] = None,
     existing_fields_only=False,
     bytes_reserved=None,
@@ -141,13 +141,13 @@ async def async_sign_pdf(
             "existing_fields_only=True."
         )
 
-    signer = PdfSigner(
+    pdf_signer = PdfSigner(
         signature_meta,
         signer,
         timestamper=timestamper,
         new_field_spec=new_field_spec,
     )
-    return await signer.async_sign_pdf(
+    return await pdf_signer.async_sign_pdf(
         pdf_out,
         existing_fields_only=existing_fields_only,
         bytes_reserved=bytes_reserved,

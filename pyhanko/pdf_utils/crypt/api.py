@@ -119,8 +119,8 @@ class SecurityHandler:
         compatibility with certain implementations.
     """
 
-    __registered_subclasses: Dict[str, Type['SecurityHandler']] = dict()
-    _known_crypt_filters = dict()
+    __registered_subclasses: Dict[str, Type['SecurityHandler']] = {}
+    _known_crypt_filters: Dict[generic.NameObject, 'CryptFilterBuilder'] = {}
 
     def __init__(
         self,
@@ -137,7 +137,7 @@ class SecurityHandler:
         self.crypt_filter_config = crypt_filter_config
         self.encrypt_metadata = encrypt_metadata
         self._compat_entries = compat_entries
-        self._credential = None
+        self._credential: Optional[SerialisableCredential] = None
 
     def __init_subclass__(cls, **kwargs):
         # ensure that _known_crypt_filters is initialised to a fresh object
@@ -383,10 +383,14 @@ class SecurityHandler:
         except KeyError:
             return None
 
-        crypt_filters = {
-            name: cls.read_cf_dictionary(cfdict, name in (stmf, strf))
-            for name, cfdict in cf_config_dict.items()
-        }
+        def _crypt_filters():
+            for name, cfdict in cf_config_dict.items():
+                cf = cls.read_cf_dictionary(cfdict, name in (stmf, strf))
+                if cf is None:
+                    raise misc.PdfReadError("Failed to load crypt filter with ")
+                yield name, cf
+
+        crypt_filters = dict(_crypt_filters())
         return CryptFilterConfiguration(
             crypt_filters=crypt_filters,
             default_stream_filter=stmf,
@@ -408,6 +412,7 @@ class SecurityHandler:
             return 1, 5
         elif v >= SecurityHandlerVersion.RC4_LONGER_KEYS:
             return 1, 4
+        return None
 
 
 class CryptFilter:
@@ -423,7 +428,7 @@ class CryptFilter:
     the API supports mixin usage so code can be shared.
     """
 
-    _handler: 'SecurityHandler' = None
+    _handler: Optional['SecurityHandler'] = None
     _shared_key: Optional[bytes] = None
     _embedded_only = False
 
@@ -681,7 +686,7 @@ class CryptFilterConfiguration:
 
     def __init__(
         self,
-        crypt_filters: Dict[str, CryptFilter] = None,
+        crypt_filters: Dict[str, CryptFilter],
         default_stream_filter=IDENTITY,
         default_string_filter=IDENTITY,
         default_file_filter=None,
@@ -724,7 +729,7 @@ class CryptFilterConfiguration:
         :param handler:
             A :class:`.SecurityHandler` instance.
         """
-        for cf in self._crypt_filters.values():
+        for cf in self.filters():
             cf._set_security_handler(handler)
 
     def get_for_stream(self):

@@ -21,11 +21,14 @@ class RC4CryptFilterMixin(CryptFilter, abc.ABC):
     """
 
     method = generic.NameObject('/V2')
-    keylen = None
 
     def __init__(self, *, keylen=5, **kwargs):
-        self.keylen = keylen
+        self._keylen = keylen
         super().__init__(**kwargs)
+
+    @property
+    def keylen(self) -> int:
+        return self._keylen
 
     def encrypt(self, key, plaintext: bytes, params=None) -> bytes:
         """
@@ -75,19 +78,24 @@ class RC4CryptFilterMixin(CryptFilter, abc.ABC):
 class AESCryptFilterMixin(CryptFilter, abc.ABC):
     """Mixin for AES-based crypt filters."""
 
-    keylen = None
-    method = None
-
-    def __init__(self, *, keylen, **kwargs):
+    def __init__(self, *, keylen: int, **kwargs):
         if keylen not in (16, 32):
             raise NotImplementedError("Only AES-128 and AES-256 are supported")
-        self.keylen = keylen
-        self.method = (
+        self._keylen = keylen
+        self._method = (
             generic.NameObject('/AESV2')
             if keylen == 16
             else generic.NameObject('/AESV3')
         )
         super().__init__(**kwargs)
+
+    @property
+    def method(self) -> generic.NameObject:
+        return self._method
+
+    @property
+    def keylen(self) -> int:
+        return self._keylen
 
     def encrypt(self, key, plaintext: bytes, params=None):
         """
@@ -142,6 +150,7 @@ class AESCryptFilterMixin(CryptFilter, abc.ABC):
         :return:
             The local key.
         """
+        assert self._handler
         if self._handler.version >= SecurityHandlerVersion.AES256:
             return self.shared_key
         else:

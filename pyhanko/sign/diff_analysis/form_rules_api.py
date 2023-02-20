@@ -6,12 +6,12 @@ In principle, these aren't relevant to the high-level validation API.
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Generator, Iterable, List, Optional, Set, Tuple
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
-from .commons import compare_dicts, compare_key_refs, qualify
+from .commons import compare_dicts, compare_key_refs, qualify_transforming
 from .constants import ACROFORM_EXEMPT_STRICT_COMPARISON
 from .policy_api import ModificationLevel, SuspiciousModification
 from .rules_api import Context, ReferenceUpdate
@@ -115,11 +115,14 @@ class FieldComparisonSpec:
         assert isinstance(field, generic.DictionaryObject)
         return field
 
-    def expected_contexts(self):
+    def expected_contexts(self) -> Set[Context]:
+        old_field_ref = self.old_field_ref
+        if old_field_ref is None:
+            return set()
         # these are the paths where we expect the form field to be referred to
         paths = self._old_annotation_paths()
-        contexts = set(
-            Context.from_absolute(self.old_field_ref.get_pdf_handler(), path)
+        contexts: Set[Context] = set(
+            Context.from_absolute(old_field_ref.get_pdf_handler(), path)
             for path in paths
         )
         struct_context = self._find_in_structure_tree()
@@ -128,7 +131,7 @@ class FieldComparisonSpec:
         if self.old_canonical_path:
             contexts.add(
                 Context.from_absolute(
-                    self.old_field_ref.get_pdf_handler(),
+                    old_field_ref.get_pdf_handler(),
                     self.old_canonical_path,
                 )
             )
@@ -150,11 +153,12 @@ class FieldComparisonSpec:
         # from parent pointers in the tree and from the /ParentTree index.
 
         old_field_ref = self.old_field_ref
-        old = self.old_field_ref.get_pdf_handler()
+        assert old_field_ref is not None
+        old = old_field_ref.get_pdf_handler()
         assert isinstance(old, HistoricalResolver)
 
         if '/StructTreeRoot' not in old.root:
-            return
+            return None
 
         # check if the path ends in Form.K.Obj and
         # starts with Root.StructTreeRoot.K
@@ -171,6 +175,7 @@ class FieldComparisonSpec:
                     and struct_tree_root == '/StructTreeRoot'
                 ):
                     return Context.from_absolute(old, pdf_path)
+        return None
 
     # FIXME this is wrong now
     def _old_annotation_paths(self):
@@ -257,18 +262,18 @@ class FieldMDPRule:
 
 
 def _list_fields(
-    old_fields: generic.PdfObject,
-    new_fields: generic.PdfObject,
+    old_fields: Optional[generic.PdfObject],
+    new_fields: Optional[generic.PdfObject],
     old_path: RawPdfPath,
     parent_name="",
     inherited_ft=None,
-) -> Dict[str, FieldComparisonSpec]:
+) -> Generator[Tuple[str, FieldComparisonSpec], None, None]:
     """
     Recursively construct a list of field names, together with their
     "incarnations" in either revision.
     """
 
-    def _make_list(lst: generic.PdfObject, exc):
+    def _make_list(lst: Optional[generic.PdfObject], exc):
         if not isinstance(lst, generic.ArrayObject):
             raise exc("Field list is not an array.")
         names_seen = set()
@@ -316,7 +321,7 @@ def _list_fields(
     old_fields_by_name = dict(_make_list(old_fields, misc.PdfReadError))
     new_fields_by_name = dict(_make_list(new_fields, SuspiciousModification))
 
-    names = set()
+    names: Set[str] = set()
     names.update(old_fields_by_name.keys())
     names.update(new_fields_by_name.keys())
 
@@ -422,7 +427,7 @@ class FormUpdatingRule:
         acroform_context = Context.from_absolute(
             old, RawPdfPath('/Root', '/AcroForm')
         )
-        old_acroform, new_acroform = yield from qualify(
+        old_acroform, new_acroform = yield from qualify_transforming(
             ModificationLevel.LTA_UPDATES,
             compare_key_refs('/AcroForm', old, old.root, new.root),
             transform=FormUpdate.curry_ref(
@@ -441,7 +446,7 @@ class FormUpdatingRule:
         # for vetting the creation of other form fields anyway.
         fields_path = RawPdfPath('/Root', '/AcroForm', '/Fields')
         fields_context = Context.from_absolute(old, fields_path)
-        old_fields, new_fields = yield from qualify(
+        old_fields, new_fields = yield from qualify_transforming(
             ModificationLevel.LTA_UPDATES,
             compare_key_refs('/Fields', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(
@@ -454,7 +459,7 @@ class FormUpdatingRule:
         dr_context = Context.from_absolute(
             old, RawPdfPath('/Root', '/AcroForm', '/DR')
         )
-        old_dr, new_dr = yield from qualify(
+        old_dr, new_dr = yield from qualify_transforming(
             ModificationLevel.FORM_FILLING,
             compare_key_refs('/DR', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(
@@ -465,7 +470,7 @@ class FormUpdatingRule:
             dr_deps = new.collect_dependencies(
                 new_dr, since_revision=old.revision + 1
             )
-            yield from qualify(
+            yield from qualify_transforming(
                 ModificationLevel.FORM_FILLING,
                 misc._as_gen(dr_deps),
                 transform=FormUpdate.curry_ref(field_name=None),

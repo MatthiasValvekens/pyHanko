@@ -11,6 +11,8 @@ See also RFC 5126.
 Note: not all of these are applicable in PAdES.
 """
 
+# mypy: ignore-errors
+
 __all__ = [
     'CommitmentTypeIdentifier',
     'CommitmentTypeQualifier',

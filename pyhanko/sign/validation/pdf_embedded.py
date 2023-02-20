@@ -27,6 +27,7 @@ from pyhanko.sign.fields import (
     SigSeedValueSpec,
 )
 from pyhanko.sign.general import (
+    SignedDataCerts,
     UnacceptableSignerError,
     byte_range_digest,
     extract_signer_info,
@@ -73,22 +74,25 @@ def _extract_reference_dict(
     try:
         sig_refs = signature_obj['/Reference']
     except KeyError:
-        return
+        return None
     for ref in sig_refs:
         ref = ref.get_object()
         if ref['/TransformMethod'] == method:
             return ref
+    return None
 
 
 def _extract_docmdp_for_sig(signature_obj) -> Optional[MDPPerm]:
     ref = _extract_reference_dict(signature_obj, '/DocMDP')
     if ref is None:
-        return
+        return None
     try:
         raw_perms = ref['/TransformParams'].raw_get('/P')
         return MDPPerm(raw_perms)
     except (ValueError, KeyError) as e:  # pragma: nocover
-        raise SignatureValidationError("Failed to read document permissions", e)
+        raise SignatureValidationError(
+            "Failed to read document permissions"
+        ) from e
 
 
 def extract_contents(sig_object: generic.DictionaryObject) -> bytes:
@@ -165,7 +169,7 @@ class EmbeddedPdfSignature:
         self.signed_data: cms.SignedData = signed_data
 
         self.signer_info = extract_signer_info(signed_data)
-        self._sd_cert_info = None
+        self._sd_cert_info: Optional[SignedDataCerts] = None
 
         # The PDF standard does not define a way to specify the digest algorithm
         # used other than this one.
@@ -204,43 +208,42 @@ class EmbeddedPdfSignature:
             sig_object_ref.reference
         )
         self.coverage = None
-        self.external_digest = None
-        self.total_len = None
-        self._docmdp = self._fieldmdp = None
+        self.external_digest: Optional[bytes] = None
+        self.total_len: Optional[int] = None
+        self._docmdp: Optional[MDPPerm] = None
+        self._fieldmdp: Optional[FieldMDPSpec] = None
         self._docmdp_queried = self._fieldmdp_queried = False
-        self.tst_signature_digest = None
+        self.tst_signature_digest: Optional[bytes] = None
 
         self.diff_result = None
         self._integrity_checked = False
         self.fq_name = fq_name
 
-    def _init_cert_info(self):
+    def _init_cert_info(self) -> SignedDataCerts:
         if self._sd_cert_info is None:
             self._sd_cert_info = extract_certs_for_validation(self.signed_data)
+        return self._sd_cert_info
 
     @property
     def embedded_attr_certs(self) -> List[cms.AttributeCertificateV2]:
         """
         Embedded attribute certificates.
         """
-        self._init_cert_info()
-        return list(self._sd_cert_info.attribute_certs)
+        return list(self._init_cert_info().attribute_certs)
 
     @property
     def other_embedded_certs(self) -> List[x509.Certificate]:
         """
         Embedded X.509 certificates, excluding than that of the signer.
         """
-        self._init_cert_info()
-        return list(self._sd_cert_info.other_certs)
+        return list(self._init_cert_info().other_certs)
 
     @property
     def signer_cert(self) -> x509.Certificate:
         """
         Certificate of the signer.
         """
-        self._init_cert_info()
-        return self._sd_cert_info.signer_cert
+        return self._init_cert_info().signer_cert
 
     @property
     def sig_object_type(self) -> generic.NameObject:
@@ -277,7 +280,7 @@ class EmbeddedPdfSignature:
             st_as_pdf_date = self.sig_object['/M']
             return generic.parse_pdf_date(st_as_pdf_date)
         except KeyError:  # pragma: nocover
-            pass
+            return None
 
     @property
     def attached_timestamp_data(self) -> Optional[cms.SignedData]:
@@ -363,7 +366,7 @@ class EmbeddedPdfSignature:
         try:
             sig_sv_dict = self.sig_field['/SV']
         except KeyError:
-            return
+            return None
         return SigSeedValueSpec.from_pdf_object(sig_sv_dict)
 
     @property
@@ -411,13 +414,13 @@ class EmbeddedPdfSignature:
         ref_dict = _extract_reference_dict(self.sig_object, '/FieldMDP')
         self._fieldmdp_queried = True
         if ref_dict is None:
-            return
+            return None
         try:
             sp = FieldMDPSpec.from_pdf_object(ref_dict['/TransformParams'])
         except (ValueError, KeyError) as e:  # pragma: nocover
             raise SignatureValidationError(
-                "Failed to read /FieldMDP settings", e
-            )
+                "Failed to read /FieldMDP settings"
+            ) from e
         self._fieldmdp = sp
         return sp
 
@@ -584,7 +587,7 @@ def read_certification_data(reader: PdfFileReader) -> Optional[DocMDPInfo]:
     try:
         certification_sig = reader.root['/Perms']['/DocMDP']
     except KeyError:
-        return
+        return None
 
     perm = _extract_docmdp_for_sig(certification_sig)
     return DocMDPInfo(perm, certification_sig)
@@ -594,6 +597,8 @@ def _validate_sv_constraints(
     emb_sig: EmbeddedPdfSignature, validation_path, timestamp_found
 ):
     sv_spec = emb_sig.seed_value_spec
+    if sv_spec is None:
+        return
     signing_cert = emb_sig.signer_cert
     if sv_spec.cert is not None:
         try:
@@ -743,14 +748,15 @@ def _validate_sv_constraints(
     if flags & SigSeedValFlags.REASONS:
         # standard says that omission of the /Reasons key amounts to
         #  a prohibition in this case
-        must_omit = not sv_spec.reasons or sv_spec.reasons == ["."]
+        reasons = sv_spec.reasons or []
+        must_omit = not reasons or reasons == ["."]
         reason_given = sig_obj.get('/Reason')
         if must_omit and reason_given is not None:
             raise SigSeedValueValidationError(
                 "The seed value dictionary prohibits giving a reason "
                 "for signing."
             )
-        if not must_omit and reason_given not in sv_spec.reasons:
+        if not must_omit and reason_given not in reasons:
             raise SigSeedValueValidationError(
                 "The reason for signing \"%s\" is not accepted by the "
                 "seed value dictionary." % (reason_given,)
@@ -775,9 +781,6 @@ def report_seed_value_validation(
     :return:
         A ``status_kwargs`` dict.
     """
-    sv_spec = embedded_sig.seed_value_spec
-    if sv_spec is None:
-        return {}
     sv_err: Optional[SigSeedValueValidationError]
     try:
         _validate_sv_constraints(
@@ -787,7 +790,10 @@ def report_seed_value_validation(
     except SigSeedValueValidationError as e:
         logger.warning("Error in seed value validation.", exc_info=e)
         sv_err = e
-    return {'has_seed_values': True, 'seed_value_constraint_error': sv_err}
+    return {
+        'has_seed_values': embedded_sig.seed_value_spec is not None,
+        'seed_value_constraint_error': sv_err,
+    }
 
 
 def _validate_subfilter(subfilter_str, permitted_subfilters, err_msg):
@@ -804,11 +810,11 @@ def _validate_subfilter(subfilter_str, permitted_subfilters, err_msg):
 
 async def async_validate_pdf_signature(
     embedded_sig: EmbeddedPdfSignature,
-    signer_validation_context: ValidationContext = None,
-    ts_validation_context: ValidationContext = None,
-    ac_validation_context: ValidationContext = None,
-    diff_policy: DiffPolicy = None,
-    key_usage_settings: KeyUsageConstraints = None,
+    signer_validation_context: Optional[ValidationContext] = None,
+    ts_validation_context: Optional[ValidationContext] = None,
+    ac_validation_context: Optional[ValidationContext] = None,
+    diff_policy: Optional[DiffPolicy] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
     skip_diff: bool = False,
 ) -> PdfSignatureStatus:
     """
@@ -871,7 +877,7 @@ async def async_validate_pdf_signature(
     ts_status_kwargs = await collect_timing_info(
         embedded_sig.signer_info,
         ts_validation_context,
-        raw_digest=embedded_sig.external_digest,
+        raw_digest=embedded_sig.compute_digest(),
     )
     status_kwargs.update(ts_status_kwargs)
     if 'signer_reported_dt' not in status_kwargs:
@@ -915,8 +921,8 @@ async def async_validate_pdf_signature(
 
 async def async_validate_pdf_timestamp(
     embedded_sig: EmbeddedPdfSignature,
-    validation_context: ValidationContext = None,
-    diff_policy: DiffPolicy = None,
+    validation_context: Optional[ValidationContext] = None,
+    diff_policy: Optional[DiffPolicy] = None,
     skip_diff: bool = False,
 ) -> DocumentTimestampStatus:
     """
@@ -959,7 +965,7 @@ async def async_validate_pdf_timestamp(
     status_kwargs = await validate_tst_signed_data(
         embedded_sig.signed_data,
         validation_context,
-        embedded_sig.external_digest,
+        embedded_sig.compute_digest(),
     )
 
     status_kwargs['coverage'] = embedded_sig.coverage

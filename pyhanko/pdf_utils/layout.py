@@ -4,7 +4,7 @@ import enum
 import logging
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Optional
+from typing import Optional, Union
 
 __all__ = [
     'LayoutError',
@@ -51,26 +51,33 @@ class BoxConstraints:
     _ar: Optional[Fraction]
     _fully_specified: bool
 
-    def __init__(self, width=None, height=None, aspect_ratio: Fraction = None):
-        self._width = int(width) if width is not None else None
-        self._height = int(height) if height is not None else None
+    def __init__(
+        self,
+        width: Union[int, float, None] = None,
+        height: Union[int, float, None] = None,
+        aspect_ratio: Optional[Fraction] = None,
+    ):
+        int_width = int(width) if width is not None else None
+        int_height = int(height) if height is not None else None
+        self._width = int_width
+        self._height = int_height
 
         fully_specified = False
 
         self._ar = None
-        if width is None and height is None and aspect_ratio is None:
+        if int_width is None and int_height is None and aspect_ratio is None:
             return
-        elif width is not None and height is not None:
+        elif int_width is not None and int_height is not None:
             if aspect_ratio is not None:
                 raise BoxSpecificationError  # overspecified
-            self._ar = Fraction(self._width, self._height)
+            self._ar = Fraction(int_width, int_height)
             fully_specified = True
         elif aspect_ratio is not None:
             self._ar = aspect_ratio
-            if height is not None:
-                self._width = height * aspect_ratio
-            elif width is not None:
-                self._height = width / aspect_ratio
+            if int_height is not None:
+                self._width = int(round(int_height * aspect_ratio))
+            elif int_width is not None:
+                self._height = int(round(int_width / aspect_ratio))
 
         self._fully_specified = fully_specified
 
@@ -310,6 +317,7 @@ class AxisAlignment(enum.Enum):
             # we'll center the inner content *within* the margins
             inner_offset = (effective_max_len - inner_len) // 2
             return pre_margin + inner_offset
+        raise TypeError
 
 
 # Class variables in enums are weird, so let's put this here

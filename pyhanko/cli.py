@@ -6,6 +6,7 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum, auto
+from typing import TextIO
 
 import click
 import tzlocal
@@ -74,6 +75,7 @@ def logging_setup(log_configs, verbose: bool):
     for module, log_config in log_configs.items():
         cur_logger = logging.getLogger(module)
         cur_logger.setLevel(log_config.level)
+        handler: logging.StreamHandler
         if isinstance(log_config.output, StdLogOutput):
             if StdLogOutput == StdLogOutput.STDOUT:
                 handler = logging.StreamHandler(sys.stdout)
@@ -241,8 +243,8 @@ readable_file = click.Path(exists=True, readable=True, dir_okay=False)
 
 
 def _build_vc_kwargs(
-    ctx,
-    validation_context,
+    ctx: click.Context,
+    validation_context: ValidationContext,
     trust,
     trust_replace,
     other_certs,
@@ -313,7 +315,9 @@ def _build_vc_kwargs(
         raise click.ClickException(msg)
 
 
-def _get_key_usage_settings(ctx, validation_context):
+def _get_key_usage_settings(
+    ctx: click.Context, validation_context: ValidationContext
+):
     cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
     if cli_config is None:
         return None
@@ -358,7 +362,7 @@ def trust_options(f):
     return f
 
 
-def _select_style(ctx, style_name, url):
+def _select_style(ctx: click.Context, style_name: str, url: str):
     try:
         cli_config: CLIConfig = ctx.obj[Ctx.CLI_CONFIG]
     except KeyError:
@@ -600,7 +604,7 @@ def _attempt_iso_dt_parse(dt_str) -> datetime:
 )
 @click.pass_context
 def validate_signatures(
-    ctx,
+    ctx: click.Context,
     infile,
     executive_summary,
     pretty_print,
@@ -1286,7 +1290,15 @@ def grab_certs(files):
 )
 @click.pass_context
 def addsig_pemder(
-    ctx, infile, outfile, key, cert, chain, pemder_setup, passfile, no_pass
+    ctx: click.Context,
+    infile,
+    outfile,
+    key,
+    cert,
+    chain,
+    pemder_setup,
+    passfile,
+    no_pass,
 ):
     signature_meta = ctx.obj[Ctx.SIG_META]
     existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
@@ -1379,7 +1391,9 @@ def addsig_pemder(
     show_default='stdin',
 )
 @click.pass_context
-def addsig_pkcs12(ctx, infile, outfile, pfx, chain, passfile, p12_setup):
+def addsig_pkcs12(
+    ctx: click.Context, infile, outfile, pfx, chain, passfile, p12_setup
+):
     # TODO add sanity check in case the user gets the arg order wrong
     #  (now it fails with a gnarly DER decoding error, which is not very
     #  user-friendly)
@@ -1519,7 +1533,7 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
 )
 @click.pass_context
 def addsig_pkcs11(
-    ctx,
+    ctx: click.Context,
     infile,
     outfile,
     lib,
@@ -1618,7 +1632,9 @@ def addsig_pkcs11(
     default=None,
 )
 @click.pass_context
-def addsig_beid(ctx, infile, outfile, lib, use_auth_cert, slot_no):
+def addsig_beid(
+    ctx: click.Context, infile, outfile, lib, use_auth_cert, slot_no
+):
     from pyhanko.sign import beid
 
     if not lib:

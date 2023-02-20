@@ -341,15 +341,18 @@ async def test_sign_mechanism_not_supported():
     with pytest.raises(SigningError, match='must be one of'):
         # noinspection PyTypeChecker
         signer = csc_signer.CSCSigner(None, auth_manager=auth_man)
-        signer.get_signature_mechanism(digest_algorithm='sha256')
+        signer.get_signature_mechanism_for_digest(digest_algorithm='sha256')
 
     # ...but overrides should still work
     # noinspection PyTypeChecker
     signer = csc_signer.CSCSigner(None, auth_manager=auth_man)
-    signer.signature_mechanism = mech = algos.SignedDigestAlgorithm(
+    signer._signature_mechanism = mech = algos.SignedDigestAlgorithm(
         {'algorithm': 'sha256_rsa'}
     )
-    assert signer.get_signature_mechanism(digest_algorithm='sha256') == mech
+    assert (
+        signer.get_signature_mechanism_for_digest(digest_algorithm='sha256')
+        == mech
+    )
 
 
 @pytest.mark.asyncio
@@ -626,7 +629,7 @@ async def test_csc_with_parameters(aiohttp_client):
 
     result = await signer.async_sign_raw(b'foobar', digest_algorithm='sha256')
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
-    mech = signer.get_signature_mechanism('sha256')
+    mech = signer.get_signature_mechanism_for_digest('sha256')
     assert mech.signature_algo == 'rsassa_pss'
     validate_raw(
         result,

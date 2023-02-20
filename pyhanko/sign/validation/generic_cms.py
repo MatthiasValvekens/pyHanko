@@ -1,7 +1,19 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import IO, Iterable, List, Optional, Tuple, Type, TypeVar, Union
+from typing import (
+    IO,
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
 
 from asn1crypto import cms, core, tsp, x509
 from cryptography.exceptions import InvalidSignature
@@ -371,14 +383,14 @@ def extract_certs_for_validation(
 
 async def cms_basic_validation(
     signed_data: cms.SignedData,
-    raw_digest: bytes = None,
+    raw_digest: Optional[bytes] = None,
     validation_context: Optional[ValidationContext] = None,
-    status_kwargs: dict = None,
+    status_kwargs: Optional[dict] = None,
     validation_path: Optional[ValidationPath] = None,
     pkix_validation_params: Optional[PKIXValidationParams] = None,
     *,
     key_usage_settings: KeyUsageConstraints,
-):
+) -> Dict[str, Any]:
     """
     Perform basic validation of CMS and PKCS#7 signatures in isolation
     (i.e. integrity and trust checks).
@@ -441,6 +453,7 @@ async def cms_basic_validation(
                 other_certs
             )
 
+            paths: CancelableAsyncIterator[ValidationPath]
             if validation_path is not None:
                 paths = lift_iterable_async([validation_path])
             else:
@@ -504,14 +517,39 @@ async def validate_cert_usage(
     return ades_status, revo_details, path
 
 
+@overload
 async def async_validate_cms_signature(
     signed_data: cms.SignedData,
-    status_cls: Type[StatusType] = SignatureStatus,
-    raw_digest: bytes = None,
-    validation_context: ValidationContext = None,
-    status_kwargs: dict = None,
-    key_usage_settings: KeyUsageConstraints = None,
-):
+    *,
+    status_cls: Type[StatusType],
+    raw_digest: Optional[bytes] = None,
+    validation_context: Optional[ValidationContext] = None,
+    status_kwargs: Optional[dict] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
+) -> StatusType:
+    ...
+
+
+@overload
+async def async_validate_cms_signature(
+    signed_data: cms.SignedData,
+    *,
+    raw_digest: Optional[bytes] = None,
+    validation_context: Optional[ValidationContext] = None,
+    status_kwargs: Optional[dict] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
+) -> SignatureStatus:
+    ...
+
+
+async def async_validate_cms_signature(
+    signed_data: cms.SignedData,
+    status_cls=SignatureStatus,
+    raw_digest: Optional[bytes] = None,
+    validation_context: Optional[ValidationContext] = None,
+    status_kwargs: Optional[dict] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
+) -> StatusType:
     """
     Validate a CMS signature (i.e. a ``SignedData`` object).
 
@@ -532,7 +570,7 @@ async def async_validate_cms_signature(
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
-    key_usage_settings = status_cls.default_usage_constraints(
+    eff_key_usage_settings = status_cls.default_usage_constraints(
         key_usage_settings
     )
     status_kwargs = await cms_basic_validation(
@@ -540,8 +578,9 @@ async def async_validate_cms_signature(
         raw_digest,
         validation_context,
         status_kwargs,
-        key_usage_settings=key_usage_settings,
+        key_usage_settings=eff_key_usage_settings,
     )
+    # noinspection PyArgumentList
     return status_cls(**status_kwargs)
 
 
@@ -562,7 +601,7 @@ def extract_self_reported_ts(signer_info: cms.SignerInfo) -> Optional[datetime]:
         st = find_unique_cms_attribute(sa, 'signing_time')
         return st.native
     except (NonexistentAttributeError, MultivaluedAttributeError):
-        pass
+        return None
 
 
 def extract_tst_data(
@@ -592,7 +631,7 @@ def extract_tst_data(
         tst_signed_data = tst['content']
         return tst_signed_data
     except (NonexistentAttributeError, MultivaluedAttributeError):
-        pass
+        return None
 
 
 def compute_signature_tst_digest(
@@ -630,7 +669,7 @@ def compute_signature_tst_digest(
 
 async def collect_timing_info(
     signer_info: cms.SignerInfo,
-    ts_validation_context: ValidationContext,
+    ts_validation_context: Optional[ValidationContext],
     raw_digest: bytes,
 ):
     """
@@ -647,7 +686,7 @@ async def collect_timing_info(
         validation of the content timestamp token, if there is one)
     """
 
-    status_kwargs = {}
+    status_kwargs: Dict[str, Any] = {}
 
     # timestamp-related validation
     signer_reported_dt = extract_self_reported_ts(signer_info)
@@ -656,10 +695,12 @@ async def collect_timing_info(
 
     tst_signed_data = extract_tst_data(signer_info, signed=False)
     if tst_signed_data is not None:
+        tst_signature_digest = compute_signature_tst_digest(signer_info)
+        assert tst_signature_digest is not None
         tst_validity_kwargs = await validate_tst_signed_data(
             tst_signed_data,
             ts_validation_context,
-            compute_signature_tst_digest(signer_info),
+            tst_signature_digest,
         )
         tst_validity = TimestampSignatureStatus(**tst_validity_kwargs)
         status_kwargs['timestamp_validity'] = tst_validity
@@ -733,7 +774,10 @@ async def process_certified_attrs(
     acs: Iterable[cms.AttributeCertificateV2],
     signer_cert: x509.Certificate,
     validation_context: ValidationContext,
-) -> Tuple[List[ACValidationResult], List[Exception]]:
+) -> Tuple[
+    List[ACValidationResult],
+    List[Union[PathValidationError, PathBuildingError]],
+]:
     jobs = [
         async_validate_ac(ac, validation_context, holder_cert=signer_cert)
         for ac in acs
@@ -767,7 +811,7 @@ async def collect_signer_attr_status(
             str(e), ades_subindication=AdESFailure.FORMAT_FAILURE
         ) from e
 
-    result = {}
+    result: Dict[str, Any] = {}
     cades_ac_results = None
     cades_ac_errors = None
     if signer_attrs is not None:
@@ -852,10 +896,10 @@ async def collect_signer_attr_status(
 async def async_validate_detached_cms(
     input_data: Union[bytes, IO, cms.ContentInfo, cms.EncapsulatedContentInfo],
     signed_data: cms.SignedData,
-    signer_validation_context: ValidationContext = None,
-    ts_validation_context: ValidationContext = None,
-    ac_validation_context: ValidationContext = None,
-    key_usage_settings: KeyUsageConstraints = None,
+    signer_validation_context: Optional[ValidationContext] = None,
+    ts_validation_context: Optional[ValidationContext] = None,
+    ac_validation_context: Optional[ValidationContext] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
     max_read=None,
 ) -> StandardCMSSignatureStatus:

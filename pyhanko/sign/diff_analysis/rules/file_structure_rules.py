@@ -1,9 +1,8 @@
 from typing import Iterable, Tuple
 
-from pyhanko.pdf_utils.generic import Reference
 from pyhanko.pdf_utils.reader import HistoricalResolver, RawPdfPath
 
-from ..commons import compare_dicts, compare_key_refs, qualify
+from ..commons import compare_dicts, compare_key_refs, qualify_transforming
 from ..constants import ROOT_EXEMPT_STRICT_COMPARISON
 from ..policy_api import ModificationLevel
 from ..rules_api import (
@@ -39,7 +38,7 @@ class CatalogModificationRule(QualifiedWhitelistRule):
 
     def apply_qualified(
         self, old: HistoricalResolver, new: HistoricalResolver
-    ) -> Iterable[Tuple[ModificationLevel, Reference]]:
+    ) -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
         old_root = old.root
         new_root = new.root
         # first, check if the keys in the document catalog are unchanged
@@ -53,7 +52,7 @@ class CatalogModificationRule(QualifiedWhitelistRule):
         #    whitelist it (but do not process any further)
         #  - /DSS, /AcroForm and /Metadata are dealt with by other rules.
         for key in ('/Extensions', '/MarkInfo'):
-            yield from qualify(
+            yield from qualify_transforming(
                 ModificationLevel.LTA_UPDATES,
                 compare_key_refs(key, old, old_root, new_root),
                 transform=lambda ref: ReferenceUpdate(
@@ -85,7 +84,7 @@ class ObjectStreamRule(WhitelistRule):
 
     def apply(
         self, old: HistoricalResolver, new: HistoricalResolver
-    ) -> Iterable[Reference]:
+    ) -> Iterable[ReferenceUpdate]:
         # object streams are OK, but overriding object streams is not.
         for objstream_ref in new.object_streams_used():
             if old.is_ref_available(objstream_ref):
@@ -99,7 +98,7 @@ class XrefStreamRule(WhitelistRule):
 
     def apply(
         self, old: HistoricalResolver, new: HistoricalResolver
-    ) -> Iterable[Reference]:
+    ) -> Iterable[ReferenceUpdate]:
         xrefs = new.reader.xrefs
         xref_meta = xrefs.get_xref_container_info(new.revision)
         xref_stm = xref_meta.stream_ref
@@ -121,5 +120,5 @@ class XrefStreamRule(WhitelistRule):
 
         if next_rev_data.hybrid is not None:
             hyb_xref_stm = next_rev_data.hybrid.meta_info.stream_ref
-            if old.is_ref_available(hyb_xref_stm):
+            if hyb_xref_stm and old.is_ref_available(hyb_xref_stm):
                 yield ReferenceUpdate(hyb_xref_stm)

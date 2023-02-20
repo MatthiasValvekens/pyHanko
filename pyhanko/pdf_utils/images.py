@@ -17,11 +17,11 @@ The image data handling is done by
 """
 
 import uuid
-from typing import Union
+from typing import Optional, Union
 
 from . import generic
 from .content import PdfContent, PdfResources, ResourceType
-from .generic import pdf_name
+from .generic import IndirectObject, pdf_name
 from .layout import BoxConstraints
 from .writer import BasePdfFileWriter
 
@@ -75,6 +75,7 @@ def pil_image(img: Image.Image, writer: BasePdfFileWriter):
         # finally, convert to RBG or L as appropriate
         img = img.convert(img.mode[:-1])
 
+    clr_space: Union[generic.NameObject, generic.ArrayObject]
     clr_space = (
         pdf_name('/DeviceGray') if img.mode == 'L' else pdf_name('/DeviceRGB')
     )
@@ -127,11 +128,11 @@ class PdfImage(PdfContent):
     def __init__(
         self,
         image: Union[Image.Image, str],
-        writer: BasePdfFileWriter = None,
-        resources: PdfResources = None,
-        name: str = None,
+        writer: Optional[BasePdfFileWriter] = None,
+        resources: Optional[PdfResources] = None,
+        name: Optional[str] = None,
         opacity=None,
-        box: BoxConstraints = None,
+        box: Optional[BoxConstraints] = None,
     ):
         if isinstance(image, str):
             image = Image.open(image)
@@ -144,7 +145,7 @@ class PdfImage(PdfContent):
             # assume square pixels
             box = BoxConstraints(self.image.width, self.image.height)
         super().__init__(resources, writer=writer, box=box)
-        self._image_ref = None
+        self._image_ref: Optional[IndirectObject] = None
 
     @property
     def image_ref(self) -> generic.IndirectObject:
@@ -159,12 +160,11 @@ class PdfImage(PdfContent):
         """
         assert self.writer is not None
         # cache is invalidated if the writer changed
-        if (
-            self._image_ref is None
-            or self._image_ref.get_pdf_handler() is not self.writer
-        ):
-            self._image_ref = pil_image(self.image, self.writer)
-        return self._image_ref
+        image_ref = self._image_ref
+        if image_ref is None or image_ref.get_pdf_handler() is not self.writer:
+            self._image_ref = image_ref = pil_image(self.image, self.writer)
+        assert image_ref is not None
+        return image_ref
 
     def render(self) -> bytes:
         img_ref_name = '/Img' + self.name

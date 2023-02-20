@@ -12,14 +12,14 @@ import uuid
 from binascii import hexlify
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import qrcode
 import tzlocal
 
 from pyhanko.pdf_utils import content, generic, layout
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
-from pyhanko.pdf_utils.generic import pdf_name, pdf_string
+from pyhanko.pdf_utils.generic import IndirectObject, pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import rd
@@ -124,7 +124,7 @@ class BaseStampStyle(ConfigurableMixin):
     Border width in user units (for the stamp, not the text box).
     """
 
-    background: content.PdfContent = None
+    background: Optional[content.PdfContent] = None
     """
     :class:`~.pdf_utils.content.PdfContent` instance that will be used to render
     the stamp's background.
@@ -236,7 +236,7 @@ class TextStampStyle(BaseStampStyle):
     The text box style for the internal text box used.
     """
 
-    inner_content_layout: layout.SimpleBoxLayoutRule = None
+    inner_content_layout: Optional[layout.SimpleBoxLayoutRule] = None
     """
     Rule determining the position and alignment of the inner text box within
     the stamp.
@@ -411,12 +411,12 @@ class BaseStamp(content.PdfContent):
         self,
         writer: BasePdfFileWriter,
         style,
-        box: layout.BoxConstraints = None,
+        box: Optional[layout.BoxConstraints] = None,
     ):
         super().__init__(box=box, writer=writer)
         self.style = style
         self._resources_ready = False
-        self._stamp_ref = None
+        self._stamp_ref: Optional[IndirectObject] = None
 
     def _render_background(self):
         bg = self.style.background
@@ -497,8 +497,9 @@ class BaseStamp(content.PdfContent):
         """
         stamp_ref = self._stamp_ref
         if stamp_ref is None:
+            wr = self._ensure_writer
             form_xobj = self.as_form_xobject()
-            self._stamp_ref = stamp_ref = self.writer.add_object(form_xobj)
+            self._stamp_ref = stamp_ref = wr.add_object(form_xobj)
         return stamp_ref
 
     def apply(self, dest_page: int, x: int, y: int):
@@ -533,6 +534,7 @@ class BaseStamp(content.PdfContent):
             }
         )
         wr = self.writer
+        assert wr is not None
         page_ref = wr.add_stream_to_page(
             dest_page, wr.add_object(stamp_wrapper_stream), resources
         )
@@ -584,7 +586,7 @@ class TextStamp(BaseStamp):
         writer: BasePdfFileWriter,
         style,
         text_params=None,
-        box: layout.BoxConstraints = None,
+        box: Optional[layout.BoxConstraints] = None,
     ):
         super().__init__(box=box, style=style, writer=writer)
         self.text_params = text_params
@@ -667,7 +669,7 @@ class QRStamp(TextStamp):
         url: str,
         style: QRStampStyle,
         text_params=None,
-        box: layout.BoxConstraints = None,
+        box: Optional[layout.BoxConstraints] = None,
     ):
         super().__init__(writer, style, text_params=text_params, box=box)
         self.url = url
@@ -681,7 +683,7 @@ class QRStamp(TextStamp):
         # choose a reasonable default based on the QR code's relative position
         return style.qr_position.value
 
-    def _inner_layout_natural_size(self):
+    def _inner_layout_natural_size(self) -> Tuple[List[bytes], Tuple[int, int]]:
         text_commands, (
             text_width,
             text_height,

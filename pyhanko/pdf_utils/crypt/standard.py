@@ -169,7 +169,7 @@ class StandardCryptFilter(CryptFilter, abc.ABC):
     Crypt filter for use with the standard security handler.
     """
 
-    _handler: 'StandardSecurityHandler' = None
+    _handler: Optional['StandardSecurityHandler'] = None
 
     @property
     def _auth_failed(self):
@@ -184,6 +184,7 @@ class StandardCryptFilter(CryptFilter, abc.ABC):
         self._shared_key = None
 
     def derive_shared_encryption_key(self) -> bytes:
+        assert self._handler
         return self._handler.get_file_encryption_key()
 
     def as_pdf_object(self):
@@ -250,10 +251,14 @@ class StandardSecurityHandler(SecurityHandler):
     """
 
     _known_crypt_filters: Dict[generic.NameObject, CryptFilterBuilder] = {
-        '/V2': _build_legacy_standard_crypt_filter,
-        '/AESV2': lambda _, __: StandardAESCryptFilter(keylen=16),
-        '/AESV3': lambda _, __: StandardAESCryptFilter(keylen=32),
-        '/Identity': lambda _, __: IdentityCryptFilter(),
+        generic.NameObject('/V2'): _build_legacy_standard_crypt_filter,
+        generic.NameObject('/AESV2'): lambda _, __: StandardAESCryptFilter(
+            keylen=16
+        ),
+        generic.NameObject('/AESV3'): lambda _, __: StandardAESCryptFilter(
+            keylen=32
+        ),
+        generic.NameObject('/Identity'): lambda _, __: IdentityCryptFilter(),
     }
 
     @classmethod
@@ -498,7 +503,7 @@ class StandardSecurityHandler(SecurityHandler):
         ueseed=None,
         encrypted_perms=None,
         encrypt_metadata=True,
-        crypt_filter_config: CryptFilterConfiguration = None,
+        crypt_filter_config: Optional[CryptFilterConfiguration] = None,
         compat_entries=True,
     ):
         if crypt_filter_config is None:
@@ -513,6 +518,10 @@ class StandardSecurityHandler(SecurityHandler):
                 # there's a reasonable default config that we can fall back
                 # to here
                 crypt_filter_config = _std_aes_config(32)
+            else:
+                raise misc.PdfError(
+                    "Could not impute a reasonable crypt filter config"
+                )
         super().__init__(
             version,
             legacy_keylen,
@@ -538,7 +547,7 @@ class StandardSecurityHandler(SecurityHandler):
             self.oeseed = self.ueseed = self.encrypted_perms = None
         self.odata = odata
         self.udata = udata
-        self._shared_key = None
+        self._shared_key: Optional[bytes] = None
         self._auth_failed = False
 
     @classmethod
@@ -562,20 +571,22 @@ class StandardSecurityHandler(SecurityHandler):
             udata = encrypt_dict['/U']
         except KeyError:
             raise misc.PdfError("/O and /U entries must be present")
+
+        def _get_bytes(x: generic.PdfObject) -> bytes:
+            if not isinstance(
+                x, (generic.TextStringObject, generic.ByteStringObject)
+            ):
+                raise misc.PdfReadError(f"Expected string, but got {type(x)}")
+            return x.original_bytes
+
         return dict(
             legacy_keylen=keylen,
             perm_flags=as_signed(encrypt_dict.get('/P', ALL_PERMS)),
             odata=odata.original_bytes[:48],
             udata=udata.original_bytes[:48],
-            oeseed=encrypt_dict.get_and_apply(
-                '/OE', lambda x: x.original_bytes
-            ),
-            ueseed=encrypt_dict.get_and_apply(
-                '/UE', lambda x: x.original_bytes
-            ),
-            encrypted_perms=encrypt_dict.get_and_apply(
-                '/Perms', lambda x: x.original_bytes
-            ),
+            oeseed=encrypt_dict.get_and_apply('/OE', _get_bytes),
+            ueseed=encrypt_dict.get_and_apply('/UE', _get_bytes),
+            encrypted_perms=encrypt_dict.get_and_apply('/Perms', _get_bytes),
             encrypt_metadata=encrypt_dict.get_and_apply(
                 '/EncryptMetadata', bool, default=True
             ),

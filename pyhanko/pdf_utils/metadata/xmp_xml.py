@@ -19,6 +19,7 @@ from defusedxml.ElementTree import parse as defused_parse
 
 from pyhanko.pdf_utils import generic, misc
 
+from ..crypt.api import SecurityHandler
 from ..misc import get_and_apply, isoparse
 from . import model
 
@@ -34,6 +35,7 @@ def _untag(tag: str) -> Optional[model.ExpandedName]:
     m = TAG_RE.match(tag)
     if m is not None:
         return model.ExpandedName(ns=m.group(1), local_name=m.group(2))
+    return None
 
 
 def _name(elem: ElementTree.Element) -> Optional[model.ExpandedName]:
@@ -147,7 +149,11 @@ def serialise_xmp(roots: List[model.XmpStructure], out: BinaryIO):
 
 class MetadataStream(generic.StreamObject):
     def __init__(
-        self, dict_data=None, stream_data=None, encoded_data=None, handler=None
+        self,
+        dict_data: Optional[dict] = None,
+        stream_data: Optional[bytes] = None,
+        encoded_data: Optional[bytes] = None,
+        handler: Optional[SecurityHandler] = None,
     ):
         self._xmp: Optional[List[model.XmpStructure]] = None
         super().__init__(
@@ -179,6 +185,7 @@ class MetadataStream(generic.StreamObject):
 
     def _reserialise(self) -> bytes:
         stm = BytesIO()
+        assert self._xmp is not None
         serialise_xmp(self._xmp, stm)
         self._data = data = stm.getvalue()
         return data
@@ -204,6 +211,7 @@ def _meta_string_as_value(
     elif isinstance(meta_str, str):
         quals = LANG_X_DEFAULT if lang_xdefault else model.Qualifiers.of()
         return model.XmpValue(meta_str, quals)
+    return None
 
 
 def _write_meta_string(
@@ -290,7 +298,7 @@ def _parse_dt(xmp_val: model.XmpValue):
 
 
 def _simplify_meta_str(val: model.XmpValue) -> model.MetaString:
-    result = None
+    result: model.MetaString = None
     focus = val
     if isinstance(val.value, model.XmpArray) and len(val.value.entries) > 0:
         # we expect this to be the case
@@ -386,14 +394,17 @@ def _proc_xmp_struct(
             fields[name] = _proc_xmp_value(child, lang=lang)
 
     # extract attributes as unqualified simple values
-    for name, value in iter_attrs(elem):
+    value: Union[model.XmpUri, str]
+    for name, attr_value in iter_attrs(elem):
         if name != model.XML_LANG:
-            if HTTP_URI_RE.match(value):
+            if HTTP_URI_RE.match(attr_value):
                 # hack to get around some popular XMP processors
                 # putting URIs in places where they shouldn't go
                 # (in particular: "Structure element with field attributes"
                 # pattern
-                value = model.XmpUri(value)
+                value = model.XmpUri(attr_value)
+            else:
+                value = attr_value
             fields[name] = model.XmpValue(value)
 
     return model.XmpStructure(fields)
@@ -403,6 +414,8 @@ def _proc_xmp_arr(
     elem: ElementTree.Element, lang: Optional[str]
 ) -> model.XmpArray:
     name = _name(elem)
+    if name is None:
+        raise ValueError
 
     arr_type = {
         'Seq': model.XmpArrayType.ORDERED,

@@ -325,14 +325,14 @@ class XRefSectionData:
     independently of the others.
     """
 
-    def __init__(self):
+    def __init__(self: 'XRefSectionData'):
         # TODO Food for thought: is there an efficient IntMap implementation out
         #  there that can beat generic python dicts in real-world scenarios?
         self.freed: Dict[int, int] = {}
-        self.standard_xrefs: Dict[int, (int, int)] = {}
+        self.standard_xrefs: Dict[int, Tuple[int, int]] = {}
         self.xrefs_in_objstm: Dict[int, ObjStreamRef] = {}
-        self.explicit_refs_in_revision = set()
-        self.obj_streams_used = set()
+        self.explicit_refs_in_revision: Set[Tuple[int, int]] = set()
+        self.obj_streams_used: Set[int] = set()
         self.hybrid: Optional[XRefSection] = None
 
     def try_resolve(
@@ -396,11 +396,14 @@ class XRefSectionData:
             if xref_entry.idnum == 0:
                 continue  # don't bother
             if xref_entry.xref_type == XRefType.STANDARD:
-                self.standard_xrefs[idnum] = (generation, xref_entry.location)
+                offset = xref_entry.location
+                assert isinstance(offset, int)
+                self.standard_xrefs[idnum] = (generation, offset)
                 self.explicit_refs_in_revision.add((idnum, generation))
             elif xref_entry.xref_type == XRefType.IN_OBJ_STREAM:
                 assert generation == 0
-                loc: ObjStreamRef = xref_entry.location
+                loc = xref_entry.location
+                assert isinstance(loc, ObjStreamRef)
                 self.xrefs_in_objstm[idnum] = loc
                 self.obj_streams_used.add(loc.obj_stream_id)
                 self.explicit_refs_in_revision.add((idnum, 0))
@@ -445,7 +448,9 @@ class XRefSection:
     """
 
 
-def _check_freed_refs(ix, section, all_sections):
+def _check_freed_refs(
+    ix: int, section: XRefSection, all_sections: List[XRefSection]
+):
     # Prevent xref stream objects from being overwritten.
     # (stricter than the spec, but it makes our lives easier at the cost
     # of rejecting some theoretically valid files)
@@ -634,7 +639,7 @@ class XRefBuilder:
         self.stream = stream
         self.strict = strict
         self.last_startxref = last_startxref
-        self.sections = []
+        self.sections: List[XRefSection] = []
 
         self.trailer = TrailerDictionary()
         self.trailer.container_ref = generic.TrailerReference(self)
@@ -861,7 +866,7 @@ class TrailerDictionary(generic.PdfObject):
         '/XRefStm',
     }
 
-    def __init__(self):
+    def __init__(self: 'TrailerDictionary'):
         # trailer revisions, numbered backwards (i.e. in processing order)
         # The element at index 0 is the most recent one.
         self._trailer_revisions: List[generic.DictionaryObject] = []
@@ -1075,15 +1080,15 @@ class XRefCache:
         """
         section = self._xref_sections[revision]
         result = {
-            generic.Reference(*ref, pdf=self.reader)
-            for ref in section.xref_data.explicit_refs_in_revision
+            generic.Reference(idnum, generation, pdf=self.reader)
+            for idnum, generation in section.xref_data.explicit_refs_in_revision
         }
         hybrid = section.xref_data.hybrid
         if hybrid is not None:
             # make sure we also account for refs in hybrid sections
             result |= {
-                generic.Reference(*ref, pdf=self.reader)
-                for ref in hybrid.xref_data.explicit_refs_in_revision
+                generic.Reference(idnum, generation, pdf=self.reader)
+                for idnum, generation in hybrid.xref_data.explicit_refs_in_revision
             }
         return result
 

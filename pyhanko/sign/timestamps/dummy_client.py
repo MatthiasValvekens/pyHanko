@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 import tzlocal
 from asn1crypto import algos, cms, core, keys, tsp, x509
@@ -29,8 +30,8 @@ class DummyTimeStamper(TimeStamper):
         self,
         tsa_cert: x509.Certificate,
         tsa_key: keys.PrivateKeyInfo,
-        certs_to_embed: CertificateStore = None,
-        fixed_dt: datetime = None,
+        certs_to_embed: Optional[CertificateStore] = None,
+        fixed_dt: Optional[datetime] = None,
         include_nonce=True,
         override_md=None,
     ):
@@ -56,7 +57,7 @@ class DummyTimeStamper(TimeStamper):
             {'algorithm': md_algorithm}
         )
         dt = self.fixed_dt or datetime.now(tz=tzlocal.get_localzone())
-        tst_info = {
+        tst_info_args = {
             'version': 'v1',
             # See http://oidref.com/1.3.6.1.4.1.4146.2.2
             # I don't really care too much, this is a testing device anyway
@@ -70,9 +71,9 @@ class DummyTimeStamper(TimeStamper):
             ),
         }
         if req['nonce'].native is not None:
-            tst_info['nonce'] = req['nonce']
+            tst_info_args['nonce'] = req['nonce']
 
-        tst_info = tsp.TSTInfo(tst_info)
+        tst_info = tsp.TSTInfo(tst_info_args)
         tst_info_data = tst_info.dump()
         md_spec = get_pyca_cryptography_hash(md_algorithm)
         md = hashes.Hash(md_spec)

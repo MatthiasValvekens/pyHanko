@@ -1,6 +1,7 @@
 import binascii
 import uuid
 from enum import Enum
+from typing import Optional
 
 from .generic import (
     DictionaryObject,
@@ -20,6 +21,8 @@ __all__ = [
     'RawContent',
     'ImportedPdfPage',
 ]
+
+from .writer import BasePdfFileWriter
 
 # TODO have the merge_resources helper in incremental_writer rely on some
 #  of the idioms established here
@@ -174,13 +177,19 @@ class PdfContent:
 
     def __init__(
         self,
-        resources: PdfResources = None,
-        box: BoxConstraints = None,
-        writer=None,
+        resources: Optional[PdfResources] = None,
+        box: Optional[BoxConstraints] = None,
+        writer: Optional[BasePdfFileWriter] = None,
     ):
-        self._resources = resources or PdfResources()
-        self.box = box or BoxConstraints()
+        self._resources: PdfResources = resources or PdfResources()
+        self.box: BoxConstraints = box or BoxConstraints()
         self.writer = writer
+
+    @property
+    def _ensure_writer(self) -> BasePdfFileWriter:
+        if self.writer is None:
+            raise ValueError("PDF writer is not set")
+        return self.writer
 
     # TODO support a set-if-not-taken mechanism, that suggests alternative names
     #  if necessary.
@@ -264,8 +273,8 @@ class RawContent(PdfContent):
     def __init__(
         self,
         data: bytes,
-        resources: PdfResources = None,
-        box: BoxConstraints = None,
+        resources: Optional[PdfResources] = None,
+        box: Optional[BoxConstraints] = None,
     ):
         super().__init__(resources, box)
         self.data = data
@@ -285,7 +294,7 @@ class ImportedPdfPage(PdfContent):
     def render(self) -> bytes:
         from .writer import BasePdfFileWriter
 
-        w: BasePdfFileWriter = self.writer
+        w: BasePdfFileWriter = self._ensure_writer
         with open(self.file_name, 'rb') as inf:
             r = PdfFileReader(inf)
             xobj = w.import_page_as_xobject(r, page_ix=self.page_ix)

@@ -6,7 +6,7 @@ In principle, these aren't relevant to the high-level validation API.
 import logging
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Iterable, Optional, Tuple, Union
+from typing import Callable, Iterable, Optional, Tuple, Type, TypeVar, Union
 
 from pyhanko.pdf_utils.generic import (
     ArrayObject,
@@ -64,10 +64,12 @@ class Context:
     @classmethod
     def relative_to(
         cls,
-        start: Union[DictionaryObject, ArrayObject],
+        start: Union[DictionaryObject, ArrayObject, TrailerDictionary],
         path: Union[RawPdfPath, int, str],
     ) -> 'RelativeContext':
-        cur_ref: Dereferenceable = start.container_ref
+        container_ref: Optional[Dereferenceable] = start.container_ref
+        assert container_ref is not None
+        cur_ref: Dereferenceable = container_ref
         if isinstance(path, (int, str)):
             path = RawPdfPath(path)
         walk = path.walk_nodes(start, transparent_dereference=False)
@@ -127,7 +129,7 @@ class AbsoluteContext(Context):
     """
 
     pdf_handler: PdfHandler = dataclass_field(
-        repr=False, hash=False, compare=False, default=None
+        repr=False, hash=False, compare=False
     )
     """
     The PDF handler to which this context is tied.
@@ -149,6 +151,9 @@ class ApprovalType(misc.OrderedEnum):
     APPROVE_PATH = 2
 
 
+RefUpdateType = TypeVar('RefUpdateType', bound='ReferenceUpdate')
+
+
 @dataclass(frozen=True)
 class ReferenceUpdate:
     updated_ref: Reference
@@ -159,7 +164,9 @@ class ReferenceUpdate:
     context_checked: Optional[Context] = None
 
     @classmethod
-    def curry_ref(cls, **kwargs):
+    def curry_ref(
+        cls: Type[RefUpdateType], **kwargs
+    ) -> Callable[[Reference], RefUpdateType]:
         return lambda ref: cls(updated_ref=ref, **kwargs)
 
     @property

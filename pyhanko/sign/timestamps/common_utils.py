@@ -74,7 +74,7 @@ def handle_tsp_response(
     if nonce is not None and nonce_received != nonce:
         raise TimestampRequestError(
             f'Time stamping authority sent back bad nonce value. Expected '
-            f'{nonce}, but got {nonce_received}.'
+            f'{nonce.hex()}, but got {hex(nonce_received)}.'
         )
     return tst
 

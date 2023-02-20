@@ -271,59 +271,104 @@ class Signer:
             missing). In other words, we never validate the actual
             self-signature. This heuristic is sufficiently accurate
             for most applications.
+    :param signature_mechanism:
+        The (cryptographic) signature mechanism to use for all signing
+        operations. If unset, the default behaviour is to try to impute
+        a reasonable one given the preferred digest algorithm and public key.
+    :param signing_cert:
+        See :attr:`signing_cert`.
+    :param attribute_certs:
+        See :attr:`attribute_certs`.
+    :param cert_registry:
+        Initial value for :attr:`cert_registry`. If unset, an empty certificate
+        store will be initialised.
     """
 
-    signing_cert: Optional[x509.Certificate] = None
-    """
-    .. versionchanged:: 0.14.0
-        Made optional (see note)
-
-    The certificate that will be used to create the signature.
-
-    .. note::
-        This is an optional field only to a limited extent. Subclasses may
-        require it to be present, and not setting it at the beginning of
-        the signing process implies that certain high-level convenience
-        features will no longer work or be limited in function (e.g.,
-        automatic hash selection, appearance generation, revocation information
-        collection, ...).
-
-        However, making :attr:`signing_cert` optional enables certain signing
-        workflows where the certificate of the signer is not known until the
-        signature has actually been produced. This is most relevant in certain
-        types of remote signing scenarios.
-    """
-
-    cert_registry: CertificateStore
-    """
-    Collection of certificates associated with this signer.
-    Note that this is simply a bookkeeping tool; in particular it doesn't care
-    about trust.
-    """
-
-    signature_mechanism: SignedDigestAlgorithm = None
-    """
-    The (cryptographic) signature mechanism to use.
-    """
-
-    attribute_certs: Iterable[cms.AttributeCertificateV2] = ()
-    """
-    Attribute certificates to include with the signature.
-
-    .. note::
-        Only ``v2`` attribute certificates are supported.
-    """
-
-    def __init__(self, prefer_pss=False, embed_roots=True):
+    def __init__(
+        self,
+        *,
+        prefer_pss: bool = False,
+        embed_roots: bool = True,
+        signature_mechanism: Optional[SignedDigestAlgorithm] = None,
+        signing_cert: Optional[x509.Certificate] = None,
+        cert_registry: Optional[CertificateStore] = None,
+        attribute_certs: Iterable[cms.AttributeCertificateV2] = (),
+    ):
         self.prefer_pss = prefer_pss
         self.embed_roots = embed_roots
         self.signed_attr_prov_spec: Optional[SignedAttributeProviderSpec] = None
         self.unsigned_attr_prov_spec: Optional[
             UnsignedAttributeProviderSpec
         ] = None
+        self._signature_mechanism = signature_mechanism
+        self._signing_cert = signing_cert
+        self._cert_registry = cert_registry or SimpleCertificateStore()
+        self._attribute_certs = attribute_certs
 
-    def get_signature_mechanism(
-        self, digest_algorithm
+    @property
+    def signature_mechanism(self) -> Optional[SignedDigestAlgorithm]:
+        """
+        .. versionchanged:: 0.18.0
+            Turned into a property instead of a class attribute.
+
+        The (cryptographic) signature mechanism to use for all signing
+        operations.
+        """
+        return self._signature_mechanism
+
+    @property
+    def signing_cert(self) -> Optional[x509.Certificate]:
+        """
+        .. versionchanged:: 0.14.0
+            Made optional (see note)
+
+        .. versionchanged:: 0.18.0
+            Turned into a property instead of a class attribute.
+
+        The certificate that will be used to create the signature.
+
+        .. note::
+            This is an optional field only to a limited extent. Subclasses may
+            require it to be present, and not setting it at the beginning of
+            the signing process implies that certain high-level convenience
+            features will no longer work or be limited in function (e.g.,
+            automatic hash selection, appearance generation, revocation
+            information collection, ...).
+
+            However, making :attr:`signing_cert` optional enables certain
+            signing workflows where the certificate of the signer is not known
+            until the signature has actually been produced. This is most
+            relevant in certain types of remote signing scenarios.
+        """
+        return self._signing_cert
+
+    @property
+    def cert_registry(self) -> CertificateStore:
+        """
+        .. versionchanged:: 0.18.0
+            Turned into a property instead of a class attribute.
+
+        Collection of certificates associated with this signer.
+        Note that this is simply a bookkeeping tool; in particular it
+        doesn't care about trust.
+        """
+        return self._cert_registry
+
+    @property
+    def attribute_certs(self) -> Iterable[cms.AttributeCertificateV2]:
+        """
+        .. versionchanged:: 0.18.0
+            Turned into a property instead of a class attribute.
+
+        Attribute certificates to include with the signature.
+
+        .. note::
+            Only ``v2`` attribute certificates are supported.
+        """
+        return self._attribute_certs
+
+    def get_signature_mechanism_for_digest(
+        self, digest_algorithm: Optional[str]
     ) -> SignedDigestAlgorithm:
         """
         Get the signature mechanism for this signer to use.
@@ -411,7 +456,9 @@ class Signer:
         return result
 
     @staticmethod
-    def format_revinfo(ocsp_responses: list = None, crls: list = None):
+    def format_revinfo(
+        ocsp_responses: Optional[list] = None, crls: Optional[list] = None
+    ):
         """
         Format Adobe-style revocation information for inclusion into a CMS
         object.
@@ -457,14 +504,14 @@ class Signer:
             return GenericPdfSignedAttributeProviderSpec(
                 attr_settings=attr_settings,
                 signing_cert=self.signing_cert,
-                signature_mechanism=self.get_signature_mechanism,
+                signature_mechanism=self.get_signature_mechanism_for_digest,
                 timestamper=timestamper,
             )
         else:
             return GenericCMSSignedAttributeProviderSpec(
                 attr_settings=attr_settings,
                 signing_cert=self.signing_cert,
-                signature_mechanism=self.get_signature_mechanism,
+                signature_mechanism=self.get_signature_mechanism_for_digest,
                 timestamper=timestamper,
             )
 
@@ -557,7 +604,7 @@ class Signer:
                     }
                 ),
                 'digest_algorithm': digest_algorithm_obj,
-                'signature_algorithm': self.get_signature_mechanism(
+                'signature_algorithm': self.get_signature_mechanism_for_digest(
                     digest_algorithm
                 ),
                 'signed_attrs': signed_attrs,
@@ -634,7 +681,7 @@ class Signer:
             # we need to cover cases like ed448 and ed25519 (where
             # the hash algorithm choice is fixed) also when the signature
             # mechanism is not explicitly passed in.
-            mech = self.get_signature_mechanism(None)
+            mech = self.get_signature_mechanism_for_digest(None)
         except ValueError:
             # This could happen if there's no explicit mechanism defined,
             # and we're signing with ECDSA, for example. In that case
@@ -732,7 +779,7 @@ class Signer:
         self,
         data_digest: bytes,
         digest_algorithm: str,
-        attr_settings: PdfCMSSignedAttributes = None,
+        attr_settings: Optional[PdfCMSSignedAttributes] = None,
         content_type='data',
         use_pades=False,
         timestamper=None,
@@ -811,7 +858,7 @@ class Signer:
         dry_run=False,
         use_pades=False,
         timestamper=None,
-        signed_attr_settings: PdfCMSSignedAttributes = None,
+        signed_attr_settings: Optional[PdfCMSSignedAttributes] = None,
         is_pdf_sig=True,
         encap_content_info=None,
     ) -> cms.ContentInfo:
@@ -969,7 +1016,7 @@ class Signer:
         use_cades=False,
         timestamper=None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
-        signed_attr_settings: PdfCMSSignedAttributes = None,
+        signed_attr_settings: Optional[PdfCMSSignedAttributes] = None,
         max_read=None,
     ) -> cms.ContentInfo:
         """
@@ -1044,12 +1091,12 @@ class Signer:
         self,
         data_digest: bytes,
         digest_algorithm: str,
-        timestamp: datetime = None,
+        timestamp: Optional[datetime] = None,
         dry_run=False,
         revocation_info=None,
         use_pades=False,
         timestamper=None,
-        cades_signed_attr_meta: CAdESSignedAttrSpec = None,
+        cades_signed_attr_meta: Optional[CAdESSignedAttrSpec] = None,
         encap_content_info=None,
     ) -> cms.ContentInfo:
         """
@@ -1209,10 +1256,10 @@ class Signer:
         ],
         digest_algorithm: str,
         detached=True,
-        timestamp: datetime = None,
+        timestamp: Optional[datetime] = None,
         use_cades=False,
         timestamper=None,
-        cades_signed_attr_meta: CAdESSignedAttrSpec = None,
+        cades_signed_attr_meta: Optional[CAdESSignedAttrSpec] = None,
         chunk_size=misc.DEFAULT_CHUNK_SIZE,
         max_read=None,
     ) -> cms.ContentInfo:
@@ -1340,18 +1387,21 @@ class SimpleSigner(Signer):
         signing_cert: x509.Certificate,
         signing_key: keys.PrivateKeyInfo,
         cert_registry: CertificateStore,
-        signature_mechanism: SignedDigestAlgorithm = None,
-        prefer_pss=False,
-        embed_roots=True,
-        attribute_certs=None,
+        signature_mechanism: Optional[SignedDigestAlgorithm] = None,
+        prefer_pss: bool = False,
+        embed_roots: bool = True,
+        attribute_certs: Optional[Iterable[cms.AttributeCertificateV2]] = None,
     ):
-        self.signing_cert = signing_cert
         self.signing_key = signing_key
-        self.cert_registry = cert_registry
-        self.signature_mechanism = signature_mechanism
+        super().__init__(
+            prefer_pss=prefer_pss,
+            embed_roots=embed_roots,
+            cert_registry=cert_registry,
+            signature_mechanism=signature_mechanism,
+            signing_cert=signing_cert,
+        )
         if attribute_certs is not None:
-            self.attribute_certs = list(attribute_certs)
-        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
+            self._attribute_certs = list(attribute_certs)
 
     async def async_sign_raw(
         self, data: bytes, digest_algorithm: str, dry_run=False
@@ -1370,7 +1420,9 @@ class SimpleSigner(Signer):
             Raw signature encoded according to the conventions of the
             signing algorithm used.
         """
-        signature_mechanism = self.get_signature_mechanism(digest_algorithm)
+        signature_mechanism = self.get_signature_mechanism_for_digest(
+            digest_algorithm
+        )
         mechanism = signature_mechanism.signature_algo
         priv_key = serialization.load_der_private_key(
             self.signing_key.dump(), password=None
@@ -1586,15 +1638,17 @@ class ExternalSigner(Signer):
         prefer_pss: bool = False,
         embed_roots: bool = True,
     ):
-        self.signing_cert = signing_cert
-        self.cert_registry = cert_registry or SimpleCertificateStore()
-        self.signature_mechanism = signature_mechanism
-
         if isinstance(signature_value, bytes):
             self._signature_value = signature_value
         else:
             self._signature_value = bytes(signature_value or 256)
-        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
+        super().__init__(
+            prefer_pss=prefer_pss,
+            embed_roots=embed_roots,
+            signing_cert=signing_cert,
+            cert_registry=cert_registry,
+            signature_mechanism=signature_mechanism,
+        )
 
     async def async_sign_raw(
         self, data: bytes, digest_algorithm: str, dry_run=False

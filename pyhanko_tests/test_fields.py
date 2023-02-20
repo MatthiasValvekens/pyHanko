@@ -608,7 +608,7 @@ def test_visible_field_flags(settings, flags):
         sig_field_spec=fields.SigFieldSpec(
             sig_field_name='Sig1',
             visible_sig_settings=settings,
-            box=[10, 10, 100, 100],
+            box=(10, 10, 100, 100),
         ),
     )
     w.write_in_place()

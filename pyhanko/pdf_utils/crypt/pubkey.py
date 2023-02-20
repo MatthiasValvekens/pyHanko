@@ -4,7 +4,7 @@ import logging
 import secrets
 import struct
 from hashlib import sha1, sha256
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyAlgorithm
@@ -57,7 +57,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             way pyHanko interprets this value.
     """
 
-    _handler: 'PubKeySecurityHandler' = None
+    _handler: Optional['PubKeySecurityHandler'] = None
 
     def __init__(
         self,
@@ -147,6 +147,7 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
         return AuthResult(AuthStatus.FAILED)
 
     def derive_shared_encryption_key(self) -> bytes:
+        assert self._handler is not None
         if self._recp_key_seed is None:
             raise misc.PdfError("No seed available; authenticate first.")
         if self._handler.version >= SecurityHandlerVersion.AES256:
@@ -547,9 +548,13 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
                 f"Only 'rsaes_pkcs1v15' is supported for envelope encryption, "
                 f"not '{algo_name}'."
             )
-        priv_key: RSAPrivateKey = serialization.load_der_private_key(
+        priv_key = serialization.load_der_private_key(
             self.private_key.dump(), password=None
         )
+        if not isinstance(priv_key, RSAPrivateKey):
+            raise NotImplementedError(
+                "The loaded key does not seem to be an RSA private key"
+            )
         return priv_key.decrypt(encrypted_key, padding=PKCS1v15())
 
 
@@ -709,10 +714,10 @@ class PubKeySecurityHandler(SecurityHandler):
     """
 
     _known_crypt_filters: Dict[generic.NameObject, CryptFilterBuilder] = {
-        '/V2': _build_legacy_pubkey_cf,
-        '/AESV2': _build_aes128_pubkey_cf,
-        '/AESV3': _build_aes256_pubkey_cf,
-        '/Identity': lambda _, __: IdentityCryptFilter(),
+        generic.NameObject('/V2'): _build_legacy_pubkey_cf,
+        generic.NameObject('/AESV2'): _build_aes128_pubkey_cf,
+        generic.NameObject('/AESV3'): _build_aes256_pubkey_cf,
+        generic.NameObject('/Identity'): lambda _, __: IdentityCryptFilter(),
     }
 
     @classmethod
@@ -801,8 +806,8 @@ class PubKeySecurityHandler(SecurityHandler):
         pubkey_handler_subfilter: PubKeyAdbeSubFilter,
         legacy_keylen,
         encrypt_metadata=True,
-        crypt_filter_config: 'CryptFilterConfiguration' = None,
-        recipient_objs: list = None,
+        crypt_filter_config: Optional['CryptFilterConfiguration'] = None,
+        recipient_objs: Optional[list] = None,
         compat_entries=True,
     ):
         # I don't see how it would be possible to handle V4 without
@@ -837,6 +842,10 @@ class PubKeySecurityHandler(SecurityHandler):
                     keylen=32,
                     encrypt_metadata=encrypt_metadata,
                     recipients=recipient_objs,
+                )
+            else:
+                raise misc.PdfError(
+                    "Failed to impute a reasonable crypt filter config"
                 )
         super().__init__(
             version,
@@ -991,7 +1000,9 @@ class PubKeySecurityHandler(SecurityHandler):
             )
 
     def authenticate(
-        self, credential: EnvelopeKeyDecrypter, id1=None
+        self,
+        credential: Union[EnvelopeKeyDecrypter, SerialisedCredential],
+        id1=None,
     ) -> AuthResult:
         """
         Authenticate a user to this security handler.
@@ -1007,20 +1018,24 @@ class PubKeySecurityHandler(SecurityHandler):
             obtained.
         """
 
+        actual_credential: EnvelopeKeyDecrypter
         if isinstance(credential, SerialisedCredential):
-            credential = SerialisableCredential.deserialise(credential)
-        if not isinstance(credential, EnvelopeKeyDecrypter):
-            raise misc.PdfReadError(
-                f"Pubkey authentication credential must be an instance of "
-                f"EnvelopeKeyDecrypter, not {type(credential)}."
-            )
+            deser_credential = SerialisableCredential.deserialise(credential)
+            if not isinstance(deser_credential, EnvelopeKeyDecrypter):
+                raise misc.PdfReadError(
+                    f"Pubkey authentication credential must be an instance of "
+                    f"EnvelopeKeyDecrypter, not {type(deser_credential)}."
+                )
+            actual_credential = deser_credential
+        else:
+            actual_credential = credential
 
         perms = 0xFFFFFFFF
         for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
             recp: cms.ContentInfo
-            result = cf.authenticate(credential)
+            result = cf.authenticate(actual_credential)
             if result.status == AuthStatus.FAILED:
                 return result
             # these should really be the same for both filters, but hey,
@@ -1028,8 +1043,8 @@ class PubKeySecurityHandler(SecurityHandler):
             # course of action
             if result.permission_flags is not None:
                 perms &= result.permission_flags
-        if isinstance(credential, SerialisableCredential):
-            self._credential = credential
+        if isinstance(actual_credential, SerialisableCredential):
+            self._credential = actual_credential
         return AuthResult(AuthStatus.USER, as_signed(perms))
 
     def get_file_encryption_key(self) -> bytes:

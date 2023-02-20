@@ -44,6 +44,7 @@ __all__ = [
     'load_private_key_from_pemder_data',
     'get_cms_hash_algo_for_mechanism',
     'get_pyca_cryptography_hash',
+    'get_pyca_cryptography_hash_for_signing',
     'optimal_pss_params',
     'process_pss_params',
     'as_signing_certificate',
@@ -349,14 +350,18 @@ class UnacceptableSignerError(SigningError):
     pass
 
 
-def get_pyca_cryptography_hash(
-    algorithm, prehashed=False
-) -> Union[hashes.HashAlgorithm, Prehashed]:
+def get_pyca_cryptography_hash(algorithm) -> Union[hashes.HashAlgorithm]:
     if algorithm.lower() == 'shake256':
         # force the output length to 64 bytes = 512 bits
-        hash_algo = hashes.SHAKE256(digest_size=64)
+        return hashes.SHAKE256(digest_size=64)
     else:
-        hash_algo = getattr(hashes, algorithm.upper())()
+        return getattr(hashes, algorithm.upper())()
+
+
+def get_pyca_cryptography_hash_for_signing(
+    algorithm, prehashed=False
+) -> Union[hashes.HashAlgorithm, Prehashed]:
+    hash_algo = get_pyca_cryptography_hash(algorithm)
     return Prehashed(hash_algo) if prehashed else hash_algo
 
 
@@ -414,8 +419,8 @@ def process_pss_params(
         )
     salt_len: int = params['salt_length'].native
 
-    mgf_md = get_pyca_cryptography_hash(mgf_md_name, prehashed=False)
-    md = get_pyca_cryptography_hash(md_name, prehashed=prehashed)
+    mgf_md = get_pyca_cryptography_hash(mgf_md_name)
+    md = get_pyca_cryptography_hash_for_signing(md_name, prehashed=prehashed)
     pss_padding = padding.PSS(
         mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
     )
@@ -439,9 +444,9 @@ def optimal_pss_params(
 
     digest_algorithm = digest_algorithm.lower()
 
-    key: RSAPublicKey = serialization.load_der_public_key(
-        cert.public_key.dump()
-    )
+    key = serialization.load_der_public_key(cert.public_key.dump())
+    if not isinstance(key, RSAPublicKey):
+        raise SigningError(f"Expected RSA key, but got key of type {type(key)}")
     md = get_pyca_cryptography_hash(digest_algorithm)
     # the PSS salt calculation function is not in the .pyi file, apparently.
     # noinspection PyUnresolvedReferences

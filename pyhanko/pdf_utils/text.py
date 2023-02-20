@@ -1,6 +1,7 @@
 """Utilities related to text rendering & layout."""
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
@@ -26,7 +27,7 @@ class TextStyle(ConfigurableMixin):
     Font size to be used.
     """
 
-    leading: int = None
+    leading: Optional[int] = None
     """
     Text leading. If ``None``, the :attr:`font_size` parameter is used instead.
     """
@@ -68,7 +69,7 @@ class TextBoxStyle(TextStyle):
     Border width, if applicable.
     """
 
-    box_layout_rule: layout.SimpleBoxLayoutRule = None
+    box_layout_rule: Optional[layout.SimpleBoxLayoutRule] = None
     """
     Layout rule to nest the text within its containing box.
     
@@ -95,8 +96,8 @@ class TextBox(PdfContent):
         self,
         style: TextBoxStyle,
         writer,
-        resources: PdfResources = None,
-        box: layout.BoxConstraints = None,
+        resources: Optional[PdfResources] = None,
+        box: Optional[layout.BoxConstraints] = None,
         font_name='F1',
     ):
         super().__init__(resources, writer=writer, box=box)

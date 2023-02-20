@@ -14,7 +14,7 @@ import os
 import re
 from collections import defaultdict
 from io import BytesIO
-from typing import Generator, Optional, Set, Tuple, Union
+from typing import Dict, Generator, Optional, Set, Tuple, Union
 
 from . import generic, misc
 from .crypt import (
@@ -57,6 +57,7 @@ def parse_catalog_version(version_str) -> Optional[Tuple[int, int]]:
         major = int(m.group(1))
         minor = int(m.group(2))
         return major, minor
+    return None
 
 
 # General remark:
@@ -141,7 +142,7 @@ class PdfFileReader(PdfHandler):
     has_xref_stream = False
     xrefs: XRefCache
 
-    def __init__(self, stream, strict=True):
+    def __init__(self, stream, strict: bool = True):
         """
         Initializes a PdfFileReader object.  This operation can take some time,
         as the PDF stream's cross-reference tables are read into memory.
@@ -154,10 +155,10 @@ class PdfFileReader(PdfHandler):
         """
         self.security_handler: Optional[SecurityHandler] = None
         self.strict = strict
-        self.resolved_objects = {}
+        self.resolved_objects: Dict[Tuple[int, int], generic.PdfObject] = {}
         self._header_version = None
         self._input_version = None
-        self._historical_resolver_cache = {}
+        self._historical_resolver_cache: Dict[int, HistoricalResolver] = {}
         self.stream = stream
         self.xrefs, self.trailer = self.read()
         encrypt_dict = self._get_encryption_params()
@@ -172,10 +173,11 @@ class PdfFileReader(PdfHandler):
 
             meta_obj = self.root['/Metadata']
         except (ImportError, KeyError):
-            return
+            return None
 
         if isinstance(meta_obj, xmp_xml.MetadataStream):
             return xmp_xml.meta_from_xmp(meta_obj.xmp)
+        return None
 
     @property
     def document_meta_view(self) -> DocumentMetadata:
@@ -284,7 +286,7 @@ class PdfFileReader(PdfHandler):
         try:
             encrypt_ref = self.trailer.raw_get('/Encrypt')
         except KeyError:
-            return
+            return None
         if isinstance(encrypt_ref, generic.IndirectObject):
             return self.get_object(encrypt_ref.reference, never_decrypt=True)
         else:
@@ -399,7 +401,11 @@ class PdfFileReader(PdfHandler):
         return obj
 
     def _read_object(
-        self, ref, marker, never_decrypt=False, as_metadata_stream=False
+        self,
+        ref: generic.Reference,
+        marker: Union[int, ObjStreamRef, None],
+        never_decrypt: bool = False,
+        as_metadata_stream: bool = False,
     ):
         if marker is None:
             if self.strict:
@@ -456,7 +462,8 @@ class PdfFileReader(PdfHandler):
             and not isinstance(marker, ObjStreamRef)
             and self.encrypted
         ):
-            sh: SecurityHandler = self.security_handler
+            sh: Optional[SecurityHandler] = self.security_handler
+            assert sh is not None
             # make sure the object that lands in the cache is always
             # a proxy object
             retval = generic.proxy_encrypted_obj(retval, sh)
@@ -685,7 +692,7 @@ class RawPdfPath:
         self, from_obj, transparent_dereference=True
     ) -> Generator[Tuple[Union[int, str, None], generic.PdfObject], None, None]:
         current_obj = from_obj
-        elem = None
+        elem: Union[int, str, None] = None
         for ix, entry in enumerate(self.path):
             if not transparent_dereference:
                 yield elem, current_obj
@@ -815,11 +822,13 @@ class HistoricalResolver(PdfHandler):
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
     def __init__(self, reader: PdfFileReader, revision):
-        self.cache = {}
+        self.cache: Dict[generic.Reference, generic.PdfObject] = {}
         self.reader = reader
         self.revision = revision
         self._trailer = self.reader.trailer.flatten(self.revision)
-        self._indirect_object_access_cache = None
+        self._indirect_object_access_cache: Optional[
+            Dict[generic.Reference, Set[RawPdfPath]]
+        ] = None
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
@@ -966,7 +975,9 @@ class HistoricalResolver(PdfHandler):
         # as long as the ID is strictly less than meta.size
         return ref.idnum >= meta.size
 
-    def collect_dependencies(self, obj: generic.PdfObject, since_revision=None):
+    def collect_dependencies(
+        self, obj: generic.PdfObject, since_revision=None
+    ) -> Set[generic.Reference]:
         """
         Collect all indirect references used by an object and its descendants.
 
@@ -983,7 +994,7 @@ class HistoricalResolver(PdfHandler):
         :return:
             A :class:`set` of :class:`~.generic.Reference` objects.
         """
-        result_set = set()
+        result_set: Set[generic.Reference] = set()
         self._collect_indirect_references(obj, result_set, since_revision)
         return result_set
 
@@ -1030,8 +1041,8 @@ class HistoricalResolver(PdfHandler):
         # We flatten everything when we're done
         def _compute_paths_to_refs(
             obj,
-            cur_path: misc.ConsList,
-            seen_in_path: misc.ConsList,
+            cur_path: misc.ConsList[Union[str, int]],
+            seen_in_path: misc.ConsList[generic.Reference],
             *,
             is_page_tree,
             page_tree_objs,

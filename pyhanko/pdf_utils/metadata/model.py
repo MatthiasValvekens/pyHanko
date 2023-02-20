@@ -8,7 +8,7 @@ metadata management.
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 from pyhanko import __version__
 from pyhanko.pdf_utils.misc import StringWithLanguage
@@ -445,7 +445,7 @@ class XmpStructure:
     def __getitem__(self, item):
         return self._fields[item]
 
-    def __iter__(self) -> Iterable[Tuple[ExpandedName, 'XmpValue']]:
+    def __iter__(self) -> Iterator[Tuple[ExpandedName, 'XmpValue']]:
         yield from self._fields.items()
 
     def __repr__(self):

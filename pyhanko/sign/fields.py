@@ -4,7 +4,7 @@ Utilities to deal with signature form fields and their properties in PDF files.
 import logging
 from dataclasses import dataclass
 from enum import Enum, Flag, unique
-from typing import List, Optional, Set, Union
+from typing import List, Optional, Set, Tuple, Union
 
 from asn1crypto import x509
 from asn1crypto.x509 import KeyUsage
@@ -280,7 +280,11 @@ class SigCertKeyUsage:
         that must *not* be present on the signer's certificate.
     """
 
-    def __init__(self, must_have: KeyUsage = None, forbidden: KeyUsage = None):
+    def __init__(
+        self,
+        must_have: Optional[KeyUsage] = None,
+        forbidden: Optional[KeyUsage] = None,
+    ):
         self.must_have = must_have if must_have is not None else KeyUsage(set())
         self.forbidden = forbidden if forbidden is not None else KeyUsage(set())
 
@@ -325,7 +329,11 @@ class SigCertKeyUsage:
         )
 
     @classmethod
-    def from_sets(cls, must_have: Set[str] = None, forbidden: Set[str] = None):
+    def from_sets(
+        cls,
+        must_have: Optional[Set[str]] = None,
+        forbidden: Optional[Set[str]] = None,
+    ):
         """
         Initialise a :class:`.SigCertKeyUsage` object from two sets.
 
@@ -409,25 +417,25 @@ class SigCertConstraints:
     Enforcement flags. By default, all entries are optional.
     """
 
-    subjects: List[x509.Certificate] = None
+    subjects: Optional[List[x509.Certificate]] = None
     """
     Explicit list of certificates that can be used to sign a signature field.
     """
 
-    subject_dn: x509.Name = None
+    subject_dn: Optional[x509.Name] = None
     """
     Certificate subject names that can be used to sign a signature field.
     Subject DN entries that are not mentioned are unconstrained.
     """
 
-    issuers: List[x509.Certificate] = None
+    issuers: Optional[List[x509.Certificate]] = None
     """
     List of issuer certificates that the signer certificate can be issued by.
     Note that these issuers do not need to be the *direct* issuer of the
     signer's certificate; any descendant relationship will do.
     """
 
-    info_url: str = None
+    info_url: Optional[str] = None
     """
     Informational URL that should be opened when an appropriate certificate
     cannot be found (if :attr:`url_type` is ``/Browser``, that is).
@@ -442,7 +450,7 @@ class SigCertConstraints:
     ``/Browser`` is the only implementation-independent value.
     """
 
-    key_usage: List[SigCertKeyUsage] = None
+    key_usage: Optional[List[SigCertKeyUsage]] = None
     """
     Specify the key usage extensions that should (or should not) be present
     on the signer's certificate.
@@ -728,12 +736,12 @@ class SigSeedValueSpec:
     Enforcement flags. By default, all entries are optional.
     """
 
-    reasons: List[str] = None
+    reasons: Optional[List[str]] = None
     """
     Acceptable reasons for signing.
     """
 
-    timestamp_server_url: str = None
+    timestamp_server_url: Optional[str] = None
     """
     RFC 3161 timestamp server endpoint suggestion.
     """
@@ -744,22 +752,22 @@ class SigSeedValueSpec:
     This flag is only meaningful if :attr:`timestamp_server_url` is specified.
     """
 
-    cert: SigCertConstraints = None
+    cert: Optional[SigCertConstraints] = None
     """
     Constraints on the signer's certificate.
     """
 
-    subfilters: List[SigSeedSubFilter] = None
+    subfilters: Optional[List[SigSeedSubFilter]] = None
     """
     Acceptable ``/SubFilter`` values.
     """
 
-    digest_methods: List[str] = None
+    digest_methods: Optional[List[str]] = None
     """
     Acceptable digest methods.
     """
 
-    add_rev_info: bool = None
+    add_rev_info: Optional[bool] = None
     """
     Indicates whether revocation information should be embedded.
     
@@ -772,7 +780,7 @@ class SigSeedValueSpec:
         ``/adbe.pkcs7.detached`` if this flag is ``True``.
     """
 
-    seed_signature_type: SeedSignatureType = None
+    seed_signature_type: Optional[SeedSignatureType] = None
     """
     Specifies the type of signature that should occupy a signature field;
     this represents the ``/MDP`` entry in the seed value dictionary.
@@ -784,7 +792,7 @@ class SigSeedValueSpec:
         cannot be cryptographically enforced.
     """
 
-    sv_dict_version: Union[SeedValueDictVersion, int] = None
+    sv_dict_version: Union[SeedValueDictVersion, int, None] = None
     """
     Specifies the compliance level required of a seed value dictionary
     processor. If ``None``, pyHanko will compute an appropriate value.
@@ -795,7 +803,7 @@ class SigSeedValueSpec:
         does not support out of the box.
     """
 
-    legal_attestations: List[str] = None
+    legal_attestations: Optional[List[str]] = None
     """
     Specifies the possible legal attestations that a certification signature
     occupying this signature field can supply.
@@ -815,7 +823,7 @@ class SigSeedValueSpec:
         entry no matter what, and will therefore ignore it when signing.
     """
 
-    lock_document: SeedLockDocument = None
+    lock_document: Optional[SeedLockDocument] = None
     """
     Tell the signer whether or not the document should be locked after signing
     this field; see :class:`.SeedLockDocument` for details.
@@ -827,7 +835,7 @@ class SigSeedValueSpec:
     # TODO handle this value by reading named appearances from the user's
     #  settings
 
-    appearance: str = None
+    appearance: Optional[str] = None
     """
     Specify a named appearance to use when generating the signature.
     The corresponding flag in :attr:`flags` indicates whether this constraint
@@ -1099,7 +1107,7 @@ class FieldMDPSpec:
         )
         if self.action != FieldMDPAction.ALL:
             result['/Fields'] = generic.ArrayObject(
-                map(pdf_string, self.fields)
+                map(pdf_string, self.fields or ())
             )
         return result
 
@@ -1171,7 +1179,7 @@ class FieldMDPSpec:
             return True
 
         lock_result = self.action == FieldMDPAction.INCLUDE
-        for scoped_field_name in self.fields:
+        for scoped_field_name in self.fields or ():
             # treat non-terminal field in/exclusions as including the whole
             # tree beneath them
             if field_name.startswith(scoped_field_name):
@@ -1271,7 +1279,7 @@ class SigFieldSpec:
         those that have a widget associated with them.
     """
 
-    box: (int, int, int, int) = None
+    box: Optional[Tuple[int, int, int, int]] = None
     """
     Bounding box of the signature field, if applicable.
 
@@ -1280,17 +1288,17 @@ class SigFieldSpec:
     corner.
     """
 
-    seed_value_dict: SigSeedValueSpec = None
+    seed_value_dict: Optional[SigSeedValueSpec] = None
     """
     Specification for the seed value dictionary, if applicable.
     """
 
-    field_mdp_spec: FieldMDPSpec = None
+    field_mdp_spec: Optional[FieldMDPSpec] = None
     """
     Specification for the field lock dictionary, if applicable.
     """
 
-    doc_mdp_update_value: MDPPerm = None
+    doc_mdp_update_value: Optional[MDPPerm] = None
     """
     Value to use for the document modification policy associated with the
     signature in this field.
@@ -1346,7 +1354,7 @@ class SigFieldSpec:
 
     def format_lock_dictionary(self) -> Optional[generic.DictionaryObject]:
         if self.field_mdp_spec is None:
-            return
+            return None
         result = self.field_mdp_spec.as_sig_field_lock()
         # this requires PDF 2.0 in principle, but meh, noncompliant
         # readers will ignore it anyway
@@ -1736,6 +1744,7 @@ class SignatureFormField(generic.DictionaryObject):
         )
 
         self.combine_annotation = combine_annotation
+        annot_dict: generic.DictionaryObject
         if combine_annotation:
             annot_dict = self
         else:

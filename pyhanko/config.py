@@ -4,7 +4,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, Iterable, List, Optional, Set, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Type, Union
 
 import yaml
 from asn1crypto import x509
@@ -17,7 +17,7 @@ from pyhanko.sign import SimpleSigner, load_certs_from_pemder
 from pyhanko.sign.general import load_cert_from_pemder
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.sign.validation.settings import KeyUsageConstraints
-from pyhanko.stamp import QRStampStyle, TextStampStyle
+from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
 
 
 class StdLogOutput(enum.Enum):
@@ -246,7 +246,9 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
         default=StdLogOutput.STDERR,
     )
 
-    log_config = {None: LogConfig(root_logger_level, root_logger_output)}
+    log_config: Dict[Optional[str], LogConfig] = {
+        None: LogConfig(root_logger_level, root_logger_output)
+    }
 
     logging_by_module = log_config_spec.get('by-module', {})
     if not isinstance(logging_by_module, dict):
@@ -279,10 +281,10 @@ class PKCS12SignatureConfig(config_utils.ConfigurableMixin):
     pfx_file: str
     """Path to the PKCS#12 file."""
 
-    other_certs: List[x509.Certificate] = None
+    other_certs: Optional[List[x509.Certificate]] = None
     """Other relevant certificates."""
 
-    pfx_passphrase: bytes = None
+    pfx_passphrase: Optional[bytes] = None
     """PKCS#12 passphrase (if relevant)."""
 
     prompt_passphrase: bool = True
@@ -341,10 +343,10 @@ class PemDerSignatureConfig(config_utils.ConfigurableMixin):
     cert_file: str
     """Signer's certificate."""
 
-    other_certs: List[x509.Certificate] = None
+    other_certs: Optional[List[x509.Certificate]] = None
     """Other relevant certificates."""
 
-    key_passphrase: bytes = None
+    key_passphrase: Optional[bytes] = None
     """Signer's key passphrase (if relevant)."""
 
     prompt_passphrase: bool = True
@@ -650,7 +652,7 @@ def _process_pkcs11_id_value(x: Union[str, int]):
 
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
 DEFAULT_TIME_TOLERANCE = 10
-STAMP_STYLE_TYPES = {
+STAMP_STYLE_TYPES: Dict[str, Type[BaseStampStyle]] = {
     'qr': QRStampStyle,
     'text': TextStampStyle,
 }
@@ -663,7 +665,7 @@ def parse_cli_config(yaml_str) -> CLIConfig:
 
 def process_config_dict(config_dict: dict) -> dict:
     # validation context config
-    vcs = {DEFAULT_VALIDATION_CONTEXT: {}}
+    vcs: Dict[str, dict] = {DEFAULT_VALIDATION_CONTEXT: {}}
     try:
         vc_specs = config_dict['validation-contexts']
         vcs.update(vc_specs)

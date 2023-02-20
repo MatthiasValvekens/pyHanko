@@ -23,7 +23,6 @@ from pyhanko.config import (
 from pyhanko.sign.general import (
     CertificateStore,
     SigningError,
-    SimpleCertificateStore,
     get_pyca_cryptography_hash,
 )
 from pyhanko.sign.signers import Signer
@@ -61,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 
 def criteria_mismatches(
-    criteria: TokenCriteria, token: p11_types.Token
+    criteria: Optional[TokenCriteria], token: p11_types.Token
 ) -> List[Tuple[str, str]]:
     if criteria is None:
         return []
@@ -76,7 +75,7 @@ def criteria_mismatches(
 
 
 def criteria_satisfied_by(
-    criteria: TokenCriteria, token: p11_types.Token
+    criteria: Optional[TokenCriteria], token: p11_types.Token
 ) -> bool:
     return not criteria_mismatches(criteria, token)
 
@@ -504,7 +503,7 @@ class PKCS11Signer(Signer):
         self,
         pkcs11_session: Session,
         cert_label: Optional[str] = None,
-        signing_cert: x509.Certificate = None,
+        signing_cert: Optional[x509.Certificate] = None,
         ca_chain=None,
         key_label: Optional[str] = None,
         prefer_pss=False,
@@ -527,7 +526,6 @@ class PKCS11Signer(Signer):
         self.cert_label = cert_label
         self.key_id = key_id
         self.cert_id = cert_id
-        self._signing_cert = signing_cert
         if key_id is None and key_label is None:
             if cert_label is None:
                 raise SigningError(
@@ -537,12 +535,6 @@ class PKCS11Signer(Signer):
             key_label = cert_label
         self.key_label = key_label
         self.pkcs11_session = pkcs11_session
-        cs = SimpleCertificateStore()
-        self._cert_registry: CertificateStore = cs
-        if ca_chain is not None:
-            cs.register_multiple(ca_chain)
-        if signing_cert is not None:
-            cs.register(signing_cert)
         self.other_certs = other_certs_to_pull
         self._other_certs_loaded = False
         if other_certs_to_pull is not None and len(other_certs_to_pull) <= 1:
@@ -553,7 +545,15 @@ class PKCS11Signer(Signer):
         self._key_handle = None
         self._loaded = False
         self.__loading_event = None
-        super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
+        super().__init__(
+            prefer_pss=prefer_pss,
+            embed_roots=embed_roots,
+            signing_cert=signing_cert,
+        )
+        if ca_chain is not None:
+            self._cert_registry.register_multiple(ca_chain)
+        if signing_cert is not None:
+            self._cert_registry.register(signing_cert)
 
     def _init_cert_registry(self):
         # it's conceivable that one might want to load this separately from
@@ -564,7 +564,11 @@ class PKCS11Signer(Signer):
             self._other_certs_loaded = True
         return self._cert_registry
 
-    cert_registry = property(_init_cert_registry)
+    @property
+    def cert_registry(self) -> CertificateStore:
+        # apparently mypy doesn't like it when I write
+        # cert_registry = property(_init_cert_registry)
+        return self._init_cert_registry()
 
     @property
     def signing_cert(self):
@@ -576,7 +580,7 @@ class PKCS11Signer(Signer):
     ) -> PKCS11SignatureOperationSpec:
         digest_algorithm = digest_algorithm.lower()
         return select_pkcs11_signing_params(
-            self.get_signature_mechanism(digest_algorithm),
+            self.get_signature_mechanism_for_digest(digest_algorithm),
             digest_algorithm,
             use_raw_mechanism=self.use_raw_mechanism,
         )

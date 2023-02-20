@@ -1,6 +1,8 @@
+from typing import List
+
 from .cli import cli
 
-__all__ = []
+__all__: List[str] = []
 
 
 def launch():

@@ -836,7 +836,7 @@ async def test_sign_weak_sig_digest_mismatch():
     )
     si_obj: cms.SignerInfo = cms_obj['content']['signer_infos'][0]
     bad_algo = SignedDigestAlgorithm({'algorithm': 'md5_rsa'})
-    si_obj['signature_algorithm'] = signer.signature_mechanism = bad_algo
+    si_obj['signature_algorithm'] = signer._signature_mechanism = bad_algo
     attrs = si_obj['signed_attrs']
     cms_prot = find_cms_attribute(attrs, 'cms_algorithm_protection')[0]
     cms_prot['signature_algorithm'] = bad_algo
@@ -1912,7 +1912,7 @@ async def _generate_badly_ordered_signed_attrs(
     )
 
     digest_algo_obj = cms.DigestAlgorithm({'algorithm': 'sha256'})
-    algo = signer.get_signature_mechanism('sha256')
+    algo = signer.get_signature_mechanism_for_digest('sha256')
     sig_info = HackySignerInfo(
         {
             'version': 'v1',

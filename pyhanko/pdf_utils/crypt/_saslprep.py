@@ -22,6 +22,7 @@ __all__ = ['saslprep']
 
 import stringprep
 import unicodedata
+from typing import Callable, Iterable
 
 # RFC4013 section 2.3 prohibited output.
 _PROHIBITED = (
@@ -40,7 +41,7 @@ _PROHIBITED = (
 )
 
 
-def saslprep(data: str, prohibit_unassigned_code_points=True) -> str:
+def saslprep(data: str, prohibit_unassigned_code_points: bool = True) -> str:
     """An implementation of RFC4013 SASLprep.
 
     :param data:
@@ -53,6 +54,7 @@ def saslprep(data: str, prohibit_unassigned_code_points=True) -> str:
 
     :return: The SASLprep'ed version of `data`.
     """
+    prohibited: Iterable[Callable[[str], bool]]
     if prohibit_unassigned_code_points:
         prohibited = _PROHIBITED + (stringprep.in_table_a1,)
     else:

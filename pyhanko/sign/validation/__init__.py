@@ -1,6 +1,6 @@
 import asyncio
 import warnings
-from typing import IO, Type, TypeVar, Union
+from typing import IO, Optional, Type, TypeVar, Union
 
 from asn1crypto import cms
 from pyhanko_certvalidator import ValidationContext
@@ -74,13 +74,14 @@ __all__ = [
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 
+# noinspection PyUnusedLocal
 def validate_cms_signature(
     signed_data: cms.SignedData,
-    status_cls: Type[StatusType] = SignatureStatus,
-    raw_digest: bytes = None,
-    validation_context: ValidationContext = None,
-    status_kwargs: dict = None,
-    key_usage_settings: KeyUsageConstraints = None,
+    status_cls=SignatureStatus,
+    raw_digest: Optional[bytes] = None,
+    validation_context: Optional[ValidationContext] = None,
+    status_kwargs: Optional[dict] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
     encap_data_invalid=False,
 ):
     """
@@ -89,6 +90,9 @@ def validate_cms_signature(
 
     .. versionchanged:: 0.7.0
         Now handles both detached and enveloping signatures.
+
+    .. versionchanged:: 0.17.0
+        The ``encap_data_invalid`` parameter is ignored.
 
     Validate a CMS signature (i.e. a ``SignedData`` object).
 
@@ -107,13 +111,7 @@ def validate_cms_signature(
         A :class:`.KeyUsageConstraints` object specifying which key usages
         must or must not be present in the signer's certificate.
     :param encap_data_invalid:
-        If ``True``, the encapsulated data inside the CMS is invalid,
-        but the remaining validation logic still has to be run (e.g. a
-        timestamp token, which requires validation of the embedded message
-        imprint).
-
-        This option is considered internal API, the semantics of which may
-        change without notice in the future.
+        As of version ``0.17.0``, this parameter is ignored.
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
@@ -138,9 +136,9 @@ def validate_cms_signature(
 def validate_detached_cms(
     input_data: Union[bytes, IO, cms.ContentInfo, cms.EncapsulatedContentInfo],
     signed_data: cms.SignedData,
-    signer_validation_context: ValidationContext = None,
-    ts_validation_context: ValidationContext = None,
-    key_usage_settings: KeyUsageConstraints = None,
+    signer_validation_context: Optional[ValidationContext] = None,
+    ts_validation_context: Optional[ValidationContext] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
     max_read=None,
 ) -> StandardCMSSignatureStatus:
@@ -197,10 +195,10 @@ def validate_detached_cms(
 
 def validate_pdf_signature(
     embedded_sig: EmbeddedPdfSignature,
-    signer_validation_context: ValidationContext = None,
-    ts_validation_context: ValidationContext = None,
-    diff_policy: DiffPolicy = None,
-    key_usage_settings: KeyUsageConstraints = None,
+    signer_validation_context: Optional[ValidationContext] = None,
+    ts_validation_context: Optional[ValidationContext] = None,
+    diff_policy: Optional[DiffPolicy] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
     skip_diff: bool = False,
 ) -> PdfSignatureStatus:
     """
@@ -242,8 +240,8 @@ def validate_pdf_signature(
 
 def validate_pdf_timestamp(
     embedded_sig: EmbeddedPdfSignature,
-    validation_context: ValidationContext = None,
-    diff_policy: DiffPolicy = None,
+    validation_context: Optional[ValidationContext] = None,
+    diff_policy: Optional[DiffPolicy] = None,
     skip_diff: bool = False,
 ) -> DocumentTimestampStatus:
     """
@@ -339,8 +337,8 @@ def validate_pdf_ltv_signature(
     validation_context_kwargs=None,
     bootstrap_validation_context=None,
     force_revinfo=False,
-    diff_policy: DiffPolicy = None,
-    key_usage_settings: KeyUsageConstraints = None,
+    diff_policy: Optional[DiffPolicy] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
     skip_diff: bool = False,
 ) -> PdfSignatureStatus:
     """

@@ -13,6 +13,7 @@ import struct
 import zlib
 from io import BytesIO
 
+from .crypt.api import SecurityHandler
 from .misc import PdfStreamError, Singleton
 
 __all__ = [
@@ -163,11 +164,11 @@ class ASCII85Decode(Decoder, metaclass=Singleton):
 
     def encode(self, data: bytes, decode_params=None) -> bytes:
         # BytesIO is quite clever, in that it doesn't copy things until modified
-        data = BytesIO(data)
+        data_stm = BytesIO(data)
         out = BytesIO()
 
         while True:
-            grp = data.read(4)
+            grp = data_stm.read(4)
             if not grp:
                 break
             # This needs to happen before applying padding!
@@ -194,16 +195,16 @@ class ASCII85Decode(Decoder, metaclass=Singleton):
 
     def decode(self, data, decode_params=None):
         data, _ = data.split(ASCII_85_EOD_MARKER, 1)
-        data = BytesIO(WS_REGEX.sub(b'', data))
+        data_stm = BytesIO(WS_REGEX.sub(b'', data))
         out = BytesIO()
         while True:
-            next_char = data.read(1)
+            next_char = data_stm.read(1)
             if not next_char:
                 break
             if next_char == b'z':
                 out.write(b'\0\0\0\0')
                 continue
-            rest = data.read(4)
+            rest = data_stm.read(4)
             if not rest:  # pragma: nocover
                 raise PdfStreamError(
                     'Nonzero ASCII85 group must have at least two digits.'
@@ -235,10 +236,8 @@ class ASCII85Decode(Decoder, metaclass=Singleton):
 
 
 class CryptFilterDecoder(Decoder):
-    def __init__(self, handler):
-        from .crypt import SecurityHandler
-
-        self.handler: SecurityHandler = handler
+    def __init__(self, handler: SecurityHandler):
+        self.handler = handler
 
     def decode(self, data: bytes, decode_params: dict) -> bytes:
         from .crypt import IDENTITY

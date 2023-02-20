@@ -45,6 +45,7 @@ class SignatureValidationError(ValueErrorWithMessage):
     def ades_status(self) -> Optional[AdESStatus]:
         if self.ades_subindication is not None:
             return self.ades_subindication.status
+        return None
 
 
 class DisallowedAlgorithmError(SignatureValidationError):

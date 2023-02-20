@@ -339,7 +339,7 @@ class PdfSignedData(PdfByteRangeDigest):
         self,
         obj_type,
         subfilter: SigSeedSubFilter = constants.DEFAULT_SIG_SUBFILTER,
-        timestamp: datetime = None,
+        timestamp: Optional[datetime] = None,
         bytes_reserved=None,
     ):
         super().__init__(bytes_reserved=bytes_reserved)

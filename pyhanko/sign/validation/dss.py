@@ -2,10 +2,11 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from dataclasses import field as data_field
-from typing import Optional
+from typing import Iterable, Optional
 
 from asn1crypto import crl as asn1_crl
 from asn1crypto import ocsp as asn1_ocsp
+from asn1crypto import x509
 from asn1crypto.x509 import Certificate
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.path import ValidationPath
@@ -95,7 +96,7 @@ class DocumentSecurityStore:
 
     def __init__(
         self,
-        writer: BasePdfFileWriter,
+        writer: Optional[BasePdfFileWriter],
         certs=None,
         ocsps=None,
         crls=None,
@@ -260,7 +261,7 @@ class DocumentSecurityStore:
 
         return pdf_dict
 
-    def load_certs(self):
+    def load_certs(self) -> Iterable[x509.Certificate]:
         """
         Return a generator that parses and yields all certificates in the DSS.
 
@@ -441,7 +442,7 @@ class DocumentSecurityStore:
         else:
             identifier = None
 
-        def _certs():
+        def _certs() -> Iterable[x509.Certificate]:
             yield from certs or ()
             path: ValidationPath
             for path in paths or ():

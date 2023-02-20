@@ -56,7 +56,7 @@ def docmdp_reference_dictionary(permission_level: MDPPerm):
 def fieldmdp_reference_dictionary(
     field_mdp_spec: FieldMDPSpec, data_ref: generic.Reference
 ):
-    data_ref = generic.IndirectObject(
+    data_ind_obj = generic.IndirectObject(
         data_ref.idnum, data_ref.generation, data_ref.pdf
     )
     # this is part of the /Reference entry of the signature object.
@@ -64,7 +64,7 @@ def fieldmdp_reference_dictionary(
         {
             pdf_name('/Type'): pdf_name('/SigRef'),
             pdf_name('/TransformMethod'): pdf_name('/FieldMDP'),
-            pdf_name('/Data'): data_ref,
+            pdf_name('/Data'): data_ind_obj,
             pdf_name('/TransformParams'): field_mdp_spec.as_transform_params(),
         }
     )
@@ -372,7 +372,7 @@ class PdfCMSEmbedder:
 
     def write_cms(
         self,
-        field_name: str,
+        field_name: Optional[str],
         writer: BasePdfFileWriter,
         existing_fields_only=False,
     ):

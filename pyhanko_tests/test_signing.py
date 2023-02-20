@@ -1183,7 +1183,7 @@ def test_determine_mechanism_no_signing_cert():
     )
 
     with pytest.raises(SigningError, match="Could not set up.*mechanism"):
-        signer.get_signature_mechanism('sha256')
+        signer.get_signature_mechanism_for_digest('sha256')
 
 
 @pytest.mark.asyncio
@@ -1329,11 +1329,13 @@ class LegacyRSASigner(signers.Signer):
         signature_mechanism: SignedDigestAlgorithm = None,
         prefer_pss=False,
     ):
-        self.signing_cert = signing_cert
         self.signing_key = signing_key
-        self.cert_registry = cert_registry
-        self.signature_mechanism = signature_mechanism
-        super().__init__(prefer_pss=prefer_pss)
+        super().__init__(
+            prefer_pss=prefer_pss,
+            signing_cert=signing_cert,
+            cert_registry=cert_registry,
+            signature_mechanism=signature_mechanism,
+        )
 
     # noinspection PyUnusedLocal
     def sign_raw(

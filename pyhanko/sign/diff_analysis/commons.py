@@ -6,7 +6,7 @@ In principle, these aren't relevant to the high-level validation API.
 
 
 import logging
-from typing import Callable, Generator, Optional, Set, Tuple, TypeVar
+from typing import Callable, FrozenSet, Generator, Optional, Set, Tuple, TypeVar
 
 from pyhanko.pdf_utils import generic, misc
 from pyhanko.pdf_utils.generic import PdfObject, Reference
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'qualify',
+    'qualify_transforming',
     'safe_whitelist',
     'compare_key_refs',
     'compare_dicts',
@@ -126,15 +127,16 @@ def compare_key_refs(
     return old_value, new_value
 
 
-R = TypeVar('R')
-X = TypeVar('X')
+R = TypeVar('R', covariant=True)
+QualifyIn = TypeVar('QualifyIn', contravariant=True)
+RefToUpd = TypeVar('RefToUpd', bound=ReferenceUpdate)
+OutRefUpd = TypeVar('OutRefUpd', bound=ReferenceUpdate, covariant=True)
 
 
 def qualify(
     level: ModificationLevel,
-    rule_result: Generator[X, None, R],
-    transform: Callable[[X], ReferenceUpdate] = lambda x: x,
-) -> Generator[Tuple[ModificationLevel, ReferenceUpdate], None, R]:
+    rule_result: Generator[RefToUpd, None, R],
+) -> Generator[Tuple[ModificationLevel, RefToUpd], None, R]:
     """
     This is a helper function for rule implementors.
     It attaches a fixed modification level to an existing reference update
@@ -169,10 +171,29 @@ def qualify(
         The modification level to set.
     :param rule_result:
         A generator that outputs references to be whitelisted.
+    :return:
+        A converted generator that outputs references qualified at the
+        modification level specified.
+    """
+    return qualify_transforming(level, rule_result, transform=lambda x: x)
+
+
+def qualify_transforming(
+    level: ModificationLevel,
+    rule_result: Generator[QualifyIn, None, R],
+    transform: Callable[[QualifyIn], OutRefUpd],
+) -> Generator[Tuple[ModificationLevel, OutRefUpd], None, R]:
+    """
+    This is a version of :func:`.qualify` that additionally allows
+    a transformation to be applied to the output of the rule.
+
+    :param level:
+        The modification level to set.
+    :param rule_result:
+        A generator that outputs references to be whitelisted.
     :param transform:
         Function to apply to the reference object before appending
         the modification level and yielding it.
-        Defaults to the identity.
     :return:
         A converted generator that outputs references qualified at the
         modification level specified.
@@ -183,9 +204,9 @@ def qualify(
 
 
 def compare_dicts(
-    old_dict: PdfObject,
-    new_dict: PdfObject,
-    ignored: Set[str] = frozenset(),
+    old_dict: Optional[PdfObject],
+    new_dict: Optional[PdfObject],
+    ignored: FrozenSet[str] = frozenset(),
     raise_exc=True,
 ) -> bool:
     """
