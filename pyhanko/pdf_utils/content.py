@@ -12,6 +12,7 @@ from .generic import (
 )
 from .layout import BoxConstraints
 from .reader import PdfFileReader
+from .writer import BasePdfFileWriter
 
 __all__ = [
     'ResourceType',
@@ -21,8 +22,6 @@ __all__ = [
     'RawContent',
     'ImportedPdfPage',
 ]
-
-from .writer import BasePdfFileWriter
 
 # TODO have the merge_resources helper in incremental_writer rely on some
 #  of the idioms established here
@@ -265,6 +264,36 @@ class PdfContent:
             An instance of :class:`~.writer.BasePdfFileWriter`.
         """
         self.writer = writer
+
+    def add_to_page(
+        self, writer: BasePdfFileWriter, page_ix: int, prepend: bool = False
+    ):
+        """
+        Convenience wrapper around :meth:`.BasePdfFileWriter.add_stream_to_page`
+        to turn a :class:`.PdfContent` instance into a page
+        content stream.
+
+        :param writer:
+            A PDF file writer.
+        :param page_ix:
+            Index of the page to modify.
+            The first page has index `0`.
+        :param prepend:
+            Prepend the content stream to the list of content streams, as
+            opposed to appending it to the end.
+            This has the effect of causing the stream to be rendered
+            underneath the already existing content on the page.
+        :return:
+            An :class:`~.generic.IndirectObject` reference to the page object
+            that was modified.
+        """
+        as_stream = StreamObject({}, stream_data=self.render())
+        return writer.add_stream_to_page(
+            page_ix,
+            writer.add_object(as_stream),
+            resources=self.resources.as_pdf_object(),
+            prepend=prepend,
+        )
 
 
 class RawContent(PdfContent):

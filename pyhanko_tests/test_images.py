@@ -51,6 +51,5 @@ def test_image_content_embed(infile):
         writer=w,
         opacity=0.6,
     )
-    w.add_content_to_page(0, img_content, prepend=True)
-
+    img_content.add_to_page(writer=w, page_ix=0, prepend=True)
     w.write_in_place()

@@ -2004,9 +2004,10 @@ def test_skip_diff_scenario_2():
     from pyhanko.pdf_utils.content import RawContent
 
     w = IncrementalPdfFileWriter(out)
-    w.add_content_to_page(
-        0, RawContent(b'q BT /F1 18 Tf 0 50 Td (Sneaky text!) Tj ET Q')
+    RawContent(b'q BT /F1 18 Tf 0 50 Td (Sneaky text!) Tj ET Q').add_to_page(
+        w, 0
     )
+
     w.write_in_place()
 
     r = PdfFileReader(out)

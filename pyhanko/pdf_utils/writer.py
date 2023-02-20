@@ -10,7 +10,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 
 from asn1crypto import x509
 
-from pyhanko.pdf_utils import content, generic
+from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.crypt import (
     PubKeySecurityHandler,
     SecurityHandler,
@@ -1005,35 +1005,6 @@ class BasePdfFileWriter(PdfHandler):
             self.merge_resources(orig_resource_dict, resources)
 
         return page_obj_ref
-
-    def add_content_to_page(
-        self, page_ix, pdf_content: content.PdfContent, prepend=False
-    ):
-        """
-        Convenience wrapper around :meth:`add_stream_to_page` to turn a
-        :class:`~.content.PdfContent` instance into a page content stream.
-
-        :param page_ix:
-            Index of the page to modify.
-            The first page has index `0`.
-        :param pdf_content:
-            An instance of :class:`~.content.PdfContent`
-        :param prepend:
-            Prepend the content stream to the list of content streams, as
-            opposed to appending it to the end.
-            This has the effect of causing the stream to be rendered
-            underneath the already existing content on the page.
-        :return:
-            An :class:`~.generic.IndirectObject` reference to the page object
-            that was modified.
-        """
-        as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
-        return self.add_stream_to_page(
-            page_ix,
-            self.add_object(as_stream),
-            resources=pdf_content.resources.as_pdf_object(),
-            prepend=prepend,
-        )
 
     # TODO this doesn't really belong here
     def merge_resources(self, orig_dict, new_dict) -> bool:
