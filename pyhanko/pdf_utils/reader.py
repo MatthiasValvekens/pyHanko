@@ -826,6 +826,7 @@ class HistoricalResolver(PdfHandler):
         self.reader = reader
         self.revision = revision
         self._trailer = self.reader.trailer.flatten(self.revision)
+        self._trailer.container_ref = generic.TrailerReference(self)
         self._indirect_object_access_cache: Optional[
             Dict[generic.Reference, Set[RawPdfPath]]
         ] = None
