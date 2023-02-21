@@ -1,5 +1,6 @@
-pyhanko.sign.diff_analysis package
-==================================
+pyhanko.sign.diff\_analysis package
+===================================
+
 
 .. versionchanged:: 0.2.0
 
@@ -57,14 +58,61 @@ putting together custom diff rules.
   the first point is important).
 
 
-.. toctree::
-   :maxdepth: 3
+Subpackages
+-----------
 
-   pyhanko.sign.diff_analysis.commons
-   pyhanko.sign.diff_analysis.form_rules_api
-   pyhanko.sign.diff_analysis.policies
-   pyhanko.sign.diff_analysis.policy_api
-   pyhanko.sign.diff_analysis.rules.file_structure_rules
-   pyhanko.sign.diff_analysis.rules.form_field_rules
-   pyhanko.sign.diff_analysis.rules.metadata_rules
-   pyhanko.sign.diff_analysis.rules_api
+.. toctree::
+   :maxdepth: 4
+
+   pyhanko.sign.diff_analysis.rules
+
+Submodules
+----------
+
+pyhanko.sign.diff\_analysis.commons module
+------------------------------------------
+
+.. automodule:: pyhanko.sign.diff_analysis.commons
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.diff\_analysis.constants module
+--------------------------------------------
+
+.. automodule:: pyhanko.sign.diff_analysis.constants
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.diff\_analysis.form\_rules\_api module
+---------------------------------------------------
+
+.. automodule:: pyhanko.sign.diff_analysis.form_rules_api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.diff\_analysis.policies module
+-------------------------------------------
+
+.. automodule:: pyhanko.sign.diff_analysis.policies
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.diff\_analysis.policy\_api module
+----------------------------------------------
+
+.. automodule:: pyhanko.sign.diff_analysis.policy_api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.diff\_analysis.rules\_api module
+---------------------------------------------
+
+.. automodule:: pyhanko.sign.diff_analysis.rules_api
+   :members:
+   :undoc-members:
+   :show-inheritance:

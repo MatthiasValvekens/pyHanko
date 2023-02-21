@@ -1,11 +1,45 @@
 pyhanko.sign.timestamps package
 ===============================
 
-.. toctree::
-   :maxdepth: 4
+Submodules
+----------
 
-   pyhanko.sign.timestamps.api
-   pyhanko.sign.timestamps.aiohttp_client
-   pyhanko.sign.timestamps.requests_client
-   pyhanko.sign.timestamps.dummy_client
-   pyhanko.sign.timestamps.common_utils
+pyhanko.sign.timestamps.aiohttp\_client module
+----------------------------------------------
+
+.. automodule:: pyhanko.sign.timestamps.aiohttp_client
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.timestamps.api module
+----------------------------------
+
+.. automodule:: pyhanko.sign.timestamps.api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.timestamps.common\_utils module
+--------------------------------------------
+
+.. automodule:: pyhanko.sign.timestamps.common_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.timestamps.dummy\_client module
+--------------------------------------------
+
+.. automodule:: pyhanko.sign.timestamps.dummy_client
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.timestamps.requests\_client module
+-----------------------------------------------
+
+.. automodule:: pyhanko.sign.timestamps.requests_client
+   :members:
+   :undoc-members:
+   :show-inheritance:

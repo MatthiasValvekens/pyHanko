@@ -1,6 +1,6 @@
 import asyncio
 import warnings
-from typing import IO, Optional, Type, TypeVar, Union
+from typing import IO, Optional, TypeVar, Union
 
 from asn1crypto import cms
 from pyhanko_certvalidator import ValidationContext

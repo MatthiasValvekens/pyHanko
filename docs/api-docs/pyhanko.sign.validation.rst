@@ -1,30 +1,92 @@
 pyhanko.sign.validation package
 ===============================
 
-.. toctree::
-   :maxdepth: 4
+Submodules
+----------
 
-   pyhanko.sign.validation.ades
-   pyhanko.sign.validation.dss
-   pyhanko.sign.validation.errors
-   pyhanko.sign.validation.generic_cms
-   pyhanko.sign.validation.ltv
-   pyhanko.sign.validation.pdf_embedded
-   pyhanko.sign.validation.settings
-   pyhanko.sign.validation.status
-   pyhanko.sign.validation.utils
+pyhanko.sign.validation.ades module
+-----------------------------------
 
+.. automodule:: pyhanko.sign.validation.ades
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-Direct members
---------------
+pyhanko.sign.validation.dss module
+----------------------------------
 
-This package also exports a number of convenience functions at the package level.
-These are all synchronous wrappers around asynchronous functions. Some are
-deprecated and preserved only for compatibility reasons.
+.. automodule:: pyhanko.sign.validation.dss
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
+pyhanko.sign.validation.errors module
+-------------------------------------
+
+.. automodule:: pyhanko.sign.validation.errors
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.generic\_cms module
+-------------------------------------------
+
+.. automodule:: pyhanko.sign.validation.generic_cms
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.ltv module
+----------------------------------
+
+.. automodule:: pyhanko.sign.validation.ltv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.pdf\_embedded module
+--------------------------------------------
+
+.. automodule:: pyhanko.sign.validation.pdf_embedded
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.policy\_decl module
+-------------------------------------------
+
+.. automodule:: pyhanko.sign.validation.policy_decl
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.settings module
+---------------------------------------
+
+.. automodule:: pyhanko.sign.validation.settings
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.status module
+-------------------------------------
+
+.. automodule:: pyhanko.sign.validation.status
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.sign.validation.utils module
+------------------------------------
+
+.. automodule:: pyhanko.sign.validation.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
 
 .. automodule:: pyhanko.sign.validation
-   :members:
-    validate_pdf_signature, validate_pdf_ltv_signature, validate_cms_signature,
-    validate_detached_cms, validate_pdf_timestamp, add_validation_info
+   :members: validate_cms_signature, validate_detached_cms, validate_pdf_signature, validate_pdf_timestamp, add_validation_info, validate_pdf_ltv_signature
    :show-inheritance:

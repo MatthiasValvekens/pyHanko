@@ -13,8 +13,42 @@ Subpackages
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+pyhanko.cli module
+------------------
 
-   pyhanko.config
-   pyhanko.stamp
+.. automodule:: pyhanko.cli
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.config module
+---------------------
+
+.. automodule:: pyhanko.config
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.stamp module
+--------------------
+
+.. automodule:: pyhanko.stamp
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyhanko.version module
+----------------------
+
+.. automodule:: pyhanko.version
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: pyhanko
+   :members:
+   :undoc-members:
+   :show-inheritance:
