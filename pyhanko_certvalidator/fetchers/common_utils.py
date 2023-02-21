@@ -122,7 +122,6 @@ def get_certid(
     *,
     certid_hash_algo,
 ) -> ocsp.CertId:
-
     if isinstance(cert, x509.Certificate):
         serial_number = cert.serial_number
     else:

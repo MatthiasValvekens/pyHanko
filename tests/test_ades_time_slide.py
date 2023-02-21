@@ -45,7 +45,6 @@ def read_test_path(revoked_intermediate_ca=False) -> ValidationPath:
 
 
 def load_cert_registry(revoked_intermediate_ca=False) -> CertificateRegistry:
-
     cert_files = (
         'root.crt',
         'interm-revoked.crt' if revoked_intermediate_ca else 'interm.crt',

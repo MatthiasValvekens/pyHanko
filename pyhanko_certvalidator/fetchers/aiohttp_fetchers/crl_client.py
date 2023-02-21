@@ -42,7 +42,6 @@ class AIOHttpCRLFetcher(CRLFetcher, AIOHttpMixin):
         return results
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
-
         sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
 
         if not sources:
