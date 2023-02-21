@@ -6,7 +6,6 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum, auto
-from typing import TextIO
 
 import click
 import tzlocal

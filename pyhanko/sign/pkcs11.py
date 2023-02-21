@@ -14,17 +14,14 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from asn1crypto import algos, core, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
+from pyhanko_certvalidator.registry import CertificateStore
 
 from pyhanko.config import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
     TokenCriteria,
 )
-from pyhanko.sign.general import (
-    CertificateStore,
-    SigningError,
-    get_pyca_cryptography_hash,
-)
+from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.signers import Signer
 
 try:

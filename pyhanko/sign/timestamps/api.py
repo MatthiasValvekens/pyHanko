@@ -10,8 +10,8 @@ import asyncio
 
 from asn1crypto import algos, cms, tsp
 from pyhanko_certvalidator import CertificateValidator
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-from ..general import SimpleCertificateStore
 from .common_utils import (
     dummy_digest,
     extract_ts_certs,

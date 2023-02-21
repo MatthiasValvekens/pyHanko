@@ -26,6 +26,10 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko_certvalidator._asyncio_compat import to_thread
+from pyhanko_certvalidator.registry import (
+    CertificateStore,
+    SimpleCertificateStore,
+)
 
 from pyhanko.pdf_utils import misc
 from pyhanko.sign import attributes
@@ -36,9 +40,7 @@ from pyhanko.sign.attributes import (
     UnsignedAttributeProviderSpec,
 )
 from pyhanko.sign.general import (
-    CertificateStore,
     SigningError,
-    SimpleCertificateStore,
     _translate_pyca_cryptography_cert_to_asn1,
     _translate_pyca_cryptography_key_to_asn1,
     get_cms_hash_algo_for_mechanism,
