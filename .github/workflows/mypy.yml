@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - uses: jpetrucciani/mypy-check@0.971
+    - uses: jpetrucciani/mypy-check@0.991
       with:
         path: pyhanko_certvalidator
         requirements: "types-requests"

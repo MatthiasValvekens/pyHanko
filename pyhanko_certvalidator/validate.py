@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 
 def validate_path(
-    validation_context, path, parameters: PKIXValidationParams = None
+    validation_context, path, parameters: Optional[PKIXValidationParams] = None
 ):
     """
     Validates the path using the algorithm from
@@ -1028,7 +1028,7 @@ async def intl_validate_path(
     validation_context: ValidationContext,
     path: ValidationPath,
     proc_state: ValProcState,
-    parameters: PKIXValidationParams = None,
+    parameters: Optional[PKIXValidationParams] = None,
 ):
     """
     Internal copy of validate_path() that allows overriding the name of the
@@ -1223,6 +1223,7 @@ def _finish_policy_processing(
             state.explicit_policy = 0
     # Step 4 g
     # Step 4 g i
+    intersection: Optional[PolicyTreeRoot]
     if state.valid_policy_tree is None:
         intersection = None
 
@@ -1239,8 +1240,9 @@ def _finish_policy_processing(
     if intersection is not None:
         # collect policies in a user-friendly format and attach them to the
         # path object
-        def _enum_policies():
+        def _enum_policies() -> Iterable[QualifiedPolicy]:
             accepted_policy: PolicyTreeNode
+            assert intersection is not None
             for accepted_policy in intersection.at_depth(path_length):
                 listed_pol = accepted_policy.valid_policy
                 if listed_pol != 'any_policy':
