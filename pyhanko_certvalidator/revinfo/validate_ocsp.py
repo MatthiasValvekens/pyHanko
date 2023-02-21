@@ -54,7 +54,6 @@ OCSP_PROVENANCE_ERR = (
 def _delegated_ocsp_response_path(
     responder_cert: x509.Certificate, issuer: Authority, ee_path: ValidationPath
 ):
-
     if isinstance(issuer, AuthorityWithCert):
         responder_chain = ee_path.truncate_to_and_append(
             issuer.certificate, responder_cert
@@ -73,7 +72,6 @@ async def _validate_delegated_ocsp_provenance(
     ee_path: ValidationPath,
     proc_state: ValProcState,
 ):
-
     if proc_state.check_path_verif_recursion(responder_cert):
         # we permit this for CRLs for historical reasons, but there's no
         # sane reason why this would make sense for OCSP responders, so
@@ -175,7 +173,6 @@ def _match_ocsp_certid(
     ocsp_response: OCSPContainer,
     errs: _OCSPErrs,
 ) -> bool:
-
     cert_response = ocsp_response.extract_single_response()
     if cert_response is None:
         errs.mismatch_failures += 1
@@ -318,7 +315,6 @@ async def _check_ocsp_authorisation(
     errs: _OCSPErrs,
     proc_state: ValProcState,
 ) -> bool:
-
     simple_check = _precheck_ocsp_responder_auth(responder_cert, issuer, is_pkc)
 
     # we can take an early out in this case
@@ -382,7 +378,6 @@ def _check_ocsp_status(
 def _verify_ocsp_signature(
     responder_key: PublicKeyInfo, ocsp_response: OCSPContainer, errs: _OCSPErrs
 ) -> bool:
-
     response = ocsp_response.extract_basic_ocsp_response()
     if response is None:
         return False
@@ -425,7 +420,6 @@ def _assess_ocsp_relevance(
     cert_store: CertificateCollection,
     errs: _OCSPErrs,
 ) -> Optional[x509.Certificate]:
-
     matched = _match_ocsp_certid(
         cert, issuer=issuer, ocsp_response=ocsp_response, errs=errs
     )
@@ -457,7 +451,6 @@ async def _handle_single_ocsp_resp(
     errs: _OCSPErrs,
     proc_state: ValProcState,
 ) -> bool:
-
     responder_cert = _assess_ocsp_relevance(
         cert=cert,
         issuer=issuer,

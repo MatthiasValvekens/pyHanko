@@ -67,7 +67,6 @@ class AIOHttpCertificateFetcher(CertificateFetcher, AIOHttpMixin):
     def fetch_cert_issuers(
         self, cert: Union[x509.Certificate, cms.AttributeCertificateV2]
     ):
-
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='certificate')
             for url in gather_aia_issuer_urls(cert)

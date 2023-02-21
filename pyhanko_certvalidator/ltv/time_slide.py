@@ -129,7 +129,6 @@ def _update_control_time_for_unrevoked(
     rev_trust_policy: CertRevTrustPolicy,
     time_tolerance: timedelta,
 ):
-
     # if the cert is not on the list, we need the freshness check
     usability = revinfo_container.usable_at(
         rev_trust_policy,
@@ -313,7 +312,6 @@ async def _time_slide(
 
         most_recent_ocsp = None
         for ocsp_of_interest in ocsps:
-
             ocsp_container = ocsp_of_interest.ocsp_response
             issued = ocsp_container.issuance_date
             if (

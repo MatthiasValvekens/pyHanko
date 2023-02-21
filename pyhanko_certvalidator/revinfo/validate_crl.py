@@ -188,7 +188,6 @@ async def _find_candidate_crl_paths(
     is_indirect: bool,
     proc_state: ValProcState,
 ) -> Tuple[List[ValidationPath], _CRLIssuerSearchErrs]:
-
     cert_sha256 = hashlib.sha256(cert.dump()).digest()
 
     candidate_crl_issuers = await _find_candidate_crl_issuer_certs(
@@ -260,7 +259,6 @@ async def _find_crl_issuer(
     is_indirect: bool,
     proc_state: ValProcState,
 ) -> ValidationPath:
-
     candidate_paths, errs = await _find_candidate_crl_paths(
         crl_authority_name,
         certificate_list,
@@ -273,7 +271,6 @@ async def _find_crl_issuer(
     )
 
     for candidate_crl_issuer_path in candidate_paths:
-
         candidate_crl_issuer = candidate_crl_issuer_path.last
 
         # Skip path validation step if we're recursing
@@ -361,7 +358,6 @@ def _match_dps_idp_names(
     crl_issuer: x509.Certificate,
     crl_authority_name: x509.Name,
 ) -> bool:
-
     # Step b 2 i
     has_idp_name = False
     has_dp_name = False
@@ -499,7 +495,6 @@ def _handle_attr_cert_crl_idp_ext_constraints(
     crl_authority_name: x509.Name,
     errs: _CRLErrs,
 ) -> bool:
-
     match = _match_dps_idp_names(
         crl_idp=crl_idp,
         crl_dps=crl_dps,
@@ -547,7 +542,6 @@ async def _handle_single_crl(
     errs: _CRLErrs,
     proc_state: ValProcState,
 ) -> Optional[Set[str]]:
-
     certificate_list = certificate_list_cont.crl_data
 
     try:
@@ -704,7 +698,6 @@ def _maybe_get_delta_crl(
     timing_params: Optional[ValidationTimingParams] = None,
     policy: Optional[CertRevTrustPolicy] = None,
 ) -> Optional[CRLContainer]:
-
     if (
         not certificate_list.freshest_crl_value
         or len(certificate_list.freshest_crl_value) == 0
@@ -778,7 +771,6 @@ def _get_crl_scope_assuming_authority(
     is_indirect: bool,
     errs: _CRLErrs,
 ) -> Optional[Set[str]]:
-
     certificate_list = certificate_list_cont.crl_data
     crl_idp: crl.IssuingDistributionPoint = (
         certificate_list.issuing_distribution_point_value
@@ -880,7 +872,6 @@ def _check_cert_on_crl_and_delta(
     delta_certificate_list_cont: Optional[CRLContainer],
     errs: _CRLErrs,
 ):
-
     certificate_list = certificate_list_cont.crl_data
     # Step i
     revoked_reason = None
@@ -937,7 +928,6 @@ async def _classify_relevant_crls(
     errs: _CRLErrs,
     control_time: Optional[datetime] = None,
 ):
-
     # NOTE: the control_time parameter is only used in the time sliding
     # algorithm code path for AdES validation
 
@@ -981,7 +971,6 @@ def _process_crl_completeness(
     errs: _CRLErrs,
     proc_state: ValProcState,
 ):
-
     # CRLs should not include this value, but at least one of the examples
     # from the NIST test suite does
     checked_reasons -= {'unused'}
@@ -1177,7 +1166,6 @@ async def _assess_crl_relevance(
     errs: _CRLErrs,
     proc_state: ValProcState,
 ) -> Optional[CRLOfInterest]:
-
     certificate_list = certificate_list_cont.crl_data
     registry = revinfo_manager.certificate_registry
     try:

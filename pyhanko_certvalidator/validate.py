@@ -307,7 +307,6 @@ def _validate_ac_targeting(
     attr_cert: cms.AttributeCertificateV2,
     acceptable_targets: ACTargetDescription,
 ):
-
     target_info = get_ac_extension_value(attr_cert, 'target_information')
     if target_info is None:
         return
@@ -379,7 +378,6 @@ def _parse_iss_serial(
 
 
 def _process_aki_ext(aki_ext: x509.AuthorityKeyIdentifier):
-
     aki = aki_ext['key_identifier'].native  # could be None
     auth_iss_ser = auth_iss_dirname = None
     if not isinstance(aki_ext['authority_cert_issuer'], core.Void):
@@ -462,7 +460,6 @@ def _check_ac_signature(
     aa_cert: x509.Certificate,
     validation_context: ValidationContext,
 ):
-
     sd_algo = attr_cert['signature_algorithm']
     embedded_sd_algo = attr_cert['ac_info']['signature']
     use_time = validation_context.best_signature_time
@@ -776,7 +773,6 @@ class _PathValidationState:
         trust_anchor: TrustAnchor,
         parameters: Optional[PKIXValidationParams],
     ):
-
         trust_anchor_quals = trust_anchor.trust_qualifiers
         max_path_length = max_aa_path_length = path_length
         if trust_anchor_quals.max_path_length is not None:
@@ -916,7 +912,6 @@ class _PathValidationState:
         any_policy_uninhibited,
         proc_state: ValProcState,
     ):
-
         if certificate_policies and self.valid_policy_tree is not None:
             self.valid_policy_tree = update_policy_tree(
                 certificate_policies,
@@ -964,7 +959,6 @@ class _PathValidationState:
         proc_state: ValProcState,
         moment: datetime.datetime,
     ):
-
         sd_algo: algos.SignedDigestAlgorithm = cert['signature_algorithm']
         sd_algo_name = sd_algo['algorithm'].native
         sig_algo_allowed = algorithm_policy.signature_algorithm_allowed(
