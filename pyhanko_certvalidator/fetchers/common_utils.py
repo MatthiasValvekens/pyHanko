@@ -5,7 +5,7 @@ and OCSP responses.
 import asyncio
 import logging
 import os
-from typing import Optional, Union
+from typing import Awaitable, Callable, Dict, Optional, TypeVar, Union
 
 from asn1crypto import algos, cms, core, ocsp, pem, x509
 
@@ -207,7 +207,16 @@ def process_ocsp_response_data(
     return ocsp_response
 
 
-async def queue_fetch_task(results, running_jobs, tag, async_fun):
+T = TypeVar('T')
+R = TypeVar('R')
+
+
+async def queue_fetch_task(
+    results: Dict[T, Union[R, Exception]],
+    running_jobs: Dict[T, asyncio.Event],
+    tag: T,
+    async_fun: Callable[[], Awaitable[R]],
+) -> Union[R, Exception]:
     # use an asyncio events to make sure that we don't attempt to re-fetch
     # the same tag while the job is running
     # Note: this uses asyncio locking, so we only transfer control

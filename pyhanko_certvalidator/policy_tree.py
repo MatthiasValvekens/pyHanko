@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Set
 
 from asn1crypto import x509
 
@@ -250,7 +250,7 @@ class PolicyTreeRoot:
 
         self.children.remove(child)
 
-    def at_depth(self, depth):
+    def at_depth(self, depth) -> Iterable['PolicyTreeNode']:
         """
         Returns a generator yielding all nodes in the tree at a specific depth
 
@@ -304,16 +304,12 @@ class PolicyTreeNode(PolicyTreeRoot):
     A policy tree node that is used for all nodes but the root
     """
 
-    # A unicode string of a policy name or OID
-    valid_policy = None
-
-    # An instance of asn1crypto.x509.PolicyQualifierInfos
-    qualifier_set = None
-
-    # A set of unicode strings containing policy names or OIDs
-    expected_policy_set = None
-
-    def __init__(self, valid_policy, qualifier_set, expected_policy_set):
+    def __init__(
+        self,
+        valid_policy: str,
+        qualifier_set: x509.PolicyQualifierInfos,
+        expected_policy_set: Set[str],
+    ):
         """
         :param valid_policy:
             A unicode string of a policy name or OID

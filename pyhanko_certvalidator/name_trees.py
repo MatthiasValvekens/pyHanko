@@ -255,9 +255,13 @@ def process_general_subtrees(subtrees: x509.GeneralSubtrees) -> PKIXSubtrees:
 
 
 class NameConstraintValidationResult:
-    def __init__(self, failing_name_type=None, failing_name=None):
-        self.failing_name_type: GeneralNameType = failing_name_type
-        self.failing_name: Union[str, x509.Name] = failing_name
+    def __init__(
+        self,
+        failing_name_type: Optional[GeneralNameType] = None,
+        failing_name: Union[str, x509.Name, None] = None,
+    ):
+        self.failing_name_type: Optional[GeneralNameType] = failing_name_type
+        self.failing_name: Union[str, x509.Name, None] = failing_name
 
     def __bool__(self):
         return self.failing_name_type is None
