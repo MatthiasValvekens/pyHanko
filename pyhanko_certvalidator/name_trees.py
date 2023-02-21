@@ -215,6 +215,7 @@ class NameSubtree:
     def universal_tree(cls, name_type: GeneralNameType) -> 'NameSubtree':
         """
         Tree that contains all names of a given type.
+
         :param name_type:
             The name type to use.
         :return:
