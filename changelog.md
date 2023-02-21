@@ -1,5 +1,9 @@
 # changelog
 
+## 0.20.1
+
+Minor maintenance release without functional changes, only to metadata, documentation and typing.
+
 ## 0.20.0
 
 This is a big release, with many breaking changes in the "deeper" APIs.
