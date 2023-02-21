@@ -41,7 +41,6 @@ class AIOHttpOCSPFetcher(OCSPFetcher, AIOHttpMixin):
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         authority: Authority,
     ) -> ocsp.OCSPResponse:
-
         tag = (issuer_serial(cert), authority.hashable)
         if isinstance(cert, x509.Certificate):
             target = cert.subject.human_friendly

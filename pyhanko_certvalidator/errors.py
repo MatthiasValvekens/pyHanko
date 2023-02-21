@@ -9,12 +9,10 @@ from pyhanko_certvalidator._state import ValProcState
 
 
 class PathError(Exception):
-
     pass
 
 
 class PathBuildingError(PathError):
-
     pass
 
 
@@ -23,12 +21,10 @@ class CertificateFetchError(PathBuildingError):
 
 
 class CRLValidationError(Exception):
-
     pass
 
 
 class CRLNoMatchesError(CRLValidationError):
-
     pass
 
 
@@ -43,12 +39,10 @@ class CRLValidationIndeterminateError(CRLValidationError):
 
 
 class OCSPValidationError(Exception):
-
     pass
 
 
 class OCSPNoMatchesError(OCSPValidationError):
-
     pass
 
 

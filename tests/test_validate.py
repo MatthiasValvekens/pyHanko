@@ -415,7 +415,6 @@ def read_openssl_ocsp_test_params():
     "test_case", read_openssl_ocsp_test_params(), ids=lambda case: case.name
 )
 def openssl_ocsp(test_case: OCSPTestCase):
-
     context = ValidationContext(
         trust_roots=test_case.roots,
         other_certs=test_case.other_certs,

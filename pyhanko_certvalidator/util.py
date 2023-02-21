@@ -174,7 +174,6 @@ def get_ocsp_urls(cert: Union[x509.Certificate, cms.AttributeCertificateV2]):
 def get_declared_revinfo(
     cert: Union[x509.Certificate, cms.AttributeCertificateV2]
 ):
-
     if isinstance(cert, x509.Certificate):
         aia = cert.authority_information_access_value
         crl_dps = cert.crl_distribution_points_value

@@ -55,7 +55,6 @@ class RequestsCRLFetcher(CRLFetcher, RequestsFetcherMixin):
         return await self._perform_fetch(url, task)
 
     async def _fetch(self, cert: x509.Certificate, *, use_deltas):
-
         sources = get_relevant_crl_dps(cert, use_deltas=use_deltas)
 
         def _fetch_jobs():

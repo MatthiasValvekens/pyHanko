@@ -40,7 +40,6 @@ class RequestsOCSPFetcher(OCSPFetcher, RequestsFetcherMixin):
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         authority: Authority,
     ) -> ocsp.OCSPResponse:
-
         tag = (issuer_serial(cert), authority.hashable)
         return await self._perform_fetch(
             tag, lambda: self._fetch(cert, authority)

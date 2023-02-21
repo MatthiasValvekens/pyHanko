@@ -103,6 +103,7 @@ class CRLFetcher(abc.ABC):
     ) -> Iterable[crl.CertificateList]:
         """
         Return all relevant fetched CRLs for the given certificate
+
         :param cert:
             A certificate.
         :return:

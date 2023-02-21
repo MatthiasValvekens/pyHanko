@@ -93,7 +93,6 @@ async def test_basic_certificate_validator_tls_whitelist():
 
 @pytest.mark.asyncio
 async def test_certvalidator_with_params():
-
     cert = load_nist_cert('ValidPolicyMappingTest12EE.crt')
     ca_certs = [load_nist_cert('TrustAnchorRootCertificate.crt')]
     other_certs = [load_nist_cert('P12Mapping1to3CACert.crt')]

@@ -152,7 +152,6 @@ def sort_freshest_first(lst: Iterable[RevInfoType]) -> List[RevInfoType]:
 
 
 def _freshness_delta(policy, this_update, next_update, time_tolerance):
-
     freshness_delta = policy.freshness
     if freshness_delta is None:
         if next_update is not None and next_update >= this_update:
@@ -168,7 +167,6 @@ def _judge_revinfo(
     policy: CertRevTrustPolicy,
     timing_params: ValidationTimingParams,
 ) -> RevinfoUsability:
-
     if this_update is None:
         return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
@@ -249,7 +247,6 @@ def _judge_revinfo(
 def _extract_basic_ocsp_response(
     ocsp_response,
 ) -> Optional[ocsp.BasicOCSPResponse]:
-
     # Make sure that we get a valid response back from the OCSP responder
     status = ocsp_response['response_status'].native
     if status != 'successful':
@@ -317,7 +314,6 @@ class OCSPContainer(RevinfoContainer):
     def usable_at(
         self, policy: CertRevTrustPolicy, timing_params: ValidationTimingParams
     ) -> RevinfoUsability:
-
         cert_response = self.extract_single_response()
         if cert_response is None:
             return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)

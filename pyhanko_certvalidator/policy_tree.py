@@ -116,7 +116,6 @@ def apply_policy_mapping(
     """
 
     for issuer_domain_policy, subject_domain_policies in policy_map.items():
-
         # Step 3 b 1
         if policy_mapping_uninhibited:
             issuer_domain_policy_match = False

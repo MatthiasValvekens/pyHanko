@@ -52,7 +52,6 @@ class ValidationPath:
         interm: Iterable[x509.Certificate],
         leaf: Optional[Leaf],
     ):
-
         if interm and not leaf:
             raise ValueError("Leafless paths cannot have intermediate certs")
         self._interm = list(interm)

@@ -74,7 +74,7 @@ class RevocationCheckingRule(enum.Enum):
         This is not an ESI check type, but is preserved for 
         compatibility with the 'hard-fail' mode in certvalidator.
 
-    .. info::
+    .. note::
         In this mode, cached CRLs will _not_ be checked if the certificate
         does not list any distribution points.
     """
@@ -88,7 +88,7 @@ class RevocationCheckingRule(enum.Enum):
         This is not an ESI check type, but is preserved for 
         compatibility with the 'soft-fail' mode in certvalidator.
 
-    .. info::
+    .. note::
         In this mode, cached CRLs will _not_ be checked if the certificate
         does not list any distribution points.
     """

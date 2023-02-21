@@ -206,7 +206,6 @@ class SimpleTrustManager(TrustManager):
     """
 
     def __init__(self):
-
         self._roots = set()
         self._root_subject_map = defaultdict(list)
 
@@ -353,7 +352,6 @@ class CertificateRegistry(SimpleCertificateStore):
     def find_potential_issuers(
         self, cert: x509.Certificate, trust_manager: TrustManager
     ) -> Iterator[Union[TrustAnchor, x509.Certificate]]:
-
         issuer_hashable = cert.issuer.hashable
 
         # Info from the authority key identifier extension can be used to
@@ -510,7 +508,6 @@ class _IssuerFetcher:
         raise StopIteration
 
     async def __anext__(self) -> Union[TrustAnchor, x509.Certificate]:
-
         try:
             return next(self)
         except StopIteration:
