@@ -24,3 +24,4 @@ refer to the :ref:`CLI user guide <cli-user-guide>`.
    :maxdepth: 4
 
    pyhanko
+   pyhanko_certvalidator
