@@ -7,16 +7,19 @@ import pytest
 import yaml
 from asn1crypto import x509
 
-from pyhanko import config, stamp
-from pyhanko.config import (
+import pyhanko.config.pkcs11
+from pyhanko import stamp
+from pyhanko.cli import config
+from pyhanko.cli.config import (
     DEFAULT_ROOT_LOGGER_LEVEL,
     DEFAULT_TIME_TOLERANCE,
     StdLogOutput,
-    TokenCriteria,
     init_validation_context_kwargs,
 )
+from pyhanko.config.api import ConfigurableMixin
+from pyhanko.config.errors import ConfigurationError
+from pyhanko.config.pkcs11 import TokenCriteria
 from pyhanko.pdf_utils import layout
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
 from pyhanko.stamp import QRStampStyle, TextStampStyle
@@ -772,14 +775,14 @@ def test_read_pkcs11_config_no_cert_spec():
 @pytest.mark.parametrize(
     'literal,exp_val',
     [
-        ('prompt', config.PKCS11PinEntryMode.PROMPT),
-        ('skip', config.PKCS11PinEntryMode.SKIP),
-        ('defer', config.PKCS11PinEntryMode.DEFER),
+        ('prompt', pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT),
+        ('skip', pyhanko.config.pkcs11.PKCS11PinEntryMode.SKIP),
+        ('defer', pyhanko.config.pkcs11.PKCS11PinEntryMode.DEFER),
         # fallbacks
-        ('true', config.PKCS11PinEntryMode.PROMPT),
-        ('false', config.PKCS11PinEntryMode.SKIP),
-        ('1', config.PKCS11PinEntryMode.PROMPT),
-        ('0', config.PKCS11PinEntryMode.SKIP),
+        ('true', pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT),
+        ('false', pyhanko.config.pkcs11.PKCS11PinEntryMode.SKIP),
+        ('1', pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT),
+        ('0', pyhanko.config.pkcs11.PKCS11PinEntryMode.SKIP),
     ],
 )
 def test_read_pkcs11_prompt_pin(literal, exp_val):
@@ -810,7 +813,7 @@ def test_read_pkcs11_prompt_pin_default():
         """
     )
     setup = cli_config.get_pkcs11_config('foo')
-    assert setup.prompt_pin == config.PKCS11PinEntryMode.PROMPT
+    assert setup.prompt_pin == pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT
 
 
 def test_read_pkcs11_prompt_pin_invalid():

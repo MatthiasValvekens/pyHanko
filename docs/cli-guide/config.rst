@@ -246,7 +246,7 @@ and use PKCS#11 object IDs to select the certificate and the private key. All of
 are represented as hex strings.
 
 For a full overview of the parameters you can set on a PKCS#11 configuration, see the API reference
-documentation for :class:`~pyhanko.config.PKCS11SignatureConfig`.
+documentation for :class:`~pyhanko.cli.config.PKCS11SignatureConfig`.
 
 
 .. note::
@@ -307,8 +307,8 @@ On the command line, you can use these named setups like this:
     pyhanko sign addsig pemder --pemder-setup bar input.pdf output.pdf
 
 For a full overview of the parameters you can set in these configuration dictionaries,
-see the API reference documentation for :class:`~pyhanko.config.PKCS12SignatureConfig` and
-:class:`~pyhanko.config.PemDerSignatureConfig`.
+see the API reference documentation for :class:`~pyhanko.cli.config.PKCS12SignatureConfig` and
+:class:`~pyhanko.cli.config.PemDerSignatureConfig`.
 
 
 .. _key-usage-conf:

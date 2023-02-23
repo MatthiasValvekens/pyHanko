@@ -1,6 +1,6 @@
 from typing import List
 
-from .cli import cli
+from .cli.commands import cli
 
 __all__: List[str] = []
 

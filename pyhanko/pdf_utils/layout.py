@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Optional, Union
 
+from pyhanko.config.api import ConfigurableMixin
+from pyhanko.config.errors import ConfigurationError
+
 __all__ = [
     'LayoutError',
     'BoxSpecificationError',
@@ -16,8 +19,6 @@ __all__ = [
     'SimpleBoxLayoutRule',
     'Positioning',
 ]
-
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 
 logger = logging.getLogger(__name__)
 

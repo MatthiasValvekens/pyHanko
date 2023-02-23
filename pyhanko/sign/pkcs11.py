@@ -16,7 +16,7 @@ from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
 from pyhanko_certvalidator.registry import CertificateStore
 
-from pyhanko.config import (
+from pyhanko.config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
     TokenCriteria,

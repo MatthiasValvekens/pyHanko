@@ -3,8 +3,9 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from pyhanko.config.api import ConfigurableMixin
+from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import layout
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.content import PdfContent, PdfResources, ResourceType
 from pyhanko.pdf_utils.font import FontEngineFactory, SimpleFontEngineFactory
 from pyhanko.pdf_utils.generic import pdf_name

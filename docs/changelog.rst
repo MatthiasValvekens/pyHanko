@@ -246,11 +246,11 @@ the change to
  * :func:`~pyhanko.pdf_utils.font.basic.get_courier` convenience function moved into
    :mod:`pyhanko.pdf_utils.font.basic` and now takes a mandatory writer argument.
  * The ``token_label`` attribute was removed from
-   :class:`~pyhanko.config.PKCS11SignatureConfig`, but will still be parsed
+   :class:`~pyhanko.cli.config.PKCS11SignatureConfig`, but will still be parsed
    (with a deprecation warning).
- * The :attr:`~pyhanko.config.PKCS11SignatureConfig.prompt_pin` attribute in
-   :class:`~pyhanko.config.PKCS11SignatureConfig` was changed from a bool to
-   an enum. See :class:`~pyhanko.config.PKCS11PinEntryMode`.
+ * The :attr:`~pyhanko.cli.config.PKCS11SignatureConfig.prompt_pin` attribute in
+   :class:`~pyhanko.cli.config.PKCS11SignatureConfig` was changed from a bool to
+   an enum. See :class:`~pyhanko.cli.config.PKCS11PinEntryMode`.
 
 
 Dependency updates
@@ -300,7 +300,7 @@ Signing
    This is implemented using :class:`~pyhanko.sign.fields.VisibleSigSettings`.
    See `discussion #150 <https://github.com/MatthiasValvekens/pyHanko/discussions/150>`_.
  * Factor out and improve PKCS#11 token finding; see
-   :class:`~pyhanko.config.TokenCriteria`
+   :class:`~pyhanko.cli.config.TokenCriteria`
    and `issue #149 <https://github.com/MatthiasValvekens/pyHanko/issues/149>`_.
  * Factor out and improve PKCS#11 mechanism selection, allowing more raw modes.
  * Change pin entry settings for PKCS#11 to be more granular, in order to also

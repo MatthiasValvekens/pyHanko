@@ -13,8 +13,9 @@ from typing import Any, Optional, Set, Tuple, Type, Union
 
 from asn1crypto.core import BitString, ObjectIdentifier
 
+from .errors import ConfigurationError
+
 __all__ = [
-    'ConfigurationError',
     'ConfigurableMixin',
     'check_config_keys',
     'OID_REGEX',
@@ -65,12 +66,6 @@ def _has_default(f: dataclasses.Field):
         f.default_factory is not dataclasses.MISSING
         or f.default is not dataclasses.MISSING
     )
-
-
-class ConfigurationError(ValueError):
-    """Signal configuration errors."""
-
-    pass
 
 
 @dataclasses.dataclass(frozen=True)

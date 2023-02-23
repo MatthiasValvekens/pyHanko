@@ -14,21 +14,8 @@ from pyhanko_certvalidator import ValidationContext
 
 import pyhanko.sign.validation.pdf_embedded
 from pyhanko import __version__
-from pyhanko.config import (
-    CLIConfig,
-    LogConfig,
-    PemDerSignatureConfig,
-    PKCS11PinEntryMode,
-    PKCS11SignatureConfig,
-    PKCS12SignatureConfig,
-    StdLogOutput,
-    TokenCriteria,
-    init_validation_context_kwargs,
-    parse_cli_config,
-    parse_logging_config,
-)
+from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import crypt, misc
-from pyhanko.pdf_utils.config_utils import ConfigurationError
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import isoparse
@@ -43,6 +30,22 @@ from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.validation import RevocationInfoValidationType
 from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
+
+from ..config.pkcs11 import (
+    PKCS11PinEntryMode,
+    PKCS11SignatureConfig,
+    TokenCriteria,
+)
+from .config import (
+    CLIConfig,
+    LogConfig,
+    PemDerSignatureConfig,
+    PKCS12SignatureConfig,
+    StdLogOutput,
+    init_validation_context_kwargs,
+    parse_cli_config,
+    parse_logging_config,
+)
 
 __all__ = ['cli']
 

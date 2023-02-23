@@ -23,6 +23,7 @@ setup(
     version=get_version(),
     packages=[
         'pyhanko',
+        'pyhanko.config',
         'pyhanko.pdf_utils', 'pyhanko.pdf_utils.font',
         'pyhanko.pdf_utils.crypt', 'pyhanko.pdf_utils.metadata',
         'pyhanko.sign', 'pyhanko.sign.ades', 'pyhanko.sign.signers',

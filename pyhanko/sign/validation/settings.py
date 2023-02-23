@@ -4,7 +4,7 @@ from typing import Optional, Set
 from asn1crypto import x509
 from pyhanko_certvalidator.errors import InvalidCertificateError
 
-from pyhanko.pdf_utils.config_utils import (
+from pyhanko.config.api import (
     ConfigurableMixin,
     process_bit_string_flags,
     process_oids,

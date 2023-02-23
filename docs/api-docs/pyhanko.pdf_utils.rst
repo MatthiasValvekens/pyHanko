@@ -23,16 +23,6 @@ pyhanko.pdf\_utils.barcodes module
    :show-inheritance:
 
 
-.. _pyhanko-config-api-ref:
-
-pyhanko.pdf\_utils.config\_utils module
----------------------------------------
-
-.. automodule:: pyhanko.pdf_utils.config_utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 pyhanko.pdf\_utils.content module
 ---------------------------------
 

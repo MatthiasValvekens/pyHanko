@@ -17,8 +17,9 @@ from typing import List, Optional, Tuple
 import qrcode
 import tzlocal
 
+from pyhanko.config.api import ConfigurableMixin
+from pyhanko.config.errors import ConfigurationError
 from pyhanko.pdf_utils import content, generic, layout
-from pyhanko.pdf_utils.config_utils import ConfigurableMixin, ConfigurationError
 from pyhanko.pdf_utils.generic import IndirectObject, pdf_name, pdf_string
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import LayoutError
