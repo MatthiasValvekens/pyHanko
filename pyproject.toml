@@ -1,0 +1,106 @@
+[build-system]
+requires = [
+    "setuptools>=67.4",
+    "wheel", "pytest-runner",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyHanko"
+dynamic = ['version']
+authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
+license = {text = "MIT"}
+description = "Tools for stamping and signing PDF files"
+keywords = [
+    "signature",
+    "pdf",
+    "pades",
+    "digital-signature",
+    "pkcs11",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "asn1crypto>=1.5.1",
+    "pytz>=2020.1",
+    "qrcode>=6.1",
+    "tzlocal>=2.1",
+    "pyhanko-certvalidator==0.20.*",
+    "click>=7.1.2",
+    "requests>=2.24.0",
+    "pyyaml>=5.3.1",
+    "cryptography>=3.3.1",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyhanko.version.__version__"}
+
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/MatthiasValvekens/pyHanko"
+
+[project.optional-dependencies]
+extra_pubkey_algs = ["oscrypto>=1.2.1"]
+xmp = ["defusedxml~=0.7.1"]
+opentype = [
+    "fonttools>=4.33.3",
+    # uharfbuzz sometimes includes breaking changes, so
+    # we set an explicit range
+    "uharfbuzz>=0.25.0,<0.31.0",
+]
+image-support = [
+    # Only tested systematically on 8.x,
+    # but we allow 7.2.x to support system PIL on Ubuntu
+    "Pillow>=7.2.0",
+    "python-barcode==0.14.0"
+]
+pkcs11 = ["python-pkcs11~=0.7.0"]
+async_http = ["aiohttp~=3.8.0"]
+testing = [
+    "pytest>=6.1.1",
+    "requests-mock>=1.8.0",
+    "freezegun>=1.1.0",
+    "certomancer~=0.9.1",
+    "aiohttp~=3.8.0",
+    "pytest-aiohttp~=1.0.4",
+    "certomancer-csc-dummy==0.2.1",
+]
+
+[project.scripts]
+pyhanko = "pyhanko.__main__:launch"
+
+[tool.setuptools]
+packages = [
+    "pyhanko",
+    "pyhanko.config",
+    "pyhanko.pdf_utils",
+    "pyhanko.pdf_utils.font",
+    "pyhanko.pdf_utils.crypt",
+    "pyhanko.pdf_utils.metadata",
+    "pyhanko.sign",
+    "pyhanko.sign.ades",
+    "pyhanko.sign.signers",
+    "pyhanko.sign.diff_analysis",
+    "pyhanko.sign.diff_analysis.rules",
+    "pyhanko.sign.timestamps",
+    "pyhanko.sign.validation",
+]
+include-package-data = false
+
+[tool.setuptools.package-data]
+pyhanko = ["py.typed"]
