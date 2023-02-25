@@ -104,3 +104,21 @@ include-package-data = false
 
 [tool.setuptools.package-data]
 pyhanko = ["py.typed"]
+
+[tool.mypy]
+files = 'pyhanko'
+
+[[tool.mypy.overrides]]
+module = [
+    "asn1crypto.*",
+    "pkcs11.*",
+    "oscrypto.*",
+    "uritools.*",
+    "barcode.*",
+    "PIL.*",
+    "uharfbuzz.*",
+    "fontTools.*",
+    "qrcode.*",
+    "defusedxml.*",
+]
+ignore_missing_imports = true
