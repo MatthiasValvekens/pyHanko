@@ -14,5 +14,4 @@ jobs:
     - uses: jpetrucciani/mypy-check@0.991
       with:
         path: pyhanko
-        requirements: "types-requests types-python-dateutil types-pytz types-PyYAML types-tzlocal"
-        requirements_file: "requirements.txt"
+        requirements: "-e .[mypy,testing,pkcs11,xmp,opentype,image-support,async_http,extra_pubkey_algs] --config-settings editable_mode=strict"

@@ -24,9 +24,8 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install poppler-utils imagemagick softhsm2
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install --upgrade pytest pytest-cov
+        python -m pip install --upgrade pip setuptools
+        pip install -e .[testing,pkcs11,xmp,opentype,image-support,async_http,extra_pubkey_algs] --config-settings editable_mode=strict
     - name: Initialise SoftHSM tokens
       run: |
         mkdir softhsm_tokens
