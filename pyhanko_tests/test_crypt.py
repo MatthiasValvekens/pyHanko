@@ -4,6 +4,7 @@ from io import BytesIO
 
 import pytest
 
+from pyhanko.keys import load_cert_from_pemder
 from pyhanko.pdf_utils import generic, misc, writer
 from pyhanko.pdf_utils.crypt import (
     DEFAULT_CRYPT_FILTER,
@@ -29,7 +30,6 @@ from pyhanko.pdf_utils.crypt import (
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
-from pyhanko.sign.general import load_cert_from_pemder
 from pyhanko_tests.samples import (
     MINIMAL,
     MINIMAL_AES256,

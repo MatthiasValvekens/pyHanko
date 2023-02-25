@@ -196,7 +196,7 @@ for a ballot form of sorts, subject to the following requirements.
 .. code-block:: python
 
     from pyhanko.sign import fields
-    from pyhanko.sign.general import load_cert_from_pemder
+    from pyhanko.keys import load_cert_from_pemder
 
     franchising_ca = load_cert_from_pemder('path/to/certfile')
     sv = fields.SigSeedValueSpec(

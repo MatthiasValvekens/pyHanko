@@ -15,6 +15,15 @@ Subpackages
 Submodules
 ----------
 
+pyhanko.keys module
+--------------------
+
+.. automodule:: pyhanko.keys
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 pyhanko.stamp module
 --------------------
 
@@ -22,6 +31,7 @@ pyhanko.stamp module
    :members:
    :undoc-members:
    :show-inheritance:
+
 
 pyhanko.version module
 ----------------------

@@ -88,7 +88,7 @@ w.r.t. a specific trust root.
 
 .. code-block:: python
 
-    from pyhanko.sign.general import load_cert_from_pemder
+    from pyhanko.keys import load_cert_from_pemder
     from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
@@ -143,7 +143,7 @@ The PAdES B-LTA validation example below should clarify that.
 
 .. code-block:: python
 
-    from pyhanko.sign.general import load_cert_from_pemder
+    from pyhanko.keys import load_cert_from_pemder
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import (
         validate_pdf_ltv_signature, RevocationInfoValidationType
@@ -246,7 +246,7 @@ To actually use a custom diff policy, you can proceed as follows.
 
 .. code-block:: python
 
-    from pyhanko.sign.general import load_cert_from_pemder
+    from pyhanko.keys import load_cert_from_pemder
     from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
@@ -304,7 +304,7 @@ Anyhow, to disable diff analysis completely, it suffices to pass the
 
 .. code-block:: python
 
-    from pyhanko.sign.general import load_cert_from_pemder
+    from pyhanko.keys import load_cert_from_pemder
     from pyhanko_certvalidator import ValidationContext
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature

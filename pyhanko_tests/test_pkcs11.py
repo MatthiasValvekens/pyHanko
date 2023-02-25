@@ -19,7 +19,7 @@ from pkcs11 import Mechanism, NoSuchKey, PKCS11Error
 from pkcs11 import types as p11_types
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-from pyhanko.config import PKCS11PinEntryMode, PKCS11SignatureConfig
+from pyhanko.config.pkcs11 import PKCS11PinEntryMode, PKCS11SignatureConfig
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import general, pkcs11, signers

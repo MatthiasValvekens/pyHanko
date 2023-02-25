@@ -13,15 +13,15 @@ from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
+from pyhanko.keys import (
+    _translate_pyca_cryptography_cert_to_asn1,
+    _translate_pyca_cryptography_key_to_asn1,
+)
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import SimpleSigner, signers
 from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.fields import SigSeedSubFilter
-from pyhanko.sign.general import (
-    _translate_pyca_cryptography_cert_to_asn1,
-    _translate_pyca_cryptography_key_to_asn1,
-)
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.validation import (
     RevocationInfoValidationType,

@@ -8,9 +8,10 @@ from asn1crypto import x509
 
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
+from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils.misc import get_and_apply
-from pyhanko.sign import load_certs_from_pemder
-from pyhanko.sign.general import load_cert_from_pemder
+
+__all__ = ['TokenCriteria', 'PKCS11PinEntryMode', 'PKCS11SignatureConfig']
 
 
 @dataclass(frozen=True)

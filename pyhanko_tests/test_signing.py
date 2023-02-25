@@ -13,6 +13,7 @@ from pyhanko_certvalidator.errors import PathValidationError
 import pyhanko.pdf_utils.content
 import pyhanko.sign.fields
 from pyhanko import stamp
+from pyhanko.keys import load_cert_from_pemder, load_certs_from_pemder
 from pyhanko.pdf_utils import embed, generic, layout
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -25,12 +26,7 @@ from pyhanko.sign.diff_analysis import (
     DiffResult,
     ModificationLevel,
 )
-from pyhanko.sign.general import (
-    SigningError,
-    get_pyca_cryptography_hash,
-    load_cert_from_pemder,
-    load_certs_from_pemder,
-)
+from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 from pyhanko.sign.signers import cms_embedder
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.signers.pdf_cms import (

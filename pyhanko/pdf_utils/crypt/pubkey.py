@@ -480,13 +480,13 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         :return:
             An instance of :class:`.SimpleEnvelopeKeyDecrypter`.
         """
-        from pyhanko.sign.general import load_private_key_from_pemder
+        from ...keys import load_private_key_from_pemder
 
         try:
             private_key = load_private_key_from_pemder(
                 key_file, passphrase=key_passphrase
             )
-            from pyhanko.sign.general import load_cert_from_pemder
+            from ...keys import load_cert_from_pemder
 
             cert = load_cert_from_pemder(cert_file)
         except (IOError, ValueError, TypeError) as e:  # pragma: nocover
@@ -514,7 +514,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
                 pfx_bytes, passphrase
             )
 
-            from ...sign.general import (
+            from ...keys import (
                 _translate_pyca_cryptography_cert_to_asn1,
                 _translate_pyca_cryptography_key_to_asn1,
             )

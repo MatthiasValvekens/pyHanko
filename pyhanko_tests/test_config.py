@@ -10,18 +10,21 @@ from asn1crypto import x509
 import pyhanko.config.pkcs11
 from pyhanko import stamp
 from pyhanko.cli import config
-from pyhanko.cli.config import (
-    DEFAULT_ROOT_LOGGER_LEVEL,
-    DEFAULT_TIME_TOLERANCE,
-    StdLogOutput,
-    init_validation_context_kwargs,
-)
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
+from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput
 from pyhanko.config.pkcs11 import TokenCriteria
+from pyhanko.config.trust import (
+    DEFAULT_TIME_TOLERANCE,
+    init_validation_context_kwargs,
+)
 from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.content import ImportedPdfPage
 from pyhanko.pdf_utils.images import PdfImage
+from pyhanko.sign.signers.pdf_cms import (
+    signer_from_p12_config,
+    signer_from_pemder_config,
+)
 from pyhanko.stamp import QRStampStyle, TextStampStyle
 from pyhanko_tests.samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
 
@@ -862,7 +865,7 @@ def test_read_pkcs12_config():
 
     assert len(setup.other_certs) == 2
 
-    signer = setup.instantiate()
+    signer = signer_from_p12_config(setup)
     _signer_sanity_check(signer)
 
 
@@ -879,7 +882,7 @@ def test_read_pkcs12_config_null_pw():
     setup = cli_config.get_pkcs12_config('foo')
     assert len(setup.other_certs) == 2
 
-    signer = setup.instantiate()
+    signer = signer_from_p12_config(setup)
     _signer_sanity_check(signer)
 
 
@@ -900,7 +903,7 @@ def test_read_pemder_config():
 
     assert len(setup.other_certs) == 2
 
-    signer = setup.instantiate()
+    signer = signer_from_pemder_config(setup)
     _signer_sanity_check(signer)
 
 
@@ -916,7 +919,7 @@ def test_read_pemder_config_wrong_passphrase():
     )
     setup = cli_config.get_pemder_config('foo')
     with pytest.raises(ConfigurationError):
-        setup.instantiate()
+        signer_from_pemder_config(setup)
 
 
 def test_read_pemder_config_missing_passphrase():
@@ -930,8 +933,9 @@ def test_read_pemder_config_missing_passphrase():
     )
     setup = cli_config.get_pemder_config('foo')
     with pytest.raises(ConfigurationError):
-        setup.instantiate()
-    setup.instantiate(provided_key_passphrase=b'secret')
+        signer_from_pemder_config(setup)
+
+    signer_from_pemder_config(setup, provided_key_passphrase=b'secret')
 
 
 def test_read_pkcs12_config_wrong_passphrase():
@@ -946,7 +950,7 @@ def test_read_pkcs12_config_wrong_passphrase():
     )
     setup = cli_config.get_pkcs12_config('foo')
     with pytest.raises(ConfigurationError):
-        setup.instantiate()
+        signer_from_p12_config(setup)
 
 
 @pytest.mark.parametrize(

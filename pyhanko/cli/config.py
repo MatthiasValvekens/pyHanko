@@ -1,53 +1,21 @@
-import enum
-import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, List, Optional, Type, Union
+from typing import Dict, Optional, Type
 
 import yaml
-from asn1crypto import x509
 from pyhanko_certvalidator import ValidationContext
 
-from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
+from pyhanko.config.local_keys import (
+    PemDerSignatureConfig,
+    PKCS12SignatureConfig,
+)
+from pyhanko.config.logging import LogConfig, parse_logging_config
 from pyhanko.config.pkcs11 import PKCS11SignatureConfig
-from pyhanko.pdf_utils.misc import get_and_apply
-from pyhanko.sign import SimpleSigner, load_certs_from_pemder
+from pyhanko.config.trust import DEFAULT_TIME_TOLERANCE, parse_trust_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.sign.validation.settings import KeyUsageConstraints
 from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
-
-
-class StdLogOutput(enum.Enum):
-    STDERR = enum.auto()
-    STDOUT = enum.auto()
-
-
-@dataclass(frozen=True)
-class LogConfig:
-    level: Union[int, str]
-    """
-    Logging level, should be one of the levels defined in the logging module.
-    """
-
-    output: Union[StdLogOutput, str]
-    """
-    Name of the output file, or a standard one.
-    """
-
-    @staticmethod
-    def parse_output_spec(spec) -> Union[StdLogOutput, str]:
-        if not isinstance(spec, str):
-            raise ConfigurationError(
-                "Log output must be specified as a string."
-            )
-        spec_l = spec.lower()
-        if spec_l == 'stderr':
-            return StdLogOutput.STDERR
-        elif spec_l == 'stdout':
-            return StdLogOutput.STDOUT
-        else:
-            return spec
 
 
 @dataclass
@@ -141,259 +109,12 @@ class CLIConfig:
         return PemDerSignatureConfig.from_config(setup)
 
 
-def init_validation_context_kwargs(
-    *,
-    trust,
-    trust_replace,
-    other_certs,
-    retroactive_revinfo=False,
-    time_tolerance=None,
-):
-    if not isinstance(time_tolerance, timedelta):
-        if time_tolerance is None:
-            time_tolerance = timedelta(seconds=DEFAULT_TIME_TOLERANCE)
-        elif isinstance(time_tolerance, int):
-            time_tolerance = timedelta(seconds=time_tolerance)
-        else:
-            raise ConfigurationError(
-                "time-tolerance parameter must be specified in seconds"
-            )
-    vc_kwargs = {'time_tolerance': time_tolerance}
-    if retroactive_revinfo:
-        vc_kwargs['retroactive_revinfo'] = True
-    if trust:
-        if isinstance(trust, str):
-            trust = (trust,)
-        # add trust roots to the validation context, or replace them
-        trust_certs = list(load_certs_from_pemder(trust))
-        if trust_replace:
-            vc_kwargs['trust_roots'] = trust_certs
-        else:
-            vc_kwargs['extra_trust_roots'] = trust_certs
-    if other_certs:
-        if isinstance(other_certs, str):
-            other_certs = (other_certs,)
-        vc_kwargs['other_certs'] = list(load_certs_from_pemder(other_certs))
-    return vc_kwargs
-
-
 # TODO allow CRL/OCSP loading here as well (esp. CRL loading might be useful
 #  in some cases)
 # Time-related settings are probably better off in the CLI.
 
 
-def parse_trust_config(
-    trust_config, time_tolerance, retroactive_revinfo
-) -> dict:
-    api.check_config_keys(
-        'ValidationContext',
-        (
-            'trust',
-            'trust-replace',
-            'other-certs',
-            'time-tolerance',
-            'retroactive-revinfo',
-            'signer-key-usage',
-            'signer-extd-key-usage',
-            'signer-key-usage-policy',
-        ),
-        trust_config,
-    )
-    return init_validation_context_kwargs(
-        trust=trust_config.get('trust'),
-        trust_replace=trust_config.get('trust-replace', False),
-        other_certs=trust_config.get('other-certs'),
-        time_tolerance=trust_config.get('time-tolerance', time_tolerance),
-        retroactive_revinfo=trust_config.get(
-            'retroactive-revinfo', retroactive_revinfo
-        ),
-    )
-
-
-DEFAULT_ROOT_LOGGER_LEVEL = logging.INFO
-
-
-def _retrieve_log_level(settings_dict, key, default=None) -> Union[int, str]:
-    try:
-        level_spec = settings_dict[key]
-    except KeyError:
-        if default is not None:
-            return default
-        raise ConfigurationError(
-            f"Logging config for '{key}' does not define a log level."
-        )
-    if not isinstance(level_spec, (int, str)):
-        raise ConfigurationError(
-            f"Log levels must be int or str, not {type(level_spec)}"
-        )
-    return level_spec
-
-
-def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
-    if not isinstance(log_config_spec, dict):
-        raise ConfigurationError('logging config should be a dictionary')
-
-    root_logger_level = _retrieve_log_level(
-        log_config_spec, 'root-level', default=DEFAULT_ROOT_LOGGER_LEVEL
-    )
-
-    root_logger_output = get_and_apply(
-        log_config_spec,
-        'root-output',
-        LogConfig.parse_output_spec,
-        default=StdLogOutput.STDERR,
-    )
-
-    log_config: Dict[Optional[str], LogConfig] = {
-        None: LogConfig(root_logger_level, root_logger_output)
-    }
-
-    logging_by_module = log_config_spec.get('by-module', {})
-    if not isinstance(logging_by_module, dict):
-        raise ConfigurationError('logging.by-module should be a dict')
-
-    for module, module_logging_settings in logging_by_module.items():
-        if not isinstance(module, str):
-            raise ConfigurationError(
-                "Keys in logging.by-module should be strings"
-            )
-        level_spec = _retrieve_log_level(module_logging_settings, 'level')
-        output_spec = get_and_apply(
-            module_logging_settings,
-            'output',
-            LogConfig.parse_output_spec,
-            default=StdLogOutput.STDERR,
-        )
-        log_config[module] = LogConfig(level=level_spec, output=output_spec)
-
-    return log_config
-
-
-@dataclass(frozen=True)
-class PKCS12SignatureConfig(api.ConfigurableMixin):
-    """
-    Configuration for a signature using key material on disk, contained
-    in a PKCS#12 bundle.
-    """
-
-    pfx_file: str
-    """Path to the PKCS#12 file."""
-
-    other_certs: Optional[List[x509.Certificate]] = None
-    """Other relevant certificates."""
-
-    pfx_passphrase: Optional[bytes] = None
-    """PKCS#12 passphrase (if relevant)."""
-
-    prompt_passphrase: bool = True
-    """
-    Prompt for the PKCS#12 passphrase. Default is ``True``.
-
-    .. note::
-        If :attr:`key_passphrase` is not ``None``, this setting has no effect.
-    """
-
-    prefer_pss: bool = False
-    """
-    Prefer PSS to PKCS#1 v1.5 padding when creating RSA signatures.
-    """
-
-    @classmethod
-    def process_entries(cls, config_dict):
-        super().process_entries(config_dict)
-
-        other_certs = config_dict.get('other_certs', ())
-        if isinstance(other_certs, str):
-            other_certs = (other_certs,)
-        config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
-
-        try:
-            passphrase = config_dict['pfx_passphrase']
-            if passphrase is not None:
-                config_dict['pfx_passphrase'] = passphrase.encode('utf8')
-        except KeyError:
-            pass
-
-    def instantiate(
-        self, provided_pfx_passphrase: Optional[bytes] = None
-    ) -> SimpleSigner:
-        passphrase = self.pfx_passphrase or provided_pfx_passphrase
-        result = SimpleSigner.load_pkcs12(
-            pfx_file=self.pfx_file,
-            passphrase=passphrase,
-            other_certs=self.other_certs,
-            prefer_pss=self.prefer_pss,
-        )
-        if result is None:
-            raise ConfigurationError("Error while loading key material")
-        return result
-
-
-@dataclass(frozen=True)
-class PemDerSignatureConfig(api.ConfigurableMixin):
-    """
-    Configuration for a signature using PEM or DER-encoded key material on disk.
-    """
-
-    key_file: str
-    """Signer's private key."""
-
-    cert_file: str
-    """Signer's certificate."""
-
-    other_certs: Optional[List[x509.Certificate]] = None
-    """Other relevant certificates."""
-
-    key_passphrase: Optional[bytes] = None
-    """Signer's key passphrase (if relevant)."""
-
-    prompt_passphrase: bool = True
-    """
-    Prompt for the key passphrase. Default is ``True``.
-
-    .. note::
-        If :attr:`key_passphrase` is not ``None``, this setting has no effect.
-    """
-
-    prefer_pss: bool = False
-    """
-    Prefer PSS to PKCS#1 v1.5 padding when creating RSA signatures.
-    """
-
-    @classmethod
-    def process_entries(cls, config_dict):
-        super().process_entries(config_dict)
-
-        other_certs = config_dict.get('other_certs', ())
-        if isinstance(other_certs, str):
-            other_certs = (other_certs,)
-        config_dict['other_certs'] = list(load_certs_from_pemder(other_certs))
-
-        try:
-            passphrase = config_dict['key_passphrase']
-            if passphrase is not None:
-                config_dict['key_passphrase'] = passphrase.encode('utf8')
-        except KeyError:
-            pass
-
-    def instantiate(
-        self, provided_key_passphrase: Optional[bytes] = None
-    ) -> SimpleSigner:
-        key_passphrase = self.key_passphrase or provided_key_passphrase
-        result = SimpleSigner.load(
-            key_file=self.key_file,
-            cert_file=self.cert_file,
-            other_certs=self.other_certs,
-            prefer_pss=self.prefer_pss,
-            key_passphrase=key_passphrase,
-        )
-        if result is None:
-            raise ConfigurationError("Error while loading key material")
-        return result
-
-
 DEFAULT_VALIDATION_CONTEXT = DEFAULT_STAMP_STYLE = 'default'
-DEFAULT_TIME_TOLERANCE = 10
 STAMP_STYLE_TYPES: Dict[str, Type[BaseStampStyle]] = {
     'qr': QRStampStyle,
     'text': TextStampStyle,

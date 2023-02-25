@@ -41,19 +41,21 @@ from pyhanko.sign.attributes import (
 )
 from pyhanko.sign.general import (
     SigningError,
-    _translate_pyca_cryptography_cert_to_asn1,
-    _translate_pyca_cryptography_key_to_asn1,
     get_cms_hash_algo_for_mechanism,
     get_pyca_cryptography_hash,
-    load_cert_from_pemder,
-    load_certs_from_pemder,
-    load_private_key_from_pemder,
     optimal_pss_params,
     process_pss_params,
     simple_cms_attribute,
 )
 from pyhanko.sign.timestamps import TimeStamper
 
+from ...keys import (
+    _translate_pyca_cryptography_cert_to_asn1,
+    _translate_pyca_cryptography_key_to_asn1,
+    load_cert_from_pemder,
+    load_certs_from_pemder,
+    load_private_key_from_pemder,
+)
 from . import constants
 
 __all__ = [
@@ -65,7 +67,12 @@ __all__ = [
     'format_signed_attributes',
     'asyncify_signer',
     'select_suitable_signing_md',
+    'signer_from_p12_config',
+    'signer_from_pemder_config',
 ]
+
+from ...config.errors import ConfigurationError
+from ...config.local_keys import PemDerSignatureConfig, PKCS12SignatureConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1606,6 +1613,39 @@ class SimpleSigner(Signer):
             signature_mechanism=signature_mechanism,
             prefer_pss=prefer_pss,
         )
+
+
+def signer_from_p12_config(
+    config: PKCS12SignatureConfig,
+    provided_pfx_passphrase: Optional[bytes] = None,
+):
+    passphrase = config.pfx_passphrase or provided_pfx_passphrase
+    result = SimpleSigner.load_pkcs12(
+        pfx_file=config.pfx_file,
+        passphrase=passphrase,
+        other_certs=config.other_certs,
+        prefer_pss=config.prefer_pss,
+    )
+    if result is None:
+        raise ConfigurationError("Error while loading key material")
+    return result
+
+
+def signer_from_pemder_config(
+    config: PemDerSignatureConfig,
+    provided_key_passphrase: Optional[bytes] = None,
+):
+    key_passphrase = config.key_passphrase or provided_key_passphrase
+    result = SimpleSigner.load(
+        key_file=config.key_file,
+        cert_file=config.cert_file,
+        other_certs=config.other_certs,
+        prefer_pss=config.prefer_pss,
+        key_passphrase=key_passphrase,
+    )
+    if result is None:
+        raise ConfigurationError("Error while loading key material")
+    return result
 
 
 class ExternalSigner(Signer):

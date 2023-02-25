@@ -22,30 +22,29 @@ from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers, validation
-from pyhanko.sign.general import SigningError, load_certs_from_pemder
+from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
 from pyhanko.sign.signers.pdf_byterange import BuildProps
-from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
+from pyhanko.sign.signers.pdf_cms import (
+    PdfCMSSignedAttributes,
+    signer_from_p12_config,
+    signer_from_pemder_config,
+)
 from pyhanko.sign.timestamps import HTTPTimeStamper
 from pyhanko.sign.validation import RevocationInfoValidationType
 from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
+from ..config.local_keys import PemDerSignatureConfig, PKCS12SignatureConfig
+from ..config.logging import LogConfig, StdLogOutput, parse_logging_config
 from ..config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
     TokenCriteria,
 )
-from .config import (
-    CLIConfig,
-    LogConfig,
-    PemDerSignatureConfig,
-    PKCS12SignatureConfig,
-    StdLogOutput,
-    init_validation_context_kwargs,
-    parse_cli_config,
-    parse_logging_config,
-)
+from ..config.trust import init_validation_context_kwargs
+from ..keys import load_certs_from_pemder
+from .config import CLIConfig, parse_cli_config
 
 __all__ = ['cli']
 
@@ -1343,7 +1342,9 @@ def addsig_pemder(
     else:
         passphrase = None
 
-    signer = pemder_config.instantiate(provided_key_passphrase=passphrase)
+    signer = signer_from_pemder_config(
+        pemder_config, provided_key_passphrase=passphrase
+    )
     if ctx.obj[Ctx.SIG_META] is None:
         detached_sig(
             signer,
@@ -1439,7 +1440,9 @@ def addsig_pkcs12(
     else:
         passphrase = None
 
-    signer = pkcs12_config.instantiate(provided_pfx_passphrase=passphrase)
+    signer = signer_from_p12_config(
+        pkcs12_config, provided_pfx_passphrase=passphrase
+    )
     if ctx.obj[Ctx.SIG_META] is None:
         detached_sig(
             signer,

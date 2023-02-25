@@ -5,8 +5,7 @@ in PDF files, and for handling PDF-specific document signing needs.
 """
 
 # reexport this for backwards compatibility
-from pyhanko.sign.general import load_certs_from_pemder
-
+from ...keys import load_certs_from_pemder
 from .constants import (
     DEFAULT_MD,
     DEFAULT_SIG_SUBFILTER,
@@ -36,7 +35,6 @@ __all__ = [
     'DocumentTimestamp',
     'sign_pdf',
     'async_sign_pdf',
-    'load_certs_from_pemder',
     'DEFAULT_MD',
     'DEFAULT_SIGNING_STAMP_STYLE',
     'DEFAULT_SIG_SUBFILTER',
