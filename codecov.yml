@@ -2,6 +2,6 @@ ignore:
     - "pyhanko_tests"
     - "docs"
     - "pyhanko/sign/beid.py"
-    - "pyhanko/cli.py"  # Maybe it's not a terrible idea to do this using pytest as well (TODO)
+    - "pyhanko/cli/commands.py"
     - "pyhanko/__main__.py"
     - "pyhanko/pdf_utils/_saslprep.py"  # this is mostly vendored code
