@@ -93,22 +93,11 @@ mypy = [
 pyhanko = "pyhanko.__main__:launch"
 
 [tool.setuptools]
-packages = [
-    "pyhanko",
-    "pyhanko.config",
-    "pyhanko.pdf_utils",
-    "pyhanko.pdf_utils.font",
-    "pyhanko.pdf_utils.crypt",
-    "pyhanko.pdf_utils.metadata",
-    "pyhanko.sign",
-    "pyhanko.sign.ades",
-    "pyhanko.sign.signers",
-    "pyhanko.sign.diff_analysis",
-    "pyhanko.sign.diff_analysis.rules",
-    "pyhanko.sign.timestamps",
-    "pyhanko.sign.validation",
-]
 include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["pyhanko", "pyhanko.*"]
+exclude = ["pyhanko_tests*"]
 
 [tool.setuptools.package-data]
 pyhanko = ["py.typed"]
