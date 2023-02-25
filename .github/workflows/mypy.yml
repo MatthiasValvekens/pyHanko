@@ -14,5 +14,4 @@ jobs:
     - uses: jpetrucciani/mypy-check@0.991
       with:
         path: pyhanko_certvalidator
-        requirements: "types-requests"
-        requirements_file: "requirements.txt"
+        requirements: "-e .[mypy,testing,async_http] --config-settings editable_mode=strict"

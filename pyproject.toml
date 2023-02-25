@@ -1,0 +1,93 @@
+[build-system]
+requires = [
+    "setuptools>=67.4",
+    "wheel", "pytest-runner",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyhanko-certvalidator"
+dynamic = ['version']
+authors = [{name = "Matthias Valvekens", email = "dev@mvalvekens.be"}]
+license = {text = "MIT"}
+description = "Validates X.509 certificates and paths; forked from wbond/certvalidator"
+keywords = [
+    "crypto",
+    "pki",
+    "x509",
+    "certificate",
+    "crl",
+    "ocsp",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "asn1crypto>=1.5.1",
+    "oscrypto>=1.1.0",
+    "cryptography>=3.3.1",
+    "uritools>=3.0.1",
+    "requests>=2.24.0",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyhanko_certvalidator.version.__version__"}
+
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/MatthiasValvekens/certvalidator"
+
+[project.optional-dependencies]
+async_http = ["aiohttp~=3.8.0"]
+testing = [
+    "pytest>=6.1.1",
+    "freezegun>=1.1.0",
+    "aiohttp~=3.8.0",
+    "pytest-aiohttp~=1.0.4",
+]
+mypy = [
+    "types-requests",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["pyhanko_certvalidator*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+pyhanko_certvalidator = ["py.typed"]
+
+[tool.mypy]
+files = 'pyhanko_certvalidator'
+
+[[tool.mypy.overrides]]
+module = [
+    "asn1crypto.*",
+    "pkcs11.*",
+    "oscrypto.*",
+    "uritools.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+log_format = "%(asctime)s %(levelname)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+log_cli = true
+log_cli_level = "INFO"
+testpaths = "tests"
+asyncio_mode = "strict"
