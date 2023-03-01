@@ -88,6 +88,10 @@ mypy = [
     "types-PyYAML",
     "types-tzlocal",
 ]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme"
+]
 
 [project.scripts]
 pyhanko = "pyhanko.__main__:launch"

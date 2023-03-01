@@ -1,0 +1,15 @@
+version: 2
+
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
+        - extra_pubkey_algs
+        - xmp
+        - opentype
+        - image-support
+        - pkcs11
+        - async_http
+formats: all
