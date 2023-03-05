@@ -125,7 +125,7 @@ def _get_or_create_sigfield(
             root,
             update_writer=pdf_out,
             existing_fields_only=existing_fields_only,
-            **sig_field_kwargs
+            **sig_field_kwargs,
         )
         if field_created and new_field_spec is not None:
             apply_sig_field_spec_properties(

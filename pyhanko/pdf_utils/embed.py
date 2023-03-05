@@ -365,7 +365,7 @@ def wrap_encrypted_payload(
     params: Optional[EmbeddedFileParams] = None,
     file_name: Optional[str] = None,
     description='Wrapped document',
-    include_explanation_page=True
+    include_explanation_page=True,
 ) -> writer.PdfFileWriter:
     """
     Include a PDF document as an encrypted attachment in a wrapper document.

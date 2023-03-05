@@ -464,7 +464,7 @@ def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
             ),
             signer=FROM_CA,
             timestamper=DUMMY_TS,
-            **kwargs
+            **kwargs,
         )
     return out
 

@@ -55,7 +55,7 @@ class CSCDummy:
         credential_id,
         timeout: int,
         waste_time=0,
-        **signer_kwargs
+        **signer_kwargs,
     ):
         self.timeout = timeout
         self.svc_info = CSCServiceSessionInfo(
@@ -81,7 +81,7 @@ class CSCDummy:
             session,
             auth_manager=auth_manager,
             sign_timeout=self.timeout,
-            **self.signer_kwargs
+            **self.signer_kwargs,
         )
         return signer
 

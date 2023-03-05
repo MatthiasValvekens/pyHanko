@@ -409,7 +409,7 @@ async def sign_with_sv(
     timestamper=DUMMY_TS,
     *,
     test_violation=False,
-    add_field_lock=False
+    add_field_lock=False,
 ):
     w = IncrementalPdfFileWriter(
         prepare_sv_field(sv_spec, add_field_lock=add_field_lock)

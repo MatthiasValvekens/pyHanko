@@ -381,7 +381,7 @@ class DocumentSecurityStore:
         crls=None,
         paths=None,
         validation_context=None,
-        embed_roots: bool = True
+        embed_roots: bool = True,
     ) -> 'DocumentSecurityStore':
         """
         Add or update a DSS, and optionally associate the new information with a
@@ -488,7 +488,7 @@ class DocumentSecurityStore:
         validation_context=None,
         force_write: bool = False,
         embed_roots: bool = True,
-        file_credential: Optional[SerialisedCredential] = None
+        file_credential: Optional[SerialisedCredential] = None,
     ):
         """
         Wrapper around :meth:`supply_dss_in_writer`.

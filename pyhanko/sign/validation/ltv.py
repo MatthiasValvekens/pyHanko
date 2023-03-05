@@ -94,7 +94,7 @@ DEFAULT_LTV_INTERNAL_REVO_CHECK_POLICY = RevocationCheckingPolicy(
 def _default_ltv_internal_revo_policy(**kwargs):
     return CertRevTrustPolicy(
         revocation_checking_policy=DEFAULT_LTV_INTERNAL_REVO_CHECK_POLICY,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -107,7 +107,7 @@ STRICT_LTV_INTERNAL_REVO_CHECK_POLICY = RevocationCheckingPolicy(
 def _strict_ltv_internal_revo_policy(**kwargs):
     return CertRevTrustPolicy(
         revocation_checking_policy=STRICT_LTV_INTERNAL_REVO_CHECK_POLICY,
-        **kwargs
+        **kwargs,
     )
 
 
