@@ -47,19 +47,16 @@ dependencies = [
 dynamic = ["version"]
 
 
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
 [project.urls]
 Homepage = "https://github.com/MatthiasValvekens/pyHanko"
 Documentation = "https://pyhanko.readthedocs.io/"
 Changes = "https://pyhanko.readthedocs.io/en/latest/changelog.html"
 "Source Code" = "https://github.com/MatthiasValvekens/pyHanko"
 "Issue Tracker" = "https://github.com/MatthiasValvekens/pyHanko/issues"
-
-[tool.setuptools.dynamic]
-version = {attr = "pyhanko.version.__version__"}
-
-[project.readme]
-file = "README.md"
-content-type = "text/markdown"
 
 [project.optional-dependencies]
 extra_pubkey_algs = ["oscrypto>=1.2.1"]
@@ -105,6 +102,9 @@ pyhanko = "pyhanko.__main__:launch"
 
 [tool.setuptools]
 include-package-data = false
+
+[tool.setuptools.dynamic]
+version = {attr = "pyhanko.version.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["pyhanko", "pyhanko.*"]
