@@ -121,13 +121,16 @@ def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
     cnt = 0
     while tok in PDF_WHITESPACE:
         tok = stream.read(1)
+        if not tok:
+            raise PdfStreamError("Stream ended prematurely")
         cnt += 1
         if stop_after_eol:
             if tok == b'\n':
                 return cnt > 1
             elif tok == b'\r':
-                # read the next char and check if it's a LF
-                if stream.read(1) == b'\n':
+                # read the next char and check if it's a LF (or EOF)
+                nxt = stream.read(1)
+                if nxt == b'\n' or not nxt:
                     return cnt > 1
                 # if not, break here; we need to seek back one position
                 # (CR by itself also counts as an EOL sequence)
