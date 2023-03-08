@@ -170,6 +170,30 @@ def test_skip_ws_behaviour(data):
 
 
 @pytest.mark.parametrize(
+    'data, stop_after_eol',
+    [
+        (b'   \n', False),
+        (b'   \r', False),
+        (b'   \r\n', False),
+        (b'', False),
+        (b'', True),
+    ],
+)
+def test_skip_ws_eof_err_behaviour(data, stop_after_eol):
+    buf = BytesIO(data)
+    with pytest.raises(misc.PdfStreamError, match="ended prematurely"):
+        misc.skip_over_whitespace(buf, stop_after_eol=stop_after_eol)
+
+
+@pytest.mark.parametrize('data', [b'   \n', b'   \r', b'   \r\n'])
+def test_skip_ws_eof_ok_behaviour(data):
+    buf = BytesIO(data)
+    ws_read = misc.skip_over_whitespace(buf, stop_after_eol=True)
+    assert ws_read
+    assert not buf.read(1)  # we should be at EOF now
+
+
+@pytest.mark.parametrize(
     'data',
     [
         b'/Test\x00B',
