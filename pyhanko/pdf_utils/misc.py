@@ -163,8 +163,13 @@ def skip_over_comment(stream) -> bool:
     tok = stream.read(1)
     stream.seek(-1, 1)
     if tok == b'%':
-        while tok not in (b'\n', b'\r'):
+        while tok not in (b'\n', b'\r', b''):
             tok = stream.read(1)
+        # read the next char and check if it's a LF (or EOF)
+        nxt = stream.read(1)
+        if nxt and nxt != b'\n':
+            # ...if not, rewind
+            stream.seek(-1, os.SEEK_CUR)
         return True
     return False
 

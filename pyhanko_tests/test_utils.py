@@ -194,6 +194,25 @@ def test_skip_ws_eof_ok_behaviour(data):
 
 
 @pytest.mark.parametrize(
+    'data,next_data',
+    [
+        (b'%abc\n a', b' a'),
+        (b'%a\x00bc\x00\r\n a', b' a'),
+        (b'%abc\r a', b' a'),
+        (b'%abc\n', b''),
+        (b'%abc\x00\r\n', b''),
+        (b'%abc\r', b''),
+        (b'%abc', b''),
+    ],
+)
+def test_skip_comment_behaviour(data, next_data):
+    buf = BytesIO(data)
+    comment_read = misc.skip_over_comment(buf)
+    assert comment_read
+    assert buf.read() == next_data
+
+
+@pytest.mark.parametrize(
     'data',
     [
         b'/Test\x00B',
