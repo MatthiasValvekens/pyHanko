@@ -3,6 +3,28 @@ Release history
 ***************
 
 
+.. _release-0.17.2:
+
+0.17.2
+======
+
+
+*Release date:* 2023-03-10
+
+
+Note
+----
+
+This is a follow-up on yesterday's bugfix release, addressing a number of similar issues.
+
+
+Bugs fixed
+----------
+
+ * Address another potential infinite loop in the comment processing logic.
+ * Fix some (rather esoteric) correctness issues w.r.t. PDF whitespace.
+
+
 .. _release-0.17.1:
 
 0.17.1
