@@ -145,11 +145,10 @@ In addition, keep in mind the following when writing test cases:
 
 ## Code style
 
-Code style is currently not formally standardised; fixing that is on the TODO
-list. As such, code style issues will be handled on a case-by-case basis for
-the time being (sorry about that).
+PyHanko uses Black, with the line length set to 80 characters and
+string literal standardisation turned off.
 
-Nevertheless, here are some pointers.
+Here are some additional pointers.
 
  * Avoid overly long function definitions.
  * Avoid letting builtin exceptions (`KeyError`, `ValueError`, ...) bubble up
@@ -160,10 +159,13 @@ Nevertheless, here are some pointers.
  * As a general rule, keep your lines under 80 characters. This makes it easier
    to view multiple files side-by-side on a single monitor. Exceeding the limit
    is permissible in documentation files.
+ * Generally prefer double-quoted literals for strings intended for human consumption.
+   Other strings should use single quotes. This distinction is not strictly enforced.
+ * Check for Black conformance using `black -S --line-length 80 --check`
  * Format imports using `isort --profile black --line-length 80`.
  * Check for whitespace errors using `git diff-index --check --cached HEAD`.
 
-You can put the last two in a pre-commit hook to avoid getting yelled at by the
+You can put the last three in a pre-commit hook to avoid getting yelled at by the
 CI linter.
 
 
