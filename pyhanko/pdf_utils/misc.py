@@ -76,7 +76,7 @@ def pair_iter(lst):
         yield x1, x2
 
 
-def read_until_whitespace(stream, maxchars: Optional[int] = None):
+def read_until_whitespace(stream, maxchars: Optional[int] = None) -> bytes:
     """
     Reads non-whitespace characters and returns them.
     Stops upon encountering whitespace, or, if ``maxchars`` is not ``None``,
