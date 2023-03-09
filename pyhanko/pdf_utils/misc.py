@@ -30,6 +30,7 @@ __all__ = [
     'is_regular_character',
     'read_non_whitespace',
     'read_until_whitespace',
+    'read_until_delimiter',
     'read_until_regex',
     'skip_over_whitespace',
     'skip_over_comment',
@@ -78,7 +79,11 @@ def pair_iter(lst):
         yield x1, x2
 
 
-def read_until_whitespace(stream, maxchars: Optional[int] = None):
+PDF_WHITESPACE = b' \n\r\t\f\x00'
+PDF_DELIMITERS = b'()<>[]{}/%'
+
+
+def read_until_whitespace(stream, maxchars: Optional[int] = None) -> bytes:
     """
     Reads non-whitespace characters and returns them.
     Stops upon encountering whitespace, or, if ``maxchars`` is not ``None``,
@@ -89,6 +94,27 @@ def read_until_whitespace(stream, maxchars: Optional[int] = None):
     :param maxchars:
         maximal number of bytes to read before returning
     """
+
+    return _read_until_class(PDF_WHITESPACE, stream, maxchars=maxchars)
+
+
+def read_until_delimiter(stream) -> bytes:
+    """
+    Read until a token delimiter (i.e. a delimiter character or a PDF
+    whitespace character) is encountered, and rewind the stream to the previous
+    character.
+
+    :param stream:
+        A stream.
+    :return:
+        The bytes read.
+    """
+    result = _read_until_class(PDF_WHITESPACE + PDF_DELIMITERS, stream)
+    stream.seek(-1, os.SEEK_CUR)
+    return result
+
+
+def _read_until_class(class_chars: bytes, stream, maxchars=None) -> bytes:
     if maxchars == 0:
         return b''
 
@@ -96,15 +122,11 @@ def read_until_whitespace(stream, maxchars: Optional[int] = None):
         stop_at = None if maxchars is None else stream.tell() + maxchars
         while maxchars is None or stream.tell() < stop_at:
             tok = stream.read(1)
-            if tok.isspace() or not tok:
+            if tok in class_chars or not tok:
                 break
             yield tok
 
     return b''.join(_build())
-
-
-PDF_WHITESPACE = b' \n\r\t\f\x00'
-PDF_DELIMITERS = b'()<>[]{}/%'
 
 
 def is_regular_character(byte_value: int):

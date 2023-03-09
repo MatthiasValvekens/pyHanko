@@ -231,6 +231,56 @@ def test_name_delim(data):
     assert res == '/Test'
 
 
+def test_name_with_non_pdf_ascii_whitespace():
+    with pytest.raises(misc.PdfReadError, match='must be escaped'):
+        generic.NameObject.read_from_stream(BytesIO(b'/Test\vTest'))
+
+
+@pytest.mark.parametrize(
+    'data,expected_return,expected_remaining',
+    [
+        (b'abc z', b'abc', b'z'),
+        (b'abc\x00z', b'abc', b'z'),
+        (b'abc\fz', b'abc', b'z'),
+        (b'abc\rz', b'abc', b'z'),
+        # \v is a whitespace character in ASCII but not in PDF
+        (b'abc\vde\nz', b'abc\vde', b'z'),
+        (b'abc ', b'abc', b''),
+        (b'abc\x00', b'abc', b''),
+        (b'abc\f', b'abc', b''),
+        (b'abc\r', b'abc', b''),
+        (b'abc\vde\n', b'abc\vde', b''),
+        (b'abc', b'abc', b''),
+        (b'abc\r\nz', b'abc', b'\nz'),
+    ],
+)
+def test_read_until_whitespace(data, expected_return, expected_remaining):
+    stream = BytesIO(data)
+    ret_val = misc.read_until_whitespace(stream)
+    assert ret_val == expected_return
+    assert stream.read() == expected_remaining
+
+
+@pytest.mark.parametrize(
+    'data,expected_return,expected_remaining,max_read',
+    [
+        (b'abc z', b'abc', b' z', 3),
+        (b'abc  z', b'abc', b'  z', 3),
+        (b'abc z', b'abc', b'z', 4),
+        (b'abc  z', b'abc', b' z', 4),
+        (b'abc z', b'ab', b'c z', 2),
+        (b'abc z', b'', b'abc z', 0),
+    ],
+)
+def test_read_until_whitespace_bounded(
+    data, expected_return, expected_remaining, max_read
+):
+    stream = BytesIO(data)
+    ret_val = misc.read_until_whitespace(stream, maxchars=max_read)
+    assert ret_val == expected_return
+    assert stream.read() == expected_remaining
+
+
 TEST_STRING = b'\x74\x77\x74\x84\x66'
 
 
