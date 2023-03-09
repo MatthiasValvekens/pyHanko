@@ -3,6 +3,30 @@ Release history
 ***************
 
 
+.. _release-0.17.1:
+
+0.17.1
+======
+
+
+*Release date:* 2023-03-09
+
+
+Note
+----
+
+This is a maintenance release without significant functionality changes.
+It contains a bugfix, addresses some documentation issues and applies the Black
+formatter to the codebase.
+
+
+Bugs fixed
+----------
+
+ * Address a potential infinite loop in the PDF parsing logic.
+   See `PR #237 <https://github.com/MatthiasValvekens/pyHanko/issues/237>`_.
+
+
 .. _release-0.17.0:
 
 0.17.0
