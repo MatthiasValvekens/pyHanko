@@ -27,6 +27,7 @@ from .misc import (
     PdfWriteError,
     is_regular_character,
     read_non_whitespace,
+    read_until_delimiter,
     read_until_regex,
     skip_over_whitespace,
 )
@@ -1040,10 +1041,6 @@ class NameObject(str, PdfObject):
     required.
     """
 
-    DELIMITER_PATTERN = re.compile(
-        r"\s|[\(\)<>\[\]{}/%]".encode('ascii') + b'|\x00'
-    )
-
     def write_to_stream(self, stream, handler=None, container_ref=None):
         byte_iter = iter(self.encode('utf8'))
         if not next(byte_iter) == 0x2F:
@@ -1069,9 +1066,7 @@ class NameObject(str, PdfObject):
         name_start = stream.read(1)
         if name_start != b'/':
             raise PdfReadError("Name object should start with /")
-        name_bytes = read_until_regex(
-            stream, NameObject.DELIMITER_PATTERN, ignore_eof=True
-        )
+        name_bytes = read_until_delimiter(stream)
         return _decode_name(name_bytes)
 
 

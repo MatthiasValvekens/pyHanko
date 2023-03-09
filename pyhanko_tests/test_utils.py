@@ -212,6 +212,11 @@ def test_name_delim(data):
     assert res == '/Test'
 
 
+def test_name_with_non_pdf_ascii_whitespace():
+    with pytest.raises(misc.PdfReadError, match='must be escaped'):
+        generic.NameObject.read_from_stream(BytesIO(b'/Test\vTest'))
+
+
 @pytest.mark.parametrize(
     'data,expected_return,expected_remaining',
     [
