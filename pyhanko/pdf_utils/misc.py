@@ -76,6 +76,10 @@ def pair_iter(lst):
         yield x1, x2
 
 
+PDF_WHITESPACE = b' \n\r\t\f\x00'
+PDF_DELIMITERS = b'()<>[]{}/%'
+
+
 def read_until_whitespace(stream, maxchars=None):
     """
     Reads non-whitespace characters and returns them.
@@ -88,15 +92,11 @@ def read_until_whitespace(stream, maxchars=None):
         stop_at = None if maxchars is None else stream.tell() + maxchars
         while maxchars is None or stream.tell() < stop_at:
             tok = stream.read(1)
-            if tok.isspace() or not tok:
+            if tok in PDF_WHITESPACE or not tok:
                 break
             yield tok
 
     return b''.join(_build())
-
-
-PDF_WHITESPACE = b' \n\r\t\f\x00'
-PDF_DELIMITERS = b'()<>[]{}/%'
 
 
 def is_regular_character(byte_value: int):
