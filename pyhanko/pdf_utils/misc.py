@@ -76,10 +76,16 @@ def pair_iter(lst):
         yield x1, x2
 
 
-def read_until_whitespace(stream, maxchars=None):
+def read_until_whitespace(stream, maxchars: Optional[int] = None):
     """
     Reads non-whitespace characters and returns them.
-    Stops upon encountering whitespace or when maxchars is reached.
+    Stops upon encountering whitespace, or, if ``maxchars`` is not ``None``,
+    when maxchars is reached.
+
+    :param stream:
+        stream to read
+    :param maxchars:
+        maximal number of bytes to read before returning
     """
     if maxchars == 0:
         return b''
@@ -130,7 +136,7 @@ def read_non_whitespace(stream, seek_back=False, allow_eof=False):
 
 def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
     """
-    Similar to readNonWhitespace, but returns a Boolean if more than
+    Similar to :func:`read_non_whitespace`, but returns a ``bool`` if more than
     one whitespace character was read.
 
     Will return the cursor to before the first non-whitespace character
@@ -160,6 +166,16 @@ def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
 
 
 def skip_over_comment(stream) -> bool:
+    """
+    Skip over a comment and position the cursor at the first byte after
+    the EOL sequence following the comment. If there is no comment under
+    the cursor, do nothing.
+
+    :param stream:
+        stream to read
+    :return:
+        ``True`` if a comment was read.
+    """
     tok = stream.read(1)
     stream.seek(-1, 1)
     if tok == b'%':
@@ -169,13 +185,19 @@ def skip_over_comment(stream) -> bool:
     return False
 
 
-def read_until_regex(stream, regex, ignore_eof=False):
+def read_until_regex(stream, regex, ignore_eof: bool = False):
     """
     Reads until the regular expression pattern matched (ignore the match)
-    Raise PdfStreamError on premature end-of-file.
-    :param bool ignore_eof: If true, ignore end-of-line and return immediately
-    :param regex: regex to match
-    :param stream: stream to search
+    Raise :class:`PdfStreamError` on premature end-of-file.
+
+    :param stream:
+        stream to search
+    :param regex:
+        regex to match
+    :param ignore_eof:
+        if true, ignore end-of-line and return immediately
+    :raises PdfStreamError:
+        on premature EOF
     """
     name = b''
     while True:
