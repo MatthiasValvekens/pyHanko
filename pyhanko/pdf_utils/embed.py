@@ -16,8 +16,12 @@ from .font.basic import get_courier
 from .generic import pdf_name, pdf_string
 
 __all__ = [
-    'embed_file', 'EmbeddedFileObject', 'EmbeddedFileParams',
-    'FileSpec', 'RelatedFileSpec', 'wrap_encrypted_payload'
+    'embed_file',
+    'EmbeddedFileObject',
+    'EmbeddedFileParams',
+    'FileSpec',
+    'RelatedFileSpec',
+    'wrap_encrypted_payload',
 ]
 
 
@@ -55,12 +59,15 @@ class EmbeddedFileParams:
 
 
 class EmbeddedFileObject(generic.StreamObject):
-
     @classmethod
-    def from_file_data(cls, pdf_writer: writer.BasePdfFileWriter,
-                       data: bytes, compress=True,
-                       params: EmbeddedFileParams = None,
-                       mime_type: str = None) -> 'EmbeddedFileObject':
+    def from_file_data(
+        cls,
+        pdf_writer: writer.BasePdfFileWriter,
+        data: bytes,
+        compress=True,
+        params: EmbeddedFileParams = None,
+        mime_type: str = None,
+    ) -> 'EmbeddedFileObject':
         """
         Construct an embedded file object from file data.
 
@@ -86,21 +93,30 @@ class EmbeddedFileObject(generic.StreamObject):
         """
 
         result = EmbeddedFileObject(
-            pdf_writer=pdf_writer, stream_data=data,
-            params=params, mime_type=mime_type
+            pdf_writer=pdf_writer,
+            stream_data=data,
+            params=params,
+            mime_type=mime_type,
         )
         if compress:
             result.compress()
 
         return result
 
-    def __init__(self, pdf_writer: writer.BasePdfFileWriter,
-                 dict_data=None, stream_data=None, encoded_data=None,
-                 params: EmbeddedFileParams = None, mime_type: str = None):
-
+    def __init__(
+        self,
+        pdf_writer: writer.BasePdfFileWriter,
+        dict_data=None,
+        stream_data=None,
+        encoded_data=None,
+        params: EmbeddedFileParams = None,
+        mime_type: str = None,
+    ):
         super().__init__(
-            dict_data=dict_data, stream_data=stream_data,
-            encoded_data=encoded_data, handler=pdf_writer.security_handler
+            dict_data=dict_data,
+            stream_data=stream_data,
+            encoded_data=encoded_data,
+            handler=pdf_writer.security_handler,
         )
         self['/Type'] = generic.pdf_name('/EmbeddedFile')
         if mime_type is not None:
@@ -116,8 +132,10 @@ class EmbeddedFileObject(generic.StreamObject):
             cfc = handler.crypt_filter_config
             ef_filter_name = cfc.embedded_file_filter_name
             stream_filter_name = cfc.stream_filter_name
-            if ef_filter_name is not None and \
-                    ef_filter_name != stream_filter_name:
+            if (
+                ef_filter_name is not None
+                and ef_filter_name != stream_filter_name
+            ):
                 self.add_crypt_filter(ef_filter_name)
 
         # apply the parameters before serialisation
@@ -170,6 +188,7 @@ class RelatedFileSpec:
             for rfs in lst:
                 yield generic.pdf_string(rfs.name)
                 yield rfs.embedded_data.ef_stream_ref
+
         return generic.ArrayObject(_gen())
 
 
@@ -231,17 +250,21 @@ class FileSpec:
         Represent the file spec as a PDF dictionary.
         """
 
-        result = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/Filespec'),
-            pdf_name('/F'): pdf_string(self.file_spec_string),
-        })
+        result = generic.DictionaryObject(
+            {
+                pdf_name('/Type'): pdf_name('/Filespec'),
+                pdf_name('/F'): pdf_string(self.file_spec_string),
+            }
+        )
         if self.file_name is not None:
             result['/UF'] = pdf_string(self.file_name)
 
         if self.embedded_data is not None:
-            result['/EF'] = ef_dict = generic.DictionaryObject({
-                pdf_name('/F'): self.embedded_data.ef_stream_ref,
-            })
+            result['/EF'] = ef_dict = generic.DictionaryObject(
+                {
+                    pdf_name('/F'): self.embedded_data.ef_stream_ref,
+                }
+            )
             if self.file_name is not None:
                 ef_dict['/UF'] = self.embedded_data.ef_stream_ref
 
@@ -332,16 +355,18 @@ def embed_file(pdf_writer: writer.BasePdfFileWriter, spec: FileSpec):
         pdf_writer.ensure_output_version(version=(1, 7))
 
 
-def wrap_encrypted_payload(plaintext_payload: bytes, *,
-                           password: str = None,
-                           certs: List[x509.Certificate] = None,
-                           security_handler: crypt.SecurityHandler = None,
-                           file_spec_string: str = 'attachment.pdf',
-                           params: EmbeddedFileParams = None,
-                           file_name: Optional[str] = None,
-                           description='Wrapped document',
-                           include_explanation_page=True) \
-        -> writer.PdfFileWriter:
+def wrap_encrypted_payload(
+    plaintext_payload: bytes,
+    *,
+    password: str = None,
+    certs: List[x509.Certificate] = None,
+    security_handler: crypt.SecurityHandler = None,
+    file_spec_string: str = 'attachment.pdf',
+    params: EmbeddedFileParams = None,
+    file_name: Optional[str] = None,
+    description='Wrapped document',
+    include_explanation_page=True
+) -> writer.PdfFileWriter:
     """
     Include a PDF document as an encrypted attachment in a wrapper document.
 
@@ -412,17 +437,17 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
         if password is None:
             # set up pubkey security handler
             cf = crypt.PubKeyAESCryptFilter(
-                keylen=32, acts_as_default=False,
-                encrypt_metadata=False
+                keylen=32, acts_as_default=False, encrypt_metadata=False
             )
             cf.set_embedded_only()
             security_handler = crypt.PubKeySecurityHandler(
                 version=crypt.SecurityHandlerVersion.AES256,
                 pubkey_handler_subfilter=crypt.PubKeyAdbeSubFilter.S5,
-                legacy_keylen=None, encrypt_metadata=False,
+                legacy_keylen=None,
+                encrypt_metadata=False,
                 crypt_filter_config=crypt.CryptFilterConfiguration(
                     {crypt.DEF_EMBEDDED_FILE: cf},
-                    default_file_filter=crypt.DEF_EMBEDDED_FILE
+                    default_file_filter=crypt.DEF_EMBEDDED_FILE,
                 ),
             )
             cf.add_recipients(certs)
@@ -433,10 +458,9 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
             security_handler = crypt.StandardSecurityHandler.build_from_pw(
                 password,
                 crypt_filter_config=crypt.CryptFilterConfiguration(
-                    {crypt.STD_CF: cf},
-                    default_file_filter=crypt.STD_CF
+                    {crypt.STD_CF: cf}, default_file_filter=crypt.STD_CF
                 ),
-                encrypt_metadata=False
+                encrypt_metadata=False,
             )
     w._assign_security_handler(security_handler)
 
@@ -446,22 +470,28 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
     collection_dict['/View'] = pdf_name('/H')  # hide "Collection" view
 
     ef_obj = EmbeddedFileObject.from_file_data(
-        w, data=plaintext_payload, mime_type='application/pdf',
-        params=params or EmbeddedFileParams()
+        w,
+        data=plaintext_payload,
+        mime_type='application/pdf',
+        params=params or EmbeddedFileParams(),
     )
 
     spec = FileSpec(
-        file_spec_string=file_spec_string, file_name=file_name,
-        embedded_data=ef_obj, description=description
+        file_spec_string=file_spec_string,
+        file_name=file_name,
+        embedded_data=ef_obj,
+        description=description,
     )
     embed_file(w, spec)
 
     if include_explanation_page:
-        resources = generic.DictionaryObject({
-            pdf_name('/Font'): generic.DictionaryObject({
-                pdf_name('/F1'): get_courier(w)
-            })
-        })
+        resources = generic.DictionaryObject(
+            {
+                pdf_name('/Font'): generic.DictionaryObject(
+                    {pdf_name('/F1'): get_courier(w)}
+                )
+            }
+        )
 
         # TODO make it easy to customise this
         #  (i.e. don't require the user to put together a page object by
@@ -485,7 +515,7 @@ def wrap_encrypted_payload(plaintext_payload: bytes, *,
             contents=w.add_object(stream),
             # A4 media box
             media_box=(0, 0, 595.28, 841.89),
-            resources=resources
+            resources=resources,
         )
 
         w.insert_page(explanation_page)

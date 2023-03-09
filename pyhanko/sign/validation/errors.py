@@ -4,14 +4,18 @@ from ..ades.report import AdESIndeterminate, AdESStatus, AdESSubIndic
 from ..general import ValueErrorWithMessage
 
 __all__ = [
-    'SignatureValidationError', 'DisallowedAlgorithmError',
-    'ValidationInfoReadingError', 'NoDSSFoundError',
-    'SigSeedValueValidationError', 'CMSAlgorithmProtectionError'
+    'SignatureValidationError',
+    'DisallowedAlgorithmError',
+    'ValidationInfoReadingError',
+    'NoDSSFoundError',
+    'SigSeedValueValidationError',
+    'CMSAlgorithmProtectionError',
 ]
 
 
 class ValidationInfoReadingError(ValueErrorWithMessage):
     """Error reading validation info."""
+
     pass
 
 
@@ -26,8 +30,10 @@ class CMSAlgorithmProtectionError(ValueErrorWithMessage):
 
 class SignatureValidationError(ValueErrorWithMessage):
     """Error validating a signature."""
-    def __init__(self, failure_message,
-                 ades_subindication: Optional[AdESSubIndic] = None):
+
+    def __init__(
+        self, failure_message, ades_subindication: Optional[AdESSubIndic] = None
+    ):
         self.ades_subindication = ades_subindication
         if ades_subindication:
             msg = "%s [%s]" % (failure_message, ades_subindication)
@@ -48,8 +54,7 @@ class DisallowedAlgorithmError(SignatureValidationError):
         else:
             subindic = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
         super().__init__(
-            failure_message=failure_message,
-            ades_subindication=subindic
+            failure_message=failure_message, ades_subindication=subindic
         )
 
 

@@ -6,7 +6,8 @@ except ImportError as e:  # pragma: nocover
         "pyhanko.pdf_utils.barcodes requires pyHanko to be installed with "
         "the [image-support] option. You can install missing "
         "dependencies by running "
-        "\"pip install 'pyHanko[image-support]'\".", e
+        "\"pip install 'pyHanko[image-support]'\".",
+        e,
     )
 
 from pyhanko.pdf_utils.content import PdfContent
@@ -44,6 +45,7 @@ class PdfStreamBarcodeWriter(BaseWriter):
     def __init__(self):
         def dummy(*_args, **_kwargs):
             pass
+
         # The architecture of the BaseWriter class is a little bizarre IMO.
         # It's not clear to me why the author didn't just put in some abstract
         # methods instead, but let's roll with it.
@@ -59,10 +61,13 @@ class PdfStreamBarcodeWriter(BaseWriter):
 
     def _paint_module(self, xpos, ypos, width, color):
         self._command_stream.append(
-            b'%s rg %g %g %g %g re f' % (
+            b'%s rg %g %g %g %g re f'
+            % (
                 barcode_colour_to_pdf(color),
-                mm2uu(xpos), mm2uu(ypos), mm2uu(width),
-                mm2uu(self.module_height)
+                mm2uu(xpos),
+                mm2uu(ypos),
+                mm2uu(width),
+                mm2uu(self.module_height),
             )
         )
 
@@ -87,7 +92,6 @@ class BarcodeBox(PdfContent):
     """
 
     def __init__(self, barcode_type, code):
-
         self.barcode_type = barcode_type
         self.code = code
 
@@ -96,9 +100,7 @@ class BarcodeBox(PdfContent):
         # render everything here, since we need part of the rendering
         # operation's results to determine the box parameters to pass to
         # the parent
-        b = barcode.get_barcode(
-            self.barcode_type, code=code, writer=writer
-        )
+        b = barcode.get_barcode(self.barcode_type, code=code, writer=writer)
         self._barcode_commands = b.render()
         (w, h) = writer.size
         super().__init__(box=BoxConstraints(width=w, height=h))

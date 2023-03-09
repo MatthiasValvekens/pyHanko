@@ -40,11 +40,16 @@ def test_copy_into_new_writer_sets_info():
 def test_date_parse_failure():
     r = PdfFileReader(BytesIO(MINIMAL))
     writer_kwargs = {
-        'info': generic.DictionaryObject({
-            generic.pdf_name('/Title'): generic.pdf_string('a failure test'),
-            generic.pdf_name('/CreationDate'):
-                generic.pdf_string('this makes no sense')
-        })
+        'info': generic.DictionaryObject(
+            {
+                generic.pdf_name('/Title'): generic.pdf_string(
+                    'a failure test'
+                ),
+                generic.pdf_name('/CreationDate'): generic.pdf_string(
+                    'this makes no sense'
+                ),
+            }
+        )
     }
     w = copy_into_new_writer(r, writer_kwargs=writer_kwargs)
     w._update_meta = lambda: None
@@ -82,17 +87,22 @@ def test_writer_meta_view_does_not_persist_changes(writer_type):
 
 
 @freeze_time(datetime(2022, 9, 7, tzinfo=tzlocal.get_localzone()))
-@pytest.mark.parametrize('writer_type,meta_dict,ver', list(itertools.product(
-    ('fresh', 'from_data', 'incremental', 'in_place'),
-    [
-        {'title': 'Test test'},
-        {'author': 'John Doe'},
-        {'keywords': ['foo', 'bar', 'baz']},
-        {'created': datetime(2022, 9, 7, tzinfo=pytz.utc)},
-        {'author': 'John Doe', 'subject': 'Blah blah blah'},
-    ],
-    ("pdf1.7", "pdf2.0")
-)))
+@pytest.mark.parametrize(
+    'writer_type,meta_dict,ver',
+    list(
+        itertools.product(
+            ('fresh', 'from_data', 'incremental', 'in_place'),
+            [
+                {'title': 'Test test'},
+                {'author': 'John Doe'},
+                {'keywords': ['foo', 'bar', 'baz']},
+                {'created': datetime(2022, 9, 7, tzinfo=pytz.utc)},
+                {'author': 'John Doe', 'subject': 'Blah blah blah'},
+            ],
+            ("pdf1.7", "pdf2.0"),
+        )
+    ),
+)
 def test_metadata_info_round_trip(writer_type, meta_dict: dict, ver):
     out = BytesIO()
     if writer_type == 'fresh':
@@ -122,10 +132,14 @@ def test_metadata_info_round_trip(writer_type, meta_dict: dict, ver):
         assert r.document_meta_view == model.DocumentMetadata(**meta_dict)
 
 
-@pytest.mark.parametrize('writer_type,ver', list(itertools.product(
-    ('fresh', 'from_data', 'incremental', 'in_place'),
-    ((1, 7), (2, 0))
-)))
+@pytest.mark.parametrize(
+    'writer_type,ver',
+    list(
+        itertools.product(
+            ('fresh', 'from_data', 'incremental', 'in_place'), ((1, 7), (2, 0))
+        )
+    ),
+)
 def test_metadata_info_with_language_round_trip(writer_type, ver):
     title = StringWithLanguage('Test test', lang_code='en', country_code='US')
     out = BytesIO()
@@ -215,8 +229,9 @@ def test_ensure_uri_is_rdf_resource():
 # noinspection HttpUrlsUsage
 @freeze_time('2022-09-10')
 def test_incremental_update_doc_with_xmp():
-    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
-            as inf:
+    with open(
+        os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb'
+    ) as inf:
         w = IncrementalPdfFileWriter(inf)
         w.root['/Foo'] = generic.NameObject('/Bar')
         w.document_meta.subject = "Update test"
@@ -234,8 +249,9 @@ def test_incremental_update_doc_with_xmp():
 # noinspection HttpUrlsUsage
 @freeze_time('2022-09-10')
 def test_rewrite_update_doc_with_xmp():
-    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
-            as inf:
+    with open(
+        os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb'
+    ) as inf:
         w = copy_into_new_writer(PdfFileReader(inf))
         w.document_meta.subject = "Update test"
         out = BytesIO()
@@ -251,13 +267,15 @@ def test_rewrite_update_doc_with_xmp():
 
 @freeze_time('2022-09-10')
 def test_meta_view_from_xmp():
-    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
-            as inf:
+    with open(
+        os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb'
+    ) as inf:
         r = PdfFileReader(inf)
         # wipe out the info dict just because
         r.trailer['/Info'] = generic.DictionaryObject()
-        assert r.document_meta_view.title == \
-               StringWithLanguage(value="Test document", lang_code="DEFAULT")
+        assert r.document_meta_view.title == StringWithLanguage(
+            value="Test document", lang_code="DEFAULT"
+        )
 
 
 def test_upgrade_pdf2_no_info_dict():
@@ -291,12 +309,15 @@ def test_add_extra_xmp():
         ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
     )
     extra = model.XmpStructure.of(
-        (n_base_url, model.XmpValue(
-            model.XmpUri("https://example.com/"),
-            qualifiers=model.Qualifiers.of(
-                (n_xe_qualifier, model.XmpValue('artificial example'))
-            )
-        )),
+        (
+            n_base_url,
+            model.XmpValue(
+                model.XmpUri("https://example.com/"),
+                qualifiers=model.Qualifiers.of(
+                    (n_xe_qualifier, model.XmpValue('artificial example'))
+                ),
+            ),
+        ),
     )
     w.document_meta.xmp_extra = [extra]
     w.write_in_place()
@@ -319,12 +340,15 @@ def test_unmanaged_xmp():
         ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
     )
     extra = model.XmpStructure.of(
-        (n_base_url, model.XmpValue(
-            model.XmpUri("https://example.com/"),
-            qualifiers=model.Qualifiers.of(
-                (n_xe_qualifier, model.XmpValue('artificial example'))
-            )
-        )),
+        (
+            n_base_url,
+            model.XmpValue(
+                model.XmpUri("https://example.com/"),
+                qualifiers=model.Qualifiers.of(
+                    (n_xe_qualifier, model.XmpValue('artificial example'))
+                ),
+            ),
+        ),
     )
     w.document_meta.title = "This should not be written"
     w.document_meta.xmp_unmanaged = True
@@ -351,12 +375,15 @@ def test_unmanaged_xmp_does_not_affect_info():
         ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
     )
     extra = model.XmpStructure.of(
-        (n_base_url, model.XmpValue(
-            model.XmpUri("https://example.com/"),
-            qualifiers=model.Qualifiers.of(
-                (n_xe_qualifier, model.XmpValue('artificial example'))
-            )
-        )),
+        (
+            n_base_url,
+            model.XmpValue(
+                model.XmpUri("https://example.com/"),
+                qualifiers=model.Qualifiers.of(
+                    (n_xe_qualifier, model.XmpValue('artificial example'))
+                ),
+            ),
+        ),
     )
     w.document_meta.title = "This should not be written"
     w.document_meta.xmp_unmanaged = True
@@ -399,20 +426,29 @@ def test_xmp_with_resource_with_multiple_quals():
     )
 
     assert result == model.XmpStructure.of(
-        (model.DC_TITLE, model.XmpValue(
-            "This is a test", model.Qualifiers.of(
-                (model.XML_LANG, model.XmpValue("en")),
-                (n_xe_qualifier, model.XmpValue(
-                     "artificial example",
-                     model.Qualifiers.lang_as_qual("en")))
-            )
-        )),
-        (model.RDF_ABOUT, model.XmpValue(""))
+        (
+            model.DC_TITLE,
+            model.XmpValue(
+                "This is a test",
+                model.Qualifiers.of(
+                    (model.XML_LANG, model.XmpValue("en")),
+                    (
+                        n_xe_qualifier,
+                        model.XmpValue(
+                            "artificial example",
+                            model.Qualifiers.lang_as_qual("en"),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        (model.RDF_ABOUT, model.XmpValue("")),
     )
     title_val = result[model.DC_TITLE]
     assert title_val.qualifiers[n_xe_qualifier].value == 'artificial example'
-    assert xmp_xml.meta_from_xmp([result]).title \
-           == model.StringWithLanguage("This is a test", lang_code="en")
+    assert xmp_xml.meta_from_xmp([result]).title == model.StringWithLanguage(
+        "This is a test", lang_code="en"
+    )
 
 
 def test_xmp_str():
@@ -450,8 +486,7 @@ def test_xmp_with_bag():
     result = xmp_xml.parse_xmp(inp)[0]
 
     n_xe_keywords = model.ExpandedName(
-        ns="http://ns.adobe.com/xmp-example/",
-        local_name="keywords"
+        ns="http://ns.adobe.com/xmp-example/", local_name="keywords"
     )
     n_xe_qualifier = model.ExpandedName(
         ns="http://ns.adobe.com/xmp-example/", local_name="qualifier"
@@ -470,7 +505,7 @@ def test_xmp_ord_arr_comparison():
         map(model.XmpValue, ['apple', 'pear', 'banana'])
     )
     o2 = model.XmpArray.ordered(
-        map(model.XmpValue, ['apple',  'banana', 'pear'])
+        map(model.XmpValue, ['apple', 'banana', 'pear'])
     )
     a = model.XmpArray.alternative(
         map(model.XmpValue, ['apple', 'pear', 'banana'])
@@ -484,7 +519,7 @@ def test_xmp_unord_arr_comparison():
         map(model.XmpValue, ['apple', 'pear', 'banana'])
     )
     u2 = model.XmpArray.unordered(
-        map(model.XmpValue, ['apple',  'banana', 'pear'])
+        map(model.XmpValue, ['apple', 'banana', 'pear'])
     )
     assert u1 == u2
 
@@ -519,11 +554,8 @@ XMP_WITH_INVALID_VALUE_FORM = """
 
 
 def test_xmp_with_invalid_form():
-    with pytest.raises(xmp_xml.XmpXmlProcessingError,
-                       match="value form"):
-        xmp_xml.parse_xmp(
-            BytesIO(XMP_WITH_INVALID_VALUE_FORM.encode('utf8'))
-        )
+    with pytest.raises(xmp_xml.XmpXmlProcessingError, match="value form"):
+        xmp_xml.parse_xmp(BytesIO(XMP_WITH_INVALID_VALUE_FORM.encode('utf8')))
 
 
 # noinspection HttpUrlsUsage
@@ -538,8 +570,9 @@ XMP_VALUE_FORM_MULTIPLE_CHILDREN = """
 
 
 def test_xmp_value_form_multiple_children():
-    with pytest.raises(xmp_xml.XmpXmlProcessingError,
-                       match="more than one child"):
+    with pytest.raises(
+        xmp_xml.XmpXmlProcessingError, match="more than one child"
+    ):
         xmp_xml.parse_xmp(
             BytesIO(XMP_VALUE_FORM_MULTIPLE_CHILDREN.encode('utf8'))
         )
@@ -552,11 +585,10 @@ XMP_NO_RDF_IN_XMPMETA = """
 
 
 def test_xmp_no_rdf_in_xmpmeta():
-    with pytest.raises(xmp_xml.XmpXmlProcessingError,
-                       match="RDF node in x:xmpmeta"):
-        xmp_xml.parse_xmp(
-            BytesIO(XMP_NO_RDF_IN_XMPMETA.encode('utf8'))
-        )
+    with pytest.raises(
+        xmp_xml.XmpXmlProcessingError, match="RDF node in x:xmpmeta"
+    ):
+        xmp_xml.parse_xmp(BytesIO(XMP_NO_RDF_IN_XMPMETA.encode('utf8')))
 
 
 XMP_INVALID_ROOT = """
@@ -565,11 +597,8 @@ XMP_INVALID_ROOT = """
 
 
 def test_xmp_invalid_root():
-    with pytest.raises(xmp_xml.XmpXmlProcessingError,
-                       match="XMP root must be"):
-        xmp_xml.parse_xmp(
-            BytesIO(XMP_INVALID_ROOT.encode('utf8'))
-        )
+    with pytest.raises(xmp_xml.XmpXmlProcessingError, match="XMP root must be"):
+        xmp_xml.parse_xmp(BytesIO(XMP_INVALID_ROOT.encode('utf8')))
 
 
 # noinspection HttpUrlsUsage
@@ -604,12 +633,11 @@ XMP_INVALID_DATE1 = """
 
 
 def test_xmp_invalid_date1():
-    with pytest.raises(xmp_xml.XmpXmlProcessingError,
-                       match="Failed to parse.*as a date"):
+    with pytest.raises(
+        xmp_xml.XmpXmlProcessingError, match="Failed to parse.*as a date"
+    ):
         xmp_xml.meta_from_xmp(
-            xmp_xml.parse_xmp(
-                BytesIO(XMP_INVALID_DATE1.encode('utf8'))
-            )
+            xmp_xml.parse_xmp(BytesIO(XMP_INVALID_DATE1.encode('utf8')))
         )
 
 
@@ -626,12 +654,9 @@ XMP_INVALID_DATE2 = """
 
 
 def test_xmp_invalid_date2():
-    with pytest.raises(xmp_xml.XmpXmlProcessingError,
-                       match="Wrong type"):
+    with pytest.raises(xmp_xml.XmpXmlProcessingError, match="Wrong type"):
         xmp_xml.meta_from_xmp(
-            xmp_xml.parse_xmp(
-                BytesIO(XMP_INVALID_DATE2.encode('utf8'))
-            )
+            xmp_xml.parse_xmp(BytesIO(XMP_INVALID_DATE2.encode('utf8')))
         )
 
 
@@ -769,23 +794,28 @@ PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE = """
 @pytest.mark.parametrize('sample', ['ok', 'wrong uri type'])
 def test_parse_pdfa_ext_schema(sample):
     xmp = (
-        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE if sample == 'ok'
+        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE
+        if sample == 'ok'
         else PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE
     )
     roots = xmp_xml.parse_xmp(BytesIO(xmp.encode('utf8')))
     root = roots[0]
     pdfa_ext = root[model.ExpandedName(model.NS['pdfaExtension'], 'schemas')]
     pdfua_ext_schema = pdfa_ext.value.entries[0]
-    pfx = pdfua_ext_schema\
-        .value[model.ExpandedName(model.NS['pdfaSchema'], 'prefix')].value
+    pfx = pdfua_ext_schema.value[
+        model.ExpandedName(model.NS['pdfaSchema'], 'prefix')
+    ].value
     assert pfx == "pdfuaid"
-    property_seq = pdfua_ext_schema \
-        .value[model.ExpandedName(model.NS['pdfaSchema'], 'property')].value
-    desc_value = property_seq.entries[0]\
-        .value[model.ExpandedName(model.NS['pdfaProperty'], 'description')]
+    property_seq = pdfua_ext_schema.value[
+        model.ExpandedName(model.NS['pdfaSchema'], 'property')
+    ].value
+    desc_value = property_seq.entries[0].value[
+        model.ExpandedName(model.NS['pdfaProperty'], 'description')
+    ]
     assert desc_value.value == "PDF/UA version identifier"
-    ns_uri = pdfua_ext_schema \
-        .value[model.ExpandedName(model.NS['pdfaSchema'], 'namespaceURI')].value
+    ns_uri = pdfua_ext_schema.value[
+        model.ExpandedName(model.NS['pdfaSchema'], 'namespaceURI')
+    ].value
     assert isinstance(ns_uri, model.XmpUri)
     assert ns_uri.value == model.NS['pdfuaid']
 
@@ -793,7 +823,8 @@ def test_parse_pdfa_ext_schema(sample):
 @pytest.mark.parametrize('sample', ['ok', 'wrong uri type'])
 def test_reser_pdfa_ext_schema(sample):
     xmp = (
-        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE if sample == 'ok'
+        PDFA_PLUS_UA_XMP_SAMPLE_CORRECT_URI_TYPE
+        if sample == 'ok'
         else PDFA_PLUS_UA_XMP_SAMPLE_WRONG_URI_TYPE
     )
     roots = xmp_xml.parse_xmp(BytesIO(xmp.encode('utf8')))
@@ -801,6 +832,7 @@ def test_reser_pdfa_ext_schema(sample):
     xmp_xml.serialise_xmp(roots, out)
     roots_redux = xmp_xml.parse_xmp(out)
     assert roots_redux[0] == roots[0]
+
 
 XMP_WITH_EMPTY_STRING = """
 <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.1.0-jc003">
@@ -832,8 +864,10 @@ def test_xmp_lang_explicit_xdefault():
     w.write(out)
 
     r = PdfFileReader(out)
-    assert b"<rdf:li xml:lang=\"x-default\">Blah</rdf:li>" \
-           in r.root['/Metadata'].data
+    assert (
+        b"<rdf:li xml:lang=\"x-default\">Blah</rdf:li>"
+        in r.root['/Metadata'].data
+    )
 
 
 def test_encrypt_skipping_managed_metadata():

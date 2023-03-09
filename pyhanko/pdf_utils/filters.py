@@ -16,8 +16,11 @@ from io import BytesIO
 from .misc import PdfStreamError, Singleton
 
 __all__ = [
-    'Decoder', 'ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode',
-    'get_generic_decoder'
+    'Decoder',
+    'ASCII85Decode',
+    'ASCIIHexDecode',
+    'FlateDecode',
+    'get_generic_decoder',
 ]
 
 decompress = zlib.decompress
@@ -59,7 +62,6 @@ class Decoder:
 
 
 def _png_decode(data: memoryview, columns):
-
     output = BytesIO()
     # PNG prediction can vary from row to row
     rowlength = columns + 1
@@ -67,7 +69,7 @@ def _png_decode(data: memoryview, columns):
 
     prev_result = bytes(rowlength - 1)
     for row in range(len(data) // rowlength):
-        rowdata = data[(row * rowlength):((row + 1) * rowlength)]
+        rowdata = data[(row * rowlength) : ((row + 1) * rowlength)]
         filter_byte = rowdata[0]
         result_row = bytearray(rowlength - 1)
         if filter_byte == 0:
@@ -106,7 +108,7 @@ class FlateDecode(Decoder, metaclass=Singleton):
             try:
                 predictor = decode_params.get("/Predictor", 1)
             except AttributeError:
-                pass    # usually an array with a null object was read
+                pass  # usually an array with a null object was read
 
         # predictor 1 == no predictor
         if predictor == 1:
@@ -151,7 +153,7 @@ class ASCIIHexDecode(Decoder, metaclass=Singleton):
 # TODO reimplement LZW decoder
 
 ASCII_85_EOD_MARKER = b'~>'
-POWS = tuple(85 ** p for p in (4, 3, 2, 1, 0))
+POWS = tuple(85**p for p in (4, 3, 2, 1, 0))
 
 
 class ASCII85Decode(Decoder, metaclass=Singleton):
@@ -177,12 +179,12 @@ class ASCII85Decode(Decoder, metaclass=Singleton):
             bytes_read = len(grp)
             if bytes_read < 4:
                 grp += b'\0' * (4 - bytes_read)
-                pows = POWS[:bytes_read + 1]
+                pows = POWS[: bytes_read + 1]
             else:
                 pows = POWS
 
             # write 5 chars in base85
-            grp_int, = struct.unpack('>L', grp)
+            (grp_int,) = struct.unpack('>L', grp)
             for p in pows:
                 digit, grp_int = divmod(grp_int, p)
                 # use chars from 0x21 to 0x75
@@ -228,18 +230,19 @@ class ASCII85Decode(Decoder, metaclass=Singleton):
             # Finally, pack the integer into a 4-byte unsigned int
             # (potentially need to cut off some excess digits)
             decoded = struct.pack('>L', grp_result)
-            out.write(decoded[:len(grp) - 1])
+            out.write(decoded[: len(grp) - 1])
         return out.getvalue()
 
 
 class CryptFilterDecoder(Decoder):
-
     def __init__(self, handler):
         from .crypt import SecurityHandler
+
         self.handler: SecurityHandler = handler
 
     def decode(self, data: bytes, decode_params: dict) -> bytes:
         from .crypt import IDENTITY
+
         cf_name = decode_params.get('/Name', IDENTITY)
         cf = self.handler.get_stream_filter(name=cf_name)
         # the spec explicitly tells us to use the global key here, go figure
@@ -248,15 +251,19 @@ class CryptFilterDecoder(Decoder):
 
     def encode(self, data: bytes, decode_params: dict) -> bytes:
         from .crypt import IDENTITY
+
         cf_name = decode_params.get('/Name', IDENTITY)
         cf = self.handler.get_stream_filter(name=cf_name)
         return cf.encrypt(cf.shared_key, data, params=decode_params)
 
 
 DECODERS = {
-    '/FlateDecode': FlateDecode, '/Fl': FlateDecode,
-    '/ASCIIHexDecode': ASCIIHexDecode, '/AHx': ASCIIHexDecode,
-    '/ASCII85Decode': ASCII85Decode, '/A85': ASCII85Decode,
+    '/FlateDecode': FlateDecode,
+    '/Fl': FlateDecode,
+    '/ASCIIHexDecode': ASCIIHexDecode,
+    '/AHx': ASCIIHexDecode,
+    '/ASCII85Decode': ASCII85Decode,
+    '/A85': ASCII85Decode,
 }
 
 

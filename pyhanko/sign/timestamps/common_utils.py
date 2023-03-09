@@ -8,9 +8,12 @@ from cryptography.hazmat.primitives import hashes
 from ..general import CertificateStore, get_pyca_cryptography_hash
 
 __all__ = [
-    'TimestampRequestError', 'get_nonce',
-    'extract_ts_certs', 'dummy_digest', 'handle_tsp_response',
-    'set_tsp_headers'
+    'TimestampRequestError',
+    'get_nonce',
+    'extract_ts_certs',
+    'dummy_digest',
+    'handle_tsp_response',
+    'set_tsp_headers',
 ]
 
 
@@ -18,6 +21,7 @@ class TimestampRequestError(IOError):
     """
     Raised when an error occurs while requesting a timestamp.
     """
+
     pass
 
 
@@ -37,9 +41,7 @@ def extract_ts_certs(ts_token, store: CertificateStore):
         assert isinstance(sid, cms.IssuerAndSerialNumber)
         return sid['issuer'].dump(), sid['serial_number'].native
 
-    ts_leaves = set(
-        extract_ts_sid(si) for si in ts_signed_data['signer_infos']
-    )
+    ts_leaves = set(extract_ts_sid(si) for si in ts_signed_data['signer_infos'])
 
     for wrapped_c in ts_certs:
         c: cms.Certificate = wrapped_c.chosen
@@ -53,8 +55,9 @@ def dummy_digest(md_algorithm: str) -> bytes:
     return hashes.Hash(md_spec).finalize()
 
 
-def handle_tsp_response(response: tsp.TimeStampResp, nonce: Optional[bytes]) \
-        -> cms.ContentInfo:
+def handle_tsp_response(
+    response: tsp.TimeStampResp, nonce: Optional[bytes]
+) -> cms.ContentInfo:
     pki_status_info = response['status']
     if pki_status_info['status'].native != 'granted':
         status_strs = pki_status_info['status_string'].native or []

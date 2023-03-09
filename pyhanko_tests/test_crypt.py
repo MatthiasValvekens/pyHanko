@@ -47,9 +47,13 @@ def _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw_legacy(
-        rev, w._document_id[0].original_bytes, "ownersecret", "usersecret",
-        keylen_bytes=keylen_bytes, use_aes128=use_aes,
-        perms=-44
+        rev,
+        w._document_id[0].original_bytes,
+        "ownersecret",
+        "usersecret",
+        keylen_bytes=keylen_bytes,
+        use_aes128=use_aes,
+        perms=-44,
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -61,20 +65,23 @@ def _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes):
     return out
 
 
-@pytest.mark.parametrize("use_owner_pass,rev,keylen_bytes,use_aes", [
-    (True, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
-    (False, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
-    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
-    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
-    (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
-    (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
-    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
-    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
-    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
-    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
-    (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
-    (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
-])
+@pytest.mark.parametrize(
+    "use_owner_pass,rev,keylen_bytes,use_aes",
+    [
+        (True, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
+        (False, StandardSecuritySettingsRevision.RC4_BASIC, 5, False),
+        (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
+        (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 5, False),
+        (True, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
+        (False, StandardSecuritySettingsRevision.RC4_EXTENDED, 16, False),
+        (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
+        (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 5, False),
+        (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
+        (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, False),
+        (True, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
+        (False, StandardSecuritySettingsRevision.RC4_OR_AES128, 16, True),
+    ],
+)
 def test_legacy_encryption(use_owner_pass, rev, keylen_bytes, use_aes):
     out = _produce_legacy_encrypted_file(rev, keylen_bytes, use_aes)
     r = PdfFileReader(out)
@@ -99,8 +106,11 @@ def test_wrong_password(legacy):
     if legacy:
         sh = StandardSecurityHandler.build_from_pw_legacy(
             StandardSecuritySettingsRevision.RC4_OR_AES128,
-            w._document_id[0].original_bytes, "ownersecret", "usersecret",
-            keylen_bytes=16, use_aes128=True
+            w._document_id[0].original_bytes,
+            "ownersecret",
+            "usersecret",
+            keylen_bytes=16,
+            use_aes128=True,
         )
     else:
         sh = StandardSecurityHandler.build_from_pw("ownersecret", "usersecret")
@@ -119,7 +129,6 @@ def test_wrong_password(legacy):
 
 
 def test_identity_crypt_filter_api():
-
     # confirm that the CryptFilter API of the identity filter doesn't do
     # anything unexpected, even though we typically don't invoke it explicitly.
     idf: IdentityCryptFilter = IdentityCryptFilter()
@@ -137,9 +146,10 @@ def test_identity_crypt_filter_api():
         idf.as_pdf_object()
 
 
-@pytest.mark.parametrize("use_alias, with_never_decrypt", [
-    (True, False), (False, True), (False, False)
-])
+@pytest.mark.parametrize(
+    "use_alias, with_never_decrypt",
+    [(True, False), (False, True), (False, False)],
+)
 def test_identity_crypt_filter(use_alias, with_never_decrypt):
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw("secret")
@@ -157,9 +167,7 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     else:
         w._assign_security_handler(sh)
     test_bytes = b'This is some test data that should remain unencrypted.'
-    test_stream = generic.StreamObject(
-        stream_data=test_bytes, handler=sh
-    )
+    test_stream = generic.StreamObject(stream_data=test_bytes, handler=sh)
     test_stream.apply_filter(
         "/Crypt", params={pdf_name("/Name"): pdf_name("/Identity")}
     )
@@ -179,30 +187,38 @@ def _produce_pubkey_encrypted_file(version, keylen, use_aes, use_crypt_filters):
     w = writer.PdfFileWriter()
 
     sh = PubKeySecurityHandler.build_from_certs(
-        [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=keylen,
-        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
-        perms=-44
+        [PUBKEY_TEST_DECRYPTER.cert],
+        keylen_bytes=keylen,
+        version=version,
+        use_aes=use_aes,
+        use_crypt_filters=use_crypt_filters,
+        perms=-44,
     )
     w._assign_security_handler(sh)
-    new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'),
+    )
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
     w.write(out)
     return out
 
 
-@pytest.mark.parametrize("version, keylen, use_aes, use_crypt_filters", [
-    (SecurityHandlerVersion.AES256, 32, True, True),
-    (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
-    (SecurityHandlerVersion.RC4_OR_AES128, 16, False, True),
-    (SecurityHandlerVersion.RC4_OR_AES128, 5, False, True),
-    (SecurityHandlerVersion.RC4_40, 5, False, True),
-    (SecurityHandlerVersion.RC4_40, 5, False, False),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, True),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, False),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, True),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
-])
+@pytest.mark.parametrize(
+    "version, keylen, use_aes, use_crypt_filters",
+    [
+        (SecurityHandlerVersion.AES256, 32, True, True),
+        (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
+        (SecurityHandlerVersion.RC4_OR_AES128, 16, False, True),
+        (SecurityHandlerVersion.RC4_OR_AES128, 5, False, True),
+        (SecurityHandlerVersion.RC4_40, 5, False, True),
+        (SecurityHandlerVersion.RC4_40, 5, False, False),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, True),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, False),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, True),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
+    ],
+)
 def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
     out = _produce_pubkey_encrypted_file(
         version, keylen, use_aes, use_crypt_filters
@@ -223,34 +239,44 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
 def test_key_encipherment_requirement():
     with pytest.raises(misc.PdfWriteError):
         PubKeySecurityHandler.build_from_certs(
-            [PUBKEY_SELFSIGNED_DECRYPTER.cert], keylen_bytes=32,
+            [PUBKEY_SELFSIGNED_DECRYPTER.cert],
+            keylen_bytes=32,
             version=SecurityHandlerVersion.AES256,
-            use_aes=True, use_crypt_filters=True,
-            perms=-44
+            use_aes=True,
+            use_crypt_filters=True,
+            perms=-44,
         )
 
 
-@pytest.mark.parametrize("version, keylen, use_aes, use_crypt_filters", [
-    (SecurityHandlerVersion.AES256, 32, True, True),
-    (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
-    (SecurityHandlerVersion.RC4_OR_AES128, 16, False, True),
-    (SecurityHandlerVersion.RC4_OR_AES128, 5, False, True),
-    (SecurityHandlerVersion.RC4_40, 5, False, True),
-    (SecurityHandlerVersion.RC4_40, 5, False, False),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, True),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, False),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, True),
-    (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
-])
-def test_key_encipherment_requirement_override(version, keylen, use_aes,
-                                               use_crypt_filters):
+@pytest.mark.parametrize(
+    "version, keylen, use_aes, use_crypt_filters",
+    [
+        (SecurityHandlerVersion.AES256, 32, True, True),
+        (SecurityHandlerVersion.RC4_OR_AES128, 16, True, True),
+        (SecurityHandlerVersion.RC4_OR_AES128, 16, False, True),
+        (SecurityHandlerVersion.RC4_OR_AES128, 5, False, True),
+        (SecurityHandlerVersion.RC4_40, 5, False, True),
+        (SecurityHandlerVersion.RC4_40, 5, False, False),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, True),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 5, False, False),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, True),
+        (SecurityHandlerVersion.RC4_LONGER_KEYS, 16, False, False),
+    ],
+)
+def test_key_encipherment_requirement_override(
+    version, keylen, use_aes, use_crypt_filters
+):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
 
     sh = PubKeySecurityHandler.build_from_certs(
-        [PUBKEY_SELFSIGNED_DECRYPTER.cert], keylen_bytes=keylen,
-        version=version, use_aes=use_aes, use_crypt_filters=use_crypt_filters,
-        perms=-44, ignore_key_usage=True
+        [PUBKEY_SELFSIGNED_DECRYPTER.cert],
+        keylen_bytes=keylen,
+        version=version,
+        use_aes=use_aes,
+        use_crypt_filters=use_crypt_filters,
+        perms=-44,
+        ignore_key_usage=True,
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -353,9 +379,10 @@ def test_pubkey_encryption_dict_errors():
         PubKeySecurityHandler.build(encrypt)
 
 
-@pytest.mark.parametrize('with_hex_filter, main_unencrypted', [
-    (True, False), (True, True), (False, True), (False, False)
-])
+@pytest.mark.parametrize(
+    'with_hex_filter, main_unencrypted',
+    [(True, False), (True, True), (False, True), (False, False)],
+)
 def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
     w = writer.PdfFileWriter()
     custom = pdf_name('/Custom')
@@ -370,14 +397,17 @@ def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
         crypt_filters[STD_CF] = StandardAESCryptFilter(keylen=16)
         cfc = CryptFilterConfiguration(
             crypt_filters=crypt_filters,
-            default_string_filter=STD_CF, default_stream_filter=STD_CF
+            default_string_filter=STD_CF,
+            default_stream_filter=STD_CF,
         )
         assert len(cfc.filters()) == 2
     sh = StandardSecurityHandler.build_from_pw_legacy(
         rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
-        id1=w.document_id[0], desired_user_pass="usersecret",
+        id1=w.document_id[0],
+        desired_user_pass="usersecret",
         desired_owner_pass="ownersecret",
-        keylen_bytes=16, crypt_filter_config=cfc
+        keylen_bytes=16,
+        crypt_filter_config=cfc,
     )
     w._assign_security_handler(sh)
     test_data = b'This is test data!'
@@ -413,9 +443,10 @@ def test_custom_crypt_filter(with_hex_filter, main_unencrypted):
         assert raw.encoded_data != test_data
 
 
-@pytest.mark.parametrize('with_hex_filter, main_unencrypted', [
-    (True, False), (True, True), (False, True), (False, False)
-])
+@pytest.mark.parametrize(
+    'with_hex_filter, main_unencrypted',
+    [(True, False), (True, True), (False, True), (False, False)],
+)
 def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
     w = writer.PdfFileWriter()
     custom = pdf_name('/Custom')
@@ -432,12 +463,13 @@ def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
         cfc = CryptFilterConfiguration(
             crypt_filters=crypt_filters,
             default_string_filter=DEFAULT_CRYPT_FILTER,
-            default_stream_filter=DEFAULT_CRYPT_FILTER
+            default_stream_filter=DEFAULT_CRYPT_FILTER,
         )
     sh = PubKeySecurityHandler(
         version=SecurityHandlerVersion.RC4_OR_AES128,
         pubkey_handler_subfilter=PubKeyAdbeSubFilter.S5,
-        legacy_keylen=16, crypt_filter_config=cfc
+        legacy_keylen=16,
+        crypt_filter_config=cfc,
     )
 
     # if main_unencrypted, these should be no-ops
@@ -513,17 +545,20 @@ def test_custom_crypt_filter_errors():
     custom = pdf_name('/Custom')
     crypt_filters = {
         custom: StandardRC4CryptFilter(keylen=16),
-        STD_CF: StandardAESCryptFilter(keylen=16)
+        STD_CF: StandardAESCryptFilter(keylen=16),
     }
     cfc = CryptFilterConfiguration(
         crypt_filters=crypt_filters,
-        default_string_filter=STD_CF, default_stream_filter=STD_CF
+        default_string_filter=STD_CF,
+        default_stream_filter=STD_CF,
     )
     sh = StandardSecurityHandler.build_from_pw_legacy(
         rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
-        id1=w.document_id[0], desired_user_pass="usersecret",
+        id1=w.document_id[0],
+        desired_user_pass="usersecret",
         desired_owner_pass="ownersecret",
-        keylen_bytes=16, crypt_filter_config=cfc
+        keylen_bytes=16,
+        crypt_filter_config=cfc,
     )
     w._assign_security_handler(sh)
     test_data = b'This is test data!'
@@ -645,7 +680,6 @@ def test_empty_user_pass():
 
 
 def test_load_pkcs12():
-
     sedk = SimpleEnvelopeKeyDecrypter.load_pkcs12(
         "pyhanko_tests/data/crypto/selfsigned.pfx", b'exportsecret'
     )
@@ -659,18 +693,25 @@ def test_pubkey_wrong_content_type():
     sh = PubKeySecurityHandler.build_from_certs(
         [PUBKEY_TEST_DECRYPTER.cert],
         version=SecurityHandlerVersion.RC4_40,
-        keylen_bytes=16, use_aes=True, use_crypt_filters=False
+        keylen_bytes=16,
+        use_aes=True,
+        use_crypt_filters=False,
     )
     w.security_handler = sh
     enc_dict = sh.as_pdf_object()
     from asn1crypto import cms
-    cms_bytes = cms.ContentInfo({
-        'content_type': cms.ContentType('data'),
-        'content': cms.OctetString(b"\xde\xad\xbe\xef")
-    }).dump()
+
+    cms_bytes = cms.ContentInfo(
+        {
+            'content_type': cms.ContentType('data'),
+            'content': cms.OctetString(b"\xde\xad\xbe\xef"),
+        }
+    ).dump()
     enc_dict['/Recipients'][0] = generic.ByteStringObject(cms_bytes)
     w._encrypt = w.add_object(enc_dict)
-    new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'),
+    )
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
     w.write(out)
@@ -719,31 +760,40 @@ def test_custom_crypt_filter_type(on_subclass):
     class CustomCFClass(StandardRC4CryptFilter):
         def __init__(self):
             super().__init__(keylen=16)
+
         method = custom_cf_type
 
     if on_subclass:
+
         class NewStandardSecurityHandler(StandardSecurityHandler):
             pass
+
         sh_class = NewStandardSecurityHandler
-        assert sh_class._known_crypt_filters is \
-               not StandardSecurityHandler._known_crypt_filters
+        assert (
+            sh_class._known_crypt_filters
+            is not StandardSecurityHandler._known_crypt_filters
+        )
         assert '/V2' in sh_class._known_crypt_filters
         SecurityHandler.register(sh_class)
     else:
         sh_class = StandardSecurityHandler
 
     sh_class.register_crypt_filter(
-        custom_cf_type, lambda _, __: CustomCFClass(),
+        custom_cf_type,
+        lambda _, __: CustomCFClass(),
     )
     cfc = CryptFilterConfiguration(
         crypt_filters={STD_CF: CustomCFClass()},
-        default_string_filter=STD_CF, default_stream_filter=STD_CF
+        default_string_filter=STD_CF,
+        default_stream_filter=STD_CF,
     )
     sh = sh_class.build_from_pw_legacy(
         rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
-        id1=w.document_id[0], desired_user_pass="usersecret",
+        id1=w.document_id[0],
+        desired_user_pass="usersecret",
         desired_owner_pass="ownersecret",
-        keylen_bytes=16, crypt_filter_config=cfc
+        keylen_bytes=16,
+        crypt_filter_config=cfc,
     )
     assert isinstance(sh, sh_class)
     w._assign_security_handler(sh)
@@ -761,8 +811,9 @@ def test_custom_crypt_filter_type(on_subclass):
     obj: generic.StreamObject = r.get_object(ref.reference)
     assert obj.data == test_data
 
-    obj: generic.DecryptedObjectProxy = \
-        r.get_object(ref.reference, transparent_decrypt=False)
+    obj: generic.DecryptedObjectProxy = r.get_object(
+        ref.reference, transparent_decrypt=False
+    )
     assert isinstance(obj.raw_object, generic.StreamObject)
     assert obj.raw_object.encoded_data != test_data
 
@@ -773,16 +824,22 @@ def test_custom_crypt_filter_type(on_subclass):
 
 
 def test_security_handler_version_deser():
-    assert SecurityHandlerVersion.from_number(5) \
-           == SecurityHandlerVersion.AES256
+    assert (
+        SecurityHandlerVersion.from_number(5) == SecurityHandlerVersion.AES256
+    )
     assert SecurityHandlerVersion.from_number(6) == SecurityHandlerVersion.OTHER
-    assert SecurityHandlerVersion.from_number(None) \
-           == SecurityHandlerVersion.OTHER
+    assert (
+        SecurityHandlerVersion.from_number(None) == SecurityHandlerVersion.OTHER
+    )
 
-    assert StandardSecuritySettingsRevision.from_number(6) \
-           == StandardSecuritySettingsRevision.AES256
-    assert StandardSecuritySettingsRevision.from_number(7) \
-           == StandardSecuritySettingsRevision.OTHER
+    assert (
+        StandardSecuritySettingsRevision.from_number(6)
+        == StandardSecuritySettingsRevision.AES256
+    )
+    assert (
+        StandardSecuritySettingsRevision.from_number(7)
+        == StandardSecuritySettingsRevision.OTHER
+    )
 
 
 def test_key_len():
@@ -833,12 +890,13 @@ def test_ser_deser_credential_standard_corrupted():
     cred = r.security_handler.extract_credential()
     cred_data = SerialisedCredential(
         credential_type=cred.serialise().credential_type,
-        data=b'\xde\xad\xbe\xef'
+        data=b'\xde\xad\xbe\xef',
     )
 
     r = PdfFileReader(BytesIO(MINIMAL_AES256))
-    with pytest.raises(misc.PdfReadError,
-                       match="Failed to deserialise password"):
+    with pytest.raises(
+        misc.PdfReadError, match="Failed to deserialise password"
+    ):
         r.security_handler.authenticate(cred_data)
 
 
@@ -847,13 +905,13 @@ def test_ser_deser_credential_unknown_cred_type():
     r.decrypt("ownersecret")
     cred = r.security_handler.extract_credential()
     cred_data = SerialisedCredential(
-        credential_type='foobar',
-        data=cred.serialise().data
+        credential_type='foobar', data=cred.serialise().data
     )
 
     r = PdfFileReader(BytesIO(MINIMAL_AES256))
-    with pytest.raises(misc.PdfReadError,
-                       match="credential type 'foobar' not known"):
+    with pytest.raises(
+        misc.PdfReadError, match="credential type 'foobar' not known"
+    ):
         r.security_handler.authenticate(cred_data)
 
 
@@ -893,9 +951,11 @@ def test_ser_deser_credential_standard_sh_legacy_no_id1(pw):
 
 def test_ser_deser_credential_standard_legacy_sh_extract_from_builder():
     sh = StandardSecurityHandler.build_from_pw_legacy(
-        desired_owner_pass=b'ownersecret', desired_user_pass=b'usersecret',
-        rev=StandardSecuritySettingsRevision.RC4_OR_AES128, keylen_bytes=16,
-        id1=b'\xde\xad\xbe\xef'
+        desired_owner_pass=b'ownersecret',
+        desired_user_pass=b'usersecret',
+        rev=StandardSecuritySettingsRevision.RC4_OR_AES128,
+        keylen_bytes=16,
+        id1=b'\xde\xad\xbe\xef',
     )
     cred = sh.extract_credential()
     assert cred['pwd_bytes'].native == b'ownersecret'
@@ -917,10 +977,12 @@ def test_ser_deser_credential_pubkey():
 
 def test_ser_deser_credential_pubkey_sh_cannot_extract_from_builder():
     sh = PubKeySecurityHandler.build_from_certs(
-        [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=16,
+        [PUBKEY_TEST_DECRYPTER.cert],
+        keylen_bytes=16,
         version=SecurityHandlerVersion.RC4_OR_AES128,
-        use_aes=True, use_crypt_filters=True,
-        perms=-44
+        use_aes=True,
+        use_crypt_filters=True,
+        perms=-44,
     )
     assert sh.extract_credential() is None
 
@@ -934,8 +996,7 @@ def test_ser_deser_credential_wrong_cred_type_pubkey():
         SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
     )
     r = PdfFileReader(out)
-    with pytest.raises(misc.PdfReadError,
-                       match="must be an instance of"):
+    with pytest.raises(misc.PdfReadError, match="must be an instance of"):
         r.security_handler.authenticate(cred_data)
 
 
@@ -961,20 +1022,20 @@ def test_ser_deser_credential_pubkey_corrupted():
     cred = r.security_handler.extract_credential()
     cred_data = SerialisedCredential(
         credential_type=cred.serialise().credential_type,
-        data=b'\xde\xad\xbe\xef'
+        data=b'\xde\xad\xbe\xef',
     )
 
     r = PdfFileReader(out)
-    with pytest.raises(misc.PdfReadError,
-                       match="Failed to decode serialised pubkey credential"):
+    with pytest.raises(
+        misc.PdfReadError, match="Failed to decode serialised pubkey credential"
+    ):
         r.security_handler.authenticate(cred_data)
 
 
 def test_ser_deser_credential_wrong_cert():
-
     wrong_cert_cred_data = SimpleEnvelopeKeyDecrypter(
         cert=PUBKEY_SELFSIGNED_DECRYPTER.cert,
-        private_key=PUBKEY_TEST_DECRYPTER.private_key
+        private_key=PUBKEY_TEST_DECRYPTER.private_key,
     ).serialise()
     out = _produce_pubkey_encrypted_file(
         SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
@@ -986,10 +1047,9 @@ def test_ser_deser_credential_wrong_cert():
 
 
 def test_ser_deser_credential_wrong_key():
-
     wrong_key_cred_data = SimpleEnvelopeKeyDecrypter(
         cert=PUBKEY_TEST_DECRYPTER.cert,
-        private_key=PUBKEY_SELFSIGNED_DECRYPTER.private_key
+        private_key=PUBKEY_SELFSIGNED_DECRYPTER.private_key,
     ).serialise()
     out = _produce_pubkey_encrypted_file(
         SecurityHandlerVersion.RC4_OR_AES128, 16, True, True
@@ -1008,18 +1068,22 @@ def test_encrypt_skipping_metadata(legacy):
     # we need to manually flag the metadata streams, since
     # pyHanko's PDF reader is (currently) not metadata-aware
     from pyhanko.pdf_utils.writer import copy_into_new_writer
-    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
-            as inf:
+
+    with open(
+        os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb'
+    ) as inf:
         w = copy_into_new_writer(PdfFileReader(inf))
 
     if legacy:
         sh = StandardSecurityHandler.build_from_pw_legacy(
             StandardSecuritySettingsRevision.RC4_OR_AES128,
             w._document_id[0].original_bytes,
-            desired_owner_pass="secret", desired_user_pass="secret",
-            keylen_bytes=16, use_aes128=True,
+            desired_owner_pass="secret",
+            desired_user_pass="secret",
+            keylen_bytes=16,
+            use_aes128=True,
             perms=-44,
-            encrypt_metadata=False
+            encrypt_metadata=False,
         )
         w._assign_security_handler(sh)
     else:
@@ -1047,8 +1111,10 @@ def test_encrypt_skipping_metadata_pubkey():
     # we need to manually flag the metadata streams, since
     # pyHanko's PDF reader is (currently) not metadata-aware
     from pyhanko.pdf_utils.writer import copy_into_new_writer
-    with open(os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb') \
-            as inf:
+
+    with open(
+        os.path.join(PDF_DATA_DIR, "minimal-pdf-ua-and-a.pdf"), 'rb'
+    ) as inf:
         w = copy_into_new_writer(PdfFileReader(inf))
 
     w.encrypt_pubkey([PUBKEY_TEST_DECRYPTER.cert], encrypt_metadata=False)
@@ -1089,56 +1155,73 @@ def test_unknown_envelope_enc_type():
             r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
 
 
-BASIC_R6_ENC_DICT = generic.DictionaryObject({
-    pdf_name('/Filter'): pdf_name('/Standard'),
-    pdf_name('/O'): generic.ByteStringObject(binascii.unhexlify(
-        "047761f7f568bfacb096382f2fc7cc94ffd87f33dc472ca4"
-        "a3a3a78c739c77df26a794a7819aff59b3b85780c0fafe9f"
-    )),
-    pdf_name('/U'): generic.ByteStringObject(binascii.unhexlify(
-        "446ea469061c56060b56fa0296bfd32cc54fa9175e92ef5c"
-        "0b945f4c810e309a03af4a2ff103bbd4db065e036f78ac4c"
-    )),
-    pdf_name('/OE'): generic.ByteStringObject(binascii.unhexlify(
-        "65012afdd09b34431117b9fa5f557202"
-        "940dece9758d53c61fc5ff436cf2515c"
-    )),
-    pdf_name('/UE'): generic.ByteStringObject(binascii.unhexlify(
-        "71071c8c117abc19d26b5efc44a08066"
-        "7ef3c3665ad3bc8f5f5b58126a15d931"
-    )),
-    pdf_name('/Perms'): generic.ByteStringObject(binascii.unhexlify(
-        "b8729f735b0976d80f61d16bcfe09273"
-    )),
-    pdf_name('/P'): generic.NumberObject(-4),
-    pdf_name('/V'): generic.NumberObject(5),
-    pdf_name('/R'): generic.NumberObject(6),
-    pdf_name('/Length'): generic.NumberObject(256),
-    pdf_name('/EncryptMetadata'): generic.BooleanObject(True),
-    pdf_name('/StmF'): pdf_name('/StdCF'),
-    pdf_name('/StrF'): pdf_name('/StdCF'),
-    pdf_name('/CF'): generic.DictionaryObject({
-        pdf_name('/StdCF'): generic.DictionaryObject({
-            pdf_name('/AuthEvent'): pdf_name('/DocOpen'),
-            pdf_name('/CFM'): pdf_name('/AESV3'),
-            pdf_name('/Length'): generic.NumberObject(32)
-        })
-    })
-})
+BASIC_R6_ENC_DICT = generic.DictionaryObject(
+    {
+        pdf_name('/Filter'): pdf_name('/Standard'),
+        pdf_name('/O'): generic.ByteStringObject(
+            binascii.unhexlify(
+                "047761f7f568bfacb096382f2fc7cc94ffd87f33dc472ca4"
+                "a3a3a78c739c77df26a794a7819aff59b3b85780c0fafe9f"
+            )
+        ),
+        pdf_name('/U'): generic.ByteStringObject(
+            binascii.unhexlify(
+                "446ea469061c56060b56fa0296bfd32cc54fa9175e92ef5c"
+                "0b945f4c810e309a03af4a2ff103bbd4db065e036f78ac4c"
+            )
+        ),
+        pdf_name('/OE'): generic.ByteStringObject(
+            binascii.unhexlify(
+                "65012afdd09b34431117b9fa5f557202"
+                "940dece9758d53c61fc5ff436cf2515c"
+            )
+        ),
+        pdf_name('/UE'): generic.ByteStringObject(
+            binascii.unhexlify(
+                "71071c8c117abc19d26b5efc44a08066"
+                "7ef3c3665ad3bc8f5f5b58126a15d931"
+            )
+        ),
+        pdf_name('/Perms'): generic.ByteStringObject(
+            binascii.unhexlify("b8729f735b0976d80f61d16bcfe09273")
+        ),
+        pdf_name('/P'): generic.NumberObject(-4),
+        pdf_name('/V'): generic.NumberObject(5),
+        pdf_name('/R'): generic.NumberObject(6),
+        pdf_name('/Length'): generic.NumberObject(256),
+        pdf_name('/EncryptMetadata'): generic.BooleanObject(True),
+        pdf_name('/StmF'): pdf_name('/StdCF'),
+        pdf_name('/StrF'): pdf_name('/StdCF'),
+        pdf_name('/CF'): generic.DictionaryObject(
+            {
+                pdf_name('/StdCF'): generic.DictionaryObject(
+                    {
+                        pdf_name('/AuthEvent'): pdf_name('/DocOpen'),
+                        pdf_name('/CFM'): pdf_name('/AESV3'),
+                        pdf_name('/Length'): generic.NumberObject(32),
+                    }
+                )
+            }
+        ),
+    }
+)
 
 
-@pytest.mark.parametrize('enc_entry,delete,err', [
-    ('/OE', False, "be 32 bytes long"),
-    ('/OE', True, "be 32 bytes long"),
-    ('/UE', False, "be 32 bytes long"),
-    ('/UE', True, "be 32 bytes long"),
-    ('/O', False, "be 48 bytes long"),
-    ('/O', True, "be present"),
-    ('/U', False, "be 48 bytes long"),
-    ('/U', True, "be present"),
-    ('/Perms', False, "be 16 bytes long"),
-    ('/Perms', True, "be 16 bytes long"),
-])
+@pytest.mark.parametrize(
+    'enc_entry,delete,err',
+    [
+        ('/OE', False, "be 32 bytes long"),
+        ('/OE', True, "be 32 bytes long"),
+        ('/UE', False, "be 32 bytes long"),
+        ('/UE', True, "be 32 bytes long"),
+        ('/O', False, "be 48 bytes long"),
+        ('/O', True, "be present"),
+        ('/U', False, "be 48 bytes long"),
+        ('/U', True, "be present"),
+        ('/Perms', False, "be 16 bytes long"),
+        ('/Perms', True, "be 16 bytes long"),
+    ],
+)
 def test_r6_values(enc_entry, delete, err):
     enc_dict = generic.DictionaryObject(BASIC_R6_ENC_DICT)
     if delete:
@@ -1151,26 +1234,30 @@ def test_r6_values(enc_entry, delete, err):
 
 @pytest.mark.parametrize('entry', ["/U", "/O"])
 def test_legacy_o_u_values(entry):
-
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
     sh = StandardSecurityHandler.build_from_pw_legacy(
         StandardSecuritySettingsRevision.RC4_OR_AES128,
-        w._document_id[0].original_bytes, "ownersecret", "usersecret",
-        keylen_bytes=True, use_aes128=True, perms=-44
+        w._document_id[0].original_bytes,
+        "ownersecret",
+        "usersecret",
+        keylen_bytes=True,
+        use_aes128=True,
+        perms=-44,
     )
     w.security_handler = sh
     enc_dict = sh.as_pdf_object()
     enc_dict[entry] = generic.ByteStringObject(b"\xde\xad\xbe\xef")
     w._encrypt = w.add_object(enc_dict)
-    new_page_tree = w.import_object(r.root.raw_get('/Pages'),)
+    new_page_tree = w.import_object(
+        r.root.raw_get('/Pages'),
+    )
     w.root['/Pages'] = new_page_tree
     out = BytesIO()
     w.write(out)
 
     with pytest.raises(misc.PdfError, match="be 32 bytes long"):
         PdfFileReader(out)
-
 
 
 def test_key_length_constraint():
@@ -1198,8 +1285,10 @@ def test_legacy_no_r6():
 def test_legacy_cf_req():
     with pytest.raises(misc.PdfError, match="s5 is required"):
         PubKeySecurityHandler.build_from_certs(
-            [PUBKEY_TEST_DECRYPTER.cert], keylen_bytes=16,
-            version=SecurityHandlerVersion.RC4_OR_AES128, use_aes=True,
+            [PUBKEY_TEST_DECRYPTER.cert],
+            keylen_bytes=16,
+            version=SecurityHandlerVersion.RC4_OR_AES128,
+            use_aes=True,
             use_crypt_filters=False,
         )
 
@@ -1246,7 +1335,7 @@ def test_encrypted_obj_stm():
     xref_data = r.xrefs[new_objref]
     stm = r.get_object(
         generic.Reference(xref_data.obj_stream_id, pdf=r),
-        transparent_decrypt=False
+        transparent_decrypt=False,
     )
     assert b"(Hello there)" in stm.decrypted.data
 

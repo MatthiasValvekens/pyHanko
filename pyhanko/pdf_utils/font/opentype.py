@@ -25,7 +25,7 @@ except ImportError as import_err:  # pragma: nocover
         "pyhanko.pdf_utils.font.opentype requires pyHanko to be installed with "
         "the [opentype] option. You can install missing "
         "dependencies by running \"pip install 'pyHanko[opentype]'\".",
-        import_err
+        import_err,
     )
 
 
@@ -43,7 +43,6 @@ pdf_string = generic.pdf_string
 
 
 def _format_simple_glyphline_from_buffer(buf, cid_width_callback):
-
     def _emit_subsegment():
         nonlocal subsgmt_cids
         current_tj_segments.append(
@@ -87,9 +86,9 @@ def _format_simple_glyphline_from_buffer(buf, cid_width_callback):
     return f'[{" ".join(current_tj_segments)}] TJ'.encode('ascii'), total_len
 
 
-def _format_cid_glyphline_from_buffer(buf, cid_width_callback,
-                                      units_per_em, font_size,
-                                      vertical):
+def _format_cid_glyphline_from_buffer(
+    buf, cid_width_callback, units_per_em, font_size, vertical
+):
     no_complex_positioning = not vertical and all(
         not pos.y_offset for pos in buf.glyph_positions
     )
@@ -99,14 +98,13 @@ def _format_cid_glyphline_from_buffer(buf, cid_width_callback,
 
     # simple case where we can do it in one TJ
     if no_complex_positioning:
-        ops, total_len = \
-            _format_simple_glyphline_from_buffer(buf, cid_width_callback)
+        ops, total_len = _format_simple_glyphline_from_buffer(
+            buf, cid_width_callback
+        )
 
         # do a Td to put the newline cursor at the end of our output,
         # for compatibility with the complex positioning layout code
-        text_ops = b'%s %g 0 Td' % (
-            ops, _glyph_to_user(total_len)
-        )
+        text_ops = b'%s %g 0 Td' % (ops, _glyph_to_user(total_len))
         return text_ops, (total_len, 0)
 
     info: hb.GlyphInfo
@@ -173,23 +171,28 @@ def _gids_by_cluster(buf):
     yield cur_cluster, None, cur_cluster_glyphs
 
 
-def _build_type0_font_from_cidfont(writer, cidfont_obj: 'CIDFont',
-                                   widths_by_cid_iter,
-                                   vertical, obj_stream=None):
-
+def _build_type0_font_from_cidfont(
+    writer,
+    cidfont_obj: 'CIDFont',
+    widths_by_cid_iter,
+    vertical,
+    obj_stream=None,
+):
     # take the Identity-* encoding to inherit from the /Encoding
     # entry specified in our CIDSystemInfo dict
     encoding = 'Identity-V' if vertical else 'Identity-H'
 
     cidfont_obj.embed(writer, obj_stream=obj_stream)
     cidfont_ref = writer.add_object(cidfont_obj, obj_stream=obj_stream)
-    type0 = generic.DictionaryObject({
-        pdf_name('/Type'): pdf_name('/Font'),
-        pdf_name('/Subtype'): pdf_name('/Type0'),
-        pdf_name('/DescendantFonts'): generic.ArrayObject([cidfont_ref]),
-        pdf_name('/Encoding'): pdf_name('/' + encoding),
-        pdf_name('/BaseFont'): pdf_name(f'/{cidfont_obj.name}-{encoding}'),
-    })
+    type0 = generic.DictionaryObject(
+        {
+            pdf_name('/Type'): pdf_name('/Font'),
+            pdf_name('/Subtype'): pdf_name('/Type0'),
+            pdf_name('/DescendantFonts'): generic.ArrayObject([cidfont_ref]),
+            pdf_name('/Encoding'): pdf_name('/' + encoding),
+            pdf_name('/BaseFont'): pdf_name(f'/{cidfont_obj.name}-{encoding}'),
+        }
+    )
     # compute widths entry
 
     def _widths():
@@ -252,8 +255,7 @@ def _segment_cmap(mappings):
                 # TODO use short form for bfrange targets if they're all
                 #  contiguous
                 target_values = ' '.join(
-                    f'<{hexlify(target).decode("ascii")}>'
-                    for target in targets
+                    f'<{hexlify(target).decode("ascii")}>' for target in targets
                 )
                 yield (
                     f'<{source_start:04x}> <{source_end:04x}> [{target_values}]'
@@ -341,10 +343,18 @@ class GlyphAccumulator(FontEngine):
         specified.
     """
 
-    def __init__(self, writer: BasePdfFileWriter, font_handle, font_size,
-                 features=None, ot_language_tag=None, ot_script_tag=None,
-                 writing_direction=None, bcp47_lang_code=None, obj_stream=None):
-
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        font_handle,
+        font_size,
+        features=None,
+        ot_language_tag=None,
+        ot_script_tag=None,
+        writing_direction=None,
+        bcp47_lang_code=None,
+        obj_stream=None,
+    ):
         # harfbuzz expects bytes
         font_handle.seek(0)
         font_bytes = font_handle.read()
@@ -387,8 +397,12 @@ class GlyphAccumulator(FontEngine):
         self.__reverse_cmap = None
         self.ot_language_tag = _check_ot_tag(ot_language_tag)
         self.ot_script_tag = _check_ot_tag(ot_script_tag)
-        if writing_direction is not None and \
-                writing_direction not in ('ltr', 'rtl', 'ttb', 'btt'):
+        if writing_direction is not None and writing_direction not in (
+            'ltr',
+            'rtl',
+            'ttb',
+            'btt',
+        ):
             raise ValueError(
                 "Writing direction must be one of 'ltr', 'rtl', 'ttb' or 'btt'."
             )
@@ -422,9 +436,9 @@ class GlyphAccumulator(FontEngine):
         return result
 
     def marked_content_property_list(self, txt) -> generic.DictionaryObject:
-        result = generic.DictionaryObject({
-            pdf_name('/ActualText'): generic.TextStringObject(txt)
-        })
+        result = generic.DictionaryObject(
+            {pdf_name('/ActualText'): generic.TextStringObject(txt)}
+        )
         if self.bcp47_lang_code is not None:
             result['/Lang'] = pdf_string(self.bcp47_lang_code)
         return result
@@ -451,9 +465,11 @@ class GlyphAccumulator(FontEngine):
 
         vertical = buf.direction in ('ttb', 'btt')
         text_ops, (total_x, total_y) = _format_cid_glyphline_from_buffer(
-            buf, cid_width_callback=self._get_cid_and_width,
-            units_per_em=self.units_per_em, font_size=self.font_size,
-            vertical=vertical
+            buf,
+            cid_width_callback=self._get_cid_and_width,
+            units_per_em=self.units_per_em,
+            font_size=self.font_size,
+            vertical=vertical,
         )
 
         # the original buffer's cluster values are just character indexes
@@ -516,7 +532,7 @@ class GlyphAccumulator(FontEngine):
         return ShapeResult(
             graphics_ops=graphics_ops,
             x_advance=total_x / self.units_per_em,
-            y_advance=total_y / self.units_per_em
+            y_advance=total_y / self.units_per_em,
         )
 
     def _format_tounicode_cmap(self):
@@ -606,13 +622,13 @@ class GlyphAccumulator(FontEngine):
         obj_stream = self.obj_stream
         by_cid = iter(sorted(self._glyphs.values(), key=lambda t: t[0]))
         type0 = _build_type0_font_from_cidfont(
-            writer=writer, cidfont_obj=self.cidfont_obj,
-            widths_by_cid_iter=by_cid, obj_stream=obj_stream,
-            vertical=False
+            writer=writer,
+            cidfont_obj=self.cidfont_obj,
+            widths_by_cid_iter=by_cid,
+            obj_stream=obj_stream,
+            vertical=False,
         )
-        type0['/ToUnicode'] = writer.add_object(
-            self._format_tounicode_cmap()
-        )
+        type0['/ToUnicode'] = writer.add_object(self._format_tounicode_cmap())
         # use our preallocated font ref
         writer.add_object(type0, obj_stream, idnum=self._font_ref.idnum)
         self._write_prepared = True
@@ -622,9 +638,16 @@ class GlyphAccumulator(FontEngine):
 
 
 class CIDFont(generic.DictionaryObject):
-    def __init__(self, tt: ttLib.TTFont, subtype, registry, ordering,
-                 supplement, base_ps_name, subset_prefix):
-
+    def __init__(
+        self,
+        tt: ttLib.TTFont,
+        subtype,
+        registry,
+        ordering,
+        supplement,
+        base_ps_name,
+        subset_prefix,
+    ):
         self._tt = tt
 
         self.subset_prefix = subset_prefix
@@ -634,16 +657,22 @@ class CIDFont(generic.DictionaryObject):
         self.name = ps_name
         self.ros = registry, ordering, supplement
 
-        super().__init__({
-            pdf_name('/Type'): pdf_name('/Font'),
-            pdf_name('/Subtype'): pdf_name(subtype),
-            pdf_name('/CIDSystemInfo'): generic.DictionaryObject({
-                pdf_name('/Registry'): pdf_string(registry),
-                pdf_name('/Ordering'): pdf_string(ordering),
-                pdf_name('/Supplement'): generic.NumberObject(supplement)
-            }),
-            pdf_name('/BaseFont'): pdf_name('/' + ps_name)
-        })
+        super().__init__(
+            {
+                pdf_name('/Type'): pdf_name('/Font'),
+                pdf_name('/Subtype'): pdf_name(subtype),
+                pdf_name('/CIDSystemInfo'): generic.DictionaryObject(
+                    {
+                        pdf_name('/Registry'): pdf_string(registry),
+                        pdf_name('/Ordering'): pdf_string(ordering),
+                        pdf_name('/Supplement'): generic.NumberObject(
+                            supplement
+                        ),
+                    }
+                ),
+                pdf_name('/BaseFont'): pdf_name('/' + ps_name),
+            }
+        )
         self._font_descriptor = FontDescriptor(self)
 
     def embed(self, writer: BasePdfFileWriter, obj_stream=None):
@@ -679,8 +708,13 @@ class CIDFontType0(CIDFont):
             ordering = "Identity"
             supplement = 0
         super().__init__(
-            tt, '/CIDFontType0', registry, ordering, supplement,
-            base_ps_name, subset_prefix
+            tt,
+            '/CIDFontType0',
+            registry,
+            ordering,
+            supplement,
+            base_ps_name,
+            subset_prefix,
         )
         td.rawDict['FullName'] = '%s+%s' % (self.subset_prefix, self.name)
 
@@ -689,10 +723,13 @@ class CIDFontType0(CIDFont):
         # write the CFF table to the stream
         self.cff.compile(stream_buf, self.tt_font)
         stream_buf.seek(0)
-        font_stream = generic.StreamObject({
-            # this is a Type0 CFF font program (see Table 126 in ISO 32000)
-            pdf_name('/Subtype'): pdf_name('/CIDFontType0C'),
-        }, stream_data=stream_buf.read())
+        font_stream = generic.StreamObject(
+            {
+                # this is a Type0 CFF font program (see Table 126 in ISO 32000)
+                pdf_name('/Subtype'): pdf_name('/CIDFontType0C'),
+            },
+            stream_data=stream_buf.read(),
+        )
         font_stream.compress()
         font_stream_ref = writer.add_object(font_stream)
         self._font_descriptor[pdf_name('/FontFile3')] = font_stream_ref
@@ -700,7 +737,6 @@ class CIDFontType0(CIDFont):
 
 
 class CIDFontType2(CIDFont):
-
     def __init__(self, tt: ttLib.TTFont, base_ps_name, subset_prefix):
         super().__init__(
             tt,
@@ -713,7 +749,8 @@ class CIDFontType2(CIDFont):
             # that CIDs correspond to GIDs in the font)
             ordering="Identity",
             supplement=0,
-            base_ps_name=base_ps_name, subset_prefix=subset_prefix
+            base_ps_name=base_ps_name,
+            subset_prefix=subset_prefix,
         )
         self['/CIDToGIDMap'] = pdf_name('/Identity')
 
@@ -745,25 +782,27 @@ class FontDescriptor(generic.DictionaryObject):
         os2 = tt['OS/2']
         weight = os2.usWeightClass
         stemv = int(10 + 220 * (weight - 50) / 900)
-        super().__init__({
-            pdf_name('/Type'): pdf_name('/FontDescriptor'),
-            pdf_name('/FontName'): pdf_name('/' + cf.name),
-            pdf_name('/Ascent'): generic.NumberObject(hhea.ascent),
-            pdf_name('/Descent'): generic.NumberObject(hhea.descent),
-            pdf_name('/FontBBox'): generic.ArrayObject(
-                map(generic.NumberObject, bbox)
-            ),
-            # FIXME I'm setting the Serif and Symbolic flags here, but
-            #  is there any way we can read/infer those from the TTF metadata?
-            pdf_name('/Flags'): generic.NumberObject(0b110),
-            pdf_name('/StemV'): generic.NumberObject(stemv),
-            pdf_name('/ItalicAngle'): generic.FloatObject(
-                getattr(tt['post'], 'italicAngle', 0)
-            ),
-            pdf_name('/CapHeight'): generic.NumberObject(
-                getattr(os2, 'sCapHeight', 750)
-            )
-        })
+        super().__init__(
+            {
+                pdf_name('/Type'): pdf_name('/FontDescriptor'),
+                pdf_name('/FontName'): pdf_name('/' + cf.name),
+                pdf_name('/Ascent'): generic.NumberObject(hhea.ascent),
+                pdf_name('/Descent'): generic.NumberObject(hhea.descent),
+                pdf_name('/FontBBox'): generic.ArrayObject(
+                    map(generic.NumberObject, bbox)
+                ),
+                # FIXME I'm setting the Serif and Symbolic flags here, but
+                #  is there any way we can read/infer those from the TTF metadata?
+                pdf_name('/Flags'): generic.NumberObject(0b110),
+                pdf_name('/StemV'): generic.NumberObject(stemv),
+                pdf_name('/ItalicAngle'): generic.FloatObject(
+                    getattr(tt['post'], 'italicAngle', 0)
+                ),
+                pdf_name('/CapHeight'): generic.NumberObject(
+                    getattr(os2, 'sCapHeight', 750)
+                ),
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -807,16 +846,22 @@ class GlyphAccumulatorFactory(FontEngineFactory):
     object stream is passed in, and the writer supports object streams.
     """
 
-    def create_font_engine(self, writer: 'BasePdfFileWriter',
-                           obj_stream=None) -> GlyphAccumulator:
+    def create_font_engine(
+        self, writer: 'BasePdfFileWriter', obj_stream=None
+    ) -> GlyphAccumulator:
         fh = open(self.font_file, 'rb')
-        if obj_stream is None and writer.stream_xrefs and \
-                self.create_objstream_if_needed:
+        if (
+            obj_stream is None
+            and writer.stream_xrefs
+            and self.create_objstream_if_needed
+        ):
             obj_stream = writer.prepare_object_stream()
         return GlyphAccumulator(
-            writer=writer, font_handle=fh,
-            font_size=self.font_size, ot_script_tag=self.ot_script_tag,
+            writer=writer,
+            font_handle=fh,
+            font_size=self.font_size,
+            ot_script_tag=self.ot_script_tag,
             ot_language_tag=self.ot_language_tag,
             writing_direction=self.writing_direction,
-            obj_stream=obj_stream
+            obj_stream=obj_stream,
         )

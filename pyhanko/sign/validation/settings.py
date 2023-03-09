@@ -12,7 +12,6 @@ from pyhanko.pdf_utils.config_utils import (
 
 
 def _match_usages(required: set, present: set, need_all: bool):
-
     if need_all:
         return not (required - present)
     else:
@@ -113,7 +112,8 @@ class KeyUsageConstraints(ConfigurableMixin):
         # First, check the "regular" key usage extension
         cert_ku = (
             set(key_usage_extension_value.native)
-            if key_usage_extension_value is not None else set()
+            if key_usage_extension_value is not None
+            else set()
         )
 
         # check blacklisted key usages (ISO 32k)
@@ -141,12 +141,13 @@ class KeyUsageConstraints(ConfigurableMixin):
         # check extended key usage
         has_extd_key_usage_ext = eku_extension_value is not None
         cert_eku = (
-            set(eku_extension_value.native)
-            if has_extd_key_usage_ext else set()
+            set(eku_extension_value.native) if has_extd_key_usage_ext else set()
         )
 
-        if 'any_extended_key_usage' in cert_eku and \
-                not self.explicit_extd_key_usage_required:
+        if (
+            'any_extended_key_usage' in cert_eku
+            and not self.explicit_extd_key_usage_required
+        ):
             return  # early out, cert is valid for all EKUs
 
         extd_key_usage = self.extd_key_usage or set()
@@ -180,8 +181,9 @@ class KeyUsageConstraints(ConfigurableMixin):
             if affected_flags is not None:
                 config_dict[key_usage_sett] = set(
                     process_bit_string_flags(
-                        x509.KeyUsage, affected_flags,
-                        key_usage_sett.replace('_', '-')
+                        x509.KeyUsage,
+                        affected_flags,
+                        key_usage_sett.replace('_', '-'),
                     )
                 )
 

@@ -21,14 +21,25 @@ from pyhanko.pdf_utils.misc import PdfReadError, PdfStrictReadError, peek
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 __all__ = [
-    'XRefCache', 'XRefBuilder',
-    'XRefType', 'XRefEntry',
-    'ObjStreamRef', 'ObjectHeaderReadError',
-    'XRefSection', 'XRefSectionData', 'XRefSectionType', 'XRefSectionMetaInfo',
+    'XRefCache',
+    'XRefBuilder',
+    'XRefType',
+    'XRefEntry',
+    'ObjStreamRef',
+    'ObjectHeaderReadError',
+    'XRefSection',
+    'XRefSectionData',
+    'XRefSectionType',
+    'XRefSectionMetaInfo',
     'TrailerDictionary',
-    'read_object_header', 'parse_xref_stream', 'parse_xref_table',
-    'write_xref_table', 'ObjectStream', 'XRefStream', 'OBJSTREAM_FORBIDDEN',
-    'PositionDict'
+    'read_object_header',
+    'parse_xref_stream',
+    'parse_xref_table',
+    'write_xref_table',
+    'ObjectStream',
+    'XRefStream',
+    'OBJSTREAM_FORBIDDEN',
+    'PositionDict',
 ]
 
 logger = logging.getLogger(__name__)
@@ -148,13 +159,15 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
                 yield XRefEntry(
                     xref_type=XRefType.STANDARD,
                     location=int(offset),
-                    idnum=num, generation=int(generation)
+                    idnum=num,
+                    generation=int(generation),
                 )
             elif marker == b'f':
                 yield XRefEntry(
                     xref_type=XRefType.FREE,
                     location=None,
-                    idnum=num, generation=int(generation)
+                    idnum=num,
+                    generation=int(generation),
                 )
             num += 1
         misc.read_non_whitespace(stream)
@@ -170,8 +183,9 @@ def parse_xref_table(stream) -> Iterator[XRefEntry]:
             stream.seek(-7, os.SEEK_CUR)
 
 
-def parse_xref_stream(xref_stream: generic.StreamObject,
-                      strict: bool = True) -> Iterator[XRefEntry]:
+def parse_xref_stream(
+    xref_stream: generic.StreamObject, strict: bool = True
+) -> Iterator[XRefEntry]:
     """
     Parse a single cross-reference stream and yield its entries one by one.
 
@@ -229,8 +243,9 @@ def parse_xref_stream(xref_stream: generic.StreamObject,
                 generation = get_entry(2)
                 yield XRefEntry(
                     xref_type=XRefType.STANDARD,
-                    idnum=num, location=location,
-                    generation=generation
+                    idnum=num,
+                    location=location,
+                    generation=generation,
                 )
             elif xref_type == 2:
                 # compressed objects
@@ -239,7 +254,8 @@ def parse_xref_stream(xref_stream: generic.StreamObject,
                 location = ObjStreamRef(objstr_num, objstr_idx)
                 yield XRefEntry(
                     xref_type=XRefType.IN_OBJ_STREAM,
-                    idnum=num, location=location
+                    idnum=num,
+                    location=location,
                 )
             elif xref_type == 0:
                 # freed object
@@ -248,8 +264,9 @@ def parse_xref_stream(xref_stream: generic.StreamObject,
                 next_generation = get_entry(2)
                 yield XRefEntry(
                     xref_type=XRefType.FREE,
-                    idnum=num, generation=next_generation,
-                    location=None
+                    idnum=num,
+                    generation=next_generation,
+                    location=None,
                 )
             else:
                 # unknown type (=> ignore).
@@ -318,10 +335,9 @@ class XRefSectionData:
         self.obj_streams_used = set()
         self.hybrid: Optional[XRefSection] = None
 
-    def try_resolve(self,
-                    ref: Union[generic.Reference, generic.IndirectObject]) \
-            -> Optional[Union[int, ObjStreamRef]]:
-
+    def try_resolve(
+        self, ref: Union[generic.Reference, generic.IndirectObject]
+    ) -> Optional[Union[int, ObjStreamRef]]:
         # The lookups are ordered more or less in the order we expect
         # them to be queried most frequently in a given file.
 
@@ -348,8 +364,10 @@ class XRefSectionData:
         # The generation in a free entry is the _next_ gen number at which
         # the reference may be used, hence the -1
         # Otherwise, the freed entry is irrelevant, so we fall through.
-        if freed_next_generation is not None \
-                and ref.generation == freed_next_generation - 1:
+        if (
+            freed_next_generation is not None
+            and ref.generation == freed_next_generation - 1
+        ):
             # note: 7.5.8.4 is confusingly worded, but we do _not_ need to
             # fall back to the hybrid ref here, because the main section
             # still takes precedence!
@@ -368,7 +386,7 @@ class XRefSectionData:
             idnum = xref_entry.idnum
             generation = xref_entry.generation
             highest_id = max(idnum, highest_id)
-            if generation > 0xffff:
+            if generation > 0xFFFF:
                 if strict:
                     raise PdfStrictReadError(
                         f"Illegal generation {generation} for "
@@ -393,9 +411,12 @@ class XRefSectionData:
                 self.explicit_refs_in_revision.add((idnum, generation - 1))
         return highest_id
 
-    def process_hybrid_entries(self, entries: Iterator[XRefEntry],
-                               xref_meta_info: XRefSectionMetaInfo,
-                               strict: bool):
+    def process_hybrid_entries(
+        self,
+        entries: Iterator[XRefEntry],
+        xref_meta_info: XRefSectionMetaInfo,
+        strict: bool,
+    ):
         hybrid = XRefSectionData()
         hybrid.process_entries(entries, strict=strict)
         self.hybrid = XRefSection(xref_meta_info, hybrid)
@@ -425,7 +446,6 @@ class XRefSection:
 
 
 def _check_freed_refs(ix, section, all_sections):
-
     # Prevent xref stream objects from being overwritten.
     # (stricter than the spec, but it makes our lives easier at the cost
     # of rejecting some theoretically valid files)
@@ -434,7 +454,7 @@ def _check_freed_refs(ix, section, all_sections):
     xstream_ref = section.meta_info.stream_ref
     if xstream_ref:
         as_tuple = (xstream_ref.idnum, xstream_ref.generation)
-        for section_ in all_sections[ix + 1:]:
+        for section_ in all_sections[ix + 1 :]:
             data = section_.xref_data
             if as_tuple in data.explicit_refs_in_revision:
                 raise misc.PdfStrictReadError(
@@ -445,7 +465,6 @@ def _check_freed_refs(ix, section, all_sections):
     # For all free refs, check that _if_ redefined, they're
     # redefined with a proper generation number
     for idnum, expected_next_generation in section.xref_data.freed.items():
-
         # When rewriting files & removing dead objects, Acrobat will
         # enter the deleted reference into the Xref table/stream with
         # a 'next generation' ID of 0. It doesn't contradict the spec
@@ -485,16 +504,19 @@ def _check_freed_refs(ix, section, all_sections):
             next_section = all_sections[ix + 1]
             hybrid: Optional[XRefSectionData] = (
                 next_section.xref_data.hybrid.xref_data
-                if next_section.xref_data.hybrid is not None else None
+                if next_section.xref_data.hybrid is not None
+                else None
             )
             if hybrid is not None:
-                if idnum in hybrid.standard_xrefs \
-                        or idnum in hybrid.xrefs_in_objstm:
+                if (
+                    idnum in hybrid.standard_xrefs
+                    or idnum in hybrid.xrefs_in_objstm
+                ):
                     # exemption!
                     continue
 
         improper_generation = None
-        for succ in all_sections[ix + 1:]:
+        for succ in all_sections[ix + 1 :]:
             data = succ.xref_data
             # don't enforce
             if idnum in data.xrefs_in_objstm:
@@ -507,8 +529,10 @@ def _check_freed_refs(ix, section, all_sections):
                     # by the higher_gen check further down.
                     # For the == 0 check, see comment about dead objects
                     # further up.
-                    if expected_next_generation == 0 or \
-                            next_generation < expected_next_generation:
+                    if (
+                        expected_next_generation == 0
+                        or next_generation < expected_next_generation
+                    ):
                         improper_generation = next_generation
                 except KeyError:
                     pass
@@ -570,8 +594,9 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
         #  freeings in the previous revision, to allow room for the way
         #  the free placeholders are commonly declared in hybrid reference
         #  files (i.e. as xxxxxxxxx 65535 f)
-        is_hybrid_stream = \
+        is_hybrid_stream = (
             section.meta_info.xref_section_type == XRefSectionType.HYBRID_STREAM
+        )
         for idnum, generation in higher_gen:
             preceding = reversed(expanded_sections[:ix])
 
@@ -600,11 +625,11 @@ def _check_xref_consistency(all_sections: List[XRefSection]):
 
 
 class XRefBuilder:
-
     err_limit = 10
 
-    def __init__(self, handler: PdfHandler, stream, strict: bool,
-                 last_startxref: int):
+    def __init__(
+        self, handler: PdfHandler, stream, strict: bool, last_startxref: int
+    ):
         self.handler = handler
         self.stream = stream
         self.strict = strict
@@ -634,7 +659,7 @@ class XRefBuilder:
         xref_section_data = XRefSectionData()
         xref_section_data.process_entries(
             parse_xref_stream(xrefstream, strict=self.strict),
-            strict=self.strict
+            strict=self.strict,
         )
         xref_meta_info = XRefSectionMetaInfo(
             xref_section_type=XRefSectionType.STREAM,
@@ -644,7 +669,7 @@ class XRefBuilder:
             declared_startxref=declared_startxref,
             start_location=start_location,
             end_location=stream.tell(),
-            stream_ref=xrefstream_ref
+            stream_ref=xrefstream_ref,
         )
         self.sections.append(XRefSection(xref_meta_info, xref_section_data))
 
@@ -694,11 +719,12 @@ class XRefBuilder:
                 declared_startxref=hybrid_xref_stm_loc,
                 start_location=hybrid_xref_stm_loc,
                 end_location=stream.tell(),
-                stream_ref=stream_ref
+                stream_ref=stream_ref,
             )
             xref_section_data.process_hybrid_entries(
-                parse_xref_stream(xrefstream), hybrid_stream_meta,
-                strict=self.strict
+                parse_xref_stream(xrefstream),
+                hybrid_stream_meta,
+                strict=self.strict,
             )
             stream.seek(stream_pos)
             xref_type = XRefSectionType.HYBRID_MAIN
@@ -755,7 +781,8 @@ class XRefBuilder:
                 except ObjectHeaderReadError as e:
                     logger.debug(
                         "Failed to read xref stream header, attempting to "
-                        "correct...", exc_info=e
+                        "correct...",
+                        exc_info=e,
                     )
                     # can be caused by an OBO error (pointing too far)
                     startxref = _attempt_startxref_correction(stream, startxref)
@@ -825,8 +852,13 @@ class TrailerDictionary(generic.PdfObject):
     # These keys shouldn't really be considered part of the trailer dictionary,
     # and in particular are not subject to inheritance rules.
     non_trailer_keys = {
-        '/Length', '/Filter', '/DecodeParms', '/W', '/Type', '/Index',
-        '/XRefStm'
+        '/Length',
+        '/Filter',
+        '/DecodeParms',
+        '/W',
+        '/Type',
+        '/Index',
+        '/XRefStm',
     }
 
     def __init__(self):
@@ -843,9 +875,12 @@ class TrailerDictionary(generic.PdfObject):
         # as necessary.
         return self.raw_get(item).get_object()
 
-    def raw_get(self, key,
-                decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT,
-                revision=None):
+    def raw_get(
+        self,
+        key,
+        decrypt: EncryptedObjAccess = EncryptedObjAccess.TRANSPARENT,
+        revision=None,
+    ):
         revisions = self._trailer_revisions
         if revision is None:
             try:
@@ -885,11 +920,14 @@ class TrailerDictionary(generic.PdfObject):
     def flatten(self, revision=None) -> generic.DictionaryObject:
         relevant_revisions = self._trailer_revisions
         if revision is not None:
-            relevant_revisions = relevant_revisions[-revision-1:]
-        trailer = generic.DictionaryObject({
-            k: v for revision in reversed(relevant_revisions)
-            for k, v in revision.items()
-        })
+            relevant_revisions = relevant_revisions[-revision - 1 :]
+        trailer = generic.DictionaryObject(
+            {
+                k: v
+                for revision in reversed(relevant_revisions)
+                for k, v in revision.items()
+            }
+        )
         if revision is None:
             trailer.update(self._new_changes)
 
@@ -947,9 +985,7 @@ def _attempt_startxref_correction(stream, startxref):
                 return line_start + look
 
     # no xref table found at specified location
-    raise PdfReadError(
-        "Could not find xref table at specified location"
-    )
+    raise PdfReadError("Could not find xref table at specified location")
 
 
 def convert_to_int(d, size):
@@ -982,7 +1018,8 @@ class XRefCache:
         # for the time being, I'm willing to deal with the possibility of
         # having to reject a few potentially legitimate files because of this.
         self.xref_stream_refs = {
-            section.meta_info.stream_ref for section in xref_sections
+            section.meta_info.stream_ref
+            for section in xref_sections
             if section.meta_info.stream_ref is not None
         }
 
@@ -1080,8 +1117,9 @@ class XRefCache:
         section = self._xref_sections[revision]
         return section.meta_info.declared_startxref
 
-    def get_historical_ref(self, ref, revision) \
-            -> Optional[Union[int, ObjStreamRef]]:
+    def get_historical_ref(
+        self, ref, revision
+    ) -> Optional[Union[int, ObjStreamRef]]:
         """
         Look up the location of the historical value of an object.
 
@@ -1098,7 +1136,7 @@ class XRefCache:
             An integer offset, an object stream reference, or ``None`` if
             the reference does not resolve in the specified revision.
         """
-        for section in reversed(self._xref_sections[:revision + 1]):
+        for section in reversed(self._xref_sections[: revision + 1]):
             try:
                 result = section.xref_data.try_resolve(ref)
                 return result
@@ -1131,7 +1169,6 @@ PositionDict = Dict[Tuple[int, int], Union[int, Tuple[int, int]]]
 # for historical reasons (inherited from refactored PyPDF2 logic).
 # Position can be an int (absolute file offset) or a
 # tuple (object stream reference)
-
 
 
 OBJSTREAM_FORBIDDEN = (generic.IndirectObject, generic.StreamObject)
@@ -1209,11 +1246,14 @@ class ObjectStream:
         stream_header.seek(0)
         sh_bytes = stream_header.read(first_obj_offset)
         stream_data = sh_bytes + main_body.getvalue()
-        stream_object = generic.StreamObject({
-            pdf_name('/Type'): pdf_name('/ObjStm'),
-            pdf_name('/N'): generic.NumberObject(len(self._obj_refs)),
-            pdf_name('/First'): generic.NumberObject(first_obj_offset)
-        }, stream_data=stream_data)
+        stream_object = generic.StreamObject(
+            {
+                pdf_name('/Type'): pdf_name('/ObjStm'),
+                pdf_name('/N'): generic.NumberObject(len(self._obj_refs)),
+                pdf_name('/First'): generic.NumberObject(first_obj_offset),
+            },
+            stream_data=stream_data,
+        )
         if self.compress:
             stream_object.compress()
         return stream_object
@@ -1302,7 +1342,6 @@ def write_xref_table(stream, position_dict: Dict[Tuple[int, int], int]):
 
 
 class XRefStream(generic.StreamObject):
-
     def __init__(self, position_dict: PositionDict):
         super().__init__()
         self.position_dict = position_dict
@@ -1311,10 +1350,12 @@ class XRefStream(generic.StreamObject):
         # we use longs to indicate positions of objects (>Q)
         # two more bytes for the generation number of an uncompressed object
         widths = map(generic.NumberObject, (1, 8, 2))
-        self.update({
-            pdf_name('/W'): generic.ArrayObject(widths),
-            pdf_name('/Type'): pdf_name('/XRef'),
-        })
+        self.update(
+            {
+                pdf_name('/W'): generic.ArrayObject(widths),
+                pdf_name('/Type'): pdf_name('/XRef'),
+            }
+        )
 
     def write_to_stream(self, stream, handler=None, container_ref=None):
         # the caller is responsible for making sure that the stream

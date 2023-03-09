@@ -38,11 +38,13 @@ def test_code128_render():
     stamp_wrapper_stream = generic.StreamObject(
         stream_data=b'q 1 0 0 1 50 50 cm /Barcode Do Q'
     )
-    resources = generic.DictionaryObject({
-        pdf_name('/XObject'): generic.DictionaryObject({
-            pdf_name('/Barcode'): xobj_ref
-        })
-    })
+    resources = generic.DictionaryObject(
+        {
+            pdf_name('/XObject'): generic.DictionaryObject(
+                {pdf_name('/Barcode'): xobj_ref}
+            )
+        }
+    )
     writer.add_stream_to_page(
         0, writer.add_object(stamp_wrapper_stream), resources
     )

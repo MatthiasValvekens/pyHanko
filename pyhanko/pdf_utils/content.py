@@ -13,8 +13,12 @@ from .layout import BoxConstraints
 from .reader import PdfFileReader
 
 __all__ = [
-    'ResourceType', 'ResourceManagementError',
-    'PdfResources', 'PdfContent', 'RawContent', 'ImportedPdfPage'
+    'ResourceType',
+    'ResourceManagementError',
+    'PdfResources',
+    'PdfContent',
+    'RawContent',
+    'ImportedPdfPage',
 ]
 
 # TODO have the merge_resources helper in incremental_writer rely on some
@@ -75,6 +79,7 @@ class ResourceManagementError(ValueError):
     """
     Used to signal problems with resource dictionaries.
     """
+
     pass
 
 
@@ -130,6 +135,7 @@ class PdfResources:
                 val = self[k]
                 if val:
                     yield k.value, val
+
         return DictionaryObject({k: v for k, v in _gen()})
 
     def __iadd__(self, other):
@@ -166,16 +172,21 @@ class PdfContent:
     It can also be set after the fact by calling :meth:`set_writer`.
     """
 
-    def __init__(self, resources: PdfResources = None,
-                 box: BoxConstraints = None, writer=None):
+    def __init__(
+        self,
+        resources: PdfResources = None,
+        box: BoxConstraints = None,
+        writer=None,
+    ):
         self._resources = resources or PdfResources()
         self.box = box or BoxConstraints()
         self.writer = writer
 
     # TODO support a set-if-not-taken mechanism, that suggests alternative names
     #  if necessary.
-    def set_resource(self, category: ResourceType, name: NameObject,
-                     value: PdfObject):
+    def set_resource(
+        self, category: ResourceType, name: NameObject, value: PdfObject
+    ):
         """Set a value in the resource dictionary associated with this content
         fragment.
 
@@ -228,11 +239,13 @@ class PdfContent:
             the resulting form XObject.
         """
         from pyhanko.pdf_utils.writer import init_xobject_dictionary
+
         command_stream = self.render()
         return init_xobject_dictionary(
-            command_stream=command_stream, box_width=self.box.width,
+            command_stream=command_stream,
+            box_width=self.box.width,
             box_height=self.box.height,
-            resources=self._resources.as_pdf_object()
+            resources=self._resources.as_pdf_object(),
         )
 
     def set_writer(self, writer):
@@ -248,8 +261,12 @@ class PdfContent:
 class RawContent(PdfContent):
     """Raw byte sequence to be used as PDF content."""
 
-    def __init__(self, data: bytes, resources: PdfResources = None,
-                 box: BoxConstraints = None):
+    def __init__(
+        self,
+        data: bytes,
+        resources: PdfResources = None,
+        box: BoxConstraints = None,
+    ):
         super().__init__(resources, box)
         self.data = data
 
@@ -267,6 +284,7 @@ class ImportedPdfPage(PdfContent):
 
     def render(self) -> bytes:
         from .writer import BasePdfFileWriter
+
         w: BasePdfFileWriter = self.writer
         with open(self.file_name, 'rb') as inf:
             r = PdfFileReader(inf)

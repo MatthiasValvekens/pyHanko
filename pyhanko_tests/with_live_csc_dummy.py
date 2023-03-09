@@ -39,12 +39,17 @@ async def test_simple_sign_with_dummy():
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
 
-    async with CSCDummy(endpoint_url=CSC_SCAL2_HOST_URL,
-                        credential_id='testing-ca/signer1-long',
-                        timeout=TIMEOUT) as signer:
+    async with CSCDummy(
+        endpoint_url=CSC_SCAL2_HOST_URL,
+        credential_id='testing-ca/signer1-long',
+        timeout=TIMEOUT,
+    ) as signer:
         out = await async_sign_pdf(
-            w, signature_meta=PdfSignatureMetadata(),
-            existing_fields_only=True, signer=signer, in_place=True
+            w,
+            signature_meta=PdfSignatureMetadata(),
+            existing_fields_only=True,
+            signer=signer,
+            in_place=True,
         )
 
     r = PdfFileReader(out)
@@ -54,38 +59,44 @@ async def test_simple_sign_with_dummy():
 
 @run_if_live
 @pytest.mark.parametrize(
-    'num_results,batch_size,expected_auth_count,waste_time', [
-        (3, 3, 1, 0),
-        (6, 3, 2, 0),
-        (6, 3, 2, 1)
-    ]
+    'num_results,batch_size,expected_auth_count,waste_time',
+    [(3, 3, 1, 0), (6, 3, 2, 0), (6, 3, 2, 1)],
 )
-async def test_implicit_batch_sign_with_dummy(num_results, batch_size,
-                                              expected_auth_count, waste_time):
+async def test_implicit_batch_sign_with_dummy(
+    num_results, batch_size, expected_auth_count, waste_time
+):
     from io import BytesIO
 
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import PdfSignatureMetadata, async_sign_pdf
     from pyhanko_tests.samples import MINIMAL_ONE_FIELD
 
-    async with CSCDummy(endpoint_url=CSC_SCAL2_HOST_URL,
-                        credential_id='testing-ca/signer1-long',
-                        waste_time=waste_time,
-                        timeout=TIMEOUT, batch_size=batch_size) as signer:
+    async with CSCDummy(
+        endpoint_url=CSC_SCAL2_HOST_URL,
+        credential_id='testing-ca/signer1-long',
+        waste_time=waste_time,
+        timeout=TIMEOUT,
+        batch_size=batch_size,
+    ) as signer:
 
         async def do_sign(num):
             w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
             return await async_sign_pdf(
-                w, signature_meta=PdfSignatureMetadata(
+                w,
+                signature_meta=PdfSignatureMetadata(
                     reason=f"I'm number #{num}!"
                 ),
-                existing_fields_only=True, signer=signer, in_place=True,
+                existing_fields_only=True,
+                signer=signer,
+                in_place=True,
             )
+
         results = await asyncio.gather(
             *(do_sign(i) for i in range(1, num_results + 1))
         )
-        assert signer.auth_manager.authorizations_requested \
-               == expected_auth_count
+        assert (
+            signer.auth_manager.authorizations_requested == expected_auth_count
+        )
 
     for ix, out in enumerate(results):
         r = PdfFileReader(out)

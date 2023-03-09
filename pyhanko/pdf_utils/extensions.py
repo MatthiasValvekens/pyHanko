@@ -118,13 +118,15 @@ class DeveloperExtension:
             A :class:`.generic.DictionaryObject`.
         """
 
-        result = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/DeveloperExtensions'),
-            pdf_name('/BaseVersion'): self.base_version,
-            pdf_name('/ExtensionLevel'): generic.NumberObject(
-                self.extension_level
-            ),
-        })
+        result = generic.DictionaryObject(
+            {
+                pdf_name('/Type'): pdf_name('/DeveloperExtensions'),
+                pdf_name('/BaseVersion'): self.base_version,
+                pdf_name('/ExtensionLevel'): generic.NumberObject(
+                    self.extension_level
+                ),
+            }
+        )
         if self.url is not None:
             result['/URL'] = generic.TextStringObject(self.url)
         if self.extension_revision is not None:

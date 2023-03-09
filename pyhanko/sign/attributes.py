@@ -49,8 +49,7 @@ class CMSAttributeProvider:
         """
         raise NotImplementedError
 
-    async def get_attribute(self, dry_run=False) \
-            -> Optional[cms.CMSAttribute]:
+    async def get_attribute(self, dry_run=False) -> Optional[cms.CMSAttribute]:
         value = await self.build_attr_value(dry_run=dry_run)
         if value is not None:
             return simple_cms_attribute(self.attribute_type, value)
@@ -113,34 +112,43 @@ class AdobeRevinfoProvider(CMSAttributeProvider):
     def __init__(self, value: asn1_pdf.RevocationInfoArchival):
         self.value = value
 
-    async def build_attr_value(self, dry_run=False) \
-            -> Optional[asn1_pdf.RevocationInfoArchival]:
+    async def build_attr_value(
+        self, dry_run=False
+    ) -> Optional[asn1_pdf.RevocationInfoArchival]:
         return self.value
 
 
 class CMSAlgorithmProtectionProvider(CMSAttributeProvider):
     attribute_type: str = 'cms_algorithm_protection'
 
-    def __init__(self, digest_algo: str,
-                 signature_algo: algos.SignedDigestAlgorithm):
+    def __init__(
+        self, digest_algo: str, signature_algo: algos.SignedDigestAlgorithm
+    ):
         self.digest_algo = digest_algo
         self.signature_algo = signature_algo
 
-    async def build_attr_value(self, dry_run=False) \
-            -> cms.CMSAlgorithmProtection:
-        return cms.CMSAlgorithmProtection({
-            'digest_algorithm': algos.DigestAlgorithm(
-                {'algorithm': self.digest_algo}
-            ),
-            'signature_algorithm': self.signature_algo
-        })
+    async def build_attr_value(
+        self, dry_run=False
+    ) -> cms.CMSAlgorithmProtection:
+        return cms.CMSAlgorithmProtection(
+            {
+                'digest_algorithm': algos.DigestAlgorithm(
+                    {'algorithm': self.digest_algo}
+                ),
+                'signature_algorithm': self.signature_algo,
+            }
+        )
 
 
 class TSTProvider(CMSAttributeProvider):
-    def __init__(self, digest_algorithm: str, data_to_ts: bytes,
-                 timestamper: TimeStamper,
-                 attr_type: str = 'signature_time_stamp_token',
-                 prehashed=False):
+    def __init__(
+        self,
+        digest_algorithm: str,
+        data_to_ts: bytes,
+        timestamper: TimeStamper,
+        attr_type: str = 'signature_time_stamp_token',
+        prehashed=False,
+    ):
         self.attribute_type = attr_type
         self.digest_algorithm = digest_algorithm
         self.timestamper = timestamper
@@ -171,8 +179,9 @@ class SignedAttributeProviderSpec(abc.ABC):
     :class:`~pyhanko.sign.signers.pdf_cms.Signer` hierarchy.
     """
 
-    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
-            -> Iterable[CMSAttributeProvider]:
+    def signed_attr_providers(
+        self, data_digest: bytes, digest_algorithm: str
+    ) -> Iterable[CMSAttributeProvider]:
         """
         Lazily set up signed attribute providers.
 
@@ -193,8 +202,11 @@ class UnsignedAttributeProviderSpec(abc.ABC):
     """
 
     def unsigned_attr_providers(
-            self, signature: bytes, signed_attrs: cms.CMSAttributes,
-            digest_algorithm: str) -> Iterable[CMSAttributeProvider]:
+        self,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+        digest_algorithm: str,
+    ) -> Iterable[CMSAttributeProvider]:
         """
         Lazily set up unsigned attribute providers.
 

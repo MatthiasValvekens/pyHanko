@@ -53,8 +53,11 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
             info_ref = None
         document_id = self.__class__._handle_id(prev)
         super().__init__(
-            root_ref, info_ref, document_id, obj_id_start=trailer['/Size'],
-            stream_xrefs=prev.has_xref_stream
+            root_ref,
+            info_ref,
+            document_id,
+            obj_id_start=trailer['/Size'],
+            stream_xrefs=prev.has_xref_stream,
         )
         if self._info is not None:
             self.trailer['/Info'] = self._info
@@ -136,8 +139,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 ido, as_metadata_stream=as_metadata_stream
             )
 
-    def mark_update(self, obj_ref: Union[generic.Reference,
-                                         generic.IndirectObject]):
+    def mark_update(
+        self, obj_ref: Union[generic.Reference, generic.IndirectObject]
+    ):
         ix = (obj_ref.generation, obj_ref.idnum)
         self.objects[ix] = obj_ref.get_object()
 
@@ -169,8 +173,10 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         )
         self.input_stream.seek(input_pos)
 
-    def set_info(self, info: Optional[Union[generic.IndirectObject,
-                                      generic.DictionaryObject]]):
+    def set_info(
+        self,
+        info: Optional[Union[generic.IndirectObject, generic.DictionaryObject]],
+    ):
         info = super().set_info(info)
         if info is not None:
             # also update our trailer
@@ -185,8 +191,7 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         trailer[pdf_name('/Prev')] = generic.NumberObject(
             self.prev.last_startxref
         )
-        if self.prev.encrypted and \
-                not self.security_handler.is_authenticated():
+        if self.prev.encrypted and not self.security_handler.is_authenticated():
             # removing encryption in an incremental update is impossible
             raise misc.PdfWriteError(
                 'Cannot update this document without encryption credentials '
@@ -194,8 +199,9 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
                 'of the original file before calling write().'
             )
 
-    def set_custom_trailer_entry(self, key: generic.NameObject,
-                                 value: generic.PdfObject):
+    def set_custom_trailer_entry(
+        self, key: generic.NameObject, value: generic.PdfObject
+    ):
         """
         Set a custom, unmanaged entry in the document trailer or cross-reference
         stream dictionary.
@@ -213,7 +219,6 @@ class IncrementalPdfFileWriter(BasePdfFileWriter):
         self.trailer[key] = value
 
     def write(self, stream):
-
         if not self.objects and not self._force_write_when_empty:
             # just write the original and then bail
             self._write_header(stream)

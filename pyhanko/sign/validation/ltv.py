@@ -42,9 +42,11 @@ from .status import (
 
 __all__ = [
     'RevocationInfoValidationType',
-    'apply_adobe_revocation_info', 'retrieve_adobe_revocation_info',
-    'get_timestamp_chain', 'async_validate_pdf_ltv_signature',
-    'establish_timestamp_trust'
+    'apply_adobe_revocation_info',
+    'retrieve_adobe_revocation_info',
+    'get_timestamp_chain',
+    'async_validate_pdf_ltv_signature',
+    'establish_timestamp_trust',
 ]
 
 
@@ -118,8 +120,9 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
     # Certs with OCSP/CRL endpoints should have the relevant revocation data
     # embedded, if no stricter revocation_mode policy is in place already
 
-    revinfo_policy: CertRevTrustPolicy \
-        = validation_context_kwargs.get('revinfo_policy', None)
+    revinfo_policy: CertRevTrustPolicy = validation_context_kwargs.get(
+        'revinfo_policy', None
+    )
     retroactive = validation_context_kwargs.get('retroactive_revinfo', False)
     if revinfo_policy is None:
         # handle legacy revocation mode
@@ -143,9 +146,10 @@ def _strict_vc_context_kwargs(timestamp, validation_context_kwargs):
 
 
 async def establish_timestamp_trust(
-        tst_signed_data: cms.SignedData,
-        validation_context: ValidationContext,
-        expected_tst_imprint: bytes):
+    tst_signed_data: cms.SignedData,
+    validation_context: ValidationContext,
+    expected_tst_imprint: bytes,
+):
     """
     Wrapper around :func:`validate_tst_signed_data` for use when analysing
     timestamps for the purpose of establishing a timestamp chain.
@@ -174,7 +178,7 @@ async def establish_timestamp_trust(
     if not timestamp_status.valid or not timestamp_status.trusted:
         logger.warning(
             "Could not validate embedded timestamp token: %s.",
-            timestamp_status.summary()
+            timestamp_status.summary(),
         )
         raise SignatureValidationError(
             "Could not establish time of signing, timestamp token did not "
@@ -183,8 +187,9 @@ async def establish_timestamp_trust(
     return timestamp_status
 
 
-def get_timestamp_chain(reader: PdfFileReader) \
-        -> Iterator[EmbeddedPdfSignature]:
+def get_timestamp_chain(
+    reader: PdfFileReader,
+) -> Iterator[EmbeddedPdfSignature]:
     """
     Get the document timestamp chain of the associated reader, ordered
     from new to old.
@@ -198,7 +203,7 @@ def get_timestamp_chain(reader: PdfFileReader) \
     """
     return filter(
         lambda sig: sig.sig_object.get('/Type', None) == '/DocTimeStamp',
-        reversed(reader.embedded_signatures)
+        reversed(reader.embedded_signatures),
     )
 
 
@@ -210,14 +215,14 @@ class _TimestampTrustData:
     current_signature_vc_kwargs: dict
 
 
-def _instantiate_ltv_vc(emb_timestamp: EmbeddedPdfSignature,
-                        validation_context_kwargs):
+def _instantiate_ltv_vc(
+    emb_timestamp: EmbeddedPdfSignature, validation_context_kwargs
+):
     try:
-        hist_resolver = emb_timestamp.reader \
-            .get_historical_resolver(emb_timestamp.signed_revision)
-        dss = DocumentSecurityStore.read_dss(
-            hist_resolver
+        hist_resolver = emb_timestamp.reader.get_historical_resolver(
+            emb_timestamp.signed_revision
         )
+        dss = DocumentSecurityStore.read_dss(hist_resolver)
         return dss.as_validation_context(validation_context_kwargs)
     except NoDSSFoundError:
         validation_context_kwargs.setdefault('crls', ())
@@ -226,8 +231,11 @@ def _instantiate_ltv_vc(emb_timestamp: EmbeddedPdfSignature,
 
 
 async def _establish_timestamp_trust_lta(
-        reader, bootstrap_validation_context,
-        validation_context_kwargs, until_revision):
+    reader,
+    bootstrap_validation_context,
+    validation_context_kwargs,
+    until_revision,
+):
     timestamps = get_timestamp_chain(reader)
     validation_context_kwargs = dict(validation_context_kwargs)
     current_vc = bootstrap_validation_context
@@ -249,14 +257,14 @@ async def _establish_timestamp_trust_lta(
         # read the DSS at the current revision into a new
         # validation context object
         current_vc = _instantiate_ltv_vc(
-            emb_timestamp,
-            validation_context_kwargs
+            emb_timestamp, validation_context_kwargs
         )
 
     return _TimestampTrustData(
-        latest_dts=emb_timestamp, earliest_ts_status=ts_status,
+        latest_dts=emb_timestamp,
+        earliest_ts_status=ts_status,
         ts_chain_length=ts_count + 1,
-        current_signature_vc_kwargs=validation_context_kwargs
+        current_signature_vc_kwargs=validation_context_kwargs,
     )
 
 
@@ -268,15 +276,16 @@ async def _establish_timestamp_trust_lta(
 #  timestamp chain provided that newer timestamps are "strong" enough to
 #  cover the gap.
 async def async_validate_pdf_ltv_signature(
-               embedded_sig: EmbeddedPdfSignature,
-               validation_type: RevocationInfoValidationType,
-               validation_context_kwargs=None,
-               bootstrap_validation_context: Optional[ValidationContext] = None,
-               ac_validation_context_kwargs=None,
-               force_revinfo=False,
-               diff_policy: Optional[DiffPolicy] = None,
-               key_usage_settings: Optional[KeyUsageConstraints] = None,
-               skip_diff: bool = False) -> PdfSignatureStatus:
+    embedded_sig: EmbeddedPdfSignature,
+    validation_type: RevocationInfoValidationType,
+    validation_context_kwargs=None,
+    bootstrap_validation_context: Optional[ValidationContext] = None,
+    ac_validation_context_kwargs=None,
+    force_revinfo=False,
+    diff_policy: Optional[DiffPolicy] = None,
+    key_usage_settings: Optional[KeyUsageConstraints] = None,
+    skip_diff: bool = False,
+) -> PdfSignatureStatus:
     """
     .. versionadded:: 0.9.0
 
@@ -329,22 +338,26 @@ async def async_validate_pdf_ltv_signature(
     # we switch to hard-fail forcibly.
     retroactive = validation_context_kwargs['retroactive_revinfo']
     if force_revinfo:
-        validation_context_kwargs['revinfo_policy'] \
-            = _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
+        validation_context_kwargs[
+            'revinfo_policy'
+        ] = _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
         if ac_validation_context_kwargs is not None:
-            ac_validation_context_kwargs['revinfo_policy'] \
-                = _strict_ltv_internal_revo_policy(
-                    retroactive_revinfo=retroactive
-                )
+            ac_validation_context_kwargs[
+                'revinfo_policy'
+            ] = _strict_ltv_internal_revo_policy(
+                retroactive_revinfo=retroactive
+            )
     elif 'revocation_mode' not in validation_context_kwargs:
         validation_context_kwargs.setdefault(
             'revinfo_policy',
-            _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
+            _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive),
         )
         if ac_validation_context_kwargs is not None:
             ac_validation_context_kwargs.setdefault(
                 'revinfo_policy',
-                _default_ltv_internal_revo_policy(retroactive_revinfo=retroactive)
+                _default_ltv_internal_revo_policy(
+                    retroactive_revinfo=retroactive
+                ),
             )
 
     current_vc: ValidationContext
@@ -364,9 +377,7 @@ async def async_validate_pdf_ltv_signature(
         else:
             current_vc = bootstrap_validation_context
             # add the certs from the DSS
-            current_vc.certificate_registry.register_multiple(
-                dss.load_certs()
-            )
+            current_vc.certificate_registry.register_multiple(dss.load_certs())
 
     embedded_sig.compute_digest()
     embedded_sig.compute_tst_digest()
@@ -383,9 +394,10 @@ async def async_validate_pdf_ltv_signature(
     earliest_good_timestamp_st = None
     if validation_type != RevocationInfoValidationType.ADOBE_STYLE:
         ts_trust_data = await _establish_timestamp_trust_lta(
-            reader, current_vc,
+            reader,
+            current_vc,
             validation_context_kwargs=validation_context_kwargs,
-            until_revision=embedded_sig.signed_revision
+            until_revision=embedded_sig.signed_revision,
         )
         validation_context_kwargs = ts_trust_data.current_signature_vc_kwargs
         # if we found a timestamp, use it to pass to the next VC iteration
@@ -398,14 +410,18 @@ async def async_validate_pdf_ltv_signature(
         # If the validation profile is PAdES-LTA, then we must have seen
         # at least one document timestamp pass by, i.e. earliest_known_timestamp
         # must be non-None by now.
-        if ts_trust_data.earliest_ts_status is None \
-                and validation_type == RevocationInfoValidationType.PADES_LTA:
+        if (
+            ts_trust_data.earliest_ts_status is None
+            and validation_type == RevocationInfoValidationType.PADES_LTA
+        ):
             raise SignatureValidationError(
                 "Purported PAdES-LTA signature does not have a timestamp chain."
             )
         # if this assertion fails, there's a bug in the validation code
-        assert validation_type == RevocationInfoValidationType.PADES_LT \
-               or ts_trust_data.ts_chain_length >= 1
+        assert (
+            validation_type == RevocationInfoValidationType.PADES_LT
+            or ts_trust_data.ts_chain_length >= 1
+        )
         earliest_good_timestamp_st = ts_trust_data.earliest_ts_status
 
     # now that we have arrived at the revision with the signature,
@@ -422,8 +438,10 @@ async def async_validate_pdf_ltv_signature(
         validation_context_kwargs['moment'] = signature_poe
         if ac_validation_context_kwargs is not None:
             ac_validation_context_kwargs['moment'] = signature_poe
-    elif validation_type == RevocationInfoValidationType.PADES_LTA \
-            and ts_trust_data.ts_chain_length == 1:
+    elif (
+        validation_type == RevocationInfoValidationType.PADES_LTA
+        and ts_trust_data.ts_chain_length == 1
+    ):
         # TODO Pretty sure that this is the spirit of the LTA profile,
         #  but are we being too harsh here? I don't think so, but it's worth
         #  revisiting later
@@ -449,9 +467,7 @@ async def async_validate_pdf_ltv_signature(
 
     stored_ac_vc = None
     if validation_type == RevocationInfoValidationType.ADOBE_STYLE:
-        ocsps, crls = retrieve_adobe_revocation_info(
-            embedded_sig.signer_info
-        )
+        ocsps, crls = retrieve_adobe_revocation_info(embedded_sig.signer_info)
         validation_context_kwargs['ocsps'] = ocsps
         validation_context_kwargs['crls'] = crls
         stored_vc = ValidationContext(**validation_context_kwargs)
@@ -489,8 +505,10 @@ async def async_validate_pdf_ltv_signature(
     # DSS / revocation info store, so validate the timestamp *again*
     # using those settings.
 
-    if tst_signed_data is not None or \
-            validation_type == RevocationInfoValidationType.PADES_LT:
+    if (
+        tst_signed_data is not None
+        or validation_type == RevocationInfoValidationType.PADES_LT
+    ):
         if tst_signed_data is not None:
             ts_to_validate = tst_signed_data
         else:
@@ -499,10 +517,10 @@ async def async_validate_pdf_ltv_signature(
             # so we run the same check here
             ts_to_validate = ts_trust_data.latest_dts.signed_data
         ts_status_coro = async_validate_cms_signature(
-            ts_to_validate, status_cls=TimestampSignatureStatus,
-            validation_context=stored_vc, status_kwargs={
-                'timestamp': earliest_good_timestamp_st.timestamp
-            }
+            ts_to_validate,
+            status_cls=TimestampSignatureStatus,
+            validation_context=stored_vc,
+            status_kwargs={'timestamp': earliest_good_timestamp_st.timestamp},
         )
         timestamp_status: TimestampSignatureStatus = await ts_status_coro
     else:
@@ -515,17 +533,21 @@ async def async_validate_pdf_ltv_signature(
         diff_policy=diff_policy, skip_diff=skip_diff
     )
     status_kwargs = embedded_sig.summarise_integrity_info()
-    status_kwargs.update({
-        'signer_reported_dt': earliest_good_timestamp_st.timestamp,
-        'timestamp_validity': timestamp_status
-    })
-    key_usage_settings = \
-        PdfSignatureStatus.default_usage_constraints(key_usage_settings)
+    status_kwargs.update(
+        {
+            'signer_reported_dt': earliest_good_timestamp_st.timestamp,
+            'timestamp_validity': timestamp_status,
+        }
+    )
+    key_usage_settings = PdfSignatureStatus.default_usage_constraints(
+        key_usage_settings
+    )
     status_kwargs = await cms_basic_validation(
         embedded_sig.signed_data,
         raw_digest=embedded_sig.external_digest,
-        validation_context=stored_vc, status_kwargs=status_kwargs,
-        key_usage_settings=key_usage_settings
+        validation_context=stored_vc,
+        status_kwargs=status_kwargs,
+        key_usage_settings=key_usage_settings,
     )
 
     report_seed_value_validation(
@@ -540,7 +562,7 @@ async def async_validate_pdf_ltv_signature(
             sd_attr_certificates=embedded_sig.embedded_attr_certs,
             signer_cert=embedded_sig.signer_cert,
             validation_context=stored_ac_vc,
-            sd_signed_attrs=embedded_sig.signer_info['signed_attrs']
+            sd_signed_attrs=embedded_sig.signer_info['signed_attrs'],
         )
     )
 
@@ -574,9 +596,9 @@ def retrieve_adobe_revocation_info(signer_info: cms.SignerInfo):
     return ocsps, crls
 
 
-def apply_adobe_revocation_info(signer_info: cms.SignerInfo,
-                                validation_context_kwargs=None) \
-                               -> ValidationContext:
+def apply_adobe_revocation_info(
+    signer_info: cms.SignerInfo, validation_context_kwargs=None
+) -> ValidationContext:
     """
     Read Adobe-style revocation information from a CMS object, and load it
     into a validation context.

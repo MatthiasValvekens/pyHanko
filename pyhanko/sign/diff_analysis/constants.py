@@ -9,7 +9,7 @@ __all__ = [
     'ROOT_EXEMPT_STRICT_COMPARISON',
     'FORMFIELD_ALWAYS_MODIFIABLE',
     'VALUE_UPDATE_KEYS',
-    'VRI_KEY_PATTERN'
+    'VRI_KEY_PATTERN',
 ]
 
 
@@ -24,19 +24,33 @@ FORMFIELD_ALWAYS_MODIFIABLE = {'/Ff', '/Type'}
 # /F: (widget) annotation flags
 # /DA: default appearance
 # /Q: quadding
-VALUE_UPDATE_KEYS = (
-    FORMFIELD_ALWAYS_MODIFIABLE | {'/AP', '/AS', '/V', '/F', '/DA', '/Q'}
-)
+VALUE_UPDATE_KEYS = FORMFIELD_ALWAYS_MODIFIABLE | {
+    '/AP',
+    '/AS',
+    '/V',
+    '/F',
+    '/DA',
+    '/Q',
+}
 
 
 VRI_KEY_PATTERN = re.compile('/[A-Z0-9]{40}')
 
 
 ACROFORM_EXEMPT_STRICT_COMPARISON = {
-    '/Fields', '/DR', '/DA', '/Q', '/NeedAppearances'
+    '/Fields',
+    '/DR',
+    '/DA',
+    '/Q',
+    '/NeedAppearances',
 }
 
 
 ROOT_EXEMPT_STRICT_COMPARISON = {
-    '/AcroForm', '/DSS', '/Extensions', '/Metadata', '/MarkInfo', '/Version'
+    '/AcroForm',
+    '/DSS',
+    '/Extensions',
+    '/Metadata',
+    '/MarkInfo',
+    '/Version',
 }

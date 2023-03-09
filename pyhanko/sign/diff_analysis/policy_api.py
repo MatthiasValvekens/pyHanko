@@ -7,8 +7,10 @@ from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.sign.fields import FieldMDPSpec, MDPPerm
 
 __all__ = [
-    'ModificationLevel', 'SuspiciousModification',
-    'DiffResult', 'DiffPolicy'
+    'ModificationLevel',
+    'SuspiciousModification',
+    'DiffResult',
+    'DiffPolicy',
 ]
 
 
@@ -66,6 +68,7 @@ class ModificationLevel(OrderedEnum):
 
 class SuspiciousModification(ValueError):
     """Error indicating a suspicious modification"""
+
     pass
 
 
@@ -98,9 +101,13 @@ class DiffPolicy:
     Analyse the differences between two revisions.
     """
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver,
-              field_mdp_spec: Optional[FieldMDPSpec] = None,
-              doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
+    def apply(
+        self,
+        old: HistoricalResolver,
+        new: HistoricalResolver,
+        field_mdp_spec: Optional[FieldMDPSpec] = None,
+        doc_mdp: Optional[MDPPerm] = None,
+    ) -> DiffResult:
         """
         Execute the policy on a pair of revisions, with the MDP values provided.
         :class:`.SuspiciousModification` exceptions should be propagated.
@@ -118,11 +125,13 @@ class DiffPolicy:
         """
         raise NotImplementedError
 
-    def review_file(self, reader: PdfFileReader,
-                    base_revision: Union[int, HistoricalResolver],
-                    field_mdp_spec: Optional[FieldMDPSpec] = None,
-                    doc_mdp: Optional[MDPPerm] = None) \
-            -> Union[DiffResult, SuspiciousModification]:
+    def review_file(
+        self,
+        reader: PdfFileReader,
+        base_revision: Union[int, HistoricalResolver],
+        field_mdp_spec: Optional[FieldMDPSpec] = None,
+        doc_mdp: Optional[MDPPerm] = None,
+    ) -> Union[DiffResult, SuspiciousModification]:
         """
         Compare the current state of a file to an earlier version,
         with the MDP values provided.

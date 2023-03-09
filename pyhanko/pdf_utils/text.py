@@ -13,8 +13,9 @@ from pyhanko.pdf_utils.generic import pdf_name
 class TextStyle(ConfigurableMixin):
     """Container for basic test styling settings."""
 
-    font: FontEngineFactory \
-        = field(default_factory=SimpleFontEngineFactory.default_factory)
+    font: FontEngineFactory = field(
+        default_factory=SimpleFontEngineFactory.default_factory
+    )
     """
     The :class:`.FontEngineFactory` to be used for this text style.
     Defaults to Courier (as a non-embedded standard font).
@@ -35,14 +36,16 @@ class TextStyle(ConfigurableMixin):
         super().process_entries(config_dict)
         try:
             fc = config_dict['font']
-            if not isinstance(fc, str) or \
-                    not (fc.endswith('.otf') or fc.endswith('.ttf')):
+            if not isinstance(fc, str) or not (
+                fc.endswith('.otf') or fc.endswith('.ttf')
+            ):
                 raise ConfigurationError(
                     "'font' must be a path to an OpenType or "
                     "TrueType font file."
                 )
 
             from pyhanko.pdf_utils.font.opentype import GlyphAccumulatorFactory
+
             config_dict['font'] = GlyphAccumulatorFactory(fc)
         except KeyError:
             pass
@@ -88,10 +91,14 @@ class TextBox(PdfContent):
         Text boxes currently don't offer automatic word wrapping.
     """
 
-    def __init__(self, style: TextBoxStyle, writer,
-                 resources: PdfResources = None,
-                 box: layout.BoxConstraints = None,
-                 font_name='F1'):
+    def __init__(
+        self,
+        style: TextBoxStyle,
+        writer,
+        resources: PdfResources = None,
+        box: layout.BoxConstraints = None,
+        font_name='F1',
+    ):
         super().__init__(resources, writer=writer, box=box)
         self.style = style
         self._content = None
@@ -188,12 +195,12 @@ class TextBox(PdfContent):
         return style.font_size if style.leading is None else style.leading
 
     def render(self):
-
         style = self.style
 
         self.set_resource(
-            category=ResourceType.FONT, name=pdf_name('/' + self.font_name),
-            value=self.font_engine.as_resource()
+            category=ResourceType.FONT,
+            name=pdf_name('/' + self.font_name),
+            value=self.font_engine.as_resource(),
         )
         leading = self.leading
 
@@ -214,9 +221,8 @@ class TextBox(PdfContent):
         # draw border before scaling
         if style.border_width:
             command_stream.append(
-                b'q %g w 0 0 %g %g re S Q' % (
-                    style.border_width, self.box.width, self.box.height
-                )
+                b'q %g w 0 0 %g %g re S Q'
+                % (style.border_width, self.box.width, self.box.height)
             )
 
         # reposition cursor
@@ -224,10 +230,8 @@ class TextBox(PdfContent):
 
         command_stream += [
             b'BT',
-            b'/%s %d Tf %d TL' % (
-                self.font_name.encode('latin1'),
-                style.font_size, leading
-            ),
+            b'/%s %d Tf %d TL'
+            % (self.font_name.encode('latin1'), style.font_size, leading),
         ]
 
         # start by moving the cursor to the starting position.
@@ -238,7 +242,7 @@ class TextBox(PdfContent):
                 # V-mode leading/baselining is weird like that---the glyph
                 # origin is in the middle, so we chop off half of the leading
                 nat_text_width * positioning.x_scale - leading / 2,
-                nat_text_height * positioning.y_scale
+                nat_text_height * positioning.y_scale,
             )
         else:
             text_cursor_start = b'0 %g Td' % (

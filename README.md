@@ -90,10 +90,11 @@ Note that not all of these are necessarily exposed through the CLI.
  - Signature validation
     - Cryptographic integrity check
     - Authentication through X.509 chain of trust validation
-    - LTV validation/sanity check
+    - LTV validation/sanity check (ad hoc)
     - Difference analysis on files with multiple signatures and/or incremental 
       updates made after signing (experimental)
     - Signature seed value constraint validation
+    - AdES validation (incubating)
  - Encryption
     - All encryption methods in PDF 2.0 are supported.
  - CLI & configuration

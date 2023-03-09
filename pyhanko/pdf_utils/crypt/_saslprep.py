@@ -36,7 +36,8 @@ _PROHIBITED = (
     stringprep.in_table_c6,
     stringprep.in_table_c7,
     stringprep.in_table_c8,
-    stringprep.in_table_c9)
+    stringprep.in_table_c9,
+)
 
 
 def saslprep(data: str, prohibit_unassigned_code_points=True) -> str:
@@ -64,8 +65,12 @@ def saslprep(data: str, prohibit_unassigned_code_points=True) -> str:
     in_table_c12 = stringprep.in_table_c12
     in_table_b1 = stringprep.in_table_b1
     data = "".join(
-        ["\u0020" if in_table_c12(elt) else elt
-         for elt in data if not in_table_b1(elt)])
+        [
+            "\u0020" if in_table_c12(elt) else elt
+            for elt in data
+            if not in_table_b1(elt)
+        ]
+    )
 
     # RFC3454 section 2, step 2 - Normalize
     # RFC4013 section 2.2 normalization
@@ -90,7 +95,6 @@ def saslprep(data: str, prohibit_unassigned_code_points=True) -> str:
     # RFC3454 section 2, step 3 and 4 - Prohibit and check bidi
     for char in data:
         if any(in_table(char) for in_table in prohibited):
-            raise ValueError(
-                "SASLprep: failed prohibited character check")
+            raise ValueError("SASLprep: failed prohibited character check")
 
     return data

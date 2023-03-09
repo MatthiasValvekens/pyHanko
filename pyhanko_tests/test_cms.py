@@ -135,21 +135,24 @@ def test_generic_data_sign_legacy():
     assert status.intact
 
 
-@pytest.mark.parametrize('input_data, detached', list(itertools.product(
-        [
-            b'Hello world!', BytesIO(b'Hello world!'),
-            # v1 CMS -> PKCS#7 compatible -> use cms.ContentInfo
-            cms.ContentInfo({
-                'content_type': 'data',
-                'content': b'Hello world!'
-            })
-        ],
-        [True, False]
-    ))
+@pytest.mark.parametrize(
+    'input_data, detached',
+    list(
+        itertools.product(
+            [
+                b'Hello world!',
+                BytesIO(b'Hello world!'),
+                # v1 CMS -> PKCS#7 compatible -> use cms.ContentInfo
+                cms.ContentInfo(
+                    {'content_type': 'data', 'content': b'Hello world!'}
+                ),
+            ],
+            [True, False],
+        )
+    ),
 )
 @pytest.mark.asyncio
 async def test_generic_data_sign(input_data, detached):
-
     signature = await FROM_CA.async_sign_general_data(
         input_data, 'sha256', detached=detached
     )
@@ -177,8 +180,10 @@ async def test_generic_data_sign(input_data, detached):
         status = await async_validate_detached_cms(input_data, content)
         assert status.valid
         assert status.intact
-        assert 'No available information about the signing time.' \
-               in status.pretty_print_details()
+        assert (
+            'No available information about the signing time.'
+            in status.pretty_print_details()
+        )
         if isinstance(input_data, BytesIO):
             input_data.seek(0)
     else:
@@ -199,12 +204,14 @@ async def test_cms_v3_sign(detached):
     )
 
     signature = await FROM_CA.async_sign_general_data(
-        cms.EncapsulatedContentInfo({
-            'content_type': 'signed_data',
-            'content': inner_obj['content'].untag()
-        }),
+        cms.EncapsulatedContentInfo(
+            {
+                'content_type': 'signed_data',
+                'content': inner_obj['content'].untag(),
+            }
+        ),
         'sha256',
-        detached=detached
+        detached=detached,
     )
 
     # re-parse just to make sure we're starting fresh
@@ -223,9 +230,7 @@ async def test_cms_v3_sign(detached):
         raw_digest = None
         inner_eci = eci['content'].parsed['encap_content_info']
         assert inner_eci['content'].native == b'Hello world!'
-    status = await async_validate_cms_signature(
-        content, raw_digest=raw_digest
-    )
+    status = await async_validate_cms_signature(content, raw_digest=raw_digest)
     assert status.valid
     assert status.intact
 
@@ -234,8 +239,10 @@ async def test_cms_v3_sign(detached):
 async def test_detached_cms_with_self_reported_timestamp():
     dt = datetime.fromisoformat('2020-11-01T05:00:00+00:00')
     signature = await FROM_CA.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False,
-        signed_attr_settings=PdfCMSSignedAttributes(signing_time=dt)
+        b'Hello world!',
+        'sha256',
+        detached=False,
+        signed_attr_settings=PdfCMSSignedAttributes(signing_time=dt),
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -274,8 +281,11 @@ async def test_detached_cms_with_content_tst():
         cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
     )
     signature = await FROM_CA.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
-        signed_attr_settings=signed_attr_settings
+        b'Hello world!',
+        'sha256',
+        detached=False,
+        timestamper=DUMMY_TS,
+        signed_attr_settings=signed_attr_settings,
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -288,7 +298,9 @@ async def test_detached_cms_with_content_tst():
     assert status.content_timestamp_validity
     assert status.content_timestamp_validity.intact
     assert status.content_timestamp_validity.valid
-    assert status.content_timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.content_timestamp_validity.timestamp == datetime.now(
+        tz=pytz.utc
+    )
     pretty_print = status.pretty_print_details()
     assert 'The TSA certificate is untrusted' in pretty_print
     assert 'Content timestamp' in pretty_print
@@ -302,12 +314,13 @@ async def test_detached_cms_with_content_tst():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_wrong_tst():
-
     class Spec(UnsignedAttributeProviderSpec):
-
         def unsigned_attr_providers(
-                self, signature: bytes, signed_attrs: cms.CMSAttributes,
-                digest_algorithm: str):
+            self,
+            signature: bytes,
+            signed_attrs: cms.CMSAttributes,
+            digest_algorithm: str,
+        ):
             yield TSTProvider(
                 digest_algorithm='sha256',
                 data_to_ts=b'\xde\xad\xbe\xef',
@@ -317,16 +330,17 @@ async def test_detached_cms_with_wrong_tst():
     signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     signer.unsigned_attr_prov_spec = Spec()
     signature = await signer.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        b'Hello world!',
+        'sha256',
+        detached=False,
+        timestamper=DUMMY_TS,
         signed_attr_settings=PdfCMSSignedAttributes(
-            cades_signed_attrs=CAdESSignedAttrSpec(
-                timestamp_content=True
-            )
-        )
+            cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
+        ),
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -341,7 +355,9 @@ async def test_detached_cms_with_wrong_tst():
     assert status.content_timestamp_validity
     assert status.content_timestamp_validity.intact
     assert status.content_timestamp_validity.valid
-    assert status.content_timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.content_timestamp_validity.timestamp == datetime.now(
+        tz=pytz.utc
+    )
     assert status.valid
     assert status.intact
     assert 'CONTENT_TIMESTAMP_TOKEN<INTACT:UNTRUSTED>' in status.summary()
@@ -351,10 +367,10 @@ async def test_detached_cms_with_wrong_tst():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_wrong_content_tst():
-
     class Spec(SignedAttributeProviderSpec):
-        def signed_attr_providers(self, data_digest: bytes,
-                                  digest_algorithm: str):
+        def signed_attr_providers(
+            self, data_digest: bytes, digest_algorithm: str
+        ):
             yield TSTProvider(
                 digest_algorithm='sha256',
                 data_to_ts=b'\xde\xad\xbe\xef',
@@ -365,11 +381,14 @@ async def test_detached_cms_with_wrong_content_tst():
     signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     signer.signed_attr_prov_spec = Spec()
     signature = await signer.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        b'Hello world!',
+        'sha256',
+        detached=False,
+        timestamper=DUMMY_TS,
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -383,7 +402,9 @@ async def test_detached_cms_with_wrong_content_tst():
     assert not status.content_timestamp_validity.intact
     # internally, the content timestamp is OK
     assert status.content_timestamp_validity.valid
-    assert status.content_timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.content_timestamp_validity.timestamp == datetime.now(
+        tz=pytz.utc
+    )
     pretty_print = status.pretty_print_details()
     assert 'The TSA certificate is untrusted' in pretty_print
     assert 'Content timestamp' in pretty_print
@@ -397,7 +418,6 @@ async def test_detached_cms_with_wrong_content_tst():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_detached_cms_with_duplicated_attr():
-
     class CustomProvider(CMSAttributeProvider):
         attribute_type = 'message_digest'
 
@@ -405,18 +425,22 @@ async def test_detached_cms_with_duplicated_attr():
             return b'\xde\xad\xbe\xef'
 
     class Spec(SignedAttributeProviderSpec):
-        def signed_attr_providers(self, data_digest: bytes,
-                                  digest_algorithm: str):
+        def signed_attr_providers(
+            self, data_digest: bytes, digest_algorithm: str
+        ):
             yield CustomProvider()
 
     signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     signer.signed_attr_prov_spec = Spec()
     signature = await signer.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
+        b'Hello world!',
+        'sha256',
+        detached=False,
+        timestamper=DUMMY_TS,
     )
     signature = cms.ContentInfo.load(signature.dump())
     with pytest.raises(SignatureValidationError, match='structural'):
@@ -427,20 +451,38 @@ async def test_detached_cms_with_duplicated_attr():
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('content,detach', [
-    (b'This is not a TST!', True),
-    (b'This is not a TST!', False),
-    (cms.ContentInfo({
-        'content_type': 'data', 'content': b'This is not a TST!'
-    }), False),
-    (cms.EncapsulatedContentInfo({
-        'content_type': '2.999',
-        'content': core.ParsableOctetString(
-            core.OctetString(b'This is not a TST!').dump()
-        )
-    }), False),
-    (cms.ContentInfo({'content_type': '2.999',}), True),
-])
+@pytest.mark.parametrize(
+    'content,detach',
+    [
+        (b'This is not a TST!', True),
+        (b'This is not a TST!', False),
+        (
+            cms.ContentInfo(
+                {'content_type': 'data', 'content': b'This is not a TST!'}
+            ),
+            False,
+        ),
+        (
+            cms.EncapsulatedContentInfo(
+                {
+                    'content_type': '2.999',
+                    'content': core.ParsableOctetString(
+                        core.OctetString(b'This is not a TST!').dump()
+                    ),
+                }
+            ),
+            False,
+        ),
+        (
+            cms.ContentInfo(
+                {
+                    'content_type': '2.999',
+                }
+            ),
+            True,
+        ),
+    ],
+)
 @pytest.mark.asyncio
 async def test_detached_with_malformed_content_tst(content, detach):
     class CustomProvider(CMSAttributeProvider):
@@ -448,7 +490,8 @@ async def test_detached_with_malformed_content_tst(content, detach):
 
         async def build_attr_value(self, dry_run=False):
             attr_value = await FROM_CA.async_sign_general_data(
-                content, 'sha256',
+                content,
+                'sha256',
                 detached=detach,
             )
             return attr_value
@@ -461,18 +504,19 @@ async def test_detached_with_malformed_content_tst(content, detach):
     signer = CustomSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     signature = await signer.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False,
+        b'Hello world!',
+        'sha256',
+        detached=False,
         timestamper=DUMMY_TS,
     )
     signature = cms.ContentInfo.load(signature.dump())
-    with pytest.raises(SignatureValidationError,
-                       match="does not encapsulate TSTInfo"):
-        await async_validate_detached_cms(
-            b'Hello world!', signature['content']
-        )
+    with pytest.raises(
+        SignatureValidationError, match="does not encapsulate TSTInfo"
+    ):
+        await async_validate_detached_cms(b'Hello world!', signature['content'])
 
 
 @freeze_time('2020-11-01')
@@ -486,17 +530,14 @@ def test_overspecify_cms_digest_algo():
         key_passphrase=b'secret',
         # specify an algorithm object that also mandates a specific
         # message digest
-        signature_mechanism=SignedDigestAlgorithm(
-            {'algorithm': 'sha256_rsa'}
-        )
+        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'sha256_rsa'}),
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     # digest methods agree, so that should be OK
     out = signers.sign_pdf(
         w,
         signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='sha256'),
-        signer=signer
-
+        signer=signer,
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -505,16 +546,23 @@ def test_overspecify_cms_digest_algo():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     with pytest.raises(SigningError):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
+            w,
+            signers.PdfSignatureMetadata(
                 field_name='Sig1', md_algorithm='sha512'
-            ), signer=signer
+            ),
+            signer=signer,
         )
 
 
-def _tamper_with_signed_attrs(attr_name, *, duplicate=False,
-                              oid_duplicate=False,
-                              delete=False,
-                              replace_with=None, resign=False):
+def _tamper_with_signed_attrs(
+    attr_name,
+    *,
+    duplicate=False,
+    oid_duplicate=False,
+    delete=False,
+    replace_with=None,
+    resign=False,
+):
     input_buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(input_buf)
     md_algorithm = 'sha256'
@@ -532,11 +580,12 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False,
     )
 
     signer: signers.SimpleSigner = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
         cert_registry=FROM_CA.cert_registry,
-        signature_mechanism=SignedDigestAlgorithm({
-            'algorithm': 'rsassa_pkcs1v15'
-        })
+        signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        ),
     )
     with pytest.deprecated_call():
         # noinspection PyDeprecation
@@ -545,10 +594,11 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False,
             digest_algorithm=md_algorithm,
         )
     sd = cms_obj['content']
-    si, = sd['signer_infos']
+    (si,) = sd['signer_infos']
     signed_attrs = si['signed_attrs']
     ix = next(
-        ix for ix, attr in enumerate(signed_attrs)
+        ix
+        for ix, attr in enumerate(signed_attrs)
         if attr['type'].native == attr_name
     )
 
@@ -566,43 +616,53 @@ def _tamper_with_signed_attrs(attr_name, *, duplicate=False,
 
     # ... and replace the signature if requested
     if resign:
-        si['signature'] = \
-            signer.sign_raw(si['signed_attrs'].untag().dump(), md_algorithm)
+        si['signature'] = signer.sign_raw(
+            si['signed_attrs'].untag().dump(), md_algorithm
+        )
     cms_writer.send(cms_obj)
     return output
 
 
-@pytest.mark.parametrize('replacement_value', [
-    cms.CMSAlgorithmProtection({
-        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha1'}),
-        'signature_algorithm': SignedDigestAlgorithm(
-            {'algorithm': 'rsassa_pkcs1v15'}
-        )
-    }),
-    cms.CMSAlgorithmProtection({
-        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
-        'signature_algorithm': SignedDigestAlgorithm(
-            {'algorithm': 'sha512_rsa'}
-        )
-    }),
-    cms.CMSAlgorithmProtection({
-        'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
-    }),
-    None
-])
+@pytest.mark.parametrize(
+    'replacement_value',
+    [
+        cms.CMSAlgorithmProtection(
+            {
+                'digest_algorithm': DigestAlgorithm({'algorithm': 'sha1'}),
+                'signature_algorithm': SignedDigestAlgorithm(
+                    {'algorithm': 'rsassa_pkcs1v15'}
+                ),
+            }
+        ),
+        cms.CMSAlgorithmProtection(
+            {
+                'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
+                'signature_algorithm': SignedDigestAlgorithm(
+                    {'algorithm': 'sha512_rsa'}
+                ),
+            }
+        ),
+        cms.CMSAlgorithmProtection(
+            {
+                'digest_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
+            }
+        ),
+        None,
+    ],
+)
 def test_cms_algorithm_protection(replacement_value):
     output = _tamper_with_signed_attrs(
-        'cms_algorithm_protection', duplicate=replacement_value is None,
-        replace_with=replacement_value, resign=True
+        'cms_algorithm_protection',
+        duplicate=replacement_value is None,
+        replace_with=replacement_value,
+        resign=True,
     )
 
     r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
     with pytest.raises(SignatureValidationError, match='.*CMS.*'):
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
 def test_signed_attrs_tampering():
@@ -632,9 +692,7 @@ def test_no_message_digest():
     digest = emb.compute_digest()
 
     with pytest.raises(SignatureValidationError):
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
 def test_duplicate_content_type():
@@ -647,9 +705,7 @@ def test_duplicate_content_type():
     digest = emb.compute_digest()
 
     with pytest.raises(SignatureValidationError) as exc_info:
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
     assert exc_info.value.ades_status == AdESStatus.FAILED
 
 
@@ -663,9 +719,7 @@ def test_duplicate_content_type_oid():
     digest = emb.compute_digest()
 
     with pytest.raises(CMSStructuralError):
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
 def test_no_content_type():
@@ -676,9 +730,7 @@ def test_no_content_type():
     digest = emb.compute_digest()
 
     with pytest.raises(SignatureValidationError):
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
 def test_wrong_content_type():
@@ -694,9 +746,7 @@ def test_wrong_content_type():
     digest = emb.compute_digest()
 
     with pytest.raises(SignatureValidationError):
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
 @freeze_time('2020-11-01')
@@ -721,8 +771,9 @@ def test_sign_weak_digest():
 def test_sign_weak_digest_prevention():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', md_algorithm='md5',
-        validation_context=SIMPLE_V_CONTEXT()
+        field_name='Sig1',
+        md_algorithm='md5',
+        validation_context=SIMPLE_V_CONTEXT(),
     )
     with pytest.raises(SigningError, match='md5 is not allowed'):
         signers.sign_pdf(w, meta, signer=FROM_CA)
@@ -739,7 +790,7 @@ def test_forbidden_signature_algorithm():
         trust_roots=[ROOT_CERT],
         algorithm_usage_policy=DisallowWeakAlgorithmsPolicy(
             weak_signature_algos={'rsassa_pkcs1v15'}
-        )
+        ),
     )
     with pytest.raises(DisallowedAlgorithmError, match="rsa"):
         val_trusted(r.embedded_signatures[0], vc=rsa_banned_vc)
@@ -774,13 +825,14 @@ async def test_sign_weak_sig_digest_mismatch():
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA.get_cert(CertLabel('signer1')),
         signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer1')),
-        cert_registry=SimpleCertificateStore.from_certs([ROOT_CERT,
-                                                         INTERM_CERT])
+        cert_registry=SimpleCertificateStore.from_certs(
+            [ROOT_CERT, INTERM_CERT]
+        ),
     )
     cms_obj = await signer.async_sign(
         data_digest=prep_digest.document_digest,
         digest_algorithm=external_md_algorithm,
-        signed_attr_settings=PdfCMSSignedAttributes(signing_time=timestamp)
+        signed_attr_settings=PdfCMSSignedAttributes(signing_time=timestamp),
     )
     si_obj: cms.SignerInfo = cms_obj['content']['signer_infos'][0]
     bad_algo = SignedDigestAlgorithm({'algorithm': 'md5_rsa'})
@@ -799,7 +851,7 @@ async def test_sign_weak_sig_digest_mismatch():
         trust_roots=[ROOT_CERT], weak_hash_algos=set()
     )
     with pytest.raises(
-            SignatureValidationError, match="sha256 does not match.*md5"
+        SignatureValidationError, match="sha256 does not match.*md5"
     ):
         await async_val_trusted(emb, vc=lenient_vc)
 
@@ -807,11 +859,8 @@ async def test_sign_weak_sig_digest_mismatch():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_sign_weak_sig_digest():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', md_algorithm='md5'
-    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='md5')
     out = await signers.async_sign_pdf(w, meta, signer=FROM_CA)
 
     r = PdfFileReader(out)
@@ -824,9 +873,7 @@ async def test_sign_weak_sig_digest():
 @pytest.mark.asyncio
 async def test_sign_weak_sig_digest_allowed():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
-    meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', md_algorithm='md5'
-    )
+    meta = signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='md5')
     out = await signers.async_sign_pdf(w, meta, signer=FROM_CA)
 
     r = PdfFileReader(out)
@@ -857,7 +904,6 @@ def test_old_style_signing_cert_attr_ok(with_issser):
 @pytest.mark.parametrize("with_issser", [False, True])
 @freeze_time('2020-11-01')
 def test_old_style_signing_cert_attr_mismatch(with_issser):
-
     if with_issser:
         # this file has an old-style signing cert attr with issuerSerial
         fname = 'pades-with-old-style-signing-cert-attr-issser.pdf'
@@ -871,22 +917,26 @@ def test_old_style_signing_cert_attr_mismatch(with_issser):
     # signer1-long has the same key as signer1
     alt_cert = TESTING_CA.get_cert(CertLabel('signer1-long'))
     signer_info['sid'] = {
-        'issuer_and_serial_number': cms.IssuerAndSerialNumber({
-            'issuer': alt_cert.issuer,
-            'serial_number': alt_cert.serial_number
-        })
+        'issuer_and_serial_number': cms.IssuerAndSerialNumber(
+            {'issuer': alt_cert.issuer, 'serial_number': alt_cert.serial_number}
+        )
     }
     with pytest.raises(
-            SignatureValidationError,
-            match="Signing certificate attribute does not match ") as exc_info:
+        SignatureValidationError,
+        match="Signing certificate attribute does not match ",
+    ) as exc_info:
         validate_sig_integrity(
-            signer_info, alt_cert, expected_content_type='data',
-            actual_digest=digest
+            signer_info,
+            alt_cert,
+            expected_content_type='data',
+            actual_digest=digest,
         )
 
     assert exc_info.value.ades_status == AdESStatus.INDETERMINATE
-    assert exc_info.value.ades_subindication \
-           == AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+    assert (
+        exc_info.value.ades_subindication
+        == AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+    )
 
 
 def test_old_style_signing_cert_attr_get():
@@ -899,27 +949,28 @@ def test_old_style_signing_cert_attr_get():
 
 def test_signing_cert_attr_malformed_issuer():
     from asn1crypto import x509
+
     cert = TESTING_CA.get_cert(CertLabel('signer1'))
     bogus_attr = as_signing_certificate_v2(cert)
     bogus_attr['certs'][0]['issuer_serial']['issuer'][0] = x509.GeneralName(
         {'dns_name': 'www.example.com'}
     )
     output = _tamper_with_signed_attrs(
-        'signing_certificate_v2', resign=True,
-        replace_with=bogus_attr
+        'signing_certificate_v2', resign=True, replace_with=bogus_attr
     )
     r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
     with pytest.raises(
-            SignatureValidationError,
-            match="Signing certificate attribute does not match ") as exc_info:
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+        SignatureValidationError,
+        match="Signing certificate attribute does not match ",
+    ) as exc_info:
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
     assert exc_info.value.ades_status == AdESStatus.INDETERMINATE
-    assert exc_info.value.ades_subindication \
-           == AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+    assert (
+        exc_info.value.ades_subindication
+        == AdESIndeterminate.NO_SIGNING_CERTIFICATE_FOUND
+    )
 
 
 def test_signing_cert_attr_duplicated():
@@ -929,11 +980,10 @@ def test_signing_cert_attr_duplicated():
     r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
     digest = emb.compute_digest()
-    with pytest.raises(SignatureValidationError,
-                       match="Wrong cardinality for signing cert"):
-        validate_sig_integrity(
-            emb.signer_info, emb.signer_cert, 'data', digest
-        )
+    with pytest.raises(
+        SignatureValidationError, match="Wrong cardinality for signing cert"
+    ):
+        validate_sig_integrity(emb.signer_info, emb.signer_cert, 'data', digest)
 
 
 def test_verify_sig_without_signed_attrs():
@@ -989,17 +1039,17 @@ def test_sign_with_explicit_ecdsa_implied_hash():
     signer = signers.SimpleSigner(
         signing_cert=TESTING_CA_ECDSA.get_cert(CertLabel('signer1')),
         signing_key=TESTING_CA_ECDSA.key_set.get_private_key(
-            KeyLabel('signer1')),
+            KeyLabel('signer1')
+        ),
         cert_registry=SimpleCertificateStore.from_certs(
             [ECC_ROOT_CERT, ECC_INTERM_CERT]
         ),
         # this is not allowed, but the validator should accept it anyway
-        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'ecdsa'})
+        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'ecdsa'}),
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'),
-        signer=signer
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=signer
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1019,12 +1069,11 @@ def test_sign_with_explicit_dsa_implied_hash():
             [DSA_ROOT_CERT, DSA_INTERM_CERT]
         ),
         # this is not allowed, but the validator should accept it anyway
-        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'dsa'})
+        signature_mechanism=SignedDigestAlgorithm({'algorithm': 'dsa'}),
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'),
-        signer=signer
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=signer
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1039,7 +1088,8 @@ def test_sign_pss():
         CRYPTO_DATA_DIR + '/selfsigned.key.pem',
         CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
         ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
-        key_passphrase=b'secret', prefer_pss=True
+        key_passphrase=b'secret',
+        prefer_pss=True,
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -1061,17 +1111,28 @@ def test_sign_pss_md_discrepancy():
         CRYPTO_DATA_DIR + '/selfsigned.key.pem',
         CRYPTO_DATA_DIR + '/selfsigned.cert.pem',
         ca_chain_files=(CRYPTO_DATA_DIR + '/selfsigned.cert.pem',),
-        key_passphrase=b'secret', signature_mechanism=SignedDigestAlgorithm({
-            'algorithm': 'rsassa_pss',
-            'parameters': RSASSAPSSParams({
-                'mask_gen_algorithm': MaskGenAlgorithm({
-                    'algorithm': 'mgf1',
-                    'parameters': DigestAlgorithm({'algorithm': 'sha512'})
-                }),
-                'hash_algorithm': DigestAlgorithm({'algorithm': 'sha256'}),
-                'salt_length': 478
-            })
-        })
+        key_passphrase=b'secret',
+        signature_mechanism=SignedDigestAlgorithm(
+            {
+                'algorithm': 'rsassa_pss',
+                'parameters': RSASSAPSSParams(
+                    {
+                        'mask_gen_algorithm': MaskGenAlgorithm(
+                            {
+                                'algorithm': 'mgf1',
+                                'parameters': DigestAlgorithm(
+                                    {'algorithm': 'sha512'}
+                                ),
+                            }
+                        ),
+                        'hash_algorithm': DigestAlgorithm(
+                            {'algorithm': 'sha256'}
+                        ),
+                        'salt_length': 478,
+                    }
+                ),
+            }
+        ),
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
@@ -1115,9 +1176,10 @@ def test_direct_pdfcmsembedder_usage():
         cms_embedder.SigObjSetup(
             sig_placeholder=sig_obj,
             mdp_setup=cms_embedder.SigMDPSetup(
-                md_algorithm=md_algorithm, certify=True,
-                docmdp_perms=fields.MDPPerm.NO_CHANGES
-            )
+                md_algorithm=md_algorithm,
+                certify=True,
+                docmdp_perms=fields.MDPPerm.NO_CHANGES,
+            ),
         )
     )
 
@@ -1137,7 +1199,8 @@ def test_direct_pdfcmsembedder_usage():
         # noinspection PyDeprecation
         cms_bytes = signer.sign(
             data_digest=prep_digest.document_digest,
-            digest_algorithm=md_algorithm, timestamp=timestamp
+            digest_algorithm=md_algorithm,
+            timestamp=timestamp,
         ).dump()
     sig_contents = cms_writer.send(cms_bytes)
 
@@ -1166,12 +1229,15 @@ async def test_no_embed_root():
     cr = SimpleCertificateStore()
     cr.register_multiple(FROM_CA.cert_registry)
     no_embed_root_signer = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
-        cert_registry=cr, embed_roots=False
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=cr,
+        embed_roots=False,
     )
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'),
-        signer=no_embed_root_signer
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1'),
+        signer=no_embed_root_signer,
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1194,8 +1260,9 @@ async def test_noop_attribute_prov():
             yield NoopProv()
 
     signer = CustomSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
     )
     input_data = b'Hello world!'
     signature = await signer.async_sign_general_data(input_data, 'sha256')
@@ -1230,11 +1297,12 @@ async def test_no_certificates(delete):
     )
 
     signer: signers.SimpleSigner = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
         cert_registry=FROM_CA.cert_registry,
-        signature_mechanism=SignedDigestAlgorithm({
-            'algorithm': 'rsassa_pkcs1v15'
-        })
+        signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        ),
     )
     cms_obj = await signer.async_sign(
         data_digest=prep_digest.document_digest,
@@ -1253,8 +1321,7 @@ async def test_no_certificates(delete):
         await collect_validation_info(
             embedded_sig=emb, validation_context=ValidationContext()
         )
-    with pytest.raises(SignatureValidationError,
-                       match='signer cert.*includ'):
+    with pytest.raises(SignatureValidationError, match='signer cert.*includ'):
         r.embedded_signatures[0].signer_cert.dump()
 
 
@@ -1277,11 +1344,12 @@ async def test_two_signer_infos():
     )
 
     signer: signers.SimpleSigner = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
         cert_registry=SimpleCertificateStore(),
-        signature_mechanism=SignedDigestAlgorithm({
-            'algorithm': 'rsassa_pkcs1v15'
-        })
+        signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        ),
     )
     cms_obj = await signer.async_sign(
         data_digest=prep_digest.document_digest,
@@ -1307,14 +1375,16 @@ def get_ac_aware_signer(actual_signer='signer1'):
         signing_key=pki_arch.key_set.get_private_key(KeyLabel(actual_signer)),
         cert_registry=SimpleCertificateStore.from_certs(
             [
-                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
-                pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
-                pki_arch.get_cert('leaf-aa')
+                pki_arch.get_cert('root'),
+                pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'),
+                pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa'),
             ]
         ),
         attribute_certs=[
             pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-        ]
+        ],
     )
     return signer
 
@@ -1325,8 +1395,7 @@ async def test_embed_ac(requests_mock):
     signer = get_ac_aware_signer()
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1'),
-        signer=signer
+        w, signers.PdfSignatureMetadata(field_name='Sig1'), signer=signer
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1356,33 +1425,39 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
         tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
         certs_to_embed=SimpleCertificateStore.from_certs(
             [pki_arch.get_cert('root')]
-        )
+        ),
     )
     from certomancer.integrations.illusionist import Illusionist
     from pyhanko_certvalidator.fetchers.requests_fetchers import (
         RequestsFetcherBackend,
     )
+
     fetchers = RequestsFetcherBackend().get_fetchers()
     main_vc = ValidationContext(
-        trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
-        other_certs=signer.cert_registry, fetchers=fetchers,
-        revocation_mode='require'
+        trust_roots=[pki_arch.get_cert('root')],
+        allow_fetching=True,
+        other_certs=signer.cert_registry,
+        fetchers=fetchers,
+        revocation_mode='require',
     )
     ac_vc = ValidationContext(
-        trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
-        other_certs=signer.cert_registry, fetchers=fetchers,
-        revocation_mode='require'
+        trust_roots=[pki_arch.get_cert('root-aa')],
+        allow_fetching=True,
+        other_certs=signer.cert_registry,
+        fetchers=fetchers,
+        revocation_mode='require',
     )
     Illusionist(pki_arch).register(requests_mock)
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             embed_validation_info=True,
             validation_context=main_vc,
-            ac_validation_context=ac_vc
+            ac_validation_context=ac_vc,
         ),
         timestamper=dummy_ts,
-        signer=signer
+        signer=signer,
     )
 
     r = PdfFileReader(out)
@@ -1391,14 +1466,14 @@ async def test_embed_ac_revinfo_adobe_style(requests_mock):
     assert len(s.other_embedded_certs) == 5  # signer cert is excluded
     assert len(s.embedded_attr_certs) == 1
     from pyhanko.sign.validation import RevocationInfoValidationType
+
     status = await async_validate_pdf_ltv_signature(
-        s, RevocationInfoValidationType.ADOBE_STYLE,
-        validation_context_kwargs={
-            'trust_roots': [pki_arch.get_cert('root')]
-        },
+        s,
+        RevocationInfoValidationType.ADOBE_STYLE,
+        validation_context_kwargs={'trust_roots': [pki_arch.get_cert('root')]},
         ac_validation_context_kwargs={
             'trust_roots': [pki_arch.get_cert('root-aa')]
-        }
+        },
     )
     assert status.bottom_line
     roles = list(status.ac_attrs['role'].attr_values)
@@ -1416,8 +1491,10 @@ async def test_ac_detached(requests_mock):
     assert output['content']['version'].native == 'v4'
     main_vc, ac_vc = live_ac_vcs(requests_mock)
     status = await async_validate_detached_cms(
-        input_data, output['content'],
-        signer_validation_context=main_vc, ac_validation_context=ac_vc
+        input_data,
+        output['content'],
+        signer_validation_context=main_vc,
+        ac_validation_context=ac_vc,
     )
     assert status.bottom_line
     roles = list(status.ac_attrs['role'].attr_values)
@@ -1435,9 +1512,10 @@ async def test_ac_attr_validation_fail(requests_mock):
     output = await signer.async_sign_general_data(input_data, 'sha256')
     main_vc, ac_vc = live_ac_vcs(requests_mock)
     status = await async_validate_detached_cms(
-        input_data, output['content'],
+        input_data,
+        output['content'],
         signer_validation_context=main_vc,
-        ac_validation_context=main_vc  # pass in the wrong VC on purpose
+        ac_validation_context=main_vc,  # pass in the wrong VC on purpose
     )
     assert status.bottom_line  # this should still be OK
     assert len(list(status.ac_attrs)) == 0
@@ -1454,9 +1532,10 @@ async def test_ac_attr_validation_holder_mismatch(requests_mock):
     output = await signer.async_sign_general_data(input_data, 'sha256')
     main_vc, ac_vc = live_ac_vcs(requests_mock)
     status = await async_validate_detached_cms(
-        input_data, output['content'],
+        input_data,
+        output['content'],
         signer_validation_context=main_vc,
-        ac_validation_context=ac_vc
+        ac_validation_context=ac_vc,
     )
     assert status.bottom_line  # this should still be OK
     assert len(list(status.ac_attrs)) == 0
@@ -1467,8 +1546,11 @@ async def test_ac_attr_validation_holder_mismatch(requests_mock):
 @pytest.mark.asyncio
 async def test_detached_cades_cms_with_tst():
     signature = await FROM_CA.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS,
-        use_cades=True
+        b'Hello world!',
+        'sha256',
+        detached=False,
+        timestamper=DUMMY_TS,
+        use_cades=True,
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -1488,33 +1570,39 @@ class GenericOpenTypePair(core.Sequence):
 
 
 NONSENSICAL_ATTR = cms.AttCertAttribute.load(
-    GenericOpenTypePair({
-        'f1': core.ObjectIdentifier('2.5.4.72'),  # 'role'
-        'f2': cms.SetOfOctetString([
-            core.OctetString(b'This makes no sense')
-        ])
-    }).dump()
+    GenericOpenTypePair(
+        {
+            'f1': core.ObjectIdentifier('2.5.4.72'),  # 'role'
+            'f2': cms.SetOfOctetString(
+                [core.OctetString(b'This makes no sense')]
+            ),
+        }
+    ).dump()
 )
 
 UNTYPABLE_ATTR = cms.AttCertAttribute.load(
-    GenericOpenTypePair({
-        'f1': core.OctetString(b'This makes even less sense'),
-        'f2': cms.SetOfOctetString([
-            core.OctetString(b'This makes no sense')
-        ])
-    }).dump()
+    GenericOpenTypePair(
+        {
+            'f1': core.OctetString(b'This makes even less sense'),
+            'f2': cms.SetOfOctetString(
+                [core.OctetString(b'This makes no sense')]
+            ),
+        }
+    ).dump()
 )
 
 
 @pytest.mark.parametrize(
     'data,fatal',
-    list(itertools.product(
-        [
-            (NONSENSICAL_ATTR, 'Failed to parse claimed.*role'),
-            (UNTYPABLE_ATTR, 'Failed to parse.*unknown type')
-        ],
-        [True, False]
-    ))
+    list(
+        itertools.product(
+            [
+                (NONSENSICAL_ATTR, 'Failed to parse claimed.*role'),
+                (UNTYPABLE_ATTR, 'Failed to parse.*unknown type'),
+            ],
+            [True, False],
+        )
+    ),
 )
 @pytest.mark.asyncio
 async def test_parse_malformed_claimed_attrs(data, fatal):
@@ -1542,19 +1630,21 @@ async def test_validate_with_malformed_claimed_attrs(bad_attr, requests_mock):
     # This should parse up to the first level and be reencoded by asn1crypto
     #  without asking any questions.
     cms_sig = await FROM_CA.async_sign_general_data(
-        b'Hello world', digest_algorithm='sha256',
+        b'Hello world',
+        digest_algorithm='sha256',
         signed_attr_settings=PdfCMSSignedAttributes(
             cades_signed_attrs=CAdESSignedAttrSpec(
                 signer_attributes=SignerAttrSpec(
                     claimed_attrs=[bad_attr, SAMPLE_GROUP_ATTR],
-                    certified_attrs=[]
+                    certified_attrs=[],
                 )
             )
-        )
+        ),
     )
     status = await async_validate_detached_cms(
-        input_data=b'Hello world', signed_data=cms_sig['content'],
-        signer_validation_context=live_testing_vc(requests_mock)
+        input_data=b'Hello world',
+        signed_data=cms_sig['content'],
+        signer_validation_context=live_testing_vc(requests_mock),
     )
     assert isinstance(status, StandardCMSSignatureStatus)
     # The malformed attribute shouldn't have been processed,
@@ -1613,7 +1703,8 @@ async def test_parse_ac_with_malformed_attribute(requests_mock):
 
     pki_arch = PKIArchitecture(
         arch_label=ArchLabel('test'),
-        key_set=TESTING_CA.key_set, entities=TESTING_CA.entities,
+        key_set=TESTING_CA.key_set,
+        entities=TESTING_CA.entities,
         cert_spec_config=yaml.safe_load(BASIC_AC_ISSUER_SETUP),
         ac_spec_config=yaml.safe_load(attr_cert_cfg),
         service_config={},
@@ -1632,17 +1723,18 @@ async def test_parse_ac_with_malformed_attribute(requests_mock):
     spec.attributes.append(FakeAttrSpec())
 
     cms_sig = await FROM_CA.async_sign_general_data(
-        b'Hello world', digest_algorithm='sha256',
+        b'Hello world',
+        digest_algorithm='sha256',
         signed_attr_settings=PdfCMSSignedAttributes(
             cades_signed_attrs=CAdESSignedAttrSpec(
                 signer_attributes=SignerAttrSpec(
                     certified_attrs=[
                         pki_arch.get_attr_cert(CertLabel('test-ac'))
                     ],
-                    claimed_attrs=[]
+                    claimed_attrs=[],
                 )
             )
-        )
+        ),
     )
     vc = live_testing_vc(requests_mock)
     ac_vc = ValidationContext(
@@ -1650,9 +1742,10 @@ async def test_parse_ac_with_malformed_attribute(requests_mock):
         allow_fetching=False,
     )
     status = await async_validate_detached_cms(
-        input_data=b'Hello world', signed_data=cms_sig['content'],
+        input_data=b'Hello world',
+        signed_data=cms_sig['content'],
         signer_validation_context=vc,
-        ac_validation_context=ac_vc
+        ac_validation_context=ac_vc,
     )
     assert isinstance(status, StandardCMSSignatureStatus)
     # The malformed attribute shouldn't have been processed,
@@ -1669,15 +1762,18 @@ async def test_detached_cms_with_invalid_cn():
         signing_key=TESTING_CA.key_set.get_private_key(KeyLabel('signer2')),
         cert_registry=SimpleCertificateStore.from_certs(
             [ROOT_CERT, INTERM_CERT]
-        )
+        ),
     )
     signature = await sgn.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False,
+        b'Hello world!',
+        'sha256',
+        detached=False,
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content'],
-        signer_validation_context=SIMPLE_V_CONTEXT()
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=SIMPLE_V_CONTEXT(),
     )
     assert status.valid
     assert status.intact
@@ -1698,17 +1794,22 @@ async def test_detached_cms_with_invalid_cn_in_ca_wrong_cert():
             # (the actual CA cert can't be added to a certificate store
             #  because its subject isn't hashable)
             [ROOT_CERT, INTERM_CERT]
-        )
+        ),
     )
     signature = await sgn.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False,
+        b'Hello world!',
+        'sha256',
+        detached=False,
     )
     signature = cms.ContentInfo.load(signature.dump())
-    with pytest.raises(SignatureValidationError,
-                       match="Signing certificate attribute does not match"):
+    with pytest.raises(
+        SignatureValidationError,
+        match="Signing certificate attribute does not match",
+    ):
         await async_validate_detached_cms(
-            b'Hello world!', signature['content'],
-            signer_validation_context=SIMPLE_V_CONTEXT()
+            b'Hello world!',
+            signature['content'],
+            signer_validation_context=SIMPLE_V_CONTEXT(),
         )
 
 
@@ -1729,23 +1830,26 @@ async def test_detached_cms_with_invalid_cn_in_ca():
             # the malformed intermediate CA can't be added to a certificate
             # store, we'll do that later
             [ROOT_CERT]
-        )
+        ),
     )
     signature = await sgn.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False,
+        b'Hello world!',
+        'sha256',
+        detached=False,
     )
 
     signature['content']['certificates'].append(
         cms.CertificateChoices(
             name='certificate',
-            value=TESTING_CA_ERRORS.get_cert(CertLabel('ca-with-invalid-cn'))
+            value=TESTING_CA_ERRORS.get_cert(CertLabel('ca-with-invalid-cn')),
         )
     )
     signature = cms.ContentInfo.load(signature.dump())
 
     status = await async_validate_detached_cms(
-        b'Hello world!', signature['content'],
-        signer_validation_context=SIMPLE_V_CONTEXT()
+        b'Hello world!',
+        signature['content'],
+        signer_validation_context=SIMPLE_V_CONTEXT(),
     )
     assert status.valid
     assert status.intact
@@ -1755,20 +1859,24 @@ async def test_detached_cms_with_invalid_cn_in_ca():
     assert not status.trusted
 
 
-@pytest.mark.parametrize('testing_ca, expected_md', [
-    (TESTING_CA, 'sha256'),
-    (TESTING_CA_ECDSA, 'sha384'),
-    (TESTING_CA_ED25519, 'sha512'),
-    (TESTING_CA_ED448, 'shake256'),
-])
+@pytest.mark.parametrize(
+    'testing_ca, expected_md',
+    [
+        (TESTING_CA, 'sha256'),
+        (TESTING_CA_ECDSA, 'sha384'),
+        (TESTING_CA_ED25519, 'sha512'),
+        (TESTING_CA_ED448, 'shake256'),
+    ],
+)
 def test_key_based_digest_selection(testing_ca, expected_md):
     pubkey = testing_ca.key_set.get_public_key(KeyLabel('signer1'))
     md = select_suitable_signing_md(pubkey)
     assert md == expected_md
 
 
-async def _generate_badly_ordered_signed_attrs(digest: bytes,
-                                               signer: signers.Signer):
+async def _generate_badly_ordered_signed_attrs(
+    digest: bytes, signer: signers.Signer
+):
     class HackySeq(core.SequenceOf):
         tag = 17  # SET OF
         _child_spec = cms.CMSAttribute
@@ -1784,16 +1892,20 @@ async def _generate_badly_ordered_signed_attrs(digest: bytes,
         ]
 
     signing_cert = signer.signing_cert
-    seq = HackySeq([
-        simple_cms_attribute('content_type', cms.ContentType('data')),
-        simple_cms_attribute('message_digest', core.OctetString(digest)),
-        await attributes.SigningCertificateV2Provider(
-            signing_cert=signing_cert
-        ).get_attribute(),
-        # lexicographically, this one can't be last if we would encode this
-        # as a SET OF
-        simple_cms_attribute('2.999', core.OctetString(b"\xde\xad\xbe\xef")),
-    ])
+    seq = HackySeq(
+        [
+            simple_cms_attribute('content_type', cms.ContentType('data')),
+            simple_cms_attribute('message_digest', core.OctetString(digest)),
+            await attributes.SigningCertificateV2Provider(
+                signing_cert=signing_cert
+            ).get_attribute(),
+            # lexicographically, this one can't be last if we would encode this
+            # as a SET OF
+            simple_cms_attribute(
+                '2.999', core.OctetString(b"\xde\xad\xbe\xef")
+            ),
+        ]
+    )
 
     signature = await signer.async_sign_raw(
         seq.dump(), digest_algorithm='sha256'
@@ -1801,19 +1913,25 @@ async def _generate_badly_ordered_signed_attrs(digest: bytes,
 
     digest_algo_obj = cms.DigestAlgorithm({'algorithm': 'sha256'})
     algo = signer.get_signature_mechanism('sha256')
-    sig_info = HackySignerInfo({
-        'version': 'v1',
-        'sid': cms.SignerIdentifier({
-            'issuer_and_serial_number': cms.IssuerAndSerialNumber({
-                'issuer': signing_cert.issuer,
-                'serial_number': signing_cert.serial_number,
-            })
-        }),
-        'digest_algorithm': digest_algo_obj,
-        'signed_attrs': seq,
-        'signature_algorithm': algo,
-        'signature': signature,
-    })
+    sig_info = HackySignerInfo(
+        {
+            'version': 'v1',
+            'sid': cms.SignerIdentifier(
+                {
+                    'issuer_and_serial_number': cms.IssuerAndSerialNumber(
+                        {
+                            'issuer': signing_cert.issuer,
+                            'serial_number': signing_cert.serial_number,
+                        }
+                    )
+                }
+            ),
+            'digest_algorithm': digest_algo_obj,
+            'signed_attrs': seq,
+            'signature_algorithm': algo,
+            'signature': signature,
+        }
+    )
 
     nonder_data = sig_info.dump()
     sig_info = cms.SignerInfo.load(nonder_data)
@@ -1856,11 +1974,12 @@ async def test_tolerate_der_deviations_in_pdf():
     )
 
     signer: signers.SimpleSigner = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
         cert_registry=FROM_CA.cert_registry,
-        signature_mechanism=SignedDigestAlgorithm({
-            'algorithm': 'rsassa_pkcs1v15'
-        })
+        signature_mechanism=SignedDigestAlgorithm(
+            {'algorithm': 'rsassa_pkcs1v15'}
+        ),
     )
     cms_obj = await signer.async_sign(
         data_digest=prep_digest.document_digest,

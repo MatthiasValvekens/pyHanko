@@ -55,9 +55,14 @@ from pyhanko.sign.timestamps import TimeStamper
 from . import constants
 
 __all__ = [
-    'Signer', 'SimpleSigner', 'ExternalSigner', 'PdfCMSSignedAttributes',
-    'format_attributes', 'format_signed_attributes',
-    'asyncify_signer', 'select_suitable_signing_md'
+    'Signer',
+    'SimpleSigner',
+    'ExternalSigner',
+    'PdfCMSSignedAttributes',
+    'format_attributes',
+    'format_signed_attributes',
+    'asyncify_signer',
+    'select_suitable_signing_md',
 ]
 
 logger = logging.getLogger(__name__)
@@ -104,7 +109,6 @@ class PdfCMSSignedAttributes(CMSSignedAttributes):
 
 
 def _ensure_content_type(encap_content_info):
-
     encap_content_info = encap_content_info or {'content_type': 'data'}
     if isinstance(encap_content_info, core.Sequence):
         # could be cms.ContentInfo or cms.EncapsulatedContentInfo depending
@@ -116,9 +120,9 @@ def _ensure_content_type(encap_content_info):
     return encap_content_info, content_type
 
 
-def _cms_version(content_type: Union[str, core.ObjectIdentifier],
-                 has_attribute_certs):
-
+def _cms_version(
+    content_type: Union[str, core.ObjectIdentifier], has_attribute_certs
+):
     if has_attribute_certs:
         return 'v4'
 
@@ -132,22 +136,19 @@ def _cms_version(content_type: Union[str, core.ObjectIdentifier],
     return 'v1' if content_type == 'data' else 'v3'
 
 
-def _prepare_encap_content(input_data: Union[IO, bytes,
-                                             cms.ContentInfo,
-                                             cms.EncapsulatedContentInfo],
-                           digest_algorithm: str, detached=True,
-                           chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                           max_read=None):
-
+def _prepare_encap_content(
+    input_data: Union[IO, bytes, cms.ContentInfo, cms.EncapsulatedContentInfo],
+    digest_algorithm: str,
+    detached=True,
+    chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    max_read=None,
+):
     h = hashes.Hash(get_pyca_cryptography_hash(digest_algorithm))
     encap_content_info = None
-    if isinstance(input_data,
-                  (cms.ContentInfo, cms.EncapsulatedContentInfo)):
+    if isinstance(input_data, (cms.ContentInfo, cms.EncapsulatedContentInfo)):
         h.update(bytes(input_data['content']))
         if detached:
-            encap_content_info = {
-                'content_type': input_data['content_type']
-            }
+            encap_content_info = {'content_type': input_data['content_type']}
         else:
             encap_content_info = input_data
     elif isinstance(input_data, bytes):
@@ -156,9 +157,7 @@ def _prepare_encap_content(input_data: Union[IO, bytes,
             # use dicts instead of Asn1Value objects, to leave asn1crypto
             # to decide whether to use cms.ContentInfo or
             # cms.EncapsulatedContentInfo (for backwards compat with PCKS#7)
-            encap_content_info = {
-                'content_type': 'data', 'content': input_data
-            }
+            encap_content_info = {'content_type': 'data', 'content': input_data}
     elif not detached:
         # input stream is a buffer, and we're in 'enveloping' mode
         # read the entire thing into memory, since we need to embed
@@ -166,10 +165,7 @@ def _prepare_encap_content(input_data: Union[IO, bytes,
         input_bytes = input_data.read(max_read)
         h.update(input_bytes)
         # see above
-        encap_content_info = {
-            'content_type': 'data',
-            'content': input_bytes
-        }
+        encap_content_info = {'content_type': 'data', 'content': input_bytes}
     else:
         temp_buf = bytearray(chunk_size)
         misc.chunked_digest(temp_buf, input_data, h, max_read=max_read)
@@ -177,9 +173,11 @@ def _prepare_encap_content(input_data: Union[IO, bytes,
     return encap_content_info, digest_bytes
 
 
-async def format_attributes(attr_provs: List[CMSAttributeProvider],
-                            other_attrs: Iterable[cms.CMSAttributes] = (),
-                            dry_run: bool = False) -> cms.CMSAttributes:
+async def format_attributes(
+    attr_provs: List[CMSAttributeProvider],
+    other_attrs: Iterable[cms.CMSAttributes] = (),
+    dry_run: bool = False,
+) -> cms.CMSAttributes:
     """
     Format CMS attributes obtained from attribute providers.
 
@@ -203,10 +201,12 @@ async def format_attributes(attr_provs: List[CMSAttributeProvider],
     return cms.CMSAttributes(attrs)
 
 
-async def format_signed_attributes(data_digest: bytes,
-                                   attr_provs: List[CMSAttributeProvider],
-                                   content_type='data',
-                                   dry_run=False) -> cms.CMSAttributes:
+async def format_signed_attributes(
+    data_digest: bytes,
+    attr_provs: List[CMSAttributeProvider],
+    content_type='data',
+    dry_run=False,
+) -> cms.CMSAttributes:
     """
     Format signed attributes for a CMS ``SignerInfo`` value.
 
@@ -318,11 +318,13 @@ class Signer:
         self.prefer_pss = prefer_pss
         self.embed_roots = embed_roots
         self.signed_attr_prov_spec: Optional[SignedAttributeProviderSpec] = None
-        self.unsigned_attr_prov_spec: Optional[UnsignedAttributeProviderSpec] \
-            = None
+        self.unsigned_attr_prov_spec: Optional[
+            UnsignedAttributeProviderSpec
+        ] = None
 
-    def get_signature_mechanism(self, digest_algorithm) \
-            -> SignedDigestAlgorithm:
+    def get_signature_mechanism(
+        self, digest_algorithm
+    ) -> SignedDigestAlgorithm:
         """
         Get the signature mechanism for this signer to use.
         If :attr:`signature_mechanism` is set, it will be used.
@@ -354,9 +356,7 @@ class Signer:
             # The correspondence with the digestAlgorithm field in CMS is
             # verified separately.
             if digest_algorithm is None:
-                raise ValueError(
-                    "Digest algorithm required for ECDSA"
-                )
+                raise ValueError("Digest algorithm required for ECDSA")
             mech = digest_algorithm + '_ecdsa'
         elif algo == 'dsa':
             if digest_algorithm is None:
@@ -371,9 +371,7 @@ class Signer:
             if self.prefer_pss:
                 mech = 'rsassa_pss'
                 if digest_algorithm is None:
-                    raise ValueError(
-                        "Digest algorithm required for RSASSA-PSS"
-                    )
+                    raise ValueError("Digest algorithm required for RSASSA-PSS")
                 params = optimal_pss_params(self.signing_cert, digest_algorithm)
             elif digest_algorithm is not None:
                 mech = digest_algorithm + '_rsa'
@@ -382,9 +380,7 @@ class Signer:
         elif algo in ('ed25519', 'ed448'):
             mech = algo
         else:  # pragma: nocover
-            raise SigningError(
-                f"Signature mechanism {algo} is unsupported."
-            )
+            raise SigningError(f"Signature mechanism {algo} is unsupported.")
 
         sda_kwargs = {'algorithm': mech}
         if params is not None:
@@ -436,10 +432,13 @@ class Signer:
         if revinfo_dict:
             return asn1_pdf.RevocationInfoArchival(revinfo_dict)
 
-    def _signed_attr_provider_spec(self,
-                                   attr_settings: PdfCMSSignedAttributes,
-                                   timestamper=None, use_cades=False,
-                                   is_pdf_sig=True):
+    def _signed_attr_provider_spec(
+        self,
+        attr_settings: PdfCMSSignedAttributes,
+        timestamper=None,
+        use_cades=False,
+        is_pdf_sig=True,
+    ):
         """
         Internal method to select a default attribute provider spec if none
         is available already.
@@ -450,28 +449,34 @@ class Signer:
         elif use_cades:
             return CAdESSignedAttributeProviderSpec(
                 attr_settings=attr_settings,
-                signing_cert=self.signing_cert, is_pades=is_pdf_sig,
-                timestamper=timestamper
+                signing_cert=self.signing_cert,
+                is_pades=is_pdf_sig,
+                timestamper=timestamper,
             )
         elif is_pdf_sig:
             return GenericPdfSignedAttributeProviderSpec(
                 attr_settings=attr_settings,
                 signing_cert=self.signing_cert,
                 signature_mechanism=self.get_signature_mechanism,
-                timestamper=timestamper
+                timestamper=timestamper,
             )
         else:
             return GenericCMSSignedAttributeProviderSpec(
                 attr_settings=attr_settings,
                 signing_cert=self.signing_cert,
                 signature_mechanism=self.get_signature_mechanism,
-                timestamper=timestamper
+                timestamper=timestamper,
             )
 
-    def _signed_attr_providers(self, data_digest: bytes, digest_algorithm: str,
-                               attr_settings: PdfCMSSignedAttributes,
-                               timestamper=None, use_cades=False,
-                               is_pdf_sig=True):
+    def _signed_attr_providers(
+        self,
+        data_digest: bytes,
+        digest_algorithm: str,
+        attr_settings: PdfCMSSignedAttributes,
+        timestamper=None,
+        use_cades=False,
+        is_pdf_sig=True,
+    ):
         """
         Prepare "standard" signed attribute providers. Internal API.
         """
@@ -480,30 +485,37 @@ class Signer:
             attr_settings=attr_settings,
             timestamper=timestamper,
             use_cades=use_cades,
-            is_pdf_sig=is_pdf_sig
+            is_pdf_sig=is_pdf_sig,
         )
 
         return spec.signed_attr_providers(
-            data_digest=data_digest, digest_algorithm=digest_algorithm,
+            data_digest=data_digest,
+            digest_algorithm=digest_algorithm,
         )
 
-    def _unsigned_attr_provider_spec(self,
-                                     timestamper: Optional[TimeStamper] = None):
+    def _unsigned_attr_provider_spec(
+        self, timestamper: Optional[TimeStamper] = None
+    ):
         if self.unsigned_attr_prov_spec is not None:
             return self.unsigned_attr_prov_spec
         else:
             return DefaultUnsignedAttributes(timestamper=timestamper)
 
-    def _unsigned_attr_providers(self, digest_algorithm: str, signature: bytes,
-                                 signed_attrs: cms.CMSAttributes,
-                                 timestamper: Optional[TimeStamper] = None):
+    def _unsigned_attr_providers(
+        self,
+        digest_algorithm: str,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+        timestamper: Optional[TimeStamper] = None,
+    ):
         """
         Prepare "standard" unsigned attribute providers. Internal API.
         """
         spec = self._unsigned_attr_provider_spec(timestamper)
         return spec.unsigned_attr_providers(
-            digest_algorithm=digest_algorithm, signature=signature,
-            signed_attrs=signed_attrs
+            digest_algorithm=digest_algorithm,
+            signature=signature,
+            signed_attrs=signed_attrs,
         )
 
     def signer_info(self, digest_algorithm: str, signed_attrs, signature):
@@ -531,28 +543,39 @@ class Signer:
             )
         # build the signer info object that goes into the PKCS7 signature
         # (see RFC 2315 § 9.2)
-        sig_info = cms.SignerInfo({
-            'version': 'v1',
-            'sid': cms.SignerIdentifier({
-                'issuer_and_serial_number': cms.IssuerAndSerialNumber({
-                    'issuer': signing_cert.issuer,
-                    'serial_number': signing_cert.serial_number,
-                })
-            }),
-            'digest_algorithm': digest_algorithm_obj,
-            'signature_algorithm': self.get_signature_mechanism(
-                digest_algorithm
-            ),
-            'signed_attrs': signed_attrs,
-            'signature': signature
-        })
+        sig_info = cms.SignerInfo(
+            {
+                'version': 'v1',
+                'sid': cms.SignerIdentifier(
+                    {
+                        'issuer_and_serial_number': cms.IssuerAndSerialNumber(
+                            {
+                                'issuer': signing_cert.issuer,
+                                'serial_number': signing_cert.serial_number,
+                            }
+                        )
+                    }
+                ),
+                'digest_algorithm': digest_algorithm_obj,
+                'signature_algorithm': self.get_signature_mechanism(
+                    digest_algorithm
+                ),
+                'signed_attrs': signed_attrs,
+                'signature': signature,
+            }
+        )
         return sig_info
 
-    def _package_signature(self, *, digest_algorithm: str,
-                           cms_version, signed_attrs: cms.CMSAttributes,
-                           signature: bytes, unsigned_attrs: cms.CMSAttributes,
-                           encap_content_info) -> cms.ContentInfo:
-
+    def _package_signature(
+        self,
+        *,
+        digest_algorithm: str,
+        cms_version,
+        signed_attrs: cms.CMSAttributes,
+        signature: bytes,
+        unsigned_attrs: cms.CMSAttributes,
+        encap_content_info,
+    ) -> cms.ContentInfo:
         encap_content_info = encap_content_info or {'content_type': 'data'}
         digest_algorithm_obj = algos.DigestAlgorithm(
             {'algorithm': digest_algorithm}
@@ -577,7 +600,8 @@ class Signer:
             # asn1crypto either way.
             certs = {
                 cms.CertificateChoices(name='certificate', value=cert)
-                for cert in cert_registry if cert.self_signed == 'no'
+                for cert in cert_registry
+                if cert.self_signed == 'no'
             }
         certs.add(
             cms.CertificateChoices(name='certificate', value=self.signing_cert)
@@ -593,16 +617,17 @@ class Signer:
             'digest_algorithms': cms.DigestAlgorithms((digest_algorithm_obj,)),
             'encap_content_info': encap_content_info,
             'certificates': certs,
-            'signer_infos': [sig_info]
+            'signer_infos': [sig_info],
         }
 
-        return cms.ContentInfo({
-            'content_type': cms.ContentType('signed_data'),
-            'content': cms.SignedData(signed_data)
-        })
+        return cms.ContentInfo(
+            {
+                'content_type': cms.ContentType('signed_data'),
+                'content': cms.SignedData(signed_data),
+            }
+        )
 
     def _check_digest_algorithm(self, digest_algorithm: str):
-
         implied_hash_algo = None
         try:
             # Just using self.signature_mechanism is not good enough,
@@ -621,16 +646,19 @@ class Signer:
         except ValueError:
             # this is OK, just use the specified message digest
             pass
-        if implied_hash_algo is not None \
-                and implied_hash_algo != digest_algorithm:
+        if (
+            implied_hash_algo is not None
+            and implied_hash_algo != digest_algorithm
+        ):
             raise SigningError(
                 f"Selected signature mechanism specifies message digest "
                 f"{implied_hash_algo}, but {digest_algorithm} "
                 f"was requested."
             )
 
-    async def async_sign_raw(self, data: bytes, digest_algorithm: str,
-                             dry_run=False) -> bytes:
+    async def async_sign_raw(
+        self, data: bytes, digest_algorithm: str, dry_run=False
+    ) -> bytes:
         """
         Compute the raw cryptographic signature of the data provided, hashed
         using the digest algorithm provided.
@@ -651,11 +679,14 @@ class Signer:
         """
         raise NotImplementedError
 
-    async def unsigned_attrs(self, digest_algorithm: str,
-                             signature: bytes,
-                             signed_attrs: cms.CMSAttributes,
-                             timestamper=None, dry_run=False) \
-            -> Optional[cms.CMSAttributes]:
+    async def unsigned_attrs(
+        self,
+        digest_algorithm: str,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+        timestamper=None,
+        dry_run=False,
+    ) -> Optional[cms.CMSAttributes]:
         """
         .. versionchanged:: 0.9.0
             Made asynchronous _(breaking change)_
@@ -692,16 +723,22 @@ class Signer:
             signature=signature,
             signed_attrs=signed_attrs,
             digest_algorithm=digest_algorithm,
-            timestamper=timestamper
+            timestamper=timestamper,
         )
         attrs = await format_attributes(list(provs), dry_run=dry_run)
         return attrs or None
 
-    async def signed_attrs(self, data_digest: bytes,
-                           digest_algorithm: str,
-                           attr_settings: PdfCMSSignedAttributes = None,
-                           content_type='data', use_pades=False,
-                           timestamper=None, dry_run=False, is_pdf_sig=True):
+    async def signed_attrs(
+        self,
+        data_digest: bytes,
+        digest_algorithm: str,
+        attr_settings: PdfCMSSignedAttributes = None,
+        content_type='data',
+        use_pades=False,
+        timestamper=None,
+        dry_run=False,
+        is_pdf_sig=True,
+    ):
         """
         .. versionchanged:: 0.4.0
             Added positional ``digest_algorithm`` parameter _(breaking change)_.
@@ -752,22 +789,32 @@ class Signer:
         attr_settings = attr_settings or PdfCMSSignedAttributes()
 
         provs = self._signed_attr_providers(
-            data_digest=data_digest, digest_algorithm=digest_algorithm,
-            use_cades=use_pades, attr_settings=attr_settings,
-            timestamper=timestamper, is_pdf_sig=is_pdf_sig
+            data_digest=data_digest,
+            digest_algorithm=digest_algorithm,
+            use_cades=use_pades,
+            attr_settings=attr_settings,
+            timestamper=timestamper,
+            is_pdf_sig=is_pdf_sig,
         )
 
         return await format_signed_attributes(
-            data_digest, attr_provs=list(provs),
-            content_type=content_type, dry_run=dry_run
+            data_digest,
+            attr_provs=list(provs),
+            content_type=content_type,
+            dry_run=dry_run,
         )
 
-    async def async_sign(self, data_digest: bytes, digest_algorithm: str,
-                         dry_run=False, use_pades=False, timestamper=None,
-                         signed_attr_settings: PdfCMSSignedAttributes = None,
-                         is_pdf_sig=True, encap_content_info=None) \
-            -> cms.ContentInfo:
-
+    async def async_sign(
+        self,
+        data_digest: bytes,
+        digest_algorithm: str,
+        dry_run=False,
+        use_pades=False,
+        timestamper=None,
+        signed_attr_settings: PdfCMSSignedAttributes = None,
+        is_pdf_sig=True,
+        encap_content_info=None,
+    ) -> cms.ContentInfo:
         """
         .. versionadded:: 0.9.0
 
@@ -817,26 +864,37 @@ class Signer:
             An :class:`~.asn1crypto.cms.ContentInfo` object.
         """
 
-        encap_content_info, content_type \
-            = _ensure_content_type(encap_content_info)
+        encap_content_info, content_type = _ensure_content_type(
+            encap_content_info
+        )
         signed_attrs = await self.signed_attrs(
-            data_digest, digest_algorithm, attr_settings=signed_attr_settings,
-            use_pades=use_pades, timestamper=timestamper,
-            dry_run=dry_run, content_type=content_type, is_pdf_sig=is_pdf_sig
+            data_digest,
+            digest_algorithm,
+            attr_settings=signed_attr_settings,
+            use_pades=use_pades,
+            timestamper=timestamper,
+            dry_run=dry_run,
+            content_type=content_type,
+            is_pdf_sig=is_pdf_sig,
         )
         return await self.async_sign_prescribed_attributes(
-            digest_algorithm, signed_attrs,
+            digest_algorithm,
+            signed_attrs,
             cms_version=_cms_version(content_type, bool(self.attribute_certs)),
-            dry_run=dry_run, timestamper=timestamper,
-            encap_content_info=encap_content_info
+            dry_run=dry_run,
+            timestamper=timestamper,
+            encap_content_info=encap_content_info,
         )
 
-    async def async_sign_prescribed_attributes(self, digest_algorithm: str,
-                                               signed_attrs: cms.CMSAttributes,
-                                               cms_version='v1',
-                                               dry_run=False, timestamper=None,
-                                               encap_content_info=None) \
-            -> cms.ContentInfo:
+    async def async_sign_prescribed_attributes(
+        self,
+        digest_algorithm: str,
+        signed_attrs: cms.CMSAttributes,
+        cms_version='v1',
+        dry_run=False,
+        timestamper=None,
+        encap_content_info=None,
+    ) -> cms.ContentInfo:
         """
         .. versionadded:: 0.9.0
 
@@ -886,28 +944,34 @@ class Signer:
             signed_attrs.dump(), digest_algorithm.lower(), dry_run
         )
         unsigned_attrs = await self.unsigned_attrs(
-            digest_algorithm, signature,
+            digest_algorithm,
+            signature,
             signed_attrs=signed_attrs,
             timestamper=timestamper,
-            dry_run=dry_run
+            dry_run=dry_run,
         )
         return self._package_signature(
-            digest_algorithm=digest_algorithm, cms_version=cms_version,
-            signed_attrs=signed_attrs, signature=signature,
-            unsigned_attrs=unsigned_attrs, encap_content_info=encap_content_info
+            digest_algorithm=digest_algorithm,
+            cms_version=cms_version,
+            signed_attrs=signed_attrs,
+            signature=signature,
+            unsigned_attrs=unsigned_attrs,
+            encap_content_info=encap_content_info,
         )
 
     async def async_sign_general_data(
-            self,
-            input_data: Union[IO, bytes,
-                              cms.ContentInfo,
-                              cms.EncapsulatedContentInfo],
-            digest_algorithm: str, detached=True,
-            use_cades=False, timestamper=None,
-            chunk_size=misc.DEFAULT_CHUNK_SIZE,
-            signed_attr_settings:
-            PdfCMSSignedAttributes = None,
-            max_read=None) -> cms.ContentInfo:
+        self,
+        input_data: Union[
+            IO, bytes, cms.ContentInfo, cms.EncapsulatedContentInfo
+        ],
+        digest_algorithm: str,
+        detached=True,
+        use_cades=False,
+        timestamper=None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        signed_attr_settings: PdfCMSSignedAttributes = None,
+        max_read=None,
+    ) -> cms.ContentInfo:
         """
         .. versionadded:: 0.9.0
 
@@ -960,22 +1024,34 @@ class Signer:
         """
 
         encap_content_info, digest_bytes = _prepare_encap_content(
-            input_data=input_data, digest_algorithm=digest_algorithm,
-            detached=detached, chunk_size=chunk_size, max_read=max_read
+            input_data=input_data,
+            digest_algorithm=digest_algorithm,
+            detached=detached,
+            chunk_size=chunk_size,
+            max_read=max_read,
         )
         return await self.async_sign(
-            data_digest=digest_bytes, digest_algorithm=digest_algorithm,
-            use_pades=use_cades, is_pdf_sig=False,
-            timestamper=timestamper, encap_content_info=encap_content_info,
-            signed_attr_settings=signed_attr_settings
+            data_digest=digest_bytes,
+            digest_algorithm=digest_algorithm,
+            use_pades=use_cades,
+            is_pdf_sig=False,
+            timestamper=timestamper,
+            encap_content_info=encap_content_info,
+            signed_attr_settings=signed_attr_settings,
         )
 
-    def sign(self, data_digest: bytes, digest_algorithm: str,
-             timestamp: datetime = None, dry_run=False,
-             revocation_info=None, use_pades=False, timestamper=None,
-             cades_signed_attr_meta: CAdESSignedAttrSpec = None,
-             encap_content_info=None) -> cms.ContentInfo:
-
+    def sign(
+        self,
+        data_digest: bytes,
+        digest_algorithm: str,
+        timestamp: datetime = None,
+        dry_run=False,
+        revocation_info=None,
+        use_pades=False,
+        timestamper=None,
+        cades_signed_attr_meta: CAdESSignedAttrSpec = None,
+        encap_content_info=None,
+    ) -> cms.ContentInfo:
         """
         .. deprecated:: 0.9.0
             Use :meth:`async_sign` instead.
@@ -1037,25 +1113,33 @@ class Signer:
         """
         warnings.warn(
             "'Signer.sign' is deprecated, use 'Signer.async_sign' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
         signed_attr_settings = PdfCMSSignedAttributes(
-            signing_time=timestamp, adobe_revinfo_attr=revocation_info,
-            cades_signed_attrs=cades_signed_attr_meta
+            signing_time=timestamp,
+            adobe_revinfo_attr=revocation_info,
+            cades_signed_attrs=cades_signed_attr_meta,
         )
         sign_coro = self.async_sign(
-            data_digest=data_digest, digest_algorithm=digest_algorithm,
-            dry_run=dry_run, use_pades=use_pades, timestamper=timestamper,
+            data_digest=data_digest,
+            digest_algorithm=digest_algorithm,
+            dry_run=dry_run,
+            use_pades=use_pades,
+            timestamper=timestamper,
             signed_attr_settings=signed_attr_settings,
-            encap_content_info=encap_content_info
+            encap_content_info=encap_content_info,
         )
         return asyncio.run(sign_coro)
 
-    def sign_prescribed_attributes(self, digest_algorithm: str,
-                                   signed_attrs: cms.CMSAttributes,
-                                   cms_version='v1',
-                                   dry_run=False, timestamper=None,
-                                   encap_content_info=None) -> cms.ContentInfo:
+    def sign_prescribed_attributes(
+        self,
+        digest_algorithm: str,
+        signed_attrs: cms.CMSAttributes,
+        cms_version='v1',
+        dry_run=False,
+        timestamper=None,
+        encap_content_info=None,
+    ) -> cms.ContentInfo:
         """
         .. versionadded: 0.7.0
 
@@ -1106,25 +1190,32 @@ class Signer:
         warnings.warn(
             "'Signer.sign_prescribed_attributes' is deprecated, use "
             "'Signer.async_sign_prescribed_attributes' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
         sign_coro = self.async_sign_prescribed_attributes(
             digest_algorithm=digest_algorithm,
             signed_attrs=signed_attrs,
-            cms_version=cms_version, dry_run=dry_run, timestamper=timestamper,
-            encap_content_info=encap_content_info
+            cms_version=cms_version,
+            dry_run=dry_run,
+            timestamper=timestamper,
+            encap_content_info=encap_content_info,
         )
         return asyncio.run(sign_coro)
 
-    def sign_general_data(self, input_data: Union[IO, bytes,
-                                                  cms.ContentInfo,
-                                                  cms.EncapsulatedContentInfo],
-                          digest_algorithm: str, detached=True,
-                          timestamp: datetime = None,
-                          use_cades=False, timestamper=None,
-                          cades_signed_attr_meta: CAdESSignedAttrSpec = None,
-                          chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                          max_read=None) -> cms.ContentInfo:
+    def sign_general_data(
+        self,
+        input_data: Union[
+            IO, bytes, cms.ContentInfo, cms.EncapsulatedContentInfo
+        ],
+        digest_algorithm: str,
+        detached=True,
+        timestamp: datetime = None,
+        use_cades=False,
+        timestamper=None,
+        cades_signed_attr_meta: CAdESSignedAttrSpec = None,
+        chunk_size=misc.DEFAULT_CHUNK_SIZE,
+        max_read=None,
+    ) -> cms.ContentInfo:
         """
         .. versionadded:: 0.7.0
 
@@ -1192,17 +1283,20 @@ class Signer:
         warnings.warn(
             "'Signer.sign_general_data' is deprecated, use "
             "'Signer.async_sign_general_data' instead",
-            DeprecationWarning
+            DeprecationWarning,
         )
         signed_attr_settings = PdfCMSSignedAttributes(
             signing_time=timestamp, cades_signed_attrs=cades_signed_attr_meta
         )
         sign_coro = self.async_sign_general_data(
-            input_data=input_data, digest_algorithm=digest_algorithm,
-            detached=detached, use_cades=use_cades,
-            timestamper=timestamper, chunk_size=chunk_size,
+            input_data=input_data,
+            digest_algorithm=digest_algorithm,
+            detached=detached,
+            use_cades=use_cades,
+            timestamper=timestamper,
+            chunk_size=chunk_size,
             signed_attr_settings=signed_attr_settings,
-            max_read=max_read
+            max_read=max_read,
         )
         return asyncio.run(sign_coro)
 
@@ -1213,12 +1307,15 @@ def asyncify_signer(signer_cls):
     with the new async API.
     """
 
-    async def async_sign_raw(self, data: bytes, digest_algorithm: str,
-                             dry_run=False) -> bytes:
+    async def async_sign_raw(
+        self, data: bytes, digest_algorithm: str, dry_run=False
+    ) -> bytes:
         coro = to_thread(
             lambda: signer_cls.sign_raw(
-                self, data=data, digest_algorithm=digest_algorithm,
-                dry_run=dry_run
+                self,
+                data=data,
+                digest_algorithm=digest_algorithm,
+                dry_run=dry_run,
             )
         )
         return await coro
@@ -1238,11 +1335,16 @@ class SimpleSigner(Signer):
     Private key associated with the certificate in :attr:`signing_cert`.
     """
 
-    def __init__(self, signing_cert: x509.Certificate,
-                 signing_key: keys.PrivateKeyInfo,
-                 cert_registry: CertificateStore,
-                 signature_mechanism: SignedDigestAlgorithm = None,
-                 prefer_pss=False, embed_roots=True, attribute_certs=None):
+    def __init__(
+        self,
+        signing_cert: x509.Certificate,
+        signing_key: keys.PrivateKeyInfo,
+        cert_registry: CertificateStore,
+        signature_mechanism: SignedDigestAlgorithm = None,
+        prefer_pss=False,
+        embed_roots=True,
+        attribute_certs=None,
+    ):
         self.signing_cert = signing_cert
         self.signing_key = signing_key
         self.cert_registry = cert_registry
@@ -1251,8 +1353,9 @@ class SimpleSigner(Signer):
             self.attribute_certs = list(attribute_certs)
         super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
-    async def async_sign_raw(self, data: bytes, digest_algorithm: str,
-                             dry_run=False) -> bytes:
+    async def async_sign_raw(
+        self, data: bytes, digest_algorithm: str, dry_run=False
+    ) -> bytes:
         return self.sign_raw(data, digest_algorithm)
 
     def sign_raw(self, data: bytes, digest_algorithm: str) -> bytes:
@@ -1312,9 +1415,15 @@ class SimpleSigner(Signer):
             return None
 
     @classmethod
-    def load_pkcs12(cls, pfx_file, ca_chain_files=None,
-                    other_certs=None, passphrase=None,
-                    signature_mechanism=None, prefer_pss=False):
+    def load_pkcs12(
+        cls,
+        pfx_file,
+        ca_chain_files=None,
+        other_certs=None,
+        passphrase=None,
+        signature_mechanism=None,
+        prefer_pss=False,
+    ):
         """
         Load certificates and key material from a PCKS#12 archive
         (usually ``.pfx`` or ``.p12`` files).
@@ -1347,13 +1456,17 @@ class SimpleSigner(Signer):
             logger.error(f'Could not open PKCS#12 file {pfx_file}.', exc_info=e)
             return None
 
-        ca_chain = cls._load_ca_chain(ca_chain_files) \
-            if ca_chain_files else set()
+        ca_chain = (
+            cls._load_ca_chain(ca_chain_files) if ca_chain_files else set()
+        )
         if ca_chain is None:  # pragma: nocover
             return None
         try:
-            (private_key, cert, other_certs_pkcs12) \
-                = pkcs12.load_key_and_certificates(pfx_bytes, passphrase)
+            (
+                private_key,
+                cert,
+                other_certs_pkcs12,
+            ) = pkcs12.load_key_and_certificates(pfx_bytes, passphrase)
         except (IOError, ValueError, TypeError) as e:
             logger.error(
                 'Could not load key material from PKCS#12 file', exc_info=e
@@ -1361,10 +1474,9 @@ class SimpleSigner(Signer):
             return None
         kinfo = _translate_pyca_cryptography_key_to_asn1(private_key)
         cert = _translate_pyca_cryptography_cert_to_asn1(cert)
-        other_certs_pkcs12 = set(map(
-            _translate_pyca_cryptography_cert_to_asn1,
-            other_certs_pkcs12
-        ))
+        other_certs_pkcs12 = set(
+            map(_translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
+        )
 
         cs = SimpleCertificateStore()
         certs_to_register = ca_chain | other_certs_pkcs12
@@ -1372,15 +1484,24 @@ class SimpleSigner(Signer):
             certs_to_register |= set(other_certs)
         cs.register_multiple(certs_to_register)
         return SimpleSigner(
-            signing_key=kinfo, signing_cert=cert,
-            cert_registry=cs, signature_mechanism=signature_mechanism,
-            prefer_pss=prefer_pss
+            signing_key=kinfo,
+            signing_cert=cert,
+            cert_registry=cs,
+            signature_mechanism=signature_mechanism,
+            prefer_pss=prefer_pss,
         )
 
     @classmethod
-    def load(cls, key_file, cert_file, ca_chain_files=None,
-             key_passphrase=None, other_certs=None,
-             signature_mechanism=None, prefer_pss=False):
+    def load(
+        cls,
+        key_file,
+        cert_file,
+        ca_chain_files=None,
+        key_passphrase=None,
+        other_certs=None,
+        signature_mechanism=None,
+        prefer_pss=False,
+    ):
         """
         Load certificates and key material from PEM/DER files.
 
@@ -1418,15 +1539,18 @@ class SimpleSigner(Signer):
         if ca_chain is None:  # pragma: nocover
             return None
 
-        other_certs = ca_chain if other_certs is None \
-            else ca_chain + other_certs
+        other_certs = (
+            ca_chain if other_certs is None else ca_chain + other_certs
+        )
 
         cert_reg = SimpleCertificateStore()
         cert_reg.register_multiple(other_certs)
         return SimpleSigner(
-            signing_cert=signing_cert, signing_key=signing_key,
-            cert_registry=cert_reg, signature_mechanism=signature_mechanism,
-            prefer_pss=prefer_pss
+            signing_cert=signing_cert,
+            signing_key=signing_key,
+            cert_registry=cert_reg,
+            signature_mechanism=signature_mechanism,
+            prefer_pss=prefer_pss,
         )
 
 
@@ -1453,11 +1577,15 @@ class ExternalSigner(Signer):
         Whether to embed relevant root certificates into the CMS payload.
     """
 
-    def __init__(self, signing_cert: Optional[x509.Certificate],
-                 cert_registry: Optional[CertificateStore],
-                 signature_value: Union[bytes, int, None] = None,
-                 signature_mechanism: Optional[SignedDigestAlgorithm] = None,
-                 prefer_pss: bool = False, embed_roots: bool = True):
+    def __init__(
+        self,
+        signing_cert: Optional[x509.Certificate],
+        cert_registry: Optional[CertificateStore],
+        signature_value: Union[bytes, int, None] = None,
+        signature_mechanism: Optional[SignedDigestAlgorithm] = None,
+        prefer_pss: bool = False,
+        embed_roots: bool = True,
+    ):
         self.signing_cert = signing_cert
         self.cert_registry = cert_registry or SimpleCertificateStore()
         self.signature_mechanism = signature_mechanism
@@ -1468,9 +1596,9 @@ class ExternalSigner(Signer):
             self._signature_value = bytes(signature_value or 256)
         super().__init__(prefer_pss=prefer_pss, embed_roots=embed_roots)
 
-    async def async_sign_raw(self,
-                             data: bytes, digest_algorithm: str,
-                             dry_run=False) -> bytes:
+    async def async_sign_raw(
+        self, data: bytes, digest_algorithm: str, dry_run=False
+    ) -> bytes:
         """
         Return a fixed signature value.
         """
@@ -1482,21 +1610,23 @@ class GenericCMSSignedAttributeProviderSpec(SignedAttributeProviderSpec):
     Signed attribute provider spec for generic CMS signatures.
     """
 
-    def __init__(self,
-                 attr_settings: CMSSignedAttributes,
-                 signing_cert: Optional[x509.Certificate],
-                 signature_mechanism: Union[
-                     Callable[[str], algos.SignedDigestAlgorithm],
-                     None
-                 ],
-                 timestamper: Optional[TimeStamper]):
+    def __init__(
+        self,
+        attr_settings: CMSSignedAttributes,
+        signing_cert: Optional[x509.Certificate],
+        signature_mechanism: Union[
+            Callable[[str], algos.SignedDigestAlgorithm], None
+        ],
+        timestamper: Optional[TimeStamper],
+    ):
         self.signing_cert = signing_cert
         self.attr_settings = attr_settings
         self.signature_mechanism = signature_mechanism
         self.timestamper = timestamper
 
-    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
-            -> Iterable[CMSAttributeProvider]:
+    def signed_attr_providers(
+        self, data_digest: bytes, digest_algorithm: str
+    ) -> Iterable[CMSAttributeProvider]:
         attr_settings = self.attr_settings
         if self.signing_cert is not None:
             yield attributes.SigningCertificateV2Provider(
@@ -1509,7 +1639,7 @@ class GenericCMSSignedAttributeProviderSpec(SignedAttributeProviderSpec):
             yield from attr_settings.cades_signed_attrs.prepare_providers(
                 message_digest=data_digest,
                 md_algorithm=digest_algorithm,
-                timestamper=self.timestamper
+                timestamper=self.timestamper,
             )
 
         if self.signature_mechanism is not None:
@@ -1519,42 +1649,45 @@ class GenericCMSSignedAttributeProviderSpec(SignedAttributeProviderSpec):
             #  old, or it might not allow undefined signed attributes.
             # In the meantime, we only add this attribute to non-PAdES sigs
             yield attributes.CMSAlgorithmProtectionProvider(
-                digest_algo=digest_algorithm,
-                signature_algo=mech
+                digest_algo=digest_algorithm, signature_algo=mech
             )
 
 
-class GenericPdfSignedAttributeProviderSpec(GenericCMSSignedAttributeProviderSpec):
+class GenericPdfSignedAttributeProviderSpec(
+    GenericCMSSignedAttributeProviderSpec
+):
     """
     Signed attribute provider spec for generic PDF signatures.
     """
 
-    def __init__(self,
-                 attr_settings: PdfCMSSignedAttributes,
-                 signing_cert: Optional[x509.Certificate],
-                 signature_mechanism: Union[
-                     Callable[[str], algos.SignedDigestAlgorithm],
-                     None
-                 ],
-                 timestamper: Optional[TimeStamper]):
+    def __init__(
+        self,
+        attr_settings: PdfCMSSignedAttributes,
+        signing_cert: Optional[x509.Certificate],
+        signature_mechanism: Union[
+            Callable[[str], algos.SignedDigestAlgorithm], None
+        ],
+        timestamper: Optional[TimeStamper],
+    ):
         super().__init__(
             attr_settings=attr_settings,
             signing_cert=signing_cert,
             signature_mechanism=signature_mechanism,
-            timestamper=timestamper
+            timestamper=timestamper,
         )
 
-    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
-            -> Iterable[CMSAttributeProvider]:
+    def signed_attr_providers(
+        self, data_digest: bytes, digest_algorithm: str
+    ) -> Iterable[CMSAttributeProvider]:
         yield from super().signed_attr_providers(
             data_digest=data_digest, digest_algorithm=digest_algorithm
-
         )
         attr_settings = self.attr_settings
         assert isinstance(attr_settings, PdfCMSSignedAttributes)
         if attr_settings.adobe_revinfo_attr is not None:
             yield attributes.AdobeRevinfoProvider(
-                value=attr_settings.adobe_revinfo_attr)
+                value=attr_settings.adobe_revinfo_attr
+            )
 
 
 class CAdESSignedAttributeProviderSpec(SignedAttributeProviderSpec):
@@ -1562,17 +1695,21 @@ class CAdESSignedAttributeProviderSpec(SignedAttributeProviderSpec):
     Signed attribute provider spec for CAdES and PAdES signatures.
     """
 
-    def __init__(self, attr_settings: CMSSignedAttributes,
-                 signing_cert: x509.Certificate, is_pades: bool,
-                 timestamper: Optional[TimeStamper]):
+    def __init__(
+        self,
+        attr_settings: CMSSignedAttributes,
+        signing_cert: x509.Certificate,
+        is_pades: bool,
+        timestamper: Optional[TimeStamper],
+    ):
         self.signing_cert = signing_cert
         self.attr_settings = attr_settings
         self.is_pades = is_pades
         self.timestamper = timestamper
 
-    def signed_attr_providers(self, data_digest: bytes, digest_algorithm: str) \
-            -> Iterable[CMSAttributeProvider]:
-
+    def signed_attr_providers(
+        self, data_digest: bytes, digest_algorithm: str
+    ) -> Iterable[CMSAttributeProvider]:
         yield attributes.SigningCertificateV2Provider(
             signing_cert=self.signing_cert
         )
@@ -1590,7 +1727,7 @@ class CAdESSignedAttributeProviderSpec(SignedAttributeProviderSpec):
             yield from cades_meta.prepare_providers(
                 message_digest=data_digest,
                 md_algorithm=digest_algorithm,
-                timestamper=self.timestamper
+                timestamper=self.timestamper,
             )
 
 
@@ -1603,14 +1740,18 @@ class DefaultUnsignedAttributes(UnsignedAttributeProviderSpec):
         self.timestamper = timestamper
 
     def unsigned_attr_providers(
-            self, signature: bytes, signed_attrs: cms.CMSAttributes,
-            digest_algorithm: str) -> Iterable[CMSAttributeProvider]:
+        self,
+        signature: bytes,
+        signed_attrs: cms.CMSAttributes,
+        digest_algorithm: str,
+    ) -> Iterable[CMSAttributeProvider]:
         timestamper = self.timestamper
         if timestamper is not None:
             # the timestamp server needs to cross-sign our signature
             yield attributes.TSTProvider(
-                digest_algorithm=digest_algorithm, data_to_ts=signature,
-                timestamper=timestamper
+                digest_algorithm=digest_algorithm,
+                data_to_ts=signature,
+                timestamper=timestamper,
             )
 
 

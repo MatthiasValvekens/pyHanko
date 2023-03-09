@@ -22,8 +22,10 @@ from .errors import NoDSSFoundError, ValidationInfoReadingError
 from .pdf_embedded import EmbeddedPdfSignature
 
 __all__ = [
-    'VRI', 'DocumentSecurityStore', 'async_add_validation_info',
-    'collect_validation_info'
+    'VRI',
+    'DocumentSecurityStore',
+    'async_add_validation_info',
+    'collect_validation_info',
 ]
 
 from ...pdf_utils.crypt import SerialisedCredential
@@ -91,9 +93,15 @@ class DocumentSecurityStore:
     Representation of a DSS in Python.
     """
 
-    def __init__(self, writer: BasePdfFileWriter,
-                 certs=None, ocsps=None, crls=None,
-                 vri_entries=None, backing_pdf_object=None):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        certs=None,
+        ocsps=None,
+        crls=None,
+        vri_entries=None,
+        backing_pdf_object=None,
+    ):
         self.vri_entries = vri_entries if vri_entries is not None else {}
         self.certs = certs if certs is not None else {}
         self.ocsps = ocsps if ocsps is not None else []
@@ -101,7 +109,8 @@ class DocumentSecurityStore:
 
         self.writer = writer
         self.backing_pdf_object = (
-            backing_pdf_object if backing_pdf_object is not None
+            backing_pdf_object
+            if backing_pdf_object is not None
             else generic.DictionaryObject()
         )
 
@@ -263,8 +272,9 @@ class DocumentSecurityStore:
             cert = Certificate.load(cert_stream.data)
             yield cert
 
-    def as_validation_context(self, validation_context_kwargs,
-                              include_revinfo=True) -> ValidationContext:
+    def as_validation_context(
+        self, validation_context_kwargs, include_revinfo=True
+    ) -> ValidationContext:
         """
         Construct a validation context from the data in this DSS.
 
@@ -295,9 +305,7 @@ class DocumentSecurityStore:
                 crls.append(crl)
             validation_context_kwargs['crls'] = crls
 
-        return ValidationContext(
-            other_certs=certs, **validation_context_kwargs
-        )
+        return ValidationContext(other_certs=certs, **validation_context_kwargs)
 
     @classmethod
     def read_dss(cls, handler: PdfHandler) -> 'DocumentSecurityStore':
@@ -352,18 +360,28 @@ class DocumentSecurityStore:
         # are automagically preserved if they happened to be included in
         # the original file
         dss = cls(
-            writer=writer, certs=cert_refs, ocsps=ocsp_refs,
-            vri_entries=vri_entries, crls=crl_refs, backing_pdf_object=dss_dict
+            writer=writer,
+            certs=cert_refs,
+            ocsps=ocsp_refs,
+            vri_entries=vri_entries,
+            crls=crl_refs,
+            backing_pdf_object=dss_dict,
         )
         return dss
 
     @classmethod
-    def supply_dss_in_writer(cls, pdf_out: BasePdfFileWriter,
-                             sig_contents, *, certs=None,
-                             ocsps=None, crls=None, paths=None,
-                             validation_context=None,
-                             embed_roots: bool = True) \
-            -> 'DocumentSecurityStore':
+    def supply_dss_in_writer(
+        cls,
+        pdf_out: BasePdfFileWriter,
+        sig_contents,
+        *,
+        certs=None,
+        ocsps=None,
+        crls=None,
+        paths=None,
+        validation_context=None,
+        embed_roots: bool = True
+    ) -> 'DocumentSecurityStore':
         """
         Add or update a DSS, and optionally associate the new information with a
         VRI entry tied to a signature object.
@@ -417,15 +435,16 @@ class DocumentSecurityStore:
             dss = cls(writer=pdf_out)
 
         if sig_contents is not None:
-            identifier = \
-                DocumentSecurityStore.sig_content_identifier(sig_contents)
+            identifier = DocumentSecurityStore.sig_content_identifier(
+                sig_contents
+            )
         else:
             identifier = None
 
         def _certs():
             yield from certs or ()
             path: ValidationPath
-            for path in (paths or ()):
+            for path in paths or ():
                 path_parts = iter(path)
                 if not embed_roots:
                     # skip the first cert (i.e. the root)
@@ -456,10 +475,20 @@ class DocumentSecurityStore:
         return dss
 
     @classmethod
-    def add_dss(cls, output_stream, sig_contents, *, certs=None,
-                ocsps=None, crls=None, paths=None, validation_context=None,
-                force_write: bool = False, embed_roots: bool = True,
-                file_credential: Optional[SerialisedCredential] = None):
+    def add_dss(
+        cls,
+        output_stream,
+        sig_contents,
+        *,
+        certs=None,
+        ocsps=None,
+        crls=None,
+        paths=None,
+        validation_context=None,
+        force_write: bool = False,
+        embed_roots: bool = True,
+        file_credential: Optional[SerialisedCredential] = None
+    ):
         """
         Wrapper around :meth:`supply_dss_in_writer`.
 
@@ -509,17 +538,24 @@ class DocumentSecurityStore:
         if pdf_out.security_handler is not None and file_credential is not None:
             pdf_out.security_handler.authenticate(file_credential)
         dss = cls.supply_dss_in_writer(
-            pdf_out, sig_contents, certs=certs, ocsps=ocsps,
-            crls=crls, paths=paths, validation_context=validation_context,
-            embed_roots=embed_roots
+            pdf_out,
+            sig_contents,
+            certs=certs,
+            ocsps=ocsps,
+            crls=crls,
+            paths=paths,
+            validation_context=validation_context,
+            embed_roots=embed_roots,
         )
         if force_write or dss.modified:
             pdf_out.write_in_place()
 
 
-async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
-                                  validation_context: ValidationContext,
-                                  skip_timestamp=False):
+async def collect_validation_info(
+    embedded_sig: EmbeddedPdfSignature,
+    validation_context: ValidationContext,
+    skip_timestamp=False,
+):
     """
     Query revocation info for a PDF signature using a validation context,
     and store the results in a validation context.
@@ -543,8 +579,9 @@ async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
         A list of validation paths.
     """
 
-    revinfo_fetch_policy = \
+    revinfo_fetch_policy = (
         validation_context.revinfo_policy.revocation_checking_policy
+    )
     if not revinfo_fetch_policy.essential:
         logger.warning(
             "Revocation mode is set to soft-fail/tolerant mode; collected "
@@ -559,8 +596,9 @@ async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
         other_certs = cert_info.other_certs
 
         validator = CertificateValidator(
-            cert, intermediate_certs=other_certs,
-            validation_context=validation_context
+            cert,
+            intermediate_certs=other_certs,
+            validation_context=validation_context,
         )
         path = await validator.async_validate_usage(key_usage=set())
         paths.append(path)
@@ -572,13 +610,17 @@ async def collect_validation_info(embedded_sig: EmbeddedPdfSignature,
     return paths
 
 
-async def async_add_validation_info(embedded_sig: EmbeddedPdfSignature,
-                                    validation_context: ValidationContext,
-                                    skip_timestamp=False, add_vri_entry=True,
-                                    in_place=False, output=None,
-                                    force_write=False,
-                                    chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                                    embed_roots: bool = True):
+async def async_add_validation_info(
+    embedded_sig: EmbeddedPdfSignature,
+    validation_context: ValidationContext,
+    skip_timestamp=False,
+    add_vri_entry=True,
+    in_place=False,
+    output=None,
+    force_write=False,
+    chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    embed_roots: bool = True,
+):
     """
     .. versionadded: 0.9.0
 
@@ -651,8 +693,11 @@ async def async_add_validation_info(embedded_sig: EmbeddedPdfSignature,
     pdf_out = IncrementalPdfFileWriter.from_reader(reader)
     pdf_out.IO_CHUNK_SIZE = chunk_size
     resulting_dss = DocumentSecurityStore.supply_dss_in_writer(
-        pdf_out, sig_contents, validation_context=validation_context,
-        paths=paths, embed_roots=embed_roots
+        pdf_out,
+        sig_contents,
+        validation_context=validation_context,
+        paths=paths,
+        embed_roots=embed_roots,
     )
     if force_write or resulting_dss.modified:
         if in_place:

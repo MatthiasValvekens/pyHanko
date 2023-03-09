@@ -26,43 +26,59 @@ from pyhanko.stamp import BaseStampStyle, TextStampStyle
 from .pdf_byterange import PdfSignedData
 
 __all__ = [
-    'PdfCMSEmbedder', 'SigMDPSetup', 'SigObjSetup',
-    'SigAppearanceSetup', 'SigIOSetup',
+    'PdfCMSEmbedder',
+    'SigMDPSetup',
+    'SigObjSetup',
+    'SigAppearanceSetup',
+    'SigIOSetup',
 ]
 
 
 def docmdp_reference_dictionary(permission_level: MDPPerm):
     # this is part of the /Reference entry of the signature object.
-    return generic.DictionaryObject({
-        pdf_name('/Type'): pdf_name('/SigRef'),
-        pdf_name('/TransformMethod'): pdf_name('/DocMDP'),
-        pdf_name('/TransformParams'): generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/TransformParams'),
-            pdf_name('/V'): pdf_name('/1.2'),
-            pdf_name('/P'): generic.NumberObject(permission_level.value)
-        })
-    })
+    return generic.DictionaryObject(
+        {
+            pdf_name('/Type'): pdf_name('/SigRef'),
+            pdf_name('/TransformMethod'): pdf_name('/DocMDP'),
+            pdf_name('/TransformParams'): generic.DictionaryObject(
+                {
+                    pdf_name('/Type'): pdf_name('/TransformParams'),
+                    pdf_name('/V'): pdf_name('/1.2'),
+                    pdf_name('/P'): generic.NumberObject(
+                        permission_level.value
+                    ),
+                }
+            ),
+        }
+    )
 
 
-def fieldmdp_reference_dictionary(field_mdp_spec: FieldMDPSpec,
-                                  data_ref: generic.Reference):
+def fieldmdp_reference_dictionary(
+    field_mdp_spec: FieldMDPSpec, data_ref: generic.Reference
+):
     data_ref = generic.IndirectObject(
         data_ref.idnum, data_ref.generation, data_ref.pdf
     )
     # this is part of the /Reference entry of the signature object.
-    return generic.DictionaryObject({
-        pdf_name('/Type'): pdf_name('/SigRef'),
-        pdf_name('/TransformMethod'): pdf_name('/FieldMDP'),
-        pdf_name('/Data'): data_ref,
-        pdf_name('/TransformParams'): field_mdp_spec.as_transform_params()
-    })
+    return generic.DictionaryObject(
+        {
+            pdf_name('/Type'): pdf_name('/SigRef'),
+            pdf_name('/TransformMethod'): pdf_name('/FieldMDP'),
+            pdf_name('/Data'): data_ref,
+            pdf_name('/TransformParams'): field_mdp_spec.as_transform_params(),
+        }
+    )
 
 
 # Wrapper around prepare_sig_field with some error reporting
 
-def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
-                            existing_fields_only,
-                            new_field_spec: Optional[SigFieldSpec] = None):
+
+def _get_or_create_sigfield(
+    field_name,
+    pdf_out: BasePdfFileWriter,
+    existing_fields_only,
+    new_field_spec: Optional[SigFieldSpec] = None,
+):
     root = pdf_out.root
     if field_name is None:
         if not existing_fields_only:
@@ -82,15 +98,12 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
         except StopIteration:
             raise SigningError('There are no empty signature fields.')
 
-        others = ', '.join(
-            fn for fn, _, _ in empty_fields if fn is not None
-        )
+        others = ', '.join(fn for fn, _, _ in empty_fields if fn is not None)
         if others:
             raise SigningError(
                 'There are several empty signature fields. Please specify '
-                'a field name. The options are %s, %s.' % (
-                    found_field_name, others
-                )
+                'a field name. The options are %s, %s.'
+                % (found_field_name, others)
             )
     else:
         # grab or create a sig field
@@ -102,20 +115,23 @@ def _get_or_create_sigfield(field_name, pdf_out: BasePdfFileWriter,
                 )[0],
                 'combine_annotation': new_field_spec.combine_annotation,
                 'invis_settings': new_field_spec.invis_sig_settings,
-                'visible_settings': new_field_spec.visible_sig_settings
+                'visible_settings': new_field_spec.visible_sig_settings,
             }
         else:
             sig_field_kwargs = {}
 
         field_created, sig_field_ref = prepare_sig_field(
-            field_name, root, update_writer=pdf_out,
+            field_name,
+            root,
+            update_writer=pdf_out,
             existing_fields_only=existing_fields_only,
             **sig_field_kwargs
         )
         if field_created and new_field_spec is not None:
             apply_sig_field_spec_properties(
-                pdf_out, sig_field=sig_field_ref.get_object(),
-                sig_field_spec=new_field_spec
+                pdf_out,
+                sig_field=sig_field_ref.get_object(),
+                sig_field_spec=new_field_spec,
             )
 
     ensure_sig_flags(writer=pdf_out, lock_sig_flags=True)
@@ -181,9 +197,7 @@ class SigMDPSetup:
                 root['/Perms'] = perms = generic.DictionaryObject()
             perms[pdf_name('/DocMDP')] = sig_obj_ref
             writer.update_container(perms)
-            reference_array.append(
-                docmdp_reference_dictionary(docmdp_perms)
-            )
+            reference_array.append(docmdp_reference_dictionary(docmdp_perms))
 
         if lock is not None:
             fieldmdp_ref = fieldmdp_reference_dictionary(
@@ -194,8 +208,9 @@ class SigMDPSetup:
             if docmdp_perms is not None:
                 # NOTE: this is NOT spec-compatible, but emulates Acrobat
                 # behaviour
-                fieldmdp_ref['/TransformParams']['/P'] = \
-                    generic.NumberObject(docmdp_perms.value)
+                fieldmdp_ref['/TransformParams']['/P'] = generic.NumberObject(
+                    docmdp_perms.value
+                )
 
         if reference_array:
             sig_obj_ref.get_object()['/Reference'] = reference_array
@@ -355,8 +370,12 @@ class PdfCMSEmbedder:
     def __init__(self, new_field_spec: Optional[SigFieldSpec] = None):
         self.new_field_spec = new_field_spec
 
-    def write_cms(self, field_name: str, writer: BasePdfFileWriter,
-                  existing_fields_only=False):
+    def write_cms(
+        self,
+        field_name: str,
+        writer: BasePdfFileWriter,
+        existing_fields_only=False,
+    ):
         """
         .. versionadded:: 0.3.0
 
@@ -427,13 +446,15 @@ class PdfCMSEmbedder:
             A generator coroutine implementing the protocol described above.
         """
 
-        new_field_spec = self.new_field_spec \
-            if not existing_fields_only else None
+        new_field_spec = (
+            self.new_field_spec if not existing_fields_only else None
+        )
         # start by creating or fetching the appropriate signature field
         field_created, sig_field_ref = _get_or_create_sigfield(
-            field_name, writer,
+            field_name,
+            writer,
             existing_fields_only,
-            new_field_spec=new_field_spec
+            new_field_spec=new_field_spec,
         )
 
         # yield control to caller to further process the field dictionary
@@ -447,7 +468,7 @@ class PdfCMSEmbedder:
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
             try:
-                sig_annot, = sig_field['/Kids']
+                (sig_annot,) = sig_field['/Kids']
                 sig_annot = sig_annot.get_object()
             except (ValueError, TypeError):
                 raise SigningError(
@@ -484,6 +505,9 @@ class PdfCMSEmbedder:
 
         # pass control to the sig object's write_signature coroutine
         yield from sig_obj.fill(
-            writer, sig_io.md_algorithm, in_place=sig_io.in_place,
-            output=sig_io.output, chunk_size=sig_io.chunk_size
+            writer,
+            sig_io.md_algorithm,
+            in_place=sig_io.in_place,
+            output=sig_io.output,
+            chunk_size=sig_io.chunk_size,
         )

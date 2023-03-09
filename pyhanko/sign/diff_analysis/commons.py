@@ -18,8 +18,11 @@ from .rules_api import ReferenceUpdate
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    'qualify', 'safe_whitelist', 'compare_key_refs',
-    'compare_dicts', 'assert_not_stream',
+    'qualify',
+    'safe_whitelist',
+    'compare_key_refs',
+    'compare_dicts',
+    'assert_not_stream',
 ]
 
 TwoVersions = Tuple[Optional[generic.PdfObject], Optional[generic.PdfObject]]
@@ -35,8 +38,9 @@ def assert_not_stream(obj):
         )
 
 
-def safe_whitelist(old: HistoricalResolver, old_ref, new_ref) \
-        -> Generator[Reference, None, None]:
+def safe_whitelist(
+    old: HistoricalResolver, old_ref, new_ref
+) -> Generator[Reference, None, None]:
     """
     Checks whether an indirect reference in a PDF structure
     can be updated without clobbering an older object in a way
@@ -68,10 +72,12 @@ def safe_whitelist(old: HistoricalResolver, old_ref, new_ref) \
         )
 
 
-def compare_key_refs(key, old: HistoricalResolver,
-                     old_dict: generic.DictionaryObject,
-                     new_dict: generic.DictionaryObject) \
-        -> Generator[Reference, None, TwoVersions]:
+def compare_key_refs(
+    key,
+    old: HistoricalResolver,
+    old_dict: generic.DictionaryObject,
+    new_dict: generic.DictionaryObject,
+) -> Generator[Reference, None, TwoVersions]:
     """
     Ensure that updating a key in a dictionary has no undesirable side effects.
     The following scenarios are allowed:
@@ -124,10 +130,11 @@ R = TypeVar('R')
 X = TypeVar('X')
 
 
-def qualify(level: ModificationLevel,
-            rule_result: Generator[X, None, R],
-            transform: Callable[[X], ReferenceUpdate] = lambda x: x)\
-        -> Generator[Tuple[ModificationLevel, ReferenceUpdate], None, R]:
+def qualify(
+    level: ModificationLevel,
+    rule_result: Generator[X, None, R],
+    transform: Callable[[X], ReferenceUpdate] = lambda x: x,
+) -> Generator[Tuple[ModificationLevel, ReferenceUpdate], None, R]:
     """
     This is a helper function for rule implementors.
     It attaches a fixed modification level to an existing reference update
@@ -175,8 +182,12 @@ def qualify(level: ModificationLevel,
     )
 
 
-def compare_dicts(old_dict: PdfObject, new_dict: PdfObject,
-                  ignored: Set[str] = frozenset(), raise_exc=True) -> bool:
+def compare_dicts(
+    old_dict: PdfObject,
+    new_dict: PdfObject,
+    ignored: Set[str] = frozenset(),
+    raise_exc=True,
+) -> bool:
     """
     Compare entries in two dictionaries, optionally ignoring certain keys.
     """
@@ -197,8 +208,7 @@ def compare_dicts(old_dict: PdfObject, new_dict: PdfObject,
     if new_dict_keys != old_dict_keys:
         if raise_exc:
             raise SuspiciousModification(
-                f"Dict keys differ: {new_dict_keys} vs. "
-                f"{old_dict_keys}."
+                f"Dict keys differ: {new_dict_keys} vs. " f"{old_dict_keys}."
             )
         else:
             return False

@@ -13,10 +13,7 @@ from ..rules_api import (
     WhitelistRule,
 )
 
-__all__ = [
-    'CatalogModificationRule', 'ObjectStreamRule',
-    'XrefStreamRule'
-]
+__all__ = ['CatalogModificationRule', 'ObjectStreamRule', 'XrefStreamRule']
 
 
 class CatalogModificationRule(QualifiedWhitelistRule):
@@ -35,14 +32,14 @@ class CatalogModificationRule(QualifiedWhitelistRule):
 
     def __init__(self, ignored_keys=None):
         self.ignored_keys = (
-            ignored_keys if ignored_keys is not None
+            ignored_keys
+            if ignored_keys is not None
             else ROOT_EXEMPT_STRICT_COMPARISON
         )
 
-    def apply_qualified(self, old: HistoricalResolver,
-                        new: HistoricalResolver) \
-            -> Iterable[Tuple[ModificationLevel, Reference]]:
-
+    def apply_qualified(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[Tuple[ModificationLevel, Reference]]:
         old_root = old.root
         new_root = new.root
         # first, check if the keys in the document catalog are unchanged
@@ -58,14 +55,13 @@ class CatalogModificationRule(QualifiedWhitelistRule):
         for key in ('/Extensions', '/MarkInfo'):
             yield from qualify(
                 ModificationLevel.LTA_UPDATES,
-                compare_key_refs(
-                    key, old, old_root, new_root
-                ),
+                compare_key_refs(key, old, old_root, new_root),
                 transform=lambda ref: ReferenceUpdate(
-                    ref, context_checked=Context.from_absolute(
+                    ref,
+                    context_checked=Context.from_absolute(
                         old, RawPdfPath('/Root', key)
-                    )
-                )
+                    ),
+                ),
             )
 
         yield ModificationLevel.LTA_UPDATES, ReferenceUpdate(
@@ -74,7 +70,7 @@ class CatalogModificationRule(QualifiedWhitelistRule):
             # and since we checked with compare_dicts, doing a blanket
             # approval is much easier than figuring out all the ways
             # in which /Root can be cross-referenced.
-            context_checked=None
+            context_checked=None,
         )
 
 
@@ -87,8 +83,9 @@ class ObjectStreamRule(WhitelistRule):
     in them.
     """
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[Reference]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[Reference]:
         # object streams are OK, but overriding object streams is not.
         for objstream_ref in new.object_streams_used():
             if old.is_ref_available(objstream_ref):
@@ -100,8 +97,9 @@ class XrefStreamRule(WhitelistRule):
     Rule that allows new cross-reference streams to be defined.
     """
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[Reference]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[Reference]:
         xrefs = new.reader.xrefs
         xref_meta = xrefs.get_xref_container_info(new.revision)
         xref_stm = xref_meta.stream_ref

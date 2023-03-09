@@ -1,6 +1,6 @@
 name: Lint
 
-on: [push, pull_request]
+on: ["push", "pull_request"]
 
 jobs:
   lint:
@@ -8,6 +8,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
-      - run: pip install isort
+      - run: pip install isort black
       - name: Check import order
-        run: isort --profile black --line-length 80 --check .
+        run: isort --profile black --line-length 80 --check pyhanko pyhanko_tests
+      - name: Run Black
+        run: black -S --line-length 80 --check pyhanko pyhanko_tests

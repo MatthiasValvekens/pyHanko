@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     'StandardDiffPolicy',
-    'DEFAULT_DIFF_POLICY', 'NO_CHANGES_DIFF_POLICY',
+    'DEFAULT_DIFF_POLICY',
+    'NO_CHANGES_DIFF_POLICY',
 ]
 
 
@@ -97,16 +98,14 @@ def _find_orphans(hist_rev: HistoricalResolver):
     return candidate_orphans
 
 
-def _is_id(
-        old_object: generic.PdfObject,
-        new_object: generic.PdfObject):
+def _is_id(old_object: generic.PdfObject, new_object: generic.PdfObject):
     primitives = (
         generic.NumberObject,
         generic.FloatObject,
         generic.BooleanObject,
         generic.NameObject,
         generic.NullObject,
-        generic.IndirectObject
+        generic.IndirectObject,
     )
     for prim in primitives:
         if isinstance(old_object, prim):
@@ -114,13 +113,17 @@ def _is_id(
 
     strings = (generic.TextStringObject, generic.ByteStringObject)
     if isinstance(old_object, strings):
-        return isinstance(new_object, strings) \
-               and old_object.original_bytes == new_object.original_bytes
+        return (
+            isinstance(new_object, strings)
+            and old_object.original_bytes == new_object.original_bytes
+        )
 
     if isinstance(old_object, generic.ArrayObject):
-        return isinstance(new_object, generic.ArrayObject) \
-                and len(new_object) == len(old_object) \
-                and all(_is_id(x, y) for x, y in zip(old_object, new_object))
+        return (
+            isinstance(new_object, generic.ArrayObject)
+            and len(new_object) == len(old_object)
+            and all(_is_id(x, y) for x, y in zip(old_object, new_object))
+        )
 
     if isinstance(old_object, generic.StreamObject):
         # fallthrough to dict case if this check passes
@@ -177,20 +180,27 @@ class StandardDiffPolicy(DiffPolicy):
         Pointless and annoying, but also more or less harmless.
     """
 
-    def __init__(self, global_rules: List[QualifiedWhitelistRule],
-                 form_rule: Optional[FormUpdatingRule],
-                 reject_object_freeing=True, ignore_orphaned_objects=True,
-                 ignore_identical_objects=True):
+    def __init__(
+        self,
+        global_rules: List[QualifiedWhitelistRule],
+        form_rule: Optional[FormUpdatingRule],
+        reject_object_freeing=True,
+        ignore_orphaned_objects=True,
+        ignore_identical_objects=True,
+    ):
         self.global_rules = global_rules
         self.form_rule = form_rule
         self.reject_object_freeing = reject_object_freeing
         self.ignore_orphaned_objects = ignore_orphaned_objects
         self.ignore_identical_objects = ignore_identical_objects
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver,
-              field_mdp_spec: Optional[FieldMDPSpec] = None,
-              doc_mdp: Optional[MDPPerm] = None) -> DiffResult:
-
+    def apply(
+        self,
+        old: HistoricalResolver,
+        new: HistoricalResolver,
+        field_mdp_spec: Optional[FieldMDPSpec] = None,
+        doc_mdp: Optional[MDPPerm] = None,
+    ) -> DiffResult:
         if doc_mdp == MDPPerm.ANNOTATE:
             logger.warning(
                 "StandardDiffPolicy was not designed to support "
@@ -247,7 +257,8 @@ class StandardDiffPolicy(DiffPolicy):
                     # approve all usages that match the relative context,
                     # keep the rest
                     usages = set(
-                        ctx for ctx in usages
+                        ctx
+                        for ctx in usages
                         if ctx.relative_view != _upd.context_checked
                     )
                 else:
@@ -276,8 +287,9 @@ class StandardDiffPolicy(DiffPolicy):
             form_changes = self.form_rule.apply(old, new)
 
             def is_locked(fq_name):
-                return field_mdp_spec is not None \
-                       and field_mdp_spec.is_locked(fq_name)
+                return field_mdp_spec is not None and field_mdp_spec.is_locked(
+                    fq_name
+                )
 
             for level, fu in form_changes:
                 ingest_ref(level, fu)
@@ -297,19 +309,21 @@ class StandardDiffPolicy(DiffPolicy):
                     )
 
         unexplained_lta = new_xrefs - explained[ModificationLevel.LTA_UPDATES]
-        unexplained_formfill = \
+        unexplained_formfill = (
             unexplained_lta - explained[ModificationLevel.FORM_FILLING]
-        unexplained_annot = \
+        )
+        unexplained_annot = (
             unexplained_formfill - explained[ModificationLevel.ANNOTATIONS]
+        )
 
         xref_cache = old.reader.xrefs
         if self.ignore_identical_objects:
             identical_objs = set(
                 unex_ref
                 for unex_ref in unexplained_lta
-                if xref_cache.get_historical_ref(
-                    unex_ref, old.revision
-                ) is not None and _is_id(old(unex_ref), new(unex_ref))
+                if xref_cache.get_historical_ref(unex_ref, old.revision)
+                is not None
+                and _is_id(old(unex_ref), new(unex_ref))
             )
             if identical_objs:
                 logger.debug(
@@ -323,15 +337,14 @@ class StandardDiffPolicy(DiffPolicy):
 
         if unexplained_annot:
             msg = misc.LazyJoin(
-                '\n', (
-                    '%s:%s...' % (
-                        repr(x), repr(x.get_object())[:300]
-                    ) for x in unexplained_annot
-                )
+                '\n',
+                (
+                    '%s:%s...' % (repr(x), repr(x.get_object())[:300])
+                    for x in unexplained_annot
+                ),
             )
             logger.debug(
-                "Unexplained xrefs in revision %d:\n%s",
-                new.revision, msg
+                "Unexplained xrefs in revision %d:\n%s", new.revision, msg
             )
             unexplained_overrides = [
                 f" - {repr(ref)} is also used in "
@@ -365,11 +378,13 @@ class StandardDiffPolicy(DiffPolicy):
             modification_level=level, changed_form_fields=changed_form_fields
         )
 
-    def review_file(self, reader: PdfFileReader,
-                    base_revision: Union[int, HistoricalResolver],
-                    field_mdp_spec: Optional[FieldMDPSpec] = None,
-                    doc_mdp: Optional[MDPPerm] = None) \
-            -> Union[DiffResult, SuspiciousModification]:
+    def review_file(
+        self,
+        reader: PdfFileReader,
+        base_revision: Union[int, HistoricalResolver],
+        field_mdp_spec: Optional[FieldMDPSpec] = None,
+        doc_mdp: Optional[MDPPerm] = None,
+    ) -> Union[DiffResult, SuspiciousModification]:
         """
         Implementation of :meth:`.DiffPolicy.review_file` that reviews
         each intermediate revision between the base revision and the current one
@@ -381,9 +396,7 @@ class StandardDiffPolicy(DiffPolicy):
         rev_count = reader.xrefs.total_revisions
         current_max = ModificationLevel.NONE
         if isinstance(base_revision, int):
-            base_rev_resolver = reader.get_historical_resolver(
-                base_revision
-            )
+            base_rev_resolver = reader.get_historical_resolver(base_revision)
         else:
             base_rev_resolver = base_revision
             base_revision = base_rev_resolver.revision
@@ -408,12 +421,14 @@ class StandardDiffPolicy(DiffPolicy):
                 diff_result = self.apply(
                     old=base_rev_resolver,
                     new=reader.get_historical_resolver(revision),
-                    field_mdp_spec=field_mdp_spec, doc_mdp=doc_mdp
+                    field_mdp_spec=field_mdp_spec,
+                    doc_mdp=doc_mdp,
                 )
             except SuspiciousModification as e:
                 logger.warning(
                     'Error in diff operation between revision '
-                    f'{base_revision} and {revision}', exc_info=e
+                    f'{base_revision} and {revision}',
+                    exc_info=e,
                 )
                 return e
             current_max = max(current_max, diff_result.modification_level)
@@ -428,14 +443,15 @@ DEFAULT_DIFF_POLICY = StandardDiffPolicy(
         XrefStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
         ObjectStreamRule().as_qualified(ModificationLevel.LTA_UPDATES),
         DSSCompareRule().as_qualified(ModificationLevel.LTA_UPDATES),
-        MetadataUpdateRule().as_qualified(ModificationLevel.LTA_UPDATES)
+        MetadataUpdateRule().as_qualified(ModificationLevel.LTA_UPDATES),
     ],
     form_rule=FormUpdatingRule(
         field_rules=[
-            SigFieldCreationRule(), SigFieldModificationRule(),
-            GenericFieldModificationRule()
+            SigFieldCreationRule(),
+            SigFieldModificationRule(),
+            GenericFieldModificationRule(),
         ],
-    )
+    ),
 )
 """
 Default :class:`.DiffPolicy` implementation.

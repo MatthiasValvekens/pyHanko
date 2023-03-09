@@ -106,11 +106,11 @@ PADES = fields.SigSeedSubFilter.PADES
 
 
 def test_pades_flag():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
-        signer=FROM_CA
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -122,12 +122,12 @@ def test_pades_flag():
 
 
 def test_pades_pdf2():
-
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     w.ensure_output_version(version=(2, 0))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
-        signer=FROM_CA
+        w,
+        signers.PdfSignatureMetadata(field_name='Sig1', subfilter=PADES),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -141,10 +141,14 @@ def test_pades_pdf2():
 def test_pades_revinfo_dummydata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=dummy_ocsp_vc(),
+            subfilter=PADES,
+            embed_validation_info=True,
+        ),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -163,10 +167,14 @@ def test_pades_revinfo_nodata():
     with pytest.raises(SigningError):
         # noinspection PyTypeChecker
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=None,
-                subfilter=PADES, embed_validation_info=True
-            ), signer=FROM_CA
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=None,
+                subfilter=PADES,
+                embed_validation_info=True,
+            ),
+            signer=FROM_CA,
         )
 
 
@@ -174,10 +182,15 @@ def test_pades_revinfo_nodata():
 def test_pades_revinfo_ts_dummydata():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA, timestamper=DUMMY_TS
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=dummy_ocsp_vc(),
+            subfilter=PADES,
+            embed_validation_info=True,
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_TS,
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -194,14 +207,20 @@ def test_pades_revinfo_ts_dummydata():
 def test_pades_revinfo_http_ts_dummydata(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     requests_mock.post(
-        DUMMY_HTTP_TS.url, content=ts_response_callback,
-        headers={'Content-Type': 'application/timestamp-reply'}
+        DUMMY_HTTP_TS.url,
+        content=ts_response_callback,
+        headers={'Content-Type': 'application/timestamp-reply'},
     )
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA, timestamper=DUMMY_HTTP_TS
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=dummy_ocsp_vc(),
+            subfilter=PADES,
+            embed_validation_info=True,
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_HTTP_TS,
     )
     r = PdfFileReader(out)
     field_name, sig_obj, sig_field = next(fields.enumerate_sig_fields(r))
@@ -219,10 +238,14 @@ def test_pades_revinfo_live_no_timestamp(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=vc,
-            subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=vc,
+            subfilter=PADES,
+            embed_validation_info=True,
+        ),
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     rivt_pades = RevocationInfoValidationType.PADES_LT
@@ -238,10 +261,15 @@ def test_pades_revinfo_live(requests_mock):
     with freeze_time('2020-11-01'):
         vc = live_testing_vc(requests_mock)
         out = signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=vc,
-                subfilter=PADES, embed_validation_info=True
-            ), signer=FROM_CA, timestamper=DUMMY_TS
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=vc,
+                subfilter=PADES,
+                embed_validation_info=True,
+            ),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
         )
         r = PdfFileReader(out)
         dss = DocumentSecurityStore.read_dss(handler=r)
@@ -252,19 +280,28 @@ def test_pades_revinfo_live(requests_mock):
         assert len(dss.ocsps) == len(vc.ocsps) == 1
         assert len(dss.crls) == len(vc.crls) == 1
         rivt_pades = RevocationInfoValidationType.PADES_LT
-        status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
+        )
         assert status.valid and status.trusted
         assert status.modification_level == ModificationLevel.LTA_UPDATES
 
         rivt_adobe = RevocationInfoValidationType.ADOBE_STYLE
-        with pytest.raises(ValidationInfoReadingError,
-                           match='No revocation info'):
-            validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_adobe, {'trust_roots': TRUST_ROOTS})
+        with pytest.raises(
+            ValidationInfoReadingError, match='No revocation info'
+        ):
+            validate_pdf_ltv_signature(
+                r.embedded_signatures[0],
+                rivt_adobe,
+                {'trust_roots': TRUST_ROOTS},
+            )
 
     # test post-expiration, but before timestamp expires
     with freeze_time('2025-11-01'):
         r = PdfFileReader(out)
-        status = validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
+        status = validate_pdf_ltv_signature(
+            r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS}
+        )
         assert status.valid and status.trusted
 
     # test after timestamp expires: this is beyond the scope of the "basic" LTV
@@ -273,7 +310,11 @@ def test_pades_revinfo_live(requests_mock):
     with freeze_time('2040-11-01'):
         r = PdfFileReader(out)
         with pytest.raises(SignatureValidationError):
-            validate_pdf_ltv_signature(r.embedded_signatures[0], rivt_pades, {'trust_roots': TRUST_ROOTS})
+            validate_pdf_ltv_signature(
+                r.embedded_signatures[0],
+                rivt_pades,
+                {'trust_roots': TRUST_ROOTS},
+            )
 
 
 @freeze_time('2020-11-01')
@@ -281,10 +322,16 @@ def test_pades_revinfo_live_update(requests_mock):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=vc,
-            subfilter=PADES, embed_validation_info=True, use_pades_lta=True
-        ), signer=FROM_CA, timestamper=DUMMY_TS
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=vc,
+            subfilter=PADES,
+            embed_validation_info=True,
+            use_pades_lta=True,
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_TS,
     )
     r = PdfFileReader(out)
     rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
@@ -311,7 +358,7 @@ def test_update_no_timestamps():
     r = PdfFileReader(output)
     status = validate_pdf_timestamp(
         r.embedded_signatures[0],
-        validation_context=ValidationContext(trust_roots=TRUST_ROOTS)
+        validation_context=ValidationContext(trust_roots=TRUST_ROOTS),
     )
     assert status.valid and status.trusted
     assert r.embedded_timestamp_signatures[0].sig_field['/TU'] == "Timestamp"
@@ -323,14 +370,21 @@ async def test_pades_revinfo_live_update_to_disk(requests_mock, tmp_path):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=vc,
-            subfilter=PADES, embed_validation_info=True, use_pades_lta=True
-        ), signer=FROM_CA, timestamper=DUMMY_TS
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=vc,
+            subfilter=PADES,
+            embed_validation_info=True,
+            use_pades_lta=True,
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_TS,
     )
     r = PdfFileReader(out)
     rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
     from pathlib import Path
+
     out_path: Path = tmp_path / "out.pdf"
     with out_path.open('wb') as outf:
         pdf_ts = PdfTimeStamper(DUMMY_TS)
@@ -358,6 +412,7 @@ def test_pades_revinfo_live_lta(requests_mock):
 
 def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
     from pathlib import Path
+
     inout_file: Path = tmp_path / "test.pdf"
     inout_file.write_bytes(MINIMAL_ONE_FIELD)
     with inout_file.open('r+b') as f:
@@ -367,6 +422,7 @@ def test_pades_revinfo_live_lta_in_place(requests_mock, tmp_path):
 
 def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
     from pathlib import Path
+
     in_file: Path = tmp_path / "test.pdf"
     in_file.write_bytes(MINIMAL_ONE_FIELD)
     out_file: Path = tmp_path / "test-out.pdf"
@@ -380,6 +436,7 @@ def test_pades_revinfo_live_lta_direct_flush(requests_mock, tmp_path):
 def test_pades_revinfo_live_lta_direct_flush_newfile(requests_mock, tmp_path):
     # test transparent handling of non-readable/seekable output buffers
     from pathlib import Path
+
     in_file: Path = tmp_path / "test.pdf"
     in_file.write_bytes(MINIMAL_ONE_FIELD)
     out_file: Path = tmp_path / "test-out.pdf"
@@ -397,17 +454,24 @@ def _test_pades_revinfo_live_lta_sign(w, requests_mock, **kwargs):
     with freeze_time('2020-11-01'):
         vc = live_testing_vc(requests_mock)
         out = signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=vc,
-                subfilter=PADES, embed_validation_info=True,
-                use_pades_lta=True
-            ), signer=FROM_CA, timestamper=DUMMY_TS, **kwargs
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=vc,
+                subfilter=PADES,
+                embed_validation_info=True,
+                use_pades_lta=True,
+            ),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            **kwargs
         )
     return out
 
 
-def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
-                                          has_more_sigs=False):
+def _test_pades_revinfo_live_lta_validate(
+    out, requests_mock, no_write=False, has_more_sigs=False
+):
     if has_more_sigs:
         expected_modlevel = ModificationLevel.FORM_FILLING
     else:
@@ -436,9 +500,10 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
         rivt_pades_lta = RevocationInfoValidationType.PADES_LTA
         for bootstrap_vc in (None, vc):
             status = validate_pdf_ltv_signature(
-                r.embedded_signatures[0], rivt_pades_lta,
+                r.embedded_signatures[0],
+                rivt_pades_lta,
                 {'trust_roots': TRUST_ROOTS},
-                bootstrap_validation_context=bootstrap_vc
+                bootstrap_validation_context=bootstrap_vc,
             )
             assert status.valid and status.trusted
             assert status.modification_level == expected_modlevel
@@ -447,9 +512,10 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
     with freeze_time('2025-11-01'):
         r = PdfFileReader(out)
         status = validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades_lta,
+            r.embedded_signatures[0],
+            rivt_pades_lta,
             {'trust_roots': TRUST_ROOTS},
-            bootstrap_validation_context=live_testing_vc(requests_mock)
+            bootstrap_validation_context=live_testing_vc(requests_mock),
         )
         assert status.valid and status.trusted
 
@@ -458,9 +524,10 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
         r = PdfFileReader(out)
         with pytest.raises(SignatureValidationError):
             validate_pdf_ltv_signature(
-                r.embedded_signatures[0], rivt_pades_lta,
+                r.embedded_signatures[0],
+                rivt_pades_lta,
                 {'trust_roots': TRUST_ROOTS},
-                bootstrap_validation_context=live_testing_vc(requests_mock)
+                bootstrap_validation_context=live_testing_vc(requests_mock),
             )
 
     if no_write:
@@ -473,9 +540,10 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
         out = PdfTimeStamper(DUMMY_TS2).update_archival_timestamp_chain(r, vc)
         r = PdfFileReader(out)
         status = validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades_lta,
+            r.embedded_signatures[0],
+            rivt_pades_lta,
             {'trust_roots': TRUST_ROOTS},
-            bootstrap_validation_context=vc
+            bootstrap_validation_context=vc,
         )
         assert status.valid and status.trusted
         assert status.modification_level == expected_modlevel
@@ -484,9 +552,10 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
     with freeze_time('2035-11-01'):
         r = PdfFileReader(out)
         status = validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades_lta,
+            r.embedded_signatures[0],
+            rivt_pades_lta,
             {'trust_roots': TRUST_ROOTS},
-            bootstrap_validation_context=live_testing_vc(requests_mock)
+            bootstrap_validation_context=live_testing_vc(requests_mock),
         )
         assert status.valid and status.trusted
 
@@ -495,9 +564,10 @@ def _test_pades_revinfo_live_lta_validate(out, requests_mock, no_write=False,
         r = PdfFileReader(out)
         with pytest.raises(SignatureValidationError):
             validate_pdf_ltv_signature(
-                r.embedded_signatures[0], rivt_pades_lta,
+                r.embedded_signatures[0],
+                rivt_pades_lta,
                 {'trust_roots': TRUST_ROOTS},
-                bootstrap_validation_context=live_testing_vc(requests_mock)
+                bootstrap_validation_context=live_testing_vc(requests_mock),
             )
 
 
@@ -517,9 +587,10 @@ def test_pades_lta_dss_indirect_arrs(requests_mock):
             # the cert embedded into this file uses a mock URL
             # that doesn't work in the current testing architecture
             validation_context_kwargs={
-                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-                'revocation_mode': 'soft-fail'
-            }
+                'trust_roots': TRUST_ROOTS,
+                'allow_fetching': False,
+                'revocation_mode': 'soft-fail',
+            },
         )
 
 
@@ -529,22 +600,34 @@ def test_pades_lta_sign_twice(requests_mock):
     with freeze_time('2020-10-01'):
         vc = live_testing_vc(requests_mock)
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=vc,
-                subfilter=PADES, embed_validation_info=True,
-                use_pades_lta=True
-            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=vc,
+                subfilter=PADES,
+                embed_validation_info=True,
+                use_pades_lta=True,
+            ),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            in_place=True,
         )
 
     w = IncrementalPdfFileWriter(stream)
     with freeze_time('2020-11-01'):
         vc = live_testing_vc(requests_mock)
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig2', validation_context=vc,
-                subfilter=PADES, embed_validation_info=True,
-                use_pades_lta=True
-            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig2',
+                validation_context=vc,
+                subfilter=PADES,
+                embed_validation_info=True,
+                use_pades_lta=True,
+            ),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            in_place=True,
         )
 
     # test if the first sig still validates
@@ -559,7 +642,7 @@ def test_pades_lta_sign_twice(requests_mock):
             PdfFileReader(stream).embedded_signatures[2],
             validation_type=RevocationInfoValidationType.PADES_LTA,
             validation_context_kwargs={'trust_roots': TRUST_ROOTS},
-            bootstrap_validation_context=live_testing_vc(requests_mock)
+            bootstrap_validation_context=live_testing_vc(requests_mock),
         )
 
 
@@ -569,11 +652,17 @@ def test_pades_lta_sign_twice_post_expiry(requests_mock):
     with freeze_time('2020-10-01'):
         vc = live_testing_vc(requests_mock)
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=vc,
-                subfilter=PADES, embed_validation_info=True,
-                use_pades_lta=True
-            ), signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=vc,
+                subfilter=PADES,
+                embed_validation_info=True,
+                use_pades_lta=True,
+            ),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            in_place=True,
         )
 
     w = IncrementalPdfFileWriter(stream)
@@ -583,11 +672,17 @@ def test_pades_lta_sign_twice_post_expiry(requests_mock):
         vc = SIMPLE_ECC_V_CONTEXT()
         with pytest.raises(SigningError, match=".*most recent timestamp.*"):
             signers.sign_pdf(
-                w, signers.PdfSignatureMetadata(
-                    field_name='Sig2', validation_context=vc,
-                    subfilter=PADES, embed_validation_info=True,
-                    use_pades_lta=True
-                ), signer=FROM_ECC_CA, timestamper=DUMMY_TS, in_place=True
+                w,
+                signers.PdfSignatureMetadata(
+                    field_name='Sig2',
+                    validation_context=vc,
+                    subfilter=PADES,
+                    embed_validation_info=True,
+                    use_pades_lta=True,
+                ),
+                signer=FROM_ECC_CA,
+                timestamper=DUMMY_TS,
+                in_place=True,
             )
 
 
@@ -608,7 +703,7 @@ def test_standalone_document_timestamp(requests_mock):
     assert status.modification_level == ModificationLevel.LTA_UPDATES
 
     # tamper with the file
-    out.seek(0x9d)
+    out.seek(0x9D)
     out.write(b'4')
     out.seek(0)
     r = PdfFileReader(out)
@@ -625,8 +720,11 @@ def test_add_revinfo_later(requests_mock, with_vri):
     # create signature without revocation info
     with freeze_time('2020-11-01'):
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='Sig1'),
-            signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+            w,
+            signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            in_place=True,
         )
 
     # fast forward 1 month
@@ -641,15 +739,17 @@ def test_add_revinfo_later(requests_mock, with_vri):
 
         # without retroactive revinfo, the validation should fail
         status = validate_pdf_ltv_signature(
-            emb_sig, RevocationInfoValidationType.PADES_LT,
-            {'trust_roots': TRUST_ROOTS}
+            emb_sig,
+            RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS},
         )
         assert status.valid and not status.trusted
 
         # with retroactive revinfo, it should be OK
         status = validate_pdf_ltv_signature(
-            emb_sig, RevocationInfoValidationType.PADES_LT,
-            {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True}
+            emb_sig,
+            RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True},
         )
         assert status.valid and status.trusted
         assert status.modification_level == ModificationLevel.LTA_UPDATES
@@ -664,18 +764,22 @@ def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
     with freeze_time('2020-11-01'):
         # trust the intermediate cert and the TSA cert absolutely
         incomplete_vc = ValidationContext(
-            trust_roots=[INTERM_CERT, DUMMY_TS.tsa_cert], allow_fetching=True,
+            trust_roots=[INTERM_CERT, DUMMY_TS.tsa_cert],
+            allow_fetching=True,
             other_certs=[],
         )
         Illusionist(TESTING_CA).register(requests_mock)
         signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(
+            w,
+            signers.PdfSignatureMetadata(
                 field_name='Sig1',
                 validation_context=incomplete_vc,
                 embed_validation_info=True,
                 subfilter=PADES,
             ),
-            signer=FROM_CA, timestamper=DUMMY_TS, in_place=True
+            signer=FROM_CA,
+            timestamper=DUMMY_TS,
+            in_place=True,
         )
 
     # fast forward 1 month
@@ -689,8 +793,9 @@ def test_fix_incomplete_revinfo_later(requests_mock, with_vri):
         emb_sig = r.embedded_signatures[0]
 
         status = validate_pdf_ltv_signature(
-            emb_sig, RevocationInfoValidationType.PADES_LT,
-            {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True}
+            emb_sig,
+            RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS, 'retroactive_revinfo': True},
         )
         assert status.valid and status.trusted
         assert status.modification_level == ModificationLevel.LTA_UPDATES
@@ -702,8 +807,10 @@ def test_add_revinfo_and_timestamp(requests_mock):
     # create signature without revocation info
     with freeze_time('2020-11-01'):
         out = signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='Sig1'),
-            signer=FROM_CA, in_place=True
+            w,
+            signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA,
+            in_place=True,
         )
 
     # fast forward 1 month
@@ -725,18 +832,21 @@ def test_add_revinfo_and_timestamp(requests_mock):
         # (since the new timestamp is now effectively the only trusted record
         #  of the signing time anyway)
         status = validate_pdf_ltv_signature(
-            emb_sig, RevocationInfoValidationType.PADES_LT,
-            {'trust_roots': TRUST_ROOTS}
+            emb_sig,
+            RevocationInfoValidationType.PADES_LT,
+            {'trust_roots': TRUST_ROOTS},
         )
         assert status.valid and status.trusted
         assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
 
         # ... but PAdES-LTA should fail
-        with pytest.raises(SignatureValidationError,
-                           match='.*requires separate timestamps.*'):
+        with pytest.raises(
+            SignatureValidationError, match='.*requires separate timestamps.*'
+        ):
             validate_pdf_ltv_signature(
-                emb_sig, RevocationInfoValidationType.PADES_LTA,
-                {'trust_roots': TRUST_ROOTS}
+                emb_sig,
+                RevocationInfoValidationType.PADES_LTA,
+                {'trust_roots': TRUST_ROOTS},
             )
 
 
@@ -746,8 +856,10 @@ def test_add_revinfo_and_lta_timestamp(requests_mock):
     # create signature without revocation info
     with freeze_time('2020-11-01'):
         out = signers.sign_pdf(
-            w, signers.PdfSignatureMetadata(field_name='Sig1'),
-            signer=FROM_CA, in_place=True
+            w,
+            signers.PdfSignatureMetadata(field_name='Sig1'),
+            signer=FROM_CA,
+            in_place=True,
         )
 
     # fast forward 1 month
@@ -767,8 +879,9 @@ def test_add_revinfo_and_lta_timestamp(requests_mock):
         emb_sig = r.embedded_signatures[0]
 
         status = validate_pdf_ltv_signature(
-            emb_sig, RevocationInfoValidationType.PADES_LTA,
-            {'trust_roots': TRUST_ROOTS}
+            emb_sig,
+            RevocationInfoValidationType.PADES_LTA,
+            {'trust_roots': TRUST_ROOTS},
         )
         assert status.valid and status.trusted
         assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
@@ -777,9 +890,10 @@ def test_add_revinfo_and_lta_timestamp(requests_mock):
     with freeze_time('2025-11-01'):
         r = PdfFileReader(out)
         status = validate_pdf_ltv_signature(
-            r.embedded_signatures[0], RevocationInfoValidationType.PADES_LTA,
+            r.embedded_signatures[0],
+            RevocationInfoValidationType.PADES_LTA,
             {'trust_roots': TRUST_ROOTS},
-            bootstrap_validation_context=live_testing_vc(requests_mock)
+            bootstrap_validation_context=live_testing_vc(requests_mock),
         )
         assert status.valid and status.trusted
 
@@ -788,10 +902,11 @@ def test_add_revinfo_and_lta_timestamp(requests_mock):
 def test_sign_with_commitment():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        field_name='Sig1',
+        subfilter=fields.SigSeedSubFilter.PADES,
         cades_signed_attr_spec=CAdESSignedAttrSpec(
             commitment_type=GenericCommitment.PROOF_OF_ORIGIN.asn1
-        )
+        ),
     )
     out = signers.sign_pdf(w, meta, signer=FROM_CA)
 
@@ -810,7 +925,8 @@ def test_sign_with_commitment():
 def test_sign_with_content_sig():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        field_name='Sig1',
+        subfilter=fields.SigSeedSubFilter.PADES,
         cades_signed_attr_spec=CAdESSignedAttrSpec(timestamp_content=True),
     )
     out = signers.sign_pdf(w, meta, signer=FROM_CA, timestamper=DUMMY_TS)
@@ -834,25 +950,26 @@ def test_sign_with_content_sig():
 @freeze_time('2020-11-01')
 @pytest.mark.asyncio
 async def test_sign_with_wrong_content_sig():
-
     class Spec(SignedAttributeProviderSpec):
-        def signed_attr_providers(self, data_digest: bytes,
-                                  digest_algorithm: str) \
-                -> Iterable[CMSAttributeProvider]:
+        def signed_attr_providers(
+            self, data_digest: bytes, digest_algorithm: str
+        ) -> Iterable[CMSAttributeProvider]:
             yield TSTProvider(
                 digest_algorithm='sha256',
                 data_to_ts=b'\xde\xad\xbe\xef',
                 timestamper=DUMMY_TS,
                 attr_type='content_time_stamp',
             )
+
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        field_name='Sig1',
+        subfilter=fields.SigSeedSubFilter.PADES,
     )
     signer = signers.SimpleSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     signer.signed_attr_prov_spec = Spec()
     out = await signers.async_sign_pdf(
@@ -882,8 +999,9 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
     # simulate a PAdES-LTA workflow with remote signing
     # (our hypothetical remote signer just signs digests, not full CMS objects)
     requests_mock.post(
-        DUMMY_HTTP_TS.url, content=ts_response_callback,
-        headers={'Content-Type': 'application/timestamp-reply'}
+        DUMMY_HTTP_TS.url,
+        content=ts_response_callback,
+        headers={'Content-Type': 'application/timestamp-reply'},
     )
 
     def instantiate_external_signer(sig_value: bytes):
@@ -892,7 +1010,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
             signature_value=sig_value,
             cert_registry=SimpleCertificateStore.from_certs(
                 [ROOT_CERT, INTERM_CERT]
-            )
+            ),
         )
 
     async def prep_doc():
@@ -902,17 +1020,23 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
         pdf_signer = signers.PdfSigner(
             signers.PdfSignatureMetadata(
-                field_name='SigNew', embed_validation_info=True,
-                use_pades_lta=True, subfilter=PADES, validation_context=vc,
+                field_name='SigNew',
+                embed_validation_info=True,
+                use_pades_lta=True,
+                subfilter=PADES,
+                validation_context=vc,
                 md_algorithm='sha256',
-                dss_settings=DSSContentSettings(include_vri=False)
+                dss_settings=DSSContentSettings(include_vri=False),
             ),
             signer=ext_signer,
-            timestamper=DUMMY_HTTP_TS
+            timestamper=DUMMY_HTTP_TS,
         )
         # This function may perform async network I/O
-        prep_digest, tbs_document, output = \
-            await pdf_signer.async_digest_doc_for_signing(w)
+        (
+            prep_digest,
+            tbs_document,
+            output,
+        ) = await pdf_signer.async_digest_doc_for_signing(w)
         psi = tbs_document.post_sign_instructions
 
         # prepare signed attributes
@@ -929,16 +1053,18 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         # (we declare the function as async to add to the illusion)
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+
         priv_key = serialization.load_der_private_key(
             TESTING_CA.key_set.get_private_key(KeyLabel('signer1')).dump(),
-            password=None
+            password=None,
         )
         padding = PKCS1v15()
         hash_algo = hashes.SHA256()
         return priv_key.sign(data_tbs, padding, hash_algo)
 
-    async def proceed_with_signing(prep_digest, signed_attrs, sig_value, psi,
-                                   output_handle):
+    async def proceed_with_signing(
+        prep_digest, signed_attrs, sig_value, psi, output_handle
+    ):
         # use ExternalSigner to format the CMS given the signed value
         # we obtained from the remote signing service
         ext_signer = instantiate_external_signer(sig_value)
@@ -947,8 +1073,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
         # perform an async call here, because setting up the unsigned attributes
         # potentially requires async I/O in the general case
         sig_cms = await ext_signer.async_sign_prescribed_attributes(
-            'sha256', signed_attrs=signed_attrs,
-            timestamper=DUMMY_HTTP_TS
+            'sha256', signed_attrs=signed_attrs, timestamper=DUMMY_HTTP_TS
         )
 
         # fresh VC
@@ -956,10 +1081,11 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
             requests_mock, with_extra_tsa=different_tsa
         )
         await PdfTBSDocument.async_finish_signing(
-            output_handle, prepared_digest=prep_digest,
+            output_handle,
+            prepared_digest=prep_digest,
             signature_cms=sig_cms,
             post_sign_instr=psi,
-            validation_context=validation_context
+            validation_context=validation_context,
         )
 
     async def full_procedure():
@@ -990,7 +1116,7 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
             timestamp_md_algorithm=psi.timestamp_md_algorithm,
             timestamper=docts_tsa,
             timestamp_field_name=psi.timestamp_field_name,
-            dss_settings=psi.dss_settings
+            dss_settings=psi.dss_settings,
         )
         # finish signing
         await proceed_with_signing(
@@ -1019,8 +1145,9 @@ def test_interrupted_pades_lta_signature(requests_mock, different_tsa):
     emb_sig = r.embedded_signatures[0]
     # perform LTA validation
     status = validate_pdf_ltv_signature(
-        emb_sig, RevocationInfoValidationType.PADES_LTA,
-        {'trust_roots': trust_roots}
+        emb_sig,
+        RevocationInfoValidationType.PADES_LTA,
+        {'trust_roots': trust_roots},
     )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
@@ -1040,12 +1167,12 @@ def test_dss_setting_validation():
     with pytest.raises(SigningError):
         DSSContentSettings(
             include_vri=True,
-            placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
         ).assert_viable()
 
     DSSContentSettings(
         include_vri=True,
-        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS
+        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
     ).assert_viable()
     DSSContentSettings(
         include_vri=False,
@@ -1055,19 +1182,18 @@ def test_dss_setting_validation():
         DSSContentSettings(
             include_vri=False,
             placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
-            next_ts_settings=bad_ts_sett
+            next_ts_settings=bad_ts_sett,
         ).assert_viable()
 
 
 @freeze_time('2020-11-01')
 def test_pades_one_revision(requests_mock):
-
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             dss_settings=DSSContentSettings(
                 include_vri=False,
                 placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
@@ -1076,7 +1202,7 @@ def test_pades_one_revision(requests_mock):
             embed_validation_info=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     assert r.total_revisions == 1
@@ -1084,35 +1210,38 @@ def test_pades_one_revision(requests_mock):
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LT,
         validation_context_kwargs={
-            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'trust_roots': TRUST_ROOTS,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
     )
+
 
 NOOP_POLICY = CertRevTrustPolicy(
     revocation_checking_policy=RevocationCheckingPolicy(
         ee_certificate_rule=RevocationCheckingRule.NO_CHECK,
-        intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK
+        intermediate_ca_cert_rule=RevocationCheckingRule.NO_CHECK,
     )
 )
 
+
 def _lazy_pades_signature(requests_mock):
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     # set up a signer that doesn't embed anything
     #  (but still goes through the motions)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             validation_context=live_testing_vc(
                 requests_mock, revinfo_policy=NOOP_POLICY
             ),
             embed_validation_info=True,
-            use_pades_lta=True
+            use_pades_lta=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     return out
 
@@ -1128,21 +1257,21 @@ def test_pades_ltv_legacy_policy_sufficient(requests_mock):
             r.embedded_signatures[0],
             validation_type=RevocationInfoValidationType.PADES_LTA,
             validation_context_kwargs={
-                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-                'revocation_mode': 'hard-fail'
+                'trust_roots': TRUST_ROOTS,
+                'allow_fetching': False,
+                'revocation_mode': 'hard-fail',
             },
             # allow bootstrapping with soft-fail
             bootstrap_validation_context=ValidationContext(
                 trust_roots=TRUST_ROOTS,
                 allow_fetching=False,
-                revocation_mode='soft-fail'
-            )
+                revocation_mode='soft-fail',
+            ),
         )
 
 
 @freeze_time('2020-11-01')
 def test_pades_ltv_upgrade_soft_fail(requests_mock):
-
     out = _lazy_pades_signature(requests_mock)
     r = PdfFileReader(out)
     # soft fail should not apply to the internal timestamp, so we expect
@@ -1152,9 +1281,10 @@ def test_pades_ltv_upgrade_soft_fail(requests_mock):
             r.embedded_signatures[0],
             validation_type=RevocationInfoValidationType.PADES_LTA,
             validation_context_kwargs={
-                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-                'revocation_mode': 'soft-fail'
-            }
+                'trust_roots': TRUST_ROOTS,
+                'allow_fetching': False,
+                'revocation_mode': 'soft-fail',
+            },
         )
 
 
@@ -1168,36 +1298,39 @@ def test_pades_ltv_upgrade_lax_policy(requests_mock):
             r.embedded_signatures[0],
             validation_type=RevocationInfoValidationType.PADES_LTA,
             validation_context_kwargs={
-                'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-                'revinfo_policy': NOOP_POLICY
-            }
+                'trust_roots': TRUST_ROOTS,
+                'allow_fetching': False,
+                'revinfo_policy': NOOP_POLICY,
+            },
         )
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('dss_settings', [
-    DSSContentSettings(
-        placement=SigDSSPlacementPreference.SEPARATE_REVISION,
-    ),
-    DSSContentSettings(
-        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
-    ),
-    DSSContentSettings(),
-])
+@pytest.mark.parametrize(
+    'dss_settings',
+    [
+        DSSContentSettings(
+            placement=SigDSSPlacementPreference.SEPARATE_REVISION,
+        ),
+        DSSContentSettings(
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+        ),
+        DSSContentSettings(),
+    ],
+)
 def test_pades_two_revisions(requests_mock, dss_settings):
-
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             dss_settings=dss_settings,
             validation_context=live_testing_vc(requests_mock),
             embed_validation_info=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     assert r.total_revisions == 2
@@ -1205,50 +1338,54 @@ def test_pades_two_revisions(requests_mock, dss_settings):
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LT,
         validation_context_kwargs={
-            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'trust_roots': TRUST_ROOTS,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
     )
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('dss_settings', [
-    DSSContentSettings(
-        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
-        next_ts_settings=TimestampDSSContentSettings(
-            update_before_ts=True, include_vri=False
-        )
-    ),
-    DSSContentSettings(
-        placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
-        include_vri=False,
-        next_ts_settings=TimestampDSSContentSettings(
-            update_before_ts=True, include_vri=False
-        )
-    ),
-    DSSContentSettings(
-        placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
-        include_vri=False,
-    ),
-    DSSContentSettings(
-        placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
-        include_vri=False
-    ),
-])
+@pytest.mark.parametrize(
+    'dss_settings',
+    [
+        DSSContentSettings(
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+            next_ts_settings=TimestampDSSContentSettings(
+                update_before_ts=True, include_vri=False
+            ),
+        ),
+        DSSContentSettings(
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+            include_vri=False,
+            next_ts_settings=TimestampDSSContentSettings(
+                update_before_ts=True, include_vri=False
+            ),
+        ),
+        DSSContentSettings(
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+            include_vri=False,
+        ),
+        DSSContentSettings(
+            placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
+            include_vri=False,
+        ),
+    ],
+)
 def test_pades_lta_two_revisions(requests_mock, dss_settings):
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             dss_settings=dss_settings,
             validation_context=live_testing_vc(requests_mock),
             embed_validation_info=True,
-            use_pades_lta=True
+            use_pades_lta=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     assert r.total_revisions == 2
@@ -1256,9 +1393,10 @@ def test_pades_lta_two_revisions(requests_mock, dss_settings):
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LTA,
         validation_context_kwargs={
-            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'trust_roots': TRUST_ROOTS,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
     )
 
 
@@ -1266,21 +1404,22 @@ def test_pades_lta_two_revisions(requests_mock, dss_settings):
 def test_pades_lta_noskip(requests_mock):
     dss_settings = DSSContentSettings(
         placement=SigDSSPlacementPreference.SEPARATE_REVISION,
-        include_vri=False, skip_if_unneeded=False
+        include_vri=False,
+        skip_if_unneeded=False,
     )
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             dss_settings=dss_settings,
             validation_context=live_testing_vc(requests_mock),
             embed_validation_info=True,
-            use_pades_lta=True
+            use_pades_lta=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     assert r.total_revisions == 4
@@ -1288,9 +1427,10 @@ def test_pades_lta_noskip(requests_mock):
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LTA,
         validation_context_kwargs={
-            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'trust_roots': TRUST_ROOTS,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
     )
 
 
@@ -1301,21 +1441,21 @@ def test_pades_post_ts_autosuppress(requests_mock):
     # (keeping the VC constant as well)
     dss_settings = DSSContentSettings(
         placement=SigDSSPlacementPreference.TOGETHER_WITH_NEXT_TS,
-        include_vri=False
+        include_vri=False,
     )
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             dss_settings=dss_settings,
             validation_context=live_testing_vc(requests_mock),
             embed_validation_info=True,
-            use_pades_lta=True
+            use_pades_lta=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     assert r.total_revisions == 2
@@ -1328,9 +1468,10 @@ def test_pades_post_ts_autosuppress(requests_mock):
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LTA,
         validation_context_kwargs={
-            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'trust_roots': TRUST_ROOTS,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
     )
 
 
@@ -1342,21 +1483,21 @@ def test_pades_max_autosuppress(requests_mock):
     # performed pre-signing
     dss_settings = DSSContentSettings(
         placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
-        include_vri=False
+        include_vri=False,
     )
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             dss_settings=dss_settings,
             validation_context=live_testing_vc(requests_mock),
             embed_validation_info=True,
-            use_pades_lta=True
+            use_pades_lta=True,
         ),
         timestamper=DUMMY_TS,
-        signer=FROM_CA
+        signer=FROM_CA,
     )
     r = PdfFileReader(out)
     assert r.total_revisions == 2
@@ -1369,9 +1510,10 @@ def test_pades_max_autosuppress(requests_mock):
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LTA,
         validation_context_kwargs={
-            'trust_roots': TRUST_ROOTS, 'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'trust_roots': TRUST_ROOTS,
+            'allow_fetching': False,
+            'revocation_mode': 'soft-fail',
+        },
     )
 
 
@@ -1379,16 +1521,16 @@ def test_pades_max_autosuppress(requests_mock):
 def test_pades_independent_tsa(requests_mock):
     # test signing/validation behaviour with an independent TSA
 
-    w = copy_into_new_writer(
-        PdfFileReader(BytesIO(MINIMAL_ONE_FIELD))
-    )
+    w = copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL_ONE_FIELD)))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', subfilter=PADES,
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            subfilter=PADES,
             validation_context=live_testing_vc(
                 requests_mock, with_extra_tsa=True
             ),
-            embed_validation_info=True
+            embed_validation_info=True,
         ),
         signer=FROM_CA,
         timestamper=DUMMY_HTTP_TS_VARIANT,
@@ -1410,8 +1552,8 @@ def test_pades_independent_tsa(requests_mock):
         validation_context_kwargs={
             'trust_roots': trust_roots,
             'allow_fetching': False,
-            'revocation_mode': 'soft-fail'
-        }
+            'revocation_mode': 'soft-fail',
+        },
     )
 
 
@@ -1419,11 +1561,12 @@ def test_pades_independent_tsa(requests_mock):
 def test_sign_with_policy():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
-        field_name='Sig1', subfilter=fields.SigSeedSubFilter.PADES,
+        field_name='Sig1',
+        subfilter=fields.SigSeedSubFilter.PADES,
         cades_signed_attr_spec=CAdESSignedAttrSpec(
-            signature_policy_identifier=SignaturePolicyIdentifier({
-                'signature_policy_id': DUMMY_POLICY_ID
-            })
+            signature_policy_identifier=SignaturePolicyIdentifier(
+                {'signature_policy_id': DUMMY_POLICY_ID}
+            )
         ),
     )
     out = signers.sign_pdf(w, meta, signer=FROM_CA)
@@ -1443,10 +1586,15 @@ def test_sign_with_policy():
 def test_pades_revinfo_live_nofullchain():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            field_name='Sig1', validation_context=dummy_ocsp_vc(),
-            subfilter=PADES, embed_validation_info=True
-        ), signer=FROM_CA, timestamper=DUMMY_TS
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=dummy_ocsp_vc(),
+            subfilter=PADES,
+            embed_validation_info=True,
+        ),
+        signer=FROM_CA,
+        timestamper=DUMMY_TS,
     )
     r = PdfFileReader(out)
     rivt_pades = RevocationInfoValidationType.PADES_LT
@@ -1455,19 +1603,24 @@ def test_pades_revinfo_live_nofullchain():
     # which causes LTV validation to fail to bootstrap
     with pytest.raises(SignatureValidationError):
         validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades,
-            {'trust_roots': TRUST_ROOTS, 'ocsps': [FIXED_OCSP],
-             'allow_fetching': False}
+            r.embedded_signatures[0],
+            rivt_pades,
+            {
+                'trust_roots': TRUST_ROOTS,
+                'ocsps': [FIXED_OCSP],
+                'allow_fetching': False,
+            },
         )
 
     # now set up live testing
     from requests_mock import Mocker
+
     with Mocker() as m:
         live_testing_vc(m)
         status = validate_pdf_ltv_signature(
-            r.embedded_signatures[0], rivt_pades, {
-                'trust_roots': TRUST_ROOTS, 'allow_fetching': True
-            }
+            r.embedded_signatures[0],
+            rivt_pades,
+            {'trust_roots': TRUST_ROOTS, 'allow_fetching': True},
         )
         # .. which should still fail because the chain of trust is broken, but
         # at least the timestamp should initially validate
@@ -1482,19 +1635,22 @@ async def test_pades_lta_no_embed_root(requests_mock):
     cr.register_multiple(FROM_CA.cert_registry)
     vc = live_testing_vc(requests_mock)
     no_embed_root_signer = signers.SimpleSigner(
-        signing_cert=FROM_CA.signing_cert, signing_key=FROM_CA.signing_key,
-        cert_registry=cr, embed_roots=False
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=cr,
+        embed_roots=False,
     )
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             embed_validation_info=True,
             use_pades_lta=True,
-            validation_context=vc
+            validation_context=vc,
         ),
         signer=no_embed_root_signer,
-        timestamper=DUMMY_HTTP_TS
+        timestamper=DUMMY_HTTP_TS,
     )
     r = PdfFileReader(out)
     s = r.embedded_signatures[0]
@@ -1508,7 +1664,7 @@ async def test_pades_lta_no_embed_root(requests_mock):
     await async_validate_pdf_ltv_signature(
         r.embedded_signatures[0],
         validation_type=RevocationInfoValidationType.PADES_LTA,
-        validation_context_kwargs={'trust_roots': TRUST_ROOTS}
+        validation_context_kwargs={'trust_roots': TRUST_ROOTS},
     )
 
 
@@ -1521,9 +1677,11 @@ async def test_pades_live_ac_presign_validation(requests_mock):
 
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
     authorities = [
-        pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
-        pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
-        pki_arch.get_cert('leaf-aa')
+        pki_arch.get_cert('root'),
+        pki_arch.get_cert('interm'),
+        pki_arch.get_cert('root-aa'),
+        pki_arch.get_cert('interm-aa'),
+        pki_arch.get_cert('leaf-aa'),
     ]
     signer = signers.SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -1531,40 +1689,49 @@ async def test_pades_live_ac_presign_validation(requests_mock):
         cert_registry=SimpleCertificateStore.from_certs(authorities),
         attribute_certs=[
             pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-        ]
+        ],
     )
     dummy_ts = timestamps.DummyTimeStamper(
         tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
         tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
         certs_to_embed=SimpleCertificateStore.from_certs(
             [pki_arch.get_cert('root')]
-        )
+        ),
     )
 
     fetchers = RequestsFetcherBackend().get_fetchers()
     vc = ValidationContext(
-        trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
-        other_certs=authorities, fetchers=fetchers,
-        revocation_mode='require'
+        trust_roots=[pki_arch.get_cert('root')],
+        allow_fetching=True,
+        other_certs=authorities,
+        fetchers=fetchers,
+        revocation_mode='require',
     )
     ac_vc = ValidationContext(
-        trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
-        other_certs=authorities, fetchers=fetchers,
-        revocation_mode='require'
+        trust_roots=[pki_arch.get_cert('root-aa')],
+        allow_fetching=True,
+        other_certs=authorities,
+        fetchers=fetchers,
+        revocation_mode='require',
     )
     Illusionist(pki_arch).register(requests_mock)
 
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
-            validation_context=vc, ac_validation_context=ac_vc,
-            subfilter=PADES, embed_validation_info=True,
+        w,
+        signers.PdfSignatureMetadata(
+            validation_context=vc,
+            ac_validation_context=ac_vc,
+            subfilter=PADES,
+            embed_validation_info=True,
             dss_settings=DSSContentSettings(
                 include_vri=False,
-                placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE
-            )
-        ), signer=signer, timestamper=dummy_ts,
-        existing_fields_only=True
+                placement=SigDSSPlacementPreference.TOGETHER_WITH_SIGNATURE,
+            ),
+        ),
+        signer=signer,
+        timestamper=dummy_ts,
+        existing_fields_only=True,
     )
 
     r = PdfFileReader(out)
@@ -1579,15 +1746,16 @@ async def test_pades_live_ac_presign_validation(requests_mock):
     assert len(dss['/OCSPs']) == 2  # signer + AC (leaf-aa has OCSP)
     assert len(dss['/CRLs']) == 3  # root, interm-aa, root-aa
     status = await async_validate_pdf_ltv_signature(
-        s, validation_type=RevocationInfoValidationType.PADES_LT,
+        s,
+        validation_type=RevocationInfoValidationType.PADES_LT,
         validation_context_kwargs={
             'trust_roots': [pki_arch.get_cert('root')],
-            'revocation_mode': 'require'
+            'revocation_mode': 'require',
         },
         ac_validation_context_kwargs={
             'trust_roots': [pki_arch.get_cert('root-aa')],
-            'revocation_mode': 'require'
-        }
+            'revocation_mode': 'require',
+        },
     )
     assert status.bottom_line
     roles = list(status.ac_attrs['role'].attr_values)
@@ -1599,16 +1767,19 @@ async def test_pades_live_ac_presign_validation(requests_mock):
 
 @pytest.mark.parametrize('with_force_revinfo', [True, False])
 @pytest.mark.asyncio
-async def test_pades_lta_live_ac_presign_validation(requests_mock,
-                                                    with_force_revinfo):
+async def test_pades_lta_live_ac_presign_validation(
+    requests_mock, with_force_revinfo
+):
     # Same as the above, but with LTA instead (+some time manipulation)
 
     with freeze_time('2020-11-01'):
         pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
         authorities = [
-            pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
-            pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
-            pki_arch.get_cert('leaf-aa')
+            pki_arch.get_cert('root'),
+            pki_arch.get_cert('interm'),
+            pki_arch.get_cert('root-aa'),
+            pki_arch.get_cert('interm-aa'),
+            pki_arch.get_cert('leaf-aa'),
         ]
         signer = signers.SimpleSigner(
             signing_cert=pki_arch.get_cert(CertLabel('signer1')),
@@ -1616,37 +1787,46 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock,
             cert_registry=SimpleCertificateStore.from_certs(authorities),
             attribute_certs=[
                 pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-            ]
+            ],
         )
         dummy_ts = timestamps.DummyTimeStamper(
             tsa_cert=pki_arch.get_cert(CertLabel('tsa')),
             tsa_key=pki_arch.key_set.get_private_key(KeyLabel('tsa')),
             certs_to_embed=SimpleCertificateStore.from_certs(
                 [pki_arch.get_cert('root')]
-            )
+            ),
         )
 
         fetchers = RequestsFetcherBackend().get_fetchers()
         vc = ValidationContext(
-            trust_roots=[pki_arch.get_cert('root')], allow_fetching=True,
-            other_certs=authorities, fetchers=fetchers,
-            revocation_mode='require'
+            trust_roots=[pki_arch.get_cert('root')],
+            allow_fetching=True,
+            other_certs=authorities,
+            fetchers=fetchers,
+            revocation_mode='require',
         )
         ac_vc = ValidationContext(
-            trust_roots=[pki_arch.get_cert('root-aa')], allow_fetching=True,
-            other_certs=authorities, fetchers=fetchers,
-            revocation_mode='require'
+            trust_roots=[pki_arch.get_cert('root-aa')],
+            allow_fetching=True,
+            other_certs=authorities,
+            fetchers=fetchers,
+            revocation_mode='require',
         )
         Illusionist(pki_arch).register(requests_mock)
 
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
         out = await signers.async_sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                validation_context=vc, ac_validation_context=ac_vc,
-                subfilter=PADES, embed_validation_info=True,
-                use_pades_lta=True
-            ), signer=signer, timestamper=dummy_ts,
-            existing_fields_only=True
+            w,
+            signers.PdfSignatureMetadata(
+                validation_context=vc,
+                ac_validation_context=ac_vc,
+                subfilter=PADES,
+                embed_validation_info=True,
+                use_pades_lta=True,
+            ),
+            signer=signer,
+            timestamper=dummy_ts,
+            existing_fields_only=True,
         )
 
     revo_policy = CertRevTrustPolicy(
@@ -1670,10 +1850,11 @@ async def test_pades_lta_live_ac_presign_validation(requests_mock,
             vc_kwargs['revinfo_policy'] = revo_policy
             ac_vc_kwargs['revinfo_policy'] = revo_policy
         status = await async_validate_pdf_ltv_signature(
-            s, validation_type=RevocationInfoValidationType.PADES_LTA,
+            s,
+            validation_type=RevocationInfoValidationType.PADES_LTA,
             validation_context_kwargs=vc_kwargs,
             ac_validation_context_kwargs=ac_vc_kwargs,
-            force_revinfo=with_force_revinfo
+            force_revinfo=with_force_revinfo,
         )
         assert status.bottom_line
         roles = list(status.ac_attrs['role'].attr_values)
@@ -1695,23 +1876,26 @@ async def test_cades_signer_attrs_autofill_dss(requests_mock):
     main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             embed_validation_info=True,
             validation_context=main_vc,
             ac_validation_context=ac_vc,
             cades_signed_attr_spec=CAdESSignedAttrSpec(
-                commitment_type=CommitmentTypeIndication({
-                    'commitment_type_id': 'proof_of_approval',
-                }),
+                commitment_type=CommitmentTypeIndication(
+                    {
+                        'commitment_type_id': 'proof_of_approval',
+                    }
+                ),
                 signer_attributes=SignerAttrSpec(
                     claimed_attrs=[SAMPLE_GROUP_ATTR],
                     certified_attrs=[
                         pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-                    ]
-                )
-            )
+                    ],
+                ),
+            ),
         ),
         signer=signer,
     )
@@ -1730,32 +1914,37 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
         signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
         cert_registry=SimpleCertificateStore.from_certs(
             [
-                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
-                pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
-                pki_arch.get_cert('leaf-aa')
+                pki_arch.get_cert('root'),
+                pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'),
+                pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa'),
             ]
         ),
     )
     main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             embed_validation_info=True,
             validation_context=main_vc,
             ac_validation_context=ac_vc,
             cades_signed_attr_spec=CAdESSignedAttrSpec(
-                commitment_type=CommitmentTypeIndication({
-                    'commitment_type_id': 'proof_of_approval',
-                }),
+                commitment_type=CommitmentTypeIndication(
+                    {
+                        'commitment_type_id': 'proof_of_approval',
+                    }
+                ),
                 signer_attributes=SignerAttrSpec(
                     claimed_attrs=[SAMPLE_GROUP_ATTR],
                     certified_attrs=[
                         pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-                    ]
-                )
-            )
+                    ],
+                ),
+            ),
         ),
         signer=signer,
     )
@@ -1782,9 +1971,9 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
 
     # claimed attrs
     assert 'role' not in cades_signer_attrs.claimed_attrs
-    all_values, = iter(cades_signer_attrs.claimed_attrs)
+    (all_values,) = iter(cades_signer_attrs.claimed_attrs)
     assert all_values == cades_signer_attrs.claimed_attrs['group']
-    groups_ietf_attr, = iter(all_values.attr_values)
+    (groups_ietf_attr,) = iter(all_values.attr_values)
     assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
     groups = groups_ietf_attr['values']
     assert set(groups.native) == {'Executives', 'Employees'}
@@ -1803,18 +1992,20 @@ async def test_cades_signer_attrs_validate_acs(requests_mock):
 async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             cades_signed_attr_spec=CAdESSignedAttrSpec(
-                commitment_type=CommitmentTypeIndication({
-                    'commitment_type_id': 'proof_of_approval',
-                }),
+                commitment_type=CommitmentTypeIndication(
+                    {
+                        'commitment_type_id': 'proof_of_approval',
+                    }
+                ),
                 signer_attributes=SignerAttrSpec(
-                    claimed_attrs=[SAMPLE_GROUP_ATTR],
-                    certified_attrs=()
-                )
-            )
+                    claimed_attrs=[SAMPLE_GROUP_ATTR], certified_attrs=()
+                ),
+            ),
         ),
         signer=FROM_CA,
     )
@@ -1823,10 +2014,11 @@ async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
     assert len(s.embedded_attr_certs) == 0  # nothing here
     main_vc = live_testing_vc(requests_mock)
     status = await async_validate_pdf_signature(
-        s, signer_validation_context=main_vc,
+        s,
+        signer_validation_context=main_vc,
         # what the VC contains shouldn't matter, since there are no ACs to
         # validate
-        ac_validation_context=(main_vc if pass_ac_vc else None)
+        ac_validation_context=(main_vc if pass_ac_vc else None),
     )
     assert status.bottom_line
     assert not status.ac_attrs
@@ -1841,8 +2033,9 @@ async def test_cades_signer_attrs_claimed_only(requests_mock, pass_ac_vc):
         assert cades_signer_attrs.certified_attrs is None
 
     # claimed attrs
-    groups_ietf_attr, = \
-        iter(cades_signer_attrs.claimed_attrs['group'].attr_values)
+    (groups_ietf_attr,) = iter(
+        cades_signer_attrs.claimed_attrs['group'].attr_values
+    )
     assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
     groups = groups_ietf_attr['values']
     assert set(groups.native) == {'Executives', 'Employees'}
@@ -1857,16 +2050,19 @@ async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
         signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
         cert_registry=SimpleCertificateStore.from_certs(
             [
-                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
-                pki_arch.get_cert('root-aa'), pki_arch.get_cert('interm-aa'),
-                pki_arch.get_cert('leaf-aa')
+                pki_arch.get_cert('root'),
+                pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root-aa'),
+                pki_arch.get_cert('interm-aa'),
+                pki_arch.get_cert('leaf-aa'),
             ]
         ),
     )
     main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             embed_validation_info=True,
@@ -1877,9 +2073,9 @@ async def test_cades_signer_attrs_validate_acs_no_claimed(requests_mock):
                     claimed_attrs=(),
                     certified_attrs=[
                         pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
-                    ]
+                    ],
                 )
-            )
+            ),
         ),
         signer=signer,
     )
@@ -1920,34 +2116,37 @@ async def test_cades_signer_attrs_validate_acs_wrong_vc(requests_mock):
         signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
         cert_registry=SimpleCertificateStore.from_certs(
             [
-                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root'),
+                pki_arch.get_cert('interm'),
                 pki_arch.get_cert('root-aa'),
                 pki_arch.get_cert('interm-aa'),
-                pki_arch.get_cert('leaf-aa')
+                pki_arch.get_cert('leaf-aa'),
             ]
         ),
     )
     main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             embed_validation_info=True,
             validation_context=main_vc,
             ac_validation_context=ac_vc,
             cades_signed_attr_spec=CAdESSignedAttrSpec(
-                commitment_type=CommitmentTypeIndication({
-                    'commitment_type_id': 'proof_of_approval',
-                }),
+                commitment_type=CommitmentTypeIndication(
+                    {
+                        'commitment_type_id': 'proof_of_approval',
+                    }
+                ),
                 signer_attributes=SignerAttrSpec(
                     claimed_attrs=[SAMPLE_GROUP_ATTR],
                     certified_attrs=[
-                        pki_arch.get_attr_cert(
-                            CertLabel('alice-role-with-rev'))
-                    ]
-                )
-            )
+                        pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+                    ],
+                ),
+            ),
         ),
         signer=signer,
     )
@@ -1985,34 +2184,37 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
         signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
         cert_registry=SimpleCertificateStore.from_certs(
             [
-                pki_arch.get_cert('root'), pki_arch.get_cert('interm'),
+                pki_arch.get_cert('root'),
+                pki_arch.get_cert('interm'),
                 pki_arch.get_cert('root-aa'),
                 pki_arch.get_cert('interm-aa'),
-                pki_arch.get_cert('leaf-aa')
+                pki_arch.get_cert('leaf-aa'),
             ]
         ),
     )
     main_vc, ac_vc = live_ac_vcs(requests_mock, with_authorities=True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
             embed_validation_info=True,
             validation_context=main_vc,
             ac_validation_context=ac_vc,
             cades_signed_attr_spec=CAdESSignedAttrSpec(
-                commitment_type=CommitmentTypeIndication({
-                    'commitment_type_id': 'proof_of_approval',
-                }),
+                commitment_type=CommitmentTypeIndication(
+                    {
+                        'commitment_type_id': 'proof_of_approval',
+                    }
+                ),
                 signer_attributes=SignerAttrSpec(
                     claimed_attrs=[SAMPLE_GROUP_ATTR],
                     certified_attrs=[
-                        pki_arch.get_attr_cert(
-                            CertLabel('alice-role-with-rev'))
-                    ]
-                )
-            )
+                        pki_arch.get_attr_cert(CertLabel('alice-role-with-rev'))
+                    ],
+                ),
+            ),
         ),
         signer=signer,
     )
@@ -2023,7 +2225,8 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
 
     # validate with the wrong AC VC
     status = await async_validate_pdf_signature(
-        s, signer_validation_context=main_vc,
+        s,
+        signer_validation_context=main_vc,
     )
 
     # this should _not_ fail validation, since we've indicated that we don't
@@ -2041,13 +2244,14 @@ async def test_cades_signer_attrs_validate_acs_missing_vc(requests_mock):
 
 
 @freeze_time('2020-11-01')
-@pytest.mark.parametrize('as_signed_assertions,pass_ac_vc', [
-    (True, True), (True, False), (False, True), (False, False)
-])
+@pytest.mark.parametrize(
+    'as_signed_assertions,pass_ac_vc',
+    [(True, True), (True, False), (False, True), (False, False)],
+)
 @pytest.mark.asyncio
-async def test_cades_signer_attrs_unknown_attrs(requests_mock,
-                                                as_signed_assertions,
-                                                pass_ac_vc):
+async def test_cades_signer_attrs_unknown_attrs(
+    requests_mock, as_signed_assertions, pass_ac_vc
+):
     class CustomAttrProvider(CMSAttributeProvider):
         attribute_type = 'signer_attributes_v2'
 
@@ -2058,17 +2262,22 @@ async def test_cades_signer_attrs_unknown_attrs(requests_mock,
             value = core.OctetString(b'\xde\xad\xbe\xef')
             if as_signed_assertions:
                 signer_attrs['signed_assertions'] = [
-                    SignedAssertion({
-                        'signed_assertion_id': '2.999',
-                        'signed_assertion': value
-                    })
+                    SignedAssertion(
+                        {
+                            'signed_assertion_id': '2.999',
+                            'signed_assertion': value,
+                        }
+                    )
                 ]
             else:
                 signer_attrs['certified_attributes_v2'] = [
-                    CertifiedAttributeChoices(name='other_attr_cert', value={
-                        'other_attr_cert_id': '2.999',
-                        'other_attr_cert': value
-                    })
+                    CertifiedAttributeChoices(
+                        name='other_attr_cert',
+                        value={
+                            'other_attr_cert_id': '2.999',
+                            'other_attr_cert': value,
+                        },
+                    )
                 ]
             return SignerAttributesV2(signer_attrs)
 
@@ -2080,11 +2289,12 @@ async def test_cades_signer_attrs_unknown_attrs(requests_mock,
     signer = CustomSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
         ),
@@ -2095,10 +2305,11 @@ async def test_cades_signer_attrs_unknown_attrs(requests_mock,
     assert len(s.embedded_attr_certs) == 0  # nothing here
     main_vc = live_testing_vc(requests_mock)
     status = await async_validate_pdf_signature(
-        s, signer_validation_context=main_vc,
+        s,
+        signer_validation_context=main_vc,
         # what the VC contains shouldn't matter, since there are no ACs to
         # validate
-        ac_validation_context=(main_vc if pass_ac_vc else None)
+        ac_validation_context=(main_vc if pass_ac_vc else None),
     )
     # bottom line is unaffected
     assert status.bottom_line
@@ -2116,8 +2327,9 @@ async def test_cades_signer_attrs_unknown_attrs(requests_mock,
         assert cades_signer_attrs.certified_attrs is None
 
     # claimed attrs should still be OK
-    groups_ietf_attr, = \
-        iter(cades_signer_attrs.claimed_attrs['group'].attr_values)
+    (groups_ietf_attr,) = iter(
+        cades_signer_attrs.claimed_attrs['group'].attr_values
+    )
     assert isinstance(groups_ietf_attr, cms.IetfAttrSyntax)
     groups = groups_ietf_attr['values']
     assert set(groups.native) == {'Executives', 'Employees'}
@@ -2135,21 +2347,21 @@ async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
             }
             attr = SignerAttributesV2(signer_attrs)
             signed_attrs.append(
-                cms.CMSAttribute({
-                    'type': 'signer_attributes_v2',
-                    'values': [attr, attr]
-                })
+                cms.CMSAttribute(
+                    {'type': 'signer_attributes_v2', 'values': [attr, attr]}
+                )
             )
             return signed_attrs
 
     signer = CustomSigner(
         signing_cert=FROM_CA.signing_cert,
         signing_key=FROM_CA.signing_key,
-        cert_registry=FROM_CA.cert_registry
+        cert_registry=FROM_CA.cert_registry,
     )
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     out = await signers.async_sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             subfilter=PADES,
         ),
@@ -2161,8 +2373,9 @@ async def test_cades_signer_attrs_multivalued(requests_mock, pass_ac_vc):
     main_vc = live_testing_vc(requests_mock)
     with pytest.raises(SignatureValidationError, match='Expected single'):
         await async_validate_pdf_signature(
-            s, signer_validation_context=main_vc,
+            s,
+            signer_validation_context=main_vc,
             # what the VC contains shouldn't matter, since there are no ACs to
             # validate
-            ac_validation_context=(main_vc if pass_ac_vc else None)
+            ac_validation_context=(main_vc if pass_ac_vc else None),
         )

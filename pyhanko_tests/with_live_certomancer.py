@@ -45,38 +45,37 @@ run_if_live = pytest.mark.skipif(
 )
 
 
-async def _retrieve_credentials(session: aiohttp.ClientSession,
-                                arch, cert_label, **kwargs):
+async def _retrieve_credentials(
+    session: aiohttp.ClientSession, arch, cert_label, **kwargs
+):
     url = f"{CERTOMANCER_HOST_URL}/_certomancer/pfx-download/{arch}"
-    data = {
-        "cert": cert_label,
-        "passphrase": TEST_PASSPHRASE.decode("ascii")
-    }
-    async with session.post(url=url, data=data, raise_for_status=True,
-                            timeout=TIMEOUT) as response:
+    data = {"cert": cert_label, "passphrase": TEST_PASSPHRASE.decode("ascii")}
+    async with session.post(
+        url=url, data=data, raise_for_status=True, timeout=TIMEOUT
+    ) as response:
         pfx_bytes = await response.read()
-    (private_key, cert, other_certs_pkcs12) \
-        = pkcs12.load_key_and_certificates(pfx_bytes, TEST_PASSPHRASE)
+    (private_key, cert, other_certs_pkcs12) = pkcs12.load_key_and_certificates(
+        pfx_bytes, TEST_PASSPHRASE
+    )
 
     kinfo = _translate_pyca_cryptography_key_to_asn1(private_key)
     cert = _translate_pyca_cryptography_cert_to_asn1(cert)
-    other_certs_pkcs12 = set(map(
-        _translate_pyca_cryptography_cert_to_asn1,
-        other_certs_pkcs12
-    ))
+    other_certs_pkcs12 = set(
+        map(_translate_pyca_cryptography_cert_to_asn1, other_certs_pkcs12)
+    )
 
     cs = SimpleCertificateStore()
     cs.register_multiple(other_certs_pkcs12)
     return SimpleSigner(
-        signing_key=kinfo, signing_cert=cert,
-        cert_registry=cs, **kwargs
+        signing_key=kinfo, signing_cert=cert, cert_registry=cs, **kwargs
     )
 
 
 async def _retrieve_cert(session, arch, cert):
     url = f"{CERTOMANCER_HOST_URL}/_certomancer/any-cert/{arch}/{cert}.crt"
-    async with session.get(url=url, raise_for_status=True,
-                           timeout=TIMEOUT) as response:
+    async with session.get(
+        url=url, raise_for_status=True, timeout=TIMEOUT
+    ) as response:
         cert_bytes = await response.read()
     return x509.Certificate.load(cert_bytes)
 
@@ -90,8 +89,10 @@ async def _init_validation_context(session, arch, **kwargs):
     backend = _fetcher_backend(session)
     kwargs.setdefault("revocation_mode", "require")
     vc = ValidationContext(
-        trust_roots=[root], fetcher_backend=backend,
-        allow_fetching=True, **kwargs
+        trust_roots=[root],
+        fetcher_backend=backend,
+        allow_fetching=True,
+        **kwargs,
     )
     return vc, root
 
@@ -99,11 +100,9 @@ async def _init_validation_context(session, arch, **kwargs):
 async def _check_pades_result(out, roots, session, rivt_pades):
     r = PdfFileReader(out)
     status = await async_validate_pdf_ltv_signature(
-        r.embedded_signatures[0], rivt_pades,
-        {
-            'trust_roots': roots,
-            'fetcher_backend': _fetcher_backend(session)
-        }
+        r.embedded_signatures[0],
+        rivt_pades,
+        {'trust_roots': roots, 'fetcher_backend': _fetcher_backend(session)},
     )
     assert status.valid and status.trusted
     assert status.modification_level == ModificationLevel.LTA_UPDATES
@@ -119,20 +118,20 @@ async def test_pades_lt_live():
 
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
-            w, signers.PdfSignatureMetadata(
-                field_name='Sig1', validation_context=vc,
+            w,
+            signers.PdfSignatureMetadata(
+                field_name='Sig1',
+                validation_context=vc,
                 subfilter=SigSeedSubFilter.PADES,
-                embed_validation_info=True
+                embed_validation_info=True,
             ),
             signer=signer,
             timestamper=AIOHttpTimeStamper(
-                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
-                session=session
-            )
+                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=session
+            ),
         )
         await _check_pades_result(
-            out, [root], session,
-            RevocationInfoValidationType.PADES_LT
+            out, [root], session, RevocationInfoValidationType.PADES_LT
         )
 
 
@@ -146,22 +145,21 @@ async def test_pades_lta_live():
 
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
-            w, signers.PdfSignatureMetadata(
+            w,
+            signers.PdfSignatureMetadata(
                 field_name='Sig1',
                 validation_context=vc,
                 subfilter=SigSeedSubFilter.PADES,
                 embed_validation_info=True,
-                use_pades_lta=True
+                use_pades_lta=True,
             ),
             signer=signer,
             timestamper=AIOHttpTimeStamper(
-                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
-                session=session
-            )
+                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=session
+            ),
         )
         await _check_pades_result(
-            out, [root], session,
-            RevocationInfoValidationType.PADES_LTA
+            out, [root], session, RevocationInfoValidationType.PADES_LTA
         )
 
 
@@ -176,8 +174,7 @@ async def test_async_sign_many_concurrent():
         vc, root = await _init_validation_context(session, arch)
 
         timestamper = AIOHttpTimeStamper(
-            f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
-            session=session
+            f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa", session=session
         )
 
         async def _job(_i):
@@ -204,6 +201,5 @@ async def test_async_sign_many_concurrent():
             assert emb.field_name == 'Sig1'
             assert emb.sig_object['/Reason'].endswith(f"#{i}!")
             await _check_pades_result(
-                out, [root], session,
-                RevocationInfoValidationType.PADES_LTA
+                out, [root], session, RevocationInfoValidationType.PADES_LTA
             )

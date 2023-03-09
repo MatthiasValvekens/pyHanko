@@ -53,18 +53,24 @@ def _r6_normalise_pw(password: Union[str, bytes]) -> bytes:
         if not password:
             return b''
         from ._saslprep import saslprep
+
         password = saslprep(password).encode('utf-8')
     return password[:127]
 
 
-def _r6_password_authenticate(pw_bytes: bytes, entry: _R6KeyEntry,
-                              u_entry: Optional[bytes] = None):
+def _r6_password_authenticate(
+    pw_bytes: bytes, entry: _R6KeyEntry, u_entry: Optional[bytes] = None
+):
     purported_hash = _r6_hash_algo(pw_bytes, entry.validation_salt, u_entry)
     return purported_hash == entry.hash_value
 
 
-def _r6_derive_file_key(pw_bytes: bytes, entry: _R6KeyEntry, e_entry: bytes,
-                        u_entry: Optional[bytes] = None):
+def _r6_derive_file_key(
+    pw_bytes: bytes,
+    entry: _R6KeyEntry,
+    e_entry: bytes,
+    u_entry: Optional[bytes] = None,
+):
     interm_key = _r6_hash_algo(pw_bytes, entry.key_salt, u_entry)
     assert len(e_entry) == 32
     return aes_cbc_decrypt(
@@ -72,10 +78,7 @@ def _r6_derive_file_key(pw_bytes: bytes, entry: _R6KeyEntry, e_entry: bytes,
     )
 
 
-_EXPECTED_PERMS_8 = {
-    0x54: True,  # 'T'
-    0x46: False  # 'F'
-}
+_EXPECTED_PERMS_8 = {0x54: True, 0x46: False}  # 'T'  # 'F'
 
 
 def _bytes_mod_3(input_bytes: bytes):
@@ -83,8 +86,9 @@ def _bytes_mod_3(input_bytes: bytes):
     return sum(b % 3 for b in input_bytes) % 3
 
 
-def _r6_hash_algo(pw_bytes: bytes, current_salt: bytes,
-                  u_entry: Optional[bytes] = None) -> bytes:
+def _r6_hash_algo(
+    pw_bytes: bytes, current_salt: bytes, u_entry: Optional[bytes] = None
+) -> bytes:
     """
     Algorithm 2.B in ISO 32000-2 § 7.6.4.3.4
     """
@@ -127,8 +131,9 @@ class StandardSecuritySettingsRevision(misc.VersionEnum):
 
     def as_pdf_object(self) -> generic.PdfObject:
         val = self.value
-        return generic.NullObject() if val is None \
-            else generic.NumberObject(val)
+        return (
+            generic.NullObject() if val is None else generic.NumberObject(val)
+        )
 
     @classmethod
     def from_number(cls, value) -> 'StandardSecuritySettingsRevision':
@@ -139,10 +144,9 @@ class StandardSecuritySettingsRevision(misc.VersionEnum):
 
 
 class _PasswordCredential(core.Sequence, SerialisableCredential):
-
     _fields = [
         ('pwd_bytes', core.OctetString),
-        ('id1', core.OctetString, {'optional': True})
+        ('id1', core.OctetString, {'optional': True}),
     ]
 
     @classmethod
@@ -164,6 +168,7 @@ class StandardCryptFilter(CryptFilter, abc.ABC):
     """
     Crypt filter for use with the standard security handler.
     """
+
     _handler: 'StandardSecurityHandler' = None
 
     @property
@@ -193,6 +198,7 @@ class StandardAESCryptFilter(StandardCryptFilter, AESCryptFilterMixin):
     """
     AES crypt filter for the standard security handler.
     """
+
     pass
 
 
@@ -200,6 +206,7 @@ class StandardRC4CryptFilter(StandardCryptFilter, RC4CryptFilterMixin):
     """
     RC4 crypt filter for the standard security handler.
     """
+
     pass
 
 
@@ -210,7 +217,7 @@ def _std_rc4_config(keylen):
     return CryptFilterConfiguration(
         {STD_CF: StandardRC4CryptFilter(keylen=keylen)},
         default_stream_filter=STD_CF,
-        default_string_filter=STD_CF
+        default_string_filter=STD_CF,
     )
 
 
@@ -218,12 +225,13 @@ def _std_aes_config(keylen):
     return CryptFilterConfiguration(
         {STD_CF: StandardAESCryptFilter(keylen=keylen)},
         default_stream_filter=STD_CF,
-        default_string_filter=STD_CF
+        default_string_filter=STD_CF,
     )
 
 
-def _build_legacy_standard_crypt_filter(cfdict: generic.DictionaryObject,
-                                        _acts_as_default):
+def _build_legacy_standard_crypt_filter(
+    cfdict: generic.DictionaryObject, _acts_as_default
+):
     keylen_bits = cfdict.get('/Length', 40)
     return StandardRC4CryptFilter(keylen=keylen_bits // 8)
 
@@ -245,7 +253,7 @@ class StandardSecurityHandler(SecurityHandler):
         '/V2': _build_legacy_standard_crypt_filter,
         '/AESV2': lambda _, __: StandardAESCryptFilter(keylen=16),
         '/AESV3': lambda _, __: StandardAESCryptFilter(keylen=32),
-        '/Identity': lambda _, __: IdentityCryptFilter()
+        '/Identity': lambda _, __: IdentityCryptFilter(),
     }
 
     @classmethod
@@ -253,13 +261,19 @@ class StandardSecurityHandler(SecurityHandler):
         return generic.NameObject('/Standard')
 
     @classmethod
-    def build_from_pw_legacy(cls, rev: StandardSecuritySettingsRevision,
-                             id1, desired_owner_pass, desired_user_pass=None,
-                             keylen_bytes=16, use_aes128=True,
-                             perms: int = ALL_PERMS,
-                             crypt_filter_config=None,
-                             encrypt_metadata=True,
-                             **kwargs):
+    def build_from_pw_legacy(
+        cls,
+        rev: StandardSecuritySettingsRevision,
+        id1,
+        desired_owner_pass,
+        desired_user_pass=None,
+        keylen_bytes=16,
+        use_aes128=True,
+        perms: int = ALL_PERMS,
+        crypt_filter_config=None,
+        encrypt_metadata=True,
+        **kwargs,
+    ):
         """
         Initialise a legacy password-based security handler, to attach to a
         :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
@@ -294,7 +308,8 @@ class StandardSecurityHandler(SecurityHandler):
         desired_owner_pass = legacy_normalise_pw(desired_owner_pass)
         desired_user_pass = (
             legacy_normalise_pw(desired_user_pass)
-            if desired_user_pass is not None else desired_owner_pass
+            if desired_user_pass is not None
+            else desired_owner_pass
         )
         if rev > StandardSecuritySettingsRevision.RC4_OR_AES128:
             raise ValueError(
@@ -302,25 +317,31 @@ class StandardSecurityHandler(SecurityHandler):
             )
         if rev == StandardSecuritySettingsRevision.RC4_BASIC:
             keylen_bytes = 5
-        elif use_aes128 and \
-                rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
+        elif (
+            use_aes128 and rev == StandardSecuritySettingsRevision.RC4_OR_AES128
+        ):
             keylen_bytes = 16
         o_entry = compute_o_value_legacy(
             desired_owner_pass, desired_user_pass, rev.value, keylen_bytes
         )
 
         # force perms to a 4-byte format
-        perms = as_signed(perms & 0xfffffffc)
+        perms = as_signed(perms & 0xFFFFFFFC)
         if rev == StandardSecuritySettingsRevision.RC4_BASIC:
             # some permissions are not available for these security handlers
-            perms = as_signed(perms | 0xffffffc0)
+            perms = as_signed(perms | 0xFFFFFFC0)
             u_entry, key = compute_u_value_r2(
                 desired_user_pass, o_entry, perms, id1
             )
         else:
             u_entry, key = compute_u_value_r34(
-                desired_user_pass, rev.value, keylen_bytes, o_entry, perms, id1,
-                encrypt_metadata
+                desired_user_pass,
+                rev.value,
+                keylen_bytes,
+                o_entry,
+                perms,
+                id1,
+                encrypt_metadata,
             )
 
         if rev == StandardSecuritySettingsRevision.RC4_OR_AES128:
@@ -330,28 +351,41 @@ class StandardSecurityHandler(SecurityHandler):
         else:
             version = SecurityHandlerVersion.RC4_LONGER_KEYS
 
-        if rev == StandardSecuritySettingsRevision.RC4_OR_AES128 and \
-                crypt_filter_config is None:
+        if (
+            rev == StandardSecuritySettingsRevision.RC4_OR_AES128
+            and crypt_filter_config is None
+        ):
             if use_aes128:
                 crypt_filter_config = _std_aes_config(keylen=16)
             else:
                 crypt_filter_config = _std_rc4_config(keylen=keylen_bytes)
 
         sh = cls(
-            version=version, revision=rev, legacy_keylen=keylen_bytes,
-            perm_flags=perms, odata=o_entry,
-            udata=u_entry, crypt_filter_config=crypt_filter_config,
-            encrypt_metadata=encrypt_metadata, **kwargs
+            version=version,
+            revision=rev,
+            legacy_keylen=keylen_bytes,
+            perm_flags=perms,
+            odata=o_entry,
+            udata=u_entry,
+            crypt_filter_config=crypt_filter_config,
+            encrypt_metadata=encrypt_metadata,
+            **kwargs,
         )
         sh._shared_key = key
-        sh._credential = _PasswordCredential({
-            'pwd_bytes': desired_owner_pass, 'id1': id1
-        })
+        sh._credential = _PasswordCredential(
+            {'pwd_bytes': desired_owner_pass, 'id1': id1}
+        )
         return sh
 
     @classmethod
-    def build_from_pw(cls, desired_owner_pass, desired_user_pass=None,
-                      perms=ALL_PERMS, encrypt_metadata=True, **kwargs):
+    def build_from_pw(
+        cls,
+        desired_owner_pass,
+        desired_user_pass=None,
+        perms=ALL_PERMS,
+        encrypt_metadata=True,
+        **kwargs,
+    ):
         """
         Initialise a password-based security handler backed by AES-256,
         to attach to a :class:`~.pyhanko.pdf_utils.writer.PdfFileWriter`.
@@ -398,11 +432,13 @@ class StandardSecurityHandler(SecurityHandler):
         )
         assert len(oe_seed) == 32
 
-        perms_bytes = struct.pack('<I', perms & 0xfffffffc)
+        perms_bytes = struct.pack('<I', perms & 0xFFFFFFFC)
         extd_perms_bytes = (
-            perms_bytes + (b'\xff' * 4)
+            perms_bytes
+            + (b'\xff' * 4)
             + (b'T' if encrypt_metadata else b'F')
-            + b'adb' + secrets.token_bytes(4)
+            + b'adb'
+            + secrets.token_bytes(4)
         )
 
         # need to encrypt one 16 byte block in ECB mode
@@ -411,16 +447,22 @@ class StandardSecurityHandler(SecurityHandler):
         #   compatibility.]
         cipher = Cipher(algorithms.AES(encryption_key), modes.ECB())
         encryptor = cipher.encryptor()
-        encrypted_perms = \
-            encryptor.update(extd_perms_bytes) + encryptor.finalize()  # lgtm
+        encrypted_perms = (
+            encryptor.update(extd_perms_bytes) + encryptor.finalize()
+        )  # lgtm
 
         sh = cls(
             version=SecurityHandlerVersion.AES256,
             revision=StandardSecuritySettingsRevision.AES256,
-            legacy_keylen=32, perm_flags=perms, odata=o_entry,
-            udata=u_entry, oeseed=oe_seed, ueseed=ue_seed,
-            encrypted_perms=encrypted_perms, encrypt_metadata=encrypt_metadata,
-            **kwargs
+            legacy_keylen=32,
+            perm_flags=perms,
+            odata=o_entry,
+            udata=u_entry,
+            oeseed=oe_seed,
+            ueseed=ue_seed,
+            encrypted_perms=encrypted_perms,
+            encrypt_metadata=encrypt_metadata,
+            **kwargs,
         )
         sh._shared_key = encryption_key
         sh._credential = _PasswordCredential({'pwd_bytes': owner_pw_bytes})
@@ -428,14 +470,12 @@ class StandardSecurityHandler(SecurityHandler):
 
     @staticmethod
     def _check_r6_values(udata, odata, oeseed, ueseed, encrypted_perms, rev=6):
-
         if not (len(udata) == len(odata) == 48):
             raise misc.PdfError(
                 "/U and /O entries must be 48 bytes long in a "
                 f"rev. {rev} security handler"
             )
-        if not oeseed or not ueseed or \
-                not (len(oeseed) == len(ueseed) == 32):
+        if not oeseed or not ueseed or not (len(oeseed) == len(ueseed) == 32):
             raise misc.PdfError(
                 "/UE and /OE must be present and be 32 bytes long in a "
                 f"rev. {rev} security handler"
@@ -446,26 +486,39 @@ class StandardSecurityHandler(SecurityHandler):
                 f"rev. {rev} security handler"
             )
 
-    def __init__(self, version: SecurityHandlerVersion,
-                 revision: StandardSecuritySettingsRevision,
-                 legacy_keylen,  # in bytes, not bits
-                 perm_flags: int, odata, udata, oeseed=None,
-                 ueseed=None, encrypted_perms=None, encrypt_metadata=True,
-                 crypt_filter_config: CryptFilterConfiguration = None,
-                 compat_entries=True):
+    def __init__(
+        self,
+        version: SecurityHandlerVersion,
+        revision: StandardSecuritySettingsRevision,
+        legacy_keylen,  # in bytes, not bits
+        perm_flags: int,
+        odata,
+        udata,
+        oeseed=None,
+        ueseed=None,
+        encrypted_perms=None,
+        encrypt_metadata=True,
+        crypt_filter_config: CryptFilterConfiguration = None,
+        compat_entries=True,
+    ):
         if crypt_filter_config is None:
             if version == SecurityHandlerVersion.RC4_40:
                 crypt_filter_config = _std_rc4_config(5)
             elif version == SecurityHandlerVersion.RC4_LONGER_KEYS:
                 crypt_filter_config = _std_rc4_config(legacy_keylen)
-            elif version >= SecurityHandlerVersion.AES256 \
-                    and crypt_filter_config is None:
+            elif (
+                version >= SecurityHandlerVersion.AES256
+                and crypt_filter_config is None
+            ):
                 # there's a reasonable default config that we can fall back
                 # to here
                 crypt_filter_config = _std_aes_config(32)
         super().__init__(
-            version, legacy_keylen, crypt_filter_config,
-            encrypt_metadata=encrypt_metadata, compat_entries=compat_entries
+            version,
+            legacy_keylen,
+            crypt_filter_config,
+            encrypt_metadata=encrypt_metadata,
+            compat_entries=compat_entries,
         )
         self.revision = revision
         self.perms = as_signed(perm_flags)
@@ -489,9 +542,9 @@ class StandardSecurityHandler(SecurityHandler):
         self._auth_failed = False
 
     @classmethod
-    def gather_encryption_metadata(cls,
-                                   encrypt_dict: generic.DictionaryObject) \
-            -> dict:
+    def gather_encryption_metadata(
+        cls, encrypt_dict: generic.DictionaryObject
+    ) -> dict:
         """
         Gather and preprocess the "easy" metadata values in an encryption
         dictionary, and turn them into constructor kwargs.
@@ -525,18 +578,20 @@ class StandardSecurityHandler(SecurityHandler):
             ),
             encrypt_metadata=encrypt_dict.get_and_apply(
                 '/EncryptMetadata', bool, default=True
-            )
+            ),
         )
 
     @classmethod
-    def instantiate_from_pdf_object(cls,
-                                    encrypt_dict: generic.DictionaryObject):
+    def instantiate_from_pdf_object(
+        cls, encrypt_dict: generic.DictionaryObject
+    ):
         v = SecurityHandlerVersion.from_number(encrypt_dict['/V'])
         r = StandardSecuritySettingsRevision.from_number(encrypt_dict['/R'])
         return StandardSecurityHandler(
-            version=v, revision=r,
+            version=v,
+            revision=r,
             crypt_filter_config=cls.process_crypt_filters(encrypt_dict),
-            **cls.gather_encryption_metadata(encrypt_dict)
+            **cls.gather_encryption_metadata(encrypt_dict),
         )
 
     def as_pdf_object(self):
@@ -547,14 +602,17 @@ class StandardSecurityHandler(SecurityHandler):
         result['/P'] = generic.NumberObject(as_signed(self.perms))
         # this shouldn't be necessary for V5 handlers, but Adobe Reader
         # requires it anyway ...sigh...
-        if self._compat_entries or \
-                self.version == SecurityHandlerVersion.RC4_LONGER_KEYS:
+        if (
+            self._compat_entries
+            or self.version == SecurityHandlerVersion.RC4_LONGER_KEYS
+        ):
             result['/Length'] = generic.NumberObject(self.keylen * 8)
         result['/V'] = self.version.as_pdf_object()
         result['/R'] = self.revision.as_pdf_object()
         if self.version > SecurityHandlerVersion.RC4_LONGER_KEYS:
-            result['/EncryptMetadata'] \
-                = generic.BooleanObject(self.encrypt_metadata)
+            result['/EncryptMetadata'] = generic.BooleanObject(
+                self.encrypt_metadata
+            )
             result.update(self.crypt_filter_config.as_pdf_object())
         if self.revision >= StandardSecuritySettingsRevision.AES256:
             result['/OE'] = generic.ByteStringObject(self.oeseed)
@@ -571,8 +629,13 @@ class StandardSecurityHandler(SecurityHandler):
             )
         else:
             user_tok_supplied, key = compute_u_value_r34(
-                password, rev.value, self.keylen, self.odata, self.perms, id1,
-                self.encrypt_metadata
+                password,
+                rev.value,
+                self.keylen,
+                self.odata,
+                self.perms,
+                id1,
+                self.encrypt_metadata,
             )
             user_tok_supplied = user_tok_supplied[:16]
             user_token = user_token[:16]
@@ -580,10 +643,7 @@ class StandardSecurityHandler(SecurityHandler):
         return user_tok_supplied == user_token, key
 
     def _authenticate_legacy(self, id1: bytes, password):
-        cred = _PasswordCredential({
-            'pwd_bytes': password,
-            'id1': id1
-        })
+        cred = _PasswordCredential({'pwd_bytes': password, 'id1': id1})
 
         # check the owner password first
         rev = self.revision
@@ -608,8 +668,9 @@ class StandardSecurityHandler(SecurityHandler):
             return AuthStatus.USER, key
         return AuthStatus.FAILED, None
 
-    def authenticate(self, credential, id1: Optional[bytes] = None) \
-            -> AuthResult:
+    def authenticate(
+        self, credential, id1: Optional[bytes] = None
+    ) -> AuthResult:
         """
         Authenticate a user to this security handler.
 
@@ -674,8 +735,9 @@ class StandardSecurityHandler(SecurityHandler):
         #   compatibility.]
         cipher = Cipher(algorithms.AES(key), modes.ECB())
         decryptor = cipher.decryptor()
-        decrypted_p_entry = \
-            decryptor.update(self.encrypted_perms) + decryptor.finalize()  # lgtm
+        decrypted_p_entry = (
+            decryptor.update(self.encrypted_perms) + decryptor.finalize()
+        )  # lgtm
 
         # known plaintext mandated in the standard ...sigh...
         perms_ok = decrypted_p_entry[9:12] == b'adb'
@@ -708,7 +770,8 @@ class StandardSecurityHandler(SecurityHandler):
         key = self._shared_key
         if key is None:
             raise PdfKeyNotAvailableError(
-                "Authentication failed." if self._auth_failed
+                "Authentication failed."
+                if self._auth_failed
                 else "No key available to decrypt, please authenticate first."
             )
         return key

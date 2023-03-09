@@ -229,7 +229,7 @@ and a bitmap background.
     from pyhanko.pdf_utils import text, images
     from pyhanko.pdf_utils.font import opentype
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import signers
+    from pyhanko.sign import fields, signers
 
 
     signer = signers.SimpleSigner.load(...)
@@ -290,7 +290,7 @@ in the end result.
     from pyhanko.pdf_utils import text
     from pyhanko.pdf_utils.font import opentype
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-    from pyhanko.sign import signers
+    from pyhanko.sign import fields, signers
 
 
     signer = signers.SimpleSigner.load(...)

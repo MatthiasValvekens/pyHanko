@@ -20,8 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    'FormUpdatingRule', 'FormUpdate',
-    'FieldMDPRule', 'FieldComparisonSpec', 'FieldComparisonContext',
+    'FormUpdatingRule',
+    'FormUpdate',
+    'FieldMDPRule',
+    'FieldComparisonSpec',
+    'FieldComparisonContext',
 ]
 
 
@@ -116,10 +119,7 @@ class FieldComparisonSpec:
         # these are the paths where we expect the form field to be referred to
         paths = self._old_annotation_paths()
         contexts = set(
-            Context.from_absolute(
-                self.old_field_ref.get_pdf_handler(),
-                path
-            )
+            Context.from_absolute(self.old_field_ref.get_pdf_handler(), path)
             for path in paths
         )
         struct_context = self._find_in_structure_tree()
@@ -129,7 +129,7 @@ class FieldComparisonSpec:
             contexts.add(
                 Context.from_absolute(
                     self.old_field_ref.get_pdf_handler(),
-                    self.old_canonical_path
+                    self.old_canonical_path,
                 )
             )
         return contexts
@@ -164,8 +164,12 @@ class FieldComparisonSpec:
             if '/StructTreeRoot' in pdf_path and len(pdf_path) >= 5:
                 root, struct_tree_root, k1 = pdf_path.path[:3]
                 k2, obj = pdf_path.path[-2:]
-                if k1 == k2 == '/K' and obj == '/Obj' and root == '/Root' \
-                        and struct_tree_root == '/StructTreeRoot':
+                if (
+                    k1 == k2 == '/K'
+                    and obj == '/Obj'
+                    and root == '/Root'
+                    and struct_tree_root == '/StructTreeRoot'
+                ):
                     return Context.from_absolute(old, pdf_path)
 
     # FIXME this is wrong now
@@ -203,7 +207,9 @@ class FieldComparisonSpec:
 
             # rest should be nothing and nxt should be /Annots
             return (
-                descended and not rest and nxt == '/Annots'
+                descended
+                and not rest
+                and nxt == '/Annots'
                 and isinstance(nxt_ix, int)
             )
 
@@ -237,8 +243,9 @@ class FieldMDPRule:
     Sub-rules attached to a :class:`.FormUpdatingRule`.
     """
 
-    def apply(self, context: FieldComparisonContext) \
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def apply(
+        self, context: FieldComparisonContext
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
         """
         Apply the rule to the given :class:`.FieldComparisonContext`.
 
@@ -249,9 +256,13 @@ class FieldMDPRule:
         raise NotImplementedError
 
 
-def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
-                 old_path: RawPdfPath, parent_name="", inherited_ft=None) \
-        -> Dict[str, FieldComparisonSpec]:
+def _list_fields(
+    old_fields: generic.PdfObject,
+    new_fields: generic.PdfObject,
+    old_path: RawPdfPath,
+    parent_name="",
+    inherited_ft=None,
+) -> Dict[str, FieldComparisonSpec]:
     """
     Recursively construct a list of field names, together with their
     "incarnations" in either revision.
@@ -274,8 +285,9 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
                 name = field.raw_get('/T')
             except KeyError:
                 continue
-            if not isinstance(name, (generic.TextStringObject,
-                                     generic.ByteStringObject)):
+            if not isinstance(
+                name, (generic.TextStringObject, generic.ByteStringObject)
+            ):
                 raise exc("Names must be strings")
             if name in names_seen:
                 raise exc("Duplicate field name")
@@ -310,16 +322,21 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
 
     for field_name in names:
         try:
-            old_field_type, old_field_ref, old_kids, field_index = \
-                old_fields_by_name[field_name]
+            (
+                old_field_type,
+                old_field_ref,
+                old_kids,
+                field_index,
+            ) = old_fields_by_name[field_name]
         except KeyError:
             old_field_type = old_field_ref = None
             old_kids = generic.ArrayObject()
             field_index = None
 
         try:
-            new_field_type, new_field_ref, new_kids, _ = \
-                new_fields_by_name[field_name]
+            new_field_type, new_field_ref, new_kids, _ = new_fields_by_name[
+                field_name
+            ]
         except KeyError:
             new_field_type = new_field_ref = None
             new_kids = generic.ArrayObject()
@@ -336,14 +353,18 @@ def _list_fields(old_fields: generic.PdfObject, new_fields: generic.PdfObject,
             field_path = None
         yield field_name, FieldComparisonSpec(
             field_type=common_ft,
-            old_field_ref=old_field_ref, new_field_ref=new_field_ref,
-            old_canonical_path=field_path
+            old_field_ref=old_field_ref,
+            new_field_ref=new_field_ref,
+            old_canonical_path=field_path,
         )
 
         # recursively descend into /Kids if necessary
         if old_kids or new_kids:
             yield from _list_fields(
-                old_kids, new_kids, parent_name=field_name, old_path=(
+                old_kids,
+                new_kids,
+                parent_name=field_name,
+                old_path=(
                     field_path + '/Kids' if field_path is not None else None
                 ),
                 inherited_ft=common_ft,
@@ -376,16 +397,19 @@ class FormUpdatingRule:
         Changes are potentially subject to validation by other rules.
     """
 
-    def __init__(self, field_rules: List[FieldMDPRule],
-                 ignored_acroform_keys=None):
+    def __init__(
+        self, field_rules: List[FieldMDPRule], ignored_acroform_keys=None
+    ):
         self.field_rules = field_rules
         self.ignored_acroform_keys = (
-            ignored_acroform_keys if ignored_acroform_keys is not None
+            ignored_acroform_keys
+            if ignored_acroform_keys is not None
             else ACROFORM_EXEMPT_STRICT_COMPARISON
         )
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[Tuple[ModificationLevel, FormUpdate]]:
         """
         Evaluate changes in the document's form between two revisions.
 
@@ -400,12 +424,10 @@ class FormUpdatingRule:
         )
         old_acroform, new_acroform = yield from qualify(
             ModificationLevel.LTA_UPDATES,
-            compare_key_refs(
-                '/AcroForm', old, old.root, new.root
-            ),
+            compare_key_refs('/AcroForm', old, old.root, new.root),
             transform=FormUpdate.curry_ref(
                 field_name=None, context_checked=acroform_context
-            )
+            ),
         )
 
         # first, compare the entries that aren't /Fields
@@ -424,7 +446,7 @@ class FormUpdatingRule:
             compare_key_refs('/Fields', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(
                 field_name=None, context_checked=fields_context
-            )
+            ),
         )
 
         # we also need to deal with the default resource dict, since
@@ -437,22 +459,24 @@ class FormUpdatingRule:
             compare_key_refs('/DR', old, old_acroform, new_acroform),
             transform=FormUpdate.curry_ref(
                 field_name=None, context_checked=dr_context
-            )
+            ),
         )
         if new_dr is not None:
             dr_deps = new.collect_dependencies(
                 new_dr, since_revision=old.revision + 1
             )
             yield from qualify(
-                ModificationLevel.FORM_FILLING, misc._as_gen(dr_deps),
-                transform=FormUpdate.curry_ref(field_name=None)
+                ModificationLevel.FORM_FILLING,
+                misc._as_gen(dr_deps),
+                transform=FormUpdate.curry_ref(field_name=None),
             )
 
         context = FieldComparisonContext(
             field_specs=dict(
                 _list_fields(old_fields, new_fields, old_path=fields_path)
             ),
-            old=old, new=new
+            old=old,
+            new=new,
         )
 
         for rule in self.field_rules:

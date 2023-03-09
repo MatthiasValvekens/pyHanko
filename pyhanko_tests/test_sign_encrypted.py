@@ -38,8 +38,10 @@ def test_sign_crypt_rc4(password):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD_RC4))
     w.encrypt(password)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-        existing_fields_only=True
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
 
     r = PdfFileReader(out)
@@ -54,8 +56,10 @@ def test_sign_crypt_aes256(password):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD_AES256))
     w.encrypt(password)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-        existing_fields_only=True
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
 
     r = PdfFileReader(out)
@@ -69,8 +73,10 @@ def test_sign_crypt_pubkey_aes256():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_PUBKEY_ONE_FIELD_AES256))
     w.encrypt_pubkey(PUBKEY_SELFSIGNED_DECRYPTER)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-        existing_fields_only=True
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
 
     r = PdfFileReader(out)
@@ -84,8 +90,10 @@ def test_sign_crypt_pubkey_rc4():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_PUBKEY_ONE_FIELD_RC4))
     w.encrypt_pubkey(PUBKEY_SELFSIGNED_DECRYPTER)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(), signer=FROM_CA,
-        existing_fields_only=True
+        w,
+        signers.PdfSignatureMetadata(),
+        signer=FROM_CA,
+        existing_fields_only=True,
     )
 
     r = PdfFileReader(out)
@@ -95,8 +103,10 @@ def test_sign_crypt_pubkey_rc4():
 
 
 sign_crypt_new_params = [
-    [b'usersecret', 0], [b'usersecret', 1],
-    [b'ownersecret', 0], [b'ownersecret', 1]
+    [b'usersecret', 0],
+    [b'usersecret', 1],
+    [b'ownersecret', 0],
+    [b'ownersecret', 1],
 ]
 
 
@@ -106,7 +116,9 @@ def test_sign_crypt_rc4_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_rc4_files[file]))
     w.encrypt(password)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        w,
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA,
     )
     out.seek(0)
     r = PdfFileReader(out)
@@ -122,7 +134,9 @@ def test_sign_crypt_aes256_new(password, file):
     w = IncrementalPdfFileWriter(BytesIO(sign_crypt_aes256_files[file]))
     w.encrypt(password)
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(field_name='SigNew'), signer=FROM_CA,
+        w,
+        signers.PdfSignatureMetadata(field_name='SigNew'),
+        signer=FROM_CA,
     )
     out.seek(0)
     r = PdfFileReader(out)
@@ -139,16 +153,19 @@ def test_sign_encrypted_with_post_sign(requests_mock, password, file):
     w.encrypt(password)
 
     out = signers.sign_pdf(
-        w, signers.PdfSignatureMetadata(
+        w,
+        signers.PdfSignatureMetadata(
             field_name='Sig1',
             validation_context=live_testing_vc(requests_mock),
-            subfilter=PADES, embed_validation_info=True,
+            subfilter=PADES,
+            embed_validation_info=True,
             dss_settings=DSSContentSettings(
                 placement=SigDSSPlacementPreference.SEPARATE_REVISION
             ),
-            use_pades_lta=True
+            use_pades_lta=True,
         ),
-        signer=FROM_CA, timestamper=DUMMY_HTTP_TS
+        signer=FROM_CA,
+        timestamper=DUMMY_HTTP_TS,
     )
     r = PdfFileReader(out)
     r.decrypt(password)

@@ -115,9 +115,7 @@ class CLIConfig:
         try:
             style_config = dict(self.stamp_styles[name])
         except KeyError:
-            raise ConfigurationError(
-                f"There is no stamp style named '{name}'."
-            )
+            raise ConfigurationError(f"There is no stamp style named '{name}'.")
         except TypeError as e:
             raise ConfigurationError(e)
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
@@ -145,9 +143,14 @@ class CLIConfig:
         return PemDerSignatureConfig.from_config(setup)
 
 
-def init_validation_context_kwargs(*, trust, trust_replace, other_certs,
-                                   retroactive_revinfo=False,
-                                   time_tolerance=None):
+def init_validation_context_kwargs(
+    *,
+    trust,
+    trust_replace,
+    other_certs,
+    retroactive_revinfo=False,
+    time_tolerance=None,
+):
     if not isinstance(time_tolerance, timedelta):
         if time_tolerance is None:
             time_tolerance = timedelta(seconds=DEFAULT_TIME_TOLERANCE)
@@ -180,15 +183,23 @@ def init_validation_context_kwargs(*, trust, trust_replace, other_certs,
 #  in some cases)
 # Time-related settings are probably better off in the CLI.
 
-def parse_trust_config(trust_config, time_tolerance,
-                       retroactive_revinfo) -> dict:
+
+def parse_trust_config(
+    trust_config, time_tolerance, retroactive_revinfo
+) -> dict:
     check_config_keys(
         'ValidationContext',
-        ('trust', 'trust-replace', 'other-certs',
-         'time-tolerance', 'retroactive-revinfo',
-         'signer-key-usage', 'signer-extd-key-usage',
-         'signer-key-usage-policy'),
-        trust_config
+        (
+            'trust',
+            'trust-replace',
+            'other-certs',
+            'time-tolerance',
+            'retroactive-revinfo',
+            'signer-key-usage',
+            'signer-extd-key-usage',
+            'signer-key-usage-policy',
+        ),
+        trust_config,
     )
     return init_validation_context_kwargs(
         trust=trust_config.get('trust'),
@@ -197,7 +208,7 @@ def parse_trust_config(trust_config, time_tolerance,
         time_tolerance=trust_config.get('time-tolerance', time_tolerance),
         retroactive_revinfo=trust_config.get(
             'retroactive-revinfo', retroactive_revinfo
-        )
+        ),
     )
 
 
@@ -229,8 +240,10 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
     )
 
     root_logger_output = get_and_apply(
-        log_config_spec, 'root-output', LogConfig.parse_output_spec,
-        default=StdLogOutput.STDERR
+        log_config_spec,
+        'root-output',
+        LogConfig.parse_output_spec,
+        default=StdLogOutput.STDERR,
     )
 
     log_config = {None: LogConfig(root_logger_level, root_logger_output)}
@@ -246,8 +259,10 @@ def parse_logging_config(log_config_spec) -> Dict[Optional[str], LogConfig]:
             )
         level_spec = _retrieve_log_level(module_logging_settings, 'level')
         output_spec = get_and_apply(
-            module_logging_settings, 'output', LogConfig.parse_output_spec,
-            default=StdLogOutput.STDERR
+            module_logging_settings,
+            'output',
+            LogConfig.parse_output_spec,
+            default=StdLogOutput.STDERR,
         )
         log_config[module] = LogConfig(level=level_spec, output=output_spec)
 
@@ -299,12 +314,15 @@ class PKCS12SignatureConfig(config_utils.ConfigurableMixin):
         except KeyError:
             pass
 
-    def instantiate(self, provided_pfx_passphrase: Optional[bytes] = None) \
-            -> SimpleSigner:
+    def instantiate(
+        self, provided_pfx_passphrase: Optional[bytes] = None
+    ) -> SimpleSigner:
         passphrase = self.pfx_passphrase or provided_pfx_passphrase
         result = SimpleSigner.load_pkcs12(
-            pfx_file=self.pfx_file, passphrase=passphrase,
-            other_certs=self.other_certs, prefer_pss=self.prefer_pss
+            pfx_file=self.pfx_file,
+            passphrase=passphrase,
+            other_certs=self.other_certs,
+            prefer_pss=self.prefer_pss,
         )
         if result is None:
             raise ConfigurationError("Error while loading key material")
@@ -358,12 +376,15 @@ class PemDerSignatureConfig(config_utils.ConfigurableMixin):
         except KeyError:
             pass
 
-    def instantiate(self, provided_key_passphrase: Optional[bytes] = None) \
-            -> SimpleSigner:
+    def instantiate(
+        self, provided_key_passphrase: Optional[bytes] = None
+    ) -> SimpleSigner:
         key_passphrase = self.key_passphrase or provided_key_passphrase
         result = SimpleSigner.load(
-            key_file=self.key_file, cert_file=self.cert_file,
-            other_certs=self.other_certs, prefer_pss=self.prefer_pss,
+            key_file=self.key_file,
+            cert_file=self.cert_file,
+            other_certs=self.other_certs,
+            prefer_pss=self.prefer_pss,
             key_passphrase=key_passphrase,
         )
         if result is None:
@@ -445,8 +466,9 @@ class PKCS11PinEntryMode(enum.Enum):
                 )
         else:
             # fallback for backwards compatibility
-            return PKCS11PinEntryMode.PROMPT if value \
-                else PKCS11PinEntryMode.SKIP
+            return (
+                PKCS11PinEntryMode.PROMPT if value else PKCS11PinEntryMode.SKIP
+            )
 
 
 @dataclass(frozen=True)
@@ -554,10 +576,13 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
     def check_config_keys(cls, keys_supplied: Set[str]):
         # make sure we don't ding token_label since we actually still
         # process it for compatibility reasons
-        super().check_config_keys({
-            k for k in keys_supplied
-            if k not in ('token_label', 'token-label')
-        })
+        super().check_config_keys(
+            {
+                k
+                for k in keys_supplied
+                if k not in ('token_label', 'token-label')
+            }
+        )
 
     @classmethod
     def process_entries(cls, config_dict):
@@ -569,12 +594,14 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
 
         cert_file = config_dict.get('signing_certificate', None)
         if cert_file is not None:
-            config_dict['signing_certificate'] \
-                = load_cert_from_pemder(cert_file)
+            config_dict['signing_certificate'] = load_cert_from_pemder(
+                cert_file
+            )
 
         if 'key_id' in config_dict:
-            config_dict['key_id'] \
-                = _process_pkcs11_id_value(config_dict['key_id'])
+            config_dict['key_id'] = _process_pkcs11_id_value(
+                config_dict['key_id']
+            )
         elif 'key_label' not in config_dict and 'cert_label' not in config_dict:
             raise ConfigurationError(
                 "Either 'key_id', 'key_label' or 'cert_label' must be provided "
@@ -582,25 +609,30 @@ class PKCS11SignatureConfig(config_utils.ConfigurableMixin):
             )
 
         if 'cert_id' in config_dict:
-            config_dict['cert_id'] \
-                = _process_pkcs11_id_value(config_dict['cert_id'])
-        elif 'cert_label' not in config_dict \
-                and 'signing_certificate' not in config_dict:
+            config_dict['cert_id'] = _process_pkcs11_id_value(
+                config_dict['cert_id']
+            )
+        elif (
+            'cert_label' not in config_dict
+            and 'signing_certificate' not in config_dict
+        ):
             raise ConfigurationError(
                 "Either 'cert_id', 'cert_label' or 'signing_certificate' "
                 "must be provided in PKCS#11 setup"
             )
 
         config_dict['prompt_pin'] = get_and_apply(
-            config_dict, 'prompt_pin', PKCS11PinEntryMode.parse_mode_setting,
-            default=PKCS11PinEntryMode.PROMPT
+            config_dict,
+            'prompt_pin',
+            PKCS11PinEntryMode.parse_mode_setting,
+            default=PKCS11PinEntryMode.PROMPT,
         )
 
         if 'token_label' in config_dict:
             warnings.warn(
                 "'token_label' is deprecated, use 'token_criteria.label' "
                 "instead",
-                DeprecationWarning
+                DeprecationWarning,
             )
             lbl = config_dict.pop('token_label')
             if 'token_criteria' not in config_dict:
@@ -644,7 +676,7 @@ def process_config_dict(config_dict: dict) -> dict:
     stamp_configs = {
         DEFAULT_STAMP_STYLE: {
             'stamp-text': DEFAULT_SIGNING_STAMP_STYLE.stamp_text,
-            'background': '__stamp__'
+            'background': '__stamp__',
         }
     }
     try:
@@ -681,10 +713,15 @@ def process_config_dict(config_dict: dict) -> dict:
     time_tolerance = timedelta(seconds=time_tolerance_seconds)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
     return dict(
-        validation_contexts=vcs, default_validation_context=default_vc,
-        time_tolerance=time_tolerance, retroactive_revinfo=retroactive_revinfo,
-        stamp_styles=stamp_configs, default_stamp_style=default_stamp_style,
-        log_config=log_config, pkcs11_setups=pkcs11_setups,
-        pkcs12_setups=pkcs12_setups, pemder_setups=pemder_setups,
-        beid_module_path=beid_module_path
+        validation_contexts=vcs,
+        default_validation_context=default_vc,
+        time_tolerance=time_tolerance,
+        retroactive_revinfo=retroactive_revinfo,
+        stamp_styles=stamp_configs,
+        default_stamp_style=default_stamp_style,
+        log_config=log_config,
+        pkcs11_setups=pkcs11_setups,
+        pkcs12_setups=pkcs12_setups,
+        pemder_setups=pemder_setups,
+        beid_module_path=beid_module_path,
     )

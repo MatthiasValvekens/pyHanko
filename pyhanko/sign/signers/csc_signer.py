@@ -103,14 +103,17 @@ from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 
 try:
     import aiohttp
-except ImportError:   # pragma: nocover
+except ImportError:  # pragma: nocover
     raise ImportError("Install pyHanko with [async_http]")
 
 __all__ = [
     'CSCSigner',
-    'CSCServiceSessionInfo', 'CSCCredentialInfo',
-    'fetch_certs_in_csc_credential', 'CSCAuthorizationInfo',
-    'CSCAuthorizationManager', 'PrefetchedSADAuthorizationManager'
+    'CSCServiceSessionInfo',
+    'CSCCredentialInfo',
+    'fetch_certs_in_csc_credential',
+    'CSCAuthorizationInfo',
+    'CSCAuthorizationManager',
+    'PrefetchedSADAuthorizationManager',
 ]
 
 logger = logging.getLogger(__name__)
@@ -230,9 +233,11 @@ class CSCCredentialInfo:
         return scs
 
 
-async def fetch_certs_in_csc_credential(session: aiohttp.ClientSession,
-                                        csc_session_info: CSCServiceSessionInfo,
-                                        timeout: int = 30) -> CSCCredentialInfo:
+async def fetch_certs_in_csc_credential(
+    session: aiohttp.ClientSession,
+    csc_session_info: CSCServiceSessionInfo,
+    timeout: int = 30,
+) -> CSCCredentialInfo:
     """
     Call the ``credentials/info`` endpoint of the CSC service for a specific
     credential, and encode the result into a :class:`.CSCCredentialInfo`
@@ -251,13 +256,17 @@ async def fetch_certs_in_csc_credential(session: aiohttp.ClientSession,
     req_data = {
         "credentialID": csc_session_info.credential_id,
         "certificates": "chain",
-        "certInfo": False
+        "certInfo": False,
     }
 
     try:
-        async with session.post(url, headers=csc_session_info.auth_headers,
-                                json=req_data, raise_for_status=True,
-                                timeout=timeout) as response:
+        async with session.post(
+            url,
+            headers=csc_session_info.auth_headers,
+            json=req_data,
+            raise_for_status=True,
+            timeout=timeout,
+        ) as response:
             response_data = await response.json()
     except aiohttp.ClientError as e:
         raise SigningError("Credential info request failed") from e
@@ -266,7 +275,6 @@ async def fetch_certs_in_csc_credential(session: aiohttp.ClientSession,
 
 
 def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
-
     try:
         b64_certs = response_data['cert']['certificates']
     except KeyError as e:
@@ -275,13 +283,10 @@ def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
         ) from e
     try:
         certs = [
-            x509.Certificate.load(base64.b64decode(cert))
-            for cert in b64_certs
+            x509.Certificate.load(base64.b64decode(cert)) for cert in b64_certs
         ]
     except ValueError as e:
-        raise SigningError(
-            "Could not decode certificates in response"
-        ) from e
+        raise SigningError("Could not decode certificates in response") from e
     try:
         algo_oids = response_data["key"]["algo"]
         if not isinstance(algo_oids, list):
@@ -314,11 +319,12 @@ def _process_certificate_info_response(response_data) -> CSCCredentialInfo:
         # The CSC spec requires the signer's certificate to be first
         # in the 'certs' array. The order for the others is unspecified,
         # but that doesn't matter.
-        signing_cert=certs[0], chain=certs[1:],
+        signing_cert=certs[0],
+        chain=certs[1:],
         supported_mechanisms=supported_algos,
         max_batch_size=max_batch_size,
         hash_pinning_required=hash_pinning_required,
-        response_data=response_data
+        response_data=response_data,
     )
 
 
@@ -374,14 +380,17 @@ class CSCAuthorizationManager(abc.ABC):
         Details about the credential.
     """
 
-    def __init__(self,
-                 csc_session_info: CSCServiceSessionInfo,
-                 credential_info: CSCCredentialInfo):
+    def __init__(
+        self,
+        csc_session_info: CSCServiceSessionInfo,
+        credential_info: CSCCredentialInfo,
+    ):
         self.csc_session_info = csc_session_info
         self.credential_info = credential_info
 
-    async def authorize_signature(self, hash_b64s: List[str]) \
-            -> CSCAuthorizationInfo:
+    async def authorize_signature(
+        self, hash_b64s: List[str]
+    ) -> CSCAuthorizationInfo:
         """
         Request a SAD token from the signing service, either freshly or to
         extend the current transaction.
@@ -397,12 +406,15 @@ class CSCAuthorizationManager(abc.ABC):
         """
         raise NotImplementedError
 
-    def format_csc_auth_request(self, num_signatures: int = 1,
-                                pin: Optional[str] = None,
-                                otp: Optional[str] = None,
-                                hash_b64s: Optional[List[str]] = None,
-                                description: Optional[str] = None,
-                                client_data: Optional[str] = None) -> dict:
+    def format_csc_auth_request(
+        self,
+        num_signatures: int = 1,
+        pin: Optional[str] = None,
+        otp: Optional[str] = None,
+        hash_b64s: Optional[List[str]] = None,
+        description: Optional[str] = None,
+        client_data: Optional[str] = None,
+    ) -> dict:
         """
         Format the parameters for a call to ``credentials/authorize``.
 
@@ -462,9 +474,7 @@ class CSCAuthorizationManager(abc.ABC):
         try:
             sad = str(response_data["SAD"])
         except KeyError:
-            raise SigningError(
-                "Could not extract SAD value from auth response"
-            )
+            raise SigningError("Could not extract SAD value from auth response")
 
         try:
             lifetime_seconds = int(response_data.get('expiresIn', 3600))
@@ -515,15 +525,19 @@ class PrefetchedSADAuthorizationManager(CSCAuthorizationManager):
         The pre-fetched signature activation data.
     """
 
-    def __init__(self, csc_session_info: CSCServiceSessionInfo,
-                 credential_info: CSCCredentialInfo,
-                 csc_auth_info: CSCAuthorizationInfo):
+    def __init__(
+        self,
+        csc_session_info: CSCServiceSessionInfo,
+        credential_info: CSCCredentialInfo,
+        csc_auth_info: CSCAuthorizationInfo,
+    ):
         super().__init__(csc_session_info, credential_info)
         self.csc_auth_info = csc_auth_info
         self._used = False
 
-    async def authorize_signature(self,
-                                  hash_b64s: List[str]) -> CSCAuthorizationInfo:
+    async def authorize_signature(
+        self, hash_b64s: List[str]
+    ) -> CSCAuthorizationInfo:
         """
         Return the prefetched SAD, or raise an error if called twice.
 
@@ -610,16 +624,18 @@ class CSCSigner(Signer):
         overestimate.
     """
 
-    def __init__(self,
-                 session: aiohttp.ClientSession,
-                 auth_manager: CSCAuthorizationManager,
-                 sign_timeout: int = 300,
-                 prefer_pss: bool = False, embed_roots: bool = True,
-                 client_data: Optional[str] = None,
-                 batch_autocommit: bool = True,
-                 batch_size: Optional[int] = None,
-                 est_raw_signature_size=512):
-
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        auth_manager: CSCAuthorizationManager,
+        sign_timeout: int = 300,
+        prefer_pss: bool = False,
+        embed_roots: bool = True,
+        client_data: Optional[str] = None,
+        batch_autocommit: bool = True,
+        batch_size: Optional[int] = None,
+        est_raw_signature_size=512,
+    ):
         credential_info = auth_manager.credential_info
         self.auth_manager = auth_manager
         self.signing_cert = credential_info.signing_cert
@@ -646,8 +662,9 @@ class CSCSigner(Signer):
             )
         return result
 
-    async def format_csc_signing_req(self, tbs_hashes: List[str],
-                                     digest_algorithm: str) -> dict:
+    async def format_csc_signing_req(
+        self, tbs_hashes: List[str], digest_algorithm: str
+    ) -> dict:
         """
         Populate the request data for a CSC signing request
 
@@ -672,20 +689,22 @@ class CSCSigner(Signer):
         # The latter might not scale as easily within this architecture;
         # if you want both optimal security _and_ optimal performance,
         # you'll have to use this signer in the interrupted signing workflow.
-        auth_info: CSCAuthorizationInfo \
-            = await self.auth_manager.authorize_signature(tbs_hashes)
+        auth_info: CSCAuthorizationInfo = (
+            await self.auth_manager.authorize_signature(tbs_hashes)
+        )
 
         req_data = {
             'credentialID': session_info.credential_id,
             'SAD': auth_info.sad,
             'hashAlgo': algos.DigestAlgorithmId(digest_algorithm).dotted,
             'signAlgo': mechanism['algorithm'].dotted,
-            'hash': tbs_hashes
+            'hash': tbs_hashes,
         }
         if mechanism['parameters'].native is not None:
             params_der = mechanism['parameters'].dump()
-            req_data['signAlgoParams'] = \
-                base64.b64encode(params_der).decode('ascii')
+            req_data['signAlgoParams'] = base64.b64encode(params_der).decode(
+                'ascii'
+            )
         if self.client_data is not None:
             req_data['clientData'] = self.client_data
 
@@ -718,8 +737,9 @@ class CSCSigner(Signer):
         )
         return batch
 
-    async def async_sign_raw(self, data: bytes, digest_algorithm: str,
-                             dry_run=False) -> bytes:
+    async def async_sign_raw(
+        self, data: bytes, digest_algorithm: str, dry_run=False
+    ) -> bytes:
         if dry_run:
             return bytes(self.est_raw_signature_size)
 
@@ -776,10 +796,13 @@ class CSCSigner(Signer):
             session_info = self.auth_manager.csc_session_info
             url = session_info.endpoint_url("signatures/signHash")
             session = self.session
-            async with session.post(url,
-                                    headers=self.auth_manager.auth_headers,
-                                    json=req_data, raise_for_status=True,
-                                    timeout=self.sign_timeout) as response:
+            async with session.post(
+                url,
+                headers=self.auth_manager.auth_headers,
+                json=req_data,
+                raise_for_status=True,
+                timeout=self.sign_timeout,
+            ) as response:
                 response_data = await response.json()
             sig_b64s = response_data['signatures']
             actual_len = len(sig_b64s)

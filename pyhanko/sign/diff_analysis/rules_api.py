@@ -27,16 +27,21 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    'QualifiedWhitelistRule', 'WhitelistRule', 'ReferenceUpdate',
-    'Context', 'RelativeContext', 'AbsoluteContext'
+    'QualifiedWhitelistRule',
+    'WhitelistRule',
+    'ReferenceUpdate',
+    'Context',
+    'RelativeContext',
+    'AbsoluteContext',
 ]
 
 
 def _eq_deref(a: Dereferenceable, b: Dereferenceable):
     if isinstance(a, TrailerReference) and isinstance(b, TrailerReference):
         return True
-    elif isinstance(a, (Reference, IndirectObject)) \
-            and isinstance(b, (Reference, IndirectObject)):
+    elif isinstance(a, (Reference, IndirectObject)) and isinstance(
+        b, (Reference, IndirectObject)
+    ):
         return a.idnum == b.idnum and a.generation == b.generation
     else:
         return False
@@ -50,16 +55,18 @@ def _hash_deref(a: Dereferenceable):
 
 
 class Context:
-
     @classmethod
-    def from_absolute(cls, pdf_handler: PdfHandler, absolute_path: RawPdfPath) \
-            -> 'AbsoluteContext':
+    def from_absolute(
+        cls, pdf_handler: PdfHandler, absolute_path: RawPdfPath
+    ) -> 'AbsoluteContext':
         return AbsoluteContext(pdf_handler=pdf_handler, path=absolute_path)
 
     @classmethod
-    def relative_to(cls, start: Union[DictionaryObject, ArrayObject],
-                    path: Union[RawPdfPath, int, str]) -> 'RelativeContext':
-
+    def relative_to(
+        cls,
+        start: Union[DictionaryObject, ArrayObject],
+        path: Union[RawPdfPath, int, str],
+    ) -> 'RelativeContext':
         cur_ref: Dereferenceable = start.container_ref
         if isinstance(path, (int, str)):
             path = RawPdfPath(path)
@@ -105,9 +112,11 @@ class RelativeContext(Context):
         return hash(('rel', _hash_deref(self.anchor), self.relative_path))
 
     def __eq__(self, other):
-        return isinstance(other, RelativeContext) \
-               and other.relative_path == self.relative_path \
-               and _eq_deref(other.anchor, self.anchor)
+        return (
+            isinstance(other, RelativeContext)
+            and other.relative_path == self.relative_path
+            and _eq_deref(other.anchor, self.anchor)
+        )
 
 
 @dataclass(frozen=True)
@@ -127,8 +136,7 @@ class AbsoluteContext(Context):
     @property
     def relative_view(self) -> RelativeContext:
         return RelativeContext.relative_to(
-            self.pdf_handler.trailer_view,
-            self.path
+            self.pdf_handler.trailer_view, self.path
         )
 
     def descend(self, path: Union[RawPdfPath, int, str]) -> 'AbsoluteContext':
@@ -143,7 +151,6 @@ class ApprovalType(misc.OrderedEnum):
 
 @dataclass(frozen=True)
 class ReferenceUpdate:
-
     updated_ref: Reference
     """
     Reference that was (potentially) updated.
@@ -175,8 +182,9 @@ class QualifiedWhitelistRule:
     differentiate between multiple levels.
     """
 
-    def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
+    def apply_qualified(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
         """
         Apply the rule to the changes between two revisions.
 
@@ -198,8 +206,9 @@ class WhitelistRule:
     specified separately (see :meth:`.WhitelistRule.as_qualified`).
     """
 
-    def apply(self, old: HistoricalResolver, new: HistoricalResolver) \
-            -> Iterable[ReferenceUpdate]:
+    def apply(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[ReferenceUpdate]:
         """
         Apply the rule to the changes between two revisions.
 
@@ -225,12 +234,12 @@ class WhitelistRule:
 
 
 class _WrappingQualifiedWhitelistRule(QualifiedWhitelistRule):
-
     def __init__(self, rule: WhitelistRule, level: ModificationLevel):
         self.rule = rule
         self.level = level
 
-    def apply_qualified(self, old: HistoricalResolver, new: HistoricalResolver)\
-            -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
+    def apply_qualified(
+        self, old: HistoricalResolver, new: HistoricalResolver
+    ) -> Iterable[Tuple[ModificationLevel, ReferenceUpdate]]:
         for ref in self.rule.apply(old, new):
             yield self.level, ref

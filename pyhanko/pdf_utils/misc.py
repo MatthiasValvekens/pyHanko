@@ -16,16 +16,35 @@ from io import BytesIO
 from typing import Callable, Generator, Iterable, Optional, TypeVar
 
 __all__ = [
-    'PdfError', 'PdfReadError', 'PdfStrictReadError',
-    'PdfWriteError', 'PdfStreamError', 'IndirectObjectExpected',
-    'get_and_apply', 'OrderedEnum', 'StringWithLanguage',
+    'PdfError',
+    'PdfReadError',
+    'PdfStrictReadError',
+    'PdfWriteError',
+    'PdfStreamError',
+    'IndirectObjectExpected',
+    'get_and_apply',
+    'OrderedEnum',
+    'StringWithLanguage',
     'is_regular_character',
-    'read_non_whitespace', 'read_until_whitespace', 'read_until_regex',
-    'skip_over_whitespace', 'skip_over_comment', 'instance_test', 'peek',
-    'assert_writable_and_random_access', 'prepare_rw_output_stream',
+    'read_non_whitespace',
+    'read_until_whitespace',
+    'read_until_regex',
+    'skip_over_whitespace',
+    'skip_over_comment',
+    'instance_test',
+    'peek',
+    'assert_writable_and_random_access',
+    'prepare_rw_output_stream',
     'finalise_output',
-    'DEFAULT_CHUNK_SIZE', 'chunked_write', 'chunked_digest', 'chunk_stream',
-    'ConsList', 'Singleton', 'rd', 'isoparse', 'lift_iterable_async'
+    'DEFAULT_CHUNK_SIZE',
+    'chunked_write',
+    'chunked_digest',
+    'chunk_stream',
+    'ConsList',
+    'Singleton',
+    'rd',
+    'isoparse',
+    'lift_iterable_async',
 ]
 
 import pytz
@@ -40,7 +59,6 @@ rd = lambda x: round(x, 4)
 
 
 def instance_test(cls):
-
     return lambda x: isinstance(x, cls)
 
 
@@ -73,6 +91,7 @@ def read_until_whitespace(stream, maxchars=None):
             if tok.isspace() or not tok:
                 break
             yield tok
+
     return b''.join(_build())
 
 
@@ -121,13 +140,16 @@ def skip_over_whitespace(stream, stop_after_eol=False) -> bool:
     cnt = 0
     while tok in PDF_WHITESPACE:
         tok = stream.read(1)
+        if not tok:
+            raise PdfStreamError("Stream ended prematurely")
         cnt += 1
         if stop_after_eol:
             if tok == b'\n':
                 return cnt > 1
             elif tok == b'\r':
-                # read the next char and check if it's a LF
-                if stream.read(1) == b'\n':
+                # read the next char and check if it's a LF (or EOF)
+                nxt = stream.read(1)
+                if nxt == b'\n' or not nxt:
                     return cnt > 1
                 # if not, break here; we need to seek back one position
                 # (CR by itself also counts as an EOL sequence)
@@ -166,8 +188,8 @@ def read_until_regex(stream, regex, ignore_eof=False):
                 raise PdfStreamError("Stream has ended unexpectedly")
         m = regex.search(tok)
         if m is not None:
-            name += tok[:m.start()]
-            stream.seek(m.start()-len(tok), 1)
+            name += tok[: m.start()]
+            stream.seek(m.start() - len(tok), 1)
             break
         name += tok
     return name
@@ -188,7 +210,6 @@ class StringWithLanguage:
 
 
 class PdfError(Exception):
-
     def __init__(self, msg: str, *args):
         self.msg = msg
         super().__init__(msg, *args)
@@ -309,7 +330,6 @@ class VersionEnum(Enum):
 
 
 class LazyJoin:
-
     def __init__(self, sep, iterator):
         self.sep = sep
         self.iterator = iterator
@@ -331,8 +351,9 @@ Y = TypeVar('Y')
 R = TypeVar('R')
 
 
-def map_with_return(gen: Generator[X, None, R], func: Callable[[X], Y])\
-        -> Generator[Y, None, R]:
+def map_with_return(
+    gen: Generator[X, None, R], func: Callable[[X], Y]
+) -> Generator[Y, None, R]:
     while True:
         try:
             yield func(next(gen))
@@ -378,7 +399,6 @@ def chunked_write(temp_buffer: bytearray, stream, output, max_read=None):
 
 
 class Singleton(type):
-
     def __new__(mcs, name, bases, dct):
         cls = type.__new__(mcs, name, bases, dct)
         instance = type.__call__(cls)
@@ -426,9 +446,7 @@ def assert_writable_and_random_access(output):
     #  case, the write error would only happen *after* the signing/updating
     #  operations are done. We want to avoid that scenario.
     if not output.writable():
-        raise IOError(
-            "Output buffer is not writable"
-        )  # pragma: nocover
+        raise IOError("Output buffer is not writable")  # pragma: nocover
     return output.seekable() and output.readable()
 
 

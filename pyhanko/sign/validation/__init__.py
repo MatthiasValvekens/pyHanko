@@ -43,17 +43,29 @@ from .status import (
 )
 
 __all__ = [
-    'SignatureCoverageLevel', 'PdfSignatureStatus', 'DocumentTimestampStatus',
-    'StandardCMSSignatureStatus', 'ModificationInfo',
-    'EmbeddedPdfSignature', 'DocMDPInfo',
-    'RevocationInfoValidationType', 'VRI', 'DocumentSecurityStore',
-    'apply_adobe_revocation_info', 'get_timestamp_chain',
+    'SignatureCoverageLevel',
+    'PdfSignatureStatus',
+    'DocumentTimestampStatus',
+    'StandardCMSSignatureStatus',
+    'ModificationInfo',
+    'EmbeddedPdfSignature',
+    'DocMDPInfo',
+    'RevocationInfoValidationType',
+    'VRI',
+    'DocumentSecurityStore',
+    'apply_adobe_revocation_info',
+    'get_timestamp_chain',
     'read_certification_data',
-    'validate_pdf_signature', 'async_validate_pdf_signature',
-    'validate_cms_signature', 'async_validate_cms_signature',
-    'validate_detached_cms', 'async_validate_detached_cms',
-    'validate_pdf_timestamp', 'async_validate_pdf_timestamp',
-    'validate_pdf_ltv_signature', 'async_validate_pdf_ltv_signature',
+    'validate_pdf_signature',
+    'async_validate_pdf_signature',
+    'validate_cms_signature',
+    'async_validate_cms_signature',
+    'validate_detached_cms',
+    'async_validate_detached_cms',
+    'validate_pdf_timestamp',
+    'async_validate_pdf_timestamp',
+    'validate_pdf_ltv_signature',
+    'async_validate_pdf_ltv_signature',
     'collect_validation_info',
     'add_validation_info',
 ]
@@ -62,13 +74,15 @@ __all__ = [
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
 
 
-def validate_cms_signature(signed_data: cms.SignedData,
-                           status_cls: Type[StatusType] = SignatureStatus,
-                           raw_digest: bytes = None,
-                           validation_context: ValidationContext = None,
-                           status_kwargs: dict = None,
-                           key_usage_settings: KeyUsageConstraints = None,
-                           encap_data_invalid=False):
+def validate_cms_signature(
+    signed_data: cms.SignedData,
+    status_cls: Type[StatusType] = SignatureStatus,
+    raw_digest: bytes = None,
+    validation_context: ValidationContext = None,
+    status_kwargs: dict = None,
+    key_usage_settings: KeyUsageConstraints = None,
+    encap_data_invalid=False,
+):
     """
     .. deprecated:: 0.9.0
         Use :func:`~.generic_cms.async_validate_cms_signature` instead.
@@ -107,26 +121,29 @@ def validate_cms_signature(signed_data: cms.SignedData,
     warnings.warn(
         "'validate_cms_signature' is deprecated, use "
         "'async_validate_cms_signature' instead",
-        DeprecationWarning
+        DeprecationWarning,
     )
 
     coro = async_validate_cms_signature(
-        signed_data=signed_data, status_cls=status_cls, raw_digest=raw_digest,
-        validation_context=validation_context, status_kwargs=status_kwargs,
+        signed_data=signed_data,
+        status_cls=status_cls,
+        raw_digest=raw_digest,
+        validation_context=validation_context,
+        status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,
     )
     return asyncio.run(coro)
 
 
-def validate_detached_cms(input_data: Union[bytes, IO,
-                                            cms.ContentInfo,
-                                            cms.EncapsulatedContentInfo],
-                          signed_data: cms.SignedData,
-                          signer_validation_context: ValidationContext = None,
-                          ts_validation_context: ValidationContext = None,
-                          key_usage_settings: KeyUsageConstraints = None,
-                          chunk_size=misc.DEFAULT_CHUNK_SIZE,
-                          max_read=None) -> StandardCMSSignatureStatus:
+def validate_detached_cms(
+    input_data: Union[bytes, IO, cms.ContentInfo, cms.EncapsulatedContentInfo],
+    signed_data: cms.SignedData,
+    signer_validation_context: ValidationContext = None,
+    ts_validation_context: ValidationContext = None,
+    key_usage_settings: KeyUsageConstraints = None,
+    chunk_size=misc.DEFAULT_CHUNK_SIZE,
+    max_read=None,
+) -> StandardCMSSignatureStatus:
     """
     .. deprecated:: 0.9.0
         Use :func:`.generic_cms.async_validate_detached_cms` instead.
@@ -163,7 +180,7 @@ def validate_detached_cms(input_data: Union[bytes, IO,
     warnings.warn(
         "'validate_detached_cms' is deprecated, use "
         "'async_validate_detached_cms' instead",
-        DeprecationWarning
+        DeprecationWarning,
     )
 
     coro = async_validate_detached_cms(
@@ -173,17 +190,19 @@ def validate_detached_cms(input_data: Union[bytes, IO,
         ts_validation_context=ts_validation_context,
         key_usage_settings=key_usage_settings,
         chunk_size=chunk_size,
-        max_read=max_read
+        max_read=max_read,
     )
     return asyncio.run(coro)
 
 
-def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
-                           signer_validation_context: ValidationContext = None,
-                           ts_validation_context: ValidationContext = None,
-                           diff_policy: DiffPolicy = None,
-                           key_usage_settings: KeyUsageConstraints = None,
-                           skip_diff: bool = False) -> PdfSignatureStatus:
+def validate_pdf_signature(
+    embedded_sig: EmbeddedPdfSignature,
+    signer_validation_context: ValidationContext = None,
+    ts_validation_context: ValidationContext = None,
+    diff_policy: DiffPolicy = None,
+    key_usage_settings: KeyUsageConstraints = None,
+    skip_diff: bool = False,
+) -> PdfSignatureStatus:
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`~.pdf_embedded.async_validate_pdf_signature`.
@@ -214,16 +233,19 @@ def validate_pdf_signature(embedded_sig: EmbeddedPdfSignature,
         embedded_sig=embedded_sig,
         signer_validation_context=signer_validation_context,
         ts_validation_context=ts_validation_context,
-        diff_policy=diff_policy, key_usage_settings=key_usage_settings,
-        skip_diff=skip_diff
+        diff_policy=diff_policy,
+        key_usage_settings=key_usage_settings,
+        skip_diff=skip_diff,
     )
     return asyncio.run(coro)
 
 
-def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
-                           validation_context: ValidationContext = None,
-                           diff_policy: DiffPolicy = None,
-                           skip_diff: bool = False) -> DocumentTimestampStatus:
+def validate_pdf_timestamp(
+    embedded_sig: EmbeddedPdfSignature,
+    validation_context: ValidationContext = None,
+    diff_policy: DiffPolicy = None,
+    skip_diff: bool = False,
+) -> DocumentTimestampStatus:
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`~.pdf_embedded.async_validate_pdf_timestamp`.
@@ -247,16 +269,22 @@ def validate_pdf_timestamp(embedded_sig: EmbeddedPdfSignature,
     coro = async_validate_pdf_timestamp(
         embedded_sig=embedded_sig,
         validation_context=validation_context,
-        diff_policy=diff_policy, skip_diff=skip_diff,
+        diff_policy=diff_policy,
+        skip_diff=skip_diff,
     )
     return asyncio.run(coro)
 
 
-def add_validation_info(embedded_sig: EmbeddedPdfSignature,
-                        validation_context: ValidationContext,
-                        skip_timestamp=False, add_vri_entry=True,
-                        in_place=False, output=None, force_write=False,
-                        chunk_size=misc.DEFAULT_CHUNK_SIZE):
+def add_validation_info(
+    embedded_sig: EmbeddedPdfSignature,
+    validation_context: ValidationContext,
+    skip_timestamp=False,
+    add_vri_entry=True,
+    in_place=False,
+    output=None,
+    force_write=False,
+    chunk_size=misc.DEFAULT_CHUNK_SIZE,
+):
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`~.dss.async_add_validation_info`
@@ -293,22 +321,28 @@ def add_validation_info(embedded_sig: EmbeddedPdfSignature,
     """
 
     coro = async_add_validation_info(
-        embedded_sig=embedded_sig, validation_context=validation_context,
-        skip_timestamp=skip_timestamp, add_vri_entry=add_vri_entry,
-        output=output, in_place=in_place, chunk_size=chunk_size,
-        force_write=force_write
+        embedded_sig=embedded_sig,
+        validation_context=validation_context,
+        skip_timestamp=skip_timestamp,
+        add_vri_entry=add_vri_entry,
+        output=output,
+        in_place=in_place,
+        chunk_size=chunk_size,
+        force_write=force_write,
     )
     return asyncio.run(coro)
 
 
-def validate_pdf_ltv_signature(embedded_sig: EmbeddedPdfSignature,
-                               validation_type: RevocationInfoValidationType,
-                               validation_context_kwargs=None,
-                               bootstrap_validation_context=None,
-                               force_revinfo=False,
-                               diff_policy: DiffPolicy = None,
-                               key_usage_settings: KeyUsageConstraints = None,
-                               skip_diff: bool = False) -> PdfSignatureStatus:
+def validate_pdf_ltv_signature(
+    embedded_sig: EmbeddedPdfSignature,
+    validation_type: RevocationInfoValidationType,
+    validation_context_kwargs=None,
+    bootstrap_validation_context=None,
+    force_revinfo=False,
+    diff_policy: DiffPolicy = None,
+    key_usage_settings: KeyUsageConstraints = None,
+    skip_diff: bool = False,
+) -> PdfSignatureStatus:
     """
     .. versionchanged:: 0.9.0
         Wrapper around :func:`async_validate_pdf_ltv_signature`.

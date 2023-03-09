@@ -29,10 +29,17 @@ from pyhanko.pdf_utils.writer import BasePdfFileWriter, init_xobject_dictionary
 
 __all__ = [
     "AnnotAppearances",
-    "BaseStampStyle", "TextStampStyle", "QRStampStyle", "StaticStampStyle",
+    "BaseStampStyle",
+    "TextStampStyle",
+    "QRStampStyle",
+    "StaticStampStyle",
     "QRPosition",
-    "BaseStamp", "TextStamp", "QRStamp", "StaticContentStamp",
-    "text_stamp_file", "qr_stamp_file",
+    "BaseStamp",
+    "TextStamp",
+    "QRStamp",
+    "StaticContentStamp",
+    "text_stamp_file",
+    "qr_stamp_file",
     "STAMP_ART_CONTENT",
 ]
 
@@ -58,9 +65,12 @@ class AnnotAppearances:
     See § 12.5.5 in ISO 32000-1 for further information.
     """
 
-    def __init__(self, normal: generic.IndirectObject,
-                 rollover: Optional[generic.IndirectObject] = None,
-                 down: Optional[generic.IndirectObject] = None):
+    def __init__(
+        self,
+        normal: generic.IndirectObject,
+        rollover: Optional[generic.IndirectObject] = None,
+        down: Optional[generic.IndirectObject] = None,
+    ):
         self.normal = normal
         self.rollover = rollover
         self.down = down
@@ -85,9 +95,7 @@ class AnnotAppearances:
 
 def _get_background_content(bg_spec) -> content.PdfContent:
     if not isinstance(bg_spec, str):
-        raise ConfigurationError(
-            "Background specification must be a string"
-        )
+        raise ConfigurationError("Background specification must be a string")
     # 'special' value to use the stamp vector image baked into
     # the module
     if bg_spec == '__stamp__':
@@ -99,6 +107,7 @@ def _get_background_content(bg_spec) -> content.PdfContent:
         from PIL import Image
 
         from pyhanko.pdf_utils.images import PdfImage
+
         img = Image.open(bg_spec)
         # Setting the writer can be delayed
         return PdfImage(img, writer=None)
@@ -124,7 +133,7 @@ class BaseStampStyle(ConfigurableMixin):
     background_layout: layout.SimpleBoxLayoutRule = layout.SimpleBoxLayoutRule(
         x_align=layout.AxisAlignment.ALIGN_MID,
         y_align=layout.AxisAlignment.ALIGN_MID,
-        margins=layout.Margins.uniform(5)
+        margins=layout.Margins.uniform(5),
     )
     """
     Layout rule to render the background inside the stamp's bounding box.
@@ -160,9 +169,12 @@ class BaseStampStyle(ConfigurableMixin):
         if bg_spec is not None:
             config_dict['background'] = _get_background_content(bg_spec)
 
-    def create_stamp(self, writer: BasePdfFileWriter,
-                     box: layout.BoxConstraints, text_params: dict) \
-            -> 'BaseStamp':
+    def create_stamp(
+        self,
+        writer: BasePdfFileWriter,
+        box: layout.BoxConstraints,
+        text_params: dict,
+    ) -> 'BaseStamp':
         raise NotImplementedError
 
 
@@ -180,8 +192,9 @@ class StaticStampStyle(BaseStampStyle):
     """
 
     @classmethod
-    def from_pdf_file(cls, file_name, page_ix=0, **kwargs) \
-            -> 'StaticStampStyle':
+    def from_pdf_file(
+        cls, file_name, page_ix=0, **kwargs
+    ) -> 'StaticStampStyle':
         """
         Create a :class:`StaticStampStyle` from a page from an external PDF
         document. This is a convenience wrapper around
@@ -197,13 +210,15 @@ class StaticStampStyle(BaseStampStyle):
         """
         return StaticStampStyle(
             background=content.ImportedPdfPage(file_name, page_ix=page_ix),
-            **kwargs
+            **kwargs,
         )
 
-    def create_stamp(self, writer: BasePdfFileWriter,
-                     box: layout.BoxConstraints, text_params: dict) \
-            -> 'StaticContentStamp':
-
+    def create_stamp(
+        self,
+        writer: BasePdfFileWriter,
+        box: layout.BoxConstraints,
+        text_params: dict,
+    ) -> 'StaticContentStamp':
         return StaticContentStamp(writer=writer, style=self, box=box)
 
 
@@ -246,10 +261,12 @@ class TextStampStyle(BaseStampStyle):
     Datetime format used to render the timestamp.
     """
 
-    def create_stamp(self, writer: BasePdfFileWriter,
-                     box: layout.BoxConstraints, text_params: dict) \
-            -> 'TextStamp':
-
+    def create_stamp(
+        self,
+        writer: BasePdfFileWriter,
+        box: layout.BoxConstraints,
+        text_params: dict,
+    ) -> 'TextStamp':
         return TextStamp(
             writer=writer, style=self, box=box, text_params=text_params
         )
@@ -298,7 +315,7 @@ class QRPosition(enum.Enum):
                 'left': QRPosition.LEFT_OF_TEXT,
                 'right': QRPosition.RIGHT_OF_TEXT,
                 'top': QRPosition.ABOVE_TEXT,
-                'bottom': QRPosition.BELOW_TEXT
+                'bottom': QRPosition.BELOW_TEXT,
             }[config_str.lower()]
         except KeyError:
             raise ConfigurationError(
@@ -371,10 +388,12 @@ class QRStampStyle(TextStampStyle):
         except KeyError:
             pass
 
-    def create_stamp(self, writer: BasePdfFileWriter,
-                     box: layout.BoxConstraints, text_params: dict) \
-            -> 'QRStamp':
-
+    def create_stamp(
+        self,
+        writer: BasePdfFileWriter,
+        box: layout.BoxConstraints,
+        text_params: dict,
+    ) -> 'QRStamp':
         # extract the URL parameter
         try:
             url = text_params.pop('url')
@@ -388,16 +407,18 @@ class QRStampStyle(TextStampStyle):
 
 
 class BaseStamp(content.PdfContent):
-
-    def __init__(self, writer: BasePdfFileWriter, style,
-                 box: layout.BoxConstraints = None):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        style,
+        box: layout.BoxConstraints = None,
+    ):
         super().__init__(box=box, writer=writer)
         self.style = style
         self._resources_ready = False
         self._stamp_ref = None
 
     def _render_background(self):
-
         bg = self.style.background
         bg.set_writer(self.writer)
         bg_content = bg.render()  # render first, in case the BBox is lazy
@@ -413,8 +434,7 @@ class BaseStamp(content.PdfContent):
             # the left/bottom margins and hope for the best
             margins = self.style.background_layout.margins
             positioning = layout.Positioning(
-                x_scale=1, y_scale=1,
-                x_pos=margins.left, y_pos=margins.bottom
+                x_scale=1, y_scale=1, x_pos=margins.left, y_pos=margins.bottom
             )
 
         # set opacity in graphics state
@@ -422,14 +442,15 @@ class BaseStamp(content.PdfContent):
         self.set_resource(
             category=content.ResourceType.EXT_G_STATE,
             name=pdf_name('/BackgroundGS'),
-            value=generic.DictionaryObject({
-                pdf_name('/CA'): opacity, pdf_name('/ca'): opacity
-            })
+            value=generic.DictionaryObject(
+                {pdf_name('/CA'): opacity, pdf_name('/ca'): opacity}
+            ),
         )
 
         # Position & render the background
         command = b'q /BackgroundGS gs %s %s Q' % (
-            positioning.as_cm(), bg_content
+            positioning.as_cm(),
+            bg_content,
         )
         # we do this after render(), just in case our background resource
         # decides to pull in extra stuff during rendering
@@ -499,14 +520,18 @@ class BaseStamp(content.PdfContent):
         stamp_ref = self.register()
         resource_name = b'/Stamp' + hexlify(uuid.uuid4().bytes)
         stamp_paint = b'q 1 0 0 1 %g %g cm %s Do Q' % (
-            rd(x), rd(y), resource_name
+            rd(x),
+            rd(y),
+            resource_name,
         )
         stamp_wrapper_stream = generic.StreamObject(stream_data=stamp_paint)
-        resources = generic.DictionaryObject({
-            pdf_name('/XObject'): generic.DictionaryObject({
-                pdf_name(resource_name.decode('ascii')): stamp_ref
-            })
-        })
+        resources = generic.DictionaryObject(
+            {
+                pdf_name('/XObject'): generic.DictionaryObject(
+                    {pdf_name(resource_name.decode('ascii')): stamp_ref}
+                )
+            }
+        )
         wr = self.writer
         page_ref = wr.add_stream_to_page(
             dest_page, wr.add_object(stamp_wrapper_stream), resources
@@ -532,8 +557,12 @@ class BaseStamp(content.PdfContent):
 class StaticContentStamp(BaseStamp):
     """Class representing stamps with static content."""
 
-    def __init__(self, writer: BasePdfFileWriter, style: StaticStampStyle,
-                 box: layout.BoxConstraints):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        style: StaticStampStyle,
+        box: layout.BoxConstraints,
+    ):
         if not (box and box.height_defined and box.width_defined):
             raise layout.LayoutError(
                 "StaticContentStamp requires a predetermined bounding box."
@@ -550,8 +579,13 @@ class TextStamp(BaseStamp):
     of :class:`.TextStampStyle`.
     """
 
-    def __init__(self, writer: BasePdfFileWriter, style,
-                 text_params=None, box: layout.BoxConstraints = None):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        style,
+        text_params=None,
+        box: layout.BoxConstraints = None,
+    ):
         super().__init__(box=box, style=style, writer=writer)
         self.text_params = text_params
 
@@ -575,8 +609,10 @@ class TextStamp(BaseStamp):
     def _text_layout(self):
         # Set the contents of the text box
         self.text_box = tb = TextBox(
-            self.style.text_box_style, writer=self.writer,
-            resources=self.resources, box=None
+            self.style.text_box_style,
+            writer=self.writer,
+            resources=self.resources,
+            box=None,
         )
         _text_params = self.get_default_text_params()
         if self.text_params is not None:
@@ -605,8 +641,10 @@ class TextStamp(BaseStamp):
         command_stream = [b'q']
 
         # compute the inner bounding box
-        inn_commands, (inn_width, inn_height) \
-            = self._inner_layout_natural_size()
+        inn_commands, (
+            inn_width,
+            inn_height,
+        ) = self._inner_layout_natural_size()
 
         inner_layout = self._inner_content_layout_rule()
 
@@ -623,10 +661,14 @@ class TextStamp(BaseStamp):
 
 
 class QRStamp(TextStamp):
-
-    def __init__(self, writer: BasePdfFileWriter, url: str,
-                 style: QRStampStyle, text_params=None,
-                 box: layout.BoxConstraints = None):
+    def __init__(
+        self,
+        writer: BasePdfFileWriter,
+        url: str,
+        style: QRStampStyle,
+        text_params=None,
+        box: layout.BoxConstraints = None,
+    ):
         super().__init__(writer, style, text_params=text_params, box=box)
         self.url = url
         self._qr_size = None
@@ -640,14 +682,16 @@ class QRStamp(TextStamp):
         return style.qr_position.value
 
     def _inner_layout_natural_size(self):
-
-        text_commands, (text_width, text_height) \
-            = super()._inner_layout_natural_size()
+        text_commands, (
+            text_width,
+            text_height,
+        ) = super()._inner_layout_natural_size()
 
         qr_ref, natural_qr_size = self._qr_xobject()
         self.set_resource(
-            category=content.ResourceType.XOBJECT, name=pdf_name('/QR'),
-            value=qr_ref
+            category=content.ResourceType.XOBJECT,
+            name=pdf_name('/QR'),
+            value=qr_ref,
         )
 
         style = self.style
@@ -671,7 +715,7 @@ class QRStamp(TextStamp):
             # box is too tall.
             min_dim = min(
                 max(stamp_box.height, text_height),
-                max(stamp_box.width, text_width)
+                max(stamp_box.width, text_width),
             )
             qr_size = min_dim - 2 * innsep
         else:
@@ -692,11 +736,12 @@ class QRStamp(TextStamp):
 
         # Fill in the margins
         qr_layout_rule = layout.SimpleBoxLayoutRule(
-            x_align=default_layout.x_align, y_align=default_layout.y_align,
+            x_align=default_layout.x_align,
+            y_align=default_layout.y_align,
             margins=layout.Margins.uniform(innsep),
             # There's no point in scaling here, the inner content canvas
             # is always big enough
-            inner_content_scaling=layout.InnerScaling.NO_SCALING
+            inner_content_scaling=layout.InnerScaling.NO_SCALING,
         )
 
         inner_box = layout.BoxConstraints(inn_width, inn_height)
@@ -707,7 +752,8 @@ class QRStamp(TextStamp):
         draw_qr_command = b'q %g 0 0 %g %g %g cm /QR Do Q' % (
             qr_inn_pos.x_scale * qr_innunits_scale,
             qr_inn_pos.y_scale * qr_innunits_scale,
-            qr_inn_pos.x_pos, qr_inn_pos.y_pos,
+            qr_inn_pos.x_pos,
+            qr_inn_pos.y_pos,
         )
 
         # Time to put in the text box now
@@ -734,7 +780,7 @@ class QRStamp(TextStamp):
             x_align=default_layout.x_align.flipped,
             y_align=default_layout.y_align.flipped,
             margins=tb_margins,
-            inner_content_scaling=layout.InnerScaling.NO_SCALING
+            inner_content_scaling=layout.InnerScaling.NO_SCALING,
         )
 
         # position the text box
@@ -748,7 +794,8 @@ class QRStamp(TextStamp):
     def _qr_xobject(self):
         is_fancy = self.style.qr_inner_content is not None
         err_corr = (
-            qrcode.constants.ERROR_CORRECT_H if is_fancy
+            qrcode.constants.ERROR_CORRECT_H
+            if is_fancy
             else qrcode.constants.ERROR_CORRECT_M
         )
         qr = qrcode.QRCode(error_correction=err_corr)
@@ -757,17 +804,16 @@ class QRStamp(TextStamp):
 
         if is_fancy:
             img = qr.make_image(
-                image_factory=PdfFancyQRImage, version=qr.version,
-                center_image=self.style.qr_inner_content
+                image_factory=PdfFancyQRImage,
+                version=qr.version,
+                center_image=self.style.qr_inner_content,
             )
         else:
             img = qr.make_image(image_factory=PdfStreamQRImage)
         command_stream = img.render_command_stream()
 
         bbox_size = (qr.modules_count + 2 * qr.border) * qr.box_size
-        qr_xobj = init_xobject_dictionary(
-            command_stream, bbox_size, bbox_size
-        )
+        qr_xobj = init_xobject_dictionary(command_stream, bbox_size, bbox_size)
         qr_xobj.compress()
         return self.writer.add_object(qr_xobj), bbox_size
 
@@ -779,25 +825,36 @@ class QRStamp(TextStamp):
     def apply(self, dest_page, x, y):
         page_ref, (w, h) = super().apply(dest_page, x, y)
         link_rect = (x, y, x + w, y + h)
-        link_annot = generic.DictionaryObject({
-            pdf_name('/Type'): pdf_name('/Annot'),
-            pdf_name('/Subtype'): pdf_name('/Link'),
-            pdf_name('/Rect'): generic.ArrayObject(list(
-                map(generic.FloatObject, link_rect)
-            )),
-            pdf_name('/A'): generic.DictionaryObject({
-                pdf_name('/S'): pdf_name('/URI'),
-                pdf_name('/URI'): pdf_string(self.url)
-            })
-        })
+        link_annot = generic.DictionaryObject(
+            {
+                pdf_name('/Type'): pdf_name('/Annot'),
+                pdf_name('/Subtype'): pdf_name('/Link'),
+                pdf_name('/Rect'): generic.ArrayObject(
+                    list(map(generic.FloatObject, link_rect))
+                ),
+                pdf_name('/A'): generic.DictionaryObject(
+                    {
+                        pdf_name('/S'): pdf_name('/URI'),
+                        pdf_name('/URI'): pdf_string(self.url),
+                    }
+                ),
+            }
+        )
         wr = self.writer
         wr.register_annotation(page_ref, wr.add_object(link_annot))
         return page_ref, (w, h)
 
 
-def _stamp_file(input_name: str, output_name: str, style: TextStampStyle,
-                stamp_class, dest_page: int, x: int, y: int, **stamp_kwargs):
-
+def _stamp_file(
+    input_name: str,
+    output_name: str,
+    style: TextStampStyle,
+    stamp_class,
+    dest_page: int,
+    x: int,
+    y: int,
+    **stamp_kwargs,
+):
     with open(input_name, 'rb') as fin:
         pdf_out = IncrementalPdfFileWriter(fin)
         stamp = stamp_class(writer=pdf_out, style=style, **stamp_kwargs)
@@ -807,8 +864,15 @@ def _stamp_file(input_name: str, output_name: str, style: TextStampStyle,
             pdf_out.write(out)
 
 
-def text_stamp_file(input_name: str, output_name: str, style: TextStampStyle,
-                    dest_page: int, x: int, y: int, text_params=None):
+def text_stamp_file(
+    input_name: str,
+    output_name: str,
+    style: TextStampStyle,
+    dest_page: int,
+    x: int,
+    y: int,
+    text_params=None,
+):
     """
     Add a text stamp to a file.
 
@@ -828,14 +892,27 @@ def text_stamp_file(input_name: str, output_name: str, style: TextStampStyle,
         Additional parameters for text template interpolation.
     """
     _stamp_file(
-        input_name, output_name, style, TextStamp, dest_page, x, y,
-        text_params=text_params
+        input_name,
+        output_name,
+        style,
+        TextStamp,
+        dest_page,
+        x,
+        y,
+        text_params=text_params,
     )
 
 
-def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
-                  dest_page: int, x: int, y: int, url: str,
-                  text_params=None):
+def qr_stamp_file(
+    input_name: str,
+    output_name: str,
+    style: QRStampStyle,
+    dest_page: int,
+    x: int,
+    y: int,
+    url: str,
+    text_params=None,
+):
     """
     Add a QR stamp to a file.
 
@@ -858,8 +935,15 @@ def qr_stamp_file(input_name: str, output_name: str, style: QRStampStyle,
     """
 
     _stamp_file(
-        input_name, output_name, style, QRStamp, dest_page, x, y,
-        url=url, text_params=text_params
+        input_name,
+        output_name,
+        style,
+        QRStamp,
+        dest_page,
+        x,
+        y,
+        url=url,
+        text_params=text_params,
     )
 
 
@@ -880,7 +964,8 @@ c 72.488 49.34 87.043 46.695 92.332 51.984 c 97.625 57.277 96.301 65.215
 3.801 79.512 92.398 7.391 re f
 3.801 90.289 92.398 7.391 re f
 Q
-''')
+''',
+)
 """
 Hardcoded stamp background that will render a stylised image of a stamp using 
 PDF graphics operators (see below).

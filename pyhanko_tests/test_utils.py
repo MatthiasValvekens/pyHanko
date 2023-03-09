@@ -26,8 +26,9 @@ from pyhanko.pdf_utils.rw_common import PdfHandler
 from .samples import *
 
 
-@pytest.mark.parametrize('zip1, zip2',
-                         [[True, True], [True, False], [False, False]])
+@pytest.mark.parametrize(
+    'zip1, zip2', [[True, True], [True, False], [False, False]]
+)
 def test_create_fresh(zip1, zip2):
     pdf_out = writer.PdfFileWriter()
     p1 = simple_page(pdf_out, 'Hello world', compress=zip1)
@@ -145,17 +146,22 @@ def test_whitespace_variants():
     assert snippet_to_replace in MINIMAL
     for whitespace in [b' ', b'\n', b'\r', b'\t', b'\f']:
         new_snippet = snippet_to_replace.replace(b' ', whitespace)
-        r = PdfFileReader(BytesIO(MINIMAL.replace(snippet_to_replace, new_snippet)))
+        r = PdfFileReader(
+            BytesIO(MINIMAL.replace(snippet_to_replace, new_snippet))
+        )
         assert r.root['/Pages']['/Count'] == 1
 
 
-@pytest.mark.parametrize('data', [
-    b'   \n a',
-    b'   \r\n a',
-    b'   \r a',
-    b'   \r a',
-    b'   \r a',
-])
+@pytest.mark.parametrize(
+    'data',
+    [
+        b'   \n a',
+        b'   \r\n a',
+        b'   \r a',
+        b'   \r a',
+        b'   \r a',
+    ],
+)
 def test_skip_ws_behaviour(data):
     buf = BytesIO(data)
     ws_read = misc.skip_over_whitespace(buf, stop_after_eol=True)
@@ -163,17 +169,44 @@ def test_skip_ws_behaviour(data):
     assert buf.read(1) == b' '
 
 
-@pytest.mark.parametrize('data', [
-    b'/Test\x00B',
-    b'/Test  B',
-    b'/Test\x00  B',
-    b'/Test\x00 [',
-    b'/Test/B',
-    b'/Tes#74/B',
-    b'/Tes#74\x00/B',
-    b'/Tes#74 /B',
-    b'/Tes#74 \x00 /B',
-])
+@pytest.mark.parametrize(
+    'data, stop_after_eol',
+    [
+        (b'   \n', False),
+        (b'   \r', False),
+        (b'   \r\n', False),
+        (b'', False),
+        (b'', True),
+    ],
+)
+def test_skip_ws_eof_err_behaviour(data, stop_after_eol):
+    buf = BytesIO(data)
+    with pytest.raises(misc.PdfStreamError, match="ended prematurely"):
+        misc.skip_over_whitespace(buf, stop_after_eol=stop_after_eol)
+
+
+@pytest.mark.parametrize('data', [b'   \n', b'   \r', b'   \r\n'])
+def test_skip_ws_eof_ok_behaviour(data):
+    buf = BytesIO(data)
+    ws_read = misc.skip_over_whitespace(buf, stop_after_eol=True)
+    assert ws_read
+    assert not buf.read(1)  # we should be at EOF now
+
+
+@pytest.mark.parametrize(
+    'data',
+    [
+        b'/Test\x00B',
+        b'/Test  B',
+        b'/Test\x00  B',
+        b'/Test\x00 [',
+        b'/Test/B',
+        b'/Tes#74/B',
+        b'/Tes#74\x00/B',
+        b'/Tes#74 /B',
+        b'/Tes#74 \x00 /B',
+    ],
+)
 def test_name_delim(data):
     res = generic.NameObject.read_from_stream(BytesIO(data))
     assert res == '/Test'
@@ -184,6 +217,7 @@ TEST_STRING = b'\x74\x77\x74\x84\x66'
 
 def test_ascii_hex_decode():
     from pyhanko.pdf_utils import filters
+
     data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
 
     encoded = filters.ASCIIHexDecode().encode(data)
@@ -192,6 +226,7 @@ def test_ascii_hex_decode():
 
 def test_ascii85_decode():
     from pyhanko.pdf_utils import filters
+
     data = TEST_STRING * 20 + b'\0\0\0\0' + TEST_STRING * 20 + b'\x03\x02\x08'
 
     encoded = filters.ASCII85Decode().encode(data)
@@ -227,12 +262,15 @@ def test_historical_read():
 # TODO actually attempt to render the XObjects
 
 page_import_test_files = (
-    VECTOR_IMAGE_PDF, VECTOR_IMAGE_PDF_DECOMP, VECTOR_IMAGE_VARIANT_PDF
+    VECTOR_IMAGE_PDF,
+    VECTOR_IMAGE_PDF_DECOMP,
+    VECTOR_IMAGE_VARIANT_PDF,
 )
 
 
-@pytest.mark.parametrize('file_no, inherit_filters',
-                         list(product([0, 1, 2], [True, False])))
+@pytest.mark.parametrize(
+    'file_no, inherit_filters', list(product([0, 1, 2], [True, False]))
+)
 def test_page_import(file_no, inherit_filters):
     fbytes = page_import_test_files[file_no]
     image_input = PdfFileReader(BytesIO(fbytes))
@@ -247,10 +285,16 @@ def test_page_import(file_no, inherit_filters):
     assert b'0 1 0 rg /a0 gs' in xobj.data
 
 
-@pytest.mark.parametrize('stream_xrefs,with_objstreams,encrypt',
-                         [(False, False, True), (False, False, False),
-                          (True, False, False), (True, True, False),
-                          (True, True, True)])
+@pytest.mark.parametrize(
+    'stream_xrefs,with_objstreams,encrypt',
+    [
+        (False, False, True),
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (True, True, True),
+    ],
+)
 def test_page_tree_import(stream_xrefs, with_objstreams, encrypt):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter(stream_xrefs=stream_xrefs)
@@ -457,46 +501,82 @@ def test_duplicate_resource():
 
 
 TESTDATE_CET = datetime.datetime(
-    year=2008, month=2, day=3, hour=1, minute=5, second=59,
-    tzinfo=pytz.timezone('CET')
+    year=2008,
+    month=2,
+    day=3,
+    hour=1,
+    minute=5,
+    second=59,
+    tzinfo=pytz.timezone('CET'),
 )
 
 TESTDATE_EST = datetime.datetime(
-    year=2008, month=2, day=3, hour=1, minute=5, second=59,
-    tzinfo=pytz.timezone('EST')
+    year=2008,
+    month=2,
+    day=3,
+    hour=1,
+    minute=5,
+    second=59,
+    tzinfo=pytz.timezone('EST'),
 )
 
 
-@pytest.mark.parametrize('date_str, expected_dt', [
-    ('D:2008', datetime.datetime(year=2008, month=1, day=1)),
-    ('D:200802', datetime.datetime(year=2008, month=2, day=1)),
-    ('D:20080203', datetime.datetime(year=2008, month=2, day=3)),
-    ('D:20080201', datetime.datetime(year=2008, month=2, day=1)),
-    ('D:2008020301', datetime.datetime(year=2008, month=2, day=3, hour=1)),
-    ('D:200802030105',
-     datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5)),
-    ('D:20080203010559',
-     datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5, second=59)),
-    ('D:20080203010559Z',
-     datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5, second=59,
-                       tzinfo=pytz.utc)),
-    ('D:20080203010559+01\'00', TESTDATE_CET),
-    ('D:20080203010559+01', TESTDATE_CET),
-    ('D:20080203010559+01\'', TESTDATE_CET),
-    ('D:20080203010559+01\'00\'', TESTDATE_CET),
-    ('D:20080203010559-05\'00', TESTDATE_EST),
-    ('D:20080203010559-05', TESTDATE_EST),
-    ('D:20080203010559-05\'', TESTDATE_EST),
-    ('D:20080203010559-05\'00\'', TESTDATE_EST),
-])
+@pytest.mark.parametrize(
+    'date_str, expected_dt',
+    [
+        ('D:2008', datetime.datetime(year=2008, month=1, day=1)),
+        ('D:200802', datetime.datetime(year=2008, month=2, day=1)),
+        ('D:20080203', datetime.datetime(year=2008, month=2, day=3)),
+        ('D:20080201', datetime.datetime(year=2008, month=2, day=1)),
+        ('D:2008020301', datetime.datetime(year=2008, month=2, day=3, hour=1)),
+        (
+            'D:200802030105',
+            datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5),
+        ),
+        (
+            'D:20080203010559',
+            datetime.datetime(
+                year=2008, month=2, day=3, hour=1, minute=5, second=59
+            ),
+        ),
+        (
+            'D:20080203010559Z',
+            datetime.datetime(
+                year=2008,
+                month=2,
+                day=3,
+                hour=1,
+                minute=5,
+                second=59,
+                tzinfo=pytz.utc,
+            ),
+        ),
+        ('D:20080203010559+01\'00', TESTDATE_CET),
+        ('D:20080203010559+01', TESTDATE_CET),
+        ('D:20080203010559+01\'', TESTDATE_CET),
+        ('D:20080203010559+01\'00\'', TESTDATE_CET),
+        ('D:20080203010559-05\'00', TESTDATE_EST),
+        ('D:20080203010559-05', TESTDATE_EST),
+        ('D:20080203010559-05\'', TESTDATE_EST),
+        ('D:20080203010559-05\'00\'', TESTDATE_EST),
+    ],
+)
 def test_date_parsing(date_str, expected_dt):
     assert generic.parse_pdf_date(date_str) == expected_dt
 
 
-@pytest.mark.parametrize('date_str', [
-    '2008', 'D:20', 'D:20080', 'D:20081301',
-    'D:20030230', 'D:20080203010559Z00', 'D:20080203010559-05\'00\'11'
-])
+@pytest.mark.parametrize(
+    'date_str',
+    [
+        '2008',
+        'D:20',
+        'D:20080',
+        'D:20081301',
+        'D:20030230',
+        'D:20080203010559Z00',
+        'D:20080203010559-05\'00\'11',
+    ],
+)
 def test_date_parsing_errors(date_str):
     with pytest.raises(misc.PdfReadError):
         generic.parse_pdf_date(date_str)
@@ -520,7 +600,7 @@ def test_wrong_decodeparms_length():
     r = PdfFileReader(BytesIO(MINIMAL))
     s = generic.read_object(
         BytesIO(SIMPLE_STREAM_WITH_FILTERS),
-        container_ref=generic.TrailerReference(r)
+        container_ref=generic.TrailerReference(r),
     )
     assert isinstance(s, generic.StreamObject)
     s['/DecodeParms'] = generic.ArrayObject()
@@ -540,7 +620,7 @@ def test_duplicate_filter_disregard():
     r = PdfFileReader(BytesIO(MINIMAL))
     s = generic.read_object(
         BytesIO(SIMPLE_STREAM_WITH_FILTERS),
-        container_ref=generic.TrailerReference(r)
+        container_ref=generic.TrailerReference(r),
     )
     assert isinstance(s, generic.StreamObject)
     s.apply_filter('/AHx', allow_duplicates=None)
@@ -561,7 +641,7 @@ def test_duplicate_filter_permitted():
     r = PdfFileReader(BytesIO(MINIMAL))
     s = generic.read_object(
         BytesIO(SIMPLE_STREAM_WITH_FILTERS),
-        container_ref=generic.TrailerReference(r)
+        container_ref=generic.TrailerReference(r),
     )
     assert isinstance(s, generic.StreamObject)
     s.apply_filter('/AHx', allow_duplicates=True)
@@ -581,7 +661,7 @@ def test_duplicate_filter_error():
     r = PdfFileReader(BytesIO(MINIMAL))
     s = generic.read_object(
         BytesIO(SIMPLE_STREAM_WITH_FILTERS),
-        container_ref=generic.TrailerReference(r)
+        container_ref=generic.TrailerReference(r),
     )
     assert isinstance(s, generic.StreamObject)
     with pytest.raises(misc.PdfWriteError, match='has already been applied'):
@@ -602,7 +682,6 @@ def test_copy_file():
 
 # noinspection PyMethodMayBeStatic
 class PathMockHandler(PdfHandler):
-
     @property
     def document_meta_view(self) -> DocumentMetadata:
         raise NotImplementedError
@@ -626,36 +705,54 @@ class PathMockHandler(PdfHandler):
             return generic.ArrayObject([generic.NumberObject(7)])
 
 
-path_test_obj = generic.DictionaryObject({
-    pdf_name('/Blah'): generic.DictionaryObject({
-        pdf_name('/Bleh'): generic.ArrayObject(
-            [generic.NumberObject(5), pdf_name('/Foo')]
+path_test_obj = generic.DictionaryObject(
+    {
+        pdf_name('/Blah'): generic.DictionaryObject(
+            {
+                pdf_name('/Bleh'): generic.ArrayObject(
+                    [generic.NumberObject(5), pdf_name('/Foo')]
+                ),
+                pdf_name('/Null'): generic.NullObject(),
+            }
         ),
-        pdf_name('/Null'): generic.NullObject(),
-    }),
-    pdf_name('/WithRefs'): generic.DictionaryObject({
-        pdf_name('/Arr'): generic.IndirectObject(1, 0, PathMockHandler()),
-        pdf_name('/String'): generic.IndirectObject(0, 0, PathMockHandler())
-    })
-})
+        pdf_name('/WithRefs'): generic.DictionaryObject(
+            {
+                pdf_name('/Arr'): generic.IndirectObject(
+                    1, 0, PathMockHandler()
+                ),
+                pdf_name('/String'): generic.IndirectObject(
+                    0, 0, PathMockHandler()
+                ),
+            }
+        ),
+    }
+)
 
 
-@pytest.mark.parametrize('path, result', [
-    (RawPdfPath('/Blah', '/Bleh', 1), '/Foo'),
-    (RawPdfPath('/Blah', '/Bleh', 0), 5),
-    (RawPdfPath('/Blah', '/Null'), generic.NullObject()),
-    (RawPdfPath('/WithRefs', '/Arr', 0), 7),
-    (RawPdfPath('/WithRefs', '/String'), 'OK')
-])
+@pytest.mark.parametrize(
+    'path, result',
+    [
+        (RawPdfPath('/Blah', '/Bleh', 1), '/Foo'),
+        (RawPdfPath('/Blah', '/Bleh', 0), 5),
+        (RawPdfPath('/Blah', '/Null'), generic.NullObject()),
+        (RawPdfPath('/WithRefs', '/Arr', 0), 7),
+        (RawPdfPath('/WithRefs', '/String'), 'OK'),
+    ],
+)
 def test_path_access(path, result):
     assert path.access_on(path_test_obj) == result
 
 
-@pytest.mark.parametrize('path', [
-    RawPdfPath(0), RawPdfPath('/Blah', '/Null', '/NothingLeft'),
-    RawPdfPath('/Blah', '/Bleh', '/NotADictionary'),
-    RawPdfPath('/TheresNoSuchKey'), RawPdfPath('/Blah', '/Bleh', 10000)
-])
+@pytest.mark.parametrize(
+    'path',
+    [
+        RawPdfPath(0),
+        RawPdfPath('/Blah', '/Null', '/NothingLeft'),
+        RawPdfPath('/Blah', '/Bleh', '/NotADictionary'),
+        RawPdfPath('/TheresNoSuchKey'),
+        RawPdfPath('/Blah', '/Bleh', 10000),
+    ],
+)
 def test_path_access_failures(path):
     with pytest.raises(misc.PdfReadError):
         path.access_on(path_test_obj)
@@ -693,8 +790,9 @@ def test_pdf_num_precision():
     assert repr(generic.FloatObject('32')) == '32'
 
 
-@pytest.mark.parametrize('arr_str', [b'[1 1 1]', b'[1 1 1\x00\x00\x00]',
-                                     b'[1\x00\x001 1 ]'])
+@pytest.mark.parametrize(
+    'arr_str', [b'[1 1 1]', b'[1 1 1\x00\x00\x00]', b'[1\x00\x001 1 ]']
+)
 def test_array_null_bytes(arr_str):
     stream = BytesIO(arr_str)
     parsed = generic.ArrayObject.read_from_stream(stream, generic.Reference(1))
@@ -702,7 +800,6 @@ def test_array_null_bytes(arr_str):
 
 
 def test_ordered_enum():
-
     class Version(misc.OrderedEnum):
         VER1 = 1
         VER2 = 2
@@ -717,7 +814,6 @@ def test_ordered_enum():
 
 
 def test_version_enum():
-
     class Version(misc.VersionEnum):
         VER1 = 1
         VER2 = 2
@@ -741,7 +837,6 @@ def test_version_enum():
 
 
 def test_ensure_version_newfile():
-
     r = PdfFileReader(BytesIO(MINIMAL))
 
     w = writer.copy_into_new_writer(r)
@@ -802,49 +897,72 @@ def test_ensure_version_update_twice_smaller():
 TEST_EXT2 = pyhanko.pdf_utils.extensions.DeveloperExtension(
     prefix_name=generic.NameObject('/TEST'),
     base_version=generic.NameObject('/1.7'),
-    extension_level=2, url='https://example.com',
-    extension_revision='No-frills test extension'
+    extension_level=2,
+    url='https://example.com',
+    extension_revision='No-frills test extension',
 )
 
 TEST_EXT_MULTI = pyhanko.pdf_utils.extensions.DeveloperExtension(
     prefix_name=generic.NameObject('/MULT'),
     base_version=generic.NameObject('/1.7'),
-    extension_level=2, url='https://example.com',
+    extension_level=2,
+    url='https://example.com',
     extension_revision='Test extension intended to be used as multivalue',
-    multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.ALWAYS
+    multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.ALWAYS,
 )
 
 
 @pytest.mark.parametrize(
-    'expected_lvl,new_ext', [
+    'expected_lvl,new_ext',
+    [
         (2, TEST_EXT2),
-        (3, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=True
-        )),
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1, compare_by_level=True
-        )),
-        (3, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, subsumes=(2,)
-        )),
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1, subsumed_by=(2,)
-        )),
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1001,
-            subsumed_by=(2,), subsumes=(1000, 1)
-        )),
-    ]
+        (
+            3,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                compare_by_level=True,
+            ),
+        ),
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1,
+                compare_by_level=True,
+            ),
+        ),
+        (
+            3,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                subsumes=(2,),
+            ),
+        ),
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1,
+                subsumed_by=(2,),
+            ),
+        ),
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1001,
+                subsumed_by=(2,),
+                subsumes=(1000, 1),
+            ),
+        ),
+    ],
 )
 def test_single_extension_registration(expected_lvl, new_ext):
     w = writer.PdfFileWriter()
@@ -860,35 +978,55 @@ def test_single_extension_registration(expected_lvl, new_ext):
 
 
 @pytest.mark.parametrize(
-    'expected_len,new_ext', [
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3,
-        )),
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=False
-        )),
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1, subsumed_by=(5,)
-        )),
-        (2, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1001,
-            subsumed_by=(2000,), subsumes=(1000, 1)
-        )),
-        (1, pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/TEST'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=True,
-            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.ALWAYS
-        )),
-    ]
+    'expected_len,new_ext',
+    [
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+            ),
+        ),
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                compare_by_level=False,
+            ),
+        ),
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1,
+                subsumed_by=(5,),
+            ),
+        ),
+        (
+            2,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1001,
+                subsumed_by=(2000,),
+                subsumes=(1000, 1),
+            ),
+        ),
+        (
+            1,
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/TEST'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                compare_by_level=True,
+                multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.ALWAYS,
+            ),
+        ),
+    ],
 )
 def test_extension_registration_create_array(expected_len, new_ext):
     w = writer.PdfFileWriter()
@@ -904,56 +1042,104 @@ def test_extension_registration_create_array(expected_len, new_ext):
 
 
 @pytest.mark.parametrize(
-    'expected_lvls,new_ext', [
+    'expected_lvls,new_ext',
+    [
         ((2,), TEST_EXT_MULTI),
-        ((3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=True
-        )),
-        ((2,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1, compare_by_level=True
-        )),
-        ((3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, subsumes=(2,)
-        )),
-        ((2,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1, subsumed_by=(2,)
-        )),
-        ((2,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1001,
-            subsumed_by=(2,), subsumes=(1000, 1)
-        )),
-        ((2, 3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3
-        )),
-        ((2, 3,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=False
-        )),
-        ((2, 1,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1, subsumed_by=(5,)
-        )),
-        ((2, 1001,), pyhanko.pdf_utils.extensions.DeveloperExtension(
-            prefix_name=generic.NameObject('/MULT'),
-            base_version=generic.NameObject('/1.7'),
-            extension_level=1001,
-            subsumed_by=(2000,), subsumes=(1000, 1)
-        )),
-    ]
+        (
+            (3,),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                compare_by_level=True,
+            ),
+        ),
+        (
+            (2,),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1,
+                compare_by_level=True,
+            ),
+        ),
+        (
+            (3,),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                subsumes=(2,),
+            ),
+        ),
+        (
+            (2,),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1,
+                subsumed_by=(2,),
+            ),
+        ),
+        (
+            (2,),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1001,
+                subsumed_by=(2,),
+                subsumes=(1000, 1),
+            ),
+        ),
+        (
+            (
+                2,
+                3,
+            ),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+            ),
+        ),
+        (
+            (
+                2,
+                3,
+            ),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=3,
+                compare_by_level=False,
+            ),
+        ),
+        (
+            (
+                2,
+                1,
+            ),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1,
+                subsumed_by=(5,),
+            ),
+        ),
+        (
+            (
+                2,
+                1001,
+            ),
+            pyhanko.pdf_utils.extensions.DeveloperExtension(
+                prefix_name=generic.NameObject('/MULT'),
+                base_version=generic.NameObject('/1.7'),
+                extension_level=1001,
+                subsumed_by=(2000,),
+                subsumes=(1000, 1),
+            ),
+        ),
+    ],
 )
 def test_multi_extension_registration(expected_lvls, new_ext):
     w = writer.PdfFileWriter()
@@ -973,33 +1159,37 @@ def test_multi_extension_registration(expected_lvls, new_ext):
 
 
 @pytest.mark.parametrize(
-    'new_ext', [
+    'new_ext',
+    [
         pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=3,
-            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER,
         ),
         pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
-            extension_level=3, compare_by_level=False,
-            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
+            extension_level=3,
+            compare_by_level=False,
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER,
         ),
         pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
-            extension_level=1, subsumed_by=(5,),
-            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
+            extension_level=1,
+            subsumed_by=(5,),
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER,
         ),
         pyhanko.pdf_utils.extensions.DeveloperExtension(
             prefix_name=generic.NameObject('/TEST'),
             base_version=generic.NameObject('/1.7'),
             extension_level=1001,
-            subsumed_by=(2000,), subsumes=(1000, 1),
-            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER
+            subsumed_by=(2000,),
+            subsumes=(1000, 1),
+            multivalued=pyhanko.pdf_utils.extensions.DevExtensionMultivalued.NEVER,
         ),
-    ]
+    ],
 )
 def test_extension_registration_unclear(new_ext):
     w = writer.PdfFileWriter()
@@ -1014,9 +1204,9 @@ def test_extension_registration_unclear(new_ext):
 
 def test_extension_registration_type_err():
     w = writer.PdfFileWriter()
-    w.root['/Extensions'] = generic.DictionaryObject({
-        TEST_EXT2.prefix_name: generic.NullObject()
-    })
+    w.root['/Extensions'] = generic.DictionaryObject(
+        {TEST_EXT2.prefix_name: generic.NullObject()}
+    )
     out = BytesIO()
     w.write(out)
 
@@ -1027,9 +1217,9 @@ def test_extension_registration_type_err():
 
 def test_extension_registration_type_err_arr():
     w = writer.PdfFileWriter()
-    w.root['/Extensions'] = generic.DictionaryObject({
-        TEST_EXT2.prefix_name: generic.ArrayObject([generic.NullObject()])
-    })
+    w.root['/Extensions'] = generic.DictionaryObject(
+        {TEST_EXT2.prefix_name: generic.ArrayObject([generic.NullObject()])}
+    )
     out = BytesIO()
     w.write(out)
 
@@ -1042,9 +1232,9 @@ def test_extension_registration_no_level():
     w = writer.PdfFileWriter()
     ext_dict = TEST_EXT2.as_pdf_object()
     del ext_dict['/ExtensionLevel']
-    w.root['/Extensions'] = generic.DictionaryObject({
-        TEST_EXT2.prefix_name: ext_dict
-    })
+    w.root['/Extensions'] = generic.DictionaryObject(
+        {TEST_EXT2.prefix_name: ext_dict}
+    )
     out = BytesIO()
     w.write(out)
 
@@ -1057,9 +1247,9 @@ def test_extension_registration_bad_level():
     w = writer.PdfFileWriter()
     ext_dict = TEST_EXT2.as_pdf_object()
     ext_dict['/ExtensionLevel'] = generic.NullObject()
-    w.root['/Extensions'] = generic.DictionaryObject({
-        TEST_EXT2.prefix_name: ext_dict
-    })
+    w.root['/Extensions'] = generic.DictionaryObject(
+        {TEST_EXT2.prefix_name: ext_dict}
+    )
     out = BytesIO()
     w.write(out)
 
@@ -1069,11 +1259,14 @@ def test_extension_registration_bad_level():
 
 
 @pytest.mark.parametrize(
-    'name_bytes,expected', [
+    'name_bytes,expected',
+    [
         # examples from the spec
         (b'/Name1', pdf_name('/Name1')),
-        (b'/A;Name_With-Various***Characters',
-         pdf_name('/A;Name_With-Various***Characters')),
+        (
+            b'/A;Name_With-Various***Characters',
+            pdf_name('/A;Name_With-Various***Characters'),
+        ),
         (b'/1.2', pdf_name('/1.2')),
         (b'/$$', pdf_name('/$$')),
         (b'/@pattern', pdf_name('/@pattern')),
@@ -1083,8 +1276,8 @@ def test_extension_registration_bad_level():
         (b'/The_Key_of_F#23_Minor', pdf_name('/The_Key_of_F#_Minor')),
         # check hex digit handling
         (b'/application#2Fpdf', pdf_name('/application/pdf')),
-        (b'/application#2fpdf', pdf_name('/application/pdf'))
-    ]
+        (b'/application#2fpdf', pdf_name('/application/pdf')),
+    ],
 )
 def test_name_decode(name_bytes, expected):
     result = generic.NameObject.read_from_stream(BytesIO(name_bytes))
@@ -1093,14 +1286,15 @@ def test_name_decode(name_bytes, expected):
 
 @pytest.mark.parametrize(
     # examples from the spec
-    'name_bytes,expected_error', [
+    'name_bytes,expected_error',
+    [
         (b'Foo', 'Name object should start with /'),
         (b'/Foo#', 'Unterminated escape'),
         (b'/Foo#1', 'Unterminated escape'),
         (b'/Foo#z1', 'hexadecimal digit'),
         (b'/Foo\x7fbar', 'must be escaped'),
         (b'/Foo\xefbar', 'must be escaped'),
-    ]
+    ],
 )
 def test_name_decode_failure(name_bytes, expected_error):
     with pytest.raises(misc.PdfReadError, match=expected_error):
@@ -1108,12 +1302,13 @@ def test_name_decode_failure(name_bytes, expected_error):
 
 
 @pytest.mark.parametrize(
-    'name_str,expected_bytes', [
+    'name_str,expected_bytes',
+    [
         ('/Foo', b'/Foo'),
         ('/application/pdf', b'/application#2Fpdf'),
         ('/Lime Green', b'/Lime#20Green'),
         ('/The_Key_of_F#_Minor', b'/The_Key_of_F#23_Minor'),
-    ]
+    ],
 )
 def test_name_encode(name_str, expected_bytes):
     out = BytesIO()
@@ -1132,20 +1327,27 @@ def test_parse_name_invalid_utf8():
     assert result == '/Test\u00ae'
 
 
-@pytest.mark.parametrize('dt,dt_str', [
-    (
-        datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('EST')),
-        "D:20201226150511-05'00'",
-    ),
-    (
-        datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.utc),
-        "D:20201226150511Z",
-    ),
-    (
-        datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('CET')),
-        "D:20201226150511+01'00'",
-    ),
-])
+@pytest.mark.parametrize(
+    'dt,dt_str',
+    [
+        (
+            datetime.datetime(
+                2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('EST')
+            ),
+            "D:20201226150511-05'00'",
+        ),
+        (
+            datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.utc),
+            "D:20201226150511Z",
+        ),
+        (
+            datetime.datetime(
+                2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('CET')
+            ),
+            "D:20201226150511+01'00'",
+        ),
+    ],
+)
 def test_parse_datetime(dt, dt_str):
     assert generic.pdf_date(dt) == dt_str
 
@@ -1174,32 +1376,35 @@ def test_read_broken_page_tree_direct_kids():
             r.find_page_for_modification(1)
 
 
-@pytest.mark.parametrize('input_str', [
-    """
+@pytest.mark.parametrize(
+    'input_str',
+    [
+        """
     <</A/B%bleh
     /C/D>>
     """,
-    """
+        """
     <</A/B/C%bleh
     /D>>
     """,
-    """
+        """
     <</A/B/C%bleh >>
     /D>>
     """,
-    """
+        """
     <<%lkjadsf
     /A/B/C%bleh >>
     /D>>
     """,
-    """
+        """
     <<%lkjadsf\r/A/B/C%bleh >>
     /D>>
     """,
-    """
+        """
     <<%lkjadsf\r\n/A/B/C%bleh >>\r/D>>
     """,
-])
+    ],
+)
 def test_parse_comments(input_str):
     strm = BytesIO(input_str.strip().encode('utf8'))
     result = generic.DictionaryObject.read_from_stream(
@@ -1281,10 +1486,14 @@ def test_compacted_syntax():
 
 SIMPLE_STRING_ENC_SAMPLES = [
     (b'abcdef', generic.TextStringEncoding.PDF_DOC),
-    (b'\xfe\xff\x00a\x00b\x00c\x00d\x00e\x00f',
-     generic.TextStringEncoding.UTF16BE),
-    (b'\xff\xfea\x00b\x00c\x00d\x00e\x00f\x00',
-     generic.TextStringEncoding.UTF16LE),
+    (
+        b'\xfe\xff\x00a\x00b\x00c\x00d\x00e\x00f',
+        generic.TextStringEncoding.UTF16BE,
+    ),
+    (
+        b'\xff\xfea\x00b\x00c\x00d\x00e\x00f\x00',
+        generic.TextStringEncoding.UTF16LE,
+    ),
     (b'\xef\xbb\xbfabcdef', generic.TextStringEncoding.UTF8),
 ]
 
@@ -1312,15 +1521,19 @@ def test_string_encode(encoded, expected_enc):
 
 # FIXME these should work with PDFDocEncoding as well
 
-@pytest.mark.parametrize('encoded, decoded', [
-    (b'(\xef\xbb\xbfHello\\nWorld)', 'Hello\nWorld'),
-    (b'(\xef\xbb\xbfHello\\fWorld)', 'Hello\fWorld'),
-    (b'(\xef\xbb\xbfHello\\tWorld)', 'Hello\tWorld'),
-    (b'(\xef\xbb\xbfHello\\bWorld)', 'Hello\bWorld'),
-    (b'(\xef\xbb\xbfHello\\rWorld)', 'Hello\rWorld'),
-    (b'(\xef\xbb\xbfHello\\012World)', 'Hello\nWorld'),
-    (b'(\xef\xbb\xbfHello\\12World)', 'Hello\nWorld'),
-])
+
+@pytest.mark.parametrize(
+    'encoded, decoded',
+    [
+        (b'(\xef\xbb\xbfHello\\nWorld)', 'Hello\nWorld'),
+        (b'(\xef\xbb\xbfHello\\fWorld)', 'Hello\fWorld'),
+        (b'(\xef\xbb\xbfHello\\tWorld)', 'Hello\tWorld'),
+        (b'(\xef\xbb\xbfHello\\bWorld)', 'Hello\bWorld'),
+        (b'(\xef\xbb\xbfHello\\rWorld)', 'Hello\rWorld'),
+        (b'(\xef\xbb\xbfHello\\012World)', 'Hello\nWorld'),
+        (b'(\xef\xbb\xbfHello\\12World)', 'Hello\nWorld'),
+    ],
+)
 def test_decode_string_escapes(encoded, decoded):
     stream = BytesIO(encoded)
     stream.seek(0)
@@ -1368,10 +1581,11 @@ def test_text_string_no_bytes_available():
 
 
 COMMENT_TEST_PAIRS = [
-    (b'%Bleh<<>>\n<</A/B>>',
-     generic.DictionaryObject({pdf_name('/A'): pdf_name('/B')})),
-    (b'%Bleh\n[/A/B]',
-     generic.ArrayObject([pdf_name('/A'), pdf_name('/B')])),
+    (
+        b'%Bleh<<>>\n<</A/B>>',
+        generic.DictionaryObject({pdf_name('/A'): pdf_name('/B')}),
+    ),
+    (b'%Bleh\n[/A/B]', generic.ArrayObject([pdf_name('/A'), pdf_name('/B')])),
     (b'%Bleh\n/A', pdf_name('/A')),
     (b'%Bleh\n.123', generic.FloatObject(0.123)),
     (b'%Bleh\n1', generic.NumberObject(1)),
@@ -1379,10 +1593,15 @@ COMMENT_TEST_PAIRS = [
 ]
 
 
-@pytest.mark.parametrize('data,exp_result,linesep', [
-    (x, y, z) for (x, y), z in
-    itertools.product(COMMENT_TEST_PAIRS, [b'\n', b'\r', b'\r\n'])
-])
+@pytest.mark.parametrize(
+    'data,exp_result,linesep',
+    [
+        (x, y, z)
+        for (x, y), z in itertools.product(
+            COMMENT_TEST_PAIRS, [b'\n', b'\r', b'\r\n']
+        )
+    ],
+)
 def test_read_object_comment(data, exp_result, linesep):
     buf = BytesIO(data.replace(b'\n', linesep))
     # need something to give a reference
@@ -1404,11 +1623,14 @@ COMMENT_IN_DICT_DATA = [
 ]
 
 
-@pytest.mark.parametrize('data,linesep,space', list(
-    itertools.product(
-        COMMENT_IN_DICT_DATA, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
-    )
-))
+@pytest.mark.parametrize(
+    'data,linesep,space',
+    list(
+        itertools.product(
+            COMMENT_IN_DICT_DATA, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
+        )
+    ),
+)
 def test_comment_in_dict(data, linesep, space):
     buf = BytesIO(data.replace(b'\n', linesep).replace(b' ', space))
     # need something to give a reference
@@ -1436,11 +1658,14 @@ COMMENT_IN_HEX_STRING_DATA = [
 ]
 
 
-@pytest.mark.parametrize('data,linesep,space', list(
-    itertools.product(
-        COMMENT_IN_HEX_STRING_DATA, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
-    )
-))
+@pytest.mark.parametrize(
+    'data,linesep,space',
+    list(
+        itertools.product(
+            COMMENT_IN_HEX_STRING_DATA, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
+        )
+    ),
+)
 def test_comment_in_hex_string(data, linesep, space):
     buf = BytesIO(data.replace(b'\n', linesep).replace(b' ', space))
     # need something to give a reference
@@ -1460,11 +1685,14 @@ UNORTHODOX_STREAM_SYNTAX = [
 ]
 
 
-@pytest.mark.parametrize('data,linesep,space', list(
-    itertools.product(
-        UNORTHODOX_STREAM_SYNTAX, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
-    )
-))
+@pytest.mark.parametrize(
+    'data,linesep,space',
+    list(
+        itertools.product(
+            UNORTHODOX_STREAM_SYNTAX, [b'\n', b'\r', b'\r\n'], [b' ', b'\x00']
+        )
+    ),
+)
 def test_unorthodox_stream_syntax(data, linesep, space):
     dict_data_bytes = b'<</A/B/Length 7>>'
     buf = BytesIO(

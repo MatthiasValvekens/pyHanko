@@ -20,12 +20,17 @@ from .pdf_signer import PdfSignatureMetadata, PdfSigner
 __all__ = ['sign_pdf', 'async_sign_pdf', 'embed_payload_with_cms']
 
 
-def sign_pdf(pdf_out: BasePdfFileWriter,
-             signature_meta: PdfSignatureMetadata, signer: Signer,
-             timestamper: TimeStamper = None,
-             new_field_spec: Optional[SigFieldSpec] = None,
-             existing_fields_only=False, bytes_reserved=None, in_place=False,
-             output=None):
+def sign_pdf(
+    pdf_out: BasePdfFileWriter,
+    signature_meta: PdfSignatureMetadata,
+    signer: Signer,
+    timestamper: TimeStamper = None,
+    new_field_spec: Optional[SigFieldSpec] = None,
+    existing_fields_only=False,
+    bytes_reserved=None,
+    in_place=False,
+    output=None,
+):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.sign_pdf`.
 
@@ -69,21 +74,31 @@ def sign_pdf(pdf_out: BasePdfFileWriter,
         )
 
     signer = PdfSigner(
-        signature_meta, signer, timestamper=timestamper,
-        new_field_spec=new_field_spec
+        signature_meta,
+        signer,
+        timestamper=timestamper,
+        new_field_spec=new_field_spec,
     )
     return signer.sign_pdf(
-        pdf_out, existing_fields_only=existing_fields_only,
-        bytes_reserved=bytes_reserved, in_place=in_place, output=output
+        pdf_out,
+        existing_fields_only=existing_fields_only,
+        bytes_reserved=bytes_reserved,
+        in_place=in_place,
+        output=output,
     )
 
 
-async def async_sign_pdf(pdf_out: BasePdfFileWriter,
-                         signature_meta: PdfSignatureMetadata, signer: Signer,
-                         timestamper: TimeStamper = None,
-                         new_field_spec: Optional[SigFieldSpec] = None,
-                         existing_fields_only=False, bytes_reserved=None,
-                         in_place=False, output=None):
+async def async_sign_pdf(
+    pdf_out: BasePdfFileWriter,
+    signature_meta: PdfSignatureMetadata,
+    signer: Signer,
+    timestamper: TimeStamper = None,
+    new_field_spec: Optional[SigFieldSpec] = None,
+    existing_fields_only=False,
+    bytes_reserved=None,
+    in_place=False,
+    output=None,
+):
     """
     Thin convenience wrapper around :meth:`.PdfSigner.async_sign_pdf`.
 
@@ -127,21 +142,30 @@ async def async_sign_pdf(pdf_out: BasePdfFileWriter,
         )
 
     signer = PdfSigner(
-        signature_meta, signer, timestamper=timestamper,
-        new_field_spec=new_field_spec
+        signature_meta,
+        signer,
+        timestamper=timestamper,
+        new_field_spec=new_field_spec,
     )
     return await signer.async_sign_pdf(
-        pdf_out, existing_fields_only=existing_fields_only,
-        bytes_reserved=bytes_reserved, in_place=in_place, output=output
+        pdf_out,
+        existing_fields_only=existing_fields_only,
+        bytes_reserved=bytes_reserved,
+        in_place=in_place,
+        output=output,
     )
 
 
-def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
-                           file_spec_string: str,
-                           payload: embed.EmbeddedFileObject,
-                           cms_obj: cms.ContentInfo, extension='.sig',
-                           file_name: Optional[str] = None,
-                           file_spec_kwargs=None, cms_file_spec_kwargs=None):
+def embed_payload_with_cms(
+    pdf_writer: BasePdfFileWriter,
+    file_spec_string: str,
+    payload: embed.EmbeddedFileObject,
+    cms_obj: cms.ContentInfo,
+    extension='.sig',
+    file_name: Optional[str] = None,
+    file_spec_kwargs=None,
+    cms_file_spec_kwargs=None,
+):
     """
     Embed some data as an embedded file stream into a PDF, and associate it
     with a CMS object.
@@ -182,11 +206,12 @@ def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
     now = datetime.now(tz=tzlocal.get_localzone())
     cms_ef_obj = embed.EmbeddedFileObject.from_file_data(
         pdf_writer=pdf_writer,
-        data=cms_obj.dump(), compress=False,
+        data=cms_obj.dump(),
+        compress=False,
         mime_type='application/pkcs7-mime',
         params=embed.EmbeddedFileParams(
             creation_date=now, modification_date=now
-        )
+        ),
     )
 
     # replace extension
@@ -201,7 +226,8 @@ def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
         ]
 
     spec = embed.FileSpec(
-        file_spec_string=file_spec_string, file_name=file_name,
+        file_spec_string=file_spec_string,
+        file_name=file_name,
         embedded_data=payload,
         f_related_files=[
             embed.RelatedFileSpec(cms_data_f, embedded_data=cms_ef_obj)
@@ -214,7 +240,9 @@ def embed_payload_with_cms(pdf_writer: BasePdfFileWriter,
 
     # also embed the CMS data as a standalone attachment
     cms_spec = embed.FileSpec(
-        file_spec_string=cms_data_f, file_name=cms_data_uf,
-        embedded_data=cms_ef_obj, **(cms_file_spec_kwargs or {})
+        file_spec_string=cms_data_f,
+        file_name=cms_data_uf,
+        embedded_data=cms_ef_obj,
+        **(cms_file_spec_kwargs or {}),
     )
     embed.embed_file(pdf_writer, cms_spec)

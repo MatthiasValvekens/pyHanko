@@ -1,4 +1,3 @@
-
 """
 Utilities for writing PDF files.
 Contains code from the PyPDF2 project; see :ref:`here <pypdf2-license>`
@@ -44,15 +43,20 @@ from pyhanko.pdf_utils.xref import (
 
 __all__ = [
     'BasePdfFileWriter',
-    'PageObject', 'PdfFileWriter', 'init_xobject_dictionary',
-    'copy_into_new_writer'
+    'PageObject',
+    'PdfFileWriter',
+    'init_xobject_dictionary',
+    'copy_into_new_writer',
 ]
 
 
 # TODO move this to content.py?
-def init_xobject_dictionary(command_stream: bytes, box_width, box_height,
-                            resources: Optional[generic.DictionaryObject]
-                            = None) -> generic.StreamObject:
+def init_xobject_dictionary(
+    command_stream: bytes,
+    box_width,
+    box_height,
+    resources: Optional[generic.DictionaryObject] = None,
+) -> generic.StreamObject:
     """
     Helper function to initialise form XObject dictionaries.
 
@@ -71,14 +75,19 @@ def init_xobject_dictionary(command_stream: bytes, box_width, box_height,
         A :class:`~.generic.StreamObject` representation of the form XObject.
     """
     resources = resources or generic.DictionaryObject()
-    return generic.StreamObject({
-        pdf_name('/BBox'): generic.ArrayObject(list(
-            map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
-        )),
-        pdf_name('/Resources'): resources,
-        pdf_name('/Type'): pdf_name('/XObject'),
-        pdf_name('/Subtype'): pdf_name('/Form')
-    }, stream_data=command_stream)
+    return generic.StreamObject(
+        {
+            pdf_name('/BBox'): generic.ArrayObject(
+                list(
+                    map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
+                )
+            ),
+            pdf_name('/Resources'): resources,
+            pdf_name('/Type'): pdf_name('/XObject'),
+            pdf_name('/Subtype'): pdf_name('/Form'),
+        },
+        stream_data=command_stream,
+    )
 
 
 class BasePdfFileWriter(PdfHandler):
@@ -97,8 +106,9 @@ class BasePdfFileWriter(PdfHandler):
     document (as mandated by the standard).
     """
 
-    def __init__(self, root, info, document_id, obj_id_start=0,
-                 stream_xrefs=True):
+    def __init__(
+        self, root, info, document_id, obj_id_start=0, stream_xrefs=True
+    ):
         self.objects = {}
         self.object_streams: List[ObjectStream] = list()
         self.objs_in_streams = {}
@@ -130,6 +140,7 @@ class BasePdfFileWriter(PdfHandler):
 
     def get_subset_collection(self, base_postscript_name: str):
         from .font.api import FontSubsetCollection
+
         try:
             fsc = self._font_resources[base_postscript_name]
         except KeyError:
@@ -159,8 +170,10 @@ class BasePdfFileWriter(PdfHandler):
         if self.output_version < version:
             self.output_version = version
 
-    def set_info(self, info: Optional[Union[generic.IndirectObject,
-                                      generic.DictionaryObject]]):
+    def set_info(
+        self,
+        info: Optional[Union[generic.IndirectObject, generic.DictionaryObject]],
+    ):
         """
         Set the ``/Info`` entry of the document trailer.
 
@@ -168,15 +181,15 @@ class BasePdfFileWriter(PdfHandler):
             The new ``/Info`` dictionary, either as an indirect reference
             or as a :class:`~.generic.DictionaryObject`
         """
-        if info is not None and \
-                not isinstance(info, generic.IndirectObject):
+        if info is not None and not isinstance(info, generic.IndirectObject):
             self._info = info = self.add_object(info)
         else:
             self._info = info
         return info
 
-    def set_custom_trailer_entry(self, key: generic.NameObject,
-                                 value: generic.PdfObject):
+    def set_custom_trailer_entry(
+        self, key: generic.NameObject, value: generic.PdfObject
+    ):
         """
         Set a custom, unmanaged entry in the document trailer or cross-reference
         stream dictionary.
@@ -198,8 +211,9 @@ class BasePdfFileWriter(PdfHandler):
         id_arr = self._document_id
         return id_arr[0].original_bytes, id_arr[1].original_bytes
 
-    def mark_update(self, obj_ref: Union[generic.Reference,
-                                         generic.IndirectObject]):
+    def mark_update(
+        self, obj_ref: Union[generic.Reference, generic.IndirectObject]
+    ):
         """
         Mark an object reference to be updated.
         This is only relevant for incremental updates, but is included
@@ -255,7 +269,7 @@ class BasePdfFileWriter(PdfHandler):
         extension_dicts = ()
         old_ext_multivalued = False
         if isinstance(cur_ext_value, generic.DictionaryObject):
-            extension_dicts = cur_ext_value,
+            extension_dicts = (cur_ext_value,)
         elif isinstance(cur_ext_value, generic.ArrayObject):
             extension_dicts = tuple(cur_ext_value)
             old_ext_multivalued = True
@@ -279,9 +293,7 @@ class BasePdfFileWriter(PdfHandler):
             try:
                 lvl = int(ext_dict.raw_get('/ExtensionLevel'))
             except (TypeError, ValueError, KeyError):
-                raise PdfReadError(
-                    "Could not read developer extension level"
-                )
+                raise PdfReadError("Could not read developer extension level")
             # TODO is this still appropriate with the new ExtensionRevision
             #  values?
             if lvl == ext.extension_level:
@@ -382,8 +394,9 @@ class BasePdfFileWriter(PdfHandler):
         self._lastobj_id += 1
         return generic.IndirectObject(idnum, 0, self)
 
-    def add_object(self, obj, obj_stream: Optional[ObjectStream] = None,
-                   idnum=None) -> generic.IndirectObject:
+    def add_object(
+        self, obj, obj_stream: Optional[ObjectStream] = None, idnum=None
+    ) -> generic.IndirectObject:
         """
         Add a new object to this writer.
 
@@ -469,8 +482,7 @@ class BasePdfFileWriter(PdfHandler):
         for ix, (idnum, obj) in enumerate(obj_stm):
             yield idnum, (stream_ref.idnum, ix)
 
-    def _write_objects(self, stream,
-                       object_position_dict: PositionDict):
+    def _write_objects(self, stream, object_position_dict: PositionDict):
         # deal with objects in object streams first
         for obj_stream in self.object_streams:
             for idnum, pos_record in self._flush_obj_stream(obj_stream):
@@ -481,8 +493,10 @@ class BasePdfFileWriter(PdfHandler):
             obj = self.objects[ix]
             object_position_dict[ix] = stream.tell()
             stream.write(('%d %d obj\n' % (idnum, generation)).encode('ascii'))
-            if self.security_handler is not None \
-                    and idnum != self._encrypt.idnum:
+            if (
+                self.security_handler is not None
+                and idnum != self._encrypt.idnum
+            ):
                 handler = self.security_handler
             else:
                 handler = None
@@ -506,6 +520,7 @@ class BasePdfFileWriter(PdfHandler):
             # also, we want the XML dep(s) to be optional
             # noinspection PyUnresolvedReferences
             from pyhanko.pdf_utils.metadata import xmp_xml
+
             need_xmp = (
                 self._meta.xmp_unmanaged
                 or bool(self._meta.xmp_extra)
@@ -518,9 +533,10 @@ class BasePdfFileWriter(PdfHandler):
         self._meta.last_modified = 'now'
         if self._info is not None:
             mod = update_info_dict(
-                self._meta, self._info.get_object(),
+                self._meta,
+                self._info.get_object(),
                 # if we write XMP, we only update existing entries
-                only_update_existing=need_xmp
+                only_update_existing=need_xmp,
             )
             if mod:
                 self.mark_update(self._info)
@@ -545,8 +561,10 @@ class BasePdfFileWriter(PdfHandler):
                 )
                 sh = self.security_handler
                 meta_stm._handler = sh
-                if sh is not None and \
-                        not self.security_handler.encrypt_metadata:
+                if (
+                    sh is not None
+                    and not self.security_handler.encrypt_metadata
+                ):
                     # note: this will add the /Identity crypt filter, hence
                     # metadata encryption will be omitted
                     meta_stm.add_crypt_filter()
@@ -697,9 +715,9 @@ class BasePdfFileWriter(PdfHandler):
 
         return new_page_ref
 
-    def import_object(self, obj: generic.PdfObject,
-                      obj_stream: Optional[ObjectStream] = None) \
-            -> generic.PdfObject:
+    def import_object(
+        self, obj: generic.PdfObject, obj_stream: Optional[ObjectStream] = None
+    ) -> generic.PdfObject:
         """
         Deep-copy an object into this writer, dealing with resolving indirect
         references in the process.
@@ -727,9 +745,9 @@ class BasePdfFileWriter(PdfHandler):
 
         return self._import_object(obj, {}, obj_stream)
 
-    def _import_object(self, obj: generic.PdfObject, reference_map: dict,
-                       obj_stream) -> generic.PdfObject:
-
+    def _import_object(
+        self, obj: generic.PdfObject, reference_map: dict, obj_stream
+    ) -> generic.PdfObject:
         # TODO check the spec for guidance on fonts. Do font identifiers have
         #  to be globally unique?
 
@@ -778,7 +796,7 @@ class BasePdfFileWriter(PdfHandler):
                         meta_ref.idnum, meta_ref.generation, meta_ref.pdf
                     ),
                     reference_map,
-                    obj_stream
+                    obj_stream,
                 )
             except (KeyError, IndirectObjectExpected):
                 pass
@@ -789,6 +807,7 @@ class BasePdfFileWriter(PdfHandler):
                 try:
                     # noinspection PyUnresolvedReferences
                     from pyhanko.pdf_utils.metadata import xmp_xml
+
                     if isinstance(obj, xmp_xml.MetadataStream):
                         stm_cls = xmp_xml.MetadataStream
                 except ImportError:  # pragma: nocover
@@ -807,8 +826,9 @@ class BasePdfFileWriter(PdfHandler):
         else:
             return obj
 
-    def import_page_as_xobject(self, other: PdfHandler, page_ix=0,
-                               inherit_filters=True):
+    def import_page_as_xobject(
+        self, other: PdfHandler, page_ix=0, inherit_filters=True
+    ):
         """
         Import a page content stream from some other
         :class:`~.rw_common.PdfHandler` into the current one as a form XObject.
@@ -844,7 +864,7 @@ class BasePdfFileWriter(PdfHandler):
             pdf_name('/BBox'): mb,
             pdf_name('/Resources'): self.import_object(resources),
             pdf_name('/Type'): pdf_name('/XObject'),
-            pdf_name('/Subtype'): pdf_name('/Form')
+            pdf_name('/Subtype'): pdf_name('/Form'),
         }
         command_stream = page_obj['/Contents']
         # if the page /Contents is an array, retrieve the content stream
@@ -887,8 +907,9 @@ class BasePdfFileWriter(PdfHandler):
         return self.add_object(result)
 
     # TODO these can be simplified considerably using the new update_container
-    def add_stream_to_page(self, page_ix, stream_ref, resources=None,
-                           prepend=False):
+    def add_stream_to_page(
+        self, page_ix, stream_ref, resources=None, prepend=False
+    ):
         """Append an indirect stream object to a page in a PDF as a content
         stream.
 
@@ -930,8 +951,11 @@ class BasePdfFileWriter(PdfHandler):
             elif isinstance(contents, generic.StreamObject):
                 # replace the old stream with an array containing
                 # a reference to the original stream, and our own stream.
-                new = [stream_ref, contents_ref] \
-                    if prepend else [contents_ref, stream_ref]
+                new = (
+                    [stream_ref, contents_ref]
+                    if prepend
+                    else [contents_ref, stream_ref]
+                )
                 contents = generic.ArrayObject(new)
                 page_obj[pdf_name('/Contents')] = self.add_object(contents)
                 # mark the page to be updated as well
@@ -970,8 +994,9 @@ class BasePdfFileWriter(PdfHandler):
 
         return page_obj_ref
 
-    def add_content_to_page(self, page_ix, pdf_content: content.PdfContent,
-                            prepend=False):
+    def add_content_to_page(
+        self, page_ix, pdf_content: content.PdfContent, prepend=False
+    ):
         """
         Convenience wrapper around :meth:`add_stream_to_page` to turn a
         :class:`~.content.PdfContent` instance into a page content stream.
@@ -992,8 +1017,10 @@ class BasePdfFileWriter(PdfHandler):
         """
         as_stream = generic.StreamObject({}, stream_data=pdf_content.render())
         return self.add_stream_to_page(
-            page_ix, self.add_object(as_stream),
-            resources=pdf_content.resources.as_pdf_object(), prepend=prepend
+            page_ix,
+            self.add_object(as_stream),
+            resources=pdf_content.resources.as_pdf_object(),
+            prepend=prepend,
         )
 
     # TODO this doesn't really belong here
@@ -1061,14 +1088,16 @@ class PageObject(generic.DictionaryObject):
 
         if len(media_box) != 4:
             raise ValueError('Media box must consist of 4 coordinates.')
-        super().__init__({
-            pdf_name('/Type'): pdf_name('/Page'),
-            pdf_name('/MediaBox'): generic.ArrayObject(
-                map(generic.FloatObject, media_box)
-            ),
-            pdf_name('/Resources'): resources,
-            pdf_name('/Contents'): contents
-        })
+        super().__init__(
+            {
+                pdf_name('/Type'): pdf_name('/Page'),
+                pdf_name('/MediaBox'): generic.ArrayObject(
+                    map(generic.FloatObject, media_box)
+                ),
+                pdf_name('/Resources'): resources,
+                pdf_name('/Contents'): contents,
+            }
+        )
 
 
 class PdfFileWriter(BasePdfFileWriter):
@@ -1076,9 +1105,11 @@ class PdfFileWriter(BasePdfFileWriter):
 
     def __init__(self, stream_xrefs=True, init_page_tree=True, info=None):
         # root object
-        root = generic.DictionaryObject({
-            pdf_name("/Type"): pdf_name("/Catalog"),
-        })
+        root = generic.DictionaryObject(
+            {
+                pdf_name("/Type"): pdf_name("/Catalog"),
+            }
+        )
 
         id1 = generic.ByteStringObject(os.urandom(16))
         id2 = generic.ByteStringObject(os.urandom(16))
@@ -1088,11 +1119,13 @@ class PdfFileWriter(BasePdfFileWriter):
         super().__init__(root, info, id_obj, stream_xrefs=stream_xrefs)
 
         if init_page_tree:
-            pages = generic.DictionaryObject({
-                pdf_name("/Type"): pdf_name("/Pages"),
-                pdf_name("/Count"): generic.NumberObject(0),
-                pdf_name("/Kids"): generic.ArrayObject(),
-            })
+            pages = generic.DictionaryObject(
+                {
+                    pdf_name("/Type"): pdf_name("/Pages"),
+                    pdf_name("/Count"): generic.NumberObject(0),
+                    pdf_name("/Kids"): generic.ArrayObject(),
+                }
+            )
 
             root[pdf_name('/Pages')] = self.add_object(pages)
 
@@ -1171,8 +1204,9 @@ class PdfFileWriter(BasePdfFileWriter):
         sh = PubKeySecurityHandler.build_from_certs(recipients, **kwargs)
         self._assign_security_handler(sh)
 
-    def set_custom_trailer_entry(self, key: generic.NameObject,
-                                 value: generic.PdfObject):
+    def set_custom_trailer_entry(
+        self, key: generic.NameObject, value: generic.PdfObject
+    ):
         """
         Set a custom, unmanaged entry in the document trailer or cross-reference
         stream dictionary.
@@ -1195,8 +1229,9 @@ class PdfFileWriter(BasePdfFileWriter):
         super()._populate_trailer(trailer)
 
 
-def copy_into_new_writer(input_handler: PdfHandler,
-                         writer_kwargs: dict = None) -> PdfFileWriter:
+def copy_into_new_writer(
+    input_handler: PdfHandler, writer_kwargs: dict = None
+) -> PdfFileWriter:
     """
     Copy all objects in a given PDF handler into a new :class:`.PdfFileWriter`.
     This operation will attempt to preserve the document catalog
@@ -1232,8 +1267,9 @@ def copy_into_new_writer(input_handler: PdfHandler,
     # somewhat "cleaner" (i.e. it doesn't leave an orphaned document catalog
     # cluttering up the file)
     new_root_dict = w._import_object(
-        input_handler.root, reference_map={input_root_ref: output_root_ref},
-        obj_stream=None
+        input_handler.root,
+        reference_map={input_root_ref: output_root_ref},
+        obj_stream=None,
     )
     # override the old root ref
     ix = (output_root_ref.generation, output_root_ref.idnum)

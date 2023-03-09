@@ -43,7 +43,7 @@ def _ensure_path(failed_tests_root, expected_output_path):
     out_dir = os.path.join(
         failed_tests_root,
         os.path.dirname(expected_output_path),
-        os.path.basename(expected_output_path) + '_results'
+        os.path.basename(expected_output_path) + '_results',
     )
     os.makedirs(out_dir, mode=0o700, exist_ok=True)
     return out_dir
@@ -64,10 +64,14 @@ def compare_output(writer: BasePdfFileWriter, expected_output_path):
             # use the Absolute Error metric, since it's a single number
             # and hence very easy to process
             [
-                compare_path, '-metric', 'ae',
-                expected_png, actual_png, os.path.join(working_dir, 'diff.png')
+                compare_path,
+                '-metric',
+                'ae',
+                expected_png,
+                actual_png,
+                os.path.join(working_dir, 'diff.png'),
             ],
-            capture_output=True
+            capture_output=True,
         )
         if result.stderr != b'0':
             dest_dir = _ensure_path("failed_layout_tests", expected_output_path)
@@ -77,7 +81,7 @@ def compare_output(writer: BasePdfFileWriter, expected_output_path):
                 shutil.copy(
                     src=os.path.join(working_dir, f),
                     dst=os.path.join(dest_dir, f),
-                    follow_symlinks=False
+                    follow_symlinks=False,
                 )
             shutil.copy(os.path.join(working_dir, 'diff.png'), dest_dir)
             shutil.copy(os.path.join(working_dir, 'expected.png'), dest_dir)

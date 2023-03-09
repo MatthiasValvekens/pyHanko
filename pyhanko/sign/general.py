@@ -26,19 +26,34 @@ from pyhanko.pdf_utils import misc
 
 __all__ = [
     'simple_cms_attribute',
-    'find_cms_attribute', 'find_unique_cms_attribute',
-    'NonexistentAttributeError', 'MultivaluedAttributeError',
-    'CertificateStore', 'SimpleCertificateStore',
-    'SigningError', 'UnacceptableSignerError',
-    'SignedDataCerts', 'extract_signer_info', 'extract_certificate_info',
-    'load_certs_from_pemder', 'load_cert_from_pemder',
+    'find_cms_attribute',
+    'find_unique_cms_attribute',
+    'NonexistentAttributeError',
+    'MultivaluedAttributeError',
+    'CertificateStore',
+    'SimpleCertificateStore',
+    'SigningError',
+    'UnacceptableSignerError',
+    'SignedDataCerts',
+    'extract_signer_info',
+    'extract_certificate_info',
+    'load_certs_from_pemder',
+    'load_cert_from_pemder',
     'load_private_key_from_pemder',
-    'load_certs_from_pemder_data', 'load_private_key_from_pemder_data',
-    'get_cms_hash_algo_for_mechanism', 'get_pyca_cryptography_hash',
-    'optimal_pss_params', 'process_pss_params', 'as_signing_certificate',
-    'as_signing_certificate_v2', 'match_issuer_serial',
-    'check_ess_certid', 'CMSExtractionError', 'byte_range_digest',
-    'ValueErrorWithMessage', 'CMSStructuralError'
+    'load_certs_from_pemder_data',
+    'load_private_key_from_pemder_data',
+    'get_cms_hash_algo_for_mechanism',
+    'get_pyca_cryptography_hash',
+    'optimal_pss_params',
+    'process_pss_params',
+    'as_signing_certificate',
+    'as_signing_certificate_v2',
+    'match_issuer_serial',
+    'check_ess_certid',
+    'CMSExtractionError',
+    'byte_range_digest',
+    'ValueErrorWithMessage',
+    'CMSStructuralError',
 ]
 
 logger = logging.getLogger(__name__)
@@ -50,6 +65,7 @@ class ValueErrorWithMessage(ValueError):
     extracted, instead of having to rely on extracting exception args
     generically.
     """
+
     def __init__(self, failure_message):
         self.failure_message = str(failure_message)
 
@@ -74,10 +90,9 @@ def simple_cms_attribute(attr_type, value):
     :return:
         A :class:`.cms.CMSAttribute` object.
     """
-    return cms.CMSAttribute({
-        'type': cms.CMSAttributeType(attr_type),
-        'values': (value,)
-    })
+    return cms.CMSAttribute(
+        {'type': cms.CMSAttributeType(attr_type), 'values': (value,)}
+    )
 
 
 class NonexistentAttributeError(KeyError):
@@ -163,23 +178,32 @@ def as_signing_certificate(cert: x509.Certificate) -> tsp.SigningCertificate:
         certificate.
     """
     # see RFC 2634, § 5.4.1
-    return tsp.SigningCertificate({
-        'certs': [
-            tsp.ESSCertID({
-                'cert_hash': hashlib.sha1(cert.dump()).digest(),
-                'issuer_serial': {
-                    'issuer': [
-                        x509.GeneralName({'directory_name': cert.issuer})
-                    ],
-                    'serial_number': cert['tbs_certificate']['serial_number']
-                }
-            })
-        ]
-    })
+    return tsp.SigningCertificate(
+        {
+            'certs': [
+                tsp.ESSCertID(
+                    {
+                        'cert_hash': hashlib.sha1(cert.dump()).digest(),
+                        'issuer_serial': {
+                            'issuer': [
+                                x509.GeneralName(
+                                    {'directory_name': cert.issuer}
+                                )
+                            ],
+                            'serial_number': cert['tbs_certificate'][
+                                'serial_number'
+                            ],
+                        },
+                    }
+                )
+            ]
+        }
+    )
 
 
-def as_signing_certificate_v2(cert: x509.Certificate, hash_algo='sha256') \
-        -> tsp.SigningCertificateV2:
+def as_signing_certificate_v2(
+    cert: x509.Certificate, hash_algo='sha256'
+) -> tsp.SigningCertificateV2:
     """
     Format an ASN.1 ``SigningCertificateV2`` value, where the certificate
     is identified by the hash algorithm specified.
@@ -199,24 +223,33 @@ def as_signing_certificate_v2(cert: x509.Certificate, hash_algo='sha256') \
     md = hashes.Hash(hash_spec)
     md.update(cert.dump())
     digest_value = md.finalize()
-    return tsp.SigningCertificateV2({
-        'certs': [
-            tsp.ESSCertIDv2({
-                'hash_algorithm': {'algorithm': hash_algo},
-                'cert_hash': digest_value,
-                'issuer_serial': {
-                    'issuer': [
-                        x509.GeneralName({'directory_name': cert.issuer})
-                    ],
-                    'serial_number': cert['tbs_certificate']['serial_number']
-                }
-            })
-        ]
-    })
+    return tsp.SigningCertificateV2(
+        {
+            'certs': [
+                tsp.ESSCertIDv2(
+                    {
+                        'hash_algorithm': {'algorithm': hash_algo},
+                        'cert_hash': digest_value,
+                        'issuer_serial': {
+                            'issuer': [
+                                x509.GeneralName(
+                                    {'directory_name': cert.issuer}
+                                )
+                            ],
+                            'serial_number': cert['tbs_certificate'][
+                                'serial_number'
+                            ],
+                        },
+                    }
+                )
+            ]
+        }
+    )
 
 
-def check_ess_certid(cert: x509.Certificate,
-                     certid: Union[tsp.ESSCertID, tsp.ESSCertIDv2]):
+def check_ess_certid(
+    cert: x509.Certificate, certid: Union[tsp.ESSCertID, tsp.ESSCertIDv2]
+):
     """
     Match an ``ESSCertID`` value against a certificate.
 
@@ -241,23 +274,23 @@ def check_ess_certid(cert: x509.Certificate,
     if digest_value != expected_digest_value:
         return False
     expected_issuer_serial: tsp.IssuerSerial = certid['issuer_serial']
-    return (
-        not expected_issuer_serial or
-        match_issuer_serial(expected_issuer_serial, cert)
+    return not expected_issuer_serial or match_issuer_serial(
+        expected_issuer_serial, cert
     )
 
 
-def match_issuer_serial(expected_issuer_serial:
-                        Union[cms.IssuerAndSerialNumber, tsp.IssuerSerial],
-                        cert: x509.Certificate) -> bool:
+def match_issuer_serial(
+    expected_issuer_serial: Union[cms.IssuerAndSerialNumber, tsp.IssuerSerial],
+    cert: x509.Certificate,
+) -> bool:
     """
     Match the issuer and serial number of an X.509 certificate against some
     expected identifier.
-    
-    :param expected_issuer_serial: 
+
+    :param expected_issuer_serial:
         A certificate identifier, either :class:`cms.IssuerAndSerialNumber`
         or :class:`tsp.IssuerSerial`.
-    :param cert: 
+    :param cert:
         An :class:`x509.Certificate`.
     :return:
         ``True`` if there's a match, ``False`` otherwise.
@@ -273,8 +306,10 @@ def match_issuer_serial(expected_issuer_serial:
     # we need to check that the expected issuer value only contains one
     # name of type directoryName.
     if isinstance(expected_issuer, x509.GeneralNames):
-        if len(expected_issuer) != 1 or \
-                expected_issuer[0].name != 'directory_name':
+        if (
+            len(expected_issuer) != 1
+            or expected_issuer[0].name != 'directory_name'
+        ):
             return False
         expected_issuer = expected_issuer[0].chosen
 
@@ -300,6 +335,7 @@ class SigningError(ValueError):
     """
     Error encountered while signing a file.
     """
+
     def __init__(self, msg: str, *args):
         self.msg = msg
         super().__init__(msg, *args)
@@ -309,11 +345,13 @@ class UnacceptableSignerError(SigningError):
     """
     Error raised when a signer was judged unacceptable.
     """
+
     pass
 
 
-def get_pyca_cryptography_hash(algorithm, prehashed=False) \
-        -> Union[hashes.HashAlgorithm, Prehashed]:
+def get_pyca_cryptography_hash(
+    algorithm, prehashed=False
+) -> Union[hashes.HashAlgorithm, Prehashed]:
     if algorithm.lower() == 'shake256':
         # force the output length to 64 bytes = 512 bits
         hash_algo = hashes.SHAKE256(digest_size=64)
@@ -345,8 +383,9 @@ def get_cms_hash_algo_for_mechanism(mech: SignedDigestAlgorithm) -> str:
         return mech.hash_algo
 
 
-def process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm,
-                       prehashed=False):
+def process_pss_params(
+    params: algos.RSASSAPSSParams, digest_algorithm, prehashed=False
+):
     """
     Extract PSS padding settings and message digest from an
     ``RSASSAPSSParams`` value.
@@ -378,14 +417,14 @@ def process_pss_params(params: algos.RSASSAPSSParams, digest_algorithm,
     mgf_md = get_pyca_cryptography_hash(mgf_md_name, prehashed=False)
     md = get_pyca_cryptography_hash(md_name, prehashed=prehashed)
     pss_padding = padding.PSS(
-        mgf=padding.MGF1(algorithm=mgf_md),
-        salt_length=salt_len
+        mgf=padding.MGF1(algorithm=mgf_md), salt_length=salt_len
     )
     return pss_padding, md
 
 
-def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str) \
-        -> algos.RSASSAPSSParams:
+def optimal_pss_params(
+    cert: x509.Certificate, digest_algorithm: str
+) -> algos.RSASSAPSSParams:
     """
     Figure out the optimal RSASSA-PSS parameters for a given certificate.
     The subject's public key must be an RSA key.
@@ -407,18 +446,22 @@ def optimal_pss_params(cert: x509.Certificate, digest_algorithm: str) \
     # the PSS salt calculation function is not in the .pyi file, apparently.
     # noinspection PyUnresolvedReferences
     optimal_salt_len = padding.calculate_max_pss_salt_length(key, md)
-    return algos.RSASSAPSSParams({
-        'hash_algorithm': algos.DigestAlgorithm({
-            'algorithm': digest_algorithm
-        }),
-        'mask_gen_algorithm': algos.MaskGenAlgorithm({
-            'algorithm': 'mgf1',
-            'parameters': algos.DigestAlgorithm({
-                'algorithm': digest_algorithm
-            }),
-        }),
-        'salt_length': optimal_salt_len
-    })
+    return algos.RSASSAPSSParams(
+        {
+            'hash_algorithm': algos.DigestAlgorithm(
+                {'algorithm': digest_algorithm}
+            ),
+            'mask_gen_algorithm': algos.MaskGenAlgorithm(
+                {
+                    'algorithm': 'mgf1',
+                    'parameters': algos.DigestAlgorithm(
+                        {'algorithm': digest_algorithm}
+                    ),
+                }
+            ),
+            'salt_length': optimal_salt_len,
+        }
+    )
 
 
 def load_certs_from_pemder(cert_files):
@@ -476,14 +519,13 @@ def load_cert_from_pemder(cert_file):
     """
     certs = list(load_certs_from_pemder([cert_file]))
     if len(certs) != 1:
-        raise ValueError(
-            f"Number of certs in {cert_file} should be exactly 1"
-        )
+        raise ValueError(f"Number of certs in {cert_file} should be exactly 1")
     return certs[0]
 
 
-def load_private_key_from_pemder(key_file, passphrase: Optional[bytes]) \
-        -> keys.PrivateKeyInfo:
+def load_private_key_from_pemder(
+    key_file, passphrase: Optional[bytes]
+) -> keys.PrivateKeyInfo:
     """
     A convenience function to load PEM/DER-encoded keys from files.
 
@@ -500,8 +542,8 @@ def load_private_key_from_pemder(key_file, passphrase: Optional[bytes]) \
 
 
 def load_private_key_from_pemder_data(
-        key_bytes: bytes,
-        passphrase: Optional[bytes]) -> keys.PrivateKeyInfo:
+    key_bytes: bytes, passphrase: Optional[bytes]
+) -> keys.PrivateKeyInfo:
     """
     A convenience function to load PEM/DER-encoded keys from binary data.
 
@@ -513,7 +555,8 @@ def load_private_key_from_pemder_data(
         A private key encoded as an unencrypted PKCS#8 PrivateKeyInfo object.
     """
     load_fun = (
-        serialization.load_pem_private_key if pem.detect(key_bytes)
+        serialization.load_pem_private_key
+        if pem.detect(key_bytes)
         else serialization.load_der_private_key
     )
     return _translate_pyca_cryptography_key_to_asn1(
@@ -521,8 +564,9 @@ def load_private_key_from_pemder_data(
     )
 
 
-def _translate_pyca_cryptography_key_to_asn1(private_key) \
-        -> keys.PrivateKeyInfo:
+def _translate_pyca_cryptography_key_to_asn1(
+    private_key,
+) -> keys.PrivateKeyInfo:
     # Store the cert and key as generic ASN.1 structures for more
     # "standardised" introspection. This comes at the cost of some encoding/
     # decoding operations, but those should be fairly insignificant in the
@@ -535,16 +579,15 @@ def _translate_pyca_cryptography_key_to_asn1(private_key) \
     # requirements should be using HSMs to manage keys.
     return keys.PrivateKeyInfo.load(
         private_key.private_bytes(
-            serialization.Encoding.DER, serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption()
+            serialization.Encoding.DER,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
         )
     )
 
 
 def _translate_pyca_cryptography_cert_to_asn1(cert) -> x509.Certificate:
-    return x509.Certificate.load(
-        cert.public_bytes(serialization.Encoding.DER)
-    )
+    return x509.Certificate.load(cert.public_bytes(serialization.Encoding.DER))
 
 
 @dataclass(frozen=True)
@@ -616,7 +659,7 @@ def extract_signer_info(signed_data: cms.SignedData) -> cms.SignerInfo:
         If the number of ``SignerInfo`` values is not exactly one.
     """
     try:
-        signer_info, = signed_data['signer_infos']
+        (signer_info,) = signed_data['signer_infos']
         return signer_info
     except ValueError:
         raise CMSExtractionError(
@@ -646,15 +689,19 @@ def extract_certificate_info(signed_data: cms.SignedData) -> SignedDataCerts:
     signer_cert, other_certs = _partition_certs(certs, signer_info)
 
     cert_info = SignedDataCerts(
-        signer_cert=signer_cert, other_certs=other_certs,
-        attribute_certs=attr_certs
+        signer_cert=signer_cert,
+        other_certs=other_certs,
+        attribute_certs=attr_certs,
     )
     return cert_info
 
 
-def byte_range_digest(stream: IO, byte_range: Iterable[int],
-                      md_algorithm: str,
-                      chunk_size=misc.DEFAULT_CHUNK_SIZE) -> Tuple[int, bytes]:
+def byte_range_digest(
+    stream: IO,
+    byte_range: Iterable[int],
+    md_algorithm: str,
+    chunk_size=misc.DEFAULT_CHUNK_SIZE,
+) -> Tuple[int, bytes]:
     """
     Internal API to compute byte range digests. Potentially dangerous if used
     without due caution.

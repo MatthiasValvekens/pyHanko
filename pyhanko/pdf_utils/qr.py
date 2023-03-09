@@ -26,13 +26,12 @@ class PdfStreamQRImage(BaseImage):
         self._img.append((row, col))
 
     def append_single_rect(self, command_stream, row, col):
-        command_stream.append(
-            b'%g %g 1 1 re' % (col, row)
-        )
+        command_stream.append(b'%g %g 1 1 re' % (col, row))
 
     def format_qr_color(self):
-        return (b"%g %g %g rg\n" % self.qr_color) \
-               + (b"%g %g %g RG" % self.qr_color)
+        return (b"%g %g %g rg\n" % self.qr_color) + (
+            b"%g %g %g RG" % self.qr_color
+        )
 
     def setup_drawing_area(self):
         # start a command stream with fill colour set to black (default)
@@ -61,11 +60,18 @@ class PdfStreamQRImage(BaseImage):
 
 
 class PdfFancyQRImage(PdfStreamQRImage):
-
     centerpiece_corner_radius = 0.2
 
-    def __init__(self, border, width, box_size, *_args, version,
-                 center_image: Optional[PdfContent] = None, **kwargs):
+    def __init__(
+        self,
+        border,
+        width,
+        box_size,
+        *_args,
+        version,
+        center_image: Optional[PdfContent] = None,
+        **kwargs,
+    ):
         super().__init__(border, width, box_size, **kwargs)
         self._version = version
         self._centerpiece = center_image
@@ -82,8 +88,11 @@ class PdfFancyQRImage(PdfStreamQRImage):
         command_stream.extend(rounded_square(col, row, 0.9, 0.3))
 
     def is_major_position_pattern(self, row, col):
-        return (row < 7 and col < 7) or ((row > self.width - 8) and col < 7) \
-                or (row < 7 and (col > self.width - 8))
+        return (
+            (row < 7 and col < 7)
+            or ((row > self.width - 8) and col < 7)
+            or (row < 7 and (col > self.width - 8))
+        )
 
     def _enumerate_alignment_patterns(self):
         adj_ptns = qrcode.util.pattern_position(self._version)
@@ -206,8 +215,9 @@ class PdfFancyQRImage(PdfStreamQRImage):
         return b"\n".join(parts)
 
 
-def rounded_square(x_pos: float, y_pos: float, sz: float, rad: float) \
-        -> List[bytes]:
+def rounded_square(
+    x_pos: float, y_pos: float, sz: float, rad: float
+) -> List[bytes]:
     """
     Add a subpath of a square with rounded corners at the given position.
     Doesn't include any painting or clipping operations.

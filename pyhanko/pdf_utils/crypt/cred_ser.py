@@ -8,6 +8,7 @@ from pyhanko.pdf_utils import misc
 #  the file encryption key, and would be compatible with any of the "built-in"
 #  security handlers.
 
+
 @dataclass(frozen=True)
 class SerialisedCredential:
     """
@@ -83,8 +84,9 @@ class SerialisableCredential(abc.ABC):
         raise NotImplementedError
 
     @staticmethod
-    def deserialise(ser_value: SerialisedCredential) \
-            -> 'SerialisableCredential':
+    def deserialise(
+        ser_value: SerialisedCredential,
+    ) -> 'SerialisableCredential':
         """
         Deserialise a :class:`.SerialisedCredential` value by looking up
         the proper subclass of :class:`.SerialisableCredential` and invoking

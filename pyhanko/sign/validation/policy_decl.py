@@ -30,7 +30,7 @@ __all__ = [
     'LocalKnowledge',
     'RevocationInfoGatheringSpec',
     'KnownPOE',
-    'bootstrap_validation_data_handlers'
+    'bootstrap_validation_data_handlers',
 ]
 
 
@@ -56,8 +56,9 @@ class RevinfoOnlineFetchingRule(enum.Enum):
 
 @dataclass(frozen=True)
 class RevocationInfoGatheringSpec:
-    online_fetching_rule: RevinfoOnlineFetchingRule = \
+    online_fetching_rule: RevinfoOnlineFetchingRule = (
         RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH
+    )
     fetcher_backend: FetcherBackend = field(
         default_factory=RequestsFetcherBackend
     )
@@ -84,8 +85,9 @@ class LocalKnowledge:
 @dataclass(frozen=True)
 class SignatureValidationSpec:
     cert_validation_policy: CertValidationPolicySpec
-    revinfo_gathering_policy: RevocationInfoGatheringSpec = \
+    revinfo_gathering_policy: RevocationInfoGatheringSpec = (
         RevocationInfoGatheringSpec()
+    )
     ts_cert_validation_policy: Optional[CertValidationPolicySpec] = None
     ac_validation_policy: Optional[CertValidationPolicySpec] = None
     local_knowledge: LocalKnowledge = LocalKnowledge()
@@ -99,8 +101,8 @@ class PdfSignatureValidationSpec:
 
 
 def _backend_if_necessary(
-        hist: bool, rule: RevinfoOnlineFetchingRule, backend: FetcherBackend) \
-        -> Optional[FetcherBackend]:
+    hist: bool, rule: RevinfoOnlineFetchingRule, backend: FetcherBackend
+) -> Optional[FetcherBackend]:
     if rule == RevinfoOnlineFetchingRule.LOCAL_ONLY:
         return None
     elif rule == RevinfoOnlineFetchingRule.NO_HISTORICAL_FETCH and hist:
@@ -110,23 +112,25 @@ def _backend_if_necessary(
 
 
 def bootstrap_validation_data_handlers(
-        spec: SignatureValidationSpec,
-        timing_info: Optional[ValidationTimingInfo] = None,
-        is_historical: Optional[bool] = None,
-        poe_manager_override: Optional[POEManager] = None) \
-        -> ValidationDataHandlers:
+    spec: SignatureValidationSpec,
+    timing_info: Optional[ValidationTimingInfo] = None,
+    is_historical: Optional[bool] = None,
+    poe_manager_override: Optional[POEManager] = None,
+) -> ValidationDataHandlers:
     if is_historical is None:
         hist = (
             timing_info.point_in_time_validation
-            if timing_info is not None else False
+            if timing_info is not None
+            else False
         )
     else:
         hist = is_historical
     revinfo_policy = spec.revinfo_gathering_policy
 
     fetcher_backend = _backend_if_necessary(
-        hist=hist, rule=revinfo_policy.online_fetching_rule,
-        backend=revinfo_policy.fetcher_backend
+        hist=hist,
+        rule=revinfo_policy.online_fetching_rule,
+        backend=revinfo_policy.fetcher_backend,
     )
 
     knowledge = spec.local_knowledge
@@ -135,6 +139,6 @@ def bootstrap_validation_data_handlers(
         crls=knowledge.known_crls,
         ocsps=knowledge.known_ocsps,
         certs=knowledge.known_certs,
-        poe_manager=poe_manager_override
+        poe_manager=poe_manager_override,
     )
     return handlers

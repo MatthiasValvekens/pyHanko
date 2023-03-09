@@ -14,8 +14,13 @@ from typing import Optional, Set, Type, Union
 from asn1crypto.core import BitString, ObjectIdentifier
 
 __all__ = [
-    'ConfigurationError', 'ConfigurableMixin', 'check_config_keys',
-    'OID_REGEX', 'process_oid', 'process_oids', 'process_bit_string_flags'
+    'ConfigurationError',
+    'ConfigurableMixin',
+    'check_config_keys',
+    'OID_REGEX',
+    'process_oid',
+    'process_oids',
+    'process_bit_string_flags',
 ]
 
 _noneType = type(None)
@@ -64,6 +69,7 @@ def _has_default(f: dataclasses.Field):
 
 class ConfigurationError(ValueError):
     """Signal configuration errors."""
+
     pass
 
 
@@ -94,8 +100,9 @@ class ConfigurableMixin:
         # automatically parse values for configurable fields
         for f in dataclasses.fields(cls):
             field_type = _unwrap_type_annot(f.type)
-            if field_type is None or \
-                    not issubclass(field_type, ConfigurableMixin):
+            if field_type is None or not issubclass(
+                field_type, ConfigurableMixin
+            ):
                 continue
             # if the field has a value in the config dict, attempt to parse it
             try:
@@ -122,8 +129,9 @@ class ConfigurableMixin:
         """
 
         check_config_keys(
-            cls.__name__, {f.name for f in dataclasses.fields(cls)},
-            keys_supplied
+            cls.__name__,
+            {f.name for f in dataclasses.fields(cls)},
+            keys_supplied,
         )
 
     @classmethod
@@ -162,9 +170,9 @@ class ConfigurableMixin:
         cls._process_configurable_fields(config_dict)
 
         enforce_required_keys(
-            cls.__name__, {
-                f.name for f in dataclasses.fields(cls) if not _has_default(f)
-            }, config_dict
+            cls.__name__,
+            {f.name for f in dataclasses.fields(cls) if not _has_default(f)},
+            config_dict,
         )
         try:
             # noinspection PyArgumentList
@@ -210,8 +218,9 @@ def enforce_required_keys(config_name, required_keys, config_dict):
 OID_REGEX = re.compile(r'\d(\.\d+)+')
 
 
-def process_oid(asn1crypto_class: Type[ObjectIdentifier], id_string,
-                param_name):
+def process_oid(
+    asn1crypto_class: Type[ObjectIdentifier], id_string, param_name
+):
     if not isinstance(id_string, str):
         raise ConfigurationError(
             f"Identifier '{repr(id_string)}' in '{param_name}' is not a string."
@@ -234,7 +243,6 @@ def process_oid(asn1crypto_class: Type[ObjectIdentifier], id_string,
 
 
 def _ensure_strings(strings, param_name):
-
     err_msg = (
         f"'{param_name}' must be specified as a "
         "list of strings, or a string."
@@ -253,8 +261,9 @@ def process_oids(asn1crypto_class: Type[ObjectIdentifier], strings, param_name):
         yield process_oid(asn1crypto_class, usage_string, param_name)
 
 
-def process_bit_string_flags(asn1crypto_class: Type[BitString], strings,
-                             param_name):
+def process_bit_string_flags(
+    asn1crypto_class: Type[BitString], strings, param_name
+):
     strings = _ensure_strings(strings, param_name)
     valid_values = asn1crypto_class._map.values()
     for flag_string in strings:

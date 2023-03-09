@@ -20,6 +20,7 @@ __all__ = ['GenericCommitment', 'CAdESSignedAttrSpec', 'SignerAttrSpec']
 
 # TODO add semantics explanations from the standard
 
+
 @enum.unique
 class GenericCommitment(enum.Enum):
     PROOF_OF_ORIGIN = enum.auto()
@@ -31,9 +32,9 @@ class GenericCommitment(enum.Enum):
 
     @property
     def asn1(self) -> CommitmentTypeIndication:
-        return CommitmentTypeIndication({
-            'commitment_type_id': CommitmentTypeIdentifier(self.name.lower())
-        })
+        return CommitmentTypeIndication(
+            {'commitment_type_id': CommitmentTypeIdentifier(self.name.lower())}
+        )
 
 
 @dataclass(frozen=True)
@@ -101,16 +102,19 @@ class CAdESSignedAttrSpec:
     ``signer-attributes-v2`` attribute on the signature.
     """
 
-    def prepare_providers(self, message_digest, md_algorithm,
-                          timestamper: Optional[TimeStamper] = None):
-
+    def prepare_providers(
+        self,
+        message_digest,
+        md_algorithm,
+        timestamper: Optional[TimeStamper] = None,
+    ):
         if self.timestamp_content and timestamper is not None:
             yield TSTProvider(
                 digest_algorithm=md_algorithm,
                 data_to_ts=message_digest,
                 timestamper=timestamper,
                 attr_type='content_time_stamp',
-                prehashed=True
+                prehashed=True,
             )
         if self.signature_policy_identifier is not None:
             yield SigPolicyIDProvider(self.signature_policy_identifier)
@@ -136,8 +140,9 @@ class SigPolicyIDProvider(CMSAttributeProvider):
     def __init__(self, policy_id: SignaturePolicyIdentifier):
         self.policy_id = policy_id
 
-    async def build_attr_value(self, dry_run=False) \
-            -> SignaturePolicyIdentifier:
+    async def build_attr_value(
+        self, dry_run=False
+    ) -> SignaturePolicyIdentifier:
         return self.policy_id
 
 
@@ -147,8 +152,7 @@ class SignerAttributesProvider(CMSAttributeProvider):
     def __init__(self, signer_attr_spec: SignerAttrSpec):
         self.signer_attr_spec = signer_attr_spec
 
-    async def build_attr_value(self, dry_run=False) \
-            -> SignerAttributesV2:
+    async def build_attr_value(self, dry_run=False) -> SignerAttributesV2:
         spec = self.signer_attr_spec
         claimed = list(spec.claimed_attrs)
         certified = list(spec.certified_attrs)

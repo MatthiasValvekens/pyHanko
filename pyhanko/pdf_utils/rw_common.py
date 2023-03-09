@@ -12,8 +12,9 @@ class PdfHandler:
     """Abstract class providing a general interface for quering objects
     in PDF readers and writers alike."""
 
-    def get_object(self, ref: generic.Reference,
-                   as_metadata_stream: bool = False):
+    def get_object(
+        self, ref: generic.Reference, as_metadata_stream: bool = False
+    ):
         """
         Retrieve the object associated with the provided reference from
         this PDF handler.
@@ -69,7 +70,6 @@ class PdfHandler:
 
     # TODO write tests specifically for this helper function
     def _walk_page_tree(self, page_ix, retrieve_parent):
-
         # the spec says that this will always be an indirect reference
         page_tree_root_ref = self.root.raw_get('/Pages')
         assert isinstance(page_tree_root_ref, generic.IndirectObject)
@@ -113,16 +113,16 @@ class PdfHandler:
                     desc_count = kid['/Count']
                     if cur_page_ix <= page_ix < cur_page_ix + desc_count:
                         return _recurse(
-                            cur_page_ix, kid_ref, last_rsrc_dict,
-                            refs_seen | {kid_ref.reference}
+                            cur_page_ix,
+                            kid_ref,
+                            last_rsrc_dict,
+                            refs_seen | {kid_ref.reference},
                         )
                     cur_page_ix += desc_count
                 elif node_type == '/Page':
                     if cur_page_ix == page_ix:
                         if retrieve_parent:
-                            return (
-                                pages_obj_ref, kid_index, last_rsrc_dict
-                            )
+                            return (pages_obj_ref, kid_index, last_rsrc_dict)
                         else:
                             try:
                                 last_rsrc_dict = kid.raw_get('/Resources')
