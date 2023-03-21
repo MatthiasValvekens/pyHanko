@@ -16,6 +16,7 @@ from pyhanko_certvalidator.context import (
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsFetcherBackend,
 )
+from pyhanko_certvalidator.ltv.poe import digest_for_poe
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsageConstraint,
@@ -36,10 +37,12 @@ from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate, AdESPassed
 from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
 from pyhanko.sign.validation import ades
 from pyhanko.sign.validation.policy_decl import (
+    KnownPOE,
+    LocalKnowledge,
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
 )
-from pyhanko_tests.samples import CERTOMANCER, MINIMAL_ONE_FIELD
+from pyhanko_tests.samples import CERTOMANCER, MINIMAL_ONE_FIELD, TESTING_CA
 from pyhanko_tests.signing_commons import (
     DUMMY_TS,
     DUMMY_TS2,
@@ -47,6 +50,7 @@ from pyhanko_tests.signing_commons import (
     INTERM_CERT,
     REVOKED_SIGNER,
     TRUST_ROOTS,
+    TSA_CERT,
     live_testing_vc,
 )
 from pyhanko_tests.test_pades import PADES
@@ -56,6 +60,13 @@ async def _generate_pades_test_doc(requests_mock, **kwargs):
     kwargs.setdefault('use_pades_lta', True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
+
+    timestamper = timestamps.DummyTimeStamper(
+        tsa_cert=TSA_CERT,
+        tsa_key=TESTING_CA.key_set.get_private_key('tsa'),
+        certs_to_embed=FROM_CA.cert_registry,
+        override_md='sha256',
+    )
     return await signers.async_sign_pdf(
         w,
         signers.PdfSignatureMetadata(
@@ -66,7 +77,7 @@ async def _generate_pades_test_doc(requests_mock, **kwargs):
             **kwargs,
         ),
         signer=FROM_CA,
-        timestamper=DUMMY_TS,
+        timestamper=timestamper,
     )
 
 
@@ -357,8 +368,17 @@ class BanAllTheThings(AlgorithmUsagePolicy):
         return AlgorithmUsageConstraint(allowed=False)
 
 
+def _assert_certs_known(certs):
+    return [
+        KnownPOE(
+            digest=digest_for_poe(cert.dump()), poe_time=cert.not_valid_before
+        )
+        for cert in certs
+    ]
+
+
 @pytest.mark.asyncio
-async def test_pades_lta_hash_algorithm_banned_but_poe_ok(requests_mock):
+async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock):
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
             requests_mock, md_algorithm='sha512'
@@ -373,7 +393,10 @@ async def test_pades_lta_hash_algorithm_banned_but_poe_ok(requests_mock):
                 trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
                 algorithm_usage_policy=NoSha512AfterSomeTime(2025),
                 revinfo_policy=revinfo_policy,
-            )
+            ),
+            local_knowledge=LocalKnowledge(
+                known_poes=_assert_certs_known(FROM_CA.cert_registry)
+            ),
         )
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
@@ -399,7 +422,10 @@ async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock):
                 trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
                 algorithm_usage_policy=NoSha512AfterSomeTime(2019),
                 revinfo_policy=revinfo_policy,
-            )
+            ),
+            local_knowledge=LocalKnowledge(
+                known_poes=_assert_certs_known(FROM_CA.cert_registry)
+            ),
         )
         r = PdfFileReader(out)
         result = await ades.ades_lta_validation(
