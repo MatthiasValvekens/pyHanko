@@ -3,12 +3,13 @@ import itertools
 import os
 from datetime import datetime
 from io import BytesIO
+from typing import Optional
 
 import pytest
 import pytz
 import tzlocal
 import yaml
-from asn1crypto import cms, core
+from asn1crypto import algos, cms, core, keys
 from asn1crypto.algos import (
     DigestAlgorithm,
     MaskGenAlgorithm,
@@ -19,7 +20,10 @@ from certomancer import PKIArchitecture
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
-from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
+from pyhanko_certvalidator.policy_decl import (
+    AlgorithmUsageConstraint,
+    DisallowWeakAlgorithmsPolicy,
+)
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -63,6 +67,10 @@ from pyhanko.sign.validation.errors import (
 )
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
+from pyhanko.sign.validation.utils import (
+    DEFAULT_ALGORITHM_USAGE_POLICY,
+    CMSAlgorithmUsagePolicy,
+)
 from pyhanko_tests.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -796,9 +804,7 @@ def test_forbidden_signature_algorithm():
         val_trusted(r.embedded_signatures[0], vc=rsa_banned_vc)
 
 
-@freeze_time('2020-11-01')
-@pytest.mark.asyncio
-async def test_sign_weak_sig_digest_mismatch():
+async def _generate_sig_with_mismatching_digest_algos():
     # We have to jump through some hoops to put together a signature
     # where the signing method's digest is not the same as the "external"
     # digest. This is intentional, since it's bad practice.
@@ -843,7 +849,13 @@ async def test_sign_weak_sig_digest_mismatch():
     # recompute the signature
     si_obj['signature'] = signer.sign_raw(attrs.untag().dump(), 'md5')
     cms_writer.send(cms_obj)
+    return output
 
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_weak_sig_digest_mismatch():
+    output = await _generate_sig_with_mismatching_digest_algos()
     r = PdfFileReader(output)
     emb = r.embedded_signatures[0]
 
@@ -854,6 +866,130 @@ async def test_sign_weak_sig_digest_mismatch():
         SignatureValidationError, match="sha256 does not match.*md5"
     ):
         await async_val_trusted(emb, vc=lenient_vc)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_weak_sig_digest_mismatch_allowed():
+    output = await _generate_sig_with_mismatching_digest_algos()
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+
+    class _AllowEverything(CMSAlgorithmUsagePolicy):
+        def digest_combination_allowed(
+            self,
+            signature_algo: algos.SignedDigestAlgorithm,
+            message_digest_algo: algos.DigestAlgorithm,
+            moment: Optional[datetime],
+        ) -> AlgorithmUsageConstraint:
+            return AlgorithmUsageConstraint(allowed=True)
+
+        def digest_algorithm_allowed(
+            self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        ) -> AlgorithmUsageConstraint:
+            return AlgorithmUsageConstraint(allowed=True)
+
+        def signature_algorithm_allowed(
+            self,
+            algo: algos.SignedDigestAlgorithm,
+            moment: Optional[datetime],
+            public_key: Optional[keys.PublicKeyInfo],
+        ) -> AlgorithmUsageConstraint:
+            return AlgorithmUsageConstraint(allowed=True)
+
+    val_status = await async_validate_pdf_signature(
+        emb,
+        SIMPLE_V_CONTEXT(),
+        skip_diff=True,
+        algorithm_policy=_AllowEverything(),
+    )
+    assert val_status.valid and val_status.intact
+
+
+class _AllowMismatches(CMSAlgorithmUsagePolicy):
+    def __init__(self, policy):
+        self.policy = policy
+
+    def digest_combination_allowed(
+        self,
+        signature_algo: algos.SignedDigestAlgorithm,
+        message_digest_algo: algos.DigestAlgorithm,
+        moment: Optional[datetime],
+    ) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(allowed=True)
+
+    def digest_algorithm_allowed(
+        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+    ) -> AlgorithmUsageConstraint:
+        return self.policy.digest_algorithm_allowed(algo, moment)
+
+    def signature_algorithm_allowed(
+        self,
+        algo: algos.SignedDigestAlgorithm,
+        moment: Optional[datetime],
+        public_key: Optional[keys.PublicKeyInfo],
+    ) -> AlgorithmUsageConstraint:
+        return self.policy.signature_algorithm_allowed(algo, moment, public_key)
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_digest_mismatch_allowed_but_inner_banned():
+    output = await _generate_sig_with_mismatching_digest_algos()
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+
+    policy = DisallowWeakAlgorithmsPolicy(weak_hash_algos=frozenset(['md5']))
+
+    with pytest.raises(SignatureValidationError, match="md5.*not allowed"):
+        await async_validate_pdf_signature(
+            emb,
+            SIMPLE_V_CONTEXT(),
+            skip_diff=True,
+            algorithm_policy=_AllowMismatches(policy),
+        )
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_digest_mismatch_allowed_but_outer_banned():
+    output = await _generate_sig_with_mismatching_digest_algos()
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+
+    policy = DisallowWeakAlgorithmsPolicy(
+        # yes, yes, I know. It's a test.
+        weak_hash_algos=frozenset(['sha256'])
+    )
+
+    with pytest.raises(SignatureValidationError, match="sha256.*not allowed"):
+        await async_validate_pdf_signature(
+            emb,
+            SIMPLE_V_CONTEXT(),
+            skip_diff=True,
+            algorithm_policy=_AllowMismatches(policy),
+        )
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_digest_mismatch_allowed_passed_through_context():
+    output = await _generate_sig_with_mismatching_digest_algos()
+    r = PdfFileReader(output)
+    emb = r.embedded_signatures[0]
+
+    policy = DisallowWeakAlgorithmsPolicy(weak_hash_algos=frozenset())
+
+    lenient_vc = ValidationContext(
+        trust_roots=[ROOT_CERT], algorithm_usage_policy=_AllowMismatches(policy)
+    )
+
+    result = await async_validate_pdf_signature(
+        emb,
+        lenient_vc,
+        skip_diff=True,
+    )
+    assert result.valid and result.intact
 
 
 @freeze_time('2020-11-01')
@@ -884,6 +1020,39 @@ async def test_sign_weak_sig_digest_allowed():
     )
     status = await async_val_trusted(emb, vc=lenient_vc)
     assert status.trusted
+
+
+@freeze_time('2020-11-01')
+@pytest.mark.asyncio
+async def test_sign_weak_sig_digest_disallowed_by_custom_policy():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1', md_algorithm='md5')
+    out = await signers.async_sign_pdf(w, meta, signer=FROM_CA)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+
+    class Policy(CMSAlgorithmUsagePolicy):
+        def digest_algorithm_allowed(
+            self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+        ) -> AlgorithmUsageConstraint:
+            return AlgorithmUsageConstraint(
+                allowed=False, failure_reason="Test reason"
+            )
+
+        def signature_algorithm_allowed(
+            self,
+            algo: algos.SignedDigestAlgorithm,
+            moment: Optional[datetime],
+            public_key: Optional[keys.PublicKeyInfo],
+        ) -> AlgorithmUsageConstraint:
+            return AlgorithmUsageConstraint(allowed=True)
+
+    lenient_vc = ValidationContext(
+        trust_roots=[ROOT_CERT], algorithm_usage_policy=Policy()
+    )
+    with pytest.raises(DisallowedAlgorithmError, match="Test reason"):
+        await async_val_trusted(emb, vc=lenient_vc)
 
 
 @pytest.mark.parametrize("with_issser", [False, True])

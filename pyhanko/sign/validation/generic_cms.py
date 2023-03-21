@@ -54,6 +54,7 @@ from pyhanko.sign.general import (
 )
 
 from ...pdf_utils import misc
+from ...pdf_utils.misc import lift_iterable_async
 from ..ades.report import AdESFailure, AdESIndeterminate
 from . import errors
 from .settings import KeyUsageConstraints
@@ -68,6 +69,7 @@ from .status import (
 )
 from .utils import (
     DEFAULT_ALGORITHM_USAGE_POLICY,
+    CMSAlgorithmUsagePolicy,
     extract_message_digest,
     validate_raw,
 )
@@ -86,8 +88,6 @@ __all__ = [
     'collect_signer_attr_status',
     'validate_algorithm_protection',
 ]
-
-from ...pdf_utils.misc import lift_iterable_async
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +203,7 @@ def validate_sig_integrity(
     cert: x509.Certificate,
     expected_content_type: str,
     actual_digest: bytes,
-    algorithm_usage_policy: Optional[AlgorithmUsagePolicy] = None,
+    algorithm_usage_policy: Optional[CMSAlgorithmUsagePolicy] = None,
     time_indic: Optional[datetime] = None,
 ) -> Tuple[bool, bool]:
     """
@@ -243,19 +243,34 @@ def validate_sig_integrity(
     digest_algorithm_obj = signer_info['digest_algorithm']
     md_algorithm = digest_algorithm_obj['algorithm'].native
     if algorithm_usage_policy is not None:
-        algo_allowed = algorithm_usage_policy.signature_algorithm_allowed(
+        sig_algo_allowed = algorithm_usage_policy.signature_algorithm_allowed(
             signature_algorithm, moment=time_indic, public_key=cert.public_key
         )
-        if not algo_allowed:
+        if not sig_algo_allowed:
             msg = (
                 f"The algorithm {signature_algorithm['algorithm'].native} "
                 f"is not allowed by the current usage policy."
             )
-            if algo_allowed.failure_reason is not None:
-                msg += f" Reason: {algo_allowed.failure_reason}."
+            if sig_algo_allowed.failure_reason is not None:
+                msg += f" Reason: {sig_algo_allowed.failure_reason}."
             raise errors.DisallowedAlgorithmError(
-                msg, permanent=algo_allowed.not_allowed_after is None
+                msg, permanent=sig_algo_allowed.not_allowed_after is None
             )
+        digest_algo_allowed = algorithm_usage_policy.digest_algorithm_allowed(
+            digest_algorithm_obj,
+            moment=time_indic,
+        )
+        if not digest_algo_allowed:
+            msg = (
+                f"The algorithm {digest_algorithm_obj['algorithm'].native} "
+                f"is not allowed by the current usage policy."
+            )
+            if digest_algo_allowed.failure_reason is not None:
+                msg += f" Reason: {digest_algo_allowed.failure_reason}."
+            raise errors.DisallowedAlgorithmError(
+                msg, permanent=digest_algo_allowed.not_allowed_after is None
+            )
+
     signature = signer_info['signature'].native
 
     signed_attrs_orig: cms.CMSAttributes = signer_info['signed_attrs']
@@ -388,6 +403,7 @@ async def cms_basic_validation(
     status_kwargs: Optional[dict] = None,
     validation_path: Optional[ValidationPath] = None,
     pkix_validation_params: Optional[PKIXValidationParams] = None,
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
     *,
     key_usage_settings: KeyUsageConstraints,
 ) -> Dict[str, Any]:
@@ -402,10 +418,14 @@ async def cms_basic_validation(
     cert = cert_info.signer_cert
     other_certs = cert_info.other_certs
 
-    algorithm_policy = None
     time_indic = None
     if validation_context is not None:
-        algorithm_policy = validation_context.algorithm_policy
+        algorithm_policy = (
+            algorithm_policy
+            or CMSAlgorithmUsagePolicy.lift_policy(
+                validation_context.algorithm_policy
+            )
+        )
         time_indic = validation_context.best_signature_time
     validation_context = validation_context or ValidationContext()
     if algorithm_policy is None:
@@ -549,6 +569,7 @@ async def async_validate_cms_signature(
     validation_context: Optional[ValidationContext] = None,
     status_kwargs: Optional[dict] = None,
     key_usage_settings: Optional[KeyUsageConstraints] = None,
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ) -> StatusType:
     """
     Validate a CMS signature (i.e. a ``SignedData`` object).
@@ -567,6 +588,16 @@ async def async_validate_cms_signature(
     :param key_usage_settings:
         A :class:`.KeyUsageConstraints` object specifying which key usages
         must or must not be present in the signer's certificate.
+    :param algorithm_policy:
+        The algorithm usage policy for the signature validation.
+
+        .. warning::
+            This is distinct from the algorithm usage policy used for
+            certificate validation, but the latter will be used as a fallback
+            if this parameter is not specified.
+
+            It is nonetheless recommended to align both policies unless
+            there is a clear reason to do otherwise.
     :return:
         A :class:`.SignatureStatus` object (or an instance of a proper subclass)
     """
@@ -579,6 +610,7 @@ async def async_validate_cms_signature(
         validation_context,
         status_kwargs,
         key_usage_settings=eff_key_usage_settings,
+        algorithm_policy=algorithm_policy,
     )
     # noinspection PyArgumentList
     return status_cls(**status_kwargs)
@@ -724,6 +756,7 @@ async def validate_tst_signed_data(
     tst_signed_data: cms.SignedData,
     validation_context: Optional[ValidationContext],
     expected_tst_imprint: bytes,
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ):
     """
     Validate the ``SignedData`` of a time stamp token.
@@ -736,6 +769,16 @@ async def validate_tst_signed_data(
     :param expected_tst_imprint:
         The expected message imprint value that should be contained in
         the encapsulated ``TSTInfo``.
+    :param algorithm_policy:
+        The algorithm usage policy for the signature validation.
+
+        .. warning::
+            This is distinct from the algorithm usage policy used for
+            certificate validation, but the latter will be used as a fallback
+            if this parameter is not specified.
+
+            It is nonetheless recommended to align both policies unless
+            there is a clear reason to do otherwise.
     :return:
         Keyword arguments for a :class:`.TimeStampSignatureStatus`.
     """
@@ -757,6 +800,7 @@ async def validate_tst_signed_data(
         validation_context=validation_context,
         status_kwargs={'timestamp': timestamp},
         key_usage_settings=ku_settings,
+        algorithm_policy=algorithm_policy,
     )
     # compare the expected TST digest against the message imprint
     # inside the signed data
@@ -900,6 +944,7 @@ async def async_validate_detached_cms(
     ts_validation_context: Optional[ValidationContext] = None,
     ac_validation_context: Optional[ValidationContext] = None,
     key_usage_settings: Optional[KeyUsageConstraints] = None,
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
     chunk_size=misc.DEFAULT_CHUNK_SIZE,
     max_read=None,
 ) -> StandardCMSSignatureStatus:
@@ -933,6 +978,16 @@ async def async_validate_detached_cms(
         .. note::
             :rfc:`5755` requires attribute authority trust roots to be specified
             explicitly; hence why there's no default.
+    :param algorithm_policy:
+        The algorithm usage policy for the signature validation.
+
+        .. warning::
+            This is distinct from the algorithm usage policy used for
+            certificate validation, but the latter will be used as a fallback
+            if this parameter is not specified.
+
+            It is nonetheless recommended to align both policies unless
+            there is a clear reason to do otherwise.
     :param key_usage_settings:
         Key usage parameters for the signer.
     :param chunk_size:
@@ -971,6 +1026,7 @@ async def async_validate_detached_cms(
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,
+        algorithm_policy=algorithm_policy,
     )
     cert_info = extract_certificate_info(signed_data)
     if ac_validation_context is not None:
