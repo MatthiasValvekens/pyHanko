@@ -54,6 +54,7 @@ from .status import (
     PdfSignatureStatus,
     SignatureCoverageLevel,
 )
+from .utils import CMSAlgorithmUsagePolicy
 
 __all__ = [
     'EmbeddedPdfSignature',
@@ -64,6 +65,7 @@ __all__ = [
     'report_seed_value_validation',
     'extract_contents',
 ]
+
 
 logger = logging.getLogger(__name__)
 
@@ -816,6 +818,7 @@ async def async_validate_pdf_signature(
     diff_policy: Optional[DiffPolicy] = None,
     key_usage_settings: Optional[KeyUsageConstraints] = None,
     skip_diff: bool = False,
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None,
 ) -> PdfSignatureStatus:
     """
     .. versionadded:: 0.9.0
@@ -850,6 +853,16 @@ async def async_validate_pdf_signature(
         must or must not be present in the signer's certificate.
     :param skip_diff:
         If ``True``, skip the difference analysis step entirely.
+    :param algorithm_policy:
+        The algorithm usage policy for the signature validation.
+
+        .. warning::
+            This is distinct from the algorithm usage policy used for
+            certificate validation, but the latter will be used as a fallback
+            if this parameter is not specified.
+
+            It is nonetheless recommended to align both policies unless
+            there is a clear reason to do otherwise.
     :return:
         The status of the PDF signature in question.
     """
@@ -895,6 +908,7 @@ async def async_validate_pdf_signature(
         validation_context=signer_validation_context,
         status_kwargs=status_kwargs,
         key_usage_settings=key_usage_settings,
+        algorithm_policy=algorithm_policy,
     )
     tst_validity = status_kwargs.get('timestamp_validity', None)
     timestamp_found = (

@@ -1,4 +1,3 @@
-import dataclasses
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,6 +21,7 @@ from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
 from pyhanko.sign.validation import KeyUsageConstraints
+from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
 
 __all__ = [
     'SignatureValidationSpec',
@@ -30,6 +30,7 @@ __all__ = [
     'LocalKnowledge',
     'RevocationInfoGatheringSpec',
     'KnownPOE',
+    'CMSAlgorithmUsagePolicy',
     'bootstrap_validation_data_handlers',
 ]
 
@@ -92,6 +93,7 @@ class SignatureValidationSpec:
     ac_validation_policy: Optional[CertValidationPolicySpec] = None
     local_knowledge: LocalKnowledge = LocalKnowledge()
     key_usage_settings: KeyUsageConstraints = KeyUsageConstraints()
+    signature_algorithm_policy: Optional[CMSAlgorithmUsagePolicy] = None
 
 
 @dataclass(frozen=True)

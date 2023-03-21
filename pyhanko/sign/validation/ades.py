@@ -99,6 +99,7 @@ from .policy_decl import (
     SignatureValidationSpec,
     bootstrap_validation_data_handlers,
 )
+from .utils import CMSAlgorithmUsagePolicy
 
 __all__ = [
     'ades_basic_validation',
@@ -549,6 +550,7 @@ async def ades_basic_validation(
         signature_not_before_time=signature_not_before_time,
         extra_status_kwargs=extra_status_kwargs,
         status_cls=status_cls,
+        algorithm_policy=validation_spec.signature_algorithm_policy,
     )
     if isinstance(interm_result, AdESBasicValidationResult):
         return interm_result
@@ -571,6 +573,7 @@ async def _ades_basic_validation(
     raw_digest: Optional[bytes],
     signature_not_before_time: Optional[datetime],
     extra_status_kwargs: Optional[Dict[str, Any]],
+    algorithm_policy: Optional[CMSAlgorithmUsagePolicy],
     status_cls: Type[StatusType],
 ) -> Union[AdESBasicValidationResult, _InternalBasicValidationResult]:
     status_kwargs = dict(extra_status_kwargs or {})
@@ -580,6 +583,7 @@ async def _ades_basic_validation(
             raw_digest=raw_digest,
             validation_context=validation_context,
             key_usage_settings=key_usage_settings,
+            algorithm_policy=algorithm_policy,
         )
         status_kwargs.update(status_kwargs_from_validation)
     except errors.SignatureValidationError as e:
@@ -724,6 +728,7 @@ async def ades_with_time_validation(
         signature_not_before_time=signature_not_before_time,
         extra_status_kwargs=extra_status_kwargs,
         status_cls=status_cls,
+        algorithm_policy=validation_spec.signature_algorithm_policy,
     )
     if isinstance(interm_result, AdESBasicValidationResult):
         return AdESWithTimeValidationResult(

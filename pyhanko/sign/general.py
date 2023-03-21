@@ -65,6 +65,7 @@ class ValueErrorWithMessage(ValueError):
 
     def __init__(self, failure_message):
         self.failure_message = str(failure_message)
+        super().__init__(failure_message)
 
 
 class CMSStructuralError(ValueErrorWithMessage):
