@@ -511,6 +511,17 @@ accordingly.
             )
 
 
+
+.. warning::
+
+    For PAdES profiles requiring revocation information to be gathered, it is crucial
+    that the validation context be set up correctly. Not only do you need to ensure that
+    fetching revocation information is allowed (by passing ``allow_fetching=True``),
+    but you should also make sure that all certificates that you intend to use can actually
+    be validated at usage time. If you rely on trust roots that are not in the system trust on
+    your machine, you may need to pass in your own trust roots using the ``trust_roots``
+    or ``extra_trust_roots`` parameters to :class:`~pyhanko_certvalidator.ValidationContext`.
+
 .. _async-resource-management:
 
 Using ``aiohttp`` for network I/O
