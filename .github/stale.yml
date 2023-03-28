@@ -1,17 +1,14 @@
 staleLabel: stale
 closeComment: false
 
-exemptLabels:
-  - pinned
-  - security
-  - help wanted
-  - bug
+onlyLabels:
+  - waiting for user
 
 only: issues
 issues:
-  daysUntilStale: 60
-  daysUntilClose: 14
+  daysUntilStale: 30
+  daysUntilClose: 5
   markComment: >
     This issue has been automatically marked as stale because it has not had
-    recent activity. It will be closed in 14 days if no further activity occurs.
+    recent activity. It will be closed in 5 days if no further activity occurs.
     Thank you for your contributions!
