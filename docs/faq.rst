@@ -45,3 +45,45 @@ There are many reasons why path building could fail, but the most common ones ar
 
 In either case, you probably need to review your
 :ref:`validation context settings <config-validation-context>`.
+
+
+
+Features & customisation
+------------------------
+
+
+How do I use pyHanko to sign PDFs with a remote signing service?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+It depends. Does your signing service return "raw" signed hashes? If so,
+read :ref:`the section on custom Signers <extending-signer>`. Does it return fully-fledged
+CMS/PKCS#7 objects? Then have a look at :ref:`the PdfCMSEmbedder API <pdf-cms-embedder-protocol>`
+and :ref:`the section on interrupted signing <interrupted-signing>`. The interrupted signing
+pattern is actually relevant in all remote signing scenarios, so give it a read either way.
+
+PyHanko ships with built-in support for the CSC API (see the API docs for :mod:`~pyhanko.sign.signers.csc_signer`).
+There's also an example illustrating how to use pyHanko with the AWS KMS API on
+:ref:`the advanced examples page <async-aws-kms>`.
+
+
+I can't get pyHanko to work with <insert PKCS#11 device here>. Can you help me?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If pyHanko's generic :class:`~pyhanko.sign.pkcs11.PKCS11Signer` doesn't work
+with your favourite PKCS#11 device out of the box, that could be due to any
+number of reasons, including but not limited to
+
+ * nonconformities in the PKCS#11 implementation for your device;
+ * bugs in your device's drivers or PKCS#11 middleware;
+ * interop with `the PKCS#11 library that pyHanko uses under the hood <https://github.com/danni/python-pkcs11>`_;
+ * bugs in pyHanko itself;
+ * pyHanko using different defaults than <insert PKCS#11 client in other language>;
+ * hardware issues;
+ * user error.
+
+When facing an issue with PKCS#11, please *never* file a bug report on the issue tracker unless
+you're very sure you've correctly identified the root cause.
+Posting your question on `the discussion forum <https://github.com/MatthiasValvekens/pyHanko/discussions>`_
+is of course allowed, but bear in mind that PKCS#11 usage issues are generally difficult to
+diagnose remotely without access to the hardware in question.
+Be prepared to do your own troubleshooting.
