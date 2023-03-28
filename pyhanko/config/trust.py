@@ -17,7 +17,7 @@ def init_validation_context_kwargs(
 ):
     if not isinstance(time_tolerance, timedelta):
         if time_tolerance is None:
-            time_tolerance = timedelta(seconds=DEFAULT_TIME_TOLERANCE)
+            time_tolerance = DEFAULT_TIME_TOLERANCE
         elif isinstance(time_tolerance, int):
             time_tolerance = timedelta(seconds=time_tolerance)
         else:
@@ -71,4 +71,4 @@ def parse_trust_config(
     )
 
 
-DEFAULT_TIME_TOLERANCE = 10
+DEFAULT_TIME_TOLERANCE: timedelta = timedelta(seconds=30)

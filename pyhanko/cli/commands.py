@@ -6,6 +6,7 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum, auto
+from typing import Optional
 
 import click
 import tzlocal
@@ -252,7 +253,7 @@ def _build_vc_kwargs(
     retroactive_revinfo,
     allow_fetching=None,
 ):
-    cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+    cli_config: Optional[CLIConfig] = ctx.obj.get(Ctx.CLI_CONFIG, None)
     try:
         if validation_context is not None:
             if any((trust, other_certs)):
