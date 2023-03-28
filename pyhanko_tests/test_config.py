@@ -474,7 +474,7 @@ def test_key_usage_errors(key_usage_str):
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """,
-            DEFAULT_TIME_TOLERANCE,
+            DEFAULT_TIME_TOLERANCE.seconds,
         ),
     ],
 )
@@ -509,9 +509,7 @@ def test_read_time_tolerance_input_issues():
         trust=[], trust_replace=False, other_certs=[]
     )
     assert 'retroactive_revinfo' not in vc_kwargs
-    assert vc_kwargs['time_tolerance'] == timedelta(
-        seconds=DEFAULT_TIME_TOLERANCE
-    )
+    assert vc_kwargs['time_tolerance'] == DEFAULT_TIME_TOLERANCE
 
 
 @pytest.mark.parametrize(

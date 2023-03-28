@@ -168,7 +168,7 @@ def process_config_dict(config_dict: dict) -> dict:
         'default-stamp-style', DEFAULT_STAMP_STYLE
     )
     time_tolerance_seconds = config_dict.get(
-        'time-tolerance', DEFAULT_TIME_TOLERANCE
+        'time-tolerance', DEFAULT_TIME_TOLERANCE.seconds
     )
     if not isinstance(time_tolerance_seconds, int):
         raise ConfigurationError(
