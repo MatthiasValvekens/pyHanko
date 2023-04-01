@@ -93,6 +93,7 @@ from pyhanko.sign.validation.status import (
 )
 
 from ..diff_analysis import DiffPolicy, DiffResult, SuspiciousModification
+from .errors import NoDSSFoundError
 from .policy_decl import (
     LocalKnowledge,
     PdfSignatureValidationSpec,
@@ -1562,25 +1563,29 @@ async def ades_lta_validation(
     init_local_knowledge = validation_spec.local_knowledge
     # Ingest CRLs, certs and OCSPs from the DSS
     # (POE info will be processed separately)
-    dss = DocumentSecurityStore.read_dss(embedded_sig.reader)
-    dss_ocsps = [
-        cont
-        for resp in dss.ocsps
-        for cont in OCSPContainer.load_multi(
-            OCSPResponse.load(resp.get_object().data)
+    try:
+        dss = DocumentSecurityStore.read_dss(embedded_sig.reader)
+        dss_ocsps = [
+            cont
+            for resp in dss.ocsps
+            for cont in OCSPContainer.load_multi(
+                OCSPResponse.load(resp.get_object().data)
+            )
+        ]
+        dss_crls = [
+            CRLContainer(crl_data=CertificateList.load(crl.get_object().data))
+            for crl in dss.crls
+        ]
+        dss_certs = list(dss.load_certs())
+        local_knowledge = LocalKnowledge(
+            known_ocsps=init_local_knowledge.known_ocsps + dss_ocsps,
+            known_crls=init_local_knowledge.known_crls + dss_crls,
+            known_certs=init_local_knowledge.known_certs + dss_certs,
+            known_poes=init_local_knowledge.known_poes,
         )
-    ]
-    dss_crls = [
-        CRLContainer(crl_data=CertificateList.load(crl.get_object().data))
-        for crl in dss.crls
-    ]
-    dss_certs = list(dss.load_certs())
-    local_knowledge = LocalKnowledge(
-        known_ocsps=init_local_knowledge.known_ocsps + dss_ocsps,
-        known_crls=init_local_knowledge.known_crls + dss_crls,
-        known_certs=init_local_knowledge.known_certs + dss_certs,
-        known_poes=init_local_knowledge.known_poes,
-    )
+    except NoDSSFoundError:
+        local_knowledge = init_local_knowledge
+
     augmented_validation_spec = dataclasses.replace(
         validation_spec, local_knowledge=local_knowledge
     )
