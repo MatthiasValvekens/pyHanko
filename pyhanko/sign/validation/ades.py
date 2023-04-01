@@ -1008,6 +1008,9 @@ async def _ades_past_signature_validation(
     try:
         cert_info = extract_certificate_info(signed_data)
         cert = cert_info.signer_cert
+        validation_data_handlers.cert_registry.register_multiple(
+            cert_info.other_certs
+        )
     except CMSExtractionError:
         raise errors.SignatureValidationError(
             'signer certificate not included in signature',
