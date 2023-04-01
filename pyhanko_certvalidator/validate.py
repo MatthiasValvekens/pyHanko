@@ -631,13 +631,11 @@ async def async_validate_ac(
         if crit and ext not in SUPPORTED_AC_EXTENSIONS
     }
     if unsupported_critical_extensions:
-        raise PathValidationError(
+        raise InvalidCertificateError(
             "The AC could not be validated because it contains the "
             f"following unsupported critical extension"
             f"{'s' if len(unsupported_critical_extensions) != 1 else ''}: "
-            f"{', '.join(sorted(unsupported_critical_extensions))}.",
-            is_ee_cert=True,
-            is_side_validation=False,
+            f"{', '.join(sorted(unsupported_critical_extensions))}."
         )
     if 'target_information' in extensions_present:
         targ_desc = validation_context.acceptable_ac_targets

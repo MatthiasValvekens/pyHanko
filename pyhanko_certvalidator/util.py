@@ -289,6 +289,15 @@ class ConsList(Generic[ListElem]):
             yield cur.head
             cur = cur.tail
 
+    @property
+    def last(self) -> Optional[ListElem]:
+        cur = self
+        result = None
+        while cur.tail is not None:
+            result = cur.head
+            cur = cur.tail
+        return result
+
     def cons(self, head: ListElem) -> ConsList[ListElem]:
         return ConsList(head, self)
 

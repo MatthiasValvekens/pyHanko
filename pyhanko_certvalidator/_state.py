@@ -1,17 +1,16 @@
-from dataclasses import dataclass
 from typing import Optional
 
 from asn1crypto import x509
 
+from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.util import ConsList
 
 
-@dataclass
 class ValProcState:
     def __init__(
         self,
         *,
-        cert_path_stack: ConsList,
+        cert_path_stack: ConsList[ValidationPath],
         ee_name_override: Optional[str] = None,
         is_side_validation: bool = False,
     ):

@@ -7,7 +7,11 @@ from asn1crypto import cms, crl, ocsp, x509
 from pyhanko_certvalidator import validate
 from pyhanko_certvalidator.authority import CertTrustAnchor
 from pyhanko_certvalidator.context import ACTargetDescription, ValidationContext
-from pyhanko_certvalidator.errors import PathValidationError, RevokedError
+from pyhanko_certvalidator.errors import (
+    InvalidCertificateError,
+    PathValidationError,
+    RevokedError,
+)
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.revinfo.validate_crl import verify_crl
 from pyhanko_certvalidator.revinfo.validate_ocsp import verify_ocsp_response
@@ -72,7 +76,7 @@ async def test_basic_ac_validation_bad_signature():
         other_certs=[interm, role_aa],
     )
     msg = 'signature could not be verified'
-    with pytest.raises(PathValidationError, match=msg):
+    with pytest.raises(InvalidCertificateError, match=msg):
         await validate.async_validate_ac(ac, vc)
 
 
@@ -118,7 +122,7 @@ async def test_basic_ac_validation_sig_algo_mismatch():
         other_certs=[interm, role_aa],
     )
     msg = 'algorithm declaration.*does not match'
-    with pytest.raises(PathValidationError, match=msg):
+    with pytest.raises(InvalidCertificateError, match=msg):
         await validate.async_validate_ac(ac, vc)
 
 
@@ -194,7 +198,7 @@ async def test_basic_ac_validation_no_targeting():
     )
 
     msg = 'no targeting information'
-    with pytest.raises(PathValidationError, match=msg):
+    with pytest.raises(InvalidCertificateError, match=msg):
         await validate.async_validate_ac(ac, vc)
 
 
@@ -223,7 +227,7 @@ async def test_basic_ac_validation_bad_targeting_name():
     )
 
     msg = 'AC targeting'
-    with pytest.raises(PathValidationError, match=msg):
+    with pytest.raises(InvalidCertificateError, match=msg):
         await validate.async_validate_ac(ac, vc)
 
 
@@ -251,7 +255,7 @@ async def test_basic_ac_validation_bad_targeting_group():
     )
 
     msg = 'AC targeting'
-    with pytest.raises(PathValidationError, match=msg):
+    with pytest.raises(InvalidCertificateError, match=msg):
         await validate.async_validate_ac(ac, vc)
 
 
@@ -352,7 +356,7 @@ async def test_match_holder_ac_mismatch():
     )
 
     msg = 'Could not match.*base_certificate_id'
-    with pytest.raises(PathValidationError, match=msg):
+    with pytest.raises(InvalidCertificateError, match=msg):
         await validate.async_validate_ac(ac, vc, holder_cert=bob)
 
 

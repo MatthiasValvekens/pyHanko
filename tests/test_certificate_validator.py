@@ -10,7 +10,10 @@ from pyhanko_certvalidator import (
     PKIXValidationParams,
     ValidationContext,
 )
-from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.errors import (
+    InvalidCertificateError,
+    PathValidationError,
+)
 from tests.common import load_cert_object, load_nist_cert
 
 
@@ -51,7 +54,7 @@ async def test_basic_certificate_validator_tls_invalid_hostname():
     context = ValidationContext(moment=moment)
     validator = CertificateValidator(cert, other_certs, context)
 
-    with pytest.raises(PathValidationError, match='not valid'):
+    with pytest.raises(InvalidCertificateError, match='not valid'):
         await validator.async_validate_tls('google.com')
 
 
@@ -65,7 +68,7 @@ async def test_basic_certificate_validator_tls_invalid_key_usage():
     context = ValidationContext(moment=moment)
     validator = CertificateValidator(cert, other_certs, context)
 
-    with pytest.raises(PathValidationError, match='for the purpose'):
+    with pytest.raises(InvalidCertificateError, match='for the purpose'):
         await validator.async_validate_usage({'crl_sign'})
 
 

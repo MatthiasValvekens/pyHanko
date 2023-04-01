@@ -6,6 +6,7 @@ from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
 
 from pyhanko_certvalidator._state import ValProcState
+from pyhanko_certvalidator.path import ValidationPath
 
 
 class PathError(Exception):
@@ -70,15 +71,16 @@ class PathValidationError(ValidationError):
     def from_state(
         cls: Type[TPathErr], msg: str, proc_state: ValProcState
     ) -> TPathErr:
-        return cls(
-            msg,
-            is_ee_cert=proc_state.is_ee_cert,
-            is_side_validation=proc_state.is_side_validation,
-        )
+        return cls(msg, proc_state=proc_state)
 
-    def __init__(self, msg: str, *, is_ee_cert: bool, is_side_validation: bool):
-        self.is_ee_cert = is_ee_cert
-        self.is_side_validation = is_side_validation
+    def __init__(self, msg: str, *, proc_state: ValProcState):
+        self.is_ee_cert = proc_state.is_ee_cert
+        self.is_side_validation = proc_state.is_side_validation
+        current = proc_state.cert_path_stack.head
+        orig = proc_state.cert_path_stack.last
+        assert current is not None and orig is not None
+        self.current_path: ValidationPath = current
+        self.original_path: ValidationPath = orig
         super().__init__(msg)
 
 
@@ -109,11 +111,7 @@ class RevokedError(PathValidationError):
     ):
         self.reason = reason
         self.revocation_dt = revocation_dt
-        super().__init__(
-            msg,
-            is_ee_cert=proc_state.is_ee_cert,
-            is_side_validation=proc_state.is_side_validation,
-        )
+        super().__init__(msg, proc_state=proc_state)
 
 
 class InsufficientRevinfoError(PathValidationError):
@@ -132,11 +130,8 @@ class NotYetValidError(PathValidationError):
     pass
 
 
-class InvalidCertificateError(PathValidationError):
-    def __init__(self, msg, is_ee_cert=True, is_side_validation=False):
-        super().__init__(
-            msg, is_ee_cert=is_ee_cert, is_side_validation=is_side_validation
-        )
+class InvalidCertificateError(ValidationError):
+    pass
 
 
 class DisallowedAlgorithmError(PathValidationError):
