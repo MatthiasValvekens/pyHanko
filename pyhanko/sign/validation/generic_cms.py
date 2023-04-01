@@ -34,10 +34,7 @@ from pyhanko_certvalidator.errors import (
 )
 from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import (
-    AlgorithmUsagePolicy,
-    PKIXValidationParams,
-)
+from pyhanko_certvalidator.policy_decl import PKIXValidationParams
 from pyhanko_certvalidator.validate import ACValidationResult, async_validate_ac
 
 from pyhanko.sign.general import (
@@ -531,9 +528,6 @@ async def validate_cert_usage(
     ades_status, revo_details, path = await handle_certvalidator_errors(
         _check()
     )
-    if ades_status is not None:
-        subj = cert.subject.human_friendly
-        logger.warning(f"Chain of trust validation for {subj} failed.")
     return ades_status, revo_details, path
 
 
@@ -820,7 +814,9 @@ async def process_certified_attrs(
     validation_context: ValidationContext,
 ) -> Tuple[
     List[ACValidationResult],
-    List[Union[PathValidationError, PathBuildingError]],
+    List[
+        Union[PathValidationError, PathBuildingError, InvalidCertificateError]
+    ],
 ]:
     jobs = [
         async_validate_ac(ac, validation_context, holder_cert=signer_cert)
@@ -831,7 +827,11 @@ async def process_certified_attrs(
     for job in asyncio.as_completed(jobs):
         try:
             results.append(await job)
-        except (PathBuildingError, PathValidationError) as e:
+        except (
+            PathBuildingError,
+            PathValidationError,
+            InvalidCertificateError,
+        ) as e:
             errors.append(e)
     return results, errors
 
@@ -1052,7 +1052,7 @@ async def handle_certvalidator_errors(coro):
     :param coro:
     :return:
     """
-    revo_details = None
+    revo_details = path = None
     try:
         return None, None, await coro
     except InvalidCertificateError as e:
@@ -1062,6 +1062,7 @@ async def handle_certvalidator_errors(coro):
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.NO_POE
     except DisallowedAlgorithmError as e:
+        path = e.original_path
         if e.banned_since is None:
             # permaban
             ades_status = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE
@@ -1069,6 +1070,7 @@ async def handle_certvalidator_errors(coro):
             # could get resolved with more POEs
             ades_status = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
     except RevokedError as e:
+        path = e.original_path
         logger.warning(e.failure_msg)
         if e.is_side_validation:
             # don't report this as a revocation event
@@ -1091,6 +1093,7 @@ async def handle_certvalidator_errors(coro):
         logger.warning("Failed to build path", exc_info=e)
         ades_status = AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
     except ExpiredError as e:
+        path = e.original_path
         logger.warning(e.failure_msg)
         if not e.is_side_validation and e.is_ee_cert:
             # TODO modify certvalidator to perform revinfo checks on
@@ -1101,6 +1104,7 @@ async def handle_certvalidator_errors(coro):
         else:
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     except PathValidationError as e:
+        path = e.original_path
         logger.warning(e.failure_msg, exc_info=e)
         # TODO verify whether this is appropriate
         ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
@@ -1108,4 +1112,4 @@ async def handle_certvalidator_errors(coro):
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
-    return ades_status, revo_details, None
+    return ades_status, revo_details, path

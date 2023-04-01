@@ -17,7 +17,11 @@ from typing import (
 )
 
 from asn1crypto import cms, core, crl, keys, x509
-from pyhanko_certvalidator.errors import PathBuildingError, PathValidationError
+from pyhanko_certvalidator.errors import (
+    PathBuildingError,
+    PathValidationError,
+    ValidationError,
+)
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.validate import ACValidationResult
 
@@ -430,7 +434,7 @@ class CAdESSignerAttributeAssertions:
     """
 
     ac_validation_errs: Optional[
-        Collection[Union[PathValidationError, PathBuildingError]]
+        Collection[Union[ValidationError, PathBuildingError]]
     ] = None
     """
     Attribute certificate validation errors.
