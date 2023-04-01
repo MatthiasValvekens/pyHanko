@@ -1,11 +1,20 @@
+import dataclasses
 import datetime
 from io import BytesIO
 from typing import Optional
 
 import pytest
-from asn1crypto import algos, cms, keys
+import tzlocal
+from asn1crypto import algos, cms, keys, ocsp
+from asn1crypto.pdf import RevocationInfoArchival
 from certomancer.integrations.illusionist import Illusionist
-from certomancer.registry import ArchLabel, CertLabel, KeyLabel
+from certomancer.registry import (
+    ArchLabel,
+    CertLabel,
+    EntityLabel,
+    KeyLabel,
+    ServiceLabel,
+)
 from freezegun import freeze_time
 from pyhanko_certvalidator import policy_decl as certv_policy_decl
 from pyhanko_certvalidator.authority import CertTrustAnchor
@@ -34,16 +43,27 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfTimeStamper, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
 from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate, AdESPassed
-from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes
-from pyhanko.sign.validation import ades
+from pyhanko.sign.signers.pdf_cms import (
+    GenericPdfSignedAttributeProviderSpec,
+    PdfCMSSignedAttributes,
+    Signer,
+    SimpleSigner,
+)
+from pyhanko.sign.validation import SignatureCoverageLevel, ades
 from pyhanko.sign.validation.policy_decl import (
     KnownPOE,
     LocalKnowledge,
     PdfSignatureValidationSpec,
     SignatureValidationSpec,
 )
-from pyhanko_tests.samples import CERTOMANCER, MINIMAL_ONE_FIELD, TESTING_CA
+from pyhanko_tests.samples import (
+    CERTOMANCER,
+    MINIMAL_ONE_FIELD,
+    TESTING_CA,
+    UNRELATED_TSA,
+)
 from pyhanko_tests.signing_commons import (
+    DUMMY_HTTP_TS_VARIANT,
     DUMMY_TS,
     DUMMY_TS2,
     FROM_CA,
@@ -88,13 +108,14 @@ async def _update_pades_test_doc(requests_mock, out):
     await PdfTimeStamper(DUMMY_TS2).async_update_archival_timestamp_chain(r, vc)
 
 
+DEFAULT_REVINFO_POLICY = certv_policy_decl.CertRevTrustPolicy(
+    revocation_checking_policy=certv_policy_decl.REQUIRE_REVINFO,
+    freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
+)
 DEFAULT_SIG_VALIDATION_SPEC = SignatureValidationSpec(
     cert_validation_policy=CertValidationPolicySpec(
         trust_manager=SimpleTrustManager.build(TRUST_ROOTS),
-        revinfo_policy=certv_policy_decl.CertRevTrustPolicy(
-            revocation_checking_policy=certv_policy_decl.REQUIRE_REVINFO,
-            freshness_req_type=FreshnessReqType.MAX_DIFF_REVOCATION_VALIDATION,
-        ),
+        revinfo_policy=DEFAULT_REVINFO_POLICY,
     )
 )
 DEFAULT_PDF_VALIDATION_SPEC = PdfSignatureValidationSpec(
@@ -555,3 +576,109 @@ async def test_pades_lta_live_ac_validation(requests_mock):
         assert isinstance(role, cms.RoleSyntax)
         assert len(result.api_status.ac_attrs) == 1
         assert role['role_name'].native == 'bigboss@example.com'
+
+
+async def _nontraditional_hybrid_lta_doc(requests_mock):
+    # this document reproduces the situation of #228:
+    #  - No DSS or DTSes
+    #  - declared PAdES (/ETSI.CAdES.detached)
+    #  - short-lived leaf cert (=> expired by validation time)
+    #  - Leaf cert OCSP response in Adobe revinfo archival
+    #  - Revinfo for intermediate cert must be fetched
+    #  - Different TS root.
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    vc = live_testing_vc(requests_mock, with_extra_tsa=True)
+
+    custom_signer = signers.SimpleSigner(
+        signing_cert=FROM_CA.signing_cert,
+        signing_key=FROM_CA.signing_key,
+        cert_registry=FROM_CA.cert_registry,
+    )
+    cert_id = ocsp.CertId(
+        {
+            'hash_algorithm': algos.DigestAlgorithm({'algorithm': 'sha256'}),
+            'issuer_name_hash': TESTING_CA.entities.get_name_hash(
+                EntityLabel('interm'), 'sha256'
+            ),
+            'issuer_key_hash': INTERM_CERT.public_key.sha256,
+            'serial_number': FROM_CA.signing_cert.serial_number,
+        }
+    )
+    responder = TESTING_CA.service_registry.summon_responder(
+        ServiceLabel('interm'),
+        at_time=datetime.datetime.now(tz=tzlocal.get_localzone()),
+    )
+    ocsp_response = responder.assemble_simple_ocsp_responses(
+        [responder.format_single_ocsp_response(cert_id, INTERM_CERT)]
+    )
+    custom_signer.signed_attr_prov_spec = GenericPdfSignedAttributeProviderSpec(
+        attr_settings=PdfCMSSignedAttributes(
+            adobe_revinfo_attr=RevocationInfoArchival({'ocsp': [ocsp_response]})
+        ),
+        signing_cert=custom_signer.signing_cert,
+        signature_mechanism=custom_signer.signature_mechanism,
+        timestamper=None,
+    )
+
+    timestamper = DUMMY_HTTP_TS_VARIANT
+    out = await signers.async_sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=vc,
+            subfilter=PADES,
+            embed_validation_info=False,  # done manually
+        ),
+        signer=custom_signer,
+        timestamper=timestamper,
+    )
+    r = PdfFileReader(out)
+    assert len(r.embedded_signatures) == 1
+    assert '/DSS' not in r.root
+    return out
+
+
+@pytest.mark.asyncio
+async def test_nontraditional_hybrid_lta(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _nontraditional_hybrid_lta_doc(requests_mock)
+
+    modified_policy = SignatureValidationSpec(
+        cert_validation_policy=CertValidationPolicySpec(
+            trust_manager=SimpleTrustManager.build(
+                TRUST_ROOTS + [UNRELATED_TSA.get_cert('root')]
+            ),
+            revinfo_policy=DEFAULT_REVINFO_POLICY,
+        )
+    )
+    with freeze_time('2022-11-20'):
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=PdfSignatureValidationSpec(modified_policy),
+        )
+        assert result.ades_subindic == AdESPassed.OK
+        assert result.api_status.bottom_line
+        assert result.api_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
+        assert result.best_signature_time == datetime.datetime(
+            2020, 11, 20, tzinfo=datetime.timezone.utc
+        )
+
+
+@pytest.mark.asyncio
+async def test_nontraditional_hybrid_lta_with_failed_timestamp(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _nontraditional_hybrid_lta_doc(requests_mock)
+
+    with freeze_time('2022-11-20'):
+        r = PdfFileReader(out)
+        result = await ades.ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
+        )
+        assert result.ades_subindic == AdESIndeterminate.NO_POE
+        assert not result.api_status.bottom_line
+        assert result.api_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
+        assert result.best_signature_time == datetime.datetime(
+            2022, 11, 20, tzinfo=datetime.timezone.utc
+        )
