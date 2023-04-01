@@ -1,5 +1,12 @@
 # changelog
 
+## 0.21.0
+
+ - Switch to `pyproject.toml` to manage project metadata.
+ - Path validation errors now carry information about the paths that triggered them.
+ - `InvalidCertificateError` is no longer a subclass of `PathValidationError`, only of
+   `ValidationError`. This is a minor but nonetheless breaking change.
+
 ## 0.20.1
 
 Minor maintenance release without functional changes, only to metadata, documentation and typing.
