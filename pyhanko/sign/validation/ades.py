@@ -92,7 +92,7 @@ from pyhanko.sign.validation.status import (
     TimestampSignatureStatus,
 )
 
-from ..diff_analysis import DiffPolicy, DiffResult, SuspiciousModification
+from ..diff_analysis import DiffPolicy
 from .errors import NoDSSFoundError
 from .policy_decl import (
     LocalKnowledge,
@@ -149,6 +149,7 @@ class _InternalBasicValidationResult:
     ades_subindic: AdESSubIndic
     signature_poe_time: Optional[datetime]
     signature_not_before_time: Optional[datetime]
+    validation_path: Optional[ValidationPath]
     status_kwargs: dict = dataclasses.field(default_factory=dict)
     trust_subindic_update: Optional[AdESSubIndic] = None
 
@@ -159,6 +160,7 @@ class _InternalBasicValidationResult:
 
     def update(self, status_cls, with_ts, with_attrs):
         status_kwargs = self.status_kwargs
+        status_kwargs['validation_path'] = self.validation_path
         if self.trust_subindic_update:
             status_kwargs['trust_problem_indic'] = self.trust_subindic_update
 
@@ -428,6 +430,7 @@ async def _process_basic_validation(
         signature_not_before_time=signature_not_before_time,
         signer_attr_status=SignerAttributeStatus(**attr_status_kwargs),
         signature_poe_time=None,
+        validation_path=temp_status.validation_path,
     )
 
 
@@ -958,11 +961,8 @@ async def _build_and_past_validate_cert(
     paths = path_builder.async_build_paths_lazy(cert)
     try:
         async for cand_path in paths:
-            (
-                current_subindication,
-                revo_details,
-                validation_time,
-            ) = await generic_cms.handle_certvalidator_errors(
+            past_result: generic_cms.CertvalidatorOperationResult[datetime]
+            past_result = await generic_cms.handle_certvalidator_errors(
                 past_validate(
                     path=cand_path,
                     validation_policy_spec=validation_policy_spec,
@@ -970,7 +970,10 @@ async def _build_and_past_validate_cert(
                     init_control_time=init_control_time,
                 )
             )
+            current_subindication = past_result.error_subindic
+            validation_time = past_result.success_result
             if current_subindication is None:
+                assert validation_time is not None
                 return cand_path, validation_time
     finally:
         await paths.cancel()
@@ -994,7 +997,7 @@ async def _ades_past_signature_validation(
     current_time_sub_indic: Optional[AdESIndeterminate],
     init_control_time: datetime,
     is_timestamp: bool,
-):
+) -> ValidationPath:
     validation_data_handlers = bootstrap_validation_data_handlers(
         validation_spec, is_historical=True, poe_manager_override=poe_manager
     )
@@ -1054,14 +1057,14 @@ async def _ades_past_signature_validation(
     if best_signature_time <= validation_time:
         if current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE:
             _pass_contingent_on_revinfo_issuance_poe()
-            return
+            return cert_path
         elif current_time_sub_indic in (
             AdESIndeterminate.REVOKED_CA_NO_POE,
             AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
         ):
             # This is an automatic pass given that certvalidator checks
             # these conditions for us as part of past_validate(...)
-            return
+            return cert_path
         elif current_time_sub_indic in (
             AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
             AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED,
@@ -1073,7 +1076,7 @@ async def _ades_past_signature_validation(
                 )
             elif best_signature_time <= cert.not_valid_after:
                 _pass_contingent_on_revinfo_issuance_poe()
-                return
+                return cert_path
 
     # TODO here, it would help to preserve more than the sub-indication
     #  from before
@@ -1146,7 +1149,8 @@ class PrimaFaciePOE:
     digests_covered: FrozenSet[bytes]
     timestamp_token_signed_data: cms.SignedData
     doc_digest: bytes
-    diff_result: Union[DiffResult, SuspiciousModification, None]
+    # include info from difference analysis as part of the status kwargs
+    forensic_info: dict
 
     def add_to_poe_manager(self, manager: POEManager):
         for thing in self.digests_covered:
@@ -1264,7 +1268,7 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
                         digests_covered=frozenset(collected_so_far),
                         timestamp_token_signed_data=ts_signed_data,
                         doc_digest=doc_digest,
-                        diff_result=embedded_sig.diff_result,
+                        forensic_info=embedded_sig.summarise_integrity_info(),
                     )
                 )
                 # reset for_next_ts
@@ -1365,7 +1369,7 @@ async def _validate_prima_facie_poe(
             timing_info=cur_timing_info,
             expected_tst_imprint=poe.doc_digest,
             validation_data_handlers=validation_data_handlers,
-            extra_status_kwargs={'diff_result': poe.diff_result},
+            extra_status_kwargs=poe.forensic_info,
             status_cls=DocumentTimestampStatus,
         )
         sub_indic = cur_time_result.ades_subindic
@@ -1487,7 +1491,7 @@ async def _process_signature_ts(
         try:
             # TODO: in principle, we should also run this if the status is
             #  PASSED already. Ensure that that is possible.
-            await _ades_past_signature_validation(
+            validation_path = await _ades_past_signature_validation(
                 signed_data=signature_ts,
                 validation_spec=validation_spec,
                 poe_manager=poe_manager,
@@ -1498,7 +1502,10 @@ async def _process_signature_ts(
             signature_ts_result = AdESBasicValidationResult(
                 ades_subindic=AdESPassed.OK,
                 # TODO update pyHanko status object as well
-                api_status=signature_ts_prelim_result.api_status,
+                api_status=dataclasses.replace(
+                    signature_ts_prelim_result.api_status,
+                    validation_path=validation_path,
+                ),
                 failure_msg=None,
             )
         except errors.SignatureValidationError as e:
@@ -1643,7 +1650,7 @@ async def ades_lta_validation(
         validation_data_handlers=with_time_data_handlers,
         raw_digest=embedded_sig.compute_digest(),
         signature_not_before_time=signature_not_before_time,
-        extra_status_kwargs={'diff_result': embedded_sig.diff_result},
+        extra_status_kwargs=embedded_sig.summarise_integrity_info(),
         status_cls=PdfSignatureStatus,
     )
 

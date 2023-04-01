@@ -134,6 +134,15 @@ class SignatureStatus:
     in the chain) was revoked.
     """
 
+    error_time_horizon: Optional[datetime]
+    """
+    Informational timestamp indicating a point in time where the validation
+    behaviour potentially changed (e.g. expiration, revocation, etc.).
+
+    The presence of this value by itself should not be taken as an assertion
+    that validation would have succeeded if executed before that point in time.
+    """
+
     # XXX frozenset makes more sense here, but asn1crypto doesn't allow that
     #  (probably legacy behaviour)
     key_usage: ClassVar[Set[str]] = {'non_repudiation'}

@@ -1,10 +1,13 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     IO,
     Any,
+    Awaitable,
     Dict,
+    Generic,
     Iterable,
     List,
     Optional,
@@ -463,7 +466,7 @@ async def cms_basic_validation(
         ) from e
 
     # next, validate trust
-    ades_status = path = revo_details = None
+    ades_status = path = revo_details = error_time_horizon = None
     if valid:
         try:
             validation_context.certificate_registry.register_multiple(
@@ -478,13 +481,17 @@ async def cms_basic_validation(
                     cert
                 )
 
-            ades_status, revo_details, path = await validate_cert_usage(
+            op_result = await validate_cert_usage(
                 cert,
                 validation_context,
                 key_usage_settings=key_usage_settings,
                 paths=paths,
                 pkix_validation_params=pkix_validation_params,
             )
+            ades_status = op_result.error_subindic
+            revo_details = op_result.revo_details
+            path = op_result.success_result or op_result.error_path
+            error_time_horizon = op_result.error_time_horizon
         except ValueError as e:
             logger.error("Processing error in validation process", exc_info=e)
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
@@ -499,6 +506,7 @@ async def cms_basic_validation(
         trust_problem_indic=ades_status,
         validation_path=path,
         revocation_details=revo_details,
+        error_time_horizon=error_time_horizon,
     )
     return status_kwargs
 
@@ -509,13 +517,14 @@ async def validate_cert_usage(
     key_usage_settings: KeyUsageConstraints,
     paths: CancelableAsyncIterator[ValidationPath],
     pkix_validation_params: Optional[PKIXValidationParams] = None,
-):
+) -> 'CertvalidatorOperationResult[ValidationPath]':
     """
     Low-level certificate validation routine.
     Internal API.
     """
 
-    async def _check():
+    async def _check() -> ValidationPath:
+        # validate usage without going through pyhanko_certvalidator
         key_usage_settings.validate(cert)
         return await find_valid_path(
             cert,
@@ -524,11 +533,7 @@ async def validate_cert_usage(
             pkix_validation_params=pkix_validation_params,
         )
 
-    # validate usage without going through pyhanko_certvalidator
-    ades_status, revo_details, path = await handle_certvalidator_errors(
-        _check()
-    )
-    return ades_status, revo_details, path
+    return await handle_certvalidator_errors(_check())
 
 
 @overload
@@ -1044,7 +1049,25 @@ async def async_validate_detached_cms(
     return StandardCMSSignatureStatus(**status_kwargs)
 
 
-async def handle_certvalidator_errors(coro):
+ResultType = TypeVar('ResultType', covariant=True)
+
+
+@dataclass(frozen=True)
+class CertvalidatorOperationResult(Generic[ResultType]):
+    """
+    Internal class to inspect error data from certvalidator.
+    """
+
+    success_result: Optional[ResultType]
+    revo_details: Optional[RevocationDetails] = None
+    error_time_horizon: Optional[datetime] = None
+    error_path: Optional[ValidationPath] = None
+    error_subindic: Optional[AdESIndeterminate] = None
+
+
+async def handle_certvalidator_errors(
+    coro: Awaitable[ResultType],
+) -> CertvalidatorOperationResult[ResultType]:
     """
     Internal error handling function that maps certvalidator errors
     to AdES status indications.
@@ -1052,9 +1075,10 @@ async def handle_certvalidator_errors(coro):
     :param coro:
     :return:
     """
+    time_horizon: Optional[datetime] = None
     revo_details = path = None
     try:
-        return None, None, await coro
+        return CertvalidatorOperationResult(success_result=await coro)
     except InvalidCertificateError as e:
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
@@ -1062,6 +1086,9 @@ async def handle_certvalidator_errors(coro):
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.NO_POE
     except DisallowedAlgorithmError as e:
+        # note: this is the one from the certvalidator hierarchy, which is
+        # similar but not quite the same as the one for pyhanko itself
+        # (conceptually identical, but the contextual data is different)
         path = e.original_path
         if e.banned_since is None:
             # permaban
@@ -1069,9 +1096,11 @@ async def handle_certvalidator_errors(coro):
         else:
             # could get resolved with more POEs
             ades_status = AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+            time_horizon = e.banned_since
     except RevokedError as e:
         path = e.original_path
         logger.warning(e.failure_msg)
+        time_horizon = e.revocation_dt
         if e.is_side_validation:
             # don't report this as a revocation event
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
@@ -1095,6 +1124,7 @@ async def handle_certvalidator_errors(coro):
     except ExpiredError as e:
         path = e.original_path
         logger.warning(e.failure_msg)
+        time_horizon = e.expired_dt
         if not e.is_side_validation and e.is_ee_cert:
             # TODO modify certvalidator to perform revinfo checks on
             #  expired certs, possibly as an option. If this happens, we
@@ -1112,4 +1142,10 @@ async def handle_certvalidator_errors(coro):
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
-    return ades_status, revo_details, path
+    return CertvalidatorOperationResult(
+        success_result=None,
+        revo_details=revo_details,
+        error_time_horizon=time_horizon,
+        error_path=path,
+        error_subindic=ades_status,
+    )
