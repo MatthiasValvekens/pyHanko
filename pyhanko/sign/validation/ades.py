@@ -1644,7 +1644,7 @@ async def ades_lta_validation(
     with_time_data_handlers = bootstrap_validation_data_handlers(
         spec=augmented_validation_spec,
         timing_info=timing_info,
-        poe_manager_override=updated_poe_manager,
+        poe_manager_override=copy(updated_poe_manager),
     )
     signature_prelim_result = await ades_with_time_validation(
         signed_data=embedded_sig.signed_data,
@@ -1689,7 +1689,7 @@ async def ades_lta_validation(
     signature_ts_result = await _process_signature_ts(
         embedded_sig,
         validation_spec=augmented_validation_spec,
-        poe_manager=updated_poe_manager,
+        poe_manager=copy(updated_poe_manager),
         timing_info=timing_info,
     )
 
@@ -1697,17 +1697,19 @@ async def ades_lta_validation(
     if isinstance(current_time_sub_indic, AdESIndeterminate):
         # TODO: in principle, we should also run this if the status is PASSED
         #  already. Ensure that that is possible.
+        past_sig_poe_manager = copy(updated_poe_manager)
         try:
             await _ades_past_signature_validation(
                 signed_data=embedded_sig.signed_data,
                 validation_spec=augmented_validation_spec,
-                poe_manager=updated_poe_manager,
+                poe_manager=past_sig_poe_manager,
                 current_time_sub_indic=current_time_sub_indic,
                 init_control_time=timing_info.validation_time,
                 is_timestamp=False,
             )
+            updated_poe_manager = past_sig_poe_manager
         except errors.SignatureValidationError as e:
-            sig_poe = updated_poe_manager[signature_bytes]
+            sig_poe = past_sig_poe_manager[signature_bytes]
             return AdESLTAValidationResult(
                 ades_subindic=e.ades_subindication or current_time_sub_indic,
                 failure_msg=e.failure_message,
