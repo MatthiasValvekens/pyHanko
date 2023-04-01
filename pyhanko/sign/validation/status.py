@@ -118,7 +118,7 @@ class SignatureStatus:
     Message digest algorithm used.
     """
 
-    validation_path: ValidationPath
+    validation_path: Optional[ValidationPath]
     """
     Validation path providing a valid chain of trust from the signer's
     certificate to a trusted root certificate.
@@ -170,7 +170,12 @@ class SignatureStatus:
         Reports whether the signer's certificate is trusted w.r.t. the currently
         relevant validation context and key usage requirements.
         """
-        return self.valid and self.intact and self.trust_problem_indic is None
+        return (
+            self.valid
+            and self.intact
+            and self.trust_problem_indic is None
+            and self.validation_path is not None
+        )
 
     # TODO explain in more detail.
     def summary(self, delimiter=',') -> str:
@@ -705,6 +710,15 @@ class ModificationInfo:
       by the difference policy will be stored in this attribute.
     """
 
+    docmdp_ok: Optional[bool] = None
+    """
+    Indicates whether the signature's
+    :attr:`~.ModificationInfo.modification_level` is in line with the document
+    signature policy in force.
+
+    If ``None``, compliance could not be determined.
+    """
+
     @property
     def modification_level(self) -> Optional[ModificationLevel]:
         """
@@ -734,15 +748,6 @@ class ModificationInfo:
 @dataclass(frozen=True)
 class PdfSignatureStatus(ModificationInfo, StandardCMSSignatureStatus):
     """Class to indicate the validation status of a PDF signature."""
-
-    docmdp_ok: Optional[bool] = None
-    """
-    Indicates whether the signature's
-    :attr:`~.ModificationInfo.modification_level` is in line with the document
-    signature policy in force.
-
-    If ``None``, compliance could not be determined.
-    """
 
     has_seed_values: bool = False
     """
