@@ -20,6 +20,7 @@ __all__ = [
     'AlgorithmUsageConstraint',
     'AlgorithmUsagePolicy',
     'DisallowWeakAlgorithmsPolicy',
+    'AcceptAllAlgorithms',
     'DEFAULT_WEAK_HASH_ALGOS',
     'REQUIRE_REVINFO',
     'NO_REVOCATION',
@@ -586,3 +587,18 @@ class DisallowWeakAlgorithmsPolicy(AlgorithmUsagePolicy):
                     not_allowed_after=digest_allowed.not_allowed_after,
                 )
         return AlgorithmUsageConstraint(allowed=algo_allowed)
+
+
+class AcceptAllAlgorithms(AlgorithmUsagePolicy):
+    def digest_algorithm_allowed(
+        self, algo: algos.DigestAlgorithm, moment: Optional[datetime]
+    ) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(allowed=True)
+
+    def signature_algorithm_allowed(
+        self,
+        algo: algos.SignedDigestAlgorithm,
+        moment: Optional[datetime],
+        public_key: Optional[keys.PublicKeyInfo],
+    ) -> AlgorithmUsageConstraint:
+        return AlgorithmUsageConstraint(allowed=True)
