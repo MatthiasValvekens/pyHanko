@@ -15,7 +15,11 @@ from pyhanko_certvalidator.ltv.errors import (
 from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
-from pyhanko_certvalidator.policy_decl import NO_REVOCATION, CertRevTrustPolicy
+from pyhanko_certvalidator.policy_decl import (
+    NO_REVOCATION,
+    AcceptAllAlgorithms,
+    CertRevTrustPolicy,
+)
 from pyhanko_certvalidator.validate import async_validate_path
 
 __all__ = ['past_validate']
@@ -53,6 +57,7 @@ async def _past_validate_precheck(
         revinfo_policy=CertRevTrustPolicy(
             revocation_checking_policy=NO_REVOCATION
         ),
+        algorithm_usage_policy=AcceptAllAlgorithms(),
     ).build_validation_context(timing_info=ref_time, handlers=None)
 
     try:
