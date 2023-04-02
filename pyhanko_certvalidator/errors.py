@@ -148,12 +148,7 @@ class DisallowedAlgorithmError(PathValidationError):
         proc_state: ValProcState,
         banned_since: Optional[datetime] = None,
     ) -> 'DisallowedAlgorithmError':
-        return cls(
-            msg,
-            is_ee_cert=proc_state.is_ee_cert,
-            is_side_validation=proc_state.is_side_validation,
-            banned_since=banned_since,
-        )
+        return cls(msg, banned_since=banned_since, proc_state=proc_state)
 
 
 class InvalidAttrCertificateError(InvalidCertificateError):
