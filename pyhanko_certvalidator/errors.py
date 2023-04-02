@@ -123,11 +123,43 @@ class InsufficientPOEError(PathValidationError):
 
 
 class ExpiredError(PathValidationError):
-    pass
+    @classmethod
+    def format(
+        cls,
+        *,
+        expired_dt: datetime,
+        proc_state: ValProcState,
+    ):
+        msg = (
+            f"The path could not be validated because "
+            f"{proc_state.describe_cert()} expired "
+            f"{expired_dt.strftime('%Y-%m-%d %H:%M:%SZ')}"
+        )
+        return ExpiredError(msg, expired_dt, proc_state)
+
+    def __init__(self, msg, expired_dt: datetime, proc_state: ValProcState):
+        self.expired_dt = expired_dt
+        super().__init__(msg, proc_state=proc_state)
 
 
 class NotYetValidError(PathValidationError):
-    pass
+    @classmethod
+    def format(
+        cls,
+        *,
+        valid_from: datetime,
+        proc_state: ValProcState,
+    ):
+        msg = (
+            f"The path could not be validated because "
+            f"{proc_state.describe_cert()} is not valid until "
+            f"{valid_from.strftime('%Y-%m-%d %H:%M:%SZ')}"
+        )
+        return NotYetValidError(msg, valid_from, proc_state)
+
+    def __init__(self, msg, valid_from: datetime, proc_state: ValProcState):
+        self.valid_from = valid_from
+        super().__init__(msg, proc_state=proc_state)
 
 
 class InvalidCertificateError(ValidationError):
