@@ -1194,18 +1194,12 @@ def _check_validity(
     validity: Validity, moment, tolerance, proc_state: ValProcState
 ):
     if moment < validity['not_before'].native - tolerance:
-        raise NotYetValidError.from_state(
-            f"The path could not be validated because "
-            f"{proc_state.describe_cert()} is not valid until "
-            f"{validity['not_before'].native.strftime('%Y-%m-%d %H:%M:%SZ')}",
-            proc_state,
+        raise NotYetValidError.format(
+            valid_from=validity['not_before'].native, proc_state=proc_state
         )
     if moment > validity['not_after'].native + tolerance:
-        raise ExpiredError.from_state(
-            f"The path could not be validated because "
-            f"{proc_state.describe_cert()} expired "
-            f"{validity['not_after'].native.strftime('%Y-%m-%d %H:%M:%SZ')}",
-            proc_state,
+        raise ExpiredError.format(
+            expired_dt=validity['not_after'].native, proc_state=proc_state
         )
 
 

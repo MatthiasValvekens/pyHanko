@@ -1,5 +1,14 @@
 # changelog
 
+## 0.21.1
+
+ - Fix `DisallowedAlgorithmError` parameters.
+ - Preserve timestamp info in expiration-related errors.
+ - Disable algo enforcement in prima facie past validation checks.
+ - Correct a misunderstanding in the interaction between the AdES code and
+   the old "retroactive revinfo" setting.
+
+
 ## 0.21.0
 
  - Switch to `pyproject.toml` to manage project metadata.
