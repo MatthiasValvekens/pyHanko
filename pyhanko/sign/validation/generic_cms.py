@@ -1086,6 +1086,7 @@ async def handle_certvalidator_errors(
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.NO_POE
     except DisallowedAlgorithmError as e:
+        logger.warning(e.failure_msg, exc_info=e)
         # note: this is the one from the certvalidator hierarchy, which is
         # similar but not quite the same as the one for pyhanko itself
         # (conceptually identical, but the contextual data is different)
