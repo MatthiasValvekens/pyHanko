@@ -170,18 +170,14 @@ def _judge_revinfo(
     if this_update is None:
         return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
-    # Revinfo issued after the validation time doesn't make any sense
-    # to consider, except in the case of the (legacy) default policy
-    # with retroactive_revinfo active.
-    # AdES-derived policies are supposed to use proper POE handling in lieu
-    # of this alternative system.
-    #  TODO revisit this when we actually implement AdES point-in-time
-    #   validation. Maybe this needs to be dealt with at a higher level, to
-    #   accept future revinfo as evidence of non-revocation or somesuch
+    # Revinfo issued after the validation time may need to be considered
+    # in AdES point-in-time validation.
+    # In the legacy "default" policy, this is controlled by the retroactive
+    # revinfo switch.
     if timing_params.validation_time < this_update:
         if (
             not policy.retroactive_revinfo
-            or policy.freshness_req_type != FreshnessReqType.DEFAULT
+            and policy.freshness_req_type == FreshnessReqType.DEFAULT
         ):
             return RevinfoUsability(RevinfoUsabilityRating.TOO_NEW)
 
