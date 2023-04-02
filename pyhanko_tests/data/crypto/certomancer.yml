@@ -260,6 +260,10 @@ pki-architectures:
         validity:
           valid-from: "2020-01-01T00:00:00+0000"
           valid-to: "2030-01-01T00:00:00+0000"
+      signer1-sha512:
+        subject: signer1
+        digest-algo: sha512
+        template: signer1
     services:
       ocsp:
         interm:

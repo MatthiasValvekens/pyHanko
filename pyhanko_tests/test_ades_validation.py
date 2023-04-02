@@ -1,4 +1,3 @@
-import dataclasses
 import datetime
 from io import BytesIO
 from typing import Optional
@@ -46,7 +45,6 @@ from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate, AdESPassed
 from pyhanko.sign.signers.pdf_cms import (
     GenericPdfSignedAttributeProviderSpec,
     PdfCMSSignedAttributes,
-    Signer,
     SimpleSigner,
 )
 from pyhanko.sign.validation import SignatureCoverageLevel, ades
@@ -76,7 +74,7 @@ from pyhanko_tests.signing_commons import (
 from pyhanko_tests.test_pades import PADES
 
 
-async def _generate_pades_test_doc(requests_mock, **kwargs):
+async def _generate_pades_test_doc(requests_mock, signer=FROM_CA, **kwargs):
     kwargs.setdefault('use_pades_lta', True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
@@ -96,7 +94,7 @@ async def _generate_pades_test_doc(requests_mock, **kwargs):
             embed_validation_info=True,
             **kwargs,
         ),
-        signer=FROM_CA,
+        signer=signer,
         timestamper=timestamper,
     )
 
@@ -398,11 +396,23 @@ def _assert_certs_known(certs):
     ]
 
 
+@pytest.mark.parametrize('place', ['in_sig', 'in_cert', 'both'])
 @pytest.mark.asyncio
-async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock):
+async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock, place):
+    md_algorithm = 'sha256'
+    signer = FROM_CA
+    if place == 'in_sig' or place == 'both':
+        md_algorithm = 'sha512'
+    if place == 'in_cert' or place == 'both':
+        store = SimpleCertificateStore().from_certs(FROM_CA.cert_registry)
+        signer = SimpleSigner(
+            signing_cert=TESTING_CA.get_cert('signer1-sha512'),
+            signing_key=FROM_CA.signing_key,
+            cert_registry=store,
+        )
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock, md_algorithm='sha512'
+            requests_mock, md_algorithm=md_algorithm, signer=signer
         )
 
     with freeze_time('2029-11-20'):
@@ -427,11 +437,27 @@ async def test_pades_hash_algorithm_banned_but_poe_ok(requests_mock):
         assert result.ades_subindic == AdESPassed.OK
 
 
+@pytest.mark.parametrize(
+    'place',
+    ['in_sig', 'in_cert', 'both'],
+)
 @pytest.mark.asyncio
-async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock):
+async def test_pades_lta_hash_algorithm_banned_and_no_poe(requests_mock, place):
+    md_algorithm = 'sha256'
+    signer = FROM_CA
+    if place == 'in_sig' or place == 'both':
+        md_algorithm = 'sha512'
+    if place == 'in_cert' or place == 'both':
+        # disable docts so we don't have PoE for the certs
+        store = SimpleCertificateStore().from_certs(FROM_CA.cert_registry)
+        signer = SimpleSigner(
+            signing_cert=TESTING_CA.get_cert('signer1-sha512'),
+            signing_key=FROM_CA.signing_key,
+            cert_registry=store,
+        )
     with freeze_time('2020-11-20'):
         out = await _generate_pades_test_doc(
-            requests_mock, md_algorithm='sha512'
+            requests_mock, md_algorithm=md_algorithm, signer=signer
         )
 
     with freeze_time('2029-11-20'):
