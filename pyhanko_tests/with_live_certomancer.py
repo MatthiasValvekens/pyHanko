@@ -109,6 +109,7 @@ async def _check_pades_result(out, roots, session, rivt_pades):
 
 
 @run_if_live
+@pytest.mark.asyncio
 async def test_pades_lt_live():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     arch = "testing-ca"
@@ -136,6 +137,7 @@ async def test_pades_lt_live():
 
 
 @run_if_live
+@pytest.mark.asyncio
 async def test_pades_lta_live():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     arch = "testing-ca"
@@ -164,6 +166,7 @@ async def test_pades_lta_live():
 
 
 @run_if_live
+@pytest.mark.asyncio
 async def test_async_sign_many_concurrent():
     arch = "testing-ca"
     concurrent_count = 10

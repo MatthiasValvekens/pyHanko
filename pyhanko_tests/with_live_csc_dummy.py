@@ -30,6 +30,7 @@ run_if_live = pytest.mark.skipif(
 
 
 @run_if_live
+@pytest.mark.asyncio
 async def test_simple_sign_with_dummy():
     from io import BytesIO
 
@@ -62,6 +63,7 @@ async def test_simple_sign_with_dummy():
     'num_results,batch_size,expected_auth_count,waste_time',
     [(3, 3, 1, 0), (6, 3, 2, 0), (6, 3, 2, 1)],
 )
+@pytest.mark.asyncio
 async def test_implicit_batch_sign_with_dummy(
     num_results, batch_size, expected_auth_count, waste_time
 ):
