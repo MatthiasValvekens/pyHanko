@@ -822,6 +822,20 @@ async def ades_with_time_validation(
                 best_signature_time=signature_poe_time,
                 signature_not_before_time=signature_not_before_time,
             )
+    elif (
+        interm_result.ades_subindic
+        == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+    ):
+        # in this case error_time_horizon is set to the point where the
+        # constraint was triggered
+        if signature_poe_time >= temp_status.error_time_horizon:
+            return AdESWithTimeValidationResult(
+                ades_subindic=interm_result.ades_subindic,
+                api_status=temp_status,
+                failure_msg=None,
+                best_signature_time=signature_poe_time,
+                signature_not_before_time=signature_not_before_time,
+            )
 
     # TODO TSTInfo ordering/comparison check
     if (
