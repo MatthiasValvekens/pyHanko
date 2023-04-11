@@ -2,10 +2,7 @@ import asyncio
 import getpass
 import logging
 import os
-import sys
-from contextlib import contextmanager
 from datetime import datetime
-from enum import Enum, auto
 from typing import Optional
 
 import click
@@ -16,14 +13,12 @@ from pyhanko_certvalidator import ValidationContext
 import pyhanko.sign.validation.pdf_embedded
 from pyhanko import __version__
 from pyhanko.config.errors import ConfigurationError
-from pyhanko.pdf_utils import crypt, misc
+from pyhanko.pdf_utils import crypt
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
-from pyhanko.pdf_utils.layout import LayoutError
 from pyhanko.pdf_utils.misc import isoparse
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields, signers, validation
-from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import DEFAULT_SIGNER_KEY_USAGE
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 from pyhanko.sign.signers.pdf_cms import (
@@ -37,7 +32,7 @@ from pyhanko.sign.validation.errors import SignatureValidationError
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
 from ..config.local_keys import PemDerSignatureConfig, PKCS12SignatureConfig
-from ..config.logging import LogConfig, StdLogOutput, parse_logging_config
+from ..config.logging import LogConfig, parse_logging_config
 from ..config.pkcs11 import (
     PKCS11PinEntryMode,
     PKCS11SignatureConfig,
@@ -45,12 +40,12 @@ from ..config.pkcs11 import (
 )
 from ..config.trust import init_validation_context_kwargs
 from ..keys import load_certs_from_pemder
+from ._ctx import CLIContext
 from .config import CLIConfig, parse_cli_config
+from .runtime import logging_setup, pyhanko_exception_manager
+from .utils import _warn_empty_passphrase, logger
 
 __all__ = ['cli']
-
-
-logger = logging.getLogger(__name__)
 
 
 try:
@@ -63,98 +58,7 @@ except ImportError:
 
 P11_PIN_ENV_VAR = "PYHANKO_PKCS11_PIN"
 
-
-class NoStackTraceFormatter(logging.Formatter):
-    def formatException(self, ei) -> str:
-        return ""
-
-
-LOG_FORMAT_STRING = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-
-def logging_setup(log_configs, verbose: bool):
-    log_config: LogConfig
-    for module, log_config in log_configs.items():
-        cur_logger = logging.getLogger(module)
-        cur_logger.setLevel(log_config.level)
-        handler: logging.StreamHandler
-        if isinstance(log_config.output, StdLogOutput):
-            if StdLogOutput == StdLogOutput.STDOUT:
-                handler = logging.StreamHandler(sys.stdout)
-            else:
-                handler = logging.StreamHandler()
-            # when logging to the console, don't output stack traces
-            # unless in verbose mode
-            if verbose:
-                formatter = logging.Formatter(LOG_FORMAT_STRING)
-            else:
-                formatter = NoStackTraceFormatter(LOG_FORMAT_STRING)
-        else:
-            handler = logging.FileHandler(log_config.output)
-            formatter = logging.Formatter(LOG_FORMAT_STRING)
-        handler.setFormatter(formatter)
-        cur_logger.addHandler(handler)
-
-
-@contextmanager
-def pyhanko_exception_manager():
-    msg = exception = None
-    try:
-        yield
-    except click.ClickException:
-        raise
-    except misc.PdfStrictReadError as e:
-        exception = e
-        msg = (
-            "Failed to read PDF file in strict mode; rerun with "
-            "--no-strict-syntax to try again.\n"
-            f"Error message: {e.msg}"
-        )
-    except misc.PdfReadError as e:
-        exception = e
-        msg = f"Failed to read PDF file: {e.msg}"
-    except misc.PdfWriteError as e:
-        exception = e
-        msg = f"Failed to write PDF file: {e.msg}"
-    except SigningError as e:
-        exception = e
-        msg = f"Error raised while producing signed file: {e.msg}"
-    except LayoutError as e:
-        exception = e
-        msg = f"Error raised while producing signature layout: {e.msg}"
-    except Exception as e:
-        exception = e
-        msg = "Generic processing error."
-
-    if exception is not None:
-        logger.error(msg, exc_info=exception)
-        raise click.ClickException(msg)
-
-
 DEFAULT_CONFIG_FILE = 'pyhanko.yml'
-
-
-class Ctx(Enum):
-    SIG_META = auto()
-    EXISTING_ONLY = auto()
-    TIMESTAMP_URL = auto()
-    CLI_CONFIG = auto()
-    STAMP_STYLE = auto()
-    STAMP_URL = auto()
-    NEW_FIELD_SPEC = auto()
-    PREFER_PSS = auto()
-    DETACH_PEM = auto()
-    LENIENT = auto()
-
-
-def _warn_empty_passphrase():
-    click.echo(
-        click.style(
-            "WARNING: passphrase is empty. If you intended to sign with an "
-            "unencrypted private key, use --no-pass instead.",
-            bold=True,
-        )
-    )
 
 
 @click.group()
@@ -177,7 +81,7 @@ def _warn_empty_passphrase():
     is_flag=True,
 )
 @click.pass_context
-def cli(ctx, config, verbose):
+def cli(ctx: click.Context, config, verbose):
     config_text = None
     if config is None:
         try:
@@ -198,9 +102,10 @@ def cli(ctx, config, verbose):
                 f"Failed to read configuration: {str(e)}",
             )
 
-    ctx.ensure_object(dict)
+    ctx.ensure_object(CLIContext)
+    ctx_obj: CLIContext = ctx.obj
     if config_text is not None:
-        ctx.obj[Ctx.CLI_CONFIG] = cfg = parse_cli_config(config_text)
+        ctx_obj.config = cfg = parse_cli_config(config_text)
         log_config = cfg.log_config
     else:
         # grab the default
@@ -253,7 +158,7 @@ def _build_vc_kwargs(
     retroactive_revinfo,
     allow_fetching=None,
 ):
-    cli_config: Optional[CLIConfig] = ctx.obj.get(Ctx.CLI_CONFIG, None)
+    cli_config: Optional[CLIConfig] = ctx.obj.config
     try:
         if validation_context is not None:
             if any((trust, other_certs)):
@@ -320,7 +225,7 @@ def _build_vc_kwargs(
 def _get_key_usage_settings(
     ctx: click.Context, validation_context: ValidationContext
 ):
-    cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+    cli_config: Optional[CLIConfig] = ctx.obj.config
     if cli_config is None:
         return None
 
@@ -365,11 +270,10 @@ def trust_options(f):
 
 
 def _select_style(ctx: click.Context, style_name: str, url: str):
-    try:
-        cli_config: CLIConfig = ctx.obj[Ctx.CLI_CONFIG]
-    except KeyError:
-        if not style_name:
-            return None
+    cli_config: Optional[CLIConfig] = ctx.obj.config
+    if not style_name:
+        return None
+    if not cli_config:
         raise click.ClickException(
             "Using stamp styles requires a configuration file "
             f"({DEFAULT_CONFIG_FILE} by default)."
@@ -998,7 +902,7 @@ def ltv_fix(
 )
 @click.pass_context
 def addsig(
-    ctx,
+    ctx: click.Context,
     field,
     name,
     reason,
@@ -1021,13 +925,14 @@ def addsig(
     detach_pem,
     no_strict_syntax,
 ):
-    ctx.obj[Ctx.EXISTING_ONLY] = existing_only or field is None
-    ctx.obj[Ctx.TIMESTAMP_URL] = timestamp_url
-    ctx.obj[Ctx.PREFER_PSS] = prefer_pss
+    ctx_obj: CLIContext = ctx.obj
+    ctx_obj.existing_fields_only = existing_only or field is None
+    ctx_obj.timestamp_url = timestamp_url
+    ctx_obj.prefer_pss = prefer_pss
 
     if detach:
-        ctx.obj[Ctx.DETACH_PEM] = detach_pem
-        ctx.obj[Ctx.SIG_META] = None
+        ctx_obj.detach_pem = detach_pem
+        ctx_obj.sig_settings = None
         return  # everything else doesn't apply
 
     if use_pades_lta:
@@ -1061,7 +966,7 @@ def addsig(
     field_name, new_field_spec = parse_field_location_spec(
         field, require_full_spec=False
     )
-    ctx.obj[Ctx.SIG_META] = signers.PdfSignatureMetadata(
+    ctx_obj.sig_settings = signers.PdfSignatureMetadata(
         field_name=field_name,
         location=location,
         reason=reason,
@@ -1074,10 +979,10 @@ def addsig(
         use_pades_lta=use_pades_lta,
         app_build_props=BuildProps(name='pyHanko CLI', revision=__version__),
     )
-    ctx.obj[Ctx.NEW_FIELD_SPEC] = new_field_spec
-    ctx.obj[Ctx.STAMP_STYLE] = _select_style(ctx, style_name, stamp_url)
-    ctx.obj[Ctx.STAMP_URL] = stamp_url
-    ctx.obj[Ctx.LENIENT] = no_strict_syntax
+    ctx_obj.new_field_spec = new_field_spec
+    ctx_obj.stamp_style = _select_style(ctx, style_name, stamp_url)
+    ctx_obj.stamp_url = stamp_url
+    ctx_obj.lenient = no_strict_syntax
 
 
 def _open_for_signing(infile_path, lenient, signer_cert=None, signer_key=None):
@@ -1119,7 +1024,7 @@ def _open_for_signing(infile_path, lenient, signer_cert=None, signer_key=None):
 
 def get_text_params(ctx):
     text_params = None
-    stamp_url = ctx.obj[Ctx.STAMP_URL]
+    stamp_url = ctx.obj.stamp_url
     if stamp_url is not None:
         text_params = {'url': stamp_url}
     return text_params
@@ -1302,12 +1207,13 @@ def addsig_pemder(
     passfile,
     no_pass,
 ):
-    signature_meta = ctx.obj[Ctx.SIG_META]
-    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
-    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
+    ctx_obj: CLIContext = ctx.obj
+    signature_meta = ctx_obj.sig_settings
+    existing_fields_only = ctx_obj.existing_fields_only
+    timestamp_url = ctx_obj.timestamp_url
 
     if pemder_setup:
-        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        cli_config: Optional[CLIConfig] = ctx_obj.config
         if cli_config is None:
             raise click.ClickException(
                 "The --pemder-setup option requires a configuration file"
@@ -1328,7 +1234,7 @@ def addsig_pemder(
             key_file=key,
             cert_file=cert,
             other_certs=grab_certs(chain),
-            prefer_pss=ctx.obj[Ctx.PREFER_PSS],
+            prefer_pss=ctx_obj.prefer_pss,
         )
 
     if pemder_config.key_passphrase is not None:
@@ -1346,13 +1252,13 @@ def addsig_pemder(
     signer = signer_from_pemder_config(
         pemder_config, provided_key_passphrase=passphrase
     )
-    if ctx.obj[Ctx.SIG_META] is None:
+    if ctx_obj.sig_settings is None:
         detached_sig(
             signer,
             infile,
             outfile,
             timestamp_url=timestamp_url,
-            use_pem=ctx.obj[Ctx.DETACH_PEM],
+            use_pem=ctx_obj.detach_pem,
         )
     addsig_simple_signer(
         signer,
@@ -1361,10 +1267,10 @@ def addsig_pemder(
         timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE],
+        style=ctx_obj.stamp_style,
         text_params=get_text_params(ctx),
-        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-        lenient=ctx.obj.get(Ctx.LENIENT, False),
+        new_field_spec=ctx_obj.new_field_spec,
+        lenient=ctx_obj.lenient,
     )
 
 
@@ -1401,12 +1307,13 @@ def addsig_pkcs12(
     # TODO add sanity check in case the user gets the arg order wrong
     #  (now it fails with a gnarly DER decoding error, which is not very
     #  user-friendly)
-    signature_meta = ctx.obj[Ctx.SIG_META]
-    existing_fields_only = ctx.obj[Ctx.EXISTING_ONLY]
-    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
+    ctx_obj: CLIContext = ctx.obj
+    signature_meta = ctx_obj.sig_settings
+    existing_fields_only = ctx_obj.existing_fields_only
+    timestamp_url = ctx_obj.timestamp_url
 
     if p12_setup:
-        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        cli_config: Optional[CLIConfig] = ctx_obj.config
         if cli_config is None:
             raise click.ClickException(
                 "The --p12-setup option requires a configuration file"
@@ -1426,7 +1333,7 @@ def addsig_pkcs12(
         pkcs12_config = PKCS12SignatureConfig(
             pfx_file=pfx,
             other_certs=grab_certs(chain),
-            prefer_pss=ctx.obj[Ctx.PREFER_PSS],
+            prefer_pss=ctx_obj.prefer_pss,
         )
 
     if pkcs12_config.pfx_passphrase is not None:
@@ -1444,13 +1351,13 @@ def addsig_pkcs12(
     signer = signer_from_p12_config(
         pkcs12_config, provided_pfx_passphrase=passphrase
     )
-    if ctx.obj[Ctx.SIG_META] is None:
+    if ctx_obj.sig_settings is None:
         detached_sig(
             signer,
             infile,
             outfile,
             timestamp_url=timestamp_url,
-            use_pem=ctx.obj[Ctx.DETACH_PEM],
+            use_pem=ctx_obj.detach_pem,
         )
     addsig_simple_signer(
         signer,
@@ -1459,22 +1366,23 @@ def addsig_pkcs12(
         timestamp_url=timestamp_url,
         signature_meta=signature_meta,
         existing_fields_only=existing_fields_only,
-        style=ctx.obj[Ctx.STAMP_STYLE],
+        style=ctx_obj.stamp_style,
         text_params=get_text_params(ctx),
-        new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-        lenient=ctx.obj.get(Ctx.LENIENT, False),
+        new_field_spec=ctx_obj.new_field_spec,
+        lenient=ctx_obj.lenient,
     )
 
 
-def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
+def _sign_pkcs11(ctx: click.Context, signer, infile, outfile, timestamp_url):
+    ctx_obj: CLIContext = ctx.obj
     with pyhanko_exception_manager():
-        if ctx.obj[Ctx.SIG_META] is None:
+        if ctx_obj.sig_settings is None:
             return detached_sig(
                 signer,
                 infile,
                 outfile,
                 timestamp_url=timestamp_url,
-                use_pem=ctx.obj[Ctx.DETACH_PEM],
+                use_pem=ctx_obj.detach_pem,
             )
 
         if timestamp_url is not None:
@@ -1483,14 +1391,14 @@ def _sign_pkcs11(ctx, signer, infile, outfile, timestamp_url):
             timestamper = None
 
         generic_sign_pdf(
-            writer=_open_for_signing(infile, ctx.obj.get(Ctx.LENIENT, False)),
+            writer=_open_for_signing(infile, ctx_obj.lenient),
             outfile=outfile,
-            signature_meta=ctx.obj[Ctx.SIG_META],
+            signature_meta=ctx_obj.sig_settings,
             signer=signer,
             timestamper=timestamper,
-            style=ctx.obj[Ctx.STAMP_STYLE],
-            new_field_spec=ctx.obj[Ctx.NEW_FIELD_SPEC],
-            existing_fields_only=ctx.obj[Ctx.EXISTING_ONLY],
+            style=ctx_obj.stamp_style,
+            new_field_spec=ctx_obj.new_field_spec,
+            existing_fields_only=ctx_obj.existing_fields_only,
             text_params=get_text_params(ctx),
         )
 
@@ -1553,10 +1461,11 @@ def addsig_pkcs11(
 ):
     from pyhanko.sign import pkcs11
 
-    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
+    ctx_obj: CLIContext = ctx.obj
+    timestamp_url = ctx_obj.timestamp_url
 
     if p11_setup:
-        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        cli_config: Optional[CLIConfig] = ctx_obj.config
         if cli_config is None:
             raise click.ClickException(
                 "The --p11-setup option requires a configuration file"
@@ -1643,8 +1552,9 @@ def addsig_beid(
 ):
     from pyhanko.sign import beid
 
+    ctx_obj: CLIContext = ctx.obj
     if not lib:
-        cli_config: CLIConfig = ctx.obj.get(Ctx.CLI_CONFIG, None)
+        cli_config: Optional[CLIConfig] = ctx_obj.config
         if cli_config is None or cli_config.beid_module_path is None:
             raise click.ClickException(
                 "The --lib option is mandatory unless beid-module-path is "
@@ -1652,7 +1562,7 @@ def addsig_beid(
             )
         lib = cli_config.beid_module_path
 
-    timestamp_url = ctx.obj[Ctx.TIMESTAMP_URL]
+    timestamp_url = ctx_obj.timestamp_url
 
     try:
         session = beid.open_beid_session(lib, slot_no=slot_no)
