@@ -1,12 +1,8 @@
 from typing import List
 
-from .cli.commands import cli
+from pyhanko.cli import launch
 
 __all__: List[str] = []
-
-
-def launch():
-    cli(prog_name='pyhanko')
 
 
 if __name__ == '__main__':

@@ -76,3 +76,6 @@ def pyhanko_exception_manager():
     if exception is not None:
         logger.error(msg, exc_info=exception)
         raise click.ClickException(msg)
+
+
+DEFAULT_CONFIG_FILE = 'pyhanko.yml'
