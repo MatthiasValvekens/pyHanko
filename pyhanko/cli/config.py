@@ -31,6 +31,7 @@ class CLIConfig:
     pkcs12_setups: Dict[str, dict]
     pkcs11_setups: Dict[str, dict]
     beid_module_path: Optional[str]
+    raw_config: dict
 
     # TODO graceful error handling for syntax & type issues?
 
@@ -123,7 +124,7 @@ STAMP_STYLE_TYPES: Dict[str, Type[BaseStampStyle]] = {
 
 def parse_cli_config(yaml_str) -> CLIConfig:
     config_dict = yaml.safe_load(yaml_str) or {}
-    return CLIConfig(**process_config_dict(config_dict))
+    return CLIConfig(**process_config_dict(config_dict), raw_config=config_dict)
 
 
 def process_config_dict(config_dict: dict) -> dict:

@@ -8,9 +8,9 @@ from pyhanko_certvalidator import ValidationContext
 
 import pyhanko.sign
 from pyhanko.cli._trust import (
-    _build_vc_kwargs,
     _get_key_usage_settings,
     _prepare_vc,
+    build_vc_kwargs,
     trust_options,
 )
 from pyhanko.cli.commands.signing import signing
@@ -118,6 +118,7 @@ def _attempt_iso_dt_parse(dt_str) -> datetime:
 # TODO add an option to do LTV, but guess the profile
 
 
+@trust_options
 @signing.command(name='validate', help='validate signatures')
 @click.argument('infile', type=click.File('rb'))
 @click.option(
@@ -136,7 +137,6 @@ def _attempt_iso_dt_parse(dt_str) -> datetime:
     default=False,
     show_default=True,
 )
-@trust_options
 @click.option(
     '--ltv-profile',
     help='LTV signature validation profile',
@@ -260,8 +260,8 @@ def validate_signatures(
             )
         ltv_profile = RevocationInfoValidationType(ltv_profile)
 
-    vc_kwargs = _build_vc_kwargs(
-        ctx,
+    vc_kwargs = build_vc_kwargs(
+        ctx.obj.config,
         validation_context,
         trust,
         trust_replace,

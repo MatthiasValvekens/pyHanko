@@ -2,21 +2,25 @@ import click
 from pyhanko_certvalidator import ValidationContext
 
 from pyhanko import __version__
-from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli._root import cli_root
 from pyhanko.cli._trust import (
-    _build_vc_kwargs,
     _get_key_usage_settings,
+    build_vc_kwargs,
     trust_options,
 )
-from pyhanko.cli.commands.signing.pkcs11_cli import process_pkcs11_commands
-from pyhanko.cli.commands.signing.simple import addsig_pemder, addsig_pkcs12
+from pyhanko.cli.commands.signing.plugin import REGISTRY, command_from_plugin
 from pyhanko.cli.commands.stamp import select_style
 from pyhanko.cli.utils import parse_field_location_spec
 from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 
-__all__ = ['signing']
+from ..._ctx import CLIContext
+
+# TODO replace these with "default plugin load paths"
+from .pkcs11_cli import *
+from .simple import *
+
+__all__ = ['signing', 'addsig']
 
 
 @cli_root.group(help='sign PDFs and other files', name='sign')
@@ -24,6 +28,7 @@ def signing():
     pass
 
 
+@trust_options
 @signing.group(name='addsig', help='add a signature')
 @click.option('--field', help='name of the signature field', required=False)
 @click.option('--name', help='explicitly specify signer name', required=False)
@@ -100,7 +105,6 @@ def signing():
     required=False,
     type=str,
 )
-@trust_options
 @click.option(
     '--detach',
     type=bool,
@@ -185,8 +189,8 @@ def addsig(
 
     key_usage = DEFAULT_SIGNER_KEY_USAGE
     if with_validation_info:
-        vc_kwargs = _build_vc_kwargs(
-            ctx,
+        vc_kwargs = build_vc_kwargs(
+            ctx.obj.config,
             validation_context,
             trust,
             trust_replace,
@@ -223,13 +227,24 @@ def addsig(
 
 
 def _register():
-    addsig.command(name='pemder', help='read key material from PEM/DER files')(
-        addsig_pemder
-    )
-    addsig.command(name='pkcs12', help='read key material from a PKCS#12 file')(
-        addsig_pkcs12
-    )
-    process_pkcs11_commands(addsig)
+    for signer_plugin in REGISTRY:
+        if signer_plugin.is_available():
+            addsig.add_command(command_from_plugin(signer_plugin))
+        else:
+
+            def _unavailable():
+                raise click.ClickException(
+                    signer_plugin.unavailable_message
+                    or "This subcommand is not available"
+                )
+
+            addsig.add_command(
+                click.Command(
+                    name=signer_plugin.subcommand_name,
+                    help=signer_plugin.help_summary + " [unavailable]",
+                    callback=_unavailable,
+                )
+            )
 
 
 _register()

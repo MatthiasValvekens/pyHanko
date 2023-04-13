@@ -18,6 +18,7 @@ def _warn_empty_passphrase():
 
 
 readable_file = click.Path(exists=True, readable=True, dir_okay=False)
+writable_file = click.Path(writable=True, dir_okay=False)
 
 
 def _index_page(page):

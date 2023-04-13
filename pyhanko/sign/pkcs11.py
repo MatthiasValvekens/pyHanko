@@ -11,6 +11,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
+import pkcs11
 from asn1crypto import algos, core, x509
 from asn1crypto.algos import RSASSAPSSParams
 from cryptography.hazmat.primitives import hashes
@@ -739,7 +740,12 @@ class PKCS11SigningContext:
         )
 
     def __enter__(self):
-        return self._instantiate()
+        try:
+            return self._instantiate()
+        except pkcs11.PKCS11Error as ex:  # pragma: nocover
+            raise SigningError(
+                f"PKCS#11 error: [{type(ex).__name__}] {ex}"
+            ) from ex
 
     async def __aenter__(self):
         loop = asyncio.get_running_loop()

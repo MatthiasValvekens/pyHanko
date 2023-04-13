@@ -9,7 +9,7 @@ from pyhanko.cli.utils import _index_page, logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
-__all__ = ['stamp']
+__all__ = ['stamp', 'select_style']
 
 
 def select_style(ctx: click.Context, style_name: str, url: str):

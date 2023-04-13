@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Any, Dict, Iterable, Union
 
 from pyhanko.config import api
 from pyhanko.config.errors import ConfigurationError
@@ -9,12 +10,12 @@ __all__ = ['init_validation_context_kwargs', 'parse_trust_config']
 
 def init_validation_context_kwargs(
     *,
-    trust,
-    trust_replace,
-    other_certs,
-    retroactive_revinfo=False,
-    time_tolerance=None,
-):
+    trust: Union[Iterable[str], str],
+    trust_replace: bool,
+    other_certs: Union[Iterable[str], str],
+    retroactive_revinfo: bool = False,
+    time_tolerance: Union[timedelta, int, None] = None,
+) -> Dict[str, Any]:
     if not isinstance(time_tolerance, timedelta):
         if time_tolerance is None:
             time_tolerance = DEFAULT_TIME_TOLERANCE
@@ -24,7 +25,7 @@ def init_validation_context_kwargs(
             raise ConfigurationError(
                 "time-tolerance parameter must be specified in seconds"
             )
-    vc_kwargs = {'time_tolerance': time_tolerance}
+    vc_kwargs: Dict[str, Any] = {'time_tolerance': time_tolerance}
     if retroactive_revinfo:
         vc_kwargs['retroactive_revinfo'] = True
     if trust:

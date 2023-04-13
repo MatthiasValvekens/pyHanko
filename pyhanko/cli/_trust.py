@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Iterable, Optional, TypeVar, Union
 
 import click
 from pyhanko_certvalidator import ValidationContext
@@ -10,16 +10,15 @@ from pyhanko.config.trust import init_validation_context_kwargs
 from pyhanko.keys import load_certs_from_pemder
 
 
-def _build_vc_kwargs(
-    ctx: click.Context,
-    validation_context: ValidationContext,
-    trust,
-    trust_replace,
-    other_certs,
-    retroactive_revinfo,
-    allow_fetching=None,
+def build_vc_kwargs(
+    cli_config: Optional[CLIConfig],
+    validation_context: str,
+    trust: Union[Iterable[str], str],
+    trust_replace: bool,
+    other_certs: Union[Iterable[str], str],
+    retroactive_revinfo: bool,
+    allow_fetching: Optional[bool] = None,
 ):
-    cli_config: Optional[CLIConfig] = ctx.obj.config
     try:
         if validation_context is not None:
             if any((trust, other_certs)):
@@ -97,36 +96,44 @@ def _get_key_usage_settings(
     return cli_config.get_signer_key_usages(name=validation_context)
 
 
-def trust_options(f):
-    f = click.option(
-        '--validation-context',
+TRUST_OPTIONS = [
+    click.Option(
+        ('--validation-context',),
         help='use validation context from config',
         required=False,
         type=str,
-    )(f)
-    f = click.option(
-        '--trust',
+    ),
+    click.Option(
+        ('--trust',),
         help='list trust roots (multiple allowed)',
         required=False,
         multiple=True,
         type=readable_file,
-    )(f)
-    f = click.option(
-        '--trust-replace',
+    ),
+    click.Option(
+        ('--trust-replace',),
         help='listed trust roots supersede OS-provided trust store',
         required=False,
         type=bool,
         is_flag=True,
         default=False,
         show_default=True,
-    )(f)
-    f = click.option(
-        '--other-certs',
+    ),
+    click.Option(
+        ('--other-certs',),
         help='other certs relevant for validation',
         required=False,
         multiple=True,
         type=readable_file,
-    )(f)
+    ),
+]
+
+
+FC = TypeVar('FC', bound=click.Command)
+
+
+def trust_options(f: FC) -> FC:
+    f.params.extend(TRUST_OPTIONS)
     return f
 
 

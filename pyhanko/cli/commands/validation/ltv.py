@@ -1,7 +1,7 @@
 import click
 from pyhanko_certvalidator import ValidationContext
 
-from pyhanko.cli._trust import _build_vc_kwargs, trust_options
+from pyhanko.cli._trust import build_vc_kwargs, trust_options
 from pyhanko.cli.commands.signing import signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
@@ -12,6 +12,7 @@ from pyhanko.sign.timestamps import HTTPTimeStamper
 __all__ = ['ltv_fix', 'lta_update']
 
 
+@trust_options
 @signing.command(name='ltaupdate', help='update LTA timestamp')
 @click.argument('infile', type=click.File('r+b'))
 @click.option(
@@ -30,7 +31,6 @@ __all__ = ['ltv_fix', 'lta_update']
     default=False,
     show_default=True,
 )
-@trust_options
 @click.pass_context
 def lta_update(
     ctx,
@@ -43,8 +43,8 @@ def lta_update(
     retroactive_revinfo,
 ):
     with pyhanko_exception_manager():
-        vc_kwargs = _build_vc_kwargs(
-            ctx,
+        vc_kwargs = build_vc_kwargs(
+            ctx.obj.config,
             validation_context,
             trust,
             trust_replace,
@@ -62,6 +62,7 @@ def lta_update(
 #  warn if none is present
 
 
+@trust_options
 @signing.command(
     name='ltvfix', help='add revocation information for a signature to the DSS'
 )
@@ -83,7 +84,6 @@ def lta_update(
     is_flag=True,
     show_default=True,
 )
-@trust_options
 @click.pass_context
 def ltv_fix(
     ctx,
@@ -101,8 +101,8 @@ def ltv_fix(
             "Please specify a timestamp server using --timestamp-url."
         )
 
-    vc_kwargs = _build_vc_kwargs(
-        ctx,
+    vc_kwargs = build_vc_kwargs(
+        ctx.obj.config,
         validation_context,
         trust,
         trust_replace,
