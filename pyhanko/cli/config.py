@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, Optional, Type
+from typing import Dict, List, Optional, Type
 
 import yaml
 from pyhanko_certvalidator import ValidationContext
@@ -22,6 +22,7 @@ class CLIConfig:
     time_tolerance: timedelta
     retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
+    plugin_modules: List[str]
     raw_config: dict
 
     # TODO graceful error handling for syntax & type issues?
@@ -142,6 +143,7 @@ def process_config_dict(config_dict: dict) -> dict:
 
     time_tolerance = timedelta(seconds=time_tolerance_seconds)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
+    plugins = config_dict.get('plugins', [])
     return dict(
         validation_contexts=vcs,
         default_validation_context=default_vc,
@@ -150,4 +152,5 @@ def process_config_dict(config_dict: dict) -> dict:
         stamp_styles=stamp_configs,
         default_stamp_style=default_stamp_style,
         log_config=log_config,
+        plugin_modules=plugins,
     )

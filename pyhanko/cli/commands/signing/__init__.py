@@ -16,11 +16,7 @@ from pyhanko.sign.signers.pdf_byterange import BuildProps
 
 from ..._ctx import CLIContext
 
-# TODO replace these with "default plugin load paths"
-from .pkcs11_cli import *
-from .simple import *
-
-__all__ = ['signing', 'addsig']
+__all__ = ['signing', 'addsig', 'register']
 
 
 @cli_root.group(help='sign PDFs and other files', name='sign')
@@ -226,7 +222,7 @@ def addsig(
     ctx_obj.lenient = no_strict_syntax
 
 
-def _register():
+def register():
     for signer_plugin in REGISTRY:
         if signer_plugin.is_available():
             addsig.add_command(command_from_plugin(signer_plugin))
@@ -245,6 +241,3 @@ def _register():
                     callback=_unavailable,
                 )
             )
-
-
-_register()

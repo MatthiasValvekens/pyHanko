@@ -1,3 +1,4 @@
+import importlib
 import logging
 
 import click
@@ -30,8 +31,14 @@ __all__ = ['cli_root']
     type=bool,
     is_flag=True,
 )
+@click.option(
+    '--no-plugins',
+    help='Disable non-builtin plugin loading',
+    type=bool,
+    is_flag=True,
+)
 @click.pass_context
-def cli_root(ctx: click.Context, config, verbose):
+def cli_root(ctx: click.Context, config, verbose, no_plugins):
     config_text = None
     if config is None:
         try:
@@ -61,6 +68,11 @@ def cli_root(ctx: click.Context, config, verbose):
         # grab the default
         log_config = parse_logging_config({})
 
+    from .commands.signing import register
+
+    _load_plugins(ctx_obj, plugins_enabled=not no_plugins)
+    register()
+
     if verbose:
         # override the root logger's logging level, but preserve the output
         root_logger_config = log_config[None]
@@ -89,3 +101,16 @@ def cli_root(ctx: click.Context, config, verbose):
         logging.debug(f'Finished reading configuration from {config}.')
     else:
         logging.debug('There was no configuration to parse.')
+
+
+def _load_plugins(ctx_obj: CLIContext, plugins_enabled: bool):
+    # we always load the default ones
+    to_load = [
+        'pyhanko.cli.commands.signing.pkcs11_cli',
+        'pyhanko.cli.commands.signing.simple',
+    ]
+    if plugins_enabled and ctx_obj.config is not None:
+        to_load += [str(mod) for mod in ctx_obj.config.plugin_modules]
+
+    for path in to_load:
+        importlib.import_module(path)
