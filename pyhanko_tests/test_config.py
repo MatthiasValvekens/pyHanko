@@ -10,6 +10,8 @@ from asn1crypto import x509
 import pyhanko.config.pkcs11
 from pyhanko import stamp
 from pyhanko.cli import config
+from pyhanko.cli.commands.signing.pkcs11_cli import ModuleConfigWrapper
+from pyhanko.cli.commands.signing.simple import KeyFileConfigWrapper
 from pyhanko.config.api import ConfigurableMixin
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.logging import DEFAULT_ROOT_LOGGER_LEVEL, StdLogOutput
@@ -599,9 +601,9 @@ def test_read_pkcs11_config():
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
     with pytest.raises(ConfigurationError):
-        cli_config.get_pkcs11_config('bar')
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('bar')
 
     assert setup.token_criteria == TokenCriteria('testrsa')
     assert setup.module_path == '/path/to/libfoo.so'
@@ -620,7 +622,7 @@ def test_read_pkcs11_config_legacy():
         """
     )
     with pytest.deprecated_call():
-        setup = cli_config.get_pkcs11_config('foo')
+        setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
     assert setup.token_criteria == TokenCriteria('testrsa')
 
@@ -639,7 +641,7 @@ def test_read_pkcs11_config_legacy_with_extra_criteria():
         """
     )
     with pytest.deprecated_call():
-        setup = cli_config.get_pkcs11_config('foo')
+        setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
     assert setup.token_criteria == TokenCriteria(
         label='testrsa', serial=b'\xde\xad\xbe\xef'
@@ -657,7 +659,7 @@ def test_read_pkcs11_config_slot_no():
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
     assert setup.module_path == '/path/to/libfoo.so'
     assert setup.slot_no == 0
@@ -675,7 +677,7 @@ def test_read_pkcs11_nothing_to_pull():
                 cert-label: signer
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
     assert len(setup.other_certs) == 0
 
 
@@ -690,7 +692,7 @@ def test_read_pkcs11_config_ids():
                 key-id: "74657374"
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
     assert setup.cert_id == b'\x05'
     assert setup.key_id == b'test'
 
@@ -706,7 +708,7 @@ def test_read_pkcs11_config_external_cert():
                 signing-certificate: '{TESTING_CA_DIR}/interm/signer1.cert.pem'
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
     assert setup.cert_id is None
     assert setup.cert_label is None
     assert isinstance(setup.signing_certificate, x509.Certificate)
@@ -723,7 +725,7 @@ def test_read_pkcs11_config_no_key_spec():
         """
     )
     with pytest.raises(ConfigurationError, match="Either 'key_id'"):
-        cli_config.get_pkcs11_config('foo')
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
 
 def test_read_pkcs11_config_bad_criteria_type():
@@ -740,7 +742,7 @@ def test_read_pkcs11_config_bad_criteria_type():
     with pytest.raises(
         ConfigurationError, match="TokenCriteria requires a dictionary"
     ):
-        cli_config.get_pkcs11_config('foo')
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
 
 def test_read_pkcs11_config_bad_serial():
@@ -756,7 +758,7 @@ def test_read_pkcs11_config_bad_serial():
         """
     )
     with pytest.raises(ConfigurationError, match="Failed to parse.*hex"):
-        cli_config.get_pkcs11_config('foo')
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
 
 def test_read_pkcs11_config_no_cert_spec():
@@ -770,7 +772,7 @@ def test_read_pkcs11_config_no_cert_spec():
         """
     )
     with pytest.raises(ConfigurationError, match="Either 'cert_id'"):
-        cli_config.get_pkcs11_config('foo')
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
 
 @pytest.mark.parametrize(
@@ -798,7 +800,7 @@ def test_read_pkcs11_prompt_pin(literal, exp_val):
                 prompt-pin: {literal}
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
     assert setup.prompt_pin == exp_val
 
 
@@ -813,7 +815,7 @@ def test_read_pkcs11_prompt_pin_default():
                 cert-label: signer
         """
     )
-    setup = cli_config.get_pkcs11_config('foo')
+    setup = ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
     assert setup.prompt_pin == pyhanko.config.pkcs11.PKCS11PinEntryMode.PROMPT
 
 
@@ -830,7 +832,7 @@ def test_read_pkcs11_prompt_pin_invalid():
         """
     )
     with pytest.raises(ConfigurationError, match='Invalid'):
-        cli_config.get_pkcs11_config('foo')
+        ModuleConfigWrapper(cli_config).get_pkcs11_config('foo')
 
 
 def _signer_sanity_check(signer):
@@ -857,9 +859,9 @@ def test_read_pkcs12_config():
                 other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
         """
     )
-    setup = cli_config.get_pkcs12_config('foo')
+    setup = KeyFileConfigWrapper(cli_config).get_pkcs12_config('foo')
     with pytest.raises(ConfigurationError):
-        cli_config.get_pkcs12_config('bar')
+        KeyFileConfigWrapper(cli_config).get_pkcs12_config('bar')
 
     assert len(setup.other_certs) == 2
 
@@ -877,7 +879,7 @@ def test_read_pkcs12_config_null_pw():
                 pfx-passphrase: null
         """
     )
-    setup = cli_config.get_pkcs12_config('foo')
+    setup = KeyFileConfigWrapper(cli_config).get_pkcs12_config('foo')
     assert len(setup.other_certs) == 2
 
     signer = signer_from_p12_config(setup)
@@ -895,9 +897,9 @@ def test_read_pemder_config():
                 key-passphrase: secret
         """
     )
-    setup = cli_config.get_pemder_config('foo')
+    setup = KeyFileConfigWrapper(cli_config).get_pemder_config('foo')
     with pytest.raises(ConfigurationError):
-        cli_config.get_pemder_config('bar')
+        KeyFileConfigWrapper(cli_config).get_pemder_config('bar')
 
     assert len(setup.other_certs) == 2
 
@@ -915,7 +917,7 @@ def test_read_pemder_config_wrong_passphrase():
                 key-passphrase: "this passphrase is wrong"
         """
     )
-    setup = cli_config.get_pemder_config('foo')
+    setup = KeyFileConfigWrapper(cli_config).get_pemder_config('foo')
     with pytest.raises(ConfigurationError):
         signer_from_pemder_config(setup)
 
@@ -929,7 +931,7 @@ def test_read_pemder_config_missing_passphrase():
                 cert-file: '{TESTING_CA_DIR}/interm/signer1.cert.pem'
         """
     )
-    setup = cli_config.get_pemder_config('foo')
+    setup = KeyFileConfigWrapper(cli_config).get_pemder_config('foo')
     with pytest.raises(ConfigurationError):
         signer_from_pemder_config(setup)
 
@@ -946,7 +948,7 @@ def test_read_pkcs12_config_wrong_passphrase():
                 pfx-passphrase: "this passphrase is wrong"
         """
     )
-    setup = cli_config.get_pkcs12_config('foo')
+    setup = KeyFileConfigWrapper(cli_config).get_pkcs12_config('foo')
     with pytest.raises(ConfigurationError):
         signer_from_p12_config(setup)
 

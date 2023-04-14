@@ -26,6 +26,27 @@ from pyhanko.sign.signers.pdf_cms import (
 __all__ = ['PemderPlugin', 'PKCS12Plugin']
 
 
+class KeyFileConfigWrapper:
+    def __init__(self, config: CLIConfig):
+        config_dict = config.raw_config
+        self.pemder_setups = config_dict.get('pemder-setups', {})
+        self.pkcs12_setups = config_dict.get('pkcs12-setups', {})
+
+    def get_pkcs12_config(self, name):
+        try:
+            setup = self.pkcs12_setups[name]
+        except KeyError:
+            raise ConfigurationError(f"There's no PKCS#12 setup named '{name}'")
+        return PKCS12SignatureConfig.from_config(setup)
+
+    def get_pemder_config(self, name):
+        try:
+            setup = self.pemder_setups[name]
+        except KeyError:
+            raise ConfigurationError(f"There's no PEM/DER setup named '{name}'")
+        return PemDerSignatureConfig.from_config(setup)
+
+
 @register_plugin
 class PemderPlugin(SigningCommandPlugin):
     subcommand_name = 'pemder'
@@ -105,7 +126,9 @@ def _pemder_signer(
                 "The --pemder-setup option requires a configuration file"
             )
         try:
-            pemder_config = cli_config.get_pemder_config(pemder_setup)
+            pemder_config = KeyFileConfigWrapper(cli_config).get_pemder_config(
+                pemder_setup
+            )
         except ConfigurationError as e:
             msg = f"Error while reading PEM/DER setup {pemder_setup}"
             logger.error(msg, exc_info=e)
@@ -167,7 +190,7 @@ class PKCS12Plugin(SigningCommandPlugin):
             ),
             click.Option(
                 ('--passfile',),
-                help='file containing the passphrase ' 'for the PKCS#12 file.',
+                help='file containing the passphrase for the PKCS#12 file.',
                 required=False,
                 type=click.File('r'),
                 show_default='stdin',
@@ -195,7 +218,9 @@ def _pkcs12_signer(ctx: CLIContext, pfx, chain, passfile, p12_setup):
                 "The --p12-setup option requires a configuration file"
             )
         try:
-            pkcs12_config = cli_config.get_pkcs12_config(p12_setup)
+            pkcs12_config = KeyFileConfigWrapper(cli_config).get_pkcs12_config(
+                p12_setup
+            )
         except ConfigurationError as e:
             msg = f"Error while reading PKCS#12 config {p12_setup}"
             logger.error(msg, exc_info=e)

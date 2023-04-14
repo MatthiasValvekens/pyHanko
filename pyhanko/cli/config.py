@@ -6,12 +6,7 @@ import yaml
 from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.config.errors import ConfigurationError
-from pyhanko.config.local_keys import (
-    PemDerSignatureConfig,
-    PKCS12SignatureConfig,
-)
 from pyhanko.config.logging import LogConfig, parse_logging_config
-from pyhanko.config.pkcs11 import PKCS11SignatureConfig
 from pyhanko.config.trust import DEFAULT_TIME_TOLERANCE, parse_trust_config
 from pyhanko.sign.signers import DEFAULT_SIGNING_STAMP_STYLE
 from pyhanko.sign.validation.settings import KeyUsageConstraints
@@ -27,10 +22,6 @@ class CLIConfig:
     time_tolerance: timedelta
     retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
-    pemder_setups: Dict[str, dict]
-    pkcs12_setups: Dict[str, dict]
-    pkcs11_setups: Dict[str, dict]
-    beid_module_path: Optional[str]
     raw_config: dict
 
     # TODO graceful error handling for syntax & type issues?
@@ -88,27 +79,6 @@ class CLIConfig:
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
         return cls.from_config(style_config)
 
-    def get_pkcs11_config(self, name):
-        try:
-            setup = self.pkcs11_setups[name]
-        except KeyError:
-            raise ConfigurationError(f"There's no PKCS#11 setup named '{name}'")
-        return PKCS11SignatureConfig.from_config(setup)
-
-    def get_pkcs12_config(self, name):
-        try:
-            setup = self.pkcs12_setups[name]
-        except KeyError:
-            raise ConfigurationError(f"There's no PKCS#12 setup named '{name}'")
-        return PKCS12SignatureConfig.from_config(setup)
-
-    def get_pemder_config(self, name):
-        try:
-            setup = self.pemder_setups[name]
-        except KeyError:
-            raise ConfigurationError(f"There's no PEM/DER setup named '{name}'")
-        return PemDerSignatureConfig.from_config(setup)
-
 
 # TODO allow CRL/OCSP loading here as well (esp. CRL loading might be useful
 #  in some cases)
@@ -155,12 +125,6 @@ def process_config_dict(config_dict: dict) -> dict:
     log_config_spec = config_dict.get('logging', {})
     log_config = parse_logging_config(log_config_spec)
 
-    # TODO type check!
-    pkcs11_setups = config_dict.get('pkcs11-setups', {})
-    pkcs12_setups = config_dict.get('pkcs12-setups', {})
-    pemder_setups = config_dict.get('pemder-setups', {})
-    beid_module_path = config_dict.get('beid-module-path', None)
-
     # some misc settings
     default_vc = config_dict.get(
         'default-validation-context', DEFAULT_VALIDATION_CONTEXT
@@ -186,8 +150,4 @@ def process_config_dict(config_dict: dict) -> dict:
         stamp_styles=stamp_configs,
         default_stamp_style=default_stamp_style,
         log_config=log_config,
-        pkcs11_setups=pkcs11_setups,
-        pkcs12_setups=pkcs12_setups,
-        pemder_setups=pemder_setups,
-        beid_module_path=beid_module_path,
     )
