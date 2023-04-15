@@ -7,6 +7,7 @@ from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import _warn_empty_passphrase, readable_file
 from pyhanko.keys import load_certs_from_pemder
 from pyhanko.pdf_utils import crypt
+from pyhanko.pdf_utils.crypt import StandardSecurityHandler
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import copy_into_new_writer
 
@@ -90,6 +91,10 @@ def decrypt_with_password(infile, outfile, password, force):
             r = PdfFileReader(inf)
             if r.security_handler is None:
                 raise click.ClickException("File is not encrypted.")
+            elif not isinstance(r.security_handler, StandardSecurityHandler):
+                raise click.ClickException(
+                    "File is not encrypted with the standard (password-based) security handler"
+                )
             if not password:
                 password = getpass.getpass(prompt='File password: ')
             auth_result = r.decrypt(password)

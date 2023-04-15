@@ -13,7 +13,7 @@ from pyhanko.sign.general import SigningError
 
 class NoStackTraceFormatter(logging.Formatter):
     def formatException(self, ei) -> str:
-        return ""
+        return ""  # pragma: nocover
 
 
 LOG_FORMAT_STRING = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

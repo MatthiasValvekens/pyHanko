@@ -12,7 +12,7 @@ from pyhanko.keys import load_certs_from_pemder
 
 def build_vc_kwargs(
     cli_config: Optional[CLIConfig],
-    validation_context: str,
+    validation_context: Optional[str],
     trust: Union[Iterable[str], str],
     trust_replace: bool,
     other_certs: Union[Iterable[str], str],
@@ -153,10 +153,11 @@ def _prepare_vc(vc_kwargs, soft_revocation_check, force_revinfo):
 
 
 def grab_certs(files):
-    if files is None:
+    if not files:
         return None
     try:
         return list(load_certs_from_pemder(files))
-    except (IOError, ValueError) as e:  # pragma: nocover
-        logger.error(f'Could not load certificates from {files}', exc_info=e)
-        return None
+    except (IOError, ValueError) as e:
+        raise click.ClickException(
+            f'Could not load certificates from {files}'
+        ) from e

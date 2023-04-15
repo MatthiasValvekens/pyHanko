@@ -27,9 +27,9 @@ def list_sigfields(infile, skip_status):
         field_info = fields.enumerate_sig_fields(r)
         for ix, (name, value, field_ref) in enumerate(field_info):
             if skip_status:
-                print(name)
+                click.echo(name)
                 continue
-            print(f"{name}:{'EMPTY' if value is None else 'FILLED'}")
+            click.echo(f"{name}:{'EMPTY' if value is None else 'FILLED'}")
 
 
 @signing.command(

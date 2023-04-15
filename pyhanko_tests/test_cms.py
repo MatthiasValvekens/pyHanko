@@ -2165,7 +2165,6 @@ async def test_tolerate_der_deviations_in_pdf():
     sd = r.embedded_signatures[0].signed_data
     raw_enc = sd.dump()
     forced_enc = sd.dump(force=True)
-    print(raw_enc.hex())
     # the 2.999: DEADBEEF attribute should be early in the DER version, but
     # appear only much further in the non-DER version
     marker = b'\x31\x06\x04\x04\xde\xad\xbe\xef'

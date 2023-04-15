@@ -38,7 +38,7 @@ __all__ = ['cli_root']
     is_flag=True,
 )
 @click.pass_context
-def cli_root(ctx: click.Context, config, verbose, no_plugins):
+def _root(ctx: click.Context, config, verbose, no_plugins):
     config_text = None
     if config is None:
         try:
@@ -114,3 +114,6 @@ def _load_plugins(ctx_obj: CLIContext, plugins_enabled: bool):
 
     for path in to_load:
         importlib.import_module(path)
+
+
+cli_root: click.Group = _root

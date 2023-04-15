@@ -11,8 +11,12 @@ from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.commands.signing.utils import get_text_params, open_for_signing
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import readable_file, writable_file
-from pyhanko.sign import DEFAULT_MD, PdfSigner
-from pyhanko.sign.signers.pdf_cms import PdfCMSSignedAttributes, Signer
+from pyhanko.sign import PdfSigner
+from pyhanko.sign.signers.pdf_cms import (
+    PdfCMSSignedAttributes,
+    Signer,
+    select_suitable_signing_md,
+)
 from pyhanko.sign.timestamps import HTTPTimeStamper
 
 
@@ -64,9 +68,11 @@ def _callback_logic(
                 timestamp_attr = datetime.now(tz=tzlocal.get_localzone())
 
             with open(infile, 'rb') as inf:
+                cert = signer.signing_cert
+                assert cert is not None
                 signature_job = signer.async_sign_general_data(
                     inf,
-                    DEFAULT_MD,
+                    select_suitable_signing_md(cert.public_key),
                     timestamper=timestamper,
                     signed_attr_settings=PdfCMSSignedAttributes(
                         signing_time=timestamp_attr

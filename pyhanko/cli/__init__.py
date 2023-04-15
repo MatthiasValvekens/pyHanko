@@ -5,7 +5,7 @@ from pyhanko.cli.commands.signing import *
 from pyhanko.cli.commands.stamp import *
 from pyhanko.cli.commands.validation import *
 
-__all__ = ['launch']
+__all__ = ['launch', 'cli_root']
 
 
 def launch():

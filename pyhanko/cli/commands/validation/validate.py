@@ -295,7 +295,7 @@ def validate_signatures(
                 executive_summary=executive_summary,
             )
             if signature_ok:
-                print(status_str)
+                click.echo(status_str)
             else:
                 raise click.ClickException(status_str)
             return
@@ -343,12 +343,12 @@ def validate_signatures(
             if pretty_print:
                 header = f'Field {ix + 1}: {name}'
                 line = '=' * len(header)
-                print(line)
-                print(header)
-                print(line)
-                print('\n\n' + status_str)
+                click.echo(line)
+                click.echo(header)
+                click.echo(line)
+                click.echo('\n\n' + status_str)
             else:
-                print('%s:%s:%s' % (name, fingerprint, status_str))
+                click.echo('%s:%s:%s' % (name, fingerprint, status_str))
             all_signatures_ok &= signature_ok
 
         if not all_signatures_ok:

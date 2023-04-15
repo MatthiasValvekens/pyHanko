@@ -10,7 +10,7 @@ logger = logging.getLogger("cli")
 def _warn_empty_passphrase():
     click.echo(
         click.style(
-            "WARNING: passphrase is empty. If you intended to sign with an "
+            "WARNING: passphrase is empty. If you intended to use an "
             "unencrypted private key, use --no-pass instead.",
             bold=True,
         )
@@ -41,12 +41,6 @@ def _index_page(page):
 
 
 def parse_field_location_spec(spec, require_full_spec=True):
-    if spec is None:
-        if require_full_spec:
-            raise click.ClickException(
-                "A signature field spec was not provided."
-            )
-        return None, None
     try:
         page, box, name = spec.split('/')
     except ValueError:

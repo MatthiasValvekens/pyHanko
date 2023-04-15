@@ -167,7 +167,7 @@ def addsig(
     ctx_obj.timestamp_url = timestamp_url
     ctx_obj.prefer_pss = prefer_pss
 
-    if detach:
+    if detach or detach_pem:
         ctx_obj.detach_pem = detach_pem
         ctx_obj.sig_settings = None
         return  # everything else doesn't apply

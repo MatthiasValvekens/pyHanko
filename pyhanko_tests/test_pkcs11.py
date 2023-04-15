@@ -50,6 +50,8 @@ if not pkcs11_test_module:
 elif 'softhsm' in pkcs11_test_module.casefold():
     SOFTHSM = True
 
+pkcs11_only = pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+
 
 def _simple_sess(token='testrsa'):
     return pkcs11.open_pkcs11_session(
@@ -63,7 +65,7 @@ default_other_certs = ('root', 'interm')
 SIGNER_LABEL = 'signer1'
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize(
     'bulk_fetch,pss',
     [(True, True), (False, False), (True, False), (True, True)],
@@ -88,7 +90,7 @@ def test_simple_sign(bulk_fetch, pss):
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_simple_sign_legacy_open_session_by_token_label():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -110,7 +112,7 @@ def test_simple_sign_legacy_open_session_by_token_label():
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_sign_external_certs(bulk_fetch):
@@ -146,7 +148,7 @@ def test_sign_external_certs(bulk_fetch):
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_sign_multiple_cert_sources(bulk_fetch):
@@ -170,7 +172,7 @@ def test_sign_multiple_cert_sources(bulk_fetch):
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_wrong_key_label(bulk_fetch):
@@ -188,7 +190,7 @@ def test_wrong_key_label(bulk_fetch):
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_wrong_cert(bulk_fetch):
@@ -206,7 +208,7 @@ def test_wrong_cert(bulk_fetch):
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_provided_certs():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -232,7 +234,7 @@ def test_provided_certs():
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_signer_provided_others_pulled(bulk_fetch):
@@ -255,7 +257,7 @@ def test_signer_provided_others_pulled(bulk_fetch):
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_signer_pulled_others_provided(bulk_fetch):
@@ -280,7 +282,7 @@ def test_signer_pulled_others_provided(bulk_fetch):
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_unclear_key_label():
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
@@ -293,7 +295,7 @@ def test_unclear_key_label():
             )
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_unclear_signer_cert():
     with _simple_sess() as sess:
@@ -304,7 +306,7 @@ def test_unclear_signer_cert():
             )
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_dsa(bulk_fetch):
@@ -327,7 +329,7 @@ def test_simple_sign_dsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ecdsa(bulk_fetch):
@@ -351,7 +353,7 @@ def test_simple_sign_ecdsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_ECC_V_CONTEXT())
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ed25519(bulk_fetch):
@@ -372,7 +374,7 @@ def test_simple_sign_ed25519(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_ED25519_V_CONTEXT())
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ed448(bulk_fetch):
@@ -393,7 +395,7 @@ def test_simple_sign_ed448(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_ED448_V_CONTEXT())
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_simple_sign_from_config():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -415,7 +417,7 @@ def test_simple_sign_from_config():
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_sign_skip_login_fail():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -433,7 +435,7 @@ def test_sign_skip_login_fail():
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.skipif(
     not SOFTHSM,
     reason=(
@@ -455,13 +457,13 @@ def test_sign_deferred_auth():
 
     # no key will be found, since we didn't bother logging in
     with pytest.raises(
-        PKCS11Error, match="Protected auth.*not supported by loaded module"
+        SigningError, match="Protected auth.*not supported by loaded module"
     ):
         with PKCS11SigningContext(config) as signer:
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @freeze_time('2020-11-01')
 def test_simple_sign_with_raw_rsa():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -484,7 +486,7 @@ def test_simple_sign_with_raw_rsa():
     val_trusted(emb)
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_with_raw_dsa(bulk_fetch):
@@ -508,7 +510,7 @@ def test_simple_sign_with_raw_dsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 def test_no_raw_pss():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
@@ -571,7 +573,7 @@ def test_pull_err_fmt(label, cert_id, no_results, exp_err):
     assert err == exp_err
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 @pytest.mark.parametrize(
     'bulk_fetch,pss',
     [(True, True), (False, False), (True, False), (True, True)],
@@ -600,7 +602,6 @@ async def test_simple_sign_from_config_async(bulk_fetch, pss):
     await async_val_trusted(emb)
 
 
-# @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @pytest.mark.skip  # FIXME flaky test, sometimes coredumps with SoftHSM
 @pytest.mark.parametrize(
     'bulk_fetch,pss',
@@ -641,7 +642,6 @@ async def test_async_sign_many_concurrent(bulk_fetch, pss):
                 await async_val_trusted(emb)
 
 
-# @pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 @pytest.mark.skip  # FIXME flaky test, sometimes coredumps with SoftHSM
 @pytest.mark.parametrize(
     'bulk_fetch,pss',
@@ -682,13 +682,13 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
             )
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 def test_token_does_not_exist():
     with pytest.raises(PKCS11Error, match='No token matching criteria'):
         _simple_sess(token='aintnosuchtoken')
 
 
-@pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+@pkcs11_only
 def test_token_unclear():
     with pytest.raises(PKCS11Error, match='more than 1'):
         return pkcs11.open_pkcs11_session(
