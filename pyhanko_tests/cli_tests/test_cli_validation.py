@@ -1,9 +1,12 @@
+import asyncio
 import datetime
 import getpass
 import re
 from io import BytesIO
+from typing import Optional
 
 import pytest
+from asn1crypto import pem
 from certomancer import PKIArchitecture
 from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
@@ -13,6 +16,7 @@ from pyhanko.cli import cli_root
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign import PdfSignatureMetadata, SimpleSigner, sign_pdf
+from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 from pyhanko_tests.cli_tests.conftest import (
     FREEZE_DT,
     INPUT_PATH,
@@ -23,7 +27,7 @@ from pyhanko_tests.samples import MINIMAL, MINIMAL_AES256, MINIMAL_PUBKEY_AES256
 
 
 def _write_input_to_validate(
-    pki_arch: PKIArchitecture, fname: str, w: BasePdfFileWriter
+    pki_arch: PKIArchitecture, fname: str, w: Optional[BasePdfFileWriter]
 ):
     registry = SimpleCertificateStore()
     registry.register(pki_arch.get_cert(CertLabel('interm')))
@@ -34,12 +38,22 @@ def _write_input_to_validate(
         signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
     )
     with open(fname, 'wb') as outf:
-        sign_pdf(
-            pdf_out=w,
-            signature_meta=PdfSignatureMetadata(field_name='Sig1'),
-            signer=signer,
-            output=outf,
-        )
+        if w:
+            sign_pdf(
+                pdf_out=w,
+                signature_meta=PdfSignatureMetadata(field_name='Sig1'),
+                signer=signer,
+                output=outf,
+            )
+        else:
+            ci = asyncio.run(
+                signer.async_sign_general_data(
+                    MINIMAL,
+                    select_suitable_signing_md(signer.signing_cert.public_key),
+                )
+            )
+            outf.write(ci.dump())
+
     return fname
 
 
@@ -338,3 +352,33 @@ def test_basic_validate_context_malformed_cert(cli_runner):
     )
     assert result.exit_code == 1
     assert "processing problem" in result.output
+
+
+@pytest.fixture(params=['pem', 'der'])
+def detached_input_to_validate(pki_arch: PKIArchitecture, request):
+    outf = _write_input_to_validate(pki_arch, 'detached.sig', w=None)
+    if request.param == 'pem':
+        with open(outf, 'rb') as derf:
+            sig = derf.read()
+        with open(outf, 'wb') as pemf:
+            pemf.write(pem.armor('PKCS7', sig))
+    return outf
+
+
+def test_basic_detached_validate(
+    cli_runner, root_cert, detached_input_to_validate
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            '--detached',
+            detached_input_to_validate,
+            '--trust',
+            root_cert,
+            INPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+    assert 'INTACT:TRUSTED' in result.output
