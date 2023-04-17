@@ -29,7 +29,7 @@ from pyhanko_tests.cli_tests.conftest import (
     _write_cert,
     _write_config,
 )
-from pyhanko_tests.samples import TESTING_CA
+from pyhanko_tests.samples import MINIMAL_ONE_FIELD, TESTING_CA
 from pyhanko_tests.signing_commons import FROM_CA
 from pyhanko_tests.test_pkcs11 import SOFTHSM, pkcs11_only, pkcs11_test_module
 
@@ -476,3 +476,49 @@ def test_cli_add_field_then_sign(cli_runner, cert_chain, user_key):
         ],
     )
     assert not result.exception, result.output
+
+
+def test_cli_sign_implied_field(cli_runner, cert_chain, user_key):
+    root_cert, interm_cert, user_cert = cert_chain
+    with open(INPUT_PATH, 'wb') as f:
+        f.write(MINIMAL_ONE_FIELD)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--existing-only',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_sign_field_param_required(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--existing-only',
+            'pemder',
+            '--no-pass',
+            '--key',
+            _write_user_key(TESTING_CA),
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "There are no empty signature fields" in result.output

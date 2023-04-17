@@ -200,9 +200,12 @@ def addsig(
             key_usage = key_usage_sett.key_usage
     else:
         vc = None
-    field_name, new_field_spec = parse_field_location_spec(
-        field, require_full_spec=False
-    )
+    if field:
+        field_name, new_field_spec = parse_field_location_spec(
+            field, require_full_spec=False
+        )
+    else:
+        field_name = new_field_spec = None
     ctx_obj.sig_settings = signers.PdfSignatureMetadata(
         field_name=field_name,
         location=location,
