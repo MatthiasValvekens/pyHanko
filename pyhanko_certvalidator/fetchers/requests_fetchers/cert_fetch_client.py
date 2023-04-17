@@ -77,7 +77,7 @@ class RequestsCertificateFetcher(CertificateFetcher, RequestsFetcherMixin):
         logger.info(f"Retrieving issuer certs for {target}...")
         return complete_certificate_fetch_jobs(fetch_jobs)
 
-    async def fetch_crl_issuers(self, certificate_list):
+    def fetch_crl_issuers(self, certificate_list):
         fetch_jobs = [
             self.fetch_certs(url, url_origin_type='CRL')
             for url in certificate_list.issuer_cert_urls
