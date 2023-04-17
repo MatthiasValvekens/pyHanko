@@ -170,19 +170,14 @@ def _judge_revinfo(
     if this_update is None:
         return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
 
+    validation_time = timing_params.validation_time
+    time_tolerance = timing_params.time_tolerance
+
     # Revinfo issued after the validation time may need to be considered
     # in AdES point-in-time validation.
     # In the legacy "default" policy, this is controlled by the retroactive
     # revinfo switch.
-    if timing_params.validation_time < this_update:
-        if (
-            not policy.retroactive_revinfo
-            and policy.freshness_req_type == FreshnessReqType.DEFAULT
-        ):
-            return RevinfoUsability(RevinfoUsabilityRating.TOO_NEW)
 
-    validation_time = timing_params.validation_time
-    time_tolerance = timing_params.time_tolerance
     # see 5.2.5.4 in ETSI EN 319 102-1
     if policy.freshness_req_type == FreshnessReqType.TIME_AFTER_SIGNATURE:
         # check whether the revinfo was generated sufficiently long _after_

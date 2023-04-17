@@ -1,5 +1,11 @@
 # changelog
 
+## 0.21.2
+
+ - Fix a typing issue caused by a typo in the `requests` cert fetcher.
+ - Removed a piece of misbehaving and duplicative logic in the
+   revocation freshness checker.
+
 ## 0.21.1
 
  - Fix `DisallowedAlgorithmError` parameters.
