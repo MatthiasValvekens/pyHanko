@@ -6,6 +6,7 @@ from io import BytesIO
 import aiohttp
 import pytest
 from asn1crypto import x509
+from click.testing import CliRunner
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
@@ -13,6 +14,7 @@ from pyhanko_certvalidator.fetchers.aiohttp_fetchers import (
 )
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
+from pyhanko.cli import cli_root
 from pyhanko.keys import (
     _translate_pyca_cryptography_cert_to_asn1,
     _translate_pyca_cryptography_key_to_asn1,
@@ -24,6 +26,7 @@ from pyhanko.sign.diff_analysis import ModificationLevel
 from pyhanko.sign.fields import SigSeedSubFilter
 from pyhanko.sign.timestamps.aiohttp_client import AIOHttpTimeStamper
 from pyhanko.sign.validation import (
+    DocumentSecurityStore,
     RevocationInfoValidationType,
     async_validate_pdf_ltv_signature,
 )
@@ -46,14 +49,21 @@ run_if_live = pytest.mark.skipif(
 
 
 async def _retrieve_credentials(
-    session: aiohttp.ClientSession, arch, cert_label, **kwargs
-):
+    session: aiohttp.ClientSession, arch, cert_label
+) -> bytes:
     url = f"{CERTOMANCER_HOST_URL}/_certomancer/pfx-download/{arch}"
     data = {"cert": cert_label, "passphrase": TEST_PASSPHRASE.decode("ascii")}
     async with session.post(
         url=url, data=data, raise_for_status=True, timeout=TIMEOUT
     ) as response:
         pfx_bytes = await response.read()
+    return pfx_bytes
+
+
+async def _retrieve_and_decode_credentials(
+    session: aiohttp.ClientSession, arch, cert_label, **kwargs
+):
+    pfx_bytes = await _retrieve_credentials(session, arch, cert_label)
     (private_key, cert, other_certs_pkcs12) = pkcs12.load_key_and_certificates(
         pfx_bytes, TEST_PASSPHRASE
     )
@@ -115,7 +125,9 @@ async def test_pades_lt_live():
     arch = "testing-ca"
 
     async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_credentials(session, arch, "signer1-long")
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long"
+        )
 
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
@@ -143,7 +155,9 @@ async def test_pades_lta_live():
     arch = "testing-ca"
 
     async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_credentials(session, arch, "signer1-long")
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long"
+        )
 
         vc, root = await _init_validation_context(session, arch)
         out = await signers.async_sign_pdf(
@@ -172,7 +186,9 @@ async def test_async_sign_many_concurrent():
     concurrent_count = 10
 
     async with aiohttp.ClientSession() as session:
-        signer = await _retrieve_credentials(session, arch, "signer1-long")
+        signer = await _retrieve_and_decode_credentials(
+            session, arch, "signer1-long"
+        )
 
         vc, root = await _init_validation_context(session, arch)
 
@@ -206,3 +222,78 @@ async def test_async_sign_many_concurrent():
             await _check_pades_result(
                 out, [root], session, RevocationInfoValidationType.PADES_LTA
             )
+
+
+async def _retrieve_and_save_credentials(fname, session, arch, label):
+    result = await _retrieve_credentials(session, arch, label)
+    with open(fname, 'wb') as credf:
+        credf.write(result)
+
+
+@run_if_live
+@pytest.mark.asyncio
+def test_pades_lta_live_with_cli():
+    arch = "testing-ca"
+    infile = 'in.pdf'
+    outfile = 'out.pdf'
+    cred_file = 'credential.p12'
+    root_file = 'root.crt'
+    cli_runner = CliRunner()
+
+    cfg = f"""
+    pkcs12-setups:
+        test:
+            pfx-file: {cred_file}
+            pfx-passphrase: {TEST_PASSPHRASE.decode('ascii')}
+    validation-contexts:
+        default:
+            trust: {root_file}
+    """
+
+    async def _env_setup():
+        async with aiohttp.ClientSession() as session:
+            await _retrieve_and_save_credentials(
+                cred_file, session, arch, "signer1-long"
+            )
+            root = await _retrieve_cert(session, arch, "root")
+        with open(root_file, 'wb') as f:
+            f.write(root.dump())
+        with open(infile, 'wb') as f:
+            f.write(MINIMAL_ONE_FIELD)
+        with open('pyhanko.yml', 'w') as f:
+            f.write(cfg)
+
+    async def _check():
+        async with aiohttp.ClientSession() as session:
+            with open(outfile, 'rb') as f:
+                root = await _retrieve_cert(session, arch, "root")
+                await _check_pades_result(
+                    f, [root], session, RevocationInfoValidationType.PADES_LTA
+                )
+                r = PdfFileReader(f)
+                dss = DocumentSecurityStore.read_dss(r)
+                assert len(dss.crls) == 1
+                assert len(dss.ocsps) == 1
+
+    with cli_runner.isolated_filesystem():
+        asyncio.run(_env_setup())
+
+        result = cli_runner.invoke(
+            cli_root,
+            [
+                'sign',
+                'addsig',
+                '--with-validation-info',
+                '--use-pades-lta',
+                '--timestamp-url',
+                f"{CERTOMANCER_HOST_URL}/{arch}/tsa/tsa",
+                'pkcs12',
+                '--p12-setup',
+                'test',
+                infile,
+                outfile,
+                cred_file,
+            ],
+        )
+        assert not result.exception, result.output
+        asyncio.run(_check())
