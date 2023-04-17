@@ -9,7 +9,7 @@ from asn1crypto import pem
 from asn1crypto.cms import ContentInfo
 from certomancer import PKIArchitecture
 from certomancer.integrations.illusionist import Illusionist
-from certomancer.registry import CertLabel, KeyLabel
+from certomancer.registry import CertLabel, KeyLabel, ServiceLabel
 from cryptography.hazmat.primitives import serialization
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
@@ -38,6 +38,12 @@ SIGNED_OUTPUT_PATH = 'output.pdf'
 
 
 @pytest.fixture
+def timestamp_url(pki_arch: PKIArchitecture) -> str:
+    tsa = pki_arch.service_registry.get_tsa_info(ServiceLabel('tsa'))
+    return tsa.url
+
+
+@pytest.fixture
 def p12_keys(pki_arch, post_validate):
     p12_bytes = pki_arch.package_pkcs12(
         CertLabel("signer1"), password=b"secret"
@@ -55,7 +61,7 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file):
     with open(pdf_file, 'rb') as result:
         logger.info(f"Validating last signature in {pdf_file}...")
         r = PdfFileReader(result)
-        last_sig = r.embedded_signatures[-1]
+        last_sig = r.embedded_regular_signatures[-1]
         status = validate_pdf_signature(last_sig, signer_validation_context=vc)
         assert status.bottom_line, status.pretty_print_details()
         logger.info(f"Validation successful")
@@ -522,3 +528,44 @@ def test_cli_sign_field_param_required(cli_runner):
     )
     assert result.exit_code == 1
     assert "There are no empty signature fields" in result.output
+
+
+def test_cli_pades_lta(
+    pki_arch_name, timestamp_url, cli_runner, root_cert, p12_keys
+):
+    if pki_arch_name == 'ed448':
+        # FIXME deal with this bug on the Certomancer end
+        pytest.skip("ed448 timestamping in Certomancer doesn't work")
+    cfg = {
+        'pkcs12-setups': {
+            'test': {'pfx-file': p12_keys, 'pfx-passphrase': 'secret'}
+        },
+        'validation-contexts': {
+            'test': {
+                'trust': root_cert,
+            }
+        },
+    }
+
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            '--validation-context',
+            'test',
+            '--with-validation-info',
+            '--use-pades-lta',
+            '--timestamp-url',
+            timestamp_url,
+            'pkcs12',
+            '--p12-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output

@@ -362,6 +362,12 @@ pki-architectures:
   testing-ca-ed25519:
     template: testing-ca
     keyset: testing-ca-ed25519
+    services:
+      time-stamping:
+        tsa:
+          signing-key: tsa
+          signing-cert: tsa
+          digest-algo: sha512
   testing-ca-ed448:
     template: testing-ca
     keyset: testing-ca-ed448
