@@ -27,7 +27,7 @@ try:
     import pkcs11  # lgtm [py/unused-import]
 
     pkcs11_available = True
-except ImportError:
+except ImportError:  # pragma: nocover
     pkcs11 = None
     pkcs11_available = False
 
@@ -98,6 +98,13 @@ class PKCS11Plugin(SigningCommandPlugin):
                 help='name of preconfigured PKCS#11 profile (overrides all '
                 'other options)',
             ),
+            click.Option(
+                ('--other-cert',),
+                type=str,
+                required=False,
+                help='label of other cert to pull (multiple uses allowed)',
+                multiple=True,
+            ),
         ]
 
     def create_signer(
@@ -116,6 +123,7 @@ def _pkcs11_signer_context(
     skip_user_pin,
     p11_setup,
     raw_mechanism,
+    other_cert,
 ):
     from pyhanko.sign import pkcs11
 
@@ -154,6 +162,7 @@ def _pkcs11_signer_context(
             # for now, DEFER requires a config file
             prompt_pin=pinentry_mode,
             raw_mechanism=raw_mechanism,
+            other_certs_to_pull=other_cert,
         )
 
     pin = pkcs11_config.user_pin
@@ -164,9 +173,7 @@ def _pkcs11_signer_context(
         if pin_env:
             pin = pin_env.strip()
 
-    if (
-        pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT and pin is None
-    ):  # pragma: nocover
+    if pkcs11_config.prompt_pin == PKCS11PinEntryMode.PROMPT and pin is None:
         pin = getpass.getpass(prompt='PKCS#11 user PIN: ')
     return pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin)
 
