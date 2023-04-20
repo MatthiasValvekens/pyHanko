@@ -4,6 +4,7 @@ from typing import BinaryIO, Optional
 import click
 
 from pyhanko.pdf_utils import crypt
+from pyhanko.pdf_utils.crypt import AuthStatus
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 
@@ -25,12 +26,16 @@ class OpenForSigning:
                     prompt='Password for encrypted file \'%s\': '
                     % self.infile_path
                 )
-                writer.encrypt(pdf_pass)
+                auth = writer.encrypt(pdf_pass)
+                if auth.status == AuthStatus.FAILED:
+                    raise click.ClickException(
+                        "Invalid password for encrypted file"
+                    )
             elif isinstance(sh, crypt.PubKeySecurityHandler):
                 raise click.ClickException(
                     "Public-key document encryption is not supported in the CLI"
                 )
-            else:
+            else:  # pragma: nocover
                 raise click.ClickException(
                     "Input file appears to be encrypted, but appropriate "
                     "credentials are not available."

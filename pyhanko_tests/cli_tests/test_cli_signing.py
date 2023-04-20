@@ -31,7 +31,12 @@ from pyhanko_tests.cli_tests.conftest import (
     _write_cert,
     _write_config,
 )
-from pyhanko_tests.samples import MINIMAL_ONE_FIELD, TESTING_CA
+from pyhanko_tests.samples import (
+    MINIMAL_AES256,
+    MINIMAL_ONE_FIELD,
+    MINIMAL_PUBKEY_AES256,
+    TESTING_CA,
+)
 from pyhanko_tests.signing_commons import FROM_CA
 from pyhanko_tests.test_pkcs11 import SOFTHSM, pkcs11_only, pkcs11_test_module
 
@@ -73,6 +78,9 @@ def _validate_last_sig_in(arch: PKIArchitecture, pdf_file):
     with open(pdf_file, 'rb') as result:
         logger.info(f"Validating last signature in {pdf_file}...")
         r = PdfFileReader(result)
+        # Little hack for the tests with encrypted files
+        if r.security_handler is not None:
+            r.decrypt("ownersecret")
         last_sig = r.embedded_regular_signatures[-1]
         status = validate_pdf_signature(last_sig, signer_validation_context=vc)
         assert status.bottom_line, status.pretty_print_details()
@@ -999,3 +1007,96 @@ def test_cli_pades_lta(
         ],
     )
     assert not result.exception, result.output
+
+
+def test_cli_addsig_pemder_encrypted_file(
+    cli_runner, cert_chain, user_key, monkeypatch
+):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL_AES256)
+    monkeypatch.setattr(getpass, 'getpass', _const("ownersecret"))
+    cfg = _pemder_setup_config(user_key, cert_chain)
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_addsig_no_pubkey_encryption(cli_runner):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL_PUBKEY_AES256)
+    cfg = {
+        'pemder-setups': {
+            'test': {
+                'key-file': _write_user_key(TESTING_CA),
+                'cert-file': _write_cert(
+                    TESTING_CA, CertLabel('signer1'), fname='cert.pem'
+                ),
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Public-key document encryption is not supported" in result.output
+
+
+def test_cli_addsig_wrong_password(cli_runner, monkeypatch):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL_AES256)
+    monkeypatch.setattr(getpass, 'getpass', _const("wrong"))
+    cfg = {
+        'pemder-setups': {
+            'test': {
+                'key-file': _write_user_key(TESTING_CA),
+                'cert-file': _write_cert(
+                    TESTING_CA, CertLabel('signer1'), fname='cert.pem'
+                ),
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Invalid password" in result.output
