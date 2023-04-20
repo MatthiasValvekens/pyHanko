@@ -8,13 +8,14 @@ from pyhanko.cli._trust import (
     build_vc_kwargs,
     trust_options,
 )
-from pyhanko.cli.commands.signing.plugin import REGISTRY, command_from_plugin
+from pyhanko.cli.commands.signing.plugin import command_from_plugin
 from pyhanko.cli.commands.stamp import select_style
 from pyhanko.cli.utils import parse_field_location_spec
 from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 
 from ..._ctx import CLIContext
+from ...plugin_api import SIGNING_PLUGIN_REGISTRY
 
 __all__ = ['signing', 'addsig', 'register']
 
@@ -226,7 +227,7 @@ def addsig(
 
 
 def register():
-    for signer_plugin in REGISTRY:
+    for signer_plugin in SIGNING_PLUGIN_REGISTRY:
         if signer_plugin.is_available():
             addsig.add_command(command_from_plugin(signer_plugin))
         else:

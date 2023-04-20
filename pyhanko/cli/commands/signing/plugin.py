@@ -1,7 +1,6 @@
-import abc
 import asyncio
 from datetime import datetime
-from typing import ClassVar, ContextManager, List, Optional
+from typing import List, Optional
 
 import click
 import tzlocal
@@ -9,39 +8,15 @@ from asn1crypto import pem
 
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.commands.signing.utils import get_text_params, open_for_signing
+from pyhanko.cli.plugin_api import SigningCommandPlugin
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import readable_file, writable_file
 from pyhanko.sign import PdfSigner
 from pyhanko.sign.signers.pdf_cms import (
     PdfCMSSignedAttributes,
-    Signer,
     select_suitable_signing_md,
 )
 from pyhanko.sign.timestamps import HTTPTimeStamper
-
-
-class SigningCommandPlugin(abc.ABC):
-    subcommand_name: ClassVar[str]
-
-    help_summary: ClassVar[str]
-    unavailable_message: ClassVar[Optional[str]]
-
-    def click_options(self) -> List[click.Option]:
-        raise NotImplementedError
-
-    def click_extra_arguments(self) -> List[click.Argument]:
-        return []
-
-    def is_available(self) -> bool:
-        return True
-
-    def create_signer(
-        self, context: CLIContext, **kwargs
-    ) -> ContextManager[Signer]:
-        raise NotImplementedError
-
-
-REGISTRY: List[SigningCommandPlugin] = []
 
 
 def _callback_logic(
@@ -106,11 +81,6 @@ def _callback_logic(
                     buf = result.getbuffer()
                     outf.write(buf)
                     buf.release()
-
-
-def register_plugin(cls):
-    REGISTRY.append(cls())
-    return cls
 
 
 def command_from_plugin(plugin: SigningCommandPlugin) -> click.Command:

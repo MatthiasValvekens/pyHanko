@@ -6,11 +6,8 @@ import click
 
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli._trust import grab_certs
-from pyhanko.cli.commands.signing.plugin import (
-    SigningCommandPlugin,
-    register_plugin,
-)
 from pyhanko.cli.config import CLIConfig
+from pyhanko.cli.plugin_api import SigningCommandPlugin, register_plugin
 from pyhanko.cli.utils import _warn_empty_passphrase, logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.local_keys import (

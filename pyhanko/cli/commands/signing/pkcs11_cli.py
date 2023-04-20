@@ -6,11 +6,8 @@ from typing import ContextManager, List, Optional
 import click
 
 from pyhanko.cli._ctx import CLIContext
-from pyhanko.cli.commands.signing.plugin import (
-    SigningCommandPlugin,
-    register_plugin,
-)
 from pyhanko.cli.config import CLIConfig
+from pyhanko.cli.plugin_api import SigningCommandPlugin, register_plugin
 from pyhanko.cli.utils import logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.pkcs11 import (
