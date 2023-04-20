@@ -1,6 +1,9 @@
 from pyhanko.cli import cli_root
-from pyhanko_tests.cli_tests.conftest import INPUT_PATH, _write_config
-from pyhanko_tests.cli_tests.test_cli_signing import SIGNED_OUTPUT_PATH
+from pyhanko_tests.cli_tests.conftest import (
+    INPUT_PATH,
+    SIGNED_OUTPUT_PATH,
+    _write_config,
+)
 
 
 def test_cli_stamp_with_style(cli_runner):

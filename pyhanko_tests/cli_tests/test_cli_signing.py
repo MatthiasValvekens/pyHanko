@@ -1,7 +1,5 @@
 import asyncio
 import getpass
-import logging
-import os
 from typing import Optional
 
 import pytest
@@ -10,24 +8,23 @@ from asn1crypto import pem
 from asn1crypto.cms import ContentInfo
 from certomancer import PKIArchitecture
 from certomancer.integrations.illusionist import Illusionist
-from certomancer.registry import CertLabel, KeyLabel, ServiceLabel
+from certomancer.registry import CertLabel, KeyLabel
 from cryptography.hazmat.primitives import serialization
 from freezegun import freeze_time
 from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.pkcs11_cli import P11_PIN_ENV_VAR
-from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import beid
-from pyhanko.sign.validation import (
-    async_validate_detached_cms,
-    validate_pdf_signature,
-)
+from pyhanko.sign.validation import async_validate_detached_cms
 from pyhanko_tests.cli_tests.conftest import (
+    DUMMY_PASSPHRASE,
     FREEZE_DT,
     INPUT_PATH,
+    SIGNED_OUTPUT_PATH,
     _const,
     _DummyManager,
+    _validate_last_sig_in,
     _write_cert,
     _write_config,
 )
@@ -40,27 +37,6 @@ from pyhanko_tests.samples import (
 from pyhanko_tests.signing_commons import FROM_CA
 from pyhanko_tests.test_pkcs11 import SOFTHSM, pkcs11_only, pkcs11_test_module
 
-logger = logging.getLogger(__name__)
-SIGNED_OUTPUT_PATH = 'output.pdf'
-DUMMY_PASSPHRASE = "secret"
-
-
-@pytest.fixture
-def timestamp_url(pki_arch: PKIArchitecture) -> str:
-    tsa = pki_arch.service_registry.get_tsa_info(ServiceLabel('tsa'))
-    return tsa.url
-
-
-@pytest.fixture
-def p12_keys(pki_arch, post_validate):
-    p12_bytes = pki_arch.package_pkcs12(
-        CertLabel("signer1"), password=DUMMY_PASSPHRASE.encode("utf8")
-    )
-    fname = 'signer.p12'
-    with open(fname, 'wb') as outf:
-        outf.write(p12_bytes)
-    return fname
-
 
 @pytest.fixture
 def unencrypted_p12(pki_arch, post_validate):
@@ -69,29 +45,6 @@ def unencrypted_p12(pki_arch, post_validate):
     with open(fname, 'wb') as outf:
         outf.write(p12_bytes)
     return fname
-
-
-def _validate_last_sig_in(arch: PKIArchitecture, pdf_file):
-    vc = ValidationContext(
-        trust_roots=[arch.get_cert(CertLabel('root'))], allow_fetching=True
-    )
-    with open(pdf_file, 'rb') as result:
-        logger.info(f"Validating last signature in {pdf_file}...")
-        r = PdfFileReader(result)
-        # Little hack for the tests with encrypted files
-        if r.security_handler is not None:
-            r.decrypt("ownersecret")
-        last_sig = r.embedded_regular_signatures[-1]
-        status = validate_pdf_signature(last_sig, signer_validation_context=vc)
-        assert status.bottom_line, status.pretty_print_details()
-        logger.info(f"Validation successful")
-
-
-@pytest.fixture
-def post_validate(pki_arch):
-    yield
-    if os.path.isfile(SIGNED_OUTPUT_PATH):
-        _validate_last_sig_in(pki_arch, SIGNED_OUTPUT_PATH)
 
 
 def _write_user_key(
