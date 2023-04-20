@@ -7,7 +7,7 @@ import click
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli._trust import grab_certs
 from pyhanko.cli.config import CLIConfig
-from pyhanko.cli.plugin_api import SigningCommandPlugin, register_plugin
+from pyhanko.cli.plugin_api import SigningCommandPlugin, register_signing_plugin
 from pyhanko.cli.utils import _warn_empty_passphrase, logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.local_keys import (
@@ -44,7 +44,6 @@ class KeyFileConfigWrapper:
         return PemDerSignatureConfig.from_config(setup)
 
 
-@register_plugin
 class PemderPlugin(SigningCommandPlugin):
     subcommand_name = 'pemder'
     help_summary = 'read key material from PEM/DER files'
@@ -161,7 +160,6 @@ def _pemder_signer(
     )
 
 
-@register_plugin
 class PKCS12Plugin(SigningCommandPlugin):
     subcommand_name = 'pkcs12'
     help_summary = 'read key material from PKCS#12 files'

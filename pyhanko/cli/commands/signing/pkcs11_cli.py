@@ -7,7 +7,7 @@ import click
 
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.config import CLIConfig
-from pyhanko.cli.plugin_api import SigningCommandPlugin, register_plugin
+from pyhanko.cli.plugin_api import SigningCommandPlugin
 from pyhanko.cli.utils import logger, readable_file
 from pyhanko.config.errors import ConfigurationError
 from pyhanko.config.pkcs11 import (
@@ -33,7 +33,6 @@ P11_PIN_ENV_VAR = "PYHANKO_PKCS11_PIN"
 UNAVAIL_MSG = "This subcommand requires python-pkcs11 to be installed."
 
 
-@register_plugin
 class PKCS11Plugin(SigningCommandPlugin):
     subcommand_name = 'pkcs11'
     help_summary = 'use generic PKCS#11 device to sign'
@@ -175,7 +174,6 @@ def _pkcs11_signer_context(
     return pkcs11.PKCS11SigningContext(pkcs11_config, user_pin=pin)
 
 
-@register_plugin
 class BEIDPlugin(SigningCommandPlugin):
     subcommand_name = 'beid'
     help_summary = 'use Belgian eID to sign'

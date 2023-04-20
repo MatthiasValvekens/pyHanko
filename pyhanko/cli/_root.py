@@ -1,11 +1,17 @@
-import importlib
+import itertools
 import logging
+from importlib import metadata
+from typing import Iterable
 
 import click
 
 from pyhanko import __version__
 from pyhanko.cli._ctx import CLIContext
 from pyhanko.cli.config import parse_cli_config
+from pyhanko.cli.plugin_api import (
+    SIGNING_PLUGIN_ENTRY_POINT_GROUP,
+    SIGNING_PLUGIN_REGISTRY,
+)
 from pyhanko.cli.runtime import DEFAULT_CONFIG_FILE, logging_setup
 from pyhanko.config.logging import LogConfig, parse_logging_config
 
@@ -70,8 +76,8 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
 
     from .commands.signing import register
 
-    _load_plugins(ctx_obj, plugins_enabled=not no_plugins)
-    register()
+    plugins_to_register = _load_plugins(ctx_obj, plugins_enabled=not no_plugins)
+    register(plugins_to_register)
 
     if verbose:
         # override the root logger's logging level, but preserve the output
@@ -103,17 +109,53 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
         logging.debug('There was no configuration to parse.')
 
 
+def _selected_entry_points() -> metadata.EntryPoints:
+    return metadata.entry_points().select(
+        group=SIGNING_PLUGIN_ENTRY_POINT_GROUP
+    )
+
+
 def _load_plugins(ctx_obj: CLIContext, plugins_enabled: bool):
     # we always load the default ones
     to_load = [
-        'pyhanko.cli.commands.signing.pkcs11_cli',
-        'pyhanko.cli.commands.signing.simple',
+        'pyhanko.cli.commands.signing.pkcs11_cli:PKCS11Plugin',
+        'pyhanko.cli.commands.signing.pkcs11_cli:BEIDPlugin',
+        'pyhanko.cli.commands.signing.simple:PKCS12Plugin',
+        'pyhanko.cli.commands.signing.simple:PemderPlugin',
     ]
-    if plugins_enabled and ctx_obj.config is not None:
-        to_load += [str(mod) for mod in ctx_obj.config.plugin_modules]
 
-    for path in to_load:
-        importlib.import_module(path)
+    eps_from_metadata: Iterable[metadata.EntryPoint] = []
+    if plugins_enabled:
+        if ctx_obj.config is not None:
+            to_load += [str(mod) for mod in ctx_obj.config.plugin_endpoints]
+        eps_from_metadata = _selected_entry_points()
+
+    to_load_as_endpoints: Iterable[metadata.EntryPoint] = [
+        metadata.EntryPoint(
+            name='',
+            value=v,
+            group=SIGNING_PLUGIN_ENTRY_POINT_GROUP,
+        )
+        for v in to_load
+    ]
+    resulting_plugins = list(SIGNING_PLUGIN_REGISTRY)
+    seen = set(type(x) for x in SIGNING_PLUGIN_REGISTRY)
+    for ep in itertools.chain(to_load_as_endpoints, eps_from_metadata):
+        plugin_cls = ep.load()
+        if not isinstance(plugin_cls, type):
+            click.echo(
+                click.style(
+                    f"Plugins must be defined as references to classes with a "
+                    f"nullary init function, but '{ep.value}' is "
+                    f"a {type(plugin_cls)}. Disregarding...",
+                    bold=True,
+                )
+            )
+            continue
+        if plugin_cls not in seen:
+            seen.add(plugin_cls)
+            resulting_plugins.append(plugin_cls())
+    return resulting_plugins
 
 
 cli_root: click.Group = _root

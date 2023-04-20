@@ -22,7 +22,7 @@ class CLIConfig:
     time_tolerance: timedelta
     retroactive_revinfo: bool
     log_config: Dict[Optional[str], LogConfig]
-    plugin_modules: List[str]
+    plugin_endpoints: List[str]
     raw_config: dict
 
     # TODO graceful error handling for syntax & type issues?
@@ -152,5 +152,5 @@ def process_config_dict(config_dict: dict) -> dict:
         stamp_styles=stamp_configs,
         default_stamp_style=default_stamp_style,
         log_config=log_config,
-        plugin_modules=plugins,
+        plugin_endpoints=plugins,
     )

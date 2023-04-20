@@ -1,3 +1,5 @@
+from typing import List
+
 import click
 from pyhanko_certvalidator import ValidationContext
 
@@ -15,7 +17,7 @@ from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
 
 from ..._ctx import CLIContext
-from ...plugin_api import SIGNING_PLUGIN_REGISTRY
+from ...plugin_api import SigningCommandPlugin
 
 __all__ = ['signing', 'addsig', 'register']
 
@@ -226,8 +228,11 @@ def addsig(
     ctx_obj.lenient = no_strict_syntax
 
 
-def register():
-    for signer_plugin in SIGNING_PLUGIN_REGISTRY:
+def register(plugins: List[SigningCommandPlugin]):
+    # we reset the command list before (re)populating it, in order to
+    # make the tests more consistent
+    addsig.commands = {}
+    for signer_plugin in plugins:
         if signer_plugin.is_available():
             addsig.add_command(command_from_plugin(signer_plugin))
         else:
