@@ -150,6 +150,7 @@ def decrypt_with_pemder(infile, outfile, key, cert, passfile, force, no_pass):
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
         if not passphrase:
             _warn_empty_passphrase()
+            passphrase = None
     else:
         passphrase = None
 

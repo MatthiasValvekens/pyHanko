@@ -1,4 +1,5 @@
 import datetime
+import warnings
 
 import pytest
 import requests_mock
@@ -35,7 +36,9 @@ CERTOMANCER_ARCHITECTURES = {
     "ed25519": TESTING_CA_ED25519,
     "ed448": TESTING_CA_ED448,
 }
-FREEZE_DT = tzlocal.get_localzone().localize(datetime.datetime(2020, 8, 1))
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    FREEZE_DT = tzlocal.get_localzone().localize(datetime.datetime(2020, 8, 1))
 
 
 @pytest.fixture(scope="module", params=list(CERTOMANCER_ARCHITECTURES))

@@ -155,6 +155,7 @@ def _pemder_signer(
         passphrase = getpass.getpass(prompt='Key passphrase: ').encode('utf-8')
         if not passphrase:
             _warn_empty_passphrase()
+            passphrase = None
     else:
         passphrase = None
 
@@ -195,6 +196,14 @@ class PKCS12Plugin(SigningCommandPlugin):
                 type=click.File('r'),
                 show_default='stdin',
             ),
+            click.Option(
+                ('--no-pass',),
+                help='assume the PKCS#12 file is unencrypted',
+                type=bool,
+                is_flag=True,
+                default=False,
+                show_default=True,
+            ),
         ]
 
     def create_signer(
@@ -207,7 +216,7 @@ class PKCS12Plugin(SigningCommandPlugin):
         return _m()
 
 
-def _pkcs12_signer(ctx: CLIContext, pfx, chain, passfile, p12_setup):
+def _pkcs12_signer(ctx: CLIContext, pfx, chain, passfile, p12_setup, no_pass):
     # TODO add sanity check in case the user gets the arg order wrong
     #  (now it fails with a gnarly DER decoding error, which is not very
     #  user-friendly)
@@ -242,10 +251,13 @@ def _pkcs12_signer(ctx: CLIContext, pfx, chain, passfile, p12_setup):
     elif passfile is not None:
         passphrase = passfile.readline().strip().encode('utf-8')
         passfile.close()
-    elif pkcs12_config.prompt_passphrase:
+    elif pkcs12_config.prompt_passphrase and not no_pass:
         passphrase = getpass.getpass(prompt='PKCS#12 passphrase: ').encode(
             'utf-8'
         )
+        if not passphrase:
+            _warn_empty_passphrase()
+            passphrase = None
     else:
         passphrase = None
 

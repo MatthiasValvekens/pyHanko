@@ -2,6 +2,7 @@ import asyncio
 import getpass
 import logging
 import os
+from typing import Optional
 
 import pytest
 import requests_mock
@@ -35,6 +36,7 @@ from pyhanko_tests.test_pkcs11 import SOFTHSM, pkcs11_only, pkcs11_test_module
 
 logger = logging.getLogger(__name__)
 SIGNED_OUTPUT_PATH = 'output.pdf'
+DUMMY_PASSPHRASE = "secret"
 
 
 @pytest.fixture
@@ -46,8 +48,17 @@ def timestamp_url(pki_arch: PKIArchitecture) -> str:
 @pytest.fixture
 def p12_keys(pki_arch, post_validate):
     p12_bytes = pki_arch.package_pkcs12(
-        CertLabel("signer1"), password=b"secret"
+        CertLabel("signer1"), password=DUMMY_PASSPHRASE.encode("utf8")
     )
+    fname = 'signer.p12'
+    with open(fname, 'wb') as outf:
+        outf.write(p12_bytes)
+    return fname
+
+
+@pytest.fixture
+def unencrypted_p12(pki_arch, post_validate):
+    p12_bytes = pki_arch.package_pkcs12(CertLabel("signer1"))
     fname = 'signer.p12'
     with open(fname, 'wb') as outf:
         outf.write(p12_bytes)
@@ -74,13 +85,17 @@ def post_validate(pki_arch):
         _validate_last_sig_in(pki_arch, SIGNED_OUTPUT_PATH)
 
 
-def _write_user_key(pki_arch: PKIArchitecture):
+def _write_user_key(
+    pki_arch: PKIArchitecture, passphrase: Optional[bytes] = None
+):
     key = pki_arch.key_set.get_private_key(KeyLabel('signer1'))
     key_handle = serialization.load_der_private_key(key.dump(), password=None)
     pem_bytes = key_handle.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
+        encryption_algorithm=serialization.BestAvailableEncryption(passphrase)
+        if passphrase
+        else serialization.NoEncryption(),
     )
 
     fname = 'signer.key.pem'
@@ -94,6 +109,11 @@ def user_key(pki_arch, post_validate):
     return _write_user_key(pki_arch)
 
 
+@pytest.fixture
+def encrypted_user_key(pki_arch, post_validate):
+    return _write_user_key(pki_arch, passphrase=DUMMY_PASSPHRASE.encode("utf8"))
+
+
 def test_cli_addsig_pemder(cli_runner, cert_chain, user_key):
     root_cert, interm_cert, user_cert = cert_chain
     result = cli_runner.invoke(
@@ -105,6 +125,34 @@ def test_cli_addsig_pemder(cli_runner, cert_chain, user_key):
             'Sig1',
             'pemder',
             '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_addsig_pemder_without_nopass(
+    cli_runner, cert_chain, user_key, monkeypatch
+):
+    # expect a warning, but no errors
+    monkeypatch.setattr(getpass, 'getpass', _const(""))
+
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
             '--cert',
             user_cert,
             '--chain',
@@ -150,6 +198,101 @@ def test_cli_addsig_pemder_with_setup(cli_runner, cert_chain, user_key):
         ],
     )
     assert not result.exception, result.output
+
+
+@pytest.mark.parametrize('loc', ['config', 'passfile', 'prompt'])
+def test_cli_addsig_pemder_with_setup_encrypted_key(
+    cli_runner, cert_chain, encrypted_user_key, monkeypatch, loc
+):
+    cfg = _pemder_setup_config(encrypted_user_key, cert_chain)
+    if loc == 'config':
+        cfg['pemder-setups']['test']['key-passphrase'] = DUMMY_PASSPHRASE
+        args = []
+    elif loc == 'passfile':
+        with open('passfile', 'w') as passf:
+            passf.write(DUMMY_PASSPHRASE)
+        args = ['--passfile', 'passfile']
+    else:
+        args = []
+        monkeypatch.setattr(getpass, 'getpass', _const(DUMMY_PASSPHRASE))
+
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--pemder-setup',
+            'test',
+            *args,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_addsig_pemder_setup_requires_config(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "requires a configuration file" in result.output
+
+
+def test_cli_addsig_pemder_some_args_required(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "option must be provided" in result.output
+
+
+def test_cli_addsig_pemder_setup_does_not_exist(cli_runner):
+    cfg = {'pemder-setups': {}}
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error while reading PEM/DER setup" in result.output
 
 
 def test_cli_addsig_pemder_with_unreadable_additional_certs(cli_runner):
@@ -216,7 +359,7 @@ def test_cli_addsig_pemder_detached(cli_runner, pki_arch, cert_chain, user_key):
 
 
 def test_cli_addsig_p12(cli_runner, p12_keys, monkeypatch):
-    monkeypatch.setattr(getpass, 'getpass', value=_const('secret'))
+    monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
     result = cli_runner.invoke(
         cli_root,
         [
@@ -228,6 +371,46 @@ def test_cli_addsig_p12(cli_runner, p12_keys, monkeypatch):
             INPUT_PATH,
             SIGNED_OUTPUT_PATH,
             p12_keys,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_addsig_unencrypted_p12(cli_runner, unencrypted_p12):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs12',
+            '--no-pass',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            unencrypted_p12,
+        ],
+    )
+    assert not result.exception, result.output
+
+
+def test_cli_addsig_unencrypted_p12_without_nopass(
+    cli_runner, unencrypted_p12, monkeypatch
+):
+    # expect a warning, but no errors
+    monkeypatch.setattr(getpass, 'getpass', _const(""))
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs12',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            unencrypted_p12,
         ],
     )
     assert not result.exception, result.output
@@ -246,13 +429,13 @@ def test_cli_addsig_p12_with_setup(
     }
     args = []
     if passphrase_loc == 'config':
-        cfg['pkcs12-setups']['test']['pfx_passphrase'] = 'secret'
+        cfg['pkcs12-setups']['test']['pfx_passphrase'] = DUMMY_PASSPHRASE
     elif passphrase_loc == 'prompt':
-        monkeypatch.setattr(getpass, 'getpass', value=_const('secret'))
+        monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
     elif passphrase_loc == 'file':
         args = ['--passfile', 'passfile']
         with open('passfile', 'w') as pf:
-            pf.write("secret")
+            pf.write(DUMMY_PASSPHRASE)
 
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -273,9 +456,66 @@ def test_cli_addsig_p12_with_setup(
     assert not result.exception, result.output
 
 
+def test_cli_addsig_p12_setup_requires_config(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs12',
+            '--p12-setup',
+            'blah',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "requires a configuration file" in result.output
+
+
+def test_cli_addsig_p12_setup_unreadable(cli_runner):
+    _write_config({'p12-setup': {}})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs12',
+            '--p12-setup',
+            'blah',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error while reading PKCS#12 config" in result.output
+
+
+def test_cli_addsig_p12_setup_or_pfx_argument_required(cli_runner):
+    _write_config({'p12-setup': {}})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pkcs12',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "argument or the --p12-setup" in result.output
+
+
 def test_cli_addsig_p12_passfile(cli_runner, p12_keys):
     with open('passfile', 'w') as pf:
-        pf.write("secret")
+        pf.write(DUMMY_PASSPHRASE)
 
     result = cli_runner.invoke(
         cli_root,
@@ -538,7 +778,7 @@ def test_cli_pades_lta(
         pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = {
         'pkcs12-setups': {
-            'test': {'pfx-file': p12_keys, 'pfx-passphrase': 'secret'}
+            'test': {'pfx-file': p12_keys, 'pfx-passphrase': DUMMY_PASSPHRASE}
         },
         'validation-contexts': {
             'test': {
