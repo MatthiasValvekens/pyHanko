@@ -1,4 +1,4 @@
-name: Lint
+name: Static analysis
 
 on: ["push", "pull_request"]
 
@@ -13,3 +13,11 @@ jobs:
         run: isort --profile black --line-length 80 --check pyhanko pyhanko_tests
       - name: Run Black
         run: black -S --line-length 80 --check pyhanko pyhanko_tests
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: jpetrucciani/mypy-check@0.991
+        with:
+          path: pyhanko
+          requirements: "-e .[mypy,testing,pkcs11,xmp,opentype,image-support,async_http,extra_pubkey_algs] --config-settings editable_mode=strict"
