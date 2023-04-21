@@ -9,6 +9,7 @@ from pyhanko.sign import Signer
 __all__ = [
     'SigningCommandPlugin',
     'register_signing_plugin',
+    'CLIContext',
     'SIGNING_PLUGIN_REGISTRY',
     'SIGNING_PLUGIN_ENTRY_POINT_GROUP',
 ]
@@ -33,6 +34,9 @@ class SigningCommandPlugin(abc.ABC):
 
     Subclasses exposed as entry points are required to have a no-arguments
     ``__init__`` method.
+
+    .. warning::
+        This is an incubating feature. API adjustment are still possible.
     """
 
     subcommand_name: ClassVar[str]
