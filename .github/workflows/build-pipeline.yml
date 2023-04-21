@@ -1,0 +1,139 @@
+name: CI pipeline
+
+on:
+  push:
+    branches: [ master, "release/*", "maintenance/*", "ci/*" ]
+  pull_request:
+    branches: [ master ]
+env:
+  MAIN_PYTHON_VERSION: "3.10"
+  PDFTOPPM_PATH: /usr/bin/pdftoppm
+  IM_COMPARE_PATH: /usr/bin/compare
+  SOFTHSM2_CONF: softhsm2.conf
+  SOFTHSM2_MODULE_PATH: /usr/lib/softhsm/libsofthsm2.so
+  CERTOMANCER_CONFIG_PATH: pyhanko_tests/data/crypto/certomancer.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.MAIN_PYTHON_VERSION }}
+      - name: Install build tools
+        run: pip install --upgrade build setuptools pip wheel
+      - name: build
+        run: python -m build
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: pyhanko-dist
+          path: dist/
+  pytest-coverage:
+    runs-on: ubuntu-22.04
+    needs: build
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: pyhanko-dist
+          path: dist/
+      - uses: ./.github/actions/test-job-setup
+      - name: Test with pytest
+        run: python -m pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+        env:
+          PKCS11_TEST_MODULE: ${{ env.SOFTHSM2_MODULE_PATH }}
+      - name: Stash coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: "*-coverage.xml"
+  live-integration-tests:
+    runs-on: ubuntu-22.04
+    needs: build
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: pyhanko-dist
+          path: dist/
+      - uses: ./.github/actions/test-job-setup
+        with:
+          dependency-group: live-test
+      - name: Start Certomancer Animator daemon
+        run: |
+          certomancer --service-url-prefix http://localhost:9000 \
+            --config "$CERTOMANCER_CONFIG_PATH" animate &
+      - name: Start CSC dummy server
+        run: |
+          certomancer-csc "$CERTOMANCER_CONFIG_PATH" 8999 2 &
+      - name: Test with pytest
+        run: |
+          python -m pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-live-coverage.xml \
+                pyhanko_tests/with_live_certomancer.py \
+                pyhanko_tests/with_live_csc_dummy.py
+        env:
+          LIVE_CERTOMANCER_HOST_URL: http://localhost:9000
+          LIVE_CSC_SCAL2_HOST_URL: http://localhost:8999
+      - name: Stash coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: "*-coverage.xml"
+  smoke-tests:
+    runs-on: ubuntu-22.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.MAIN_PYTHON_VERSION }}
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: pyhanko-dist
+          path: dist/
+      - uses: ./.github/actions/test-job-setup
+        with:
+          dependency-group: testing-basic
+      - name: Run smoke tests that should pass without optional dependencies
+        # We run a couple of the "bread and butter" test modules, and the full CLI test suite except for
+        # the PKCS#11 parts
+        run: |
+          python -m pytest \
+            pyhanko_tests/test_signing.py pyhanko_tests/test_diff_analysis.py pyhanko_tests/test_crypt.py \
+            pyhanko_tests/test_cms.py pyhanko_tests/cli_tests/*.py
+  codecov-upload:
+    runs-on: ubuntu-22.04
+    needs: [pytest-coverage,live-integration-tests]
+    steps:
+      - name: Retrieve coverage reports
+        uses: actions/download-artifact@v3
+        with:
+          path: ./reports/
+      - name: Upload all coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./reports/
+          flags: unittests
+          env_vars: OS,PYTHON
+          name: codecov-umbrella

@@ -6,7 +6,6 @@ from freezegun import freeze_time
 
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.pkcs11_cli import P11_PIN_ENV_VAR
-from pyhanko.sign import beid
 from pyhanko_tests.cli_tests.conftest import (
     FREEZE_DT,
     INPUT_PATH,
@@ -17,10 +16,15 @@ from pyhanko_tests.cli_tests.conftest import (
     _write_config,
 )
 from pyhanko_tests.samples import TESTING_CA
-from pyhanko_tests.signing_commons import FROM_CA
-from pyhanko_tests.test_pkcs11 import SOFTHSM, pkcs11_only, pkcs11_test_module
+from pyhanko_tests.signing_commons import (
+    FROM_CA,
+    SOFTHSM,
+    pkcs11_only,
+    pkcs11_test_module,
+)
 
 
+@pkcs11_only
 def test_cli_pkcs11_args_required(cli_runner):
     result = cli_runner.invoke(
         cli_root,
@@ -38,6 +42,7 @@ def test_cli_pkcs11_args_required(cli_runner):
     assert "--lib and --cert-label are required" in result.output
 
 
+@pkcs11_only
 def test_cli_pkcs11_setup_requires_config(cli_runner):
     result = cli_runner.invoke(
         cli_root,
@@ -57,6 +62,7 @@ def test_cli_pkcs11_setup_requires_config(cli_runner):
     assert "requires a configuration file" in result.output
 
 
+@pkcs11_only
 def test_cli_pkcs11_setup_config_unreadable(cli_runner):
     _write_config({'pkcs11-setups': {}})
     result = cli_runner.invoke(
@@ -203,8 +209,11 @@ def test_cli_addsig_pkcs11_with_setup_and_pin_prompt(
     assert not result.exception, result.output
 
 
+@pkcs11_only
 @freeze_time(FREEZE_DT)
 def test_cli_addsig_beid(cli_runner, monkeypatch):
+    from pyhanko.sign import beid
+
     monkeypatch.setattr(
         beid, 'open_beid_session', value=_const(_DummyManager())
     )
@@ -232,8 +241,11 @@ def test_cli_addsig_beid(cli_runner, monkeypatch):
         _validate_last_sig_in(TESTING_CA, SIGNED_OUTPUT_PATH)
 
 
+@pkcs11_only
 @freeze_time(FREEZE_DT)
 def test_cli_addsig_beid_with_setup(cli_runner, monkeypatch):
+    from pyhanko.sign import beid
+
     monkeypatch.setattr(
         beid, 'open_beid_session', value=_const(_DummyManager())
     )
@@ -259,7 +271,10 @@ def test_cli_addsig_beid_with_setup(cli_runner, monkeypatch):
         _validate_last_sig_in(TESTING_CA, SIGNED_OUTPUT_PATH)
 
 
+@pkcs11_only
 def test_cli_beid_lib_mandatory(cli_runner, monkeypatch):
+    from pyhanko.sign import beid
+
     monkeypatch.setattr(
         beid, 'open_beid_session', value=_const(_DummyManager())
     )
@@ -281,8 +296,11 @@ def test_cli_beid_lib_mandatory(cli_runner, monkeypatch):
     assert '--lib option is mandatory' in result.output
 
 
+@pkcs11_only
 def test_cli_beid_pkcs11_error(cli_runner, monkeypatch):
     from pkcs11 import PKCS11Error
+
+    from pyhanko.sign import beid
 
     def _throw(*_args, **_kwargs):
         raise PKCS11Error

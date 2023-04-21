@@ -5,8 +5,6 @@ NOTE: these are not run in CI, due to lack of testing setup.
 """
 import asyncio
 import binascii
-import logging
-import os
 from io import BytesIO
 from typing import Optional
 
@@ -36,21 +34,14 @@ from pyhanko_tests.signing_commons import (
     SIMPLE_ECC_V_CONTEXT,
     SIMPLE_ED448_V_CONTEXT,
     SIMPLE_ED25519_V_CONTEXT,
+    SOFTHSM,
     async_val_trusted,
+    pkcs11_only,
+    pkcs11_test_module,
     val_trusted,
 )
 
-logger = logging.getLogger(__name__)
-
-SKIP_PKCS11 = SOFTHSM = False
-pkcs11_test_module = os.environ.get('PKCS11_TEST_MODULE', None)
-if not pkcs11_test_module:
-    logger.warning("Skipping PKCS#11 tests --- no PCKS#11 module specified")
-    SKIP_PKCS11 = True
-elif 'softhsm' in pkcs11_test_module.casefold():
-    SOFTHSM = True
-
-pkcs11_only = pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
+pytestmark = pkcs11_only
 
 
 def _simple_sess(token='testrsa'):
@@ -65,7 +56,6 @@ default_other_certs = ('root', 'interm')
 SIGNER_LABEL = 'signer1'
 
 
-@pkcs11_only
 @pytest.mark.parametrize(
     'bulk_fetch,pss',
     [(True, True), (False, False), (True, False), (True, True)],
@@ -90,7 +80,6 @@ def test_simple_sign(bulk_fetch, pss):
     val_trusted(emb)
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_simple_sign_legacy_open_session_by_token_label():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -112,7 +101,6 @@ def test_simple_sign_legacy_open_session_by_token_label():
     val_trusted(emb)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_sign_external_certs(bulk_fetch):
@@ -148,7 +136,6 @@ def test_sign_external_certs(bulk_fetch):
     val_trusted(emb)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_sign_multiple_cert_sources(bulk_fetch):
@@ -172,7 +159,6 @@ def test_sign_multiple_cert_sources(bulk_fetch):
     val_trusted(emb)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_wrong_key_label(bulk_fetch):
@@ -190,7 +176,6 @@ def test_wrong_key_label(bulk_fetch):
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_wrong_cert(bulk_fetch):
@@ -208,7 +193,6 @@ def test_wrong_cert(bulk_fetch):
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_provided_certs():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -234,7 +218,6 @@ def test_provided_certs():
     val_trusted(emb)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_signer_provided_others_pulled(bulk_fetch):
@@ -257,7 +240,6 @@ def test_signer_provided_others_pulled(bulk_fetch):
     val_trusted(emb)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_signer_pulled_others_provided(bulk_fetch):
@@ -282,7 +264,6 @@ def test_signer_pulled_others_provided(bulk_fetch):
     val_trusted(emb)
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_unclear_key_label():
     signer_cert = TESTING_CA.get_cert(CertLabel('signer1'))
@@ -295,7 +276,6 @@ def test_unclear_key_label():
             )
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_unclear_signer_cert():
     with _simple_sess() as sess:
@@ -306,7 +286,6 @@ def test_unclear_signer_cert():
             )
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_dsa(bulk_fetch):
@@ -329,7 +308,6 @@ def test_simple_sign_dsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ecdsa(bulk_fetch):
@@ -353,7 +331,6 @@ def test_simple_sign_ecdsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_ECC_V_CONTEXT())
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ed25519(bulk_fetch):
@@ -374,7 +351,6 @@ def test_simple_sign_ed25519(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_ED25519_V_CONTEXT())
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_ed448(bulk_fetch):
@@ -395,7 +371,6 @@ def test_simple_sign_ed448(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_ED448_V_CONTEXT())
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_simple_sign_from_config():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -417,7 +392,6 @@ def test_simple_sign_from_config():
     val_trusted(emb)
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_sign_skip_login_fail():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -435,7 +409,6 @@ def test_sign_skip_login_fail():
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pkcs11_only
 @pytest.mark.skipif(
     not SOFTHSM,
     reason=(
@@ -463,7 +436,6 @@ def test_sign_deferred_auth():
             signers.sign_pdf(w, meta, signer=signer)
 
 
-@pkcs11_only
 @freeze_time('2020-11-01')
 def test_simple_sign_with_raw_rsa():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
@@ -486,7 +458,6 @@ def test_simple_sign_with_raw_rsa():
     val_trusted(emb)
 
 
-@pkcs11_only
 @pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
 def test_simple_sign_with_raw_dsa(bulk_fetch):
@@ -510,7 +481,6 @@ def test_simple_sign_with_raw_dsa(bulk_fetch):
     val_trusted(emb, vc=SIMPLE_DSA_V_CONTEXT())
 
 
-@pkcs11_only
 def test_no_raw_pss():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(
@@ -573,7 +543,6 @@ def test_pull_err_fmt(label, cert_id, no_results, exp_err):
     assert err == exp_err
 
 
-@pkcs11_only
 @pytest.mark.parametrize(
     'bulk_fetch,pss',
     [(True, True), (False, False), (True, False), (True, True)],
@@ -682,13 +651,11 @@ async def test_async_sign_raw_many_concurrent_no_preload_objs(bulk_fetch, pss):
             )
 
 
-@pkcs11_only
 def test_token_does_not_exist():
     with pytest.raises(PKCS11Error, match='No token matching criteria'):
         _simple_sess(token='aintnosuchtoken')
 
 
-@pkcs11_only
 def test_token_unclear():
     with pytest.raises(PKCS11Error, match='more than 1'):
         return pkcs11.open_pkcs11_session(

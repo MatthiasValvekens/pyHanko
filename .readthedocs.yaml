@@ -6,10 +6,10 @@ python:
       path: .
       extra_requirements:
         - docs
-        - extra_pubkey_algs
+        - extra-pubkey-algs
         - xmp
         - opentype
         - image-support
         - pkcs11
-        - async_http
+        - async-http
 formats: all

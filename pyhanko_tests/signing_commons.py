@@ -1,5 +1,8 @@
 import hashlib
+import logging
+import os
 
+import pytest
 from asn1crypto import ocsp
 from asn1crypto.algos import DigestAlgorithm, DigestInfo
 from certomancer.integrations.illusionist import Illusionist
@@ -29,6 +32,18 @@ from pyhanko_tests.samples import (
     UNRELATED_TSA,
     read_all,
 )
+
+logger = logging.getLogger(__name__)
+
+SKIP_PKCS11 = SOFTHSM = False
+pkcs11_test_module = os.environ.get('PKCS11_TEST_MODULE', None)
+if not pkcs11_test_module:
+    logger.warning("Skipping PKCS#11 tests --- no PCKS#11 module specified")
+    SKIP_PKCS11 = True
+elif 'softhsm' in pkcs11_test_module.casefold():
+    SOFTHSM = True
+
+pkcs11_only = pytest.mark.skipif(SKIP_PKCS11, reason="no PKCS#11 module")
 
 SELF_SIGN = signers.SimpleSigner.load(
     CRYPTO_DATA_DIR + '/selfsigned.key.pem',

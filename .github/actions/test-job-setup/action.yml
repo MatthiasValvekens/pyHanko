@@ -1,0 +1,32 @@
+name: "Test job setup"
+description: "Install dependencies and run init logic for pyHanko tests"
+inputs:
+  dependency-group:
+    description: pyHanko dependency group to install
+    required: true
+    default: "testing"
+runs:
+  using: "composite"
+  steps:
+    - name: Install Python dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        WHEEL=(dist/*.whl)
+        REQ="${WHEEL[0]}[$DEPGRP]"
+        python -m pip install $REQ
+      env:
+        DEPGRP: ${{ inputs.dependency-group }}
+    - name: Install system dependencies
+      if: ${{ inputs.dependency-group == 'testing' }}
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install poppler-utils imagemagick softhsm2
+    - name: Initialise SoftHSM tokens
+      if: ${{ inputs.dependency-group == 'testing' }}
+      shell: bash
+      run: |
+        mkdir softhsm_tokens
+        echo "directories.tokendir = $(pwd)/softhsm_tokens" > $SOFTHSM2_CONF
+        ./pyhanko_tests/data/crypto/testing-ca-setup/pkcs11-setup-certomancer.sh
