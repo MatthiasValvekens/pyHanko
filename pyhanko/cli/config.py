@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, Union
 
 import yaml
 from pyhanko_certvalidator import ValidationContext
@@ -15,15 +15,77 @@ from pyhanko.stamp import BaseStampStyle, QRStampStyle, TextStampStyle
 
 @dataclass
 class CLIConfig:
+    """
+    CLI configuration settings.
+    """
+
     validation_contexts: Dict[str, dict]
+    """
+    Named validation contexts. The values in this dictionary
+    are themselves dictionaries that support the following keys:
+
+     * ``trust``: path to a root certificate or list of such paths
+     * ``trust-replace``: whether the value of the ``trust`` setting should
+       replace the system trust, or add to it
+     * ``other-certs``: paths to other relevant certificates that are not
+       trusted by fiat.
+     * ``time-tolerance``: a time drift tolerance setting in seconds
+     * ``retroactive-revinfo``: whether to consider revocation information
+       retroactively valid
+     * ``signer-key-usage-policy``: Signer key usage requirements. See
+       :class:`.KeyUsageConstraints`.
+
+    There are two settings that are deprecated but still supported for backwards
+    compatibility:
+
+     * ``signer-key-usage``: Supplanted by ``signer-key-usage-policy``
+     * ``signer-extd-key-usage``: Supplanted by ``signer-key-usage-policy``
+
+    These may eventually be removed.
+
+    Callers should not process this information directly, but rely on
+    :meth:`get_validation_context` instead.
+    """
+
     stamp_styles: Dict[str, dict]
+    """
+    Named stamp styles. The type of style is selected by the ``type`` key, which
+    can be either ``qr`` or ``text`` (the default is ``text``).
+    For other settings values, see :class:.`QRStampStyle` and
+    :class:`.TextStampStyle`.
+
+
+    Callers should not process this information directly, but rely on
+    :meth:`get_stamp_style` instead.
+    """
+
     default_validation_context: str
+    """
+    The name of the default validation context.
+    The default value for this setting is ``default``.
+    """
+
     default_stamp_style: str
+    """
+    The name of the default stamp style.
+    The default value for this setting is ``default``.
+    """
+
     time_tolerance: timedelta
+    """
+    Time drift tolerance (global default).
+    """
+
     retroactive_revinfo: bool
-    log_config: Dict[Optional[str], LogConfig]
-    plugin_endpoints: List[str]
+    """
+    Whether to consider revocation information retroactively valid
+    (global default).
+    """
+
     raw_config: dict
+    """
+    The raw config data parsed into a Python dictionary.
+    """
 
     # TODO graceful error handling for syntax & type issues?
 
@@ -36,14 +98,39 @@ class CLIConfig:
                 f"There is no validation context named '{name}'."
             )
 
-    def get_validation_context(self, name=None, as_dict=False):
+    def get_validation_context(
+        self, name: Optional[str] = None, as_dict: bool = False
+    ):
+        """
+        Retrieve a validation context by name.
+
+        :param name:
+            The name of the validation context. If not supplied, the value
+            of :attr:`default_validation_context` will be used.
+        :param as_dict:
+            If ``True`` return the settings as a keyword argument dictionary.
+            If ``False`` (the default), return a
+            :class:`~pyhanko_certvalidator.context.ValidationContext`
+            object.
+        """
         vc_config = self._get_validation_settings_raw(name)
         vc_kwargs = parse_trust_config(
             vc_config, self.time_tolerance, self.retroactive_revinfo
         )
         return vc_kwargs if as_dict else ValidationContext(**vc_kwargs)
 
-    def get_signer_key_usages(self, name=None) -> KeyUsageConstraints:
+    def get_signer_key_usages(
+        self, name: Optional[str] = None
+    ) -> KeyUsageConstraints:
+        """
+        Get a set of key usage constraints for a given validation context.
+
+        :param name:
+            The name of the validation context. If not supplied, the value
+            of :attr:`default_validation_context` will be used.
+        :return:
+            A :class:`.KeyUsageConstraints` object.
+        """
         vc_config = self._get_validation_settings_raw(name)
 
         try:
@@ -69,7 +156,18 @@ class CLIConfig:
 
         return KeyUsageConstraints.from_config(policy_settings)
 
-    def get_stamp_style(self, name=None) -> TextStampStyle:
+    def get_stamp_style(
+        self, name: Optional[str] = None
+    ) -> Union[TextStampStyle, QRStampStyle]:
+        """
+        Retrieve a stamp style by name.
+
+        :param name:
+            The name of the style. If not supplied, the value
+            of :attr:`default_stamp_style` will be used.
+        :return:
+            A :class:`TextStampStyle` or `QRStampStyle` object.
+        """
         name = name or self.default_stamp_style
         try:
             style_config = dict(self.stamp_styles[name])
@@ -79,6 +177,46 @@ class CLIConfig:
             raise ConfigurationError(e)
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
         return cls.from_config(style_config)
+
+
+@dataclass(frozen=True)
+class CLIRootConfig:
+    """
+    Config settings that are only relevant tothe CLI root and are not exposed
+    to subcommands and plugins.
+    """
+
+    config: CLIConfig
+    """
+    General CLI config.
+    """
+
+    log_config: Dict[Optional[str], LogConfig]
+    """
+    Per-module logging configuration. The keys in this dictionary are
+    module names, the :class:`.LogConfig` values define the logging settings.
+
+    The ``None`` key houses the configuration for the root logger, if any.
+    """
+
+    plugin_endpoints: List[str]
+    """
+    List of plugin endpoints to load, of the form
+    ``package.module:PluginClass``.
+    See :class:`~pyhanko.cli.plugin_api.SigningCommandPlugin`.
+
+    The value of this setting is ignored if ``--no-plugins`` is passed.
+
+    .. note::
+        This is convenient for importing plugin classes that don't live in
+        installed packages for some reason or another.
+
+        Plugins that are part of packages should define their endpoints
+        in the package metadata, which will allow them to be discovered
+        automatically. See the docs for
+        :class:`~pyhanko.cli.plugin_api.SigningCommandPlugin` for more
+        information.
+    """
 
 
 # TODO allow CRL/OCSP loading here as well (esp. CRL loading might be useful
@@ -93,9 +231,25 @@ STAMP_STYLE_TYPES: Dict[str, Type[BaseStampStyle]] = {
 }
 
 
-def parse_cli_config(yaml_str) -> CLIConfig:
+def parse_cli_config(yaml_str) -> CLIRootConfig:
     config_dict = yaml.safe_load(yaml_str) or {}
-    return CLIConfig(**process_config_dict(config_dict), raw_config=config_dict)
+    return CLIRootConfig(
+        **process_root_config_settings(config_dict),
+        config=CLIConfig(
+            **process_config_dict(config_dict), raw_config=config_dict
+        ),
+    )
+
+
+def process_root_config_settings(config_dict: dict) -> dict:
+    plugins = config_dict.get('plugins', [])
+    # logging config
+    log_config_spec = config_dict.get('logging', {})
+    log_config = parse_logging_config(log_config_spec)
+    return dict(
+        log_config=log_config,
+        plugin_endpoints=plugins,
+    )
 
 
 def process_config_dict(config_dict: dict) -> dict:
@@ -122,10 +276,6 @@ def process_config_dict(config_dict: dict) -> dict:
     except KeyError:
         pass
 
-    # logging config
-    log_config_spec = config_dict.get('logging', {})
-    log_config = parse_logging_config(log_config_spec)
-
     # some misc settings
     default_vc = config_dict.get(
         'default-validation-context', DEFAULT_VALIDATION_CONTEXT
@@ -143,7 +293,6 @@ def process_config_dict(config_dict: dict) -> dict:
 
     time_tolerance = timedelta(seconds=time_tolerance_seconds)
     retroactive_revinfo = bool(config_dict.get('retroactive-revinfo', False))
-    plugins = config_dict.get('plugins', [])
     return dict(
         validation_contexts=vcs,
         default_validation_context=default_vc,
@@ -151,6 +300,4 @@ def process_config_dict(config_dict: dict) -> dict:
         retroactive_revinfo=retroactive_revinfo,
         stamp_styles=stamp_configs,
         default_stamp_style=default_stamp_style,
-        log_config=log_config,
-        plugin_endpoints=plugins,
     )

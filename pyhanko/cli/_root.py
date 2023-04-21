@@ -1,13 +1,13 @@
 import itertools
 import logging
 from importlib import metadata
-from typing import Iterable
+from typing import Iterable, Optional
 
 import click
 
 from pyhanko import __version__
 from pyhanko.cli._ctx import CLIContext
-from pyhanko.cli.config import parse_cli_config
+from pyhanko.cli.config import CLIRootConfig, parse_cli_config
 from pyhanko.cli.plugin_api import (
     SIGNING_PLUGIN_ENTRY_POINT_GROUP,
     SIGNING_PLUGIN_REGISTRY,
@@ -67,8 +67,10 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
 
     ctx.ensure_object(CLIContext)
     ctx_obj: CLIContext = ctx.obj
+    cfg: Optional[CLIRootConfig] = None
     if config_text is not None:
-        ctx_obj.config = cfg = parse_cli_config(config_text)
+        cfg = parse_cli_config(config_text)
+        ctx_obj.config = cfg.config
         log_config = cfg.log_config
     else:
         # grab the default
@@ -76,7 +78,7 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
 
     from .commands.signing import register
 
-    plugins_to_register = _load_plugins(ctx_obj, plugins_enabled=not no_plugins)
+    plugins_to_register = _load_plugins(cfg, plugins_enabled=not no_plugins)
     register(plugins_to_register)
 
     if verbose:
@@ -115,7 +117,7 @@ def _selected_entry_points() -> metadata.EntryPoints:
     )
 
 
-def _load_plugins(ctx_obj: CLIContext, plugins_enabled: bool):
+def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
     # we always load the default ones
     to_load = [
         'pyhanko.cli.commands.signing.pkcs11_cli:PKCS11Plugin',
@@ -126,10 +128,11 @@ def _load_plugins(ctx_obj: CLIContext, plugins_enabled: bool):
 
     eps_from_metadata: Iterable[metadata.EntryPoint] = []
     if plugins_enabled:
-        if ctx_obj.config is not None:
-            to_load += [str(mod) for mod in ctx_obj.config.plugin_endpoints]
+        if root_config is not None:
+            to_load += [str(mod) for mod in root_config.plugin_endpoints]
         eps_from_metadata = _selected_entry_points()
 
+    # noinspection PyArgumentList
     to_load_as_endpoints: Iterable[metadata.EntryPoint] = [
         metadata.EntryPoint(
             name='',

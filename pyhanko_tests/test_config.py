@@ -31,6 +31,10 @@ from pyhanko.stamp import QRStampStyle, TextStampStyle
 from pyhanko_tests.samples import CRYPTO_DATA_DIR, TESTING_CA_DIR
 
 
+def _parse_cli_config(config_string):
+    return config.parse_cli_config(config_string).config
+
+
 @pytest.mark.parametrize('trust_replace', [True, False])
 def test_read_vc_kwargs(trust_replace):
     config_string = f"""
@@ -40,7 +44,7 @@ def test_read_vc_kwargs(trust_replace):
             trust-replace: {'true' if trust_replace else 'false'}
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
     assert len(vc_kwargs['other_certs']) == 2
     if trust_replace:
@@ -91,7 +95,7 @@ def test_read_qr_config():
             type: qr
             qr-position: bleh
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     default_qr_style = cli_config.get_stamp_style()
     assert isinstance(default_qr_style, QRStampStyle)
     assert default_qr_style.background is stamp.STAMP_ART_CONTENT
@@ -137,7 +141,7 @@ def test_read_bad_config():
             type: qr
             blah: blah
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     with pytest.raises(ConfigurationError):
         cli_config.get_stamp_style()
 
@@ -149,7 +153,7 @@ def test_read_bad_background_config():
             type: text
             background: 1234
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     with pytest.raises(ConfigurationError, match='must be a string'):
         cli_config.get_stamp_style()
 
@@ -160,13 +164,13 @@ def test_read_bad_config2(bad_type):
     stamp-styles:
         default: {bad_type}
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     with pytest.raises(ConfigurationError):
         cli_config.get_stamp_style()
 
 
 def test_empty_config():
-    cli_config: config.CLIConfig = config.parse_cli_config("")
+    cli_config: config.CLIConfig = _parse_cli_config("")
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
     assert 'extra_trust_roots' not in vc_kwargs
     assert 'trust_roots' not in vc_kwargs
@@ -188,7 +192,7 @@ def test_read_logging_config():
                 level: 10
                 output: stderr
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIRootConfig = config.parse_cli_config(config_string)
 
     assert cli_config.log_config[None].output == StdLogOutput.STDOUT
     assert cli_config.log_config[None].level == 'DEBUG'
@@ -202,7 +206,7 @@ def test_read_logging_config():
 
 
 def test_read_logging_config_defaults():
-    cli_config: config.CLIConfig = config.parse_cli_config(
+    cli_config: config.CLIRootConfig = config.parse_cli_config(
         """
         logging:
             root-level: DEBUG
@@ -213,7 +217,7 @@ def test_read_logging_config_defaults():
     assert cli_config.log_config[None].level == 'DEBUG'
     assert list(cli_config.log_config.keys()) == [None]
 
-    cli_config: config.CLIConfig = config.parse_cli_config(
+    cli_config: config.CLIRootConfig = config.parse_cli_config(
         """
         logging:
             root-output: 'test.log'
@@ -224,7 +228,7 @@ def test_read_logging_config_defaults():
     assert cli_config.log_config[None].level == DEFAULT_ROOT_LOGGER_LEVEL
     assert list(cli_config.log_config.keys()) == [None]
 
-    cli_config: config.CLIConfig = config.parse_cli_config("")
+    cli_config: config.CLIRootConfig = config.parse_cli_config("")
     assert cli_config.log_config[None].output == StdLogOutput.STDERR
     assert cli_config.log_config[None].level == DEFAULT_ROOT_LOGGER_LEVEL
     assert list(cli_config.log_config.keys()) == [None]
@@ -272,7 +276,7 @@ WRONG_CONFIGS = [
 @pytest.mark.parametrize('config_str', WRONG_CONFIGS)
 def test_read_logging_config_errors(config_str):
     with pytest.raises(ConfigurationError):
-        config.parse_cli_config(config_str)
+        _parse_cli_config(config_str)
 
 
 @pytest.mark.parametrize(
@@ -293,7 +297,7 @@ def test_read_key_usage(key_usage_str, key_usages):
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-key-usage: {key_usage_str}
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
     assert key_usage_settings.key_usage == key_usages
     assert key_usage_settings.extd_key_usage is None
@@ -324,7 +328,7 @@ def test_read_extd_key_usage(key_usage_str, key_usages):
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-extd-key-usage: {key_usage_str}
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
     assert key_usage_settings.key_usage is None
     assert key_usage_settings.extd_key_usage == key_usages
@@ -340,7 +344,7 @@ def test_read_key_usage_policy_1():
                 key-usage: [digital_signature, non_repudiation]
                 match-all-key-usages: true
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
     assert key_usage_settings.key_usage == {
         'digital_signature',
@@ -361,7 +365,7 @@ def test_read_key_usage_policy_2():
                 extd-key-usage: '2.999'
                 explicit-extd-key-usage-required: true
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
     assert key_usage_settings.key_usage == {
         'digital_signature',
@@ -380,7 +384,7 @@ def test_read_key_usage_policy_3():
                 key-usage: [digital_signature, non_repudiation]
                 key-usage-forbidden: data_encipherment
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     key_usage_settings = cli_config.get_signer_key_usages()
     assert key_usage_settings.key_usage == {
         'digital_signature',
@@ -408,7 +412,7 @@ def test_extd_key_usage_errors(key_usage_str):
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-extd-key-usage: {key_usage_str}
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     with pytest.raises(ConfigurationError):
         cli_config.get_signer_key_usages()
 
@@ -430,7 +434,7 @@ def test_key_usage_errors(key_usage_str):
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
             signer-key-usage: {key_usage_str}
     """
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     with pytest.raises(ConfigurationError):
         cli_config.get_signer_key_usages()
 
@@ -481,7 +485,7 @@ def test_key_usage_errors(key_usage_str):
     ],
 )
 def test_read_time_tolerance(config_string, result):
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
     assert vc_kwargs['time_tolerance'] == timedelta(seconds=result)
 
@@ -494,7 +498,7 @@ def test_read_time_tolerance_input_issues():
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
     """
     with pytest.raises(ConfigurationError, match='time-tolerance.*'):
-        cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+        cli_config: config.CLIConfig = _parse_cli_config(config_string)
         cli_config.get_validation_context(as_dict=True)
 
     config_string = f"""
@@ -504,7 +508,7 @@ def test_read_time_tolerance_input_issues():
             trust: '{TESTING_CA_DIR}/root/root.cert.pem'
     """
     with pytest.raises(ConfigurationError, match='time-tolerance.*'):
-        cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+        cli_config: config.CLIConfig = _parse_cli_config(config_string)
         cli_config.get_validation_context(as_dict=True)
 
     vc_kwargs = init_validation_context_kwargs(
@@ -581,7 +585,7 @@ def test_read_time_tolerance_input_issues():
     ],
 )
 def test_read_retroactive_revinfo(config_string, result):
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
     vc_kwargs = cli_config.get_validation_context(as_dict=True)
     if result is False:
         assert 'retroactive_revinfo' not in vc_kwargs
@@ -590,7 +594,7 @@ def test_read_retroactive_revinfo(config_string, result):
 
 
 def test_read_pkcs11_config():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -611,7 +615,7 @@ def test_read_pkcs11_config():
 
 
 def test_read_pkcs11_config_legacy():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -628,7 +632,7 @@ def test_read_pkcs11_config_legacy():
 
 
 def test_read_pkcs11_config_legacy_with_extra_criteria():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -649,7 +653,7 @@ def test_read_pkcs11_config_legacy_with_extra_criteria():
 
 
 def test_read_pkcs11_config_slot_no():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -667,7 +671,7 @@ def test_read_pkcs11_config_slot_no():
 
 
 def test_read_pkcs11_nothing_to_pull():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -682,7 +686,7 @@ def test_read_pkcs11_nothing_to_pull():
 
 
 def test_read_pkcs11_config_ids():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -698,7 +702,7 @@ def test_read_pkcs11_config_ids():
 
 
 def test_read_pkcs11_config_external_cert():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -715,7 +719,7 @@ def test_read_pkcs11_config_external_cert():
 
 
 def test_read_pkcs11_config_no_key_spec():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -729,7 +733,7 @@ def test_read_pkcs11_config_no_key_spec():
 
 
 def test_read_pkcs11_config_bad_criteria_type():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -746,7 +750,7 @@ def test_read_pkcs11_config_bad_criteria_type():
 
 
 def test_read_pkcs11_config_bad_serial():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -762,7 +766,7 @@ def test_read_pkcs11_config_bad_serial():
 
 
 def test_read_pkcs11_config_no_cert_spec():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -789,7 +793,7 @@ def test_read_pkcs11_config_no_cert_spec():
     ],
 )
 def test_read_pkcs11_prompt_pin(literal, exp_val):
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -805,7 +809,7 @@ def test_read_pkcs11_prompt_pin(literal, exp_val):
 
 
 def test_read_pkcs11_prompt_pin_default():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -820,7 +824,7 @@ def test_read_pkcs11_prompt_pin_default():
 
 
 def test_read_pkcs11_prompt_pin_invalid():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs11-setups:
             foo:
@@ -851,7 +855,7 @@ def _signer_sanity_check(signer):
 
 
 def test_read_pkcs12_config():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs12-setups:
             foo:
@@ -870,7 +874,7 @@ def test_read_pkcs12_config():
 
 
 def test_read_pkcs12_config_null_pw():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs12-setups:
             foo:
@@ -887,7 +891,7 @@ def test_read_pkcs12_config_null_pw():
 
 
 def test_read_pemder_config():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pemder-setups:
             foo:
@@ -908,7 +912,7 @@ def test_read_pemder_config():
 
 
 def test_read_pemder_config_wrong_passphrase():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pemder-setups:
             foo:
@@ -923,7 +927,7 @@ def test_read_pemder_config_wrong_passphrase():
 
 
 def test_read_pemder_config_missing_passphrase():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pemder-setups:
             foo:
@@ -939,7 +943,7 @@ def test_read_pemder_config_missing_passphrase():
 
 
 def test_read_pkcs12_config_wrong_passphrase():
-    cli_config = config.parse_cli_config(
+    cli_config = _parse_cli_config(
         f"""
         pkcs12-setups:
             foo:
@@ -1160,7 +1164,7 @@ def test_default_stamp_style_fetch():
             other-certs: '{TESTING_CA_DIR}/ca-chain.cert.pem'
     """
 
-    cli_config: config.CLIConfig = config.parse_cli_config(config_string)
+    cli_config: config.CLIConfig = _parse_cli_config(config_string)
 
     result = cli_config.get_stamp_style(None)
     from pyhanko.sign import DEFAULT_SIGNING_STAMP_STYLE

@@ -82,9 +82,7 @@ def build_vc_kwargs(
         raise click.ClickException(msg)
 
 
-def _get_key_usage_settings(
-    ctx: click.Context, validation_context: ValidationContext
-):
+def _get_key_usage_settings(ctx: click.Context, validation_context: str):
     cli_config: Optional[CLIConfig] = ctx.obj.config
     if cli_config is None:
         return None
