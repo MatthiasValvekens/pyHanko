@@ -37,6 +37,9 @@ class SigningCommandPlugin(abc.ABC):
 
     .. warning::
         This is an incubating feature. API adjustment are still possible.
+
+    .. warning::
+        Plugin support requires Python 3.8 or later.
     """
 
     subcommand_name: ClassVar[str]

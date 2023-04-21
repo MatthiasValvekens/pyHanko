@@ -1,6 +1,5 @@
 import itertools
 import logging
-from importlib import metadata
 from typing import Iterable, Optional
 
 import click
@@ -111,13 +110,24 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
         logging.debug('There was no configuration to parse.')
 
 
-def _selected_entry_points() -> metadata.EntryPoints:
-    return metadata.entry_points().select(
-        group=SIGNING_PLUGIN_ENTRY_POINT_GROUP
-    )
-
-
 def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
+    import sys
+
+    if sys.version_info < (3, 8):  # pragma: nocover
+        from pyhanko.cli.commands.signing.pkcs11_cli import (
+            BEIDPlugin,
+            PKCS11Plugin,
+        )
+        from pyhanko.cli.commands.signing.simple import (
+            PemderPlugin,
+            PKCS12Plugin,
+        )
+
+        # no plugins on 3.7, only load defaults
+        return [PemderPlugin(), PKCS12Plugin(), PKCS11Plugin(), BEIDPlugin()]
+
+    from importlib import metadata
+
     # we always load the default ones
     to_load = [
         'pyhanko.cli.commands.signing.pkcs11_cli:PKCS11Plugin',
@@ -130,7 +140,11 @@ def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
     if plugins_enabled:
         if root_config is not None:
             to_load += [str(mod) for mod in root_config.plugin_endpoints]
-        eps_from_metadata = _selected_entry_points()
+
+        # need to use dict interface for 3.8 interop
+        eps_from_metadata = metadata.entry_points().get(
+            SIGNING_PLUGIN_ENTRY_POINT_GROUP, []
+        )
 
     # noinspection PyArgumentList
     to_load_as_endpoints: Iterable[metadata.EntryPoint] = [

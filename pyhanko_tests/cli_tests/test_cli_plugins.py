@@ -1,7 +1,17 @@
+import sys
+
+import pytest
+
 from pyhanko.cli import cli_root
 from pyhanko.cli.commands.signing.simple import PKCS12Plugin
 from pyhanko.cli.plugin_api import register_signing_plugin
 from pyhanko_tests.cli_tests.conftest import _write_config
+
+if sys.version_info < (3, 8):
+    pytest.skip(
+        allow_module_level=True,
+        reason="Plugins are only supported on Python 3.8+",
+    )
 
 
 class DummyTestPlugin(PKCS12Plugin):
