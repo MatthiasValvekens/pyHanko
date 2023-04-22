@@ -8,6 +8,11 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Disable Python problem matchers
+      shell: bash
+      # we remove setup-python's problem matchers because
+      # they aren't really an asset given the way pyHanko is tested
+      run: echo "::remove-matcher owner=python::"
     - name: Install Python dependencies
       shell: bash
       run: |
