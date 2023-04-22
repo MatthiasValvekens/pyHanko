@@ -97,6 +97,7 @@ live-test = [
     "pytest-cov~=4.0.0",
 ]
 mypy = [
+    "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
     "types-requests",
     "types-python-dateutil",
     "types-pytz",
