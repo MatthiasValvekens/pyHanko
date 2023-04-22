@@ -145,3 +145,7 @@ jobs:
           flags: unittests
           env_vars: OS,PYTHON
           name: codecov-umbrella
+      - name: Clean up coverage reports
+        uses: GeekyEggo/delete-artifact@v2
+        with:
+          name: coverage
