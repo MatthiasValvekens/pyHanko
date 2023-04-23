@@ -1,0 +1,91 @@
+name: CI pipeline
+
+on:
+  push:
+    branches: [ master, "release/*", "maintenance/*", "ci/*", "ci-*" ]
+  pull_request:
+    branches: [ master ]
+  workflow_call:
+    secrets: {}
+permissions:
+  actions: read
+  contents: read
+env:
+  MAIN_PYTHON_VERSION: "3.10"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.MAIN_PYTHON_VERSION }}
+      - name: Install build tools
+        run: pip install --upgrade build setuptools pip wheel
+      - name: build
+        run: python -m build
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: pyhanko-certvalidator-dist
+          path: dist/
+  pytest-coverage:
+    runs-on: ubuntu-22.04
+    needs: build
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: pyhanko-certvalidator-dist
+          path: dist/
+      - name: Disable Python problem matchers
+        shell: bash
+        # we remove setup-python's problem matchers because
+        # they aren't really an asset given the way pyhanko-certvalidator is tested
+        run: echo "::remove-matcher owner=python::"
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          WHEEL=(dist/*.whl)
+          REQ="${WHEEL[0]}[testing]"
+          python -m pip install $REQ
+      - name: Test with pytest
+        run: python -m pytest --cov=./ --cov-report=xml:python-${{ matrix.python-version }}-coverage.xml
+      - name: Stash coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: "*-coverage.xml"
+  codecov-upload:
+    runs-on: ubuntu-22.04
+    needs: pytest-coverage
+    steps:
+      # checkout necessary to ensure the uploaded report contains the correct paths
+      - uses: actions/checkout@v3
+      - name: Retrieve coverage reports
+        uses: actions/download-artifact@v3
+        with:
+          name: coverage
+          path: ./reports/
+      - name: Upload all coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./reports/
+          flags: unittests
+          env_vars: OS,PYTHON
+          name: codecov-umbrella
+      - name: Clean up coverage reports
+        uses: GeekyEggo/delete-artifact@v2
+        with:
+          name: coverage

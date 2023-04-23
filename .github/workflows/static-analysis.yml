@@ -1,15 +1,26 @@
-name: Lint
+name: Static analysis
 
 on: ["push", "pull_request"]
 
+permissions:
+  actions: read
+  contents: read
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
-      - run: pip install isort black
+      - run: pip install --upgrade pip isort black
       - name: Check import order
         run: isort --profile black --line-length 80 --check pyhanko_certvalidator tests
       - name: Run Black
         run: black -S --line-length 80 --check pyhanko_certvalidator tests
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: jpetrucciani/mypy-check@0.991
+        with:
+          path: pyhanko
+          requirements: "-e .[mypy] --config-settings editable_mode=strict"
