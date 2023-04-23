@@ -1,0 +1,71 @@
+name: Publish release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: environment
+  push:
+    branches: [ "ci/*", "ci-*" ]
+jobs:
+  ci:
+    name: Run CI pipeline
+    uses: MatthiasValvekens/certvalidator/.github/workflows/build-pipeline.yml@master
+    permissions:
+      actions: read
+      contents: read
+  find-env:
+    name: Determine target environment
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      publish-env: ${{ steps.setenv.outputs.envname }}
+    steps:
+      - id: setenv
+        run: |
+          if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
+              echo envname=release >> "$GITHUB_OUTPUT"
+          elif [[ $GITHUB_EVENT_NAME == 'push' ]]; then
+              # at times it may be convenient to temporarily turn on release-on-push
+              # for testing purposes, so leaving this line in helps make that smoother
+              echo envname=test-release >> "$GITHUB_OUTPUT"
+          elif [[ $GITHUB_EVENT_NAME == 'workflow_dispatch' ]]; then
+              echo "envname=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          else
+              echo "Cannot run release workflow for trigger event $GITHUB_EVENT_NAME"
+              exit 1
+          fi
+          cat "$GITHUB_OUTPUT"
+  publish:
+    name: Publish release artifacts
+    needs: [ci, find-env]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.find-env.outputs.publish-env }}
+    permissions:
+      # we use PyPI's trusted publisher model -> expose identity token
+      id-token: write
+      # we want to add sigstore's artifacts to the release on GitHub
+      contents: write
+    steps:
+    - name: Download dist artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: pyhanko-certvalidator-dist
+        path: dist/
+    - name: Upload to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: ${{ vars.REPOSITORY_URL }}
+    - name: Sign with sigstore
+      uses: sigstore/gh-action-sigstore-python@v1.2.3
+      with:
+        inputs: ./dist/*
+        # useful to inspect workflow artifacts in test runs
+        upload-signing-artifacts: true
+        release-signing-artifacts: true
+        # Append only the .sigstore bundle,
+        # the .sig suffix conflicts with my own GPG signatures
+        bundle-only: true
