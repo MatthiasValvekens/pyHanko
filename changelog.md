@@ -152,7 +152,7 @@ version's API.
    `CertificateValidator.validate_tls` and the `ValidationContext.retrieve_XYZ` methods were
    deprecated in favour of their asynchronous equivalents.
  - Support two backends for fetching revocation information and certificates: `requests` (legacy)
-   and `aiohttp` (via the `async_http` optional dependency group).
+   and `aiohttp` (via the `async-http` optional dependency group).
    - It is expected that using `aiohttp` fetchers will yield better performance with the
      asynchronous APIs, but as these require some resource management on the caller's part,
      `requests` is still the default.

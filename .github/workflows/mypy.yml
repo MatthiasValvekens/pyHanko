@@ -2,7 +2,7 @@ name: MyPy check
 
 on:
   push:
-    branches: [ master, "feature/*", "bugfix/*", "maintenance/*" ]
+    branches: [ master, "feature/*", "bugfix/*", "maintenance/*", "ci-*" ]
   pull_request:
     branches: [ master ]
 
@@ -14,4 +14,4 @@ jobs:
     - uses: jpetrucciani/mypy-check@0.991
       with:
         path: pyhanko_certvalidator
-        requirements: "-e .[mypy,testing,async_http] --config-settings editable_mode=strict"
+        requirements: "-e .[mypy] --config-settings editable_mode=strict"
