@@ -1,5 +1,13 @@
 # changelog
 
+## 0.22.0
+
+ - No implementation changes compared to `0.21.2`
+ - Renamed `async_http` dependency group to `async-http`.
+ - Move towards automated GitHub Actions-based release flow
+   as a move towards better process standardisation.
+ - Sign release artifacts with Sigstore.
+
 ## 0.21.2
 
  - Fix a typing issue caused by a typo in the `requests` cert fetcher.
