@@ -249,7 +249,7 @@ class Signer:
     * :class:`.SimpleSigner` implements the easy case where all the key material
       can be loaded into memory.
     * :class:`~pyhanko.sign.pkcs11.PKCS11Signer` implements a signer that is
-      capable of interfacing with a PKCS11 device
+      capable of interfacing with a PKCS#11 device
       (see also :class:`~pyhanko.sign.beid.BEIDSigner`).
 
     :param prefer_pss:
@@ -268,10 +268,12 @@ class Signer:
 
         .. note::
             Trust roots are configured by the validator, so embedding them
-            typically does nothing in a typical validation process.
-            Therefore they can be safely omitted in most cases.
+            doesn't affect the semantics of a typical validation process.
+            Therefore, they can be safely omitted in most cases.
             Nonetheless, embedding the roots can be useful for documentation
-            purposes.
+            purposes. In addition, some validators are poorly implemented,
+            and will refuse to build paths if the roots are not present
+            in the file.
 
         .. warning::
             To be precise, if this flag is ``False``, a certificate will be
