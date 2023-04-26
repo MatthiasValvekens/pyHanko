@@ -36,7 +36,7 @@ class SigningCommandPlugin(abc.ABC):
     ``__init__`` method.
 
     .. warning::
-        This is an incubating feature. API adjustment are still possible.
+        This is an incubating feature. API adjustments are still possible.
 
     .. warning::
         Plugin support requires Python 3.8 or later.

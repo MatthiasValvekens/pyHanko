@@ -19,12 +19,14 @@ The pyHanko library roughly consists of the following components.
   signature API supplied by pyHanko.
 * The :mod:`.pyhanko.stamp` module, which implements the signature appearance
   rendering & stamping functionality.
-* Support modules to handle CLI and configuration: :mod:`.pyhanko.config` and
+* The :mod:`.pyhanko.keys` module with utilities handle key and certificate loading.
+* Support subpackages to handle CLI and configuration: :mod:`.pyhanko.config` and
   :mod:`.pyhanko.cli`. These mostly consist of very thin wrappers around library
-  functionality, and shouldn't really be considered public API.
+  functionality, and shouldn't really be considered public API, except for
+  the parts :ref:`used in the plugin system <cli-plugin-dev>`.
 
 .. toctree::
-    :maxdepth: 3
+    :maxdepth: 2
     :caption: pyHanko library topics
 
     reading-writing
@@ -32,4 +34,5 @@ The pyHanko library roughly consists of the following components.
     signing
     validation
     pdf-utils
+    cli-plugins
     adv-examples
