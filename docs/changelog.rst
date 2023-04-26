@@ -3,6 +3,210 @@ Release history
 ***************
 
 
+.. _release-0.18.0:
+
+0.18.0
+======
+
+*Release date:* 2023-04-26
+
+Note
+----
+
+This is largely a maintenance release in the sense that it adds relatively little
+in the way of core features, but it nevertheless comes with some major
+reorganisation and work to address technical debt.
+
+This release also marks pyHanko's move to beta status. That doesn't mean that
+it's feature-complete in every respect, but it does mean that we've now entered
+a stabilisation phase in anticipation of the ``1.0.0`` release, so until then
+the focus will be on fixing bugs and clearing up issues in the documentation (in
+particular regarding the API contract). After the ``1.0.0`` release, pyHanko
+will simply follow SemVer.
+
+
+Breaking changes
+----------------
+
+Some changes have been made to the :class:`~pyhanko.sign.signers.pdf_cms.Signer` class.
+For all practical purposes, these are mostly relevant for custom
+:class:`~pyhanko.sign.signers.pdf_cms.Signer` implementations. Regular users should see
+fairly little impact.
+
+ * The arguments to ``__init__`` have been made keyword-only.
+
+ * Several attributes have been turned into read-only properties:
+
+    * :attr:`~pyhanko.sign.signers.pdf_cms.Signer.signing_cert`
+    * :attr:`~pyhanko.sign.signers.pdf_cms.Signer.cert_registry`
+    * :attr:`~pyhanko.sign.signers.pdf_cms.Signer.attribute_certs`
+    * :attr:`~pyhanko.sign.signers.pdf_cms.Signer.signature_mechanism`
+
+   This change was made to better reflect the way the properties were used internally, and made it easier to set
+   expectations for the API: it doesn't make sense to allow arbitrary modifications to these properties for all
+   :class:`~pyhanko.sign.signers.pdf_cms.Signer` implementations.
+   The parameters to ``__init__`` have been extended to allow setting defaults more cleanly.
+   Implementation-wise, the properties are backed by an underscored internal variable
+   (e.g. ``_signing_cert`` for ``signing_cert``).
+   Subclasses can of course still elect to make some of these read-only properties writable by declaring setters.
+
+ * ``get_signature_mechanism`` was renamed to
+   :meth:`~pyhanko.sign.signers.pdf_cms.Signer.get_signature_mechanism_for_digest`
+   to make it more clear that it does more than just fetch the underlying value of
+   :attr:`~pyhanko.sign.signers.pdf_cms.Signer.signature_mechanism`.
+
+
+Concretely, this means that init logic of the form
+
+.. code-block:: python
+
+    class MySigner(Signer):
+        def __init__(
+            self,
+            signing_cert: x509.Certificate,
+            cert_registry: CertificateStore,
+            *args, **kwargs
+        ):
+            self.signing_cert = signing_cert
+            self.cert_registry = cert_registry
+            self.signature_mechanism = signature_mechanism
+            super().__init__()
+
+needs to be rewritten as
+
+.. code-block:: python
+
+    class MySigner(Signer):
+        def __init__(
+            self,
+            signing_cert: x509.Certificate,
+            cert_registry: CertificateStore,
+            *args, **kwargs
+        ):
+            self._signing_cert = signing_cert
+            self._cert_registry = cert_registry
+            self._signature_mechanism = signature_mechanism
+            super().__init__()
+
+or, alternatively, as
+
+.. code-block:: python
+
+    class MySigner(Signer):
+        def __init__(
+            self,
+            signing_cert: x509.Certificate,
+            cert_registry: CertificateStore,
+            *args, **kwargs
+        ):
+            super().__init__(
+                signing_cert=signing_cert,
+                cert_registry=cert_registry,
+                signature_mechanism=signature_mechanism
+            )
+
+
+Other than these, there have been some miscellaneous changes.
+
+ * The CLI no longer allows signing files encrypted using public-key encryption targeted towards the signer's
+   certificate, because that feature didn't make much sense in key management terms, was rarely used, and hard to
+   integrate with the new plugin system.
+ * APIs with ``status_cls`` parameters have made certain args keyword-only for strict type checking purposes.
+ * Move ``add_content_to_page`` to :meth:`~pyhanko.pdf_utils.content.PdfContent.add_to_page` to deal with a
+   (conceptual) circular dependency between modules.
+ * :class:`~pyhanko_certvalidator.registry.CertificateStore` is no longer reexported by :mod:`pyhanko.sign.general`.
+ * The :class:`~pyhanko.sign.beid.BEIDSigner` no longer allows convenient access to the authentication certificate.
+ * Packaging-wise, underscores have been replaced with hyphens in optional dependency groups.
+ * In ``pyhanko_certvalidator``, :class:`~pyhanko_certvalidator.errors.InvalidCertificateError`
+   is no longer a subclass of :class:`~pyhanko_certvalidator.errors.PathValidationError`.
+
+Finally, some internal refactoring took place as well:
+
+ * The ``cli.py`` module was refactored into a new subpackage (:mod:`pyhanko.cli`) and is now
+   also tested systematically.
+ * CLI config classes have been refactored, some configuration was moved to the new :mod:`pyhanko.config` package.
+ * Time tolerance config now passes around timedelta objects instead of second values.
+ * The :func:`~pyhanko.sign.diff_analysis.commons.qualify` function in the difference analysis
+   has been split into :func:`~pyhanko.sign.diff_analysis.commons.qualify` and
+   :func:`~pyhanko.sign.diff_analysis.commons.qualify_transforming`.
+
+
+Organisational changes
+----------------------
+
+ * Certificate and key loading was moved to a new :mod:`pyhanko.keys` module, but :mod:`pyhanko.sign.general`
+   still reexports the relevant functions for backwards compatibility.
+   Concretely, the affected functions are
+
+    * :func:`pyhanko.keys.load_cert_from_pemder`,
+    * :func:`pyhanko.keys.load_certs_from_pemder`,
+    * :func:`pyhanko.keys.load_certs_from_pemder_data`,
+    * :func:`pyhanko.keys.load_private_key_from_pemder`,
+    * :func:`pyhanko.keys.load_private_key_from_pemder_data`.
+
+  * Onboarded ``mypy`` and flag pyHanko as a typed library by adding ``py.typed``.
+
+  * Package metadata and tooling settings have now been centralised to ``pyproject.toml``.
+    Other configuration files like ``setup.py``, ``requirements.txt`` and most tool-specific config
+    have been eliminated.
+
+  * The docstring-based documentation for ``pyhanko_certvalidator`` was added to the API reference.
+
+  * Some non-autogenerated API reference documentation pages were consolidated to reduce the sprawl.
+
+  * Heavily reworked the CI/CD pipeline. PyHanko releases are now published via GitHub Actions
+    and signed with Sigstore. GPG signatures will continue to be provided for the time being.
+
+
+Dependency changes
+------------------
+
+ * Bump ``pyhanko-certvalidator`` to ``0.22.0``.
+ * Relax the upper bound on ``uharfbuzz`` for better Python 3.11 support
+
+Bugs fixed
+----------
+
+ * The AdES LTA validator now tolerates documents that don't have a DSS (assuming
+   that all the required information is otherwise present).
+ * Ensure that the :attr:`~pyhanko.sign.validation.status.SignatureStatus.trusted`
+   attribute on :class:`~pyhanko.sign.validation.status.SignatureStatus` is not set
+   if the validation path is not actually available.
+ * Correct the typing on
+   :attr:`~pyhanko.sign.validation.status.SignatureStatus.validation_path`.
+ * Fix several result presentation bugs in the AdES code.
+ * Fix overeager sharing of :class:`~pyhanko_certvalidator.ltv.poe.POEManager` objects in AdES code.
+ * Correct algo policy handling in AdES-with-time validation.
+ * Ensure that ``container_ref`` is also populated on past versions of the
+   trailer dictionary.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * :ref:`The CLI now features plugins <cli-plugin-dev>`!
+   All current ``addsig`` subcommands have been reimplemented to use the plugin
+   interface. Other plugins will be auto-detected through package entry points.
+
+
+Validation
+^^^^^^^^^^
+
+ * Refine algorithm policy handling; put in place a subclass of
+   :class:`~pyhanko_certvalidator.policy_decl.AlgorithmUsagePolicy` specifically
+   for CMS validation;
+   see :class:`~pyhanko.sign.validation.utils.CMSAlgorithmUsagePolicy`.
+ * Try to remember paths when validation fails.
+ * Make certificates from local CMS context available during path building
+   for past certificate validation (subject to PoE checks).
+ * Move :attr:`~pyhanko.sign.validation.status.ModificationInfo.docmdp_ok` up in
+   the hierarchy to :class:`~pyhanko.sign.validation.status.ModificationInfo`.
+
+
+
 .. _release-0.17.2:
 
 0.17.2

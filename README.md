@@ -10,7 +10,7 @@ The lack of open-source CLI tooling to handle digitally signing and stamping PDF
 
 *Note:* The working title of this project (and former name of the repository on GitHub) was `pdf-stamp`, which might still linger in some references.
 
-*Note:* This project is currently in alpha, and not yet production-ready.
+*Note:* This project is currently in beta, and not yet production-ready.
 
 ### Installing
 
