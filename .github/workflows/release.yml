@@ -1,9 +1,6 @@
 name: Publish release
 
 on:
-  release:
-    types:
-      - published
   workflow_dispatch:
     inputs:
       environment:
@@ -17,12 +14,13 @@ jobs:
     permissions:
       actions: read
       contents: read
-  find-env:
-    name: Determine target environment
+  extract-params:
+    name: Determine release parameters
     runs-on: ubuntu-latest
     permissions: {}
     outputs:
       publish-env: ${{ steps.setenv.outputs.envname }}
+      release-version: ${{ steps.getversion.outputs.version }}
     steps:
       - id: setenv
         run: |
@@ -39,22 +37,46 @@ jobs:
               exit 1
           fi
           cat "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v3
+      - name: Get version information
+        id: getversion
+        run: |
+          set -eo pipefail
+          grep __version__ < pyhanko/version.py \
+            | sed "s/__version__ = '\(.*\)'/version=\1/" >> "$GITHUB_OUTPUT"
+      - name: Generate release body
+        run: |
+          sed "s/:VERSION/$VERSION/g" < .github/gh-release-template.md > release.md
+          cat release.md
+        env:
+          VERSION: ${{ steps.getversion.outputs.version }}
+      - name: Upload release body
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-body
+          path: release.md
   publish:
     name: Publish release artifacts
-    needs: [ci, find-env]
+    needs: [ci, extract-params]
     runs-on: ubuntu-latest
-    environment: ${{ needs.find-env.outputs.publish-env }}
+    environment: ${{ needs.extract-params.outputs.publish-env }}
     permissions:
       # we use PyPI's trusted publisher model -> expose identity token
       id-token: write
       # we want to add sigstore's artifacts to the release on GitHub
       contents: write
+      discussions: write
     steps:
     - name: Download dist artifacts
       uses: actions/download-artifact@v3
       with:
         name: pyhanko-dist
         path: dist/
+    - name: Download release body
+      uses: actions/download-artifact@v3
+      with:
+        name: release-body
+        path: release.md
     - name: Upload to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
@@ -65,7 +87,16 @@ jobs:
         inputs: ./dist/*
         # useful to inspect workflow artifacts in test runs
         upload-signing-artifacts: true
-        release-signing-artifacts: true
         # Append only the .sigstore bundle,
         # the .sig suffix conflicts with my own GPG signatures
         bundle-only: true
+    - name: Create GitHub release
+      if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*
+        body_path: release.md
+        fail_on_unmatched_files: true
+        discussion_category_name: Announcements
+        prerelease: true
+        name: pyHanko ${{ needs.extract-params.outputs.version }} beta
