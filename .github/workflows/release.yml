@@ -94,9 +94,12 @@ jobs:
       if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/*
+        files: |
+          dist/*.whl
+          dist/*.tar.gz
+          dist/*.sigstore
         body_path: release.md
         fail_on_unmatched_files: true
         discussion_category_name: Announcements
         prerelease: true
-        name: pyHanko ${{ needs.extract-params.outputs.version }} beta
+        name: pyHanko ${{ needs.extract-params.outputs.release-version }} beta
