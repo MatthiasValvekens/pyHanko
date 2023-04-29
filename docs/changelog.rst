@@ -2,6 +2,21 @@
 Release history
 ***************
 
+.. _release-0.18.1:
+
+0.18.1
+======
+
+*Release date:* 2023-04-29
+
+
+Dependency changes
+------------------
+
+ * Remove dependency on ``pytz`` with fallback to ``backports.zoneinfo``
+ * Bump ``tzlocal`` version to ``4.3``.
+ * Do not rely on deprecated timezone API anymore in the tests.
+   See `PR #257 <https://github.com/MatthiasValvekens/pyHanko/pull/257>`_.
 
 .. _release-0.18.0:
 
