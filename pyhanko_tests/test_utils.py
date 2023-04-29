@@ -1,13 +1,13 @@
 import datetime
 import itertools
 import os
+from datetime import timezone
 from fractions import Fraction
 from io import BytesIO
 from itertools import product
 from typing import Tuple
 
 import pytest
-import pytz
 
 import pyhanko.pdf_utils.extensions
 from pyhanko.pdf_utils import generic, misc, writer
@@ -24,6 +24,12 @@ from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 from .samples import *
+
+try:
+    import zoneinfo
+except ImportError:
+    # noinspection PyUnresolvedReferences
+    from backports import zoneinfo
 
 
 @pytest.mark.parametrize(
@@ -490,7 +496,7 @@ def test_box_constraint_recalc():
 def test_trailer_update():
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     w._update_meta = lambda: None
-    dt = generic.pdf_date(datetime.datetime(2020, 10, 10, tzinfo=pytz.utc))
+    dt = generic.pdf_date(datetime.datetime(2020, 10, 10, tzinfo=timezone.utc))
 
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.trailer['/Info'] = w.add_object(info)
@@ -576,7 +582,7 @@ TESTDATE_CET = datetime.datetime(
     hour=1,
     minute=5,
     second=59,
-    tzinfo=pytz.timezone('CET'),
+    tzinfo=zoneinfo.ZoneInfo('Europe/Brussels'),
 )
 
 TESTDATE_EST = datetime.datetime(
@@ -586,7 +592,7 @@ TESTDATE_EST = datetime.datetime(
     hour=1,
     minute=5,
     second=59,
-    tzinfo=pytz.timezone('EST'),
+    tzinfo=zoneinfo.ZoneInfo('America/New_York'),
 )
 
 
@@ -617,7 +623,7 @@ TESTDATE_EST = datetime.datetime(
                 hour=1,
                 minute=5,
                 second=59,
-                tzinfo=pytz.utc,
+                tzinfo=timezone.utc,
             ),
         ),
         ('D:20080203010559+01\'00', TESTDATE_CET),
@@ -1401,17 +1407,29 @@ def test_parse_name_invalid_utf8():
     [
         (
             datetime.datetime(
-                2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('EST')
+                2020,
+                12,
+                26,
+                15,
+                5,
+                11,
+                tzinfo=zoneinfo.ZoneInfo('America/New_York'),
             ),
             "D:20201226150511-05'00'",
         ),
         (
-            datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=pytz.utc),
+            datetime.datetime(2020, 12, 26, 15, 5, 11, tzinfo=timezone.utc),
             "D:20201226150511Z",
         ),
         (
             datetime.datetime(
-                2020, 12, 26, 15, 5, 11, tzinfo=pytz.timezone('CET')
+                2020,
+                12,
+                26,
+                15,
+                5,
+                11,
+                tzinfo=zoneinfo.ZoneInfo('Europe/Brussels'),
             ),
             "D:20201226150511+01'00'",
         ),

@@ -35,9 +35,8 @@ classifiers = [
 requires-python = ">=3.7"
 dependencies = [
     "asn1crypto>=1.5.1",
-    "pytz>=2020.1",
     "qrcode>=6.1",
-    "tzlocal>=2.1",
+    "tzlocal>=4.3",
     "pyhanko-certvalidator==0.22.*",
     "click>=7.1.2",
     "requests>=2.24.0",
@@ -82,6 +81,7 @@ testing-basic = [
     "pytest-asyncio==0.21.0",
     "certomancer~=0.9.1",
     "pytest-cov~=4.0.0",
+    "backports.zoneinfo[tzdata];python_version<\"3.9\"",
 ]
 testing = [
     "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
@@ -100,7 +100,6 @@ mypy = [
     "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
     "types-requests",
     "types-python-dateutil",
-    "types-pytz",
     "types-PyYAML",
     "types-tzlocal",
 ]

@@ -1,10 +1,9 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from itertools import product
 
 import pytest
-import pytz
 from freezegun.api import freeze_time
 
 from pyhanko.pdf_utils import generic, misc
@@ -74,7 +73,7 @@ def test_no_changes_policy():
 
     w = IncrementalPdfFileWriter(out)
     # do an /Info update
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.set_info(info)
     w.write_in_place()
@@ -116,7 +115,7 @@ def test_double_sig_add_field(file_ix):
     # create a new signature field after signing
     w = IncrementalPdfFileWriter(out)
     # throw in an /Info update for good measure
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.set_info(info)
 
@@ -163,7 +162,7 @@ def test_double_sig_different_pages():
 
     w = IncrementalPdfFileWriter(out)
     # throw in an /Info update for good measure
-    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=pytz.utc))
+    dt = generic.pdf_date(datetime(2020, 10, 10, tzinfo=timezone.utc))
     info = generic.DictionaryObject({pdf_name('/CreationDate'): dt})
     w.set_info(info)
     w.write_in_place()
