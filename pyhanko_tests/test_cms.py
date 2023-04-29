@@ -1,12 +1,11 @@
 import hashlib
 import itertools
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
 
 import pytest
-import pytz
 import tzlocal
 import yaml
 from asn1crypto import algos, cms, core, keys
@@ -276,7 +275,7 @@ async def test_detached_cms_with_tst():
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
-    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.timestamp_validity.timestamp == datetime.now(tz=timezone.utc)
     assert 'The TSA certificate is untrusted' in status.pretty_print_details()
     assert status.valid
     assert status.intact
@@ -302,12 +301,12 @@ async def test_detached_cms_with_content_tst():
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
-    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.timestamp_validity.timestamp == datetime.now(tz=timezone.utc)
     assert status.content_timestamp_validity
     assert status.content_timestamp_validity.intact
     assert status.content_timestamp_validity.valid
     assert status.content_timestamp_validity.timestamp == datetime.now(
-        tz=pytz.utc
+        tz=timezone.utc
     )
     pretty_print = status.pretty_print_details()
     assert 'The TSA certificate is untrusted' in pretty_print
@@ -359,12 +358,12 @@ async def test_detached_cms_with_wrong_tst():
     assert not status.timestamp_validity.intact
     assert status.timestamp_validity.valid
 
-    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.timestamp_validity.timestamp == datetime.now(tz=timezone.utc)
     assert status.content_timestamp_validity
     assert status.content_timestamp_validity.intact
     assert status.content_timestamp_validity.valid
     assert status.content_timestamp_validity.timestamp == datetime.now(
-        tz=pytz.utc
+        tz=timezone.utc
     )
     assert status.valid
     assert status.intact
@@ -405,13 +404,13 @@ async def test_detached_cms_with_wrong_content_tst():
     assert status.signer_reported_dt is None
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
-    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.timestamp_validity.timestamp == datetime.now(tz=timezone.utc)
     assert status.content_timestamp_validity
     assert not status.content_timestamp_validity.intact
     # internally, the content timestamp is OK
     assert status.content_timestamp_validity.valid
     assert status.content_timestamp_validity.timestamp == datetime.now(
-        tz=pytz.utc
+        tz=timezone.utc
     )
     pretty_print = status.pretty_print_details()
     assert 'The TSA certificate is untrusted' in pretty_print
@@ -1725,10 +1724,10 @@ async def test_detached_cades_cms_with_tst():
     status = await async_validate_detached_cms(
         b'Hello world!', signature['content']
     )
-    assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
+    assert status.signer_reported_dt == datetime.now(tz=timezone.utc)
     assert status.timestamp_validity.intact
     assert status.timestamp_validity.valid
-    assert status.timestamp_validity.timestamp == datetime.now(tz=pytz.utc)
+    assert status.timestamp_validity.timestamp == datetime.now(tz=timezone.utc)
     assert 'The TSA certificate is untrusted' in status.pretty_print_details()
     assert status.valid
     assert status.intact

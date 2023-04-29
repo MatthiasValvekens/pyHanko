@@ -1,10 +1,9 @@
 import itertools
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 
 import pytest
-import pytz
 import tzlocal
 from freezegun import freeze_time
 
@@ -16,6 +15,12 @@ from pyhanko.pdf_utils.misc import StringWithLanguage
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko_tests.samples import MINIMAL, PDF_DATA_DIR, VECTOR_IMAGE_PDF
+
+try:
+    import zoneinfo
+except ImportError:
+    # noinspection PyUnresolvedReferences
+    from backports import zoneinfo
 
 
 def test_no_meta_view_fails_gracefully():
@@ -73,7 +78,9 @@ def test_incremental_update_meta_view():
 @freeze_time(datetime(2022, 9, 7, tzinfo=tzlocal.get_localzone()))
 @pytest.mark.parametrize('writer_type', ('fresh', 'from_data', 'incremental'))
 def test_writer_meta_view_does_not_persist_changes(writer_type):
-    exp_value = datetime(2020, 9, 5, 19, 30, 57, tzinfo=pytz.FixedOffset(120))
+    exp_value = datetime(
+        2020, 9, 5, 19, 30, 57, tzinfo=zoneinfo.ZoneInfo('CET')
+    )
     if writer_type == 'fresh':
         w = PdfFileWriter()
         exp_value = None
@@ -96,7 +103,7 @@ def test_writer_meta_view_does_not_persist_changes(writer_type):
                 {'title': 'Test test'},
                 {'author': 'John Doe'},
                 {'keywords': ['foo', 'bar', 'baz']},
-                {'created': datetime(2022, 9, 7, tzinfo=pytz.utc)},
+                {'created': datetime(2022, 9, 7, tzinfo=timezone.utc)},
                 {'author': 'John Doe', 'subject': 'Blah blah blah'},
             ],
             ("pdf1.7", "pdf2.0"),

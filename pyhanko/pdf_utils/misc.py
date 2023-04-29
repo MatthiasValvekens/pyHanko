@@ -10,12 +10,12 @@ classes.
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from io import BytesIO
 from typing import Callable, Generator, Iterable, Optional, TypeVar, Union
 
-from pyhanko_certvalidator.util import ConsList
+from pyhanko_certvalidator.util import CancelableAsyncIterator, ConsList
 
 __all__ = [
     'PdfError',
@@ -49,9 +49,6 @@ __all__ = [
     'isoparse',
     'lift_iterable_async',
 ]
-
-import pytz
-from pyhanko_certvalidator import CancelableAsyncIterator
 
 DEFAULT_CHUNK_SIZE = 4096
 """
@@ -542,7 +539,7 @@ def isoparse(dt_str: str) -> datetime:
     dt = parse(dt_str)
     if dt.tzinfo is None:
         # assume UTC
-        dt = dt.replace(tzinfo=pytz.UTC)
+        dt = dt.replace(tzinfo=timezone.utc)
     return dt
 
 
