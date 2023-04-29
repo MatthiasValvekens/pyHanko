@@ -1,10 +1,9 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Iterable
 
 import pytest
-import pytz
 from asn1crypto import cms, core, tsp
 from certomancer.integrations.illusionist import Illusionist
 from certomancer.registry import ArchLabel, CertLabel, KeyLabel
@@ -837,7 +836,7 @@ def test_add_revinfo_and_timestamp(requests_mock):
             {'trust_roots': TRUST_ROOTS},
         )
         assert status.valid and status.trusted
-        assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
+        assert status.signer_reported_dt == datetime.now(tz=timezone.utc)
 
         # ... but PAdES-LTA should fail
         with pytest.raises(
@@ -884,7 +883,7 @@ def test_add_revinfo_and_lta_timestamp(requests_mock):
             {'trust_roots': TRUST_ROOTS},
         )
         assert status.valid and status.trusted
-        assert status.signer_reported_dt == datetime.now(tz=pytz.utc)
+        assert status.signer_reported_dt == datetime.now(tz=timezone.utc)
 
     # test post-expiration, but before timestamp expires
     with freeze_time('2025-11-01'):
