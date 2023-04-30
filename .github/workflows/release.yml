@@ -76,7 +76,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: release-body
-        path: release.md
+        path: release-body
     - name: Upload to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
@@ -98,7 +98,7 @@ jobs:
           dist/*.whl
           dist/*.tar.gz
           dist/*.sigstore
-        body_path: release.md
+        body_path: release-body/release.md
         fail_on_unmatched_files: true
         discussion_category_name: Announcements
         prerelease: true
