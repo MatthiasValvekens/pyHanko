@@ -32,6 +32,13 @@ DEFAULT_WEAK_HASH_ALGOS = frozenset(['md2', 'md5', 'sha1'])
 Digest algorithms considered weak by default.
 """
 
+FRESHNESS_FALLBACK_VALIDITY_DEFAULT = timedelta(minutes=30)
+"""
+Default freshness used by the default/legacy freshness policy
+when the revocation information does not specify a next update
+time. In practice this only applies to OCSP responses.
+"""
+
 
 @enum.unique
 class RevocationCheckingRule(enum.Enum):
@@ -252,6 +259,8 @@ class CertRevTrustPolicy:
     Freshness interval. If not specified, this defaults to the distance
     between ``thisUpdate`` and ``nextUpdate`` for the given piece of revocation
     information.
+    If the ``nextUpdate`` field is not present, then the effective default
+    is 30 minutes.
     """
 
     freshness_req_type: FreshnessReqType = FreshnessReqType.DEFAULT

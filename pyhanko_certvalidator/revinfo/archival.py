@@ -12,6 +12,7 @@ from pyhanko_certvalidator.ltv.types import (
     ValidationTimingParams,
 )
 from pyhanko_certvalidator.policy_decl import (
+    FRESHNESS_FALLBACK_VALIDITY_DEFAULT,
     CertRevTrustPolicy,
     FreshnessReqType,
 )
@@ -85,7 +86,7 @@ class RevinfoUsability:
 
     last_usable_at: Optional[datetime] = None
     """
-    The last date at which the revocation infromation could have been
+    The last date at which the revocation information could have been
     considered usable, if applicable.
     """
 
@@ -219,7 +220,12 @@ def _judge_revinfo(
         # check whether the validation time falls within the
         # thisUpdate-nextUpdate window (non-AdES!!)
         if next_update is None:
-            return RevinfoUsability(RevinfoUsabilityRating.UNCLEAR)
+            # OCSP semantics of nextUpdate = VOID is "please request
+            # another update whenever you like".
+            # In our default/legacy validation model this is difficult to
+            # interpret.
+            # for historical point-in-time validation, this is disqualifying
+            next_update = this_update + FRESHNESS_FALLBACK_VALIDITY_DEFAULT
 
         retroactive = policy.retroactive_revinfo
 
