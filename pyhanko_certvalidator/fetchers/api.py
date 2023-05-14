@@ -68,7 +68,7 @@ class CRLFetcher(abc.ABC):
         self,
         cert: Union[x509.Certificate, cms.AttributeCertificateV2],
         *,
-        use_deltas=None
+        use_deltas=None,
     ) -> Iterable[crl.CertificateList]:
         """
         Fetches the CRLs for a certificate.
