@@ -61,7 +61,7 @@ options, including: validation at a specific moment in time, whitelisting and re
  - *uritools*
  - *oscrypto*
  - *requests* or *aiohttp* (use the latter for more efficient asyncio, requires resource management)
- - Python 3.7, 3.8, 3.9 or 3.10
+ - Python 3.7 or higher
 
  ### Note on compatibility
 
@@ -80,15 +80,7 @@ pip install pyhanko-certvalidator
 *certvalidator* is licensed under the terms of the MIT license. See the
 [LICENSE](LICENSE) file for the exact license text.
 
-## Documentation
 
-[*certvalidator* documentation](docs/readme.md)
-
-## Continuous Integration
-
-Various combinations of platforms and versions of Python are tested via:
-
- - [GitHub Actions](https://github.com/MatthiasValvekens/certvalidator/actions)
 
 ## Testing
 
