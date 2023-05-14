@@ -99,6 +99,5 @@ jobs:
           dist/*.sigstore
         body_path: release-body/release.md
         fail_on_unmatched_files: true
-        discussion_category_name: Announcements
         prerelease: true
         name: pyhanko-certvalidator ${{ needs.extract-params.outputs.release-version }}
