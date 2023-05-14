@@ -31,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Topic :: Security :: Cryptography",
 ]
+requires-python = ">=3.7"
 dependencies = [
     "asn1crypto>=1.5.1",
     "oscrypto>=1.1.0",
