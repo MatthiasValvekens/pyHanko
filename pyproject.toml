@@ -86,7 +86,6 @@ testing-basic = [
 testing = [
     "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
     "pytest-aiohttp~=1.0.4",
-    "certomancer==0.11.*",
 ]
 live-test = [
     "pyHanko[testing-basic,xmp,async-http,extra-pubkey-algs]",
