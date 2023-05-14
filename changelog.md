@@ -1,5 +1,11 @@
 # changelog
 
+
+## 0.23.0
+
+ - Improve processing of OCSP responses without `nextUpdate`
+ - Some more package metadata & release flow tweaks
+
 ## 0.22.0
 
  - No implementation changes compared to `0.21.2`
