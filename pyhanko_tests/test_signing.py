@@ -6,9 +6,12 @@ from io import BytesIO
 
 import pytest
 from asn1crypto.algos import SignedDigestAlgorithm
+from certomancer.integrations.illusionist import Illusionist
+from certomancer.registry import CertLabel, KeyLabel
 from freezegun import freeze_time
 from pyhanko_certvalidator import CertificateValidator, ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError
+from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 import pyhanko.pdf_utils.content
 import pyhanko.sign.fields
@@ -459,6 +462,44 @@ def test_ocsp_embed():
 
     vc = apply_adobe_revocation_info(s.signer_info)
     assert len(vc.ocsps) == 1
+
+
+@freeze_time('2020-11-01')
+def test_ocsp_without_nextupdate_embed(requests_mock):
+    ca = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-ocsp-no-nextupdate'))
+    vc = ValidationContext(
+        trust_roots=[ca.get_cert(CertLabel('root'))],
+        allow_fetching=True,
+        other_certs=[],
+    )
+
+    signer = signers.SimpleSigner(
+        signing_cert=ca.get_cert(CertLabel('signer-special')),
+        signing_key=ca.key_set.get_private_key(KeyLabel('signer1')),
+        cert_registry=SimpleCertificateStore.from_certs(
+            [ca.get_cert(CertLabel('root')), ca.get_cert(CertLabel('interm'))]
+        ),
+    )
+    Illusionist(ca).register(requests_mock)
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
+    out = signers.sign_pdf(
+        w,
+        signers.PdfSignatureMetadata(
+            field_name='Sig1',
+            validation_context=vc,
+            embed_validation_info=True,
+        ),
+        signer=signer,
+    )
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    vc = apply_adobe_revocation_info(s.signer_info)
+    assert len(vc.ocsps) == 1
+    assert len(vc.crls) == 1
+
+    simple_response = vc.ocsps[0]['response_bytes']['response']
+    rdata = simple_response.parsed['tbs_response_data']
+    assert rdata['responses'][0]['next_update'].native is None
 
 
 @freeze_time('2020-11-01')

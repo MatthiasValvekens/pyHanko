@@ -340,6 +340,34 @@ pki-architectures:
   testing-ca-ed448:
     template: testing-ca
     keyset: testing-ca-ed448
+  testing-ca-ocsp-no-nextupdate:
+    template: testing-ca
+    keyset: testing-ca-ed25519
+    certs:
+      signer-special:
+        subject: signer1
+        issuer: interm
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2022-01-01T00:00:00+0000"
+        profiles:
+          - digsig-commitment
+        extensions:
+          - id: authority_information_access
+            smart-value:
+              schema: aia-urls
+              params:
+                ocsp-responder-names: [interm-no-nextupdate]
+                ca-issuer-links:
+                  - repo: interm
+                    include-repo-authority: true
+    services:
+      ocsp:
+        interm-no-nextupdate:
+          for-issuer: interm
+          responder-cert: interm-ocsp
+          signing-key: interm-ocsp
+          validity-period: {}
   testing-ca-with-aa:
     template: testing-ca
     entities:
