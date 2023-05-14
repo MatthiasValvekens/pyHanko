@@ -79,21 +79,20 @@ testing-basic = [
     "requests-mock>=1.8.0",
     "freezegun>=1.1.0",
     "pytest-asyncio==0.21.0",
-    "certomancer~=0.9.1",
+    "certomancer>=0.11.0,<0.12.0",
     "pytest-cov~=4.0.0",
     "backports.zoneinfo[tzdata];python_version<\"3.9\"",
 ]
 testing = [
     "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
     "pytest-aiohttp~=1.0.4",
-    "certomancer-csc-dummy==0.2.1",
     "certomancer~=0.9.1",
 ]
 live-test = [
     "pyHanko[testing-basic,xmp,async-http,extra-pubkey-algs]",
     "pytest-aiohttp~=1.0.4",
-    "certomancer-csc-dummy==0.2.1",
-    "certomancer[web-api,pkcs12]~=0.9.1",
+    "certomancer-csc-dummy==0.2.2",
+    "certomancer[web-api,pkcs12]>=0.11.0,<0.12.0",
     "pytest-cov~=4.0.0",
 ]
 mypy = [

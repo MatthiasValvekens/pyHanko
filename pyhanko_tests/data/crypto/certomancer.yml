@@ -155,51 +155,28 @@ pki-architectures:
         validity:
           valid-from: "2000-01-01T00:00:00+0000"
           valid-to: "2500-01-01T00:00:00+0000"
-        extensions:
-          - id: basic_constraints
-            critical: true
-            value:
-              ca: true
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [digital_signature, key_cert_sign, crl_sign]
+        profiles:
+          - id: simple-ca
+            params:
+              crl-repo: root
       interm:
         issuer: root
         validity:
           valid-from: "2000-01-01T00:00:00+0000"
           valid-to: "2100-01-01T00:00:00+0000"
-        extensions:
-          - id: basic_constraints
-            critical: true
-            value:
-              ca: true
-              path-len-constraint: 0
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [digital_signature, key_cert_sign, crl_sign]
-          - id: crl_distribution_points
-            smart-value:
-              schema: crl-dist-url
-              params: {crl-repo-names: [root]}
+        profiles:
+          - id: simple-ca
+            params:
+              max-path-len: 0
+              crl-repo: interm
+              ocsp-service: interm
       interm-ocsp:
         issuer: interm
         validity:
           valid-from: "2000-01-01T00:00:00+0000"
           valid-to: "2100-01-01T00:00:00+0000"
-        extensions:
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [digital_signature]
-          - id: extended_key_usage
-            critical: true
-            value: [ocsp_signing]
-          - id: ocsp_no_check
+        profiles:
+          - ocsp-responder
       tsa:
         issuer: root
         validity:
@@ -230,17 +207,9 @@ pki-architectures:
         validity:
           valid-from: "2020-01-01T00:00:00+0000"
           valid-to: "2022-01-01T00:00:00+0000"
+        profiles:
+          - digsig-commitment
         extensions:
-          - id: key_usage
-            critical: true
-            smart-value:
-              schema: key-usage
-              params: [digital_signature, non_repudiation]
-          - id: crl_distribution_points
-            smart-value:
-              schema: crl-dist-url
-              params:
-                crl-repo-names: [interm]
           - id: authority_information_access
             smart-value:
               schema: aia-urls
