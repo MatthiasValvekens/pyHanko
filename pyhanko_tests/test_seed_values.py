@@ -168,7 +168,9 @@ def test_sv_mdp_type():
         )
     with pytest.raises(SigningError):
         fields.SigSeedValueSpec.from_pdf_object(
-            generic.DictionaryObject({pdf_name('/MDP'): generic.NullObject()})
+            generic.DictionaryObject(
+                {pdf_name('/MDP'): generic.NumberObject(5)}
+            )
         )
 
 

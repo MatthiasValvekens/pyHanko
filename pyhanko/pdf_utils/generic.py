@@ -1201,7 +1201,11 @@ class DictionaryObject(dict, PdfObject):
                 raw_obj.reference, as_metadata_stream=True
             )
         else:
-            return raw_obj.get_object()
+            deref_obj = raw_obj.get_object()
+            if isinstance(deref_obj, NullObject):
+                raise KeyError(key)
+            else:
+                return deref_obj
 
     def get_and_apply(
         self,
