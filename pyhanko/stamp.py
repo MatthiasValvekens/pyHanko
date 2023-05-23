@@ -859,7 +859,7 @@ def _stamp_file(
     **stamp_kwargs,
 ):
     with open(input_name, 'rb') as fin:
-        pdf_out = IncrementalPdfFileWriter(fin)
+        pdf_out = IncrementalPdfFileWriter(fin, strict=False)
         stamp = stamp_class(writer=pdf_out, style=style, **stamp_kwargs)
         stamp.apply(dest_page, x, y)
 

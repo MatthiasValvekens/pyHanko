@@ -32,7 +32,8 @@ For API users, that means passing ``strict=False`` to any
 :class:`~pyhanko.pdf_utils.reader.PdfFileReader` objects that could touch hybrid files.
 
 For CLI users, there's the ``--no-strict-syntax`` switch, which is available for both signing
-and validation subcommands.
+and validation subcommands. Non-cryptographic CLI subcommands (e.g. ``stamp`` and ``addfields``)
+always open files in nonstrict mode.
 
 
 Why am I getting path building errors?

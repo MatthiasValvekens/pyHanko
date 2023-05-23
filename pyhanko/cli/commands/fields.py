@@ -23,7 +23,7 @@ __all__ = ['list_sigfields', 'add_sig_field']
 )
 def list_sigfields(infile, skip_status):
     with pyhanko_exception_manager():
-        r = PdfFileReader(infile)
+        r = PdfFileReader(infile, strict=False)
         field_info = fields.enumerate_sig_fields(r)
         for ix, (name, value, field_ref) in enumerate(field_info):
             if skip_status:
@@ -42,7 +42,7 @@ def list_sigfields(infile, skip_status):
 )
 def add_sig_field(infile, outfile, field):
     with pyhanko_exception_manager():
-        writer = IncrementalPdfFileWriter(infile)
+        writer = IncrementalPdfFileWriter(infile, strict=False)
 
         for s in field:
             name, spec = parse_field_location_spec(s)
