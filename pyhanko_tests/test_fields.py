@@ -453,6 +453,20 @@ def test_append_acroform_no_fields():
         fields.append_signature_field(w, sp)
 
 
+def test_append_acroform_reference_broken_nonstrict():
+    w = PdfFileWriter()
+    w.insert_page(simple_page(w, 'Hello world'))
+    # in nonstrict mode, this should be functionally equivalent to a null
+    w.root['/AcroForm'] = generic.IndirectObject(1239481, 0, w)
+    out = BytesIO()
+    w.write(out)
+
+    sp = fields.SigFieldSpec('InvisibleSig')
+    w = IncrementalPdfFileWriter(out, strict=False)
+    fields.append_signature_field(w, sp)
+    assert len(w.root['/AcroForm']['/Fields']) == 1
+
+
 def test_circular_form_tree_sign():
     fname = os.path.join(PDF_DATA_DIR, 'form-tree-circular-ref-input.pdf')
     with open(fname, 'rb') as inf:

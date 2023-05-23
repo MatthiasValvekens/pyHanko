@@ -1821,3 +1821,30 @@ def test_dictionary_setvalue_guard():
         dict_obj['/A'] = 1
     with pytest.raises(ValueError, match='must be PdfObject'):
         dict_obj.setdefault(pdf_name('/A'), 1)
+
+
+def test_all_nulls_equal():
+    assert generic.NullObject() == generic.NullObject()
+
+
+def test_all_nulls_same_hash():
+    assert hash(generic.NullObject()) == hash(generic.NullObject())
+
+
+def test_null_is_missing():
+    d = generic.DictionaryObject(
+        {
+            generic.pdf_name('/A'): generic.NameObject('/Z'),
+            generic.pdf_name('/B'): generic.NullObject(),
+        }
+    )
+
+    assert d['/A'] == '/Z'
+    with pytest.raises(KeyError):
+        d.__getitem__('/B')
+
+    with pytest.raises(KeyError):
+        d.__getitem__(generic.pdf_name('/B'))
+
+    with pytest.raises(KeyError):
+        d.__getitem__('/C')

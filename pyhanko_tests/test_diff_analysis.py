@@ -530,7 +530,7 @@ def test_form_field_ft_tamper():
 
 
 BOGUS_KIDS_VALUES = [
-    (generic.NullObject(), False),
+    (generic.NameObject('/Test'), False),
     (generic.ArrayObject(), False),
     (generic.ArrayObject([generic.NullObject()]), False),
     (generic.ArrayObject([generic.NullObject()]), True),
