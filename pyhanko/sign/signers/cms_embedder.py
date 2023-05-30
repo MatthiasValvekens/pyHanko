@@ -266,10 +266,11 @@ class SigAppearanceSetup:
             stamp = self._appearance_stamp(
                 writer, BoxConstraints(width=w, height=h)
             )
-            normalappearence = stamp.as_appearances()
-            if '/Matrix' in sig_annot:
-                normalappearence['/Matrix'] = sig_annot['/Matrix']
-            sig_annot['/AP'] = normalappearence.as_pdf_object()
+            normalappearence = stamp.as_appearances().as_pdf_object()
+            # Remove this when appearence stream in sig_annot['/AP'] is no longer replaced with the one from 'normalappearence'
+            if '/AP' in sig_annot and '/N' in sig_annot['/AP'] and '/Matrix' in sig_annot['/AP']['/N']:
+                normalappearence['/N']['/Matrix'] = sig_annot['/AP']['/N']['/Matrix']
+            sig_annot['/AP'] = normalappearence
             try:
                 # if there was an entry like this, it's meaningless now
                 del sig_annot[pdf_name('/AS')]
