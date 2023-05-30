@@ -184,7 +184,7 @@ class PdfContent:
         resources: Optional[PdfResources] = None,
         box: Optional[BoxConstraints] = None,
         writer: Optional[BasePdfFileWriter] = None,
-        matrix: Optional[generic.ArrayObject] = None
+        matrix: Optional[generic.DictionaryObject] = None
     ):
         self._resources: PdfResources = resources or PdfResources()
         self.box: BoxConstraints = box or BoxConstraints()
@@ -312,7 +312,7 @@ class RawContent(PdfContent):
         data: bytes,
         resources: Optional[PdfResources] = None,
         box: Optional[BoxConstraints] = None,
-        matrix: Optional[generic.ArrayObject] = None
+        matrix: Optional[generic.DictionaryObject] = None
     ):
         super().__init__(resources, box, matrix=matrix)
         self.data = data
