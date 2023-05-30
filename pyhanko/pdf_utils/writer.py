@@ -60,6 +60,7 @@ def init_xobject_dictionary(
     box_width,
     box_height,
     resources: Optional[generic.DictionaryObject] = None,
+    matrix: Optional[generic.DictionaryObject] = None
 ) -> generic.StreamObject:
     """
     Helper function to initialise form XObject dictionaries.
@@ -79,8 +80,7 @@ def init_xobject_dictionary(
         A :class:`~.generic.StreamObject` representation of the form XObject.
     """
     resources = resources or generic.DictionaryObject()
-    return generic.StreamObject(
-        {
+    dict_data = {
             pdf_name('/BBox'): generic.ArrayObject(
                 list(
                     map(generic.FloatObject, (0.0, box_height, box_width, 0.0))
@@ -89,7 +89,14 @@ def init_xobject_dictionary(
             pdf_name('/Resources'): resources,
             pdf_name('/Type'): pdf_name('/XObject'),
             pdf_name('/Subtype'): pdf_name('/Form'),
-        },
+        }
+    if matrix is not None:
+        dict_data[pdf_name('/Matrix')] = generic.ArrayObject(
+                list(
+                    map(generic.FloatObject, matrix)
+                )
+            )
+    return generic.StreamObject(dict_data,
         stream_data=command_stream,
     )
 

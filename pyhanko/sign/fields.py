@@ -1665,6 +1665,23 @@ def append_signature_field(
 
     if sig_field_spec.box is not None:
         llx, lly, urx, ury = sig_field_spec.box
+        matrix = None
+        if sig_field_spec.visible_sig_settings.rotate_with_page == False:
+            pagetree_obj = page_ref.get_object()
+            while '/Parent' in pagetree_obj and ('/Type' not in pagetree_obj or pagetree_obj['/Type'] != '/Page'):
+                pagetree_obj = pagetree_obj['/Parent']
+            if '/Rotate' in pagetree_obj:
+                match pagetree_obj['/Rotate']:
+                    case 0:
+                        matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+                    case 90:
+                        matrix = (0.0, 1.0, -1.0, 0.0, 0.0, 0.0)
+                    case 180:
+                        matrix = (-1.0, 0.0, 0.0, -1.0, 0.0, 0.0)
+                    case 270:
+                        matrix = (0.0, -1.0, 1.0, 0.0, 0.0, 0.0)
+            else:
+                matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
         w = abs(urx - llx)
         h = abs(ury - lly)
         if w and h:
@@ -1682,10 +1699,12 @@ def append_signature_field(
                 ap_stream = RawContent(
                     b' '.join(appearance_cmds),
                     box=BoxConstraints(width=w, height=h),
+                    matrix=matrix
                 ).as_form_xobject()
             else:
                 ap_stream = RawContent(
-                    b'', box=BoxConstraints(width=w, height=h)
+                    b'', box=BoxConstraints(width=w, height=h),
+                    matrix=matrix
                 ).as_form_xobject()
             ap_dict[pdf_name('/N')] = pdf_out.add_object(ap_stream)
 

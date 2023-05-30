@@ -266,7 +266,10 @@ class SigAppearanceSetup:
             stamp = self._appearance_stamp(
                 writer, BoxConstraints(width=w, height=h)
             )
-            sig_annot['/AP'] = stamp.as_appearances().as_pdf_object()
+            normalappearence = stamp.as_appearances()
+            if '/Matrix' in sig_annot:
+                normalappearence['/Matrix'] = sig_annot['/Matrix']
+            sig_annot['/AP'] = normalappearence.as_pdf_object()
             try:
                 # if there was an entry like this, it's meaningless now
                 del sig_annot[pdf_name('/AS')]

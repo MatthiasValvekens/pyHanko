@@ -2,7 +2,7 @@ import binascii
 import uuid
 from enum import Enum
 from typing import Optional
-
+from pyhanko.pdf_utils import generic
 from .generic import (
     DictionaryObject,
     NameObject,
@@ -167,6 +167,11 @@ class PdfContent:
 
     writer = None
     """
+    Transformation Matrix that would rotate the content
+    """
+
+    matrix = None
+    """
     The :meth:`__init__` method comes with an optional ``writer`` 
     parameter that can be used to let subclasses register external resources 
     with the writer by themselves.
@@ -179,10 +184,12 @@ class PdfContent:
         resources: Optional[PdfResources] = None,
         box: Optional[BoxConstraints] = None,
         writer: Optional[BasePdfFileWriter] = None,
+        matrix: Optional[generic.ArrayObject] = None
     ):
         self._resources: PdfResources = resources or PdfResources()
         self.box: BoxConstraints = box or BoxConstraints()
         self.writer = writer
+        self.matrix = matrix
 
     @property
     def _ensure_writer(self) -> BasePdfFileWriter:
@@ -254,6 +261,7 @@ class PdfContent:
             box_width=self.box.width,
             box_height=self.box.height,
             resources=self._resources.as_pdf_object(),
+            matrix=self.matrix
         )
 
     def set_writer(self, writer):
@@ -304,8 +312,9 @@ class RawContent(PdfContent):
         data: bytes,
         resources: Optional[PdfResources] = None,
         box: Optional[BoxConstraints] = None,
+        matrix: Optional[generic.ArrayObject] = None
     ):
-        super().__init__(resources, box)
+        super().__init__(resources, box, matrix=matrix)
         self.data = data
 
     def render(self) -> bytes:
