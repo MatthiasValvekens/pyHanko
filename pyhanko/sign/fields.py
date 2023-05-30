@@ -1671,17 +1671,12 @@ def append_signature_field(
             while '/Parent' in pagetree_obj and ('/Type' not in pagetree_obj or pagetree_obj['/Type'] != '/Page'):
                 pagetree_obj = pagetree_obj['/Parent']
             if '/Rotate' in pagetree_obj:
-                match pagetree_obj['/Rotate']:
-                    case 0:
-                        matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-                    case 90:
-                        matrix = (0.0, 1.0, -1.0, 0.0, 0.0, 0.0)
-                    case 180:
-                        matrix = (-1.0, 0.0, 0.0, -1.0, 0.0, 0.0)
-                    case 270:
-                        matrix = (0.0, -1.0, 1.0, 0.0, 0.0, 0.0)
-            else:
-                matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+                if pagetree_obj['/Rotate'] == 90:
+                    matrix = [0.0, 1.0, -1.0, 0.0, 0.0, 0.0]
+                elif pagetree_obj['/Rotate'] == 180:
+                    matrix = [-1.0, 0.0, 0.0, -1.0, 0.0, 0.0]
+                elif pagetree_obj['/Rotate'] == 270:
+                    matrix = [0.0, -1.0, 1.0, 0.0, 0.0, 0.0]
         w = abs(urx - llx)
         h = abs(ury - lly)
         if w and h:
