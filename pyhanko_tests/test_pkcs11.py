@@ -56,12 +56,9 @@ default_other_certs = ('root', 'interm')
 SIGNER_LABEL = 'signer1'
 
 
-@pytest.mark.parametrize(
-    'bulk_fetch,pss',
-    [(True, True), (False, False), (True, False), (True, True)],
-)
+@pytest.mark.parametrize('bulk_fetch', [True, False])
 @freeze_time('2020-11-01')
-def test_simple_sign(bulk_fetch, pss):
+def test_simple_sign(bulk_fetch):
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
     meta = signers.PdfSignatureMetadata(field_name='Sig1')
     with _simple_sess() as sess:
@@ -70,12 +67,32 @@ def test_simple_sign(bulk_fetch, pss):
             SIGNER_LABEL,
             other_certs_to_pull=default_other_certs,
             bulk_fetch=bulk_fetch,
-            prefer_pss=pss,
         )
         out = signers.sign_pdf(w, meta, signer=signer)
 
     r = PdfFileReader(out)
     emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_trusted(emb)
+
+
+@freeze_time('2020-11-01')
+def test_simple_sign_with_rsassa_pss():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1')
+    with _simple_sess(token='testrsa') as sess:
+        signer = pkcs11.PKCS11Signer(
+            sess,
+            SIGNER_LABEL,
+            other_certs_to_pull=default_other_certs,
+            prefer_pss=True,
+        )
+        out = signers.sign_pdf(w, meta, signer=signer)
+
+    r = PdfFileReader(out)
+    emb = r.embedded_signatures[0]
+    algo = emb.signer_info['signature_algorithm']['algorithm'].native
+    assert algo == 'rsassa_pss'
     assert emb.field_name == 'Sig1'
     val_trusted(emb)
 
