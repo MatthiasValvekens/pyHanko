@@ -12,24 +12,23 @@ from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 __all__ = ['stamp', 'select_style']
 
 
+_CONFIG_REQUIRED_MSG = (
+    "Using stamp styles requires a configuration file "
+    f"({DEFAULT_CONFIG_FILE} by default)."
+)
+
+
 def select_style(ctx: click.Context, style_name: str, url: str):
     cli_config: Optional[CLIConfig] = ctx.obj.config
-    if not style_name:
-        return None
     if not cli_config:
-        raise click.ClickException(
-            "Using stamp styles requires a configuration file "
-            f"({DEFAULT_CONFIG_FILE} by default)."
-        )
+        if not style_name:
+            return None
+        raise click.ClickException(_CONFIG_REQUIRED_MSG)
     try:
         style = cli_config.get_stamp_style(style_name)
     except ConfigurationError as e:
-        msg = (
-            "Configuration problem. Are you sure that the style "
-            f"'{style_name}' is properly defined in the configuration file?"
-        )
-        logger.error(msg, exc_info=e)
-        raise click.ClickException(msg)
+        logger.error(e.msg, exc_info=e)
+        raise click.ClickException(e.msg)
     if url and not isinstance(style, QRStampStyle):
         raise click.ClickException(
             "The --stamp-url parameter is only meaningful for QR stamp styles."
@@ -72,6 +71,9 @@ def select_style(ctx: click.Context, style_name: str, url: str):
 )
 @click.pass_context
 def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
+    cli_config: Optional[CLIConfig] = ctx.obj.config
+    if cli_config is None:
+        raise click.ClickException(_CONFIG_REQUIRED_MSG)
     with pyhanko_exception_manager():
         stamp_style = select_style(ctx, style_name, stamp_url)
         page_ix = _index_page(page)

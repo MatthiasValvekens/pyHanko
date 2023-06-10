@@ -169,12 +169,15 @@ class CLIConfig:
             A :class:`TextStampStyle` or `QRStampStyle` object.
         """
         name = name or self.default_stamp_style
-        try:
-            style_config = dict(self.stamp_styles[name])
-        except KeyError:
+        config = self.stamp_styles.get(name, None)
+        if config is None:
             raise ConfigurationError(f"There is no stamp style named '{name}'.")
-        except TypeError as e:
-            raise ConfigurationError(e)
+        try:
+            style_config = dict(config)
+        except (TypeError, ValueError) as e:
+            raise ConfigurationError(
+                f"Could not process stamp style named '{name}'"
+            ) from e
         cls = STAMP_STYLE_TYPES[style_config.pop('type', 'text')]
         return cls.from_config(style_config)
 
