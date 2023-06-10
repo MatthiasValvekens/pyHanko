@@ -125,4 +125,47 @@ def test_cli_stamp_style_undefined(cli_runner):
         ],
     )
     assert result.exit_code == 1
-    assert "is properly defined" in result.output
+    assert "no stamp style named" in result.output
+
+
+def test_cli_stamp_style_unspecified(cli_runner):
+    cfg = {
+        'stamp-styles': {
+            'default': {
+                'type': 'qr',
+                'background': '__stamp__',
+                'stamp-text': 'Blah',
+            }
+        }
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'stamp',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            '0',
+            '0',
+            '--stamp-url',
+            'https://example.com',
+        ],
+    )
+    assert result.exit_code == 0
+
+
+def test_cli_stamp_style_malformed(cli_runner):
+    cfg = {'stamp-styles': {'default': 'nonsense'}}
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'stamp',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+            '0',
+            '0',
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Could not process" in result.output

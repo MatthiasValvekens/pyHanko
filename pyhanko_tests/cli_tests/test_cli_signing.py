@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.cli import cli_root
+from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import async_validate_detached_cms
 from pyhanko_tests.cli_tests.conftest import (
     DUMMY_PASSPHRASE,
@@ -757,3 +758,118 @@ def test_cli_addsig_wrong_password(cli_runner, monkeypatch):
     )
     assert result.exit_code == 1
     assert "Invalid password" in result.output
+
+
+def test_cli_sign_visible_with_custom_default_style(
+    cli_runner, cert_chain, user_key
+):
+    cfg = {
+        'default-stamp-style': 'test',
+        'stamp-styles': {
+            'test': {
+                'type': 'text',
+                'background': '__stamp__',
+                'stamp_text': 'Blah',
+            }
+        },
+    }
+    _write_config(cfg)
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    with open(SIGNED_OUTPUT_PATH, 'rb') as outf:
+        r = PdfFileReader(outf)
+        page = r.root['/Pages']['/Kids'][0]
+        assert b'Blah' in page['/Annots'][0]['/AP']['/N'].data
+    assert not result.exception, result.output
+
+
+def test_cli_sign_visible_with_default_style_and_others_in_config(
+    cli_runner, cert_chain, user_key
+):
+    cfg = {
+        'stamp-styles': {
+            'test': {
+                'type': 'text',
+                'background': '__stamp__',
+                'stamp_text': 'Blah',
+            }
+        },
+    }
+    _write_config(cfg)
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    with open(SIGNED_OUTPUT_PATH, 'rb') as outf:
+        r = PdfFileReader(outf)
+        page = r.root['/Pages']['/Kids'][0]
+        assert b'Digitally signed by' in page['/Annots'][0]['/AP']['/N'].data
+    assert not result.exception, result.output
+
+
+def test_cli_sign_visible_with_undefined_default_style(
+    cli_runner, cert_chain, user_key
+):
+    cfg = {
+        'default-stamp-style': 'undefined',
+        'stamp-styles': {
+            'test': {'type': 'text', 'background': '__stamp__'},
+        },
+    }
+    _write_config(cfg)
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "There is no stamp style named \'undefined\'" in result.output

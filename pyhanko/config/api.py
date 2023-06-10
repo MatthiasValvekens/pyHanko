@@ -173,7 +173,7 @@ class ConfigurableMixin:
             # noinspection PyArgumentList
             return cls(**config_dict)
         except TypeError as e:  # pragma: nocover
-            raise ConfigurationError(e)
+            raise ConfigurationError("Failed to instantiate from config") from e
 
 
 def check_config_keys(config_name, expected_keys, supplied_keys):
