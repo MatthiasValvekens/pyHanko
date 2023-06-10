@@ -873,3 +873,32 @@ def test_cli_sign_visible_with_undefined_default_style(
     )
     assert result.exit_code == 1
     assert "There is no stamp style named \'undefined\'" in result.output
+
+
+def test_cli_sign_visible_with_style_but_no_config(
+    cli_runner, cert_chain, user_key
+):
+    root_cert, interm_cert, user_cert = cert_chain
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--style-name',
+            'test',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            user_cert,
+            '--chain',
+            interm_cert,
+            '--key',
+            user_key,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "requires a configuration file" in result.output
