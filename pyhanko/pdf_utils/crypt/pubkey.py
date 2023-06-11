@@ -463,13 +463,11 @@ class EnvelopeKeyDecrypter:
 
     This allows the key decryption process to happen offline, e.g. on a smart
     card.
-
-    :param cert:
-        The recipient's certificate.
     """
 
-    def __init__(self, cert: x509.Certificate):
-        self.cert = cert
+    @property
+    def cert(self) -> x509.Certificate:
+        raise NotImplementedError
 
     def decrypt(
         self, encrypted_key: bytes, algo_params: cms.KeyEncryptionAlgorithm
@@ -523,8 +521,12 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=key)
 
     def __init__(self, cert: x509.Certificate, private_key: PrivateKeyInfo):
-        super().__init__(cert)
         self.private_key: PrivateKeyInfo = private_key
+        self._cert = cert
+
+    @property
+    def cert(self) -> x509.Certificate:
+        return self._cert
 
     @staticmethod
     def load(key_file, cert_file, key_passphrase=None):
