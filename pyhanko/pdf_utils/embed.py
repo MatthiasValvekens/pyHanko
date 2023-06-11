@@ -12,6 +12,7 @@ from typing import List, Optional
 from asn1crypto import x509
 
 from . import crypt, generic, misc, writer
+from .crypt.pubkey import RecipientEncryptionPolicy
 from .font.basic import get_courier
 from .generic import pdf_name, pdf_string
 
@@ -451,7 +452,7 @@ def wrap_encrypted_payload(
                     default_file_filter=crypt.DEF_EMBEDDED_FILE,
                 ),
             )
-            pubkey_cf.add_recipients(certs)
+            pubkey_cf.add_recipients(certs, policy=RecipientEncryptionPolicy())
         else:
             # set up standard security handler
             std_cf = crypt.StandardAESCryptFilter(keylen=32)

@@ -27,6 +27,7 @@ from pyhanko.pdf_utils.crypt import (
     StandardSecuritySettingsRevision,
     build_crypt_filter,
 )
+from pyhanko.pdf_utils.crypt.pubkey import RecipientEncryptionPolicy
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
@@ -182,7 +183,13 @@ def test_identity_crypt_filter(use_alias, with_never_decrypt):
     assert the_stream.data == test_bytes
 
 
-def _produce_pubkey_encrypted_file(version, keylen, use_aes, use_crypt_filters):
+def _produce_pubkey_encrypted_file(
+    version,
+    keylen,
+    use_aes,
+    use_crypt_filters,
+    policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
+):
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
 
@@ -193,6 +200,7 @@ def _produce_pubkey_encrypted_file(version, keylen, use_aes, use_crypt_filters):
         use_aes=use_aes,
         use_crypt_filters=use_crypt_filters,
         perms=-44,
+        policy=policy,
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -236,6 +244,23 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
 
 
+def test_oaep_encryption():
+    out = _produce_pubkey_encrypted_file(
+        version=SecurityHandlerVersion.AES256,
+        keylen=32,
+        use_aes=True,
+        use_crypt_filters=True,
+        policy=RecipientEncryptionPolicy(prefer_oaep=True),
+    )
+    r = PdfFileReader(out)
+    result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
+    assert result.status == AuthStatus.USER
+    assert result.permission_flags == -44
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
 def test_key_encipherment_requirement():
     with pytest.raises(misc.PdfWriteError):
         PubKeySecurityHandler.build_from_certs(
@@ -276,7 +301,7 @@ def test_key_encipherment_requirement_override(
         use_aes=use_aes,
         use_crypt_filters=use_crypt_filters,
         perms=-44,
-        ignore_key_usage=True,
+        policy=RecipientEncryptionPolicy(ignore_key_usage=True),
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -477,7 +502,9 @@ def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
     # (this is always pointless, but it should be allowed)
     sh.add_recipients([PUBKEY_TEST_DECRYPTER.cert])
 
-    crypt_filters[custom].add_recipients([PUBKEY_TEST_DECRYPTER.cert])
+    crypt_filters[custom].add_recipients(
+        [PUBKEY_TEST_DECRYPTER.cert], policy=RecipientEncryptionPolicy()
+    )
     w._assign_security_handler(sh)
 
     encrypt_dict = w._encrypt.get_object()
@@ -494,7 +521,9 @@ def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
 
     # custom crypt filters can only have one set of recipients
     with pytest.raises(misc.PdfError):
-        crypt_filters[custom].add_recipients([PUBKEY_TEST_DECRYPTER.cert])
+        crypt_filters[custom].add_recipients(
+            [PUBKEY_TEST_DECRYPTER.cert], policy=RecipientEncryptionPolicy()
+        )
 
     test_data = b'This is test data!'
     dummy_stream = generic.StreamObject(stream_data=test_data)
@@ -1300,7 +1329,10 @@ def test_add_recp_before_auth_fail():
     r = PdfFileReader(out)
     cf = r.security_handler.get_stream_filter()
     with pytest.raises(misc.PdfError, match="before authenticating"):
-        cf.add_recipients([PUBKEY_SELFSIGNED_DECRYPTER.cert])
+        cf.add_recipients(
+            [PUBKEY_SELFSIGNED_DECRYPTER.cert],
+            policy=RecipientEncryptionPolicy(),
+        )
 
 
 def test_add_recp_after_key_deriv():
@@ -1312,7 +1344,10 @@ def test_add_recp_after_key_deriv():
     cf = r.security_handler.get_stream_filter()
     assert cf.shared_key is not None
     with pytest.raises(misc.PdfError, match="after deriving.*shared key"):
-        cf.add_recipients([PUBKEY_SELFSIGNED_DECRYPTER.cert])
+        cf.add_recipients(
+            [PUBKEY_SELFSIGNED_DECRYPTER.cert],
+            policy=RecipientEncryptionPolicy(),
+        )
 
 
 def test_encrypted_obj_stm():

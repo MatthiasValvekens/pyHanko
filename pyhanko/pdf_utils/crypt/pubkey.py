@@ -3,13 +3,20 @@ import enum
 import logging
 import secrets
 import struct
+from dataclasses import dataclass
 from hashlib import sha1, sha256
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 from asn1crypto import algos, cms, core, x509
+from asn1crypto.algos import RSAESOAEPParams
 from asn1crypto.keys import PrivateKeyInfo, PublicKeyAlgorithm
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.hazmat.primitives.asymmetric.padding import (
+    MGF1,
+    OAEP,
+    AsymmetricPadding,
+    PKCS1v15,
+)
 from cryptography.hazmat.primitives.asymmetric.rsa import (
     RSAPrivateKey,
     RSAPublicKey,
@@ -34,6 +41,22 @@ from .cred_ser import SerialisableCredential, SerialisedCredential
 from .filter_mixins import AESCryptFilterMixin, RC4CryptFilterMixin
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RecipientEncryptionPolicy:
+    ignore_key_usage: bool = False
+    """
+    Ignore key usage bits in the recipient's certificate.
+    """
+
+    prefer_oaep: bool = False
+    """
+    For RSA recipients, encrypt with RSAES-OAEP.
+
+    .. warning::
+        This is not widely supported.
+    """
 
 
 class PubKeyCryptFilter(CryptFilter, abc.ABC):
@@ -87,8 +110,8 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
     def add_recipients(
         self,
         certs: List[x509.Certificate],
+        policy: RecipientEncryptionPolicy,
         perms=ALL_PERMS,
-        ignore_key_usage=False,
     ):
         """
         Add recipients to this crypt filter.
@@ -96,10 +119,10 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
 
         :param certs:
             A list of recipient certificates.
+        :param policy:
+            Encryption policy choices for the chosen set of recipients.
         :param perms:
             The permission bits to assign to the listed recipients.
-        :param ignore_key_usage:
-            If ``False``, the *keyEncipherment* key usage extension is required.
         """
 
         if not self.acts_as_default and self.recipients:
@@ -122,8 +145,8 @@ class PubKeyCryptFilter(CryptFilter, abc.ABC):
             certs,
             self._recp_key_seed,
             as_signed(perms),
+            policy=policy,
             include_permissions=self.acts_as_default,
-            ignore_key_usage=ignore_key_usage,
         )
         self.recipients.append(new_cms)
 
@@ -271,10 +294,12 @@ def construct_envelope_content(
 
 
 def _recipient_info(
-    envelope_key: bytes, cert: x509.Certificate, ignore_key_usage=False
+    envelope_key: bytes,
+    cert: x509.Certificate,
+    policy: RecipientEncryptionPolicy,
 ):
-    pubkey = cert.public_key
-    pubkey_algo_info: PublicKeyAlgorithm = pubkey['algorithm']
+    pub_key_info = cert.public_key
+    pubkey_algo_info: PublicKeyAlgorithm = pub_key_info['algorithm']
     algorithm_name = pubkey_algo_info['algorithm'].native
     if algorithm_name != 'rsa':
         raise NotImplementedError(
@@ -284,7 +309,7 @@ def _recipient_info(
 
     assert len(envelope_key) == 32
 
-    if not ignore_key_usage:
+    if not policy.ignore_key_usage:
         key_usage = cert.key_usage_value
         if key_usage is None or 'key_encipherment' not in key_usage.native:
             raise misc.PdfWriteError(
@@ -292,13 +317,51 @@ def _recipient_info(
                 f"not have the 'key_encipherment' key usage bit set."
             )
 
-    pub_key = serialization.load_der_public_key(cert.public_key.dump())
+    pub_key = serialization.load_der_public_key(pub_key_info.dump())
 
-    assert isinstance(pub_key, RSAPublicKey)
-    # having support for OAEP here would be cool, but I have it on good
-    #  authority that there's some kind of tacit understanding to use
-    #  PKCS#1 v1.5 padding here.
-    encrypted_data = pub_key.encrypt(envelope_key, padding=PKCS1v15())
+    if isinstance(pub_key, RSAPublicKey):
+        # support OAEP on general principle, but most PDF software
+        # only supports PKCS#1 v1.5 padding here.
+        padding: AsymmetricPadding
+        if policy.prefer_oaep:
+            # recycle these routines
+            from pyhanko.sign.general import get_pyca_cryptography_hash
+            from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
+
+            digest_function_name = select_suitable_signing_md(pub_key_info)
+            digest_spec = get_pyca_cryptography_hash(digest_function_name)
+            algo = cms.KeyEncryptionAlgorithm(
+                {
+                    'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_oaep'),
+                    'parameters': RSAESOAEPParams(
+                        {
+                            'hash_algorithm': {
+                                'algorithm': digest_function_name
+                            },
+                            'mask_gen_algorithm': {
+                                'algorithm': 'mgf1',
+                                'parameters': {
+                                    'algorithm': digest_function_name
+                                },
+                            },
+                        }
+                    ),
+                }
+            )
+            padding = OAEP(
+                mgf=MGF1(digest_spec), algorithm=digest_spec, label=None
+            )
+        else:
+            padding = PKCS1v15()
+
+            algo = cms.KeyEncryptionAlgorithm(
+                {'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_pkcs1v15')}
+            )
+        encrypted_data = pub_key.encrypt(envelope_key, padding=padding)
+    else:
+        raise NotImplementedError(
+            f"Cannot encrypt for key type {type(pub_key)}"
+        )
 
     # TODO support subjectKeyIdentifier here (requiring version 2)
     rid = cms.RecipientIdentifier(
@@ -307,9 +370,6 @@ def _recipient_info(
                 {'issuer': cert.issuer, 'serial_number': cert.serial_number}
             )
         }
-    )
-    algo = cms.KeyEncryptionAlgorithm(
-        {'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_pkcs1v15')}
     )
     return cms.RecipientInfo(
         {
@@ -329,8 +389,8 @@ def construct_recipient_cms(
     certificates: List[x509.Certificate],
     seed: bytes,
     perms: int,
+    policy: RecipientEncryptionPolicy,
     include_permissions=True,
-    ignore_key_usage=False,
 ) -> cms.ContentInfo:
     # The content of the generated ContentInfo object
     # is an object of type EnvelopedData, containing a 20 byte seed (+ perms).
@@ -359,7 +419,7 @@ def construct_recipient_cms(
 
     # encrypt the envelope key for each recipient
     rec_infos = [
-        _recipient_info(envelope_key, cert, ignore_key_usage=ignore_key_usage)
+        _recipient_info(envelope_key, cert, policy=policy)
         for cert in certificates
     ]
 
@@ -531,22 +591,46 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         self, encrypted_key: bytes, algo_params: cms.KeyEncryptionAlgorithm
     ) -> bytes:
         """
-        Decrypt the payload using RSA with PKCS#1 v1.5 padding.
+        Decrypt the payload using RSA with PKCS#1 v1.5 padding or OAEP.
         Other schemes are not (currently) supported by this implementation.
 
         :param encrypted_key:
             Payload to decrypt.
         :param algo_params:
             Specification of the encryption algorithm as a CMS object.
-            Must use ``rsaes_pkcs1v15``.
+            Must use ``rsaes_pkcs1v15`` or ``rsaes_oaep``.
         :return:
             The decrypted payload.
         """
         algo_name = algo_params['algorithm'].native
-        if algo_name != 'rsaes_pkcs1v15':
+        padding: AsymmetricPadding
+        if algo_name == 'rsaes_pkcs1v15':
+            padding = PKCS1v15()
+        elif algo_name == 'rsaes_oaep':
+            from pyhanko.sign.general import get_pyca_cryptography_hash
+
+            oaep_params: RSAESOAEPParams = algo_params['parameters']
+            mgf = oaep_params['mask_gen_algorithm']
+            mgf_name = mgf['algorithm'].native
+            if mgf_name != 'mgf1':
+                raise NotImplementedError(
+                    f"Only MGF1 is implemented, but got '{mgf_name}'"
+                )
+            padding = OAEP(
+                mgf=MGF1(
+                    algorithm=get_pyca_cryptography_hash(
+                        mgf['parameters']['algorithm'].native
+                    )
+                ),
+                algorithm=get_pyca_cryptography_hash(
+                    oaep_params['hash_algorithm']['algorithm'].native
+                ),
+                label=None,
+            )
+        else:
             raise NotImplementedError(
-                f"Only 'rsaes_pkcs1v15' is supported for envelope encryption, "
-                f"not '{algo_name}'."
+                f"Only 'rsaes_pkcs1v15' and 'rsaes_oaep' are supported for "
+                f"envelope decryption, not '{algo_name}'."
             )
         priv_key = serialization.load_der_private_key(
             self.private_key.dump(), password=None
@@ -555,7 +639,7 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
             raise NotImplementedError(
                 "The loaded key does not seem to be an RSA private key"
             )
-        return priv_key.decrypt(encrypted_key, padding=PKCS1v15())
+        return priv_key.decrypt(encrypted_key, padding=padding)
 
 
 SerialisableCredential.register(SimpleEnvelopeKeyDecrypter)
@@ -730,7 +814,7 @@ class PubKeySecurityHandler(SecurityHandler):
         use_crypt_filters=True,
         perms: int = ALL_PERMS,
         encrypt_metadata=True,
-        ignore_key_usage=False,
+        policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
         **kwargs,
     ) -> 'PubKeySecurityHandler':
         """
@@ -763,8 +847,8 @@ class PubKeySecurityHandler(SecurityHandler):
             .. warning::
                 See :class:`.SecurityHandler` for some background on the
                 way pyHanko interprets this value.
-        :param ignore_key_usage:
-            If ``False``, the *keyEncipherment* key usage extension is required.
+        :param policy:
+            Encryption policy choices for the chosen set of recipients.
         :return:
             An instance of :class:`.PubKeySecurityHandler`.
         """
@@ -797,7 +881,7 @@ class PubKeySecurityHandler(SecurityHandler):
             recipient_objs=None,
             **kwargs,
         )
-        sh.add_recipients(certs, perms=perms, ignore_key_usage=ignore_key_usage)
+        sh.add_recipients(certs, perms=perms, policy=policy)
         return sh
 
     def __init__(
@@ -986,7 +1070,7 @@ class PubKeySecurityHandler(SecurityHandler):
         self,
         certs: List[x509.Certificate],
         perms=ALL_PERMS,
-        ignore_key_usage=False,
+        policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
     ):
         # add recipients to all *default* crypt filters
         # callers that want to do this more granularly are welcome to, but
@@ -995,9 +1079,7 @@ class PubKeySecurityHandler(SecurityHandler):
         for cf in self.crypt_filter_config.standard_filters():
             if not isinstance(cf, PubKeyCryptFilter):
                 continue
-            cf.add_recipients(
-                certs, perms=perms, ignore_key_usage=ignore_key_usage
-            )
+            cf.add_recipients(certs, perms=perms, policy=policy)
 
     def authenticate(
         self,
