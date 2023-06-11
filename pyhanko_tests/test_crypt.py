@@ -1,8 +1,11 @@
 import binascii
 import os
 from io import BytesIO
+from typing import Optional
 
 import pytest
+from asn1crypto import cms, x509
+from certomancer.registry import ArchLabel, CertLabel, KeyLabel
 
 from pyhanko.keys import load_cert_from_pemder
 from pyhanko.pdf_utils import generic, misc, writer
@@ -26,12 +29,13 @@ from pyhanko.pdf_utils.crypt import (
     StandardSecurityHandler,
     StandardSecuritySettingsRevision,
     build_crypt_filter,
+    pubkey,
 )
-from pyhanko.pdf_utils.crypt.pubkey import RecipientEncryptionPolicy
 from pyhanko.pdf_utils.generic import pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko_tests.samples import (
+    CERTOMANCER,
     MINIMAL,
     MINIMAL_AES256,
     MINIMAL_ONE_FIELD,
@@ -188,13 +192,16 @@ def _produce_pubkey_encrypted_file(
     keylen,
     use_aes,
     use_crypt_filters,
-    policy: RecipientEncryptionPolicy = RecipientEncryptionPolicy(),
+    policy: pubkey.RecipientEncryptionPolicy = pubkey.RecipientEncryptionPolicy(),
+    cert: Optional[x509.Certificate] = None,
 ):
+    if cert is None:
+        cert = PUBKEY_TEST_DECRYPTER.cert
     r = PdfFileReader(BytesIO(VECTOR_IMAGE_PDF))
     w = writer.PdfFileWriter()
 
     sh = PubKeySecurityHandler.build_from_certs(
-        [PUBKEY_TEST_DECRYPTER.cert],
+        [cert],
         keylen_bytes=keylen,
         version=version,
         use_aes=use_aes,
@@ -244,13 +251,46 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
 
 
+@pytest.mark.parametrize(
+    'cert_lbl,key_lbl',
+    [
+        (CertLabel('decrypter1'), KeyLabel('decrypter1')),
+        (CertLabel('decrypter2'), KeyLabel('decrypter2')),
+        (CertLabel('decrypter3'), KeyLabel('decrypter3')),
+    ],
+)
+def test_ecdh_encryption(cert_lbl, key_lbl):
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    cert = pki_arch.get_cert(cert_lbl)
+    out = _produce_pubkey_encrypted_file(
+        version=SecurityHandlerVersion.AES256,
+        keylen=32,
+        use_aes=True,
+        use_crypt_filters=True,
+        cert=cert,
+    )
+    r = PdfFileReader(out)
+    result = r.decrypt_pubkey(
+        SimpleEnvelopeKeyDecrypter(
+            cert, pki_arch.key_set.get_private_key(key_lbl)
+        )
+    )
+    assert result.status == AuthStatus.USER
+    assert result.permission_flags == -44
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
 def test_oaep_encryption():
     out = _produce_pubkey_encrypted_file(
         version=SecurityHandlerVersion.AES256,
         keylen=32,
         use_aes=True,
         use_crypt_filters=True,
-        policy=RecipientEncryptionPolicy(prefer_oaep=True),
+        policy=pubkey.RecipientEncryptionPolicy(prefer_oaep=True),
     )
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
@@ -259,6 +299,98 @@ def test_oaep_encryption():
     page = r.root['/Pages']['/Kids'][0].get_object()
     assert '/ExtGState' in page['/Resources']
     assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
+def test_ecdh_decryption_smoke():
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    cert = pki_arch.get_cert(CertLabel('decrypter3'))
+    decrypter = SimpleEnvelopeKeyDecrypter(
+        cert, pki_arch.key_set.get_private_key(KeyLabel('decrypter3'))
+    )
+    with open(f'{PDF_DATA_DIR}/pubkey-ecc-test.pdf', 'rb') as inf:
+        r = PdfFileReader(inf)
+        result = r.decrypt_pubkey(decrypter)
+        assert result.status == AuthStatus.USER
+
+
+def test_ecdh_decryption_wrong_key_type():
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    cert = pki_arch.get_cert(CertLabel('decrypter3'))
+    with open(f'{PDF_DATA_DIR}/pubkey-ecc-test.pdf', 'rb') as inf:
+        r = PdfFileReader(inf)
+        decrypter = SimpleEnvelopeKeyDecrypter(
+            cert=cert, private_key=PUBKEY_TEST_DECRYPTER.private_key
+        )
+        with pytest.raises(pubkey.InappropriateCredentialError):
+            r.decrypt_pubkey(decrypter)
+
+
+def test_rsa_decryption_wrong_key_type():
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    key = pki_arch.key_set.get_private_key(KeyLabel('decrypter1'))
+    with open(f'{PDF_DATA_DIR}/minimal-pubkey-rc4-envelope.pdf', 'rb') as inf:
+        r = PdfFileReader(inf)
+        decrypter = SimpleEnvelopeKeyDecrypter(
+            cert=PUBKEY_TEST_DECRYPTER.cert, private_key=key
+        )
+        with pytest.raises(pubkey.InappropriateCredentialError):
+            r.decrypt_pubkey(decrypter)
+
+
+def test_invalid_originator_key(monkeypatch):
+    def _format_kari(
+        rid,
+        originator_key,
+        algo,
+        ukm,
+        encrypted_data,
+    ):
+        return cms.RecipientInfo(
+            name='kari',
+            value=cms.KeyAgreeRecipientInfo(
+                {
+                    'version': 3,
+                    'originator': cms.OriginatorIdentifierOrKey(
+                        name='originator_key',
+                        value=PUBKEY_TEST_DECRYPTER.cert.public_key,
+                    ),
+                    'ukm': ukm,
+                    'key_encryption_algorithm': algo,
+                    'recipient_encrypted_keys': [
+                        cms.RecipientEncryptedKey(
+                            {'rid': rid, 'encrypted_key': encrypted_data}
+                        )
+                    ],
+                }
+            ),
+        )
+
+    monkeypatch.setattr(pubkey, '_format_kari', _format_kari)
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    cert = pki_arch.get_cert(CertLabel('decrypter1'))
+    out = _produce_pubkey_encrypted_file(
+        version=SecurityHandlerVersion.AES256,
+        keylen=32,
+        use_aes=True,
+        use_crypt_filters=True,
+        cert=cert,
+    )
+
+    r = PdfFileReader(out)
+    decrypter = SimpleEnvelopeKeyDecrypter(
+        cert=cert,
+        private_key=pki_arch.key_set.get_private_key(KeyLabel('decrypter1')),
+    )
+    with pytest.raises(misc.PdfReadError):
+        r.decrypt_pubkey(decrypter)
 
 
 def test_key_encipherment_requirement():
@@ -301,7 +433,7 @@ def test_key_encipherment_requirement_override(
         use_aes=use_aes,
         use_crypt_filters=use_crypt_filters,
         perms=-44,
-        policy=RecipientEncryptionPolicy(ignore_key_usage=True),
+        policy=pubkey.RecipientEncryptionPolicy(ignore_key_usage=True),
     )
     w._assign_security_handler(sh)
     new_page_tree = w.import_object(
@@ -503,7 +635,7 @@ def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
     sh.add_recipients([PUBKEY_TEST_DECRYPTER.cert])
 
     crypt_filters[custom].add_recipients(
-        [PUBKEY_TEST_DECRYPTER.cert], policy=RecipientEncryptionPolicy()
+        [PUBKEY_TEST_DECRYPTER.cert], policy=pubkey.RecipientEncryptionPolicy()
     )
     w._assign_security_handler(sh)
 
@@ -522,7 +654,8 @@ def test_custom_pubkey_crypt_filter(with_hex_filter, main_unencrypted):
     # custom crypt filters can only have one set of recipients
     with pytest.raises(misc.PdfError):
         crypt_filters[custom].add_recipients(
-            [PUBKEY_TEST_DECRYPTER.cert], policy=RecipientEncryptionPolicy()
+            [PUBKEY_TEST_DECRYPTER.cert],
+            policy=pubkey.RecipientEncryptionPolicy(),
         )
 
     test_data = b'This is test data!'
@@ -1331,7 +1464,7 @@ def test_add_recp_before_auth_fail():
     with pytest.raises(misc.PdfError, match="before authenticating"):
         cf.add_recipients(
             [PUBKEY_SELFSIGNED_DECRYPTER.cert],
-            policy=RecipientEncryptionPolicy(),
+            policy=pubkey.RecipientEncryptionPolicy(),
         )
 
 
@@ -1346,7 +1479,7 @@ def test_add_recp_after_key_deriv():
     with pytest.raises(misc.PdfError, match="after deriving.*shared key"):
         cf.add_recipients(
             [PUBKEY_SELFSIGNED_DECRYPTER.cert],
-            policy=RecipientEncryptionPolicy(),
+            policy=pubkey.RecipientEncryptionPolicy(),
         )
 
 

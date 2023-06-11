@@ -54,6 +54,12 @@ keysets:
       signer2:
         path: signer2.key.pem
         password: secret
+      decrypter1:
+        path: decrypter1.key.pem  # secp256r1
+      decrypter2:
+        path: decrypter2.key.pem  # secp384r1
+      decrypter3:
+        path: decrypter3.key.pem  # secp521r1
   testing-ca-dsa:
     path-prefix: keys-dsa
     keys:
@@ -328,6 +334,35 @@ pki-architectures:
   testing-ca-ecdsa:
     template: testing-ca
     keyset: testing-ca-ecdsa
+  ecc-testing-ca-with-decrypters:
+    template: testing-ca
+    keyset: testing-ca-ecdsa
+    entity-defaults:
+      country-name: BE
+      organization-name: Example Inc
+      organizational-unit-name: Testing Authority
+    certs:
+      decrypter1:
+        subject: signer1
+        subject-key: decrypter1
+        issuer: interm
+        validity:
+          valid-from: "2020-01-01T00:00:00+0000"
+          valid-to: "2025-01-01T00:00:00+0000"
+        extensions:
+          - id: key_usage
+            critical: true
+            smart-value:
+              schema: key-usage
+              params: [key_encipherment]
+      decrypter2:
+        template: decrypter1
+        subject: signer1
+        subject-key: decrypter2
+      decrypter3:
+        template: decrypter1
+        subject: signer1
+        subject-key: decrypter3
   testing-ca-ed25519:
     template: testing-ca
     keyset: testing-ca-ed25519
