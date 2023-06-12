@@ -31,6 +31,14 @@ from cryptography.hazmat.primitives.asymmetric.rsa import (
     RSAPrivateKey,
     RSAPublicKey,
 )
+from cryptography.hazmat.primitives.asymmetric.x448 import (
+    X448PrivateKey,
+    X448PublicKey,
+)
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey,
+    X25519PublicKey,
+)
 from cryptography.hazmat.primitives.kdf import KeyDerivationFunction
 from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
@@ -379,15 +387,21 @@ def _choose_ecdh_settings(
 ) -> Tuple[
     hashes.HashAlgorithm, KeyEncryptionAlgorithmId, KeyEncryptionAlgorithmId
 ]:
-    bit_len = pub_key_info.bit_size
+    algo_name = pub_key_info.algorithm
+    if algo_name == 'ec':
+        approx_sec_level = pub_key_info.bit_size // 2
+    elif algo_name == 'x25519':
+        approx_sec_level = 128
+    else:
+        approx_sec_level = 256
     # All of these are dhSinglePass-stdDH-sha*kdf
-    if bit_len <= 256:
+    if approx_sec_level <= 128:
         return (
             hashes.SHA256(),
             KeyEncryptionAlgorithmId('aes128_wrap'),
             KeyEncryptionAlgorithmId('1.3.132.1.11.1'),
         )
-    elif bit_len <= 384:
+    elif approx_sec_level <= 192:
         return (
             hashes.SHA384(),
             KeyEncryptionAlgorithmId('aes192_wrap'),
@@ -412,9 +426,21 @@ def _ecdh_recipient(
     )
     key_wrap_algo = KeyEncryptionAlgorithm({'algorithm': key_wrap_algo_id})
     pub_key = serialization.load_der_public_key(pub_key_info.dump())
-    assert isinstance(pub_key, EllipticCurvePublicKey)
 
-    originator_key = generate_ec_private_key(pub_key.curve)
+    originator_key: Union[
+        X25519PrivateKey, X448PrivateKey, EllipticCurvePrivateKey
+    ]
+    if isinstance(pub_key, EllipticCurvePublicKey):
+        originator_key = generate_ec_private_key(pub_key.curve)
+        ecdh_value = originator_key.exchange(ECDH(), pub_key)
+    elif isinstance(pub_key, X25519PublicKey):
+        originator_key = X25519PrivateKey.generate()
+        ecdh_value = originator_key.exchange(pub_key)
+    elif isinstance(pub_key, X448PublicKey):
+        originator_key = X448PrivateKey.generate()
+        ecdh_value = originator_key.exchange(pub_key)
+    else:
+        raise NotImplementedError
 
     originator_key_info = PublicKeyInfo.load(
         originator_key.public_key().public_bytes(
@@ -423,7 +449,6 @@ def _ecdh_recipient(
         )
     )
 
-    ecdh_value = originator_key.exchange(ECDH(), pub_key)
     ukm = secrets.token_bytes(16)
     kdf = _kdf_for_exchange(
         kdf_digest=digest_spec,
@@ -507,7 +532,7 @@ def _recipient_info(
             return _rsaes_pkcs1v15_recipient(pub_key_info, rid, envelope_key)
         else:
             return _rsaes_oaep_recipient(pub_key_info, rid, envelope_key)
-    elif algorithm_name == 'ec':
+    elif algorithm_name in ('ec', 'x25519', 'x448'):
         ka_rid = cms.KeyAgreementRecipientIdentifier(
             {'issuer_and_serial_number': iss_serial_rid}
         )
@@ -929,17 +954,34 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         priv_key = serialization.load_der_private_key(
             self.private_key.dump(), password=None
         )
-        if not isinstance(priv_key, EllipticCurvePrivateKey):
+
+        mismatch_msg = (
+            "Originator's public key is not compatible "
+            "with selected private key"
+        )
+        if isinstance(priv_key, EllipticCurvePrivateKey):
+            # we could rely on pyca/cryptography to perform this check for us,
+            #  but then mypy complains
+            if (
+                not isinstance(originator_pub_key, EllipticCurvePublicKey)
+                or originator_pub_key.curve.name != priv_key.curve.name
+            ):
+                raise ValueError(mismatch_msg)
+            ecdh_value = priv_key.exchange(
+                ECDH(), peer_public_key=originator_pub_key
+            )
+        elif isinstance(priv_key, X25519PrivateKey):
+            if not isinstance(originator_pub_key, X25519PublicKey):
+                raise ValueError(mismatch_msg)
+            ecdh_value = priv_key.exchange(originator_pub_key)
+        elif isinstance(priv_key, X448PrivateKey):
+            if not isinstance(originator_pub_key, X448PublicKey):
+                raise ValueError(mismatch_msg)
+            ecdh_value = priv_key.exchange(originator_pub_key)
+        else:
             raise InappropriateCredentialError(
                 "The loaded key does not seem to be an EC private key"
             )
-        if not isinstance(originator_pub_key, EllipticCurvePublicKey):
-            raise ValueError(
-                "The loaded originator public key does not seem to be an EC key"
-            )
-        ecdh_value = priv_key.exchange(
-            ECDH(), peer_public_key=originator_pub_key
-        )
         derived_kek = kdf.derive(ecdh_value)
         return unwrap_key(wrapping_key=derived_kek, wrapped_key=encrypted_key)
 

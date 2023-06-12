@@ -256,18 +256,20 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
 
 
 @pytest.mark.parametrize(
-    'cert_lbl,key_lbl',
+    'lbl',
     [
-        (CertLabel('decrypter1'), KeyLabel('decrypter1')),
-        (CertLabel('decrypter2'), KeyLabel('decrypter2')),
-        (CertLabel('decrypter3'), KeyLabel('decrypter3')),
+        'decrypter1',
+        'decrypter2',
+        'decrypter3',
+        'decrypter-x25519',
+        'decrypter-x448',
     ],
 )
-def test_ecdh_encryption(cert_lbl, key_lbl):
+def test_ecdh_encryption(lbl):
     pki_arch = CERTOMANCER.get_pki_arch(
         ArchLabel('ecc-testing-ca-with-decrypters')
     )
-    cert = pki_arch.get_cert(cert_lbl)
+    cert = pki_arch.get_cert(CertLabel(lbl))
     out = _produce_pubkey_encrypted_file(
         version=SecurityHandlerVersion.AES256,
         keylen=32,
@@ -278,7 +280,7 @@ def test_ecdh_encryption(cert_lbl, key_lbl):
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(
         SimpleEnvelopeKeyDecrypter(
-            cert, pki_arch.key_set.get_private_key(key_lbl)
+            cert, pki_arch.key_set.get_private_key(KeyLabel(lbl))
         )
     )
     _validate_pubkey_decryption(r, result)
@@ -325,6 +327,23 @@ def test_ecdh_decryption_wrong_key_type():
             r.decrypt_pubkey(decrypter)
 
 
+def test_ecdh_decryption_wrong_curve():
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    cert = pki_arch.get_cert(CertLabel('decrypter3'))
+    with open(f'{PDF_DATA_DIR}/pubkey-ecc-test.pdf', 'rb') as inf:
+        r = PdfFileReader(inf)
+        decrypter = SimpleEnvelopeKeyDecrypter(
+            cert=cert,
+            private_key=pki_arch.key_set.get_private_key(
+                KeyLabel('decrypter1')
+            ),
+        )
+        with pytest.raises(misc.PdfReadError, match='Failed to decrypt'):
+            r.decrypt_pubkey(decrypter)
+
+
 def test_rsa_decryption_wrong_key_type():
     pki_arch = CERTOMANCER.get_pki_arch(
         ArchLabel('ecc-testing-ca-with-decrypters')
@@ -339,7 +358,16 @@ def test_rsa_decryption_wrong_key_type():
             r.decrypt_pubkey(decrypter)
 
 
-def test_invalid_originator_key(monkeypatch):
+@pytest.mark.parametrize(
+    'lbl', ['decrypter1', 'decrypter-x25519', 'decrypter-x448']
+)
+def test_invalid_originator_key(monkeypatch, lbl):
+    pki_arch = CERTOMANCER.get_pki_arch(
+        ArchLabel('ecc-testing-ca-with-decrypters')
+    )
+    cert = pki_arch.get_cert(CertLabel(lbl))
+    priv_key = pki_arch.key_set.get_private_key(KeyLabel(lbl))
+
     def _format_kari(
         rid,
         originator_key,
@@ -368,10 +396,6 @@ def test_invalid_originator_key(monkeypatch):
         )
 
     monkeypatch.setattr(pubkey, '_format_kari', _format_kari)
-    pki_arch = CERTOMANCER.get_pki_arch(
-        ArchLabel('ecc-testing-ca-with-decrypters')
-    )
-    cert = pki_arch.get_cert(CertLabel('decrypter1'))
     out = _produce_pubkey_encrypted_file(
         version=SecurityHandlerVersion.AES256,
         keylen=32,
@@ -383,7 +407,7 @@ def test_invalid_originator_key(monkeypatch):
     r = PdfFileReader(out)
     decrypter = SimpleEnvelopeKeyDecrypter(
         cert=cert,
-        private_key=pki_arch.key_set.get_private_key(KeyLabel('decrypter1')),
+        private_key=priv_key,
     )
     with pytest.raises(misc.PdfReadError):
         r.decrypt_pubkey(decrypter)

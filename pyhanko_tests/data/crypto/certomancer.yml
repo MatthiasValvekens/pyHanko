@@ -60,6 +60,10 @@ keysets:
         path: decrypter2.key.pem  # secp384r1
       decrypter3:
         path: decrypter3.key.pem  # secp521r1
+      decrypter-x25519:
+        path: decrypter-x25519.key.pem  # x25519
+      decrypter-x448:
+        path: decrypter-x448.key.pem  # x448
   testing-ca-dsa:
     path-prefix: keys-dsa
     keys:
@@ -363,6 +367,14 @@ pki-architectures:
         template: decrypter1
         subject: signer1
         subject-key: decrypter3
+      decrypter-x25519:
+        template: decrypter1
+        subject: signer1
+        subject-key: decrypter-x25519
+      decrypter-x448:
+        template: decrypter1
+        subject: signer1
+        subject-key: decrypter-x448
   testing-ca-ed25519:
     template: testing-ca
     keyset: testing-ca-ed25519
