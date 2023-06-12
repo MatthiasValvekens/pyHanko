@@ -219,6 +219,16 @@ def _produce_pubkey_encrypted_file(
     return out
 
 
+def _validate_pubkey_decryption(r, result):
+    assert result.status == AuthStatus.USER
+    assert result.permission_flags == -44
+    page = r.root['/Pages']['/Kids'][0].get_object()
+    assert '/ExtGState' in page['/Resources']
+    # just a piece of data I know occurs in the decoded content stream
+    # of the (only) page in VECTOR_IMAGE_PDF
+    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+
+
 @pytest.mark.parametrize(
     "version, keylen, use_aes, use_crypt_filters",
     [
@@ -242,13 +252,7 @@ def test_pubkey_encryption(version, keylen, use_aes, use_crypt_filters):
     if version == SecurityHandlerVersion.AES256:
         assert r.input_version == (2, 0)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
-    assert result.status == AuthStatus.USER
-    assert result.permission_flags == -44
-    page = r.root['/Pages']['/Kids'][0].get_object()
-    assert '/ExtGState' in page['/Resources']
-    # just a piece of data I know occurs in the decoded content stream
-    # of the (only) page in VECTOR_IMAGE_PDF
-    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+    _validate_pubkey_decryption(r, result)
 
 
 @pytest.mark.parametrize(
@@ -277,11 +281,7 @@ def test_ecdh_encryption(cert_lbl, key_lbl):
             cert, pki_arch.key_set.get_private_key(key_lbl)
         )
     )
-    assert result.status == AuthStatus.USER
-    assert result.permission_flags == -44
-    page = r.root['/Pages']['/Kids'][0].get_object()
-    assert '/ExtGState' in page['/Resources']
-    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+    _validate_pubkey_decryption(r, result)
 
 
 def test_oaep_encryption():
@@ -294,11 +294,7 @@ def test_oaep_encryption():
     )
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_TEST_DECRYPTER)
-    assert result.status == AuthStatus.USER
-    assert result.permission_flags == -44
-    page = r.root['/Pages']['/Kids'][0].get_object()
-    assert '/ExtGState' in page['/Resources']
-    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+    _validate_pubkey_decryption(r, result)
 
 
 def test_ecdh_decryption_smoke():
@@ -444,13 +440,7 @@ def test_key_encipherment_requirement_override(
     w.write(out)
     r = PdfFileReader(out)
     result = r.decrypt_pubkey(PUBKEY_SELFSIGNED_DECRYPTER)
-    assert result.status == AuthStatus.USER
-    assert result.permission_flags == -44
-    page = r.root['/Pages']['/Kids'][0].get_object()
-    assert '/ExtGState' in page['/Resources']
-    # just a piece of data I know occurs in the decoded content stream
-    # of the (only) page in VECTOR_IMAGE_PDF
-    assert b'0 1 0 rg /a0 gs' in page['/Contents'].data
+    _validate_pubkey_decryption(r, result)
 
 
 def test_pubkey_alternative_filter():
