@@ -1,6 +1,7 @@
 import abc
 import enum
 import logging
+import re
 import secrets
 import struct
 from dataclasses import dataclass
@@ -9,8 +10,17 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 from asn1crypto import algos, cms, core, x509
 from asn1crypto.algos import RSAESOAEPParams
-from asn1crypto.keys import PrivateKeyInfo, PublicKeyAlgorithm
-from cryptography.hazmat.primitives import serialization
+from asn1crypto.cms import KeyEncryptionAlgorithm, KeyEncryptionAlgorithmId
+from asn1crypto.keys import PrivateKeyInfo, PublicKeyAlgorithm, PublicKeyInfo
+from cryptography.hazmat.primitives import hashes, keywrap, serialization
+from cryptography.hazmat.primitives.asymmetric.ec import (
+    ECDH,
+    EllipticCurvePrivateKey,
+    EllipticCurvePublicKey,
+)
+from cryptography.hazmat.primitives.asymmetric.ec import (
+    generate_private_key as generate_ec_private_key,
+)
 from cryptography.hazmat.primitives.asymmetric.padding import (
     MGF1,
     OAEP,
@@ -21,6 +31,8 @@ from cryptography.hazmat.primitives.asymmetric.rsa import (
     RSAPrivateKey,
     RSAPublicKey,
 )
+from cryptography.hazmat.primitives.kdf import KeyDerivationFunction
+from cryptography.hazmat.primitives.kdf.x963kdf import X963KDF
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 from .. import generic, misc
@@ -293,84 +305,61 @@ def construct_envelope_content(
     return seed + (struct.pack('<i', perms) if include_permissions else b'')
 
 
-def _recipient_info(
+def _rsaes_pkcs1v15_recipient(
+    pub_key_info: PublicKeyInfo,
+    rid: cms.RecipientIdentifier,
     envelope_key: bytes,
-    cert: x509.Certificate,
-    policy: RecipientEncryptionPolicy,
 ):
-    pub_key_info = cert.public_key
-    pubkey_algo_info: PublicKeyAlgorithm = pub_key_info['algorithm']
-    algorithm_name = pubkey_algo_info['algorithm'].native
-    if algorithm_name != 'rsa':
-        raise NotImplementedError(
-            f"Certificate public key must be of type 'rsa', "
-            f"not '{algorithm_name}'."
-        )
+    padding = PKCS1v15()
 
-    assert len(envelope_key) == 32
-
-    if not policy.ignore_key_usage:
-        key_usage = cert.key_usage_value
-        if key_usage is None or 'key_encipherment' not in key_usage.native:
-            raise misc.PdfWriteError(
-                f"Certificate for subject {cert.subject.human_friendly} does "
-                f"not have the 'key_encipherment' key usage bit set."
-            )
+    algo = cms.KeyEncryptionAlgorithm(
+        {'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_pkcs1v15')}
+    )
 
     pub_key = serialization.load_der_public_key(pub_key_info.dump())
+    assert isinstance(pub_key, RSAPublicKey)
+    encrypted_data = pub_key.encrypt(envelope_key, padding=padding)
+    return _format_ktri(rid=rid, algo=algo, encrypted_data=encrypted_data)
 
-    if isinstance(pub_key, RSAPublicKey):
-        # support OAEP on general principle, but most PDF software
-        # only supports PKCS#1 v1.5 padding here.
-        padding: AsymmetricPadding
-        if policy.prefer_oaep:
-            # recycle these routines
-            from pyhanko.sign.general import get_pyca_cryptography_hash
-            from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 
-            digest_function_name = select_suitable_signing_md(pub_key_info)
-            digest_spec = get_pyca_cryptography_hash(digest_function_name)
-            algo = cms.KeyEncryptionAlgorithm(
-                {
-                    'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_oaep'),
-                    'parameters': RSAESOAEPParams(
-                        {
-                            'hash_algorithm': {
-                                'algorithm': digest_function_name
-                            },
-                            'mask_gen_algorithm': {
-                                'algorithm': 'mgf1',
-                                'parameters': {
-                                    'algorithm': digest_function_name
-                                },
-                            },
-                        }
-                    ),
-                }
-            )
-            padding = OAEP(
-                mgf=MGF1(digest_spec), algorithm=digest_spec, label=None
-            )
-        else:
-            padding = PKCS1v15()
+def _rsaes_oaep_recipient(
+    pub_key_info: PublicKeyInfo,
+    rid: cms.RecipientIdentifier,
+    envelope_key: bytes,
+):
+    # recycle these routines
+    from pyhanko.sign.general import get_pyca_cryptography_hash
+    from pyhanko.sign.signers.pdf_cms import select_suitable_signing_md
 
-            algo = cms.KeyEncryptionAlgorithm(
-                {'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_pkcs1v15')}
-            )
-        encrypted_data = pub_key.encrypt(envelope_key, padding=padding)
-    else:
-        raise NotImplementedError(
-            f"Cannot encrypt for key type {type(pub_key)}"
-        )
-
-    # TODO support subjectKeyIdentifier here (requiring version 2)
-    rid = cms.RecipientIdentifier(
+    digest_function_name = select_suitable_signing_md(pub_key_info)
+    digest_spec = get_pyca_cryptography_hash(digest_function_name)
+    algo = cms.KeyEncryptionAlgorithm(
         {
-            'issuer_and_serial_number': cms.IssuerAndSerialNumber(
-                {'issuer': cert.issuer, 'serial_number': cert.serial_number}
-            )
+            'algorithm': cms.KeyEncryptionAlgorithmId('rsaes_oaep'),
+            'parameters': RSAESOAEPParams(
+                {
+                    'hash_algorithm': {'algorithm': digest_function_name},
+                    'mask_gen_algorithm': {
+                        'algorithm': 'mgf1',
+                        'parameters': {'algorithm': digest_function_name},
+                    },
+                }
+            ),
         }
     )
+    padding = OAEP(mgf=MGF1(digest_spec), algorithm=digest_spec, label=None)
+
+    pub_key = serialization.load_der_public_key(pub_key_info.dump())
+    assert isinstance(pub_key, RSAPublicKey)
+    encrypted_data = pub_key.encrypt(envelope_key, padding=padding)
+    return _format_ktri(rid=rid, algo=algo, encrypted_data=encrypted_data)
+
+
+def _format_ktri(
+    rid: cms.RecipientIdentifier,
+    algo: cms.KeyEncryptionAlgorithm,
+    encrypted_data: bytes,
+):
     return cms.RecipientInfo(
         {
             'ktri': cms.KeyTransRecipientInfo(
@@ -383,6 +372,150 @@ def _recipient_info(
             )
         }
     )
+
+
+def _choose_ecdh_settings(
+    pub_key_info: PublicKeyInfo,
+) -> Tuple[
+    hashes.HashAlgorithm, KeyEncryptionAlgorithmId, KeyEncryptionAlgorithmId
+]:
+    bit_len = pub_key_info.bit_size
+    # All of these are dhSinglePass-stdDH-sha*kdf
+    if bit_len <= 256:
+        return (
+            hashes.SHA256(),
+            KeyEncryptionAlgorithmId('aes128_wrap'),
+            KeyEncryptionAlgorithmId('1.3.132.1.11.1'),
+        )
+    elif bit_len <= 384:
+        return (
+            hashes.SHA384(),
+            KeyEncryptionAlgorithmId('aes192_wrap'),
+            KeyEncryptionAlgorithmId('1.3.132.1.11.2'),
+        )
+    else:
+        return (
+            hashes.SHA512(),
+            KeyEncryptionAlgorithmId('aes256_wrap'),
+            KeyEncryptionAlgorithmId('1.3.132.1.11.3'),
+        )
+
+
+def _ecdh_recipient(
+    pub_key_info: PublicKeyInfo,
+    rid: cms.KeyAgreementRecipientIdentifier,
+    envelope_key: bytes,
+):
+    # static-ephemeral ECDH (standard) with X9.63 key derivation
+    digest_spec, key_wrap_algo_id, key_exch_algo_id = _choose_ecdh_settings(
+        pub_key_info
+    )
+    key_wrap_algo = KeyEncryptionAlgorithm({'algorithm': key_wrap_algo_id})
+    pub_key = serialization.load_der_public_key(pub_key_info.dump())
+    assert isinstance(pub_key, EllipticCurvePublicKey)
+
+    originator_key = generate_ec_private_key(pub_key.curve)
+
+    originator_key_info = PublicKeyInfo.load(
+        originator_key.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+    ecdh_value = originator_key.exchange(ECDH(), pub_key)
+    ukm = secrets.token_bytes(16)
+    kdf = _kdf_for_exchange(
+        kdf_digest=digest_spec,
+        key_wrap_algo=key_wrap_algo,
+        user_keying_material=ukm,
+    )
+    kek = kdf.derive(ecdh_value)
+    encrypted_data = keywrap.aes_key_wrap(
+        wrapping_key=kek, key_to_wrap=envelope_key
+    )
+    return _format_kari(
+        rid=rid,
+        originator_key=originator_key_info,
+        algo=cms.KeyEncryptionAlgorithm(
+            {
+                'algorithm': key_exch_algo_id,
+                'parameters': key_wrap_algo,
+            }
+        ),
+        ukm=ukm,
+        encrypted_data=encrypted_data,
+    )
+
+
+def _format_kari(
+    rid: cms.KeyAgreementRecipientIdentifier,
+    originator_key: PublicKeyInfo,
+    algo: cms.KeyEncryptionAlgorithm,
+    ukm: bytes,
+    encrypted_data: bytes,
+):
+    return cms.RecipientInfo(
+        name='kari',
+        value=cms.KeyAgreeRecipientInfo(
+            {
+                'version': 3,
+                'originator': cms.OriginatorIdentifierOrKey(
+                    name='originator_key', value=originator_key
+                ),
+                'ukm': ukm,
+                'key_encryption_algorithm': algo,
+                'recipient_encrypted_keys': [
+                    cms.RecipientEncryptedKey(
+                        {'rid': rid, 'encrypted_key': encrypted_data}
+                    )
+                ],
+            }
+        ),
+    )
+
+
+def _recipient_info(
+    envelope_key: bytes,
+    cert: x509.Certificate,
+    policy: RecipientEncryptionPolicy,
+):
+    pub_key_info = cert.public_key
+    pubkey_algo_info: PublicKeyAlgorithm = pub_key_info['algorithm']
+    algorithm_name = pubkey_algo_info['algorithm'].native
+
+    assert len(envelope_key) == 32
+
+    if not policy.ignore_key_usage:
+        # TODO for ECC: reject ECDSA-only keys
+        key_usage = cert.key_usage_value
+        if key_usage is None or 'key_encipherment' not in key_usage.native:
+            raise misc.PdfWriteError(
+                f"Certificate for subject {cert.subject.human_friendly} does "
+                f"not have the 'key_encipherment' key usage bit set."
+            )
+
+    # TODO support subjectKeyIdentifier here (requiring version 2)
+    iss_serial_rid = cms.IssuerAndSerialNumber(
+        {'issuer': cert.issuer, 'serial_number': cert.serial_number}
+    )
+    if algorithm_name == 'rsa':
+        rid = cms.RecipientIdentifier(
+            {'issuer_and_serial_number': iss_serial_rid}
+        )
+        if policy.prefer_oaep:
+            return _rsaes_pkcs1v15_recipient(pub_key_info, rid, envelope_key)
+        else:
+            return _rsaes_oaep_recipient(pub_key_info, rid, envelope_key)
+    elif algorithm_name == 'ec':
+        ka_rid = cms.KeyAgreementRecipientIdentifier(
+            {'issuer_and_serial_number': iss_serial_rid}
+        )
+        return _ecdh_recipient(pub_key_info, ka_rid, envelope_key)
+    else:
+        raise NotImplementedError(
+            f"Cannot encrypt for key type '{algorithm_name}'"
+        )
 
 
 def construct_recipient_cms(
@@ -438,7 +571,7 @@ def construct_recipient_cms(
     )
 
     # version 0 because no originatorInfo, no attribute certs
-    # and all recipientinfo structures have version 0 (and aren't' pwri)
+    # and all recipientinfo structures have version 0 (and aren't pwri)
     enveloped_data = cms.EnvelopedData(
         {
             'version': 0,
@@ -456,6 +589,10 @@ def construct_recipient_cms(
     )
 
 
+class InappropriateCredentialError(TypeError):
+    pass
+
+
 # TODO implement a PKCS#11 version of this interface
 class EnvelopeKeyDecrypter:
     """
@@ -463,24 +600,53 @@ class EnvelopeKeyDecrypter:
 
     This allows the key decryption process to happen offline, e.g. on a smart
     card.
-
-    :param cert:
-        The recipient's certificate.
     """
 
-    def __init__(self, cert: x509.Certificate):
-        self.cert = cert
+    @property
+    def cert(self) -> x509.Certificate:
+        """
+        :return:
+            Return the recipient's certificate
+        """
+        raise NotImplementedError
 
     def decrypt(
         self, encrypted_key: bytes, algo_params: cms.KeyEncryptionAlgorithm
     ) -> bytes:
         """
         Invoke the actual key decryption algorithm.
+        Used with key transport.
 
         :param encrypted_key:
             Payload to decrypt.
         :param algo_params:
             Specification of the encryption algorithm as a CMS object.
+        :raises InappropriateCredentialError:
+            if the credential cannot be used for key transport.
+        :return:
+            The decrypted payload.
+        """
+        raise NotImplementedError
+
+    def decrypt_with_exchange(
+        self,
+        encrypted_key: bytes,
+        algo_params: cms.KeyEncryptionAlgorithm,
+        originator_identifier: cms.OriginatorIdentifierOrKey,
+        user_keying_material: bytes,
+    ) -> bytes:
+        """
+        Decrypt an envelope key using a key derived from a key exchange.
+
+        :param encrypted_key:
+            Payload to decrypt.
+        :param algo_params:
+            Specification of the encryption algorithm as a CMS object.
+        :param originator_identifier:
+            Information about the originator necessary to complete the key
+            exchange.
+        :param user_keying_material:
+            The user keying material that will be used in the key derivation.
         :return:
             The decrypted payload.
         """
@@ -491,16 +657,59 @@ class _PrivKeyAndCert(core.Sequence):
     _fields = [('key', PrivateKeyInfo), ('cert', x509.Certificate)]
 
 
+class ECCCMSSharedInfo(core.Sequence):
+    _fields = [
+        ('key_info', KeyEncryptionAlgorithm),
+        (
+            'entityUInfo',
+            core.OctetString,
+            {'explicit': 0, 'optional': True},
+        ),
+        ('suppPubInfo', core.OctetString, {'explicit': 2}),
+    ]
+
+
+AES_WRAP_PATTERN = re.compile(r'aes(\d+)_wrap(_pad)?')
+
+
+def _kdf_for_exchange(
+    *,
+    kdf_digest: hashes.HashAlgorithm,
+    key_wrap_algo: cms.KeyEncryptionAlgorithm,
+    user_keying_material: Optional[bytes],
+) -> KeyDerivationFunction:
+    key_wrap_algo_id: str = key_wrap_algo['algorithm'].native
+    wrap_match = AES_WRAP_PATTERN.fullmatch(key_wrap_algo_id)
+    if not wrap_match:
+        raise NotImplementedError(
+            f"{key_wrap_algo_id} is not a supported key wrapping algorithm"
+        )
+    kek_bit_len = int(wrap_match.group(1))
+    return X963KDF(
+        algorithm=kdf_digest,
+        length=kek_bit_len // 8,
+        sharedinfo=ECCCMSSharedInfo(
+            {
+                'key_info': key_wrap_algo,
+                'entityUInfo': user_keying_material,
+                'suppPubInfo': struct.pack('>I', kek_bit_len),
+            }
+        ).dump(),
+    )
+
+
 class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
     """
     Implementation of :class:`.EnvelopeKeyDecrypter` where the private key
-    is an RSA key residing in memory.
+    is an RSA or ECC key residing in memory.
 
     :param cert:
         The recipient's certificate.
     :param private_key:
         The recipient's private key.
     """
+
+    dhsinglepass_stddh_arc_pattern = re.compile(r'1\.3\.132\.1\.11\.(\d+)')
 
     @classmethod
     def get_name(cls) -> str:
@@ -523,8 +732,12 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
         return SimpleEnvelopeKeyDecrypter(cert=cert, private_key=key)
 
     def __init__(self, cert: x509.Certificate, private_key: PrivateKeyInfo):
-        super().__init__(cert)
         self.private_key: PrivateKeyInfo = private_key
+        self._cert = cert
+
+    @property
+    def cert(self) -> x509.Certificate:
+        return self._cert
 
     @staticmethod
     def load(key_file, cert_file, key_passphrase=None):
@@ -636,13 +849,168 @@ class SimpleEnvelopeKeyDecrypter(EnvelopeKeyDecrypter, SerialisableCredential):
             self.private_key.dump(), password=None
         )
         if not isinstance(priv_key, RSAPrivateKey):
-            raise NotImplementedError(
+            raise InappropriateCredentialError(
                 "The loaded key does not seem to be an RSA private key"
             )
         return priv_key.decrypt(encrypted_key, padding=padding)
 
+    def decrypt_with_exchange(
+        self,
+        encrypted_key: bytes,
+        algo_params: cms.KeyEncryptionAlgorithm,
+        originator_identifier: cms.OriginatorIdentifierOrKey,
+        user_keying_material: Optional[bytes],
+    ) -> bytes:
+        """
+        Decrypt the payload using a key agreed via ephemeral-static
+        standard (non-cofactor) ECDH with X9.63 key derivation.
+        Other schemes aer not supported at this time.
+
+
+        :param encrypted_key:
+            Payload to decrypt.
+        :param algo_params:
+            Specification of the encryption algorithm as a CMS object.
+        :param originator_identifier:
+            The originator info, which must be an EC key.
+        :param user_keying_material:
+            The user keying material that will be used in the key derivation.
+        :return:
+            The decrypted payload.
+        """
+        # TODO get the relevant OIDs added to asn1crypto
+        oid = algo_params['algorithm']
+
+        match = self.dhsinglepass_stddh_arc_pattern.fullmatch(oid.dotted)
+        kdf_digest: Optional[hashes.HashAlgorithm] = None
+        if match:
+            kdf_digest = {
+                '0': hashes.SHA224(),
+                '1': hashes.SHA256(),
+                '2': hashes.SHA384(),
+                '3': hashes.SHA512(),
+            }.get(match.group(1), None)
+        if not kdf_digest:
+            raise NotImplementedError(
+                "Only dhSinglePass-stdDH algorithms from SEC 1 / RFC 5753 are "
+                "supported."
+            )
+
+        key_wrap_algo = cms.KeyEncryptionAlgorithm.load(
+            algo_params['parameters'].dump()
+        )
+        key_wrap_algo_id: str = key_wrap_algo['algorithm'].native
+
+        if not AES_WRAP_PATTERN.fullmatch(key_wrap_algo_id):
+            raise NotImplementedError(
+                f"{key_wrap_algo_id} is not a supported key wrapping algorithm"
+            )
+        unwrap_key = (
+            keywrap.aes_key_unwrap_with_padding
+            if key_wrap_algo_id.endswith('_pad')
+            else keywrap.aes_key_unwrap
+        )
+        kdf = _kdf_for_exchange(
+            kdf_digest=kdf_digest,
+            key_wrap_algo=key_wrap_algo,
+            user_keying_material=user_keying_material,
+        )
+
+        if originator_identifier.name != 'originator_key':
+            raise NotImplementedError("Only originator_key is supported")
+
+        originator_pub_key_info: PublicKeyInfo = (
+            originator_identifier.chosen.untag()
+        )
+        originator_pub_key = serialization.load_der_public_key(
+            originator_pub_key_info.dump()
+        )
+
+        priv_key = serialization.load_der_private_key(
+            self.private_key.dump(), password=None
+        )
+        if not isinstance(priv_key, EllipticCurvePrivateKey):
+            raise InappropriateCredentialError(
+                "The loaded key does not seem to be an EC private key"
+            )
+        if not isinstance(originator_pub_key, EllipticCurvePublicKey):
+            raise ValueError(
+                "The loaded originator public key does not seem to be an EC key"
+            )
+        ecdh_value = priv_key.exchange(
+            ECDH(), peer_public_key=originator_pub_key
+        )
+        derived_kek = kdf.derive(ecdh_value)
+        return unwrap_key(wrapping_key=derived_kek, wrapped_key=encrypted_key)
+
 
 SerialisableCredential.register(SimpleEnvelopeKeyDecrypter)
+
+
+def read_envelope_key(
+    ed: cms.EnvelopedData, decrypter: EnvelopeKeyDecrypter
+) -> Optional[bytes]:
+    rec_info: cms.RecipientInfo
+    for rec_info in ed['recipient_infos']:
+        if rec_info.name == 'ktri':
+            ktri = rec_info.chosen
+            issuer_and_serial = ktri['rid'].chosen
+            if not isinstance(issuer_and_serial, cms.IssuerAndSerialNumber):
+                raise NotImplementedError(
+                    "Recipient identifier must be of type IssuerAndSerialNumber."
+                )
+            issuer = issuer_and_serial['issuer']
+            serial = issuer_and_serial['serial_number'].native
+            if (
+                decrypter.cert.issuer == issuer
+                and decrypter.cert.serial_number == serial
+            ):
+                try:
+                    return decrypter.decrypt(
+                        ktri['encrypted_key'].native,
+                        ktri['key_encryption_algorithm'],
+                    )
+                except InappropriateCredentialError as e:
+                    raise e
+                except Exception as e:
+                    raise misc.PdfReadError(
+                        "Failed to decrypt envelope key"
+                    ) from e
+        elif rec_info.name == 'kari':
+            kari = rec_info.chosen
+            for recipient_enc_key in kari['recipient_encrypted_keys']:
+                issuer_and_serial = recipient_enc_key['rid'].chosen
+                # TODO make this DRY and support key identifier
+                if not isinstance(issuer_and_serial, cms.IssuerAndSerialNumber):
+                    raise NotImplementedError(
+                        "Recipient identifier must be of type IssuerAndSerialNumber."
+                    )
+                issuer = issuer_and_serial['issuer']
+                serial = issuer_and_serial['serial_number'].native
+                if (
+                    decrypter.cert.issuer == issuer
+                    and decrypter.cert.serial_number == serial
+                ):
+                    try:
+                        return decrypter.decrypt_with_exchange(
+                            recipient_enc_key['encrypted_key'].native,
+                            kari['key_encryption_algorithm'],
+                            originator_identifier=kari['originator'],
+                            user_keying_material=kari['ukm'].native,
+                        )
+                    except InappropriateCredentialError as e:
+                        raise e
+                    except Exception as e:
+                        raise misc.PdfReadError(
+                            "Failed to decrypt envelope key"
+                        ) from e
+        else:
+            raise NotImplementedError(
+                "RecipientInfo must be of type KeyTransRecipientInfo "
+                "or KeyAgreeRecipientInfo"
+            )
+
+    return None
 
 
 def read_seed_from_recipient_cms(
@@ -656,36 +1024,8 @@ def read_seed_from_recipient_cms(
         )
     ed: cms.EnvelopedData = recipient_cms['content']
     encrypted_content_info = ed['encrypted_content_info']
-    rec_info: cms.RecipientInfo
-    for rec_info in ed['recipient_infos']:
-        ktri = rec_info.chosen
-        if not isinstance(ktri, cms.KeyTransRecipientInfo):
-            raise NotImplementedError(
-                "RecipientInfo must be of type KeyTransRecipientInfo."
-            )
-        issuer_and_serial = ktri['rid'].chosen
-        if not isinstance(issuer_and_serial, cms.IssuerAndSerialNumber):
-            raise NotImplementedError(
-                "Recipient identifier must be of type IssuerAndSerialNumber."
-            )
-        issuer = issuer_and_serial['issuer']
-        serial = issuer_and_serial['serial_number'].native
-        if (
-            decrypter.cert.issuer == issuer
-            and decrypter.cert.serial_number == serial
-        ):
-            # we have a match!
-            # use the decrypter passed in to decrypt the envelope key
-            # for this recipient.
-            try:
-                envelope_key = decrypter.decrypt(
-                    ktri['encrypted_key'].native,
-                    ktri['key_encryption_algorithm'],
-                )
-            except Exception as e:
-                raise misc.PdfReadError("Failed to decrypt envelope key") from e
-            break
-    else:
+    envelope_key = read_envelope_key(ed, decrypter)
+    if envelope_key is None:
         return None, None
 
     # we have the envelope key
