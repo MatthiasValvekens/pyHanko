@@ -196,7 +196,13 @@ have a ``.pfx`` or ``.p12`` extension) as follows:
 By default, these calls create invisible signature fields, but if the field
 specified using the ``--field`` parameter exists and has a widget associated
 with it, a simple default appearance will be generated
-(see :numref:`default-appearance`).
+(see :numref:`default-appearance`). You can also use the extended syntax from
+``addfields`` to create visible signature fields on-the-fly, e.g. like so:
+
+.. code-block:: bash
+
+    pyhanko sign addsig --field PAGE/X1,Y1,X2,Y2/NAME pkcs12 \
+        input.pdf output.pdf secrets.pfx
 
 In many cases, you may want to embed extra certificates (e.g. for intermediate
 certificate authorities) into your signature, to facilitate validation.
