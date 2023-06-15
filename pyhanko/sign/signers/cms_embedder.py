@@ -15,9 +15,11 @@ from pyhanko.sign.fields import (
     FieldMDPSpec,
     MDPPerm,
     SigFieldSpec,
+    annot_width_height,
     apply_sig_field_spec_properties,
     ensure_sig_flags,
     enumerate_sig_fields,
+    get_sig_field_annot,
     prepare_sig_field,
 )
 from pyhanko.sign.general import SigningError
@@ -254,12 +256,7 @@ class SigAppearanceSetup:
             This method is internal API.
         """
 
-        try:
-            x1, y1, x2, y2 = sig_annot['/Rect']
-        except KeyError:
-            return
-        w = abs(x1 - x2)
-        h = abs(y1 - y2)
+        w, h = annot_width_height(sig_annot)
         if w and h:
             # the field is probably a visible one, so we change its appearance
             # stream to show some data about the signature
@@ -467,18 +464,7 @@ class PdfCMSEmbedder:
         # take care of the field's visual appearance (if applicable)
         appearance_setup = sig_obj_setup.appearance_setup
         if appearance_setup is not None:
-            try:
-                (sig_annot,) = sig_field['/Kids']
-                sig_annot = sig_annot.get_object()
-            except (ValueError, TypeError):
-                raise SigningError(
-                    "Failed to access signature field's annotation. "
-                    "Signature field must have exactly one child annotation, "
-                    "or it must be combined with its annotation."
-                )
-            except KeyError:
-                sig_annot = sig_field
-
+            sig_annot = get_sig_field_annot(sig_field)
             appearance_setup.apply(sig_annot, writer)
 
         sig_obj = sig_obj_setup.sig_placeholder

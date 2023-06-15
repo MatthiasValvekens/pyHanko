@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.cli import cli_root
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import async_validate_detached_cms
 from pyhanko_tests.cli_tests.conftest import (
@@ -925,3 +926,97 @@ def test_cli_new_field_spec_bars_existing_only(cli_runner):
     )
     assert result.exit_code == 1
     assert "incompatible with --existing-only" in result.output
+
+
+def test_cli_underspecified_visible_new_field(cli_runner):
+    cfg = {
+        'stamp-styles': {'test': {'type': 'text', 'background': '__stamp__'}}
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            '--style-name',
+            'test',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            '--key',
+            _write_user_key(TESTING_CA),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "'Sig1' does not exist in the PDF file" in result.output
+    assert "you did not specify a bounding box" in result.output
+
+
+def test_cli_underspecified_visible_new_field_no_name(cli_runner):
+    cfg = {
+        'stamp-styles': {'test': {'type': 'text', 'background': '__stamp__'}}
+    }
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--style-name',
+            'test',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            '--key',
+            _write_user_key(TESTING_CA),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "did not contain any signature fields" in result.output
+    assert "you did not specify a bounding box" in result.output
+
+
+@pytest.mark.parametrize('field_name_passed', [True, False])
+def test_cli_explicit_style_but_field_invisible(cli_runner, field_name_passed):
+    cfg = {
+        'stamp-styles': {'test': {'type': 'text', 'background': '__stamp__'}}
+    }
+    _write_config(cfg)
+
+    with open(INPUT_PATH, 'rb+') as inf:
+        w = IncrementalPdfFileWriter(inf)
+        from pyhanko.sign import fields
+
+        fields.append_signature_field(
+            w, sig_field_spec=fields.SigFieldSpec("Sig1")
+        )
+        w.write_in_place()
+
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            *(('--field', 'Sig1') if field_name_passed else ()),
+            '--style-name',
+            'test',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            '--key',
+            _write_user_key(TESTING_CA),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "the field 'Sig1' in the PDF is not a visible one" in result.output

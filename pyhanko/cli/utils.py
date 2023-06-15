@@ -1,4 +1,5 @@
 import logging
+from typing import Optional, Tuple
 
 import click
 
@@ -40,7 +41,9 @@ def _index_page(page):
         )
 
 
-def parse_field_location_spec(spec, require_full_spec=True):
+def parse_field_location_spec(
+    spec: str, require_full_spec: bool = True
+) -> Tuple[str, Optional[fields.SigFieldSpec]]:
     try:
         page, box, name = spec.split('/')
     except ValueError:

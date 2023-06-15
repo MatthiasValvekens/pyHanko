@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import click
 from pyhanko_certvalidator import ValidationContext
@@ -203,6 +203,7 @@ def addsig(
             key_usage = key_usage_sett.key_usage
     else:
         vc = None
+    field_name: Optional[str]
     if field:
         field_name, new_field_spec = parse_field_location_spec(
             field, require_full_spec=False
@@ -230,6 +231,7 @@ def addsig(
     ctx_obj.stamp_style = select_style(ctx, style_name, stamp_url)
     ctx_obj.stamp_url = stamp_url
     ctx_obj.lenient = no_strict_syntax
+    ctx_obj.ux.visible_signature_desired = bool(style_name or new_field_spec)
 
 
 def register(plugins: List[SigningCommandPlugin]):
