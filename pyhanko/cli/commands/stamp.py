@@ -11,7 +11,6 @@ from pyhanko.stamp import QRStampStyle, qr_stamp_file, text_stamp_file
 
 __all__ = ['stamp', 'select_style']
 
-
 _CONFIG_REQUIRED_MSG = (
     "Using stamp styles requires a configuration file "
     f"({DEFAULT_CONFIG_FILE} by default)."
@@ -70,7 +69,16 @@ def select_style(ctx: click.Context, style_name: str, url: str):
     type=str,
 )
 @click.pass_context
-def stamp(ctx, infile, outfile, x, y, style_name, page, stamp_url):
+def stamp(
+    ctx,
+    infile: str,
+    outfile: str,
+    x: int,
+    y: int,
+    style_name: str,
+    page: int,
+    stamp_url: str,
+):
     cli_config: Optional[CLIConfig] = ctx.obj.config
     if cli_config is None:
         raise click.ClickException(_CONFIG_REQUIRED_MSG)
