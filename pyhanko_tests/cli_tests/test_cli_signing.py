@@ -275,7 +275,19 @@ def test_cli_addsig_pemder_with_unreadable_additional_certs(cli_runner):
     assert "Could not load certificates" in result.output
 
 
-def test_cli_addsig_pemder_detached(cli_runner, pki_arch, cert_chain, user_key):
+@pytest.mark.parametrize('with_timestamp', ['claimed', 'tsa'])
+def test_cli_addsig_pemder_detached(
+    cli_runner,
+    pki_arch_name,
+    pki_arch,
+    cert_chain,
+    user_key,
+    timestamp_url,
+    with_timestamp,
+):
+    if pki_arch_name == 'ed448' and with_timestamp == 'tsa':
+        # FIXME deal with this bug on the Certomancer end
+        pytest.skip("ed448 timestamping in Certomancer doesn't work")
     cfg = _pemder_setup_config(user_key, cert_chain)
     _write_config(cfg)
     result = cli_runner.invoke(
@@ -283,9 +295,12 @@ def test_cli_addsig_pemder_detached(cli_runner, pki_arch, cert_chain, user_key):
         [
             'sign',
             'addsig',
+            *(
+                ('--timestamp-url', timestamp_url)
+                if with_timestamp == 'tsa'
+                else ()
+            ),
             '--detach-pem',
-            '--field',
-            'Sig1',
             'pemder',
             '--no-pass',
             '--pemder-setup',
@@ -310,6 +325,10 @@ def test_cli_addsig_pemder_detached(cli_runner, pki_arch, cert_chain, user_key):
                 )
             )
             assert status.bottom_line, status.pretty_print_details()
+            if with_timestamp == 'tsa':
+                assert status.timestamp_validity is not None
+            else:
+                assert status.timestamp_validity is None
 
 
 def test_cli_addsig_p12(cli_runner, p12_keys, monkeypatch):
@@ -1020,3 +1039,37 @@ def test_cli_explicit_style_but_field_invisible(cli_runner, field_name_passed):
     )
     assert result.exit_code == 1
     assert "the field 'Sig1' in the PDF is not a visible one" in result.output
+
+
+def test_cli_pades_lta_no_timestamp_url(cli_runner):
+    cfg = {
+        'validation-contexts': {
+            'test': {
+                'trust': _write_cert(TESTING_CA, CertLabel('root'), "root.pem"),
+            }
+        },
+    }
+
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            '--validation-context',
+            'test',
+            '--with-validation-info',
+            '--use-pades-lta',
+            'pemder',
+            '--key',
+            _write_user_key(TESTING_CA),
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "--timestamp-url is required" in result.output
