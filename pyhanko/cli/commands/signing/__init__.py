@@ -209,6 +209,10 @@ def addsig(
         )
     else:
         field_name = new_field_spec = None
+    if new_field_spec and existing_only:
+        raise click.ClickException(
+            "Specifying field coordinates is incompatible with --existing-only"
+        )
     ctx_obj.sig_settings = signers.PdfSignatureMetadata(
         field_name=field_name,
         location=location,

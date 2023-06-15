@@ -902,3 +902,26 @@ def test_cli_sign_visible_with_style_but_no_config(
     )
     assert result.exit_code == 1
     assert "requires a configuration file" in result.output
+
+
+def test_cli_new_field_spec_bars_existing_only(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            '--existing-only',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            '--key',
+            _write_user_key(TESTING_CA),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert result.exit_code == 1
+    assert "incompatible with --existing-only" in result.output
