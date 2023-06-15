@@ -97,6 +97,11 @@ Note that not all of these are necessarily exposed through the CLI.
     - AdES validation (incubating)
  - Encryption
     - All encryption methods in PDF 2.0 are supported.
+    - In addition, we support a number of extra file encryption
+      modes of operation for the public-key security handler that are not
+      explicitly called out in the standard.
+         - RSAES-OAEP (does not appear to be widely supported in PDF tooling)
+         - ephemeral-static ECDH with X9.63 key derivation (supported by Acrobat)
  - CLI & configuration
     - YAML-based configuration (optional for most features)
     - CLI based on `click` 
