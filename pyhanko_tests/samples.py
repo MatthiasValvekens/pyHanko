@@ -30,6 +30,8 @@ MINIMAL_ONE_FIELD_TAGGED = read_all(
 MINIMAL_TWO_FIELDS_TAGGED = read_all(
     PDF_DATA_DIR + '/minimal-two-fields-tagged.pdf'
 )
+MINIMAL_HYBRID = read_all(PDF_DATA_DIR + '/minimal-hybrid-xref.pdf')
+MINIMAL_SLIGHTLY_BROKEN = read_all(PDF_DATA_DIR + '/minimal-startxref-obo2.pdf')
 
 
 # user/owner passwords are 'usersecret' and 'ownersecret' respectively

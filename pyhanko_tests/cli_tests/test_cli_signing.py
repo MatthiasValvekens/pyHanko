@@ -24,8 +24,10 @@ from pyhanko_tests.cli_tests.conftest import (
 )
 from pyhanko_tests.samples import (
     MINIMAL_AES256,
+    MINIMAL_HYBRID,
     MINIMAL_ONE_FIELD,
     MINIMAL_PUBKEY_AES256,
+    MINIMAL_SLIGHTLY_BROKEN,
     TESTING_CA,
 )
 
@@ -1097,3 +1099,51 @@ def test_cli_pades_lta_no_timestamp_url(cli_runner):
     )
     assert result.exit_code == 1
     assert "--timestamp-url is required" in result.output
+
+
+def test_fail_strict_hybrid(cli_runner):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL_HYBRID)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--key',
+            _write_user_key(TESTING_CA),
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            INPUT_PATH,
+            "out.pdf",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "hybrid cross-ref" in result.output
+
+
+def test_succeed_non_strict_hybrid(cli_runner):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL_HYBRID)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--no-strict-syntax',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--key',
+            _write_user_key(TESTING_CA),
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            INPUT_PATH,
+            "out.pdf",
+        ],
+    )
+    assert result.exit_code == 0
