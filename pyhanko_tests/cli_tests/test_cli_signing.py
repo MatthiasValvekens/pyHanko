@@ -331,6 +331,30 @@ def test_cli_addsig_pemder_detached(
                 assert status.timestamp_validity is None
 
 
+def test_cli_addsig_pemder_detached_no_field_arg(
+    cli_runner,
+):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--detach-pem',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            '--key',
+            _write_user_key(TESTING_CA),
+            INPUT_PATH,
+            'output.sig.pem',
+        ],
+    )
+    assert result.exit_code == 1
+    assert '--field is not compatible with --detach' in result.output
+
+
 def test_cli_addsig_p12(cli_runner, p12_keys, monkeypatch):
     monkeypatch.setattr(getpass, 'getpass', value=_const(DUMMY_PASSPHRASE))
     result = cli_runner.invoke(

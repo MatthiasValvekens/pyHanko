@@ -173,6 +173,10 @@ def addsig(
     if detach or detach_pem:
         ctx_obj.detach_pem = detach_pem
         ctx_obj.sig_settings = None
+        if field:
+            raise click.ClickException(
+                "--field is not compatible with --detach or --detach-pem"
+            )
         return  # everything else doesn't apply
 
     if use_pades_lta:
