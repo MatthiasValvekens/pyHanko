@@ -49,9 +49,12 @@ __all__ = [
     'ensure_sig_flags',
     'prepare_sig_field',
     'apply_sig_field_spec_properties',
+    'annot_width_height',
+    'get_sig_field_annot',
 ]
 
 logger = logging.getLogger(__name__)
+
 
 # TODO support other seed value dict entries
 # TODO add more customisability appearance-wise
@@ -1515,7 +1518,56 @@ def prepare_sig_field(
     return True, sig_field_ref
 
 
-def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
+def get_sig_field_annot(
+    sig_field: generic.DictionaryObject,
+) -> generic.DictionaryObject:
+    """
+    Internal function to get the annotation of a signature field.
+
+    :param sig_field:
+        A signature field dictionary.
+    :return:
+        The dictionary of the corresponding annotation.
+    """
+    try:
+        (sig_annot,) = sig_field['/Kids']
+        sig_annot = sig_annot.get_object()
+    except (ValueError, TypeError):
+        raise SigningError(
+            "Failed to access signature field's annotation. "
+            "Signature field must have exactly one child annotation, "
+            "or it must be combined with its annotation."
+        )
+    except KeyError:
+        sig_annot = sig_field
+    return sig_annot
+
+
+def annot_width_height(
+    annot_dict: generic.DictionaryObject,
+) -> Tuple[float, float]:
+    """
+    Internal function to compute the width and height of an annotation.
+
+    :param annot_dict:
+        Annotation dictionary.
+    :return:
+        a (width, height) tuple
+    """
+    try:
+        x1, y1, x2, y2 = annot_dict['/Rect']
+    except KeyError:
+        return 0, 0
+    w = abs(x1 - x2)
+    h = abs(y1 - y2)
+    return w, h
+
+
+def enumerate_sig_fields(
+    handler: PdfHandler,
+    filled_status: Optional[bool] = None,
+    with_name: Optional[str] = None,
+):
     """
     Enumerate signature fields.
 
@@ -1525,6 +1577,8 @@ def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
         Optional boolean. If ``True`` (resp. ``False``) then all filled
         (resp. empty) fields are returned. If left ``None`` (the default), then
         all fields are returned.
+    :param with_name:
+        If not ``None``, only look for fields with the specified name.
     :return:
         A generator producing signature fields.
     """
@@ -1534,7 +1588,12 @@ def enumerate_sig_fields(handler: PdfHandler, filled_status=None):
     except KeyError:
         return
 
-    yield from enumerate_sig_fields_in(fields, filled_status, refs_seen=set())
+    yield from enumerate_sig_fields_in(
+        fields,
+        filled_status=filled_status,
+        with_name=with_name,
+        refs_seen=set(),
+    )
 
 
 def enumerate_sig_fields_in(

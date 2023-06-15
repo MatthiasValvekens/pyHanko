@@ -1,10 +1,25 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from pyhanko.cli.config import CLIConfig
 from pyhanko.sign import PdfSignatureMetadata
 from pyhanko.sign.fields import SigFieldSpec
 from pyhanko.stamp import BaseStampStyle
+
+
+@dataclass
+class UXContext:
+    """
+    Context object to track information that affects the UX, e.g. user intent
+    as inferred from certain argument combinations that are otherwise difficult
+    to wire throughout the UI code.
+    """
+
+    visible_signature_desired: bool = False
+    """
+    Set to `True` if the user explicitly specifies `--field` with a bounding box
+    or passes `--style-name` explicitly.
+    """
 
 
 @dataclass
@@ -26,7 +41,7 @@ class CLIContext:
 
     config: Optional[CLIConfig] = None
     """
-    Valuse for CLI configuration settings.
+    Values for CLI configuration settings.
     """
 
     existing_fields_only: bool = False
@@ -69,4 +84,9 @@ class CLIContext:
     lenient: bool = False
     """
     Process PDF files in nonstrict mode.
+    """
+
+    ux: UXContext = field(default_factory=UXContext)
+    """
+    UX information.
     """

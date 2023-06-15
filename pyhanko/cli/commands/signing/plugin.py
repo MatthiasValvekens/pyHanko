@@ -11,12 +11,49 @@ from pyhanko.cli.commands.signing.utils import get_text_params, open_for_signing
 from pyhanko.cli.plugin_api import SigningCommandPlugin
 from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import readable_file, writable_file
-from pyhanko.sign import PdfSigner
+from pyhanko.pdf_utils.rw_common import PdfHandler
+from pyhanko.sign import PdfSigner, fields
 from pyhanko.sign.signers.pdf_cms import (
     PdfCMSSignedAttributes,
     select_suitable_signing_md,
 )
 from pyhanko.sign.timestamps import HTTPTimeStamper
+
+
+def _ensure_field_visible(
+    handler: PdfHandler, name: Optional[str], will_create: bool
+):
+    # verify if the resulting signature will be a visible one
+    prefix = "You seem to be trying to create a visible signature"
+    try:
+        fq_name, _, field_ref = next(
+            fields.enumerate_sig_fields(handler, with_name=name)
+        )
+        sig_annot = fields.get_sig_field_annot(sig_field=field_ref.get_object())
+        w, h = fields.annot_width_height(sig_annot)
+        if not w or not h:
+            raise click.ClickException(
+                f"{prefix}, but the field '{fq_name}' in the PDF is not a "
+                f"visible one. Please specify another field name if you "
+                f"need a visible signature."
+            )
+    except StopIteration:
+        if not name:
+            raise click.ClickException(
+                f"{prefix}, but the PDF did not contain any signature fields, "
+                f"and you did not specify a bounding box. "
+                f"Please specify the field as "
+                f"--field \"PAGE/X1,Y1,X2,Y2/NAME\" to "
+                f"create a visible signature field at the coordinates provided."
+            )
+        elif not will_create:
+            raise click.ClickException(
+                f"{prefix}, but the field '{name}' does not exist in the PDF "
+                f"file, and you did not specify a bounding box. "
+                f"Please specify the field as "
+                f"--field \"PAGE/X1,Y1,X2,Y2/{name}\" to "
+                f"create a visible signature field at the coordinates provided."
+            )
 
 
 def _callback_logic(
@@ -65,6 +102,12 @@ def _callback_logic(
             with open_for_signing(
                 infile_path=infile, lenient=cli_ctx.lenient
             ) as w:
+                if cli_ctx.ux.visible_signature_desired:
+                    _ensure_field_visible(
+                        w,
+                        pdf_sig_settings.field_name,
+                        cli_ctx.new_field_spec is not None,
+                    )
                 result = PdfSigner(
                     pdf_sig_settings,
                     signer=signer,
