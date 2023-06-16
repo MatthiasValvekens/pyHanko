@@ -20,7 +20,12 @@ from pyhanko.pdf_utils.generic import Reference, pdf_name
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.layout import BoxConstraints, BoxSpecificationError
 from pyhanko.pdf_utils.metadata.model import DocumentMetadata
-from pyhanko.pdf_utils.reader import PdfFileReader, RawPdfPath
+from pyhanko.pdf_utils.reader import (
+    HistoricalResolver,
+    PdfFileReader,
+    RawPdfPath,
+    read_next_end_line,
+)
 from pyhanko.pdf_utils.rw_common import PdfHandler
 
 from .samples import *
@@ -1963,3 +1968,67 @@ def test_assign_non_name_to_dict():
     d = generic.DictionaryObject()
     with pytest.raises(ValueError, match="must be a name object"):
         d[10] = generic.NullObject()
+
+
+def test_tolerate_startxref_on_same_line():
+    with open(f"{PDF_DATA_DIR}/minimal-startxref-same-line.pdf", 'rb') as inf:
+        r = PdfFileReader(inf)
+        assert r.last_startxref == 565
+
+
+@pytest.mark.parametrize(
+    'fname',
+    ['minimal-startxref-hopeless2.pdf', 'minimal-startxref-hopeless3.pdf'],
+)
+def test_startxref_parse_failure(fname):
+    with open(f"{PDF_DATA_DIR}/{fname}", 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match="startxref not found"):
+            PdfFileReader(inf)
+
+
+def test_illegal_header():
+    with open(f"{PDF_DATA_DIR}/minimal-illegal-header.pdf", 'rb') as inf:
+        with pytest.raises(misc.PdfReadError, match="Illegal PDF header"):
+            PdfFileReader(inf)
+
+
+def test_ignore_illegal_version_in_catalog():
+    out = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/Version'] = generic.pdf_string('zzzz')
+    w.update_root()
+    w.write_in_place()
+    r1 = PdfFileReader(out)
+    r2 = PdfFileReader(BytesIO(MINIMAL))
+    assert r1.input_version == r2.input_version
+
+
+def test_incremental_document_id_updated():
+    out = BytesIO()
+    writer.copy_into_new_writer(PdfFileReader(BytesIO(MINIMAL))).write(out)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/Blah'] = generic.pdf_name('/Bluh')
+    w.update_root()
+    w.write_in_place()
+    r = PdfFileReader(out)
+    id1 = HistoricalResolver(r, 0).document_id
+    id2 = r.document_id
+
+    assert id1[0] == id2[0]
+    assert id1[1] != id2[1]
+
+
+@pytest.mark.parametrize(
+    'ln,exp_err',
+    [
+        (b"", "Could not read"),
+        (b"0", "EOL marker not found"),
+        (b"12371", "EOL marker not found"),
+        (b"\r12371", "EOL marker not found"),
+    ],
+)
+def test_read_next_end_line_errors(ln, exp_err):
+    with pytest.raises(misc.PdfReadError, match=exp_err):
+        stm = BytesIO(ln)
+        stm.seek(len(ln))
+        read_next_end_line(stm)

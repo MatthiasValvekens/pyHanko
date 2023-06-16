@@ -12,7 +12,7 @@ from pyhanko.pdf_utils.generic import EncryptedObjAccess
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.metadata import model, xmp_xml
 from pyhanko.pdf_utils.misc import StringWithLanguage
-from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.reader import HistoricalResolver, PdfFileReader
 from pyhanko.pdf_utils.writer import PdfFileWriter, copy_into_new_writer
 from pyhanko_tests.samples import MINIMAL, PDF_DATA_DIR, VECTOR_IMAGE_PDF
 
@@ -252,6 +252,8 @@ def test_incremental_update_doc_with_xmp():
     )
     assert xmp[pdfa_conformance].value == "B"
 
+    assert HistoricalResolver(r, 0).document_meta_view.subject is None
+
 
 # noinspection HttpUrlsUsage
 @freeze_time('2022-09-10')
@@ -302,6 +304,9 @@ def test_upgrade_pdf2_no_info_dict():
     assert r.document_meta_view.author == "John Doe"
     assert r.document_meta_view.subject.value == "Test subject"
     assert r.document_meta_view.keywords == ["these", "are", "key", "words"]
+
+    # historical resolver only looks at info dict
+    assert HistoricalResolver(r, 0).document_meta_view.subject is None
 
 
 # noinspection HttpUrlsUsage
@@ -945,3 +950,15 @@ def test_rewrite_handle_binary_producer_string():
 
     r = PdfFileReader(out)
     assert r.trailer_view['/Info']['/Producer'].startswith('pyHanko')
+
+
+def test_bogus_metadata_key_value():
+    out = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(out)
+    w.root['/Metadata'] = generic.pdf_name('/Blah')
+    w.update_root()
+    w._update_meta = lambda: None
+    w.write_in_place()
+
+    r = PdfFileReader(out)
+    assert r._xmp_meta_view() is None

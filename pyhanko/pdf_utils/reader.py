@@ -73,7 +73,7 @@ def read_next_end_line(stream):
             if stream.tell() == 0:
                 raise PdfReadError("Could not read malformed PDF file")
             x = stream.read(1)
-            if stream.tell() < 2:
+            if stream.tell() < 2 or not x:
                 raise PdfReadError("EOL marker not found")
             stream.seek(-2, os.SEEK_CUR)
             if x == b'\n' or x == b'\r':
@@ -85,8 +85,6 @@ def read_next_end_line(stream):
             if x == b'\n' or x == b'\r':  # account for CR+LF
                 stream.seek(-1, os.SEEK_CUR)
                 crlf = True
-            if stream.tell() < 2:
-                raise PdfReadError("EOL marker not found")
             stream.seek(-2, os.SEEK_CUR)
         # if using CR+LF, go back 2 bytes, else 1
         stream.seek(2 if crlf else 1, os.SEEK_CUR)
@@ -201,7 +199,7 @@ class PdfFileReader(PdfHandler):
 
         try:
             version = self.root['/Version']
-            input_version = parse_catalog_version(version)
+            input_version = parse_catalog_version(version) or header_version
         except KeyError:
             input_version = header_version
 
@@ -483,24 +481,19 @@ class PdfFileReader(PdfHandler):
         stream = self.stream
         stream.seek(0)
         input_version = None
-        try:
-            header = misc.read_until_whitespace(stream, maxchars=20)
-            # match ignores trailing chars
-            m = header_regex.match(header)
-            if m is not None:
-                major = int(m.group(1))
-                minor = int(m.group(2))
-                input_version = (major, minor)
-        except (UnicodeDecodeError, ValueError):
-            pass
+        header = misc.read_until_whitespace(stream, maxchars=20)
+        # match ignores trailing chars
+        m = header_regex.match(header)
+        if m is not None:
+            major = int(m.group(1))
+            minor = int(m.group(2))
+            input_version = (major, minor)
         if input_version is None:
             raise PdfReadError('Illegal PDF header')
         self._header_version = input_version
 
         # start at the end:
         stream.seek(-1, os.SEEK_END)
-        if not stream.tell():
-            raise PdfReadError('Cannot read an empty file')
 
         # This needs to be recorded for incremental update purposes
         self.last_startxref = last_startxref = process_data_at_eof(stream)
