@@ -12,4 +12,5 @@ exclude_lines =
     raise AssertionError
     raise NotImplementedError
     TYPE_CHECKING
+    ^\s*\.\.\.
 precision = 2
