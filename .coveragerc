@@ -11,4 +11,5 @@ exclude_lines =
     pragma: nocover
     raise AssertionError
     raise NotImplementedError
+    TYPE_CHECKING
 precision = 2
