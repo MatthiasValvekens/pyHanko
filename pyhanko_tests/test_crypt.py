@@ -1523,3 +1523,9 @@ def test_encrypted_obj_stm():
 
     # assert that the object can be correctly retrieved
     assert new_objref.get_object() == "Hello there"
+
+
+def test_add_crypt_filter_to_stream_without_security_handler():
+    dummy_stream = generic.StreamObject(stream_data=b"1001")
+    with pytest.raises(misc.PdfStreamError, match="no security handler"):
+        dummy_stream.add_crypt_filter()

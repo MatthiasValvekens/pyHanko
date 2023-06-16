@@ -1129,7 +1129,7 @@ def _normalise_key(key):
         if isinstance(key, str):
             return NameObject(key)
         else:
-            raise ValueError("key must be PdfName")
+            raise ValueError("key must be a name object")
     return key
 
 
@@ -1467,7 +1467,7 @@ class StreamObject(DictionaryObject):
             # we have a single filter instance
             filter_arr = (filter_arr,)
         elif not isinstance(filter_arr, ArrayObject):
-            raise TypeError(
+            raise PdfStreamError(
                 '/Filter should be a name object or an array of names.'
             )
 

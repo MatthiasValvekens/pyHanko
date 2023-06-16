@@ -1886,6 +1886,30 @@ def test_stream_declared_length_too_long():
     assert res.data == b'abcdefg\n'
 
 
+def test_stream_nonsensical_filters():
+    data = b'<</Filter 10/Length 7>>\nstream\nabcdefg\nendstream\n'
+    # need something to give a reference
+    r = PdfFileReader(BytesIO(MINIMAL))
+    res = generic.read_object(
+        BytesIO(data), container_ref=generic.TrailerReference(r)
+    )
+    assert isinstance(res, generic.StreamObject)
+    with pytest.raises(misc.PdfStreamError, match="/Filter"):
+        # noinspection PyStatementEffect
+        res.data
+
+
+def test_stream_pathological_encode_decode():
+    stm = generic.StreamObject(dict_data={})
+
+    with pytest.raises(misc.PdfStreamError, match="No data"):
+        # noinspection PyStatementEffect
+        stm.data
+    with pytest.raises(misc.PdfStreamError, match="No data"):
+        # noinspection PyStatementEffect
+        stm.encoded_data
+
+
 def test_stream_declared_length_too_long_garbled():
     data = b'<</A/B/Length 9>>\nstream\nabcdefg\nendstre@m\n'
     # need something to give a reference
@@ -1929,3 +1953,13 @@ def test_null_is_missing():
 
     with pytest.raises(KeyError):
         d.__getitem__('/C')
+
+
+def test_unbound_reference():
+    assert generic.Reference(1, 0).get_object() == generic.NullObject()
+
+
+def test_assign_non_name_to_dict():
+    d = generic.DictionaryObject()
+    with pytest.raises(ValueError, match="must be a name object"):
+        d[10] = generic.NullObject()
