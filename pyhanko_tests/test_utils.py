@@ -1548,6 +1548,87 @@ def test_multi_def_dictionary():
         )
 
 
+def test_bad_null():
+    tst = BytesIO(b"nulx")
+    with pytest.raises(misc.PdfReadError):
+        generic.NullObject.read_from_stream(tst)
+
+    r = PdfFileReader(BytesIO(MINIMAL))
+    with pytest.raises(misc.PdfReadError):
+        generic.read_object(tst, container_ref=generic.Reference(1, 0, pdf=r))
+
+
+def test_bad_bool():
+    tst = BytesIO(b"trux")
+    with pytest.raises(misc.PdfReadError):
+        generic.BooleanObject.read_from_stream(tst)
+
+    tst = BytesIO(b"falsx")
+    with pytest.raises(misc.PdfReadError):
+        generic.BooleanObject.read_from_stream(tst)
+
+    r = PdfFileReader(BytesIO(MINIMAL))
+    with pytest.raises(misc.PdfReadError):
+        generic.read_object(tst, container_ref=generic.Reference(1, 0, pdf=r))
+
+
+def test_bad_array():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    tst = BytesIO(b"$null null]")
+    with pytest.raises(misc.PdfReadError):
+        generic.ArrayObject.read_from_stream(
+            tst, container_ref=generic.Reference(1, 0, pdf=r)
+        )
+
+
+def test_bad_dict():
+    r = PdfFileReader(BytesIO(MINIMAL))
+    tst = BytesIO(b"</Blah/Blah>>")
+    with pytest.raises(misc.PdfReadError):
+        generic.DictionaryObject.read_from_stream(
+            tst, container_ref=generic.Reference(1, 0, pdf=r)
+        )
+
+
+@pytest.mark.parametrize(
+    'payload,exp_err',
+    [
+        (b"   ", "ended unexpectedly"),
+        (b"1   ", "ended unexpectedly"),
+        (b"1 8 Q", "Error reading"),
+        (b"0 0 R", "Parse error"),
+        (b"1 -2 R", "Parse error"),
+        (b"-1 0 R", "Parse error"),
+        (b"Z 0 R", "Parse error"),
+    ],
+)
+def test_bad_indirect_ref(payload, exp_err):
+    r = PdfFileReader(BytesIO(MINIMAL))
+    tst = BytesIO(payload)
+    with pytest.raises(misc.PdfReadError, match=exp_err):
+        generic.IndirectObject.read_from_stream(
+            tst, container_ref=generic.Reference(1, 0, pdf=r)
+        )
+
+
+def test_asnumeric():
+    tst = BytesIO(b"1.2381")
+    obj = generic.NumberObject.read_from_stream(tst)
+    assert isinstance(obj, generic.FloatObject)
+    assert obj.as_numeric() == 1.2381
+
+    tst = BytesIO(b"12381")
+    obj = generic.NumberObject.read_from_stream(tst)
+    assert isinstance(obj, generic.NumberObject)
+    assert obj.as_numeric() == 12381
+
+
+def test_pdfstring_typing():
+    with pytest.raises(TypeError):
+        # noinspection PyTypeChecker
+        generic.pdf_string(-1)
+
+
 def test_multi_def_dictionary_nonstrict():
     # need a reader for context
     r = PdfFileReader(BytesIO(MINIMAL), strict=False)

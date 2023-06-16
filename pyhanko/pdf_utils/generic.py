@@ -407,10 +407,9 @@ class BooleanObject(PdfObject):
         if word == b"true":
             return BooleanObject(True)
         elif word == b"fals":
-            stream.read(1)
-            return BooleanObject(False)
-        else:
-            raise PdfReadError('Could not read Boolean object')
+            if stream.read(1) == b"e":
+                return BooleanObject(False)
+        raise PdfReadError('Could not read Boolean object')
 
     def __bool__(self):
         return bool(self.value)
@@ -579,34 +578,45 @@ class IndirectObject(PdfObject, Dereferenceable):
 
     @staticmethod
     def read_from_stream(stream, container_ref: 'Dereferenceable'):
-        idnum = b""
+        idnum_str = b""
         while True:
             tok = stream.read(1)
             if not tok:
                 # stream has truncated prematurely
                 raise PdfStreamError("Stream has ended unexpectedly")
             if tok.isspace():
-                break
-            idnum += tok
-        generation = b""
-        while True:
-            tok = stream.read(1)
-            if not tok:
-                # stream has truncated prematurely
-                raise PdfStreamError("Stream has ended unexpectedly")
-            if tok.isspace():
-                if not generation:
+                if not idnum_str:
                     continue
                 break
-            generation += tok
+            idnum_str += tok
+        generation_str = b""
+        while True:
+            tok = stream.read(1)
+            if not tok:
+                # stream has truncated prematurely
+                raise PdfStreamError("Stream has ended unexpectedly")
+            if tok.isspace():
+                if not generation_str:
+                    continue
+                break
+            generation_str += tok
         r = read_non_whitespace(stream)
         if r != b"R":
             pos = hex(stream.tell())
             raise PdfReadError(
                 "Error reading indirect object reference at byte %s" % pos
             )
+        try:
+            idnum, generation = int(idnum_str), int(generation_str)
+            if not (idnum > 0 and generation >= 0):
+                raise ValueError
+        except ValueError:
+            pos = hex(stream.tell())
+            raise PdfReadError(
+                f"Parse error on indirect object reference around {pos}"
+            )
         return IndirectObject(
-            int(idnum), int(generation), container_ref.get_pdf_handler()
+            int(idnum_str), int(generation_str), container_ref.get_pdf_handler()
         )
 
 
@@ -618,12 +628,8 @@ class FloatObject(decimal.Decimal, PdfObject):
     fixed-point objects, to be precise).
     """
 
-    # noinspection PyArgumentList,PyTypeChecker
-    def __new__(cls, value="0", context=None):
-        try:
-            return decimal.Decimal.__new__(cls, str(value), context)
-        except (ValueError, decimal.DecimalException):
-            return decimal.Decimal.__new__(cls, str(value))
+    def __new__(cls, value="0"):
+        return decimal.Decimal.__new__(cls, str(value))
 
     def __repr__(self):
         if self == self.to_integral():
@@ -657,10 +663,7 @@ class NumberObject(int, PdfObject):
     # noinspection PyArgumentList
     def __new__(cls, value):
         val = int(value)
-        try:
-            return int.__new__(cls, val)
-        except OverflowError:
-            return int.__new__(cls, 0)
+        return int.__new__(cls, val)
 
     def as_numeric(self):
         """
