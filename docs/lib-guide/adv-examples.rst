@@ -39,19 +39,24 @@ about ``aiohttp`` usage and resource management.
 
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import Signer, signers
-    from pyhanko.sign.general import get_pyca_cryptography_hash, \
-        load_cert_from_pemder
+    from pyhanko.sign.general import (
+        get_pyca_cryptography_hash,
+        load_cert_from_pemder,
+    )
     from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 
     class AsyncKMSSigner(Signer):
-
-        def __init__(self, session: aioboto3.session, key_id: str,
-                     signing_cert: x509.Certificate,
-                     signature_mechanism: algos.SignedDigestAlgorithm,
-                     # this can be derived from the above, obviously
-                     signature_mechanism_aws_id: str,
-                     other_certs=()):
+        def __init__(
+            self,
+            session: aioboto3.session,
+            key_id: str,
+            signing_cert: x509.Certificate,
+            signature_mechanism: algos.SignedDigestAlgorithm,
+            # this can be derived from the above, obviously
+            signature_mechanism_aws_id: str,
+            other_certs=(),
+        ):
             self.session = session
             self.signing_cert = signing_cert
             self.key_id = key_id
@@ -61,8 +66,9 @@ about ``aiohttp`` usage and resource management.
             cr.register_multiple(other_certs)
             super().__init__()
 
-        async def async_sign_raw(self, data: bytes,
-                                 digest_algorithm: str, dry_run=False) -> bytes:
+        async def async_sign_raw(
+            self, data: bytes, digest_algorithm: str, dry_run=False
+        ) -> bytes:
             if dry_run:
                 return bytes(256)
 
@@ -78,7 +84,7 @@ about ``aiohttp`` usage and resource management.
                     KeyId=self.key_id,
                     Message=md.finalize(),
                     MessageType='DIGEST',
-                    SigningAlgorithm=self.signature_mechanism_aws_id
+                    SigningAlgorithm=self.signature_mechanism_aws_id,
                 )
                 signature = result['Signature']
                 assert isinstance(signature, bytes)
@@ -86,7 +92,6 @@ about ``aiohttp`` usage and resource management.
 
 
     async def run():
-
         # Load relevant certificates
         # Note: the AWS KMS does not provide certificates by itself,
         # so the details of how certificates are provisioned are beyond
@@ -104,30 +109,28 @@ about ``aiohttp`` usage and resource management.
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
             # substitute your region here
-            region_name='eu-central-1'
+            region_name='eu-central-1',
         )
 
         # Set up our signer
         signer = AsyncKMSSigner(
-            session=session, key_id=kms_key_id,
-            signing_cert=cert, other_certs=chain,
+            session=session,
+            key_id=kms_key_id,
+            signing_cert=cert,
+            other_certs=chain,
             # change the signature mechanism according to your key type
             # I'm using an ECDSA key over the NIST-P384 (secp384r1) curve here.
             signature_mechanism=algos.SignedDigestAlgorithm(
                 {'algorithm': 'sha384_ecdsa'}
             ),
-            signature_mechanism_aws_id='ECDSA_SHA_384'
+            signature_mechanism_aws_id='ECDSA_SHA_384',
         )
 
         with open('input.pdf', 'rb') as inf:
             w = IncrementalPdfFileWriter(inf)
-            meta = signers.PdfSignatureMetadata(
-                field_name='AWSKMSExampleSig'
-            )
+            meta = signers.PdfSignatureMetadata(field_name='AWSKMSExampleSig')
             with open('output.pdf', 'wb') as outf:
-                await signers.async_sign_pdf(
-                    w, meta, signer=signer,output=outf
-                )
+                await signers.async_sign_pdf(w, meta, signer=signer, output=outf)
 
 
     if __name__ == '__main__':
