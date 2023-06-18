@@ -2,6 +2,62 @@
 Release history
 ***************
 
+.. _release-0.19.0:
+
+0.19.0
+======
+
+*Release date:* 2023-06-18
+
+
+Dependency changes
+------------------
+
+ * Bump ``pyhanko-certvalidator`` to ``0.23.0``
+ * ``certomancer`` updated to ``0.11.0``, ``certomancer-csc-dummy`` to ``0.2.2``
+
+
+Breaking changes
+----------------
+
+ * Minor reorganisation of the :class:`~pyhanko.pdf_utils.crypt.pubkey.EnvelopeKeyDecrypter`.
+   The change moves the ``cert`` property from an attribute to an abstract property, and adds
+   a method to allow us to handle protocols based on key agreement in addition to key transport.
+   Implementations need not implement both.
+ * Move ``ignore_key_usage`` into to new
+   :class:`~pyhanko.pdf_utils.crypt.pubkey.RecipientEncryptionPolicy` class.
+
+
+New features and enhancements
+-----------------------------
+
+Encryption
+^^^^^^^^^^
+
+ * Support RSAES-OAEP for file encryption with the public-key security handler.
+   This is not widely supported by PDF viewers in the wild.
+ * Support some ECDH-based key exchange methods for file encryption with the
+   public-key security handler. Concretely, pyHanko now supports
+   the ``dhSinglePass-stdDH-sha*kdf`` family from RFC 5753, which is also implemented in
+   Acrobat (for NIST curves). X25519 and X448 are also included.
+
+
+CLI
+^^^
+
+ * Better UX for argument errors relating to visible signature creation.
+
+
+Bugs fixed
+----------
+
+ * Allow processing OCSP responses without ``nextUpdate``.
+ * Run non-cryptographic CLI commands in nonstrict mode.
+ * Treat nulls the same as missing entries in dictionaries, as required by
+   the standard.
+ * Fix several default stamp style selection issues in CLI
+
+
 .. _release-0.18.1:
 
 0.18.1
