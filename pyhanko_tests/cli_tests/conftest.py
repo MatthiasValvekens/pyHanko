@@ -123,8 +123,8 @@ def p12_keys(pki_arch, post_validate):
     return fname
 
 
-def _write_config(config: dict):
-    with open('pyhanko.yml', 'w') as outf:
+def _write_config(config: dict, fname: str = 'pyhanko.yml'):
+    with open(fname, 'w') as outf:
         yaml.dump(config, outf)
 
 

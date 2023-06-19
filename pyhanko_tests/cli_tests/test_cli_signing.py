@@ -156,6 +156,31 @@ def test_cli_addsig_pemder_with_setup(cli_runner, cert_chain, user_key):
     assert not result.exception, result.output
 
 
+def test_cli_addsig_pemder_with_setup_in_custom_config_file(
+    cli_runner, cert_chain, user_key
+):
+    cfg = _pemder_setup_config(user_key, cert_chain)
+    _write_config(cfg, 'pyhanko-config.yml')
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            '--config',
+            'pyhanko-config.yml',
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            'pemder',
+            '--no-pass',
+            '--pemder-setup',
+            'test',
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+
+
 @pytest.mark.parametrize('loc', ['config', 'passfile', 'prompt'])
 def test_cli_addsig_pemder_with_setup_encrypted_key(
     cli_runner, cert_chain, encrypted_user_key, monkeypatch, loc
