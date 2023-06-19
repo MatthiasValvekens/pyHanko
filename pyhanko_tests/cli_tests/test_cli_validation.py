@@ -21,13 +21,23 @@ from pyhanko_tests.cli_tests.conftest import (
     FREEZE_DT,
     INPUT_PATH,
     _const,
+    _write_cert,
     _write_config,
 )
-from pyhanko_tests.samples import MINIMAL, MINIMAL_AES256, MINIMAL_PUBKEY_AES256
+from pyhanko_tests.samples import (
+    MINIMAL,
+    MINIMAL_AES256,
+    MINIMAL_PUBKEY_AES256,
+    TESTING_CA,
+)
 
 
 def _write_input_to_validate(
-    pki_arch: PKIArchitecture, fname: str, w: Optional[BasePdfFileWriter]
+    pki_arch: PKIArchitecture,
+    fname: str,
+    w: Optional[BasePdfFileWriter],
+    weakened: bool = False,
+    wrong_key: bool = False,
 ):
     registry = SimpleCertificateStore()
     registry.register(pki_arch.get_cert(CertLabel('interm')))
@@ -35,25 +45,35 @@ def _write_input_to_validate(
     signer = SimpleSigner(
         signing_cert=pki_arch.get_cert(CertLabel('signer1')),
         cert_registry=registry,
-        signing_key=pki_arch.key_set.get_private_key(KeyLabel('signer1')),
+        signing_key=pki_arch.key_set.get_private_key(
+            KeyLabel('signer1') if not wrong_key else KeyLabel('signer2')
+        ),
     )
-    with open(fname, 'wb') as outf:
-        if w:
-            sign_pdf(
-                pdf_out=w,
-                signature_meta=PdfSignatureMetadata(field_name='Sig1'),
-                signer=signer,
-                output=outf,
-            )
-        else:
-            ci = asyncio.run(
-                signer.async_sign_general_data(
-                    MINIMAL,
-                    select_suitable_signing_md(signer.signing_cert.public_key),
-                )
-            )
-            outf.write(ci.dump())
 
+    if weakened:
+        md = 'sha1'
+    else:
+        md = select_suitable_signing_md(signer.signing_cert.public_key)
+    out = BytesIO()
+    if w:
+        sign_pdf(
+            pdf_out=w,
+            signature_meta=PdfSignatureMetadata(
+                field_name='Sig1', md_algorithm=md
+            ),
+            signer=signer,
+            output=out,
+        )
+    else:
+        ci = asyncio.run(
+            signer.async_sign_general_data(
+                MINIMAL,
+                md,
+            )
+        )
+        out.write(ci.dump())
+    with open(fname, 'wb') as outf:
+        outf.write(out.getvalue())
     return fname
 
 
@@ -215,6 +235,53 @@ def test_basic_validate_untrusted(cli_runner, root_cert, input_to_validate):
             ],
         )
         assert result.exit_code == 1
+
+
+def test_basic_validate_with_weak_hash(cli_runner):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    fname = _write_input_to_validate(
+        TESTING_CA, 'to_validate.pdf', w, weakened=True
+    )
+    root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
+    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'validate',
+            fname,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'sha1_rsa is not allowed' in result.output
+
+
+@pytest.mark.parametrize('verbosity', ['default', 'verbose', 'pretty'])
+def test_basic_validate_signed_with_wrong_key(cli_runner, verbosity):
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    fname = _write_input_to_validate(
+        TESTING_CA, 'to_validate.pdf', w, wrong_key=True
+    )
+    root_cert = _write_cert(TESTING_CA, CertLabel('root'), 'root.cert.pem')
+    _write_config({'validation-contexts': {'default': {'trust': root_cert}}})
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            *(('--verbose',) if verbosity == 'verbose' else ()),
+            'sign',
+            'validate',
+            *(('--pretty-print',) if verbosity == 'pretty' else ()),
+            fname,
+        ],
+    )
+    assert result.exit_code == 1
+    assert 'INVALID' in result.output
+    if verbosity == 'pretty':
+        assert 'unsound' in result.output
+    else:
+        assert 'unsound' not in result.output
+    if verbosity == 'verbose':
+        assert 'Running with --verbose' in result.output
 
 
 def test_basic_validate_with_default_context(
