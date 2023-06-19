@@ -2032,3 +2032,65 @@ def test_read_next_end_line_errors(ln, exp_err):
         stm = BytesIO(ln)
         stm.seek(len(ln))
         read_next_end_line(stm)
+
+
+def test_merge_resources():
+    f = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(f)
+    res = w.root['/Pages']['/Kids'][0]['/Resources']
+    direct_mod = w.merge_resources(
+        res,
+        generic.DictionaryObject(
+            {
+                '/ProcSet': w.add_object(
+                    generic.ArrayObject([generic.pdf_name('/PDF')])
+                ),
+                '/Font': generic.DictionaryObject(
+                    {'/FNull': generic.DictionaryObject({})}
+                ),
+            }
+        ),
+    )
+    w.update_container(res)
+    w.write_in_place()
+    assert direct_mod
+
+    w = IncrementalPdfFileWriter(f)
+    res = w.root['/Pages']['/Kids'][0]['/Resources']
+    assert '/ProcSet' in res
+    assert '/XObject' not in res
+    assert '/FNull' in res['/Font']
+    direct_mod = w.merge_resources(
+        res,
+        generic.DictionaryObject(
+            {
+                '/ProcSet': w.add_object(
+                    generic.ArrayObject([generic.pdf_name('/Text')])
+                ),
+            }
+        ),
+    )
+    w.write_in_place()
+    assert not direct_mod
+
+    r = PdfFileReader(f)
+    res = w.root['/Pages']['/Kids'][0]['/Resources']
+    assert '/Text' in res['/ProcSet']
+    assert '/PDF' in res['/ProcSet']
+
+
+def test_merge_resource_conflict():
+    f = BytesIO(MINIMAL)
+    w = IncrementalPdfFileWriter(f)
+    res = w.root['/Pages']['/Kids'][0]['/Resources']
+    with pytest.raises(misc.PdfError, match='conflict'):
+        w.merge_resources(
+            res,
+            generic.DictionaryObject(
+                {
+                    '/Font': generic.DictionaryObject(
+                        {'/F1': generic.DictionaryObject({})}
+                    )
+                }
+            ),
+        )

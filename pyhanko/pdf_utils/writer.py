@@ -468,7 +468,7 @@ class BasePdfFileWriter(PdfHandler):
         return stream
 
     def _write_header(self, stream):
-        pass
+        raise NotImplementedError
 
     def _assign_security_handler(self, sh: SecurityHandler):
         self.security_handler = sh
@@ -1007,7 +1007,11 @@ class BasePdfFileWriter(PdfHandler):
         return page_obj_ref
 
     # TODO this doesn't really belong here
-    def merge_resources(self, orig_dict, new_dict) -> bool:
+    def merge_resources(
+        self,
+        orig_dict: generic.DictionaryObject,
+        new_dict: generic.DictionaryObject,
+    ) -> bool:
         """
         Update an existing resource dictionary object with data from another
         one. Returns ``True`` if the original dict object was modified directly.
@@ -1032,9 +1036,15 @@ class BasePdfFileWriter(PdfHandler):
                 orig_value = orig_value_ref
                 update_needed = True
 
-            if isinstance(orig_value, generic.ArrayObject):
-                # the /ProcSet case
-                orig_value.extend(value)
+            if (
+                isinstance(orig_value, generic.ArrayObject)
+                and key == '/ProcSet'
+            ):
+                orig_value.extend(
+                    x
+                    for x in value.get_object()
+                    if isinstance(x, generic.NameObject) and x not in orig_value
+                )
             elif isinstance(orig_value, generic.DictionaryObject):
                 for key_, value_ in value.items():
                     if key_ in orig_value:
