@@ -848,6 +848,11 @@ class GlyphAccumulatorFactory(FontEngineFactory):
     Will be guessed by HarfBuzz if not specified.
     """
 
+    bcp47_lang_code: Optional[str] = None
+    """
+    BCP 47 language code to tag strings with.
+    """
+
     create_objstream_if_needed: bool = True
     """
     Create an object stream to hold this glyph accumulator's assets if no
@@ -871,5 +876,6 @@ class GlyphAccumulatorFactory(FontEngineFactory):
             ot_script_tag=self.ot_script_tag,
             ot_language_tag=self.ot_language_tag,
             writing_direction=self.writing_direction,
+            bcp47_lang_code=self.bcp47_lang_code,
             obj_stream=obj_stream,
         )

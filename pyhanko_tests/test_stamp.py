@@ -211,7 +211,10 @@ def test_fancy_qr_stamp():
 @with_layout_comparison
 def test_japanese_vertical_text_stamp():
     gaf = GlyphAccumulatorFactory(
-        NOTO_SERIF_JP, font_size=10, writing_direction='ttb'
+        NOTO_SERIF_JP,
+        font_size=10,
+        writing_direction='ttb',
+        bcp47_lang_code='ja_JP',
     )
     w = empty_page()
     style = QRStampStyle(

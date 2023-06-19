@@ -152,3 +152,67 @@ def test_write_embedded_string_objstream():
     font_ref.pdf = r
     font = font_ref.get_object()
     assert font['/Type'] == pdf_name('/Font')
+
+
+def test_opentype_with_langsys():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with open(
+        # subset rigged for exactly this test so we don't have to
+        # ship the entire font file
+        f"pyhanko_tests/data/fonts/NotoSerifSubset.otf",
+        'rb',
+    ) as ffile:
+        ga1 = GlyphAccumulator(
+            w,
+            ffile,
+            font_size=10,
+        )
+        ga2 = GlyphAccumulator(
+            w, ffile, font_size=10, ot_language_tag='ZHT ', ot_script_tag='hani'
+        )
+    shape_result1 = ga1.shape('骨')
+    shape_result2 = ga2.shape('骨')
+    assert b'<b04c>' in shape_result1.graphics_ops
+    assert b'<b04e>' in shape_result2.graphics_ops
+
+
+def test_opentype_langsys_tag_too_long():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with open(
+        f"pyhanko_tests/data/fonts/NotoSerifSubset.otf",
+        'rb',
+    ) as ffile:
+        with pytest.raises(ValueError, match='4 bytes long'):
+            GlyphAccumulator(
+                w,
+                ffile,
+                font_size=10,
+                ot_language_tag='ZHT a',
+                ot_script_tag='hani',
+            )
+
+
+def test_opentype_langsys_tag_not_ascii():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with open(
+        f"pyhanko_tests/data/fonts/NotoSerifSubset.otf",
+        'rb',
+    ) as ffile:
+        with pytest.raises(ValueError, match='encodable'):
+            GlyphAccumulator(
+                w,
+                ffile,
+                font_size=10,
+                ot_language_tag='ZHTあ',
+                ot_script_tag='hani',
+            )
+
+
+def test_opentype_invalid_writing_direction():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    with open(
+        f"pyhanko_tests/data/fonts/NotoSerifSubset.otf",
+        'rb',
+    ) as ffile:
+        with pytest.raises(ValueError, match='direction must be one of'):
+            GlyphAccumulator(w, ffile, font_size=10, writing_direction='foobar')
