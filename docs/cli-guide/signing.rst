@@ -119,10 +119,15 @@ The syntax of the ``addfields`` subcommand is as follows::
 
     pyhanko sign addfields --field  PAGE/X1,Y1,X2,Y2/NAME input.pdf output.pdf
 
-The page numbering starts at 1, and the numbers specify the coordinates of two
-opposing corners of the bounding box of the signature field.
-The coordinates are Cartesian, i.e. the y-coordinate increases from bottom to
-top.
+This is what the fields mean.
+
+ * ``PAGE`` is the page number, with the page numbering starting at 1.
+ * ``X1,Y1,X2,Y2`` represent the coordinates of two opposing corners of the
+   bounding box of the signature field.
+   The coordinates are Cartesian, i.e. the y-coordinate increases from bottom to
+   top.
+ * ``NAME`` is the name of the signature field to create.
+
 Multiple signature fields may be created in one command, by passing the last
 argument multiple times.
 
