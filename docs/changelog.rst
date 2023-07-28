@@ -2,6 +2,31 @@
 Release history
 ***************
 
+
+.. _release-0.20.0:
+
+0.20.0
+======
+
+*Release date:* 2023-07-28
+
+
+Dependency changes
+------------------
+
+ * Relax upper bound on ``uharfbuzz`` to ``<0.38.0`` (allows more users to benefit from prebuilt wheels)
+ * Bump ``python-barcode`` from ``0.14.0`` to ``0.15.1``.
+ * Bump ``pytest-asyncio`` from ``0.21.0`` to ``0.21.1``.
+ * Relax ``pytest-cov`` bound to allow ``4.1.x``
+
+
+Miscellaneous
+-------------
+
+ * Various minor documentation improvements.
+ * Improved unit test coverage, especially for error handling.
+
+
 .. _release-0.19.0:
 
 0.19.0
