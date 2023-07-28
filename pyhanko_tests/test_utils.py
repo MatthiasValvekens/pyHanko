@@ -640,9 +640,15 @@ DATE_PAIRS = [
 ]
 
 
-@pytest.mark.parametrize('date_str, expected_dt', DATE_PAIRS)
-def test_date_parsing(date_str, expected_dt):
-    assert generic.parse_pdf_date(date_str) == expected_dt
+@pytest.mark.parametrize(
+    'date_str, expected_dt, strict',
+    [
+        (dt_str, dt, strict)
+        for (dt_str, dt), strict in itertools.product(DATE_PAIRS, [True, False])
+    ],
+)
+def test_date_parsing(date_str, expected_dt, strict):
+    assert generic.parse_pdf_date(date_str, strict=strict) == expected_dt
 
 
 @pytest.mark.parametrize(
