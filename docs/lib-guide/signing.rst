@@ -211,6 +211,8 @@ When creating visible signatures, you can control the visual appearance to a deg
 stamp types. This can be done in one of several ways.
 
 
+.. _text-based-stamps:
+
 Text-based stamps
 ^^^^^^^^^^^^^^^^^
 

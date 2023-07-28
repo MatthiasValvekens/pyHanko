@@ -20,7 +20,7 @@ Hybrid reference files were introduced as a transitional compatibility measure b
 PDF 1.5. Since PDF 1.5 support is all but universal now, they're no longer useful these days, and
 therefore relatively rare. Nevertheless, some tools still routinely generate such files.
 
-Prior to 0.12.0, pyHanko would actually not process hybrid files correctly and would sometimes even
+Prior to ``0.12.0``, pyHanko would actually not process hybrid files correctly and would sometimes even
 accidentally corrupt them. That bug has been fixed, but there's more to it than that.
 The problem with hybrid files is that *by design* there's no single unambiguous way to parse them,
 which makes them inherently less secure than non-hybrid PDFs. That's a problem when dealing with
@@ -88,3 +88,16 @@ Posting your question on `the discussion forum <https://github.com/MatthiasValve
 is of course allowed, but bear in mind that PKCS#11 usage issues are generally difficult to
 diagnose remotely without access to the hardware in question.
 Be prepared to do your own troubleshooting.
+
+
+I want to put Unicode text in my signatures, but I'm only seeing blanks. What gives?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By default, when generating visible signatures, pyHanko will declare a font that's almost
+guaranteed to be available in all PDF viewers, but (essentially) only supports Latin characters.
+When trying to set something up to work with minimal config, some compromises have to be made.
+
+If you need a non-Western character set, or simply want to customise the appearance of the text,
+then you'll need to supply your own OpenType/TrueType font, and install pyHanko with the
+``[opentype]`` optional dependency group. Have a look at the examples
+:ref:`in the library documentation <text-based-stamps>` or :ref:`in the CLI docs <style-definitions>`.
