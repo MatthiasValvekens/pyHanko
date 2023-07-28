@@ -2154,18 +2154,19 @@ def pdf_date(dt: datetime) -> TextStringObject:
 
 # The year field is the only mandatory one
 MIN_DATE_REGEX = re.compile(r'^D:(\d{4})')
+MIN_DATE_REGEX_LENIENT = re.compile(r'^(?:D:)?(\d{4})')
 TWO_DIGIT_START = re.compile(r'^(\d\d)')
 UTC_OFFSET = re.compile(r"(\d\d)(?:'(\d\d))?'?")
 
 
-def parse_pdf_date(date_str: str) -> datetime:
-    m = MIN_DATE_REGEX.match(date_str)
+def parse_pdf_date(date_str: str, strict: bool = True) -> datetime:
+    m = (MIN_DATE_REGEX if strict else MIN_DATE_REGEX_LENIENT).match(date_str)
     if not m:
         raise PdfReadError(f"{date_str} does not appear to be a date string.")
     year = int(m.group(1))
 
     # now, there are a number of 2-digit groups (anywhere from 0 to 5)
-    date_remaining = date_str[6:]
+    date_remaining = date_str[m.end(0) :]
     lower_order = [1, 1, 0, 0, 0]
 
     for ix in range(5):
