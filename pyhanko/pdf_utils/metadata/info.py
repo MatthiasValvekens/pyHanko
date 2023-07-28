@@ -108,7 +108,7 @@ def update_info_dict(
 
 
 def _read_date_from_dict(
-    info_dict: generic.DictionaryObject, key: str
+    info_dict: generic.DictionaryObject, key: str, strict: bool
 ) -> Optional[datetime]:
     try:
         date_str = info_dict[key]
@@ -117,7 +117,7 @@ def _read_date_from_dict(
 
     try:
         if isinstance(date_str, generic.TextStringObject):
-            return generic.parse_pdf_date(date_str)
+            return generic.parse_pdf_date(date_str, strict=strict)
     except misc.PdfReadError:
         pass
 
@@ -130,7 +130,7 @@ def _read_date_from_dict(
 
 
 def view_from_info_dict(
-    info_dict: generic.DictionaryObject,
+    info_dict: generic.DictionaryObject, strict: bool = True
 ) -> model.DocumentMetadata:
     kwargs: Dict[str, Any] = {}
     for s_entry in ('title', 'author', 'subject', 'creator'):
@@ -139,11 +139,13 @@ def view_from_info_dict(
         except KeyError:
             pass
 
-    creation_date = _read_date_from_dict(info_dict, '/CreationDate')
+    creation_date = _read_date_from_dict(
+        info_dict, '/CreationDate', strict=strict
+    )
     if creation_date is not None:
         kwargs['created'] = creation_date
 
-    mod_date = _read_date_from_dict(info_dict, '/ModDate')
+    mod_date = _read_date_from_dict(info_dict, '/ModDate', strict=strict)
     if mod_date is not None:
         kwargs['last_modified'] = mod_date
 

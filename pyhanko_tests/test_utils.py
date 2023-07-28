@@ -601,48 +601,55 @@ TESTDATE_EST = datetime.datetime(
 )
 
 
-@pytest.mark.parametrize(
-    'date_str, expected_dt',
-    [
-        ('D:2008', datetime.datetime(year=2008, month=1, day=1)),
-        ('D:200802', datetime.datetime(year=2008, month=2, day=1)),
-        ('D:20080203', datetime.datetime(year=2008, month=2, day=3)),
-        ('D:20080201', datetime.datetime(year=2008, month=2, day=1)),
-        ('D:2008020301', datetime.datetime(year=2008, month=2, day=3, hour=1)),
-        (
-            'D:200802030105',
-            datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5),
+DATE_PAIRS = [
+    ('D:2008', datetime.datetime(year=2008, month=1, day=1)),
+    ('D:200802', datetime.datetime(year=2008, month=2, day=1)),
+    ('D:20080203', datetime.datetime(year=2008, month=2, day=3)),
+    ('D:20080201', datetime.datetime(year=2008, month=2, day=1)),
+    ('D:2008020301', datetime.datetime(year=2008, month=2, day=3, hour=1)),
+    (
+        'D:200802030105',
+        datetime.datetime(year=2008, month=2, day=3, hour=1, minute=5),
+    ),
+    (
+        'D:20080203010559',
+        datetime.datetime(
+            year=2008, month=2, day=3, hour=1, minute=5, second=59
         ),
-        (
-            'D:20080203010559',
-            datetime.datetime(
-                year=2008, month=2, day=3, hour=1, minute=5, second=59
-            ),
+    ),
+    (
+        'D:20080203010559Z',
+        datetime.datetime(
+            year=2008,
+            month=2,
+            day=3,
+            hour=1,
+            minute=5,
+            second=59,
+            tzinfo=timezone.utc,
         ),
-        (
-            'D:20080203010559Z',
-            datetime.datetime(
-                year=2008,
-                month=2,
-                day=3,
-                hour=1,
-                minute=5,
-                second=59,
-                tzinfo=timezone.utc,
-            ),
-        ),
-        ('D:20080203010559+01\'00', TESTDATE_CET),
-        ('D:20080203010559+01', TESTDATE_CET),
-        ('D:20080203010559+01\'', TESTDATE_CET),
-        ('D:20080203010559+01\'00\'', TESTDATE_CET),
-        ('D:20080203010559-05\'00', TESTDATE_EST),
-        ('D:20080203010559-05', TESTDATE_EST),
-        ('D:20080203010559-05\'', TESTDATE_EST),
-        ('D:20080203010559-05\'00\'', TESTDATE_EST),
-    ],
-)
+    ),
+    ('D:20080203010559+01\'00', TESTDATE_CET),
+    ('D:20080203010559+01', TESTDATE_CET),
+    ('D:20080203010559+01\'', TESTDATE_CET),
+    ('D:20080203010559+01\'00\'', TESTDATE_CET),
+    ('D:20080203010559-05\'00', TESTDATE_EST),
+    ('D:20080203010559-05', TESTDATE_EST),
+    ('D:20080203010559-05\'', TESTDATE_EST),
+    ('D:20080203010559-05\'00\'', TESTDATE_EST),
+]
+
+
+@pytest.mark.parametrize('date_str, expected_dt', DATE_PAIRS)
 def test_date_parsing(date_str, expected_dt):
     assert generic.parse_pdf_date(date_str) == expected_dt
+
+
+@pytest.mark.parametrize(
+    'date_str, expected_dt', [(dt_str[2:], dt) for dt_str, dt in DATE_PAIRS]
+)
+def test_date_parsing_without_prefix(date_str, expected_dt):
+    assert generic.parse_pdf_date(date_str, strict=False) == expected_dt
 
 
 @pytest.mark.parametrize(
@@ -655,6 +662,7 @@ def test_date_parsing(date_str, expected_dt):
         'D:20030230',
         'D:20080203010559Z00',
         'D:20080203010559-05\'00\'11',
+        '20230719131933+02\'00\'',
     ],
 )
 def test_date_parsing_errors(date_str):

@@ -188,7 +188,7 @@ class PdfFileReader(PdfHandler):
         except KeyError:
             return DocumentMetadata()
 
-        return view_from_info_dict(info_dict)
+        return view_from_info_dict(info_dict, strict=self.strict)
 
     @property
     def input_version(self):
@@ -807,7 +807,7 @@ class HistoricalResolver(PdfHandler):
         except KeyError:
             return DocumentMetadata()
 
-        return view_from_info_dict(info_dict)
+        return view_from_info_dict(info_dict, strict=self.reader.strict)
 
     @property
     def document_id(self) -> Tuple[bytes, bytes]:

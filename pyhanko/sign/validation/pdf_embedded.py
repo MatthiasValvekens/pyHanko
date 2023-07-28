@@ -272,7 +272,8 @@ class EmbeddedPdfSignature:
         """
         :return:
             The signing time as reported by the signer, if embedded in the
-            signature's signed attributes.
+            signature's signed attributes or provided as part of the signature
+            object in the PDF document.
         """
         ts = extract_self_reported_ts(self.signer_info)
         if ts is not None:
@@ -280,7 +281,9 @@ class EmbeddedPdfSignature:
 
         try:
             st_as_pdf_date = self.sig_object['/M']
-            return generic.parse_pdf_date(st_as_pdf_date)
+            return generic.parse_pdf_date(
+                st_as_pdf_date, strict=self.reader.strict
+            )
         except KeyError:  # pragma: nocover
             return None
 
