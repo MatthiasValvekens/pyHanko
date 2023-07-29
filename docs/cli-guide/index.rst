@@ -13,7 +13,7 @@ using the ``pyhanko`` command, like so::
 
     pyhanko --help
 
-If the ``pyhanko`` package is on your ``PYTHONPATH`` buth the ``pyhanko``
+If the ``pyhanko`` package is on your ``PYTHONPATH`` but the ``pyhanko``
 executable isn't on your ``PATH`` for whatever reason, you can also invoke the
 CLI through ::
 
