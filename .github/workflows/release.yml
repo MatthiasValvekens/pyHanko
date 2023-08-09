@@ -55,9 +55,21 @@ jobs:
         with:
           name: release-body
           path: release.md
+  provenance:
+    name: Generate SLSA provenance data
+    needs: [ci]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write  # https://github.com/slsa-framework/slsa-github-generator/issues/2044 :(
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.8.0
+    with:
+      base64-subjects: "${{ needs.ci.outputs.hashes }}"
+      upload-assets: false
+      provenance-name: provenance.intoto.jsonl
   publish:
     name: Publish release artifacts
-    needs: [ci, extract-params]
+    needs: [extract-params, provenance]
     runs-on: ubuntu-latest
     environment: ${{ needs.extract-params.outputs.publish-env }}
     permissions:
@@ -72,6 +84,11 @@ jobs:
       with:
         name: pyhanko-dist
         path: dist/
+    - name: Download provenance data
+      uses: actions/download-artifact@v3
+      with:
+        name: provenance.intoto.jsonl
+        path: provenance/
     - name: Download release body
       uses: actions/download-artifact@v3
       with:
@@ -98,6 +115,7 @@ jobs:
           dist/*.whl
           dist/*.tar.gz
           dist/*.sigstore
+          provenance/provenance.intoto.jsonl
         body_path: release-body/release.md
         fail_on_unmatched_files: true
         discussion_category_name: Announcements
