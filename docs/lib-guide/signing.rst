@@ -334,6 +334,8 @@ in the end result.
     A QR stamp in Noto Sans Regular, pointing to `<https://example.com>`_
 
 
+.. _static-content-stamps:
+
 Static content stamps
 ^^^^^^^^^^^^^^^^^^^^^
 

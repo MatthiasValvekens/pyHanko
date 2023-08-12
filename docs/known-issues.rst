@@ -32,3 +32,10 @@ This page lists some TODOs and known limitations of pyHanko.
   any additional restrictions.
 * CLI support for signing files encrypted using PDF's public-key encryption
   functionality is limited.
+* The signature appearance generation code in pyHanko is quite primitive, since
+  pyHanko's principal focus is on the signing process itself.
+  If the appearance generation code behaves in ways you do not expect,
+  or you have very specific layout requirements, have a look at
+  :ref:`the section on static content stamps <static-content-stamps>`
+  for some pointers on how to "outsource" the appearance generation process
+  to more capable graphics toolkits.
