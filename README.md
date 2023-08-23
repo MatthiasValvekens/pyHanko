@@ -12,6 +12,12 @@ The lack of open-source CLI tooling to handle digitally signing and stamping PDF
 
 *Note:* This project is currently in beta, and not yet production-ready.
 
+### Documentation
+
+The [documentation for pyHanko is hosted on ReadTheDocs](https://pyhanko.readthedocs.io/en/latest/)
+and includes information on CLI usage, library usage, and API reference documentation derived from
+inline docstrings.
+
 ### Installing
 
 PyHanko is hosted on [PyPI](https://pypi.org/project/pyHanko/),
@@ -31,7 +37,6 @@ This `pip` invocation includes the optional dependencies required for PKCS#11, i
 OpenType/TrueType support.
 
 PyHanko requires Python 3.7 or later.
-
 
 ### Contributing
 
@@ -114,12 +119,6 @@ Note that not all of these are necessarily exposed through the CLI.
 
 See the [known issues](https://pyhanko.readthedocs.io/en/latest/known-issues.html)
 page in the documentation.
- 
-
-### Documentation
-
-Documentation is built using Sphinx, and hosted [here](https://pyhanko.readthedocs.io/en/latest/)
-on ReadTheDocs.
 
 
 ### Acknowledgement
