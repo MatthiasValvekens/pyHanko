@@ -30,6 +30,7 @@ from pyhanko.sign.fields import (
     InvisSigSettings,
     MDPPerm,
     SeedLockDocument,
+    SigAuthType,
     SigFieldSpec,
     SigSeedSubFilter,
     SigSeedValFlags,
@@ -293,6 +294,12 @@ class PdfSignatureMetadata:
     Reason for signing (textual).
     """
 
+    contact_info: Optional[str] = None
+    """
+    Information provided by the signer to enable the receiver to contact the
+    signer to verify the signature.
+    """
+
     name: Optional[str] = None
     """
     Name of the signer. This value is usually not necessary to set, since
@@ -307,6 +314,22 @@ class PdfSignatureMetadata:
     
     If specified, this data will be recorded in the **Prop_Build**
     dictionary of the signature.
+    """
+
+    prop_auth_time: Optional[int] = None
+    """
+    Number of seconds since signer was last authenticated.
+    """
+
+    prop_auth_type: Optional[SigAuthType] = None
+    """
+    Signature /Prop_AuthType to use.
+
+    This should be one of 
+    :attr:`~.fields.SigAuthType.PIN` or
+    :attr:`~.fields.SigAuthType.PASSWORD` or
+    :attr:`~.fields.SigAuthType.FINGERPRINT`
+    If not specified, this property won't be set on the signature dictionary.
     """
 
     certify: bool = False
@@ -2141,6 +2164,7 @@ class PdfSigningSession:
             timestamp=system_time,
             text_params=appearance_text_params,
         )
+
         sig_obj = SignatureObject(
             bytes_reserved=bytes_reserved,
             subfilter=self.subfilter,
@@ -2148,6 +2172,9 @@ class PdfSigningSession:
             name=name_specified if name_specified else None,
             location=signature_meta.location,
             reason=signature_meta.reason,
+            contact_info=signature_meta.contact_info,
+            prop_auth_time=signature_meta.prop_auth_time,
+            prop_auth_type=signature_meta.prop_auth_type,
             app_build_props=signature_meta.app_build_props,
         )
 

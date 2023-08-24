@@ -1172,3 +1172,36 @@ def test_succeed_non_strict_hybrid(cli_runner):
         ],
     )
     assert result.exit_code == 0
+
+
+def test_cli_with_signature_dictionary_entries(cli_runner):
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addsig',
+            '--field',
+            'Sig1',
+            '--reason',
+            'I agree with this document',
+            '--location',
+            'THIS-COMPUTER',
+            '--contact-info',
+            'www.pyhanko.com/verify',
+            'pemder',
+            '--no-pass',
+            '--cert',
+            _write_cert(TESTING_CA, CertLabel('signer1'), "cert.pem"),
+            '--key',
+            _write_user_key(TESTING_CA),
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
+    with open(SIGNED_OUTPUT_PATH, 'rb') as outf:
+        r = PdfFileReader(outf)
+        last_sign = r.embedded_signatures[-1].sig_object
+
+        assert last_sign['/ContactInfo'] == 'www.pyhanko.com/verify'
+        assert last_sign['/Location'] == 'THIS-COMPUTER'

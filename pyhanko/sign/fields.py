@@ -679,6 +679,17 @@ class SigSeedSubFilter(Enum):
 
 
 @unique
+class SigAuthType(Enum):
+    """
+    Enum declaring all supported ``/Prop_AuthType`` values.
+    """
+
+    PIN = pdf_string("PIN")
+    PASSWORD = pdf_string("Password")
+    FINGERPRINT = pdf_string("Fingerprint")
+
+
+@unique
 class SeedValueDictVersion(OrderedEnum):
     """
     Specify the minimal compliance level for a seed value dictionary processor.

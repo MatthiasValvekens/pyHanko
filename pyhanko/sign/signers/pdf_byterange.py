@@ -18,7 +18,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.writer import BasePdfFileWriter
 from pyhanko.sign.general import SigningError, get_pyca_cryptography_hash
 
-from ..fields import SigSeedSubFilter
+from ..fields import SigAuthType, SigSeedSubFilter
 from . import constants
 
 __all__ = [
@@ -414,6 +414,17 @@ class SignatureObject(PdfSignedData):
         Optional signing location.
     :param reason:
         Optional signing reason. May be restricted by seed values.
+    :params contact_info:
+        Optional information from the signer to enable the receiver to contact
+        the signer and verify the signature.
+    :param app_build_props:
+        Optional dictionary containing informations about the computer environment used for signing.
+        See :class:`.BuildProps`.
+    :param prop_auth_time:
+        Optional information representing the number of seconds since signer was last authenticated.
+    :param prop_auth_type:
+        Optional information about the method of user's authentication
+        See :class:`.SigAuthType`.
     """
 
     def __init__(
@@ -423,7 +434,10 @@ class SignatureObject(PdfSignedData):
         name=None,
         location=None,
         reason=None,
+        contact_info=None,
         app_build_props: Optional[BuildProps] = None,
+        prop_auth_time: Optional[int] = None,
+        prop_auth_type: Optional[SigAuthType] = None,
         bytes_reserved=None,
     ):
         super().__init__(
@@ -439,10 +453,18 @@ class SignatureObject(PdfSignedData):
             self[pdf_name('/Location')] = pdf_string(location)
         if reason:
             self[pdf_name('/Reason')] = pdf_string(reason)
+        if contact_info:
+            self[pdf_name('/ContactInfo')] = pdf_string(contact_info)
         if app_build_props:
             self[pdf_name('/Prop_Build')] = generic.DictionaryObject(
                 {pdf_name("/App"): app_build_props.as_pdf_object()}
             )
+        if prop_auth_time:
+            self[pdf_name('/Prop_AuthTime')] = generic.NumberObject(
+                prop_auth_time
+            )
+        if prop_auth_type:
+            self[pdf_name('/Prop_AuthType')] = prop_auth_type.value
 
 
 class DocumentTimestamp(PdfSignedData):

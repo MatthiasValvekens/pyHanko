@@ -33,6 +33,7 @@ def signing():
 @click.option('--name', help='explicitly specify signer name', required=False)
 @click.option('--reason', help='reason for signing', required=False)
 @click.option('--location', help='location of signing', required=False)
+@click.option('--contact-info', help='contact of the signer', required=False)
 @click.option(
     '--certify',
     help='add certification signature',
@@ -146,6 +147,7 @@ def addsig(
     field,
     name,
     reason,
+    contact_info,
     location,
     certify,
     existing_only,
@@ -222,6 +224,7 @@ def addsig(
         field_name=field_name,
         location=location,
         reason=reason,
+        contact_info=contact_info,
         name=name,
         certify=certify,
         subfilter=subfilter,
