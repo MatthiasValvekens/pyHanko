@@ -51,7 +51,7 @@ async def test_basic_certificate_validator_tls_aia(domain):
     # microsoft.com -> application/octet-stream (DER)
     # southwest.com -> application/pkcs7-mime
     # xuite.net     -> application/x-pkcs7-certificates
-    # icpedu.rnp.br -> application/octet-stream (PEM)
+    # icpedu.rnp.br -> binary/octet-stream (PEM, PKCS#7)
 
     icpedu_root = load_cert_object('testing-aia', 'root-icpedu.rnp.br')
     trust_manager = SimpleTrustManager.build(
