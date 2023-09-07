@@ -7,6 +7,10 @@ on:
     branches: [ master ]
   workflow_call:
     secrets: {}
+    outputs:
+      hashes:
+        description: "Hashes of the artifacts that were built"
+        value: ${{ jobs.build.outputs.hashes }}
 permissions:
   actions: read
   contents: read
@@ -16,6 +20,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    outputs:
+      hashes: ${{ steps.artifact-hashes.outputs.hashes }}
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python
@@ -26,6 +32,9 @@ jobs:
         run: pip install --upgrade build setuptools pip wheel
       - name: build
         run: python -m build
+      - name: Record release artifact hashes
+        id: artifact-hashes
+        run: cd dist && echo "hashes=$(sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v3
         with:
