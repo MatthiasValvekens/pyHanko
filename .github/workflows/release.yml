@@ -108,7 +108,7 @@ jobs:
         # the .sig suffix conflicts with my own GPG signatures
         bundle-only: true
     - name: Create GitHub release
-      if: needs.extract-params.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
+      if: needs.find-env.outputs.publish-env == 'release' && startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: |
