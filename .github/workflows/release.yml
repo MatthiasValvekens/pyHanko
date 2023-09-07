@@ -5,6 +5,7 @@ on:
     inputs:
       environment:
         type: environment
+        description: "Environment in which to execute the release process"
   push:
     branches: [ "ci/*", "ci-*" ]
 jobs:
