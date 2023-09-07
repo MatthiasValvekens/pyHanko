@@ -1,6 +1,13 @@
 # changelog
 
 
+## 0.24.0
+
+ - Further increase leniency regarding content types when fetching
+   certificates on-the-fly
+ - Add SLSA provenance data to releases
+ - Various updates in test dependencies and CI workflow dependencies.
+
 ## 0.23.0
 
  - Improve processing of OCSP responses without `nextUpdate`
