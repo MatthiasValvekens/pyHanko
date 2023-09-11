@@ -23,7 +23,7 @@ jobs:
     outputs:
       hashes: ${{ steps.artifact-hashes.outputs.hashes }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -47,7 +47,7 @@ jobs:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -81,7 +81,7 @@ jobs:
     needs: pytest-coverage
     steps:
       # checkout necessary to ensure the uploaded report contains the correct paths
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Retrieve coverage reports
         uses: actions/download-artifact@v3
         with:
