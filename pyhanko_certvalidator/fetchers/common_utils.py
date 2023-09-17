@@ -68,17 +68,6 @@ ACCEPTABLE_PKCS7_DER_ALIASES = frozenset(
 )
 
 
-ACCEPTABLE_PKCS7_PEM_ALIASES = frozenset(
-    [
-        'application/x-pem-file',
-        'text/plain',
-        'application/pkcs7-mime',
-        'application/x-pkcs7-certificates',
-        'binary/octet-stream',
-    ]
-)
-
-
 def unpack_cert_content(
     response_data: bytes,
     content_type: Optional[str],
@@ -99,14 +88,7 @@ def unpack_cert_content(
         yield x509.Certificate.load(response_data)
     elif (content_type in ACCEPTABLE_PKCS7_DER_ALIASES) and not is_pem:
         yield from _unpack_der_pkcs7(response_data, url)
-    elif (
-        permit_pem
-        and is_pem
-        and (
-            content_type in ACCEPTABLE_CERT_PEM_ALIASES
-            or content_type in ACCEPTABLE_PKCS7_PEM_ALIASES
-        )
-    ):
+    elif permit_pem and is_pem:
         # technically, PEM is not allowed here, but of course some people don't
         # bother following the rules
         for type_name, _, data in pem.unarmor(response_data, multiple=True):
