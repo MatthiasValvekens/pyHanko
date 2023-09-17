@@ -1,6 +1,11 @@
 # changelog
 
 
+## 0.24.1
+
+ - Ignore content types altogether when fetching certificates
+   and the response payload is PEM (see PR #9)
+
 ## 0.24.0
 
  - Further increase leniency regarding content types when fetching
