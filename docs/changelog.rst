@@ -3,6 +3,27 @@ Release history
 ***************
 
 
+.. _release-0.20.1:
+
+0.20.1
+======
+
+*Release date:* 2023-09-17
+
+Dependency changes
+------------------
+
+ * Upgrade ``pyhanko-certvalidator`` to ``0.24.x``
+
+
+Miscellaneous
+-------------
+
+ * Tolerate missing ``D:`` in date strings (see PR #296 <https://github.com/MatthiasValvekens/pyHanko/issues/296>).
+ * Various minor documentation improvements.
+ * Release workflow dependency bumps and minor improvements.
+
+
 .. _release-0.20.0:
 
 0.20.0
