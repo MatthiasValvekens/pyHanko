@@ -780,6 +780,9 @@ describe the most common use case: a scenario where pyHanko prepares a document 
 computes the digest, sends it off to somewhere else for signing, and finishes the signing process
 once the response comes in (potentially in an entirely different thread).
 
+Basic interrupted signing example
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 In the example scenario, we use :class:`~pyhanko.sign.signers.pdf_cms.ExternalSigner` to format the
 signed attributes and the final CMS object, but the same principle applies (mutatis mutandis) to
 remote signers that supply complete CMS objects.
@@ -866,10 +869,17 @@ In particular, you don't have to bother with
 :class:`~pyhanko.sign.signers.pdf_signer.PostSignInstructions` at all.
 
 
+Interrupted signing when the signer's certificate is not known a priori
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 Note that, starting with pyHanko ``0.14.0``, the signer's certificate need no
 longer be provided at the start of the signing process, if you supply some
-additional parameters yourself. Here's what that might look like in a toy
-example.
+additional parameters yourself. This is useful in situations involving integrating
+with a remote signing service that only provisions a short-lived certificate
+when provided with a hash of the document (typically, such signers respond with
+complete CMS signature containers).
+
+Here's what that might look like in a toy example.
 
 .. code-block:: python
 
@@ -879,6 +889,7 @@ example.
         # is necessary if the signing cert is not available
         signers.PdfSignatureMetadata(
             field_name='Signature',
+            md_algorithm='sha256',
         ),
         signer=ExternalSigner(
             # note the 'None's
