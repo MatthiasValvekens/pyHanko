@@ -1628,3 +1628,46 @@ def test_sign_with_build_props_versioned_app_name():
     build_prop_dict = s.sig_object['/Prop_Build']['/App']
     assert build_prop_dict['/Name'] == '/Test Application'
     assert build_prop_dict['/REx'] == '1.2.3'
+
+
+@freeze_time('2020-11-01')
+def test_signature_dict_with_prop_auth_time():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    meta = signers.PdfSignatureMetadata(field_name='Sig1', prop_auth_time=512)
+
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+    assert s.sig_object['/Prop_AuthTime'] == 512
+
+
+@freeze_time('2020-11-01')
+def test_signature_dict_with_contact_info():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    contact_info = '+55 99 99999-9999'
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1', contact_info=contact_info
+    )
+
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+    assert s.sig_object['/ContactInfo'] == contact_info
+
+
+@freeze_time('2020-11-01')
+def test_signature_dict_with_prop_auth_type():
+    w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+    auth_type = fields.SigAuthType.PASSWORD
+    meta = signers.PdfSignatureMetadata(
+        field_name='Sig1',
+        prop_auth_type=auth_type,
+    )
+
+    out = signers.sign_pdf(w, meta, signer=FROM_CA)
+    r = PdfFileReader(out)
+    s = r.embedded_signatures[0]
+    val_trusted(s)
+    assert s.sig_object['/Prop_AuthType'] == 'Password'
