@@ -5,6 +5,7 @@ from pyhanko.cli.runtime import pyhanko_exception_manager
 from pyhanko.cli.utils import parse_field_location_spec
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
+from pyhanko.pdf_utils.writer import copy_into_new_writer
 from pyhanko.sign import fields
 
 __all__ = ['list_sigfields', 'add_sig_field']
@@ -44,9 +45,17 @@ def list_sigfields(infile, skip_status):
     required=True,
     help="Field specification (multiple allowed)",
 )
-def add_sig_field(infile, outfile, field):
+@click.option(
+    '--resave',
+    is_flag=True,
+    help="Resave the PDF document instead of creating an incremental update",
+)
+def add_sig_field(infile, outfile, field, resave):
     with pyhanko_exception_manager():
-        writer = IncrementalPdfFileWriter(infile, strict=False)
+        if resave:
+            writer = copy_into_new_writer(PdfFileReader(infile, strict=False))
+        else:
+            writer = IncrementalPdfFileWriter(infile, strict=False)
 
         for s in field:
             name, spec = parse_field_location_spec(s)

@@ -7,7 +7,7 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfSignatureMetadata, sign_pdf
 from pyhanko_tests.cli_tests.conftest import INPUT_PATH
-from pyhanko_tests.samples import MINIMAL_TWO_FIELDS, MINIMAL_TWO_PAGES
+from pyhanko_tests.samples import MINIMAL, MINIMAL_TWO_FIELDS, MINIMAL_TWO_PAGES
 from pyhanko_tests.signing_commons import FROM_CA
 
 
@@ -67,6 +67,57 @@ def test_list_empty_fields_without_status(cli_runner):
 
     assert not result.exception, result.output
     assert result.output == 'Sig1\nSig2\n'
+
+
+def test_cli_add_field_incremental_update_by_default(cli_runner):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL)
+
+    output_path = 'presign.pdf'
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addfields',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            INPUT_PATH,
+            output_path,
+        ],
+    )
+    assert not result.exception, result.output
+
+    with open(output_path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        name = r.root['/AcroForm']['/Fields'][0]['/T']
+        assert name == 'Sig1'
+        assert r.xrefs.total_revisions == 2
+
+
+def test_cli_add_field_with_resave(cli_runner):
+    with open(INPUT_PATH, 'wb') as inf:
+        inf.write(MINIMAL)
+
+    output_path = 'presign.pdf'
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'addfields',
+            '--resave',
+            '--field',
+            '1/0,0,100,100/Sig1',
+            INPUT_PATH,
+            output_path,
+        ],
+    )
+    assert not result.exception, result.output
+
+    with open(output_path, 'rb') as inf:
+        r = PdfFileReader(inf)
+        name = r.root['/AcroForm']['/Fields'][0]['/T']
+        assert name == 'Sig1'
+        assert r.xrefs.total_revisions == 1
 
 
 def test_cli_add_field_to_last_page(cli_runner):
