@@ -38,7 +38,11 @@ def list_sigfields(infile, skip_status):
 @click.argument('infile', type=click.File('rb'))
 @click.argument('outfile', type=click.File('wb'))
 @click.option(
-    '--field', metavar='PAGE/X1,Y1,X2,Y2/NAME', multiple=True, required=True
+    '--field',
+    metavar='PAGE/X1,Y1,X2,Y2/NAME',
+    multiple=True,
+    required=True,
+    help="Field specification (multiple allowed)",
 )
 def add_sig_field(infile, outfile, field):
     with pyhanko_exception_manager():

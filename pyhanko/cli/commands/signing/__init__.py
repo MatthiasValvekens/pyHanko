@@ -29,7 +29,14 @@ def signing():
 
 @trust_options
 @signing.group(name='addsig', help='add a signature')
-@click.option('--field', help='name of the signature field', required=False)
+@click.option(
+    '--field',
+    help=(
+        'signature field name, or field specification PAGE/X1,Y1,X2,Y2/NAME '
+        '(required unless the field contains exactly one signature field)'
+    ),
+    required=False,
+)
 @click.option('--name', help='explicitly specify signer name', required=False)
 @click.option('--reason', help='reason for signing', required=False)
 @click.option('--location', help='location of signing', required=False)
