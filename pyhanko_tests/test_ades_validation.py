@@ -702,7 +702,11 @@ async def test_nontraditional_hybrid_lta_with_failed_timestamp(requests_mock):
             r.embedded_signatures[0],
             pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
         )
-        assert result.ades_subindic == AdESIndeterminate.NO_POE
+        # since we assert that time stamp tokens must be valid, the
+        # spec requires us to return the TS validation result
+        assert (
+            result.ades_subindic == AdESIndeterminate.NO_CERTIFICATE_CHAIN_FOUND
+        )
         assert not result.api_status.bottom_line
         assert result.api_status.coverage == SignatureCoverageLevel.ENTIRE_FILE
         assert result.best_signature_time == datetime.datetime(

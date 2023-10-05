@@ -779,7 +779,7 @@ async def ades_with_time_validation(
     )
     if sig_ts_result.ades_subindic != AdESPassed.OK:
         return AdESWithTimeValidationResult(
-            ades_subindic=interm_result.ades_subindic,
+            ades_subindic=sig_ts_result.ades_subindic,
             api_status=temp_status,
             failure_msg=None,
             best_signature_time=signature_poe_time,

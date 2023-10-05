@@ -1145,8 +1145,7 @@ async def handle_certvalidator_errors(
     except PathValidationError as e:
         path = e.original_path
         logger.warning(e.failure_msg, exc_info=e)
-        # TODO verify whether this is appropriate
-        ades_status = AdESIndeterminate.CHAIN_CONSTRAINTS_FAILURE
+        ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
     except ValidationError as e:
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
