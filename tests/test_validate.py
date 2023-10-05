@@ -20,6 +20,7 @@ from pyhanko_certvalidator.errors import (
     OCSPFetchError,
     PathValidationError,
     RevokedError,
+    StaleRevinfoError,
 )
 from pyhanko_certvalidator.fetchers import (
     CertificateFetcher,
@@ -95,7 +96,12 @@ class MockFetcherBackend(FetcherBackend):
 
 ERR_CLASSES = {
     cls.__name__: cls
-    for cls in (PathValidationError, RevokedError, InsufficientRevinfoError)
+    for cls in (
+        PathValidationError,
+        RevokedError,
+        InsufficientRevinfoError,
+        StaleRevinfoError,
+    )
 }
 
 
@@ -422,7 +428,7 @@ def read_openssl_ocsp_test_params():
 @pytest.mark.parametrize(
     "test_case", read_openssl_ocsp_test_params(), ids=lambda case: case.name
 )
-def openssl_ocsp(test_case: OCSPTestCase):
+def test_openssl_ocsp(test_case: OCSPTestCase):
     context = ValidationContext(
         trust_roots=test_case.roots,
         other_certs=test_case.other_certs,

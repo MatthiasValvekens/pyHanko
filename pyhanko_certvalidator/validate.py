@@ -30,6 +30,7 @@ from .errors import (
     PathBuildingError,
     PathValidationError,
     PSSParameterMismatch,
+    StaleRevinfoError,
     ValidationError,
 )
 from .name_trees import (
@@ -1292,6 +1293,7 @@ async def _check_revocation(
         else rev_check_policy.intermediate_ca_cert_rule
     )
 
+    ocsp_suspect_stale_since = None
     # for OCSP, we don't bother if there's nothing in the certificate's AIA
     if rev_rule.ocsp_relevant and cert_has_ocsp:
         try:
@@ -1304,6 +1306,7 @@ async def _check_revocation(
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
             ocsp_matched = True
+            ocsp_suspect_stale_since = e.suspect_stale
         except OCSPNoMatchesError:
             pass
         except OCSPFetchError as e:
@@ -1311,7 +1314,7 @@ async def _check_revocation(
                 soft_fail = True
                 validation_context._report_soft_fail(e)
             else:
-                failures.append(e)
+                failures.append(e.args[0])
                 revocation_check_failed = True
     if not ocsp_status_good and rev_rule.ocsp_mandatory:
         if failures:
@@ -1329,6 +1332,7 @@ async def _check_revocation(
     )
 
     crl_status_good = False
+    crl_suspect_stale_since = None
     # do not attempt to check CRLs (even cached ones) if there are no
     # distribution points, unless we have to
     crl_required_by_policy = rev_rule.crl_mandatory or (
@@ -1348,6 +1352,7 @@ async def _check_revocation(
             failures.extend([failure[0] for failure in e.failures])
             revocation_check_failed = True
             crl_matched = True
+            crl_suspect_stale_since = e.suspect_stale
         except CRLNoMatchesError:
             pass
         except CRLFetchError as e:
@@ -1355,7 +1360,7 @@ async def _check_revocation(
                 soft_fail = True
                 validation_context._report_soft_fail(e)
             else:
-                failures.append(e)
+                failures.append(e.args[0])
                 revocation_check_failed = True
 
     if not crl_status_good and rev_rule.crl_mandatory:
@@ -1383,12 +1388,26 @@ async def _check_revocation(
     expected_revinfo_not_found = not matched and expected_revinfo
     if not soft_fail:
         if not status_good and matched and revocation_check_failed:
-            raise InsufficientRevinfoError.from_state(
+            msg = (
                 f"The path could not be validated because "
                 f"{proc_state.describe_cert(def_interm=True)} revocation "
-                f"checks failed: {'; '.join(failures)}",
-                proc_state,
+                f"checks failed: {'; '.join(failures)}"
             )
+            maybe_stale_cutoff = (
+                ocsp_suspect_stale_since or crl_suspect_stale_since
+            )
+            if maybe_stale_cutoff:
+                stale_cutoff = (
+                    max(ocsp_suspect_stale_since, crl_suspect_stale_since)
+                    if ocsp_suspect_stale_since and crl_suspect_stale_since
+                    else maybe_stale_cutoff
+                )
+                raise StaleRevinfoError.format(msg, stale_cutoff, proc_state)
+            else:
+                raise InsufficientRevinfoError.from_state(
+                    msg,
+                    proc_state,
+                )
         if expected_revinfo_not_found:
             raise InsufficientRevinfoError.from_state(
                 f"The path could not be validated because no revocation "

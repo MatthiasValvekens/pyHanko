@@ -431,5 +431,19 @@
       "class": "InsufficientRevinfoError",
       "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: Unable to verify OCSP response since response signing certificate could not be validated"
     }
+  },
+  {
+    "name": "direct_stale_otherwise_ok",
+    "root": "ND3_Issuer_Root.pem",
+    "cert": "ND3_Cert_EE.pem",
+    "ocsps": [
+      "ND3.ors"
+    ],
+    "path_len": 2,
+    "moment": "2013-10-12T00:00:00+00:00",
+    "error": {
+      "class": "StaleRevinfoError",
+      "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: OCSP response is not recent enough"
+    }
   }
 ]
