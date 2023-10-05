@@ -521,6 +521,32 @@ def _handle_attr_cert_crl_idp_ext_constraints(
     return True
 
 
+def _check_crl_freshness(
+    certificate_list_cont: CRLContainer,
+    revinfo_policy: CertRevTrustPolicy,
+    timing_params: ValidationTimingParams,
+    errs: _CRLErrs,
+    is_delta: bool,
+):
+    freshness_result = certificate_list_cont.usable_at(
+        policy=revinfo_policy,
+        timing_params=timing_params,
+    )
+    prefix = "Delta CRL" if is_delta else "CRL"
+    rating = freshness_result.rating
+    if rating != RevinfoUsabilityRating.OK:
+        if rating == RevinfoUsabilityRating.STALE:
+            msg = f'{prefix} is not recent enough'
+            errs.update_stale(freshness_result.last_usable_at)
+        elif rating == RevinfoUsabilityRating.TOO_NEW:
+            msg = f'{prefix} is too recent'
+        else:
+            msg = f'{prefix} freshness could not be established'
+        errs.append(msg, certificate_list_cont, is_freshness_failure=True)
+        return False
+    return True
+
+
 async def _handle_single_crl(
     cert: Union[x509.Certificate, cms.AttributeCertificateV2],
     cert_issuer_auth: Authority,
@@ -582,20 +608,13 @@ async def _handle_single_crl(
     if interim_reasons is None:
         return None
 
-    freshness_result = certificate_list_cont.usable_at(
-        policy=validation_context.revinfo_policy,
-        timing_params=validation_context.timing_params,
-    )
-    rating = freshness_result.rating
-    if rating != RevinfoUsabilityRating.OK:
-        if rating == RevinfoUsabilityRating.STALE:
-            msg = 'CRL is not recent enough'
-            errs.update_stale(freshness_result.last_usable_at)
-        elif rating == RevinfoUsabilityRating.TOO_NEW:
-            msg = 'CRL is too recent'
-        else:
-            msg = 'CRL freshness could not be established'
-        errs.append(msg, certificate_list_cont, is_freshness_failure=True)
+    if not _check_crl_freshness(
+        certificate_list_cont,
+        validation_context.revinfo_policy,
+        validation_context.timing_params,
+        errs,
+        is_delta=False,
+    ):
         return None
 
     # Step c
@@ -713,12 +732,9 @@ def _maybe_get_delta_crl(
 
     delta_certificate_list = delta_certificate_list_cont.crl_data
 
-    if delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-        errs.append(
-            'One or more unrecognized critical extensions are present in '
-            'the delta CRL',
-            delta_certificate_list_cont,
-        )
+    if not _verify_no_unknown_critical_extensions(
+        delta_certificate_list_cont, errs, is_delta=True
+    ):
         return None
 
     # Step h
@@ -732,24 +748,29 @@ def _maybe_get_delta_crl(
         return None
 
     if policy and timing_params:
-        freshness_result = delta_certificate_list_cont.usable_at(
-            policy=policy, timing_params=timing_params
-        )
-        rating = freshness_result.rating
-        if rating != RevinfoUsabilityRating.OK:
-            if rating == RevinfoUsabilityRating.STALE:
-                msg = 'Delta CRL is stale'
-                errs.update_stale(freshness_result.last_usable_at)
-            elif rating == RevinfoUsabilityRating.TOO_NEW:
-                msg = 'Delta CRL is too recent'
-            else:
-                msg = 'Delta CRL freshness could not be established'
-            errs.append(
-                msg, delta_certificate_list_cont, is_freshness_failure=True
-            )
-            return None
-        return delta_certificate_list_cont
+        if _check_crl_freshness(
+            delta_certificate_list_cont,
+            policy,
+            timing_params,
+            errs,
+            is_delta=True,
+        ):
+            return delta_certificate_list_cont
     return None
+
+
+def _verify_no_unknown_critical_extensions(
+    certificate_list_cont: CRLContainer, errs: _CRLErrs, is_delta: bool
+):
+    extensions = certificate_list_cont.crl_data.critical_extensions
+    if extensions - KNOWN_CRL_EXTENSIONS:
+        errs.append(
+            f'One or more unrecognized critical extensions are present in '
+            f'the {"delta CRL" if is_delta else "CRL"}',
+            certificate_list_cont,
+        )
+        return False
+    return True
 
 
 def _get_crl_scope_assuming_authority(
@@ -840,12 +861,9 @@ def _get_crl_scope_assuming_authority(
     # We don't skip a CRL if it only contains reasons already checked since
     # a certificate issuer can self-issue a new cert that is used for CRLs
 
-    if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-        errs.append(
-            'One or more unrecognized critical extensions are present in '
-            'the CRL',
-            certificate_list_cont,
-        )
+    if not _verify_no_unknown_critical_extensions(
+        certificate_list_cont, errs, is_delta=False
+    ):
         return None
 
     return interim_reasons
