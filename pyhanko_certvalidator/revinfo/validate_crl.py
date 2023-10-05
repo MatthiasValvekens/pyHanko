@@ -24,6 +24,7 @@ from pyhanko_certvalidator.ltv.types import ValidationTimingParams
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import CertRevTrustPolicy
 from pyhanko_certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.revinfo._err_gather import Errors
 from pyhanko_certvalidator.revinfo.archival import (
     CRLContainer,
     RevinfoUsabilityRating,
@@ -317,8 +318,7 @@ async def _find_crl_issuer(
 
 
 @dataclass
-class _CRLErrs:
-    failures: list = field(default_factory=list)
+class _CRLErrs(Errors):
     issuer_failures: int = 0
 
 
@@ -436,13 +436,11 @@ def _handle_crl_idp_ext_constraints(
         crl_authority_name=crl_authority_name,
     )
     if not match:
-        errs.failures.append(
-            (
-                "The CRL issuing distribution point extension does not "
-                "share any names with the certificate CRL distribution "
-                "point extension",
-                certificate_list,
-            )
+        errs.append(
+            "The CRL issuing distribution point extension does not "
+            "share any names with the certificate CRL distribution "
+            "point extension",
+            certificate_list,
         )
         errs.issuer_failures += 1
         return False
@@ -453,12 +451,10 @@ def _handle_crl_idp_ext_constraints(
             cert.basic_constraints_value
             and cert.basic_constraints_value['ca'].native
         ):
-            errs.failures.append(
-                (
-                    "CRL only contains end-entity certificates and "
-                    "certificate is a CA certificate",
-                    certificate_list,
-                )
+            errs.append(
+                "CRL only contains end-entity certificates and "
+                "certificate is a CA certificate",
+                certificate_list,
             )
             return False
 
@@ -468,19 +464,17 @@ def _handle_crl_idp_ext_constraints(
             not cert.basic_constraints_value
             or cert.basic_constraints_value['ca'].native is False
         ):
-            errs.failures.append(
-                (
-                    "CRL only contains CA certificates and certificate "
-                    "is an end-entity certificate",
-                    certificate_list,
-                )
+            errs.append(
+                "CRL only contains CA certificates and certificate "
+                "is an end-entity certificate",
+                certificate_list,
             )
             return False
 
     # Step b 2 iv
     if crl_idp['only_contains_attribute_certs'].native:
-        errs.failures.append(
-            ('CRL only contains attribute certificates', certificate_list)
+        errs.append(
+            'CRL only contains attribute certificates', certificate_list
         )
         return False
 
@@ -502,13 +496,11 @@ def _handle_attr_cert_crl_idp_ext_constraints(
         crl_authority_name=crl_authority_name,
     )
     if not match:
-        errs.failures.append(
-            (
-                "The CRL issuing distribution point extension does not "
-                "share any names with the attribute certificate's "
-                "CRL distribution point extension",
-                certificate_list,
-            )
+        errs.append(
+            "The CRL issuing distribution point extension does not "
+            "share any names with the attribute certificate's "
+            "CRL distribution point extension",
+            certificate_list,
         )
         errs.issuer_failures += 1
         return False
@@ -519,12 +511,10 @@ def _handle_attr_cert_crl_idp_ext_constraints(
         or crl_idp['only_contains_ca_certs'].native
     )
     if pkc_only:
-        errs.failures.append(
-            (
-                "CRL only contains public-key certificates, but "
-                "certificate is an attribute certificate",
-                certificate_list,
-            )
+        errs.append(
+            "CRL only contains public-key certificates, but "
+            "certificate is an attribute certificate",
+            certificate_list,
         )
         return False
 
@@ -578,7 +568,7 @@ async def _handle_single_crl(
             errs.issuer_failures += 1
             return None
         except (CertificateFetchError, CRLValidationError) as e:
-            errs.failures.append((e.args[0], certificate_list))
+            errs.append(e.args[0], certificate_list)
             return None
 
     interim_reasons = _get_crl_scope_assuming_authority(
@@ -600,11 +590,12 @@ async def _handle_single_crl(
     if rating != RevinfoUsabilityRating.OK:
         if rating == RevinfoUsabilityRating.STALE:
             msg = 'CRL is not recent enough'
+            errs.update_stale(freshness_result.last_usable_at)
         elif rating == RevinfoUsabilityRating.TOO_NEW:
             msg = 'CRL is too recent'
         else:
             msg = 'CRL freshness could not be established'
-        errs.failures.append((msg, certificate_list_cont))
+        errs.append(msg, certificate_list_cont, is_freshness_failure=True)
         return None
 
     # Step c
@@ -679,12 +670,10 @@ def _get_crl_authority_name(
             )
             crl_authority_name = tmp_crl_issuer.subject
         else:
-            errs.failures.append(
-                (
-                    'CRL is marked as an indirect CRL, but provides no '
-                    'mechanism for locating the CRL issuer certificate',
-                    certificate_list_cont,
-                )
+            errs.append(
+                'CRL is marked as an indirect CRL, but provides no '
+                'mechanism for locating the CRL issuer certificate',
+                certificate_list_cont,
             )
             raise LookupError
     return is_indirect, crl_authority_name
@@ -725,12 +714,10 @@ def _maybe_get_delta_crl(
     delta_certificate_list = delta_certificate_list_cont.crl_data
 
     if delta_certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-        errs.failures.append(
-            (
-                'One or more unrecognized critical extensions are present in '
-                'the delta CRL',
-                delta_certificate_list_cont,
-            )
+        errs.append(
+            'One or more unrecognized critical extensions are present in '
+            'the delta CRL',
+            delta_certificate_list_cont,
         )
         return None
 
@@ -738,11 +725,9 @@ def _maybe_get_delta_crl(
     try:
         _verify_crl_signature(delta_certificate_list, crl_issuer.public_key)
     except CRLValidationError:
-        errs.failures.append(
-            (
-                'Delta CRL signature could not be verified',
-                delta_certificate_list_cont,
-            )
+        errs.append(
+            'Delta CRL signature could not be verified',
+            delta_certificate_list_cont,
         )
         return None
 
@@ -754,11 +739,14 @@ def _maybe_get_delta_crl(
         if rating != RevinfoUsabilityRating.OK:
             if rating == RevinfoUsabilityRating.STALE:
                 msg = 'Delta CRL is stale'
+                errs.update_stale(freshness_result.last_usable_at)
             elif rating == RevinfoUsabilityRating.TOO_NEW:
                 msg = 'Delta CRL is too recent'
             else:
                 msg = 'Delta CRL freshness could not be established'
-            errs.failures.append((msg, delta_certificate_list_cont))
+            errs.append(
+                msg, delta_certificate_list_cont, is_freshness_failure=True
+            )
             return None
         return delta_certificate_list_cont
     return None
@@ -853,12 +841,10 @@ def _get_crl_scope_assuming_authority(
     # a certificate issuer can self-issue a new cert that is used for CRLs
 
     if certificate_list.critical_extensions - KNOWN_CRL_EXTENSIONS:
-        errs.failures.append(
-            (
-                'One or more unrecognized critical extensions are present in '
-                'the CRL',
-                certificate_list_cont,
-            )
+        errs.append(
+            'One or more unrecognized critical extensions are present in '
+            'the CRL',
+            certificate_list_cont,
         )
         return None
 
@@ -889,12 +875,10 @@ def _check_cert_on_crl_and_delta(
                 crl_issuer.subject,
             )
         except NotImplementedError:
-            errs.failures.append(
-                (
-                    'One or more unrecognized critical extensions are present in '
-                    'the CRL entry for the certificate',
-                    delta_certificate_list_cont,
-                )
+            errs.append(
+                'One or more unrecognized critical extensions are present in '
+                'the CRL entry for the certificate',
+                delta_certificate_list_cont,
             )
             raise
 
@@ -905,12 +889,10 @@ def _check_cert_on_crl_and_delta(
                 cert, cert_issuer_name, certificate_list, crl_issuer.subject
             )
         except NotImplementedError:
-            errs.failures.append(
-                (
-                    'One or more unrecognized critical extensions are present in '
-                    'the CRL entry for the certificate',
-                    certificate_list_cont,
-                )
+            errs.append(
+                'One or more unrecognized critical extensions are present in '
+                'the CRL entry for the certificate',
+                certificate_list_cont,
             )
             raise
 
@@ -961,7 +943,7 @@ async def _classify_relevant_crls(
         except ValueError as e:
             msg = "Generic processing error while classifying CRL."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list))
+            errs.append(msg, certificate_list)
     return complete_lists_by_issuer, delta_lists_by_issuer
 
 
@@ -984,14 +966,19 @@ def _process_crl_completeness(
             )
 
         if not errs.failures:
-            errs.failures.append(
-                ('The available CRLs do not cover all revocation reasons',)
+            errs.append(
+                'The available CRLs do not cover all revocation reasons', None
             )
 
         return CRLValidationIndeterminateError(
             f"Unable to determine if {proc_state.describe_cert()} "
             f"is revoked due to insufficient information from known CRLs",
-            errs.failures,
+            failures=errs.failures,
+            suspect_stale=(
+                errs.stale_last_usable_at
+                if errs.freshness_failures_only
+                else None
+            ),
         )
 
 
@@ -1081,7 +1068,7 @@ async def verify_crl(
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list_cont))
+            errs.append(msg, certificate_list_cont)
 
     exc = _process_crl_completeness(
         checked_reasons, total_crls, errs, proc_state
@@ -1195,7 +1182,7 @@ async def _assess_crl_relevance(
         errs.issuer_failures += 1
         return None
     except (CertificateFetchError, CRLValidationError) as e:
-        errs.failures.append((e.args[0], certificate_list))
+        errs.append(e.args[0], certificate_list)
         return None
 
     provisional_results = []
@@ -1304,7 +1291,7 @@ async def collect_relevant_crls_with_paths(
         except ValueError as e:
             msg = "Generic processing error while validating CRL."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, certificate_list_cont))
+            errs.append(msg, certificate_list_cont)
 
     return CRLCollectionResult(
         crls=relevant_crls,

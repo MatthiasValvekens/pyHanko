@@ -540,7 +540,7 @@
     ],
     "path_len": 3,
     "error": {
-      "class": "InsufficientRevinfoError",
+      "class": "StaleRevinfoError",
       "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL is not recent enough"
     }
   },
@@ -556,7 +556,7 @@
     ],
     "path_len": 3,
     "error": {
-      "class": "InsufficientRevinfoError",
+      "class": "StaleRevinfoError",
       "msg_regex": "The path could not be validated because the end-entity certificate revocation checks failed: CRL is not recent enough"
     }
   },

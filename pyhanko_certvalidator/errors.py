@@ -1,6 +1,6 @@
 # coding: utf-8
 from datetime import datetime
-from typing import Optional, Type, TypeVar
+from typing import List, Optional, Type, TypeVar
 
 from asn1crypto.crl import CRLReason
 from cryptography.exceptions import InvalidSignature
@@ -34,9 +34,16 @@ class CRLFetchError(CRLValidationError):
 
 
 class CRLValidationIndeterminateError(CRLValidationError):
-    @property
-    def failures(self):
-        return self.args[1]
+    def __init__(
+        self,
+        msg: str,
+        failures: List[str],
+        suspect_stale: Optional[datetime] = None,
+    ):
+        self.msg = msg
+        self.failures = failures
+        self.suspect_stale = suspect_stale
+        super().__init__(msg, failures)
 
 
 class OCSPValidationError(Exception):
@@ -48,9 +55,16 @@ class OCSPNoMatchesError(OCSPValidationError):
 
 
 class OCSPValidationIndeterminateError(OCSPValidationError):
-    @property
-    def failures(self):
-        return self.args[1]
+    def __init__(
+        self,
+        msg: str,
+        failures: List[str],
+        suspect_stale: Optional[datetime] = None,
+    ):
+        self.msg = msg
+        self.failures = failures
+        self.suspect_stale = suspect_stale
+        super().__init__(msg, failures)
 
 
 class OCSPFetchError(OCSPValidationError):
@@ -116,6 +130,23 @@ class RevokedError(PathValidationError):
 
 class InsufficientRevinfoError(PathValidationError):
     pass
+
+
+class StaleRevinfoError(InsufficientRevinfoError):
+    @classmethod
+    def format(
+        cls,
+        msg: str,
+        time_cutoff: datetime,
+        proc_state: ValProcState,
+    ):
+        return StaleRevinfoError(msg, time_cutoff, proc_state)
+
+    def __init__(
+        self, msg: str, time_cutoff: datetime, proc_state: ValProcState
+    ):
+        self.time_cutoff = time_cutoff
+        super().__init__(msg, proc_state=proc_state)
 
 
 class InsufficientPOEError(PathValidationError):

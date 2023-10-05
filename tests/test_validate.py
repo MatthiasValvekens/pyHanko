@@ -20,6 +20,7 @@ from pyhanko_certvalidator.errors import (
     OCSPFetchError,
     PathValidationError,
     RevokedError,
+    StaleRevinfoError,
 )
 from pyhanko_certvalidator.fetchers import (
     CertificateFetcher,
@@ -95,7 +96,12 @@ class MockFetcherBackend(FetcherBackend):
 
 ERR_CLASSES = {
     cls.__name__: cls
-    for cls in (PathValidationError, RevokedError, InsufficientRevinfoError)
+    for cls in (
+        PathValidationError,
+        RevokedError,
+        InsufficientRevinfoError,
+        StaleRevinfoError,
+    )
 }
 
 

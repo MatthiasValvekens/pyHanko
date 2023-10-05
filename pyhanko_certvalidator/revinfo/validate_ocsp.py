@@ -34,6 +34,7 @@ from pyhanko_certvalidator.registry import (
     LayeredCertificateStore,
     SimpleCertificateStore,
 )
+from pyhanko_certvalidator.revinfo._err_gather import Errors
 from pyhanko_certvalidator.revinfo.archival import (
     OCSPContainer,
     RevinfoUsabilityRating,
@@ -162,8 +163,7 @@ def _ocsp_allowed(responder_cert: x509.Certificate):
 
 
 @dataclass
-class _OCSPErrs:
-    failures: list = field(default_factory=list)
+class _OCSPErrs(Errors):
     mismatch_failures: int = 0
 
 
@@ -208,23 +208,21 @@ def _match_ocsp_certid(
         return False
 
     if name_mismatch:
-        errs.failures.append(
-            ('OCSP response issuer name hash does not match', ocsp_response)
+        errs.append(
+            'OCSP response issuer name hash does not match', ocsp_response
         )
         return False
 
     if serial_mismatch:
-        errs.failures.append(
-            (
-                'OCSP response certificate serial number does not match',
-                ocsp_response,
-            )
+        errs.append(
+            'OCSP response certificate serial number does not match',
+            ocsp_response,
         )
         return False
 
     if key_hash_mismatch:
-        errs.failures.append(
-            ('OCSP response issuer key hash does not match', ocsp_response)
+        errs.append(
+            'OCSP response issuer key hash does not match', ocsp_response
         )
         return False
     return True
@@ -259,12 +257,10 @@ def _identify_responder_cert(
             candidate_responder_certs[0] if candidate_responder_certs else None
         )
     if not responder_cert:
-        errs.failures.append(
-            (
-                "Unable to verify OCSP response since response signing "
-                "certificate could not be located",
-                ocsp_response,
-            )
+        errs.append(
+            "Unable to verify OCSP response since response signing "
+            "certificate could not be located",
+            ocsp_response,
         )
     return responder_cert
 
@@ -331,15 +327,13 @@ async def _check_ocsp_authorisation(
             )
             auth_ok = True
         except OCSPValidationError as e:
-            errs.failures.append((e.args[0], ocsp_response))
+            errs.append(e.args[0], ocsp_response)
             auth_ok = False
     if not auth_ok:
-        errs.failures.append(
-            (
-                'Unable to verify OCSP response since response was '
-                'signed by an unauthorized certificate',
-                ocsp_response,
-            )
+        errs.append(
+            'Unable to verify OCSP response since response was '
+            'signed by an unauthorized certificate',
+            ocsp_response,
         )
     return auth_ok
 
@@ -399,17 +393,13 @@ def _verify_ocsp_signature(
         )
         return True
     except PSSParameterMismatch:
-        errs.failures.append(
-            (
-                'The signature parameters on the OCSP response do not match '
-                'the constraints on the public key',
-                ocsp_response,
-            )
+        errs.append(
+            'The signature parameters on the OCSP response do not match '
+            'the constraints on the public key',
+            ocsp_response,
         )
     except InvalidSignature:
-        errs.failures.append(
-            ('Unable to verify OCSP response signature', ocsp_response)
-        )
+        errs.append('Unable to verify OCSP response signature', ocsp_response)
     return False
 
 
@@ -469,11 +459,12 @@ async def _handle_single_ocsp_resp(
     if rating != RevinfoUsabilityRating.OK:
         if rating == RevinfoUsabilityRating.STALE:
             msg = 'OCSP response is not recent enough'
+            errs.update_stale(freshness_result.last_usable_at)
         elif rating == RevinfoUsabilityRating.TOO_NEW:
             msg = 'OCSP response is too recent'
         else:
             msg = 'OCSP response freshness could not be established'
-        errs.failures.append((msg, ocsp_response))
+        errs.append(msg, ocsp_response, is_freshness_failure=True)
         return False
 
     # check whether the responder cert is authorised
@@ -565,7 +556,7 @@ async def verify_ocsp_response(
         except ValueError as e:
             msg = "Generic processing error while validating OCSP response."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, ocsp_response))
+            errs.append(msg, ocsp_response)
 
     if errs.mismatch_failures == len(ocsp_responses):
         raise OCSPNoMatchesError(
@@ -575,7 +566,10 @@ async def verify_ocsp_response(
     raise OCSPValidationIndeterminateError(
         f"Unable to determine if {cert_description} "
         f"is revoked due to insufficient information from OCSP responses.",
-        errs.failures,
+        failures=errs.failures,
+        suspect_stale=(
+            errs.stale_last_usable_at if errs.freshness_failures_only else None
+        ),
     )
 
 
@@ -676,7 +670,7 @@ async def collect_relevant_responses_with_paths(
         except ValueError as e:
             msg = "Generic processing error while validating OCSP response."
             logging.debug(msg, exc_info=e)
-            errs.failures.append((msg, ocsp_response_cont))
+            errs.append(msg, ocsp_response_cont)
     return OCSPCollectionResult(
         responses=relevant,
         failure_msgs=[f[0] for f in errs.failures],
