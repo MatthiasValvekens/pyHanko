@@ -33,6 +33,7 @@ from pyhanko_certvalidator.errors import (
     PathBuildingError,
     PathValidationError,
     RevokedError,
+    StaleRevinfoError,
     ValidationError,
 )
 from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
@@ -1085,6 +1086,13 @@ async def handle_certvalidator_errors(
     except TimeSlideFailure as e:
         logger.warning(e.failure_msg, exc_info=e)
         ades_status = AdESIndeterminate.NO_POE
+    except StaleRevinfoError as e:
+        logger.warning(e.failure_msg, exc_info=e)
+        # note: the way pyhanko-certvalidator handles revinfo freshness
+        # is not strictly compliant with AdES rules, but this mapping
+        # should be roughly appropriate in most cases
+        ades_status = AdESIndeterminate.TRY_LATER
+        time_horizon = e.time_cutoff
     except DisallowedAlgorithmError as e:
         logger.warning(e.failure_msg, exc_info=e)
         # note: this is the one from the certvalidator hierarchy, which is

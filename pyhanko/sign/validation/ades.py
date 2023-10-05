@@ -635,8 +635,7 @@ _WITH_TIME_FURTHER_PROC = frozenset(
         AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
         AdESIndeterminate.REVOKED_NO_POE,
         AdESIndeterminate.REVOKED_CA_NO_POE,
-        # TODO process TRY_LATER
-        # AdESIndeterminate.TRY_LATER,
+        AdESIndeterminate.TRY_LATER,
         AdESIndeterminate.OUT_OF_BOUNDS_NO_POE,
     }
 )
@@ -825,6 +824,7 @@ async def ades_with_time_validation(
     elif (
         interm_result.ades_subindic
         == AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE
+        or interm_result.ades_subindic == AdESIndeterminate.TRY_LATER
     ):
         # in this case error_time_horizon is set to the point where the
         # constraint was triggered
@@ -850,7 +850,6 @@ async def ades_with_time_validation(
             signature_not_before_time=signature_not_before_time,
         )
     # TODO handle time-stamp delay
-    # TODO handle TRY_LATER  (now forcibly excluded)
     interm_result.trust_subindic_update = None
     interm_result.status_kwargs['trust_problem_indic'] = None
 
