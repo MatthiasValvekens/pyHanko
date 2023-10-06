@@ -13,7 +13,7 @@ import itertools
 import logging
 from copy import copy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import (
     Any,
     Dict,
@@ -95,8 +95,11 @@ from pyhanko.sign.validation.status import (
 from ..diff_analysis import DiffPolicy
 from .errors import NoDSSFoundError
 from .policy_decl import (
+    KnownPOE,
     LocalKnowledge,
     PdfSignatureValidationSpec,
+    RevinfoOnlineFetchingRule,
+    RevocationInfoGatheringSpec,
     SignatureValidationSpec,
     bootstrap_validation_data_handlers,
 )
@@ -107,6 +110,7 @@ __all__ = [
     'ades_with_time_validation',
     'ades_lta_validation',
     'ades_timestamp_validation',
+    'simulate_future_ades_lta_validation',
     'AdESBasicValidationResult',
     'AdESWithTimeValidationResult',
     'AdESLTAValidationResult',
@@ -1189,7 +1193,7 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
     r: PdfFileReader,
     include_content_ts: bool,
     diff_policy: Optional[DiffPolicy],
-):
+) -> List[PrimaFaciePOE]:
     # This subroutine implements the POE gathering part of the evidence record
     # processing algorithm in AdES as applied to PDF. For the purposes of this
     # function, the chain of document timestamps is treated as a single evidence
@@ -1545,6 +1549,33 @@ async def _process_signature_ts(
     return signature_ts_result
 
 
+def _dss_to_local_knowledge(
+    reader: PdfFileReader,
+):
+    try:
+        dss = DocumentSecurityStore.read_dss(reader)
+        dss_ocsps = [
+            cont
+            for resp in dss.ocsps
+            for cont in OCSPContainer.load_multi(
+                OCSPResponse.load(resp.get_object().data)
+            )
+        ]
+        dss_crls = [
+            CRLContainer(crl_data=CertificateList.load(crl.get_object().data))
+            for crl in dss.crls
+        ]
+        dss_certs = list(dss.load_certs())
+        local_knowledge = LocalKnowledge(
+            known_ocsps=dss_ocsps,
+            known_crls=dss_crls,
+            known_certs=dss_certs,
+        )
+    except NoDSSFoundError:
+        local_knowledge = LocalKnowledge()
+    return local_knowledge
+
+
 async def ades_lta_validation(
     embedded_sig: EmbeddedPdfSignature,
     pdf_validation_spec: PdfSignatureValidationSpec,
@@ -1586,28 +1617,13 @@ async def ades_lta_validation(
     init_local_knowledge = validation_spec.local_knowledge
     # Ingest CRLs, certs and OCSPs from the DSS
     # (POE info will be processed separately)
-    try:
-        dss = DocumentSecurityStore.read_dss(embedded_sig.reader)
-        dss_ocsps = [
-            cont
-            for resp in dss.ocsps
-            for cont in OCSPContainer.load_multi(
-                OCSPResponse.load(resp.get_object().data)
-            )
-        ]
-        dss_crls = [
-            CRLContainer(crl_data=CertificateList.load(crl.get_object().data))
-            for crl in dss.crls
-        ]
-        dss_certs = list(dss.load_certs())
-        local_knowledge = LocalKnowledge(
-            known_ocsps=init_local_knowledge.known_ocsps + dss_ocsps,
-            known_crls=init_local_knowledge.known_crls + dss_crls,
-            known_certs=init_local_knowledge.known_certs + dss_certs,
-            known_poes=init_local_knowledge.known_poes,
-        )
-    except NoDSSFoundError:
-        local_knowledge = init_local_knowledge
+    dss_facts = _dss_to_local_knowledge(reader=embedded_sig.reader)
+    local_knowledge = LocalKnowledge(
+        known_ocsps=init_local_knowledge.known_ocsps + dss_facts.known_ocsps,
+        known_crls=init_local_knowledge.known_crls + dss_facts.known_crls,
+        known_certs=init_local_knowledge.known_certs + dss_facts.known_certs,
+        known_poes=init_local_knowledge.known_poes,
+    )
 
     augmented_validation_spec = dataclasses.replace(
         validation_spec, local_knowledge=local_knowledge
@@ -1633,7 +1649,8 @@ async def ades_lta_validation(
         )
         if oldest_docts_record is not None:
             oldest_evidence_record_timestamp = oldest_docts_record.timestamp_dt
-        else:
+        elif not local_knowledge.known_poes:
+            # do not show this warning if there are POEs in the local knowledge
             logger.warning(
                 "No document timestamps after signature; proceeding "
                 "without past proof of existence"
@@ -1688,7 +1705,7 @@ async def ades_lta_validation(
             signature_not_before_time=(
                 signature_prelim_result.signature_not_before_time
             ),
-            oldest_evidence_record_timestamp=(oldest_evidence_record_timestamp),
+            oldest_evidence_record_timestamp=oldest_evidence_record_timestamp,
             signature_timestamp_status=None,
         )
 
@@ -1770,5 +1787,105 @@ async def ades_lta_validation(
             signature_prelim_result.signature_not_before_time
         ),
         signature_timestamp_status=signature_ts_result,
-        oldest_evidence_record_timestamp=(oldest_evidence_record_timestamp),
+        oldest_evidence_record_timestamp=oldest_evidence_record_timestamp,
+    )
+
+
+async def simulate_future_ades_lta_validation(
+    embedded_sig: EmbeddedPdfSignature,
+    pdf_validation_spec: PdfSignatureValidationSpec,
+    future_validation_time: datetime,
+    current_reference_time: Optional[datetime] = None,
+) -> AdESLTAValidationResult:
+    """
+    .. versionadded:: 0.21.0
+
+    Simulate a future LTA validation of a PDF signature, assuming
+    perfect timestamp maintenance until the specified point in time.
+
+    .. warning::
+        This is experimental API.
+
+    The purpose of this utility function is to act as a sanity check
+    for signers and signature archivists.
+    It takes validation spec, a future validation time and
+    a current reference time (defaults to the current time), and, by fiat,
+    generates proofs of existence for all relevant objects in the PDF for that
+    reference time. It then executes the PAdES LTA validation algorithm
+    with that set of PoEs against the future validation time, with all
+    remote fetching functionality disabled.
+
+    The idea is that this allows the caller to assess whether a signature is
+    "LTA maintainable", i.e. whether it contains the necessary information for
+    the signature to remain validatable if the timestamp chain is extended
+    properly. If this check fails but the signature validates at the current
+    time, it may indicate a lack of contemporaneous revocation information.
+
+    :param embedded_sig:
+        The signature under scrutiny.
+    :param pdf_validation_spec:
+        The validation spec against which the simulated validation
+        should be executed.
+    :param future_validation_time:
+        The future validation time at which the validation should be simulated.
+    :param current_reference_time:
+        The reference time at which all relevant objects in the PDF are
+        presumed to have been proven to exist for the purposes of
+        the (future) validation being simulated. Defaults to the current time.
+    :return:
+        An AdES LTA validation result.
+    """
+    # TODO add a mode that validates the most recent docts live at the current
+    #  reference time? Otherwise timestamp validation will typically fail
+    #  if the gap between the timestamp and the time of the simulation is large,
+    #  since the revinfo in the document for that timestamp will be stale
+    #  (but if the TS cert is not expired, fresh revinfo should be available)
+
+    now = current_reference_time or datetime.now(tz=timezone.utc)
+    timing_info = ValidationTimingInfo(
+        validation_time=future_validation_time,
+        point_in_time_validation=True,
+        best_signature_time=future_validation_time,
+    )
+    prima_facie_poes = _build_prima_facie_poe_index_from_pdf_timestamps(
+        embedded_sig.reader, include_content_ts=True, diff_policy=None
+    )
+    orig_sig_validation_spec = pdf_validation_spec.signature_validation_spec
+    orig_local_knowledge = orig_sig_validation_spec.local_knowledge
+    dss_knowledge = _dss_to_local_knowledge(embedded_sig.reader)
+
+    def _poes():
+        # For the purposes of this test, we assert all proofs of existence
+        # at the current time, including all the prima facie ones gathered from
+        # the file. This simulates perfect record keeping without having to
+        # introduce extra timestamp tokens into the validation process.
+        for poe in orig_local_knowledge.known_poes:
+            yield dataclasses.replace(poe, poe_time=min(poe.poe_time, now))
+        yield from dss_knowledge.assert_existence_known_at(now)
+        for prima_facie_poe in prima_facie_poes:
+            for digest in prima_facie_poe.digests_covered:
+                # for the prima facie ones, we only emit POEs for <now>, since
+                # we don't validate the would-be POEs that are embedded in the
+                # document at this point
+                yield KnownPOE(digest=digest, poe_time=now)
+
+    updated_local_knowledge = dataclasses.replace(
+        orig_local_knowledge,
+        known_poes=list(_poes()),
+    )
+
+    updated_pdf_validation_spec = dataclasses.replace(
+        pdf_validation_spec,
+        signature_validation_spec=dataclasses.replace(
+            orig_sig_validation_spec,
+            revinfo_gathering_policy=RevocationInfoGatheringSpec(
+                RevinfoOnlineFetchingRule.LOCAL_ONLY
+            ),
+            local_knowledge=updated_local_knowledge,
+        ),
+    )
+    return await ades_lta_validation(
+        embedded_sig,
+        updated_pdf_validation_spec,
+        timing_info=timing_info,
     )

@@ -41,7 +41,12 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import PdfTimeStamper, signers, timestamps
 from pyhanko.sign.ades.api import CAdESSignedAttrSpec
-from pyhanko.sign.ades.report import AdESFailure, AdESIndeterminate, AdESPassed
+from pyhanko.sign.ades.report import (
+    AdESFailure,
+    AdESIndeterminate,
+    AdESPassed,
+    AdESStatus,
+)
 from pyhanko.sign.signers.pdf_cms import (
     GenericPdfSignedAttributeProviderSpec,
     PdfCMSSignedAttributes,
@@ -76,6 +81,7 @@ from pyhanko_tests.test_pades import PADES
 
 async def _generate_pades_test_doc(requests_mock, signer=FROM_CA, **kwargs):
     kwargs.setdefault('use_pades_lta', True)
+    kwargs.setdefault('embed_validation_info', True)
     w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
     vc = live_testing_vc(requests_mock)
 
@@ -91,7 +97,6 @@ async def _generate_pades_test_doc(requests_mock, signer=FROM_CA, **kwargs):
             field_name='Sig1',
             validation_context=vc,
             subfilter=PADES,
-            embed_validation_info=True,
             **kwargs,
         ),
         signer=signer,
@@ -292,6 +297,91 @@ async def test_pades_lta_happy_path_past_time(requests_mock):
         assert result.best_signature_time == datetime.datetime(
             2020, 11, 20, tzinfo=datetime.timezone.utc
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('with_lta', [True, False])
+@freeze_time('2020-11-20')
+async def test_simulate_future_lta_happy_path(requests_mock, with_lta):
+    # it shouldn't matter for the purposes of this function whether the initial
+    # signature is followed by a DTS or not, so we test both
+    out = await _generate_pades_test_doc(requests_mock, use_pades_lta=with_lta)
+
+    r = PdfFileReader(out)
+    result = await ades.simulate_future_ades_lta_validation(
+        r.embedded_signatures[0],
+        pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
+        future_validation_time=datetime.datetime(
+            2030, 11, 20, tzinfo=datetime.timezone.utc
+        ),
+    )
+    assert result.ades_subindic == AdESPassed.OK
+    assert result.best_signature_time == datetime.datetime(
+        2020, 11, 20, tzinfo=datetime.timezone.utc
+    )
+
+
+@pytest.mark.asyncio
+async def test_simulate_future_lta_happy_path_with_ts_chain(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(requests_mock)
+
+    with freeze_time('2028-11-20'):
+        await _update_pades_test_doc(requests_mock, out)
+
+        r = PdfFileReader(out)
+        result = await ades.simulate_future_ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
+            future_validation_time=datetime.datetime(
+                2050, 11, 20, tzinfo=datetime.timezone.utc
+            ),
+        )
+    assert result.ades_subindic == AdESPassed.OK
+    assert result.best_signature_time == datetime.datetime(
+        2020, 11, 20, tzinfo=datetime.timezone.utc
+    )
+
+
+@pytest.mark.asyncio
+@freeze_time('2020-11-20')
+async def test_simulate_future_lta_no_revinfo_fail(requests_mock):
+    out = await _generate_pades_test_doc(
+        requests_mock, embed_validation_info=False
+    )
+    r = PdfFileReader(out)
+    result = await ades.simulate_future_ades_lta_validation(
+        r.embedded_signatures[0],
+        pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
+        future_validation_time=datetime.datetime(
+            2030, 11, 20, tzinfo=datetime.timezone.utc
+        ),
+    )
+    assert result.ades_subindic.status == AdESStatus.INDETERMINATE
+
+
+@pytest.mark.asyncio
+async def test_simulate_future_lta_with_broken_ts_chain(requests_mock):
+    with freeze_time('2020-11-20'):
+        out = await _generate_pades_test_doc(requests_mock)
+
+    # gap too large
+    with freeze_time('2031-11-20'):
+        w = IncrementalPdfFileWriter(out)
+        vc = live_testing_vc(requests_mock)
+        await PdfTimeStamper(DUMMY_TS2).async_timestamp_pdf(
+            w, md_algorithm='sha256', validation_context=vc, in_place=True
+        )
+
+        r = PdfFileReader(out)
+        result = await ades.simulate_future_ades_lta_validation(
+            r.embedded_signatures[0],
+            pdf_validation_spec=DEFAULT_PDF_VALIDATION_SPEC,
+            future_validation_time=datetime.datetime(
+                2050, 11, 20, tzinfo=datetime.timezone.utc
+            ),
+        )
+    assert result.ades_subindic == AdESIndeterminate.OUT_OF_BOUNDS_NO_POE
 
 
 @pytest.mark.asyncio

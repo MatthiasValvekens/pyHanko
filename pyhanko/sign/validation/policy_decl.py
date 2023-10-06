@@ -1,7 +1,8 @@
+import dataclasses
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import Generator, List, Optional
 
 from asn1crypto import x509
 from pyhanko_certvalidator.context import (
@@ -15,7 +16,7 @@ from pyhanko_certvalidator.fetchers import FetcherBackend
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsFetcherBackend,
 )
-from pyhanko_certvalidator.ltv.poe import POEManager
+from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
@@ -81,6 +82,23 @@ class LocalKnowledge:
     def add_to_poe_manager(self, poe_manager: POEManager):
         for poe in self.known_poes:
             poe_manager.register_by_digest(poe.digest, dt=poe.poe_time)
+
+    def assert_existence_known_at(
+        self, dt: datetime
+    ) -> Generator[KnownPOE, None, None]:
+        for poe in self.known_poes:
+            yield dataclasses.replace(poe, poe_time=min(poe.poe_time, dt))
+        for crl in self.known_crls:
+            yield KnownPOE(
+                digest=digest_for_poe(crl.crl_data.dump()), poe_time=dt
+            )
+        for ocsp in self.known_ocsps:
+            yield KnownPOE(
+                digest=digest_for_poe(ocsp.ocsp_response_data.dump()),
+                poe_time=dt,
+            )
+        for cert in self.known_certs:
+            yield KnownPOE(digest=digest_for_poe(cert.dump()), poe_time=dt)
 
 
 @dataclass(frozen=True)
