@@ -1,6 +1,11 @@
 # changelog
 
 
+## 0.25.0
+
+ - Introduce a more precise error type to signal stale revocation
+   information (see PR #11)
+
 ## 0.24.1
 
  - Ignore content types altogether when fetching certificates
