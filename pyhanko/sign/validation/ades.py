@@ -1859,8 +1859,7 @@ async def simulate_future_ades_lta_validation(
         # at the current time, including all the prima facie ones gathered from
         # the file. This simulates perfect record keeping without having to
         # introduce extra timestamp tokens into the validation process.
-        for poe in orig_local_knowledge.known_poes:
-            yield dataclasses.replace(poe, poe_time=min(poe.poe_time, now))
+        yield from orig_local_knowledge.assert_existence_known_at(now)
         yield from dss_knowledge.assert_existence_known_at(now)
         for prima_facie_poe in prima_facie_poes:
             for digest in prima_facie_poe.digests_covered:
