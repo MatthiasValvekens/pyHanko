@@ -15,6 +15,7 @@ __all__ = [
     'AdESIndeterminate',
 ]
 
+
 # TODO document these
 
 
@@ -29,6 +30,10 @@ class AdESSubIndic:
     def status(self) -> AdESStatus:
         raise NotImplementedError
 
+    @property
+    def standard_name(self):
+        raise NotImplementedError
+
 
 class AdESPassed(AdESSubIndic, enum.Enum):
     OK = enum.auto()
@@ -36,6 +41,10 @@ class AdESPassed(AdESSubIndic, enum.Enum):
     @property
     def status(self) -> AdESStatus:
         return AdESStatus.PASSED
+
+    @property
+    def standard_name(self):
+        return self.name
 
 
 class AdESFailure(AdESSubIndic, enum.Enum):
@@ -48,6 +57,10 @@ class AdESFailure(AdESSubIndic, enum.Enum):
     @property
     def status(self):
         return AdESStatus.FAILED
+
+    @property
+    def standard_name(self):
+        return self.name
 
 
 class AdESIndeterminate(AdESSubIndic, enum.Enum):
@@ -76,3 +89,7 @@ class AdESIndeterminate(AdESSubIndic, enum.Enum):
     @property
     def status(self):
         return AdESStatus.INDETERMINATE
+
+    @property
+    def standard_name(self):
+        return self.name

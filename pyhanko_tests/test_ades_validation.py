@@ -24,7 +24,13 @@ from pyhanko_certvalidator.context import (
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsFetcherBackend,
 )
-from pyhanko_certvalidator.ltv.poe import KnownPOE, digest_for_poe
+from pyhanko_certvalidator.ltv.poe import (
+    KnownPOE,
+    POEType,
+    ValidationObject,
+    ValidationObjectType,
+    digest_for_poe,
+)
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsageConstraint,
@@ -479,7 +485,13 @@ class BanAllTheThings(AlgorithmUsagePolicy):
 def _assert_certs_known(certs):
     return [
         KnownPOE(
-            digest=digest_for_poe(cert.dump()), poe_time=cert.not_valid_before
+            digest=digest_for_poe(cert.dump()),
+            poe_time=cert.not_valid_before,
+            poe_type=POEType.PROVIDED,
+            validation_object=ValidationObject(
+                object_type=ValidationObjectType.CERTIFICATE,
+                value=cert,
+            ),
         )
         for cert in certs
     ]
