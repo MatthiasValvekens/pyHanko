@@ -2,7 +2,6 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from asn1crypto import crl, ocsp, x509
 
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.errors import PathValidationError, RevokedError
