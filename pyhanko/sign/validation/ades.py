@@ -44,7 +44,7 @@ from pyhanko_certvalidator.context import (
     ValidationDataHandlers,
 )
 from pyhanko_certvalidator.ltv.ades_past import past_validate
-from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
+from pyhanko_certvalidator.ltv.poe import KnownPOE, POEManager, digest_for_poe
 from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
@@ -95,7 +95,6 @@ from pyhanko.sign.validation.status import (
 from ..diff_analysis import DiffPolicy
 from .errors import NoDSSFoundError
 from .policy_decl import (
-    KnownPOE,
     LocalKnowledge,
     PdfSignatureValidationSpec,
     RevinfoOnlineFetchingRule,

@@ -16,7 +16,7 @@ from pyhanko_certvalidator.fetchers import FetcherBackend
 from pyhanko_certvalidator.fetchers.requests_fetchers import (
     RequestsFetcherBackend,
 )
-from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
+from pyhanko_certvalidator.ltv.poe import KnownPOE, POEManager, digest_for_poe
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
@@ -30,7 +30,6 @@ __all__ = [
     'RevinfoOnlineFetchingRule',
     'LocalKnowledge',
     'RevocationInfoGatheringSpec',
-    'KnownPOE',
     'CMSAlgorithmUsagePolicy',
     'bootstrap_validation_data_handlers',
 ]
@@ -64,12 +63,6 @@ class RevocationInfoGatheringSpec:
     fetcher_backend: FetcherBackend = field(
         default_factory=RequestsFetcherBackend
     )
-
-
-@dataclass(frozen=True)
-class KnownPOE:
-    digest: bytes
-    poe_time: datetime
 
 
 @dataclass(frozen=True)
