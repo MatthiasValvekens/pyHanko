@@ -1,7 +1,7 @@
 import os
 import secrets
 from hmac import compare_digest
-from typing import FrozenSet, Optional, Tuple, Type
+from typing import Any, Dict, FrozenSet, Optional, Tuple, Type
 
 from asn1crypto import algos, cms, core
 from asn1crypto.core import VOID
@@ -210,9 +210,10 @@ class PdfMacTokenHandler:
     def _format_message(
         self, document_digest: bytes, signature_digest: Optional[bytes]
     ) -> Tuple[bytes, bytes]:
-        message_kwargs = {'data_digest': document_digest}
+        message_kwargs: Dict[str, Any] = {'data_digest': document_digest}
         if signature_digest is not None:
             message_kwargs['signature_digest'] = signature_digest
+        message_kwargs['version'] = 0
 
         message = PdfMacIntegrityInfo(message_kwargs)
         message_bytes = message.dump()

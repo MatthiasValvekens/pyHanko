@@ -12,7 +12,7 @@ from asn1crypto.core import Integer, OctetString, Sequence
 
 class PdfMacIntegrityInfo(Sequence):
     _fields = [
-        ('version', Integer, {'default': 0}),
+        ('version', Integer),
         ('data_digest', OctetString),
         ('signature_digest', OctetString, {'implicit': 0, 'optional': True}),
     ]
