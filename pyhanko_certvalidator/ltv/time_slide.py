@@ -249,7 +249,7 @@ async def _time_slide(
             if (
                 not issued
                 or issued > control_time
-                or poe_manager[crl_of_interest.crl.crl_data] > control_time
+                or poe_manager[crl_of_interest.crl] > control_time
             ):
                 continue
             sub_paths = crl_of_interest.prov_paths
@@ -317,10 +317,7 @@ async def _time_slide(
             if (
                 not issued
                 or issued > control_time
-                or poe_manager[
-                    ocsp_of_interest.ocsp_response.ocsp_response_data
-                ]
-                > control_time
+                or poe_manager[ocsp_of_interest.ocsp_response] > control_time
             ):
                 continue
 

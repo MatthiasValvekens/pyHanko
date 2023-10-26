@@ -5,7 +5,14 @@ from asn1crypto import crl, ocsp, x509
 from pyhanko_certvalidator.authority import Authority
 from pyhanko_certvalidator.errors import OCSPFetchError
 from pyhanko_certvalidator.fetchers import Fetchers
-from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
+from pyhanko_certvalidator.ltv.poe import (
+    KnownPOE,
+    POEManager,
+    POEType,
+    ValidationObject,
+    ValidationObjectType,
+    digest_for_poe,
+)
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import (
     CRLContainer,
@@ -122,7 +129,7 @@ class RevinfoManager:
         """
 
         poe_man = self._poe_manager
-        ocsp_poe_time = poe_man[ocsp_response.ocsp_response_data]
+        ocsp_poe_time = poe_man[ocsp_response]
 
         registry = self._certificate_registry
         revo_certs = self._revocation_certs
@@ -132,8 +139,19 @@ class RevinfoManager:
             for other_cert in basic['certs']:
                 if registry.register(other_cert):
                     revo_certs[other_cert.issuer_serial] = other_cert
-                    # register with the same POE as the OCSP response
-                    poe_man.register(other_cert, dt=ocsp_poe_time)
+                    poe_man.register_known_poe(
+                        KnownPOE(
+                            poe_type=POEType.VALIDATION,
+                            digest=digest_for_poe(other_cert.dump()),
+                            # register with the same POE time as the OCSP
+                            # response
+                            poe_time=ocsp_poe_time,
+                            validation_object=ValidationObject(
+                                object_type=ValidationObjectType.CERTIFICATE,
+                                value=other_cert,
+                            ),
+                        )
+                    )
 
     def record_crl_issuer(self, certificate_list, cert):
         """

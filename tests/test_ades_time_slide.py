@@ -14,7 +14,7 @@ from pyhanko_certvalidator.errors import (
 )
 from pyhanko_certvalidator.ltv.ades_past import past_validate
 from pyhanko_certvalidator.ltv.errors import TimeSlideFailure
-from pyhanko_certvalidator.ltv.poe import POEManager
+from pyhanko_certvalidator.ltv.poe import POEManager, POEType, digest_for_poe
 from pyhanko_certvalidator.ltv.time_slide import time_slide
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
@@ -167,10 +167,12 @@ async def test_time_slide_revoked_intermediate():
     poe_manager = POEManager()
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
     poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
-    poe_manager.register(test_path.leaf, dt=poe_date)
+    poe_manager.register(test_path.leaf, dt=poe_date, poe_type=POEType.PROVIDED)
     # ...make sure to include some POE prior to the revocation date of the
     # intermediate cert
-    poe_manager.register(interm_crl, dt=poe_date)
+    poe_manager.register(
+        CRLContainer(interm_crl), dt=poe_date, poe_type=POEType.PROVIDED
+    )
 
     revinfo_manager = RevinfoManager(
         certificate_registry=load_cert_registry(revoked_intermediate_ca=True),
@@ -202,7 +204,9 @@ async def test_time_slide_revoked_intermediate_enforce_cert_poe():
     # at which the intermediate cert was revoked => fail
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
     poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
-    poe_manager.register(interm_crl, dt=poe_date)
+    poe_manager.register(
+        CRLContainer(interm_crl), dt=poe_date, poe_type=POEType.PROVIDED
+    )
 
     revinfo_manager = RevinfoManager(
         certificate_registry=load_cert_registry(revoked_intermediate_ca=True),
@@ -229,7 +233,7 @@ async def test_time_slide_revoked_intermediate_enforce_revinfo_poe():
     root_crl = load_crl(BASE_DIR, 'root-2020-12-10.crl')
     poe_manager = POEManager()
     poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
-    poe_manager.register(test_path.leaf, dt=poe_date)
+    poe_manager.register(test_path.leaf, dt=poe_date, poe_type=POEType.PROVIDED)
     # This CRL issued by the intermediate CA predates its revocation date
     # so without POE, it should be treated as no longer valid
     # => no revinfo for the leaf cert => can't finish
@@ -303,11 +307,13 @@ async def test_point_in_time_validation_revoked_intermediate():
     # We set a ridiculous freshness window to ensure it's covered.
     poe_date = datetime.datetime(2020, 11, 30, tzinfo=datetime.timezone.utc)
     poe_manager = POEManager()
-    poe_manager.register(test_path.leaf, dt=poe_date)
+    poe_manager.register(test_path.leaf, dt=poe_date, poe_type=POEType.PROVIDED)
     interm_crl = load_crl(BASE_DIR, 'interm-2020-11-29.crl')
     # ...make sure to include some POE prior to the revocation date of the
     # intermediate cert
-    poe_manager.register(interm_crl, dt=poe_date)
+    poe_manager.register(
+        CRLContainer(interm_crl), dt=poe_date, poe_type=POEType.PROVIDED
+    )
 
     cert_registry = load_cert_registry(revoked_intermediate_ca=True)
     revinfo_manager = RevinfoManager(
@@ -357,3 +363,39 @@ async def test_point_in_time_validation_revinfo_insufficient_poe():
                 cert_registry=cert_registry,
             ),
         )
+
+
+def test_poe_manager_read_cert():
+    manager = POEManager()
+    cert = load_cert_object(BASE_DIR, 'certs', 'root.crt')
+    with freeze_time('2020-11-11'):
+        manager.register(cert, poe_type=POEType.PROVIDED)
+    assert manager[cert].date() == datetime.date(2020, 11, 11)
+
+
+def test_poe_manager_cert_by_digest():
+    manager = POEManager()
+    cert = load_cert_object(BASE_DIR, 'certs', 'root.crt')
+    with freeze_time('2020-11-11'):
+        manager.register_by_digest(
+            digest_for_poe(cert.dump()), poe_type=POEType.PROVIDED
+        )
+    assert manager[cert].date() == datetime.date(2020, 11, 11)
+
+
+def test_poe_manager_read_bytes():
+    manager = POEManager()
+    msg = b'deadbeef'
+    with freeze_time('2020-11-11'):
+        manager.register(msg, poe_type=POEType.PROVIDED)
+    assert manager[msg].date() == datetime.date(2020, 11, 11)
+
+
+def test_poe_manager_read_bytes_by_digest():
+    manager = POEManager()
+    msg = b'deadbeef'
+    with freeze_time('2020-11-11'):
+        manager.register_by_digest(
+            digest_for_poe(msg), poe_type=POEType.PROVIDED
+        )
+    assert manager[msg].date() == datetime.date(2020, 11, 11)

@@ -1,17 +1,99 @@
+import enum
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Iterator, Optional, Union
 
-from asn1crypto import core
+from asn1crypto import core, x509
 
-__all__ = ['KnownPOE', 'POEManager', 'digest_for_poe']
+from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
+
+__all__ = [
+    'ValidationObjectType',
+    'ValidationObject',
+    'POEType',
+    'KnownPOE',
+    'POEManager',
+    'digest_for_poe',
+]
+
+
+@enum.unique
+class ValidationObjectType(enum.Enum):
+    """
+    Types of validation objects recognised by ETSI TS 119 102-2.
+    """
+
+    CERTIFICATE = 'certificate'
+    CRL = 'CRL'
+    OCSP_RESPONSE = 'OCSPResponse'
+    TIMESTAMP = 'timestamp'
+    EVIDENCE_RECORD = 'evidencerecord'
+    PUBLIC_KEY = 'publicKey'
+    SIGNED_DATA = 'signedData'
+    OTHER = 'other'
+
+    def urn(self):
+        return f'urn:etsi:019102:validationObject:{self.value}'
+
+
+KnownObjectType = Union[bytes, CRLContainer, OCSPContainer, x509.Certificate]
+
+
+def guess_validation_object_type(
+    thing: object,
+) -> Optional[ValidationObjectType]:
+    if isinstance(thing, CRLContainer):
+        return ValidationObjectType.CRL
+    elif isinstance(thing, OCSPContainer):
+        return ValidationObjectType.OCSP_RESPONSE
+    elif isinstance(thing, x509.Certificate):
+        return ValidationObjectType.CERTIFICATE
+    return None
+
+
+@dataclass(frozen=True)
+class ValidationObject:
+    """
+    A validation object used in the course of a validation operation
+    for which proofs of existence can potentially be gathered.
+    """
+
+    object_type: ValidationObjectType
+    """
+    The type of validation object.
+    """
+
+    value: object
+    """
+    The actual object.
+
+    Currently, the following types are supported explicitly.
+    Others must currently be supplied as :class:`bytes`.
+
+     - :class:`.CRLContainer`: :attr:`.ValidationObjectType.CRL`
+     - :class:`.OCSPContainer`: :attr:`.ValidationObjectType.OCSP_RESPONSE`
+     - :class:`x509.Certificate`: :attr:`.ValidationObjectType.CERTIFICATE`
+    """
+
+
+@enum.unique
+class POEType(enum.Enum):
+    PROVIDED = 'provided'
+    VALIDATION = 'validation'
+    POLICY = 'policy'
+
+    @property
+    def urn(self) -> str:
+        return f'urn:etsi:019102:poetype:{self.value}'
 
 
 @dataclass(frozen=True)
 class KnownPOE:
+    poe_type: POEType
     digest: bytes
     poe_time: datetime
+    validation_object: Optional[ValidationObject] = None
 
 
 def digest_for_poe(data: bytes) -> bytes:
@@ -31,25 +113,54 @@ class POEManager:
         self._current_dt_override = current_dt_override
 
     def register(
-        self, data: Union[bytes, core.Asn1Value], dt: Optional[datetime] = None
+        self,
+        data: KnownObjectType,
+        poe_type: POEType,
+        dt: Optional[datetime] = None,
     ) -> KnownPOE:
         """
         Register a new POE claim if no POE for an earlier time is available.
 
         :param data:
             Data to register a POE claim for.
+        :param poe_type:
+            The type of POE.
         :param dt:
             The POE time to register. If ``None``, assume the current time.
         :return:
             The oldest POE datetime available.
         """
-        if isinstance(data, core.Asn1Value):
-            data = data.dump()
-        digest = digest_for_poe(data)
-        return self.register_by_digest(digest, dt)
+        if isinstance(data, bytes):
+            b_data = data
+        elif isinstance(data, core.Asn1Value):
+            b_data = data.dump()
+        elif isinstance(data, CRLContainer):
+            b_data = data.crl_data.dump()
+        elif isinstance(data, OCSPContainer):
+            b_data = data.ocsp_response_data.dump()
+        else:
+            raise NotImplementedError
+        digest = digest_for_poe(b_data)
+
+        dt = dt or self._current_dt_override or datetime.now(timezone.utc)
+        vo_type = guess_validation_object_type(data)
+        vo = None
+        if vo_type:
+            vo = ValidationObject(object_type=vo_type, value=data)
+        return self.register_known_poe(
+            KnownPOE(
+                poe_type=poe_type,
+                digest=digest,
+                poe_time=dt,
+                validation_object=vo,
+            )
+        )
 
     def register_by_digest(
-        self, digest: bytes, dt: Optional[datetime] = None
+        self,
+        digest: bytes,
+        poe_type: POEType,
+        dt: Optional[datetime] = None,
     ) -> KnownPOE:
         """
         Register a new POE claim if no POE for an earlier time is available.
@@ -58,11 +169,20 @@ class POEManager:
             SHA-256 digest of the data to register a POE claim for.
         :param dt:
             The POE time to register. If ``None``, assume the current time.
+        :param poe_type:
+            The type of POE.
         :return:
             The oldest POE datetime available.
         """
         dt = dt or self._current_dt_override or datetime.now(timezone.utc)
-        return self.register_known_poe(KnownPOE(digest, dt))
+        return self.register_known_poe(
+            KnownPOE(
+                poe_type=poe_type,
+                digest=digest,
+                poe_time=dt,
+                validation_object=None,
+            )
+        )
 
     def register_known_poe(self, known_poe: KnownPOE) -> KnownPOE:
         """
@@ -93,7 +213,7 @@ class POEManager:
         """
         return iter(self._poes.values())
 
-    def __getitem__(self, item: Union[bytes, core.Asn1Value]) -> datetime:
+    def __getitem__(self, item: KnownObjectType) -> datetime:
         """
         Return the earliest available POE for an item.
 
@@ -108,7 +228,9 @@ class POEManager:
             A datetime object representing the earliest available POE for the
             item.
         """
-        return self.register(item, dt=None).poe_time
+        return self.register(
+            item, poe_type=POEType.VALIDATION, dt=None
+        ).poe_time
 
     def __ior__(self, other):
         """

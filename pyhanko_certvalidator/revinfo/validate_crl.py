@@ -943,7 +943,7 @@ async def _classify_relevant_crls(
             if (
                 issued is None
                 or issued > control_time
-                or poe_manager[certificate_list] > control_time
+                or poe_manager[certificate_list_cont] > control_time
             ):
                 # We don't care about stuff issued after control_time
                 # or without the right POE

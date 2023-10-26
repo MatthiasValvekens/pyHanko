@@ -642,11 +642,10 @@ async def collect_relevant_responses_with_paths(
     errs = _OCSPErrs()
     for ocsp_response_cont in ocsp_responses:
         issued = ocsp_response_cont.issuance_date
-        ocsp_resp_data = ocsp_response_cont.ocsp_response_data
         if (
             issued is None
             or issued > control_time
-            or poe_manager[ocsp_resp_data] > control_time
+            or poe_manager[ocsp_response_cont] > control_time
         ):
             # We don't care about responses issued after control_time
             continue
