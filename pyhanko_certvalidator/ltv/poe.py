@@ -2,7 +2,7 @@ import enum
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Iterator, Optional, Union
+from typing import Any, Dict, Iterator, Optional, Union
 
 from asn1crypto import core, x509
 
@@ -64,7 +64,7 @@ class ValidationObject:
     The type of validation object.
     """
 
-    value: object
+    value: Any
     """
     The actual object.
 
