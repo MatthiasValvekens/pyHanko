@@ -34,6 +34,9 @@ __all__ = [
 ]
 
 
+BYTE_RANGE_ARR_PLACE_HOLDER_LENGTH = 60
+
+
 class SigByteRangeObject(generic.PdfObject):
     """
     Internal class to handle the ``/ByteRange`` arrays themselves.
@@ -70,13 +73,17 @@ class SigByteRangeObject(generic.PdfObject):
     def write_to_stream(self, stream, handler=None, container_ref=None):
         if self._range_object_offset is None:
             self._range_object_offset = stream.tell()
-        string_repr = "[ %08d %08d %08d %08d ]" % (
-            0,
-            self.first_region_len,
-            self.second_region_offset,
-            self.second_region_len,
-        )
-        stream.write(string_repr.encode('ascii'))
+            stream.write(b"[]")
+            stream.write(b" " * BYTE_RANGE_ARR_PLACE_HOLDER_LENGTH)
+        else:
+            string_repr = b"[%d %d %d %d]" % (
+                0,
+                self.first_region_len,
+                self.second_region_offset,
+                self.second_region_len,
+            )
+            assert len(string_repr) <= BYTE_RANGE_ARR_PLACE_HOLDER_LENGTH + 2
+            stream.write(string_repr)
 
 
 class DERPlaceholder(generic.PdfObject):

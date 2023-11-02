@@ -154,6 +154,25 @@ def test_simple_sign_fresh_doc():
     val_untrusted(emb)
 
 
+def test_simple_sign_120mb_file():
+    # put this in a function to avoid putting multiple copies
+    #  of a huge buffer in locals
+    def _gen_signed():
+        w = IncrementalPdfFileWriter(BytesIO(MINIMAL))
+        w.root['/YugeObject'] = w.add_object(
+            generic.StreamObject(stream_data=bytes(120 * 1024 * 1024))
+        )
+        w.update_root()
+
+        meta = signers.PdfSignatureMetadata(field_name='Sig1')
+        return signers.sign_pdf(w, meta, signer=SELF_SIGN)
+
+    r = PdfFileReader(_gen_signed())
+    emb = r.embedded_signatures[0]
+    assert emb.field_name == 'Sig1'
+    val_untrusted(emb)
+
+
 def test_append_sigfield_tu_on_signing():
     buf = BytesIO(MINIMAL)
     w = IncrementalPdfFileWriter(buf)
