@@ -97,6 +97,7 @@ def _apply_algo_policy(
     algo_used: algos.SignedDigestAlgorithm,
     control_time: datetime,
     public_key: keys.PublicKeyInfo,
+    val_proc_state: ValProcState,
 ):
     sig_constraint = algo_policy.signature_algorithm_allowed(
         algo_used, control_time, public_key
@@ -114,10 +115,9 @@ def _apply_algo_policy(
             )
             if sig_constraint.failure_reason is not None:
                 msg += f" Reason: {sig_constraint.failure_reason}"
-            raise DisallowedAlgorithmError(
+            raise DisallowedAlgorithmError.from_state(
                 msg,
-                is_ee_cert=False,
-                is_side_validation=True,
+                val_proc_state,
                 banned_since=None,
             )
     return control_time
@@ -165,6 +165,7 @@ def _update_control_time(
     revinfo_container: RevinfoContainer,
     algo_policy: Optional[AlgorithmUsagePolicy],
     issuer_public_key: keys.PublicKeyInfo,
+    val_proc_state: ValProcState,
 ):
     if revoked_date:
         # this means we have to update control_time
@@ -172,7 +173,11 @@ def _update_control_time(
     algo_used = revinfo_container.revinfo_sig_mechanism_used
     if algo_policy is not None and algo_used is not None:
         control_time = _apply_algo_policy(
-            algo_policy, algo_used, control_time, issuer_public_key
+            algo_policy,
+            algo_used,
+            control_time,
+            issuer_public_key,
+            val_proc_state,
         )
     return control_time
 
@@ -308,6 +313,7 @@ async def _time_slide(
                     revinfo_container=crl_container,
                     algo_policy=algo_usage_policy,
                     issuer_public_key=crl_iss_cert.public_key,
+                    val_proc_state=proc_state,
                 )
 
         most_recent_ocsp = None
@@ -355,6 +361,7 @@ async def _time_slide(
                 revinfo_container=ocsp_container,
                 algo_policy=algo_usage_policy,
                 issuer_public_key=ocsp_iss_cert.public_key,
+                val_proc_state=proc_state,
             )
         # check the algorithm constraints for the certificate itself
         if algo_usage_policy is not None:
@@ -364,6 +371,7 @@ async def _time_slide(
                 cert['signature_algorithm'],
                 control_time,
                 leaf_ca.public_key,
+                val_proc_state=proc_state,
             )
 
         # (c) if the certificate was not marked as revoked -> update
