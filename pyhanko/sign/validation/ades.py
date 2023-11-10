@@ -1241,7 +1241,11 @@ async def _ades_past_signature_validation(
             )
 
     if best_signature_time <= validation_time:
-        if current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE:
+        # TODO raise an issue with ESI about TRY_LATER here
+        if (
+            current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE
+            or current_time_sub_indic == AdESIndeterminate.TRY_LATER
+        ):
             _pass_contingent_on_revinfo_issuance_poe()
             return cert_path
         elif current_time_sub_indic in (
@@ -1702,6 +1706,7 @@ _LTA_FURTHER_PROC = frozenset(
         AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED,
         AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
         AdESIndeterminate.REVOCATION_OUT_OF_BOUNDS_NO_POE,
+        AdESIndeterminate.TRY_LATER,
     }
 )
 
