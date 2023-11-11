@@ -18,6 +18,7 @@ from .policy_decl import (
     AlgorithmUsagePolicy,
     CertRevTrustPolicy,
     DisallowWeakAlgorithmsPolicy,
+    NonRevokedStatusAssertion,
     PKIXValidationParams,
     RevocationCheckingPolicy,
 )
@@ -546,6 +547,7 @@ def bootstrap_validation_data_handlers(
     ocsps: Iterable[OCSPContainer] = (),
     certs: Iterable[x509.Certificate] = (),
     poe_manager: Optional[POEManager] = None,
+    nonrevoked_assertions: Iterable[NonRevokedStatusAssertion] = (),
 ) -> ValidationDataHandlers:
     """
     Simple bootstrapping method for a :class:`.ValidationDataHandlers`
@@ -564,6 +566,9 @@ def bootstrap_validation_data_handlers(
         Initial collection of certificates to add to the certificate registry.
     :param poe_manager:
         Explicit POE manager. Will instantiate an empty one if left unspecified.
+    :param nonrevoked_assertions:
+        Assertions about the non-revoked status of certain certificates
+        that will be taken as true by fiat.
     :return:
         A :class:`.ValidationDataHandlers` object.
     """
@@ -587,6 +592,7 @@ def bootstrap_validation_data_handlers(
         crls=crls,
         ocsps=ocsps,
         fetchers=_fetchers,
+        assertions=nonrevoked_assertions,
     )
     return ValidationDataHandlers(
         revinfo_manager=revinfo_manager,

@@ -1085,6 +1085,14 @@ async def intl_validate_path(
     else:
         cert = None
 
+    # TODO support this for attr certs
+    leaf_asserted_nonrevoked = False
+    revinfo_manager = validation_context.revinfo_manager
+    if isinstance(path.leaf, x509.Certificate):
+        leaf_asserted_nonrevoked = revinfo_manager.check_asserted_unrevoked(
+            path.leaf, moment
+        )
+
     for index in range(1, path_length + 1):
         cert = path[index]
 
@@ -1109,12 +1117,16 @@ async def intl_validate_path(
             )
 
         # Step 2 a 3 - CRL/OCSP
-        await _check_revocation(
-            cert=cert,
-            validation_context=validation_context,
-            path=path,
-            proc_state=proc_state,
-        )
+        if (
+            not leaf_asserted_nonrevoked
+            and not revinfo_manager.check_asserted_unrevoked(cert, moment)
+        ):
+            await _check_revocation(
+                cert=cert,
+                validation_context=validation_context,
+                path=path,
+                proc_state=proc_state,
+            )
 
         # Step 2 a 4
         if cert.issuer != state.working_issuer_name:

@@ -5,7 +5,7 @@ import abc
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import FrozenSet, Optional
+from typing import FrozenSet, Iterable, Optional
 
 from asn1crypto import algos, keys
 
@@ -21,6 +21,7 @@ __all__ = [
     'AlgorithmUsagePolicy',
     'DisallowWeakAlgorithmsPolicy',
     'AcceptAllAlgorithms',
+    'NonRevokedStatusAssertion',
     'DEFAULT_WEAK_HASH_ALGOS',
     'REQUIRE_REVINFO',
     'NO_REVOCATION',
@@ -38,6 +39,23 @@ Default freshness used by the default/legacy freshness policy
 when the revocation information does not specify a next update
 time. In practice this only applies to OCSP responses.
 """
+
+
+@dataclass(frozen=True)
+class NonRevokedStatusAssertion:
+    """
+    Assert that a certificate was not revoked at some given date.
+    """
+
+    cert_sha256: bytes
+    """
+    SHA-256 hash of the certificate.
+    """
+
+    at: datetime
+    """
+    Moment in time at which the assertion is to be considered valid.
+    """
 
 
 @enum.unique

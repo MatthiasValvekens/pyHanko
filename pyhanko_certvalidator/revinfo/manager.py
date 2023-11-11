@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set
 
 from asn1crypto import crl, ocsp, x509
@@ -13,6 +14,7 @@ from pyhanko_certvalidator.ltv.poe import (
     ValidationObjectType,
     digest_for_poe,
 )
+from pyhanko_certvalidator.policy_decl import NonRevokedStatusAssertion
 from pyhanko_certvalidator.registry import CertificateRegistry
 from pyhanko_certvalidator.revinfo.archival import (
     CRLContainer,
@@ -46,6 +48,7 @@ class RevinfoManager:
         poe_manager: POEManager,
         crls: Iterable[CRLContainer],
         ocsps: Iterable[OCSPContainer],
+        assertions: Iterable[NonRevokedStatusAssertion] = (),
         fetchers: Optional[Fetchers] = None,
     ):
         self._certificate_registry = certificate_registry
@@ -65,6 +68,9 @@ class RevinfoManager:
                 self._extract_ocsp_certs(ocsp_response)
 
         self._fetchers = fetchers
+        self._assertions: Dict[bytes, NonRevokedStatusAssertion] = {
+            assertion.cert_sha256: assertion for assertion in assertions
+        }
 
     @property
     def poe_manager(self) -> POEManager:
@@ -275,3 +281,11 @@ class RevinfoManager:
             return digest not in hashes_to_evict
 
         self._crls = list(filter(p, self._crls))
+
+    def check_asserted_unrevoked(
+        self, cert: x509.Certificate, at: datetime
+    ) -> bool:
+        try:
+            return at <= self._assertions[cert.sha256].at
+        except KeyError:
+            return False

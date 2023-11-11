@@ -31,8 +31,14 @@ from pyhanko_certvalidator.fetchers import (
     aiohttp_fetchers,
     requests_fetchers,
 )
+from pyhanko_certvalidator.ltv.poe import POEManager
 from pyhanko_certvalidator.path import QualifiedPolicy, ValidationPath
-from pyhanko_certvalidator.policy_decl import DisallowWeakAlgorithmsPolicy
+from pyhanko_certvalidator.policy_decl import (
+    DisallowWeakAlgorithmsPolicy,
+    NonRevokedStatusAssertion,
+)
+from pyhanko_certvalidator.registry import CertificateRegistry
+from pyhanko_certvalidator.revinfo.manager import RevinfoManager
 from pyhanko_certvalidator.validate import async_validate_path, validate_path
 
 from .common import (
@@ -344,6 +350,34 @@ def test_ed448():
         revocation_mode='soft-fail',
         weak_hash_algos={'md2', 'md5'},
         moment=datetime(2020, 11, 1, tzinfo=timezone.utc),
+    )
+    paths = context.path_builder.build_paths(cert)
+    assert 1 == len(paths)
+    path = paths[0]
+    assert 3 == len(path)
+    validate_path(context, path)
+
+
+def test_assert_no_revinfo_needed_by_fiat():
+    cert = load_cert_object('testing-ca-pss', 'signer1.cert.pem')
+    ca_certs = [load_cert_object('testing-ca-pss', 'root.cert.pem')]
+    other_certs = [load_cert_object('testing-ca-pss', 'interm.cert.pem')]
+    moment = datetime(2021, 5, 3, tzinfo=timezone.utc)
+    assertion = NonRevokedStatusAssertion(cert.sha256, moment)
+    revinfo_manager = RevinfoManager(
+        certificate_registry=CertificateRegistry.build(),
+        poe_manager=POEManager(),
+        crls=(),
+        ocsps=(),
+        assertions=(assertion,),
+    )
+    context = ValidationContext(
+        trust_roots=ca_certs,
+        other_certs=other_certs,
+        allow_fetching=False,
+        moment=moment,
+        revocation_mode='require',  # turn on strict revinfovalidation
+        revinfo_manager=revinfo_manager,
     )
     paths = context.path_builder.build_paths(cert)
     assert 1 == len(paths)
