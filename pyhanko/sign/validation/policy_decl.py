@@ -25,6 +25,7 @@ from pyhanko_certvalidator.ltv.poe import (
     digest_for_poe,
 )
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
+from pyhanko_certvalidator.policy_decl import NonRevokedStatusAssertion
 from pyhanko_certvalidator.revinfo.archival import CRLContainer, OCSPContainer
 
 from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, DiffPolicy
@@ -78,6 +79,9 @@ class LocalKnowledge:
     known_crls: List[CRLContainer] = field(default_factory=list)
     known_certs: List[x509.Certificate] = field(default_factory=list)
     known_poes: List[KnownPOE] = field(default_factory=list)
+    nonrevoked_assertions: List[NonRevokedStatusAssertion] = field(
+        default_factory=list
+    )
 
     def add_to_poe_manager(self, poe_manager: POEManager):
         for poe in self.known_poes:
@@ -180,5 +184,6 @@ def bootstrap_validation_data_handlers(
         ocsps=knowledge.known_ocsps,
         certs=knowledge.known_certs,
         poe_manager=poe_manager_override,
+        nonrevoked_assertions=knowledge.nonrevoked_assertions,
     )
     return handlers

@@ -44,6 +44,7 @@ from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
 )
+from pyhanko_certvalidator.errors import PathError
 from pyhanko_certvalidator.ltv.ades_past import past_validate
 from pyhanko_certvalidator.ltv.poe import (
     KnownPOE,
@@ -58,6 +59,7 @@ from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsagePolicy,
+    NonRevokedStatusAssertion,
     RevocationCheckingRule,
 )
 from pyhanko_certvalidator.registry import PathBuilder, TrustManager
@@ -1330,6 +1332,9 @@ async def ades_past_signature_validation(
     except errors.SignatureValidationError as e:
         logger.warning(e)
         return e.ades_subindication or AdESIndeterminate.GENERIC
+    except PathError as e:
+        logger.warning(e)
+        return AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
 
 @dataclass(frozen=True)
@@ -1522,8 +1527,11 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
 
         if ts_signed_data is not None:
             # add DSS content
-            dss = DocumentSecurityStore.read_dss(hist_handler)
-            collected_so_far.update(_read_validation_objects_from_dss(dss))
+            try:
+                dss = DocumentSecurityStore.read_dss(hist_handler)
+                collected_so_far.update(_read_validation_objects_from_dss(dss))
+            except NoDSSFoundError:
+                pass
             collected_so_far.update(for_next_ts)
             doc_digest = embedded_sig.compute_digest()
             coverage_normal = (
@@ -1898,6 +1906,7 @@ async def ades_lta_validation(
         known_crls=init_local_knowledge.known_crls + dss_facts.known_crls,
         known_certs=init_local_knowledge.known_certs + dss_facts.known_certs,
         known_poes=init_local_knowledge.known_poes,
+        nonrevoked_assertions=init_local_knowledge.nonrevoked_assertions,
     )
 
     augmented_validation_spec = dataclasses.replace(
@@ -2115,12 +2124,6 @@ async def simulate_future_ades_lta_validation(
     :return:
         An AdES LTA validation result.
     """
-    # TODO add a mode that validates the most recent docts live at the current
-    #  reference time? Otherwise timestamp validation will typically fail
-    #  if the gap between the timestamp and the time of the simulation is large,
-    #  since the revinfo in the document for that timestamp will be stale
-    #  (but if the TS cert is not expired, fresh revinfo should be available)
-
     now = current_reference_time or datetime.now(tz=timezone.utc)
     timing_info = ValidationTimingInfo(
         validation_time=future_validation_time,
@@ -2133,6 +2136,18 @@ async def simulate_future_ades_lta_validation(
     orig_sig_validation_spec = pdf_validation_spec.signature_validation_spec
     orig_local_knowledge = orig_sig_validation_spec.local_knowledge
     dss_knowledge = _dss_to_local_knowledge(embedded_sig.reader)
+    new_nonrevoked_assertions = list(orig_local_knowledge.nonrevoked_assertions)
+    # assert the nonrevoked status of the last timestamp cert, since we can't
+    # get "future" revinfo anyway
+    try:
+        last_ts = embedded_sig.reader.embedded_timestamp_signatures[-1]
+        new_nonrevoked_assertions.append(
+            NonRevokedStatusAssertion(
+                last_ts.signer_cert.sha256, at=future_validation_time
+            )
+        )
+    except IndexError:
+        pass
 
     def _poes():
         # For the purposes of this test, we assert all proofs of existence
@@ -2147,7 +2162,7 @@ async def simulate_future_ades_lta_validation(
                 # we don't validate the would-be POEs that are embedded in the
                 # document at this point
                 yield KnownPOE(
-                    poe_type=POEType.VALIDATION,
+                    poe_type=POEType.PROVIDED,
                     digest=item.digest,
                     poe_time=now,
                     validation_object=item.validation_object,
@@ -2156,6 +2171,7 @@ async def simulate_future_ades_lta_validation(
     updated_local_knowledge = dataclasses.replace(
         orig_local_knowledge,
         known_poes=list(_poes()),
+        nonrevoked_assertions=new_nonrevoked_assertions,
     )
 
     updated_pdf_validation_spec = dataclasses.replace(

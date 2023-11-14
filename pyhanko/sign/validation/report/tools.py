@@ -255,7 +255,7 @@ def _summarise_attrs(
 
 def _generate_report(
     embedded_sig: EmbeddedPdfSignature, status: AdESBasicValidationResult
-):
+) -> ts_11910202.SignatureValidationReportType:
     api_status: PdfSignatureStatus = cast(PdfSignatureStatus, status.api_status)
     # this is meaningless for EdDSA signatures, but the entry is mandatory, so...
     md_spec = get_pyca_cryptography_hash(api_status.md_algorithm)
@@ -320,7 +320,7 @@ def _generate_report(
         signer_information=ts_11910202.SignerInformationType(
             signer_certificate=ts_11910202.VOReferenceType(
                 voreference=(
-                    f"#{derive_validation_object_identifier(signer_cert_vo)}",
+                    f"{derive_validation_object_identifier(signer_cert_vo)}",
                 ),
             ),
         ),
@@ -333,7 +333,7 @@ def _generate_report(
         signature_validation_status=ts_11910202.ValidationStatusType(
             main_indication=ades_main_indic,
             sub_indication=(
-                f'urn:etsi:019102:subindication:{str(status.ades_subindic)}',
+                f'urn:etsi:019102:subindication:{status.ades_subindic.standard_name}',
             ),
         ),
     )
