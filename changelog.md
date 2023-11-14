@@ -1,5 +1,10 @@
 # changelog
 
+## 0.26.0
+
+- Fix error reporting on banned algorithms in some cases
+- Allow caller to assert revocation status of a cert
+- More refined POE information tracking in experimental AdES API
 
 ## 0.25.0
 
