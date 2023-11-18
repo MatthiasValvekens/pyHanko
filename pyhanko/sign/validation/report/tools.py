@@ -1,3 +1,14 @@
+"""
+ETSI TS 119 102-2 reporting functionality.
+
+.. info:
+    This module requires optional ``[etsi]`` dependency group,
+    and only works on Python 3.8+ for dependency reasons.
+
+.. warning::
+    This feature is incubating and subject to API changes.
+"""
+
 from typing import Any, Dict, Optional, cast
 
 from asn1crypto import tsp
@@ -25,6 +36,8 @@ from pyhanko.sign.validation.ades import (
 from pyhanko.sign.validation.generic_cms import get_signing_cert_attr
 from pyhanko.sign.validation.pdf_embedded import EmbeddedPdfSignature
 from pyhanko.sign.validation.status import PdfSignatureStatus
+
+__all__ = ['generate_report']
 
 DIGEST_ALGO_URIS = {
     'sha1': 'http://www.w3.org/2000/09/xmldsig#sha1',
@@ -357,6 +370,17 @@ def _package_validation_object(vo: ValidationObject):
 def generate_report(
     embedded_sig: EmbeddedPdfSignature, status: AdESBasicValidationResult
 ) -> str:
+    """
+    Generate signature validation report in XML format according to
+    ETSI TS 119 102-2.
+
+    :param embedded_sig:
+        PDF signature to report on.
+    :param status:
+        AdES validation result to turn into a report.
+    :return:
+        A string representation of the validation report.
+    """
     report = ts_11910202.ValidationReport(
         signature_validation_report=(_generate_report(embedded_sig, status),),
         signature_validation_objects=ts_11910202.ValidationObjectListType(

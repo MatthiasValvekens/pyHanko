@@ -5,7 +5,7 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
 
    pyhanko.sign.ades
    pyhanko.sign.diff_analysis

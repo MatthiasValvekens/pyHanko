@@ -1,6 +1,15 @@
 pyhanko.sign.validation package
 ===============================
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 2
+
+   pyhanko.sign.validation.report
+
+
 Submodules
 ----------
 
