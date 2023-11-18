@@ -114,6 +114,7 @@ pyhanko = "pyhanko.__main__:launch"
 
 [tool.setuptools]
 include-package-data = false
+license-files = ["LICENSE", "pyhanko/pdf_utils/LICENSE.PyPDF2"]
 
 [tool.setuptools.dynamic]
 version = {attr = "pyhanko.version.__version__"}
