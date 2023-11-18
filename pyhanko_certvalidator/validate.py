@@ -26,6 +26,7 @@ from .errors import (
     NotYetValidError,
     OCSPFetchError,
     OCSPNoMatchesError,
+    OCSPValidationError,
     OCSPValidationIndeterminateError,
     PathBuildingError,
     PathValidationError,
@@ -1328,6 +1329,10 @@ async def _check_revocation(
             else:
                 failures.append(e.args[0])
                 revocation_check_failed = True
+        except OCSPValidationError as e:
+            failures.append(e.args[0])
+            revocation_check_failed = True
+            ocsp_matched = True
     if not ocsp_status_good and rev_rule.ocsp_mandatory:
         if failures:
             err_str = '; '.join(str(f) for f in failures)

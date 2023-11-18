@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Iterable, List, Optional, Type
 
 import pytest
+import pytz
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
@@ -18,6 +19,7 @@ from pyhanko_certvalidator.errors import (
     CRLFetchError,
     InsufficientRevinfoError,
     OCSPFetchError,
+    OCSPValidationError,
     PathValidationError,
     RevokedError,
     StaleRevinfoError,
@@ -64,6 +66,11 @@ class MockOCSPFetcher(OCSPFetcher):
         raise OCSPFetchError("No connection")
 
 
+class MockOCSPFetcherWithValidationError(MockOCSPFetcher):
+    async def fetch(self, cert: x509.Certificate, authority: Authority):
+        raise OCSPValidationError("Something went wrong")
+
+
 class MockCRLFetcher(CRLFetcher):
     def fetched_crls_for_cert(
         self, cert: x509.Certificate
@@ -100,6 +107,15 @@ class MockFetcherBackend(FetcherBackend):
         )
 
 
+class MockFetcherBackendWithValidationError(FetcherBackend):
+    def get_fetchers(self) -> Fetchers:
+        return Fetchers(
+            ocsp_fetcher=MockOCSPFetcherWithValidationError(),
+            crl_fetcher=MockCRLFetcher(),
+            cert_fetcher=MockCertFetcher(),
+        )
+
+
 ERR_CLASSES = {
     cls.__name__: cls
     for cls in (
@@ -117,7 +133,6 @@ class PKITSTestCaseErrorResult:
     msg_regex: str
 
 
-@pytest.mark.skip("annoying to maintain; replace with certomancer test")
 def test_revocation_mode_soft():
     cert = load_cert_object(
         'digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt'
@@ -130,6 +145,7 @@ def test_revocation_mode_soft():
     context = ValidationContext(
         trust_roots=ca_certs,
         other_certs=other_certs,
+        moment=datetime(2023, 1, 10, tzinfo=pytz.UTC),
         allow_fetching=True,
         weak_hash_algos={'md2', 'md5'},
         fetcher_backend=MockFetcherBackend(),
@@ -140,6 +156,30 @@ def test_revocation_mode_soft():
     assert 3 == len(path)
 
     validate_path(context, path)
+
+
+def test_revocation_mode_soft_fail():
+    cert = load_cert_object(
+        'digicert-ecc-p384-root-g5-revoked-chain-demos-digicert-com.crt'
+    )
+    ca_certs = [load_cert_object('digicert-root-g5.crt')]
+    other_certs = [
+        load_cert_object('digicert-g5-ecc-sha384-2021-ca1.crt'),
+    ]
+
+    context = ValidationContext(
+        trust_roots=ca_certs,
+        other_certs=other_certs,
+        moment=datetime(2023, 1, 10, tzinfo=pytz.UTC),
+        allow_fetching=True,
+        weak_hash_algos={'md2', 'md5'},
+        fetcher_backend=MockFetcherBackendWithValidationError(),
+    )
+    paths = context.path_builder.build_paths(cert)
+    path = paths[0]
+
+    with pytest.raises(InsufficientRevinfoError, match="Something went wrong"):
+        validate_path(context, path)
 
 
 @pytest.mark.skip("annoying to maintain; replace with certomancer test")
