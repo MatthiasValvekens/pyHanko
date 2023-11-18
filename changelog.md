@@ -1,5 +1,9 @@
 # changelog
 
+## 0.26.2
+
+- Bump some dependency versions.
+
 ## 0.26.1
 
 - Handle nonspecific OCSP validation errors cleanly during validation.
