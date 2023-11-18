@@ -169,7 +169,7 @@ def test_revocation_mode_soft_fail():
     context = ValidationContext(
         trust_roots=ca_certs,
         other_certs=other_certs,
-        moment=datetime(2023, 1, 10, tzinfo=pytz.UTC),
+        moment=datetime(2023, 1, 10, tzinfo=timezone.utc),
         allow_fetching=True,
         weak_hash_algos={'md2', 'md5'},
         fetcher_backend=MockFetcherBackendWithValidationError(),
