@@ -18,6 +18,7 @@ from typing import (
     Any,
     Dict,
     FrozenSet,
+    Generator,
     Generic,
     Iterable,
     Iterator,
@@ -43,13 +44,22 @@ from pyhanko_certvalidator.context import (
     CertValidationPolicySpec,
     ValidationDataHandlers,
 )
+from pyhanko_certvalidator.errors import PathError
 from pyhanko_certvalidator.ltv.ades_past import past_validate
-from pyhanko_certvalidator.ltv.poe import POEManager, digest_for_poe
+from pyhanko_certvalidator.ltv.poe import (
+    KnownPOE,
+    POEManager,
+    POEType,
+    ValidationObject,
+    ValidationObjectType,
+    digest_for_poe,
+)
 from pyhanko_certvalidator.ltv.time_slide import ades_gather_prima_facie_revinfo
 from pyhanko_certvalidator.ltv.types import ValidationTimingInfo
 from pyhanko_certvalidator.path import ValidationPath
 from pyhanko_certvalidator.policy_decl import (
     AlgorithmUsagePolicy,
+    NonRevokedStatusAssertion,
     RevocationCheckingRule,
 )
 from pyhanko_certvalidator.registry import PathBuilder, TrustManager
@@ -93,9 +103,9 @@ from pyhanko.sign.validation.status import (
 )
 
 from ..diff_analysis import DiffPolicy
+from .dss import enumerate_ocsp_certs
 from .errors import NoDSSFoundError
 from .policy_decl import (
-    KnownPOE,
     LocalKnowledge,
     PdfSignatureValidationSpec,
     RevinfoOnlineFetchingRule,
@@ -114,11 +124,71 @@ __all__ = [
     'AdESBasicValidationResult',
     'AdESWithTimeValidationResult',
     'AdESLTAValidationResult',
+    'derive_validation_object_identifier',
 ]
 
 logger = logging.getLogger(__name__)
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus, covariant=True)
+
+
+def derive_validation_object_binary_data(
+    vo: ValidationObject,
+) -> Optional[bytes]:
+    if vo.object_type == ValidationObjectType.CERTIFICATE:
+        return vo.value.dump()
+    elif vo.object_type == ValidationObjectType.CRL:
+        return vo.value.crl_data.dump()
+    elif vo.object_type == ValidationObjectType.OCSP_RESPONSE:
+        return vo.value.ocsp_response_data.dump()
+    elif vo.object_type in (
+        ValidationObjectType.SIGNED_DATA,
+        ValidationObjectType.TIMESTAMP,
+    ):
+        return vo.value['signer_infos'][0]['signature'].native
+    else:
+        return None
+
+
+def derive_validation_object_identifier(vo: ValidationObject) -> Optional[str]:
+    # TODO for certs and signers, it could make sense to somehow encode
+    #  a human-readable "slugified" representation of the common name
+    #  to identify things at a glance.
+    if vo.object_type == ValidationObjectType.CERTIFICATE:
+        marker = digest_for_poe(vo.value.dump()).hex()
+    elif vo.object_type == ValidationObjectType.CRL:
+        marker = digest_for_poe(vo.value.crl_data.dump()).hex()
+    elif vo.object_type == ValidationObjectType.OCSP_RESPONSE:
+        marker = digest_for_poe(vo.value.ocsp_response_data.dump()).hex()
+    elif vo.object_type in (
+        ValidationObjectType.SIGNED_DATA,
+        ValidationObjectType.TIMESTAMP,
+    ):
+        marker = digest_for_poe(
+            vo.value['signer_infos'][0]['signature'].native
+        ).hex()
+    else:
+        return None
+
+    return f'vo-{vo.object_type.value}-{marker}'
+
+
+class ValidationObjectSet:
+    def __init__(self, *object_collections: Iterable[ValidationObject]):
+        def _pairs():
+            for obj in itertools.chain(*object_collections):
+                ident = derive_validation_object_identifier(obj)
+                if ident:
+                    yield ident, obj
+
+        self._things = {k: v for k, v in _pairs()}
+
+    def __iter__(self) -> Iterator[ValidationObject]:
+        return iter(self._things.values())
+
+    @staticmethod
+    def empty():
+        return ValidationObjectSet(())
 
 
 @dataclass(frozen=True)
@@ -145,6 +215,11 @@ class AdESBasicValidationResult(Generic[StatusType]):
     """
     A string describing the reason why validation failed,
     if applicable.
+    """
+
+    validation_objects: ValidationObjectSet
+    """
+    Validation objects that were potentially relevant for the validation process.
     """
 
 
@@ -294,6 +369,37 @@ def _ades_signature_crypto_policy_check(
         )
 
 
+def _enumerate_validation_objects(
+    validation_context: Optional[ValidationContext],
+) -> Generator[ValidationObject, None, None]:
+    if validation_context is None:
+        return
+    for ocsp in validation_context.ocsps:
+        for cont in OCSPContainer.load_multi(ocsp):
+            yield ValidationObject(ValidationObjectType.OCSP_RESPONSE, cont)
+        for cert in enumerate_ocsp_certs(ocsp):
+            yield ValidationObject(ValidationObjectType.CERTIFICATE, cert)
+    for crl in validation_context.crls:
+        yield ValidationObject(ValidationObjectType.CRL, CRLContainer(crl))
+
+
+def _enumerate_certs_in_paths(
+    status: Union[SignatureStatus, _InternalBasicValidationResult, None],
+):
+    if status is None:
+        return
+    path = status.validation_path
+    if path:
+        for cert in path.iter_certs(include_root=True):
+            yield ValidationObject(ValidationObjectType.CERTIFICATE, cert)
+    if isinstance(status, StandardCMSSignatureStatus):
+        yield from _enumerate_certs_in_paths(status.timestamp_validity)
+        yield from _enumerate_certs_in_paths(status.content_timestamp_validity)
+    if isinstance(status, _InternalBasicValidationResult):
+        yield from _enumerate_certs_in_paths(status.signature_ts_validity)
+        yield from _enumerate_certs_in_paths(status.content_ts_validity)
+
+
 async def _ades_timestamp_validation_from_context(
     tst_signed_data: cms.SignedData,
     validation_context: ValidationContext,
@@ -301,6 +407,7 @@ async def _ades_timestamp_validation_from_context(
     extra_status_kwargs: Optional[Dict[str, Any]] = None,
     status_cls=TimestampSignatureStatus,
 ) -> AdESBasicValidationResult:
+    vos = ValidationObjectSet(_enumerate_validation_objects(validation_context))
     status_kwargs = dict(extra_status_kwargs or {})
     status_kwargs_from_validation = await generic_cms.validate_tst_signed_data(
         tst_signed_data,
@@ -308,18 +415,21 @@ async def _ades_timestamp_validation_from_context(
         expected_tst_imprint=expected_tst_imprint,
     )
     status_kwargs.update(status_kwargs_from_validation)
+    # noinspection PyArgumentList
     status = status_cls(**status_kwargs)
     if not status.intact:
         return AdESBasicValidationResult(
             ades_subindic=AdESFailure.HASH_FAILURE,
             api_status=status,
             failure_msg=None,
+            validation_objects=vos,
         )
     elif not status.valid:
         return AdESBasicValidationResult(
             ades_subindic=AdESFailure.SIG_CRYPTO_FAILURE,
             api_status=status,
             failure_msg=None,
+            validation_objects=vos,
         )
 
     interm_result = await _process_basic_validation(
@@ -330,12 +440,16 @@ async def _ades_timestamp_validation_from_context(
         signature_not_before_time=None,
     )
     interm_result.status_kwargs = status_kwargs
+    vos = ValidationObjectSet(
+        iter(vos), _enumerate_certs_in_paths(interm_result)
+    )
     return AdESBasicValidationResult(
         ades_subindic=interm_result.ades_subindic,
         api_status=interm_result.update(
             status_cls, with_ts=False, with_attrs=False
         ),
         failure_msg=None,
+        validation_objects=vos,
     )
 
 
@@ -353,6 +467,7 @@ async def _ades_process_attached_ts(
         ades_subindic=AdESIndeterminate.GENERIC,
         failure_msg=None,
         api_status=None,
+        validation_objects=ValidationObjectSet.empty(),
     )
 
 
@@ -363,6 +478,7 @@ async def _process_basic_validation(
     ac_validation_context: Optional[ValidationContext],
     signature_not_before_time: Optional[datetime],
 ):
+    validation_time = temp_status.validation_time
     ades_trust_status: Optional[AdESSubIndic] = temp_status.trust_problem_indic
     signer_info = generic_cms.extract_signer_info(signed_data)
     ts_status: Optional[TimestampSignatureStatus] = None
@@ -435,6 +551,7 @@ async def _process_basic_validation(
         signer_attr_status=SignerAttributeStatus(**attr_status_kwargs),
         signature_poe_time=None,
         validation_path=temp_status.validation_path,
+        status_kwargs={'validation_time': validation_time},
     )
 
 
@@ -563,12 +680,21 @@ async def ades_basic_validation(
     if isinstance(interm_result, AdESBasicValidationResult):
         return interm_result
 
+    status: StandardCMSSignatureStatus = interm_result.update(
+        StandardCMSSignatureStatus, with_ts=False, with_attrs=True
+    )
+    vos = ValidationObjectSet(
+        _enumerate_validation_objects(validation_context),
+        _enumerate_validation_objects(ac_validation_context),
+        _enumerate_validation_objects(ts_validation_context),
+        _enumerate_certs_in_paths(status),
+    )
+
     return AdESBasicValidationResult(
         ades_subindic=interm_result.ades_subindic,
-        api_status=interm_result.update(
-            StandardCMSSignatureStatus, with_ts=False, with_attrs=True
-        ),
+        api_status=status,
         failure_msg=None,
+        validation_objects=vos,
     )
 
 
@@ -585,6 +711,11 @@ async def _ades_basic_validation(
     status_cls: Type[StatusType],
 ) -> Union[AdESBasicValidationResult, _InternalBasicValidationResult]:
     status_kwargs = dict(extra_status_kwargs or {})
+    vos = ValidationObjectSet(
+        _enumerate_validation_objects(validation_context),
+        _enumerate_validation_objects(ts_validation_context),
+        _enumerate_validation_objects(ac_validation_context),
+    )
     try:
         status_kwargs_from_validation = await generic_cms.cms_basic_validation(
             signed_data,
@@ -599,6 +730,7 @@ async def _ades_basic_validation(
             ades_subindic=e.ades_subindication or AdESIndeterminate.GENERIC,
             failure_msg=e.failure_message,
             api_status=None,
+            validation_objects=vos,
         )
 
     # put the temp status into a SignatureStatus object for convenience
@@ -608,12 +740,14 @@ async def _ades_basic_validation(
             ades_subindic=AdESFailure.HASH_FAILURE,
             api_status=status,
             failure_msg=None,
+            validation_objects=vos,
         )
     elif not status.valid:
         return AdESBasicValidationResult(
             ades_subindic=AdESFailure.SIG_CRYPTO_FAILURE,
             api_status=status,
             failure_msg=None,
+            validation_objects=vos,
         )
 
     interm_result = await _process_basic_validation(
@@ -737,13 +871,21 @@ async def ades_with_time_validation(
         status_cls=status_cls,
         algorithm_policy=validation_spec.signature_algorithm_policy,
     )
+
     if isinstance(interm_result, AdESBasicValidationResult):
+        vos = ValidationObjectSet(
+            _enumerate_validation_objects(validation_context),
+            _enumerate_validation_objects(ts_validation_context),
+            _enumerate_validation_objects(ac_validation_context),
+            _enumerate_certs_in_paths(interm_result.api_status),
+        )
         return AdESWithTimeValidationResult(
             ades_subindic=interm_result.ades_subindic,
             api_status=interm_result.api_status,
             failure_msg=interm_result.failure_msg,
             best_signature_time=signature_poe_time,
             signature_not_before_time=signature_not_before_time,
+            validation_objects=vos,
         )
     elif interm_result.ades_subindic not in _WITH_TIME_FURTHER_PROC:
         assert isinstance(interm_result, _InternalBasicValidationResult)
@@ -751,12 +893,19 @@ async def ades_with_time_validation(
         api_status = interm_result.update(
             status_cls, with_ts=True, with_attrs=True
         )
+        vos = ValidationObjectSet(
+            _enumerate_validation_objects(validation_context),
+            _enumerate_validation_objects(ts_validation_context),
+            _enumerate_validation_objects(ac_validation_context),
+            _enumerate_certs_in_paths(api_status),
+        )
         return AdESWithTimeValidationResult(
             ades_subindic=interm_result.ades_subindic,
             api_status=api_status,
             failure_msg=None,
             best_signature_time=signature_poe_time,
             signature_not_before_time=signature_not_before_time,
+            validation_objects=vos,
         )
 
     signer_info = generic_cms.extract_signer_info(signed_data)
@@ -771,15 +920,29 @@ async def ades_with_time_validation(
         # TODO conditionally enforce this based on policy params---
         #  for now we assume that someone calling this method actually cares
         #  about timestamps
+        vos = ValidationObjectSet(
+            _enumerate_validation_objects(validation_context),
+            _enumerate_validation_objects(ts_validation_context),
+            _enumerate_validation_objects(ac_validation_context),
+            _enumerate_certs_in_paths(interm_result),
+        )
         return AdESWithTimeValidationResult(
             ades_subindic=AdESIndeterminate.SIG_CONSTRAINTS_FAILURE,
             api_status=temp_status,
             failure_msg="No signature timestamp present",
             best_signature_time=timing_info.best_signature_time,
             signature_not_before_time=signature_not_before_time,
+            validation_objects=vos,
         )
     sig_ts_result = await _ades_process_attached_ts(
         signer_info, validation_context, signed=False, tst_digest=tst_digest
+    )
+    vos = ValidationObjectSet(
+        _enumerate_validation_objects(validation_context),
+        _enumerate_validation_objects(ts_validation_context),
+        _enumerate_validation_objects(ac_validation_context),
+        _enumerate_certs_in_paths(interm_result),
+        _enumerate_certs_in_paths(sig_ts_result.api_status),
     )
     if sig_ts_result.ades_subindic != AdESPassed.OK:
         return AdESWithTimeValidationResult(
@@ -788,6 +951,7 @@ async def ades_with_time_validation(
             failure_msg=None,
             best_signature_time=signature_poe_time,
             signature_not_before_time=signature_not_before_time,
+            validation_objects=vos,
         )
 
     ts_status = sig_ts_result.api_status
@@ -812,6 +976,7 @@ async def ades_with_time_validation(
                 failure_msg=None,
                 best_signature_time=signature_poe_time,
                 signature_not_before_time=signature_not_before_time,
+                validation_objects=vos,
             )
     elif interm_result.ades_subindic == AdESIndeterminate.OUT_OF_BOUNDS_NO_POE:
         # NOTE: we can't process expiration here since we don't have access
@@ -824,6 +989,7 @@ async def ades_with_time_validation(
                 failure_msg=None,
                 best_signature_time=signature_poe_time,
                 signature_not_before_time=signature_not_before_time,
+                validation_objects=vos,
             )
     elif (
         interm_result.ades_subindic
@@ -839,6 +1005,7 @@ async def ades_with_time_validation(
                 failure_msg=None,
                 best_signature_time=signature_poe_time,
                 signature_not_before_time=signature_not_before_time,
+                validation_objects=vos,
             )
 
     # TODO TSTInfo ordering/comparison check
@@ -852,6 +1019,7 @@ async def ades_with_time_validation(
             failure_msg=None,
             best_signature_time=signature_poe_time,
             signature_not_before_time=signature_not_before_time,
+            validation_objects=vos,
         )
     # TODO handle time-stamp delay
     interm_result.trust_subindic_update = None
@@ -864,6 +1032,7 @@ async def ades_with_time_validation(
         failure_msg=None,
         best_signature_time=signature_poe_time,
         signature_not_before_time=signature_not_before_time,
+        validation_objects=vos,
     )
 
 
@@ -967,7 +1136,6 @@ async def _build_and_past_validate_cert(
     cert: x509.Certificate,
     validation_policy_spec: CertValidationPolicySpec,
     validation_data_handlers: ValidationDataHandlers,
-    init_control_time: Optional[datetime] = None,
 ) -> Tuple[ValidationPath, datetime]:
     path_builder = PathBuilder(
         trust_manager=validation_policy_spec.trust_manager,
@@ -984,7 +1152,7 @@ async def _build_and_past_validate_cert(
                     path=cand_path,
                     validation_policy_spec=validation_policy_spec,
                     validation_data_handlers=validation_data_handlers,
-                    init_control_time=init_control_time,
+                    init_control_time=None,
                 )
             )
             current_subindication = past_result.error_subindic
@@ -1075,7 +1243,11 @@ async def _ades_past_signature_validation(
             )
 
     if best_signature_time <= validation_time:
-        if current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE:
+        # TODO raise an issue with ESI about TRY_LATER here
+        if (
+            current_time_sub_indic == AdESIndeterminate.REVOKED_NO_POE
+            or current_time_sub_indic == AdESIndeterminate.TRY_LATER
+        ):
             _pass_contingent_on_revinfo_issuance_poe()
             return cert_path
         elif current_time_sub_indic in (
@@ -1160,28 +1332,63 @@ async def ades_past_signature_validation(
     except errors.SignatureValidationError as e:
         logger.warning(e)
         return e.ades_subindication or AdESIndeterminate.GENERIC
+    except PathError as e:
+        logger.warning(e)
+        return AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
 
 @dataclass(frozen=True)
-class PrimaFaciePOE:
+class _PrimaFaciePOEItem:
+    digest: bytes
+    validation_object: ValidationObject
+
+
+@dataclass(frozen=True)
+class _PrimaFaciePOEFromTimeStamp:
     pdf_revision: int
     timestamp_dt: datetime
-    digests_covered: FrozenSet[bytes]
+    poes_implied: FrozenSet[_PrimaFaciePOEItem]
     timestamp_token_signed_data: cms.SignedData
     doc_digest: bytes
     # include info from difference analysis as part of the status kwargs
     forensic_info: dict
 
     def add_to_poe_manager(self, manager: POEManager):
-        for thing in self.digests_covered:
-            manager.register_by_digest(digest=thing, dt=self.timestamp_dt)
+        for thing in self.poes_implied:
+            manager.register_known_poe(
+                KnownPOE(
+                    poe_type=POEType.VALIDATION,
+                    digest=thing.digest,
+                    poe_time=self.timestamp_dt,
+                    validation_object=thing.validation_object,
+                )
+            )
 
 
-def _extract_cert_digests_from_signed_data(sd: cms.SignedData):
+def _extract_cert_digests_from_signed_data(
+    sd: cms.SignedData,
+) -> Generator[_PrimaFaciePOEItem, None, None]:
     cert_choice: cms.CertificateChoices
     for cert_choice in sd['certificates']:
-        if cert_choice.name in ('certificate', 'v2_attr_set'):
-            yield digest_for_poe(cert_choice.chosen.dump())
+        obj = cert_choice.chosen
+        data = obj.dump()
+        if cert_choice.name == 'certificate':
+            vo_type = ValidationObjectType.CERTIFICATE
+        elif cert_choice.name == 'v2_attr_cert':
+            # There is no separate type for an attribute cert in
+            # ETSI TS 119 102-2, so we mark it as OTHER.
+            vo_type = ValidationObjectType.OTHER
+        else:
+            # skip over unsupported certificate types
+            # since we don't want to give the impression
+            # in the validation report that we processed them.
+            # TODO write test to verify that these don't end up in the report
+            continue
+        digest = digest_for_poe(data)
+        yield _PrimaFaciePOEItem(
+            digest=digest,
+            validation_object=ValidationObject(object_type=vo_type, value=obj),
+        )
 
 
 def _get_tst_timestamp(sd: cms.SignedData) -> datetime:
@@ -1189,11 +1396,64 @@ def _get_tst_timestamp(sd: cms.SignedData) -> datetime:
     return tst_info['gen_time'].native
 
 
+def _read_validation_objects_from_revinfo_archival(
+    revinfo_archival: asn1_pdf.RevocationInfoArchival,
+) -> Generator[_PrimaFaciePOEItem, None, None]:
+    for crl in revinfo_archival['crl']:
+        yield _PrimaFaciePOEItem(
+            digest=digest_for_poe(crl.dump()),
+            validation_object=ValidationObject(
+                object_type=ValidationObjectType.CRL,
+                value=CRLContainer(crl),
+            ),
+        )
+    for ocsp in revinfo_archival['ocsp']:
+        yield _PrimaFaciePOEItem(
+            digest=digest_for_poe(ocsp.dump()),
+            validation_object=ValidationObject(
+                object_type=ValidationObjectType.OCSP_RESPONSE,
+                value=OCSPContainer(ocsp),
+            ),
+        )
+
+
+def _read_validation_objects_from_dss(
+    dss: DocumentSecurityStore,
+) -> Generator[_PrimaFaciePOEItem, None, None]:
+    for crl_obj in dss.crls:
+        data = crl_obj.get_object().data
+        yield _PrimaFaciePOEItem(
+            digest=digest_for_poe(data),
+            validation_object=ValidationObject(
+                object_type=ValidationObjectType.CRL,
+                value=CRLContainer(CertificateList.load(data)),
+            ),
+        )
+    for ocsp_obj in dss.ocsps:
+        data = ocsp_obj.get_object().data
+        yield _PrimaFaciePOEItem(
+            digest=digest_for_poe(data),
+            validation_object=ValidationObject(
+                object_type=ValidationObjectType.OCSP_RESPONSE,
+                value=OCSPContainer(OCSPResponse.load(data)),
+            ),
+        )
+    for cert_obj in dss.certs.values():
+        data = cert_obj.get_object().data
+        yield _PrimaFaciePOEItem(
+            digest=digest_for_poe(data),
+            validation_object=ValidationObject(
+                object_type=ValidationObjectType.CERTIFICATE,
+                value=x509.Certificate.load(data),
+            ),
+        )
+
+
 def _build_prima_facie_poe_index_from_pdf_timestamps(
     r: PdfFileReader,
     include_content_ts: bool,
     diff_policy: Optional[DiffPolicy],
-) -> List[PrimaFaciePOE]:
+) -> List[_PrimaFaciePOEFromTimeStamp]:
     # This subroutine implements the POE gathering part of the evidence record
     # processing algorithm in AdES as applied to PDF. For the purposes of this
     # function, the chain of document timestamps is treated as a single evidence
@@ -1219,15 +1479,15 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
     # integrity, we do run the integrity checker for the TST data at this stage.
     # The actual trust validation is delegated
 
-    collected_so_far: Set[bytes] = set()
+    collected_so_far: Set[_PrimaFaciePOEItem] = set()
     # Holds all digests of objects contained in _document_ content so far
     # (note: this is why it's important to traverse the revisions in order)
 
-    for_next_ts: Set[bytes] = set()
+    for_next_ts: Set[_PrimaFaciePOEItem] = set()
     # Holds digests of objects that will be registered with POE on the next
     # document TS or content TS encountered.
 
-    prima_facie_poe_sets: List[PrimaFaciePOE] = []
+    prima_facie_poe_sets: List[_PrimaFaciePOEFromTimeStamp] = []
     # output array (to avoid having to work with async generators)
 
     embedded_sig: EmbeddedPdfSignature
@@ -1267,13 +1527,11 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
 
         if ts_signed_data is not None:
             # add DSS content
-            dss = DocumentSecurityStore.read_dss(hist_handler)
-            collected_so_far.update(
-                digest_for_poe(item.get_object().data)
-                for item in itertools.chain(
-                    dss.crls, dss.ocsps, dss.certs.values()
-                )
-            )
+            try:
+                dss = DocumentSecurityStore.read_dss(hist_handler)
+                collected_so_far.update(_read_validation_objects_from_dss(dss))
+            except NoDSSFoundError:
+                pass
             collected_so_far.update(for_next_ts)
             doc_digest = embedded_sig.compute_digest()
             coverage_normal = (
@@ -1282,10 +1540,10 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
             )
             if coverage_normal:
                 prima_facie_poe_sets.append(
-                    PrimaFaciePOE(
+                    _PrimaFaciePOEFromTimeStamp(
                         pdf_revision=embedded_sig.signed_revision,
                         timestamp_dt=_get_tst_timestamp(ts_signed_data),
-                        digests_covered=frozenset(collected_so_far),
+                        poes_implied=frozenset(collected_so_far),
                         timestamp_token_signed_data=ts_signed_data,
                         doc_digest=doc_digest,
                         forensic_info=embedded_sig.summarise_integrity_info(),
@@ -1315,10 +1573,7 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
                 )
 
                 for_next_ts.update(
-                    digest_for_poe(item.dump())
-                    for item in itertools.chain(
-                        revinfo_attr['crl'], revinfo_attr['ocsp']
-                    )
+                    _read_validation_objects_from_revinfo_archival(revinfo_attr)
                 )
             except (MultivaluedAttributeError, NonexistentAttributeError):
                 pass
@@ -1326,7 +1581,19 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
         # Prepare a POE entry for the signature itself (to be processed
         # with the next timestamp)
         sig_bytes = embedded_sig.signer_info['signature'].native
-        for_next_ts.add(digest_for_poe(sig_bytes))
+        for_next_ts.add(
+            _PrimaFaciePOEItem(
+                digest=digest_for_poe(sig_bytes),
+                validation_object=ValidationObject(
+                    object_type=ValidationObjectType.SIGNED_DATA,
+                    # For now, we put the entire signed data object here
+                    # while we take the digest only over the signature.
+                    # This was done for expediency & ease of reasoning
+                    # given existing code, but may change in the future.
+                    value=embedded_sig.signed_data,
+                ),
+            )
+        )
 
         # add POE entries for the timestamp(s) attached to this signature
         try:
@@ -1345,15 +1612,28 @@ def _build_prima_facie_poe_index_from_pdf_timestamps(
             signature_tses = ()
 
         for ts_data in itertools.chain(signature_tses, content_tses):
-            for ts_signer_info in ts_data['content']['signer_infos']:
+            ts_data_content = ts_data['content']
+            for ts_signer_info in ts_data_content['signer_infos']:
                 ts_sig_bytes = ts_signer_info['signature'].native
-                for_next_ts.add(digest_for_poe(ts_sig_bytes))
+                for_next_ts.add(
+                    _PrimaFaciePOEItem(
+                        digest=digest_for_poe(ts_sig_bytes),
+                        # Same as for signedData: we take the digest over
+                        # the signature part only.
+                        # This was done for expediency & ease of reasoning
+                        # given existing code, but may change in the future.
+                        validation_object=ValidationObject(
+                            object_type=ValidationObjectType.TIMESTAMP,
+                            value=ts_data_content,
+                        ),
+                    )
+                )
 
     return prima_facie_poe_sets
 
 
 async def _validate_prima_facie_poe(
-    prima_facie_poe_sets: List[PrimaFaciePOE],
+    prima_facie_poe_sets: List[_PrimaFaciePOEFromTimeStamp],
     # we assume that the validation info extracted from the DSS
     # has been registered in the revinfo gathering policy object
     # and/or the known cert list, respectively
@@ -1434,6 +1714,7 @@ _LTA_FURTHER_PROC = frozenset(
         AdESIndeterminate.OUT_OF_BOUNDS_NOT_REVOKED,
         AdESIndeterminate.CRYPTO_CONSTRAINTS_FAILURE_NO_POE,
         AdESIndeterminate.REVOCATION_OUT_OF_BOUNDS_NO_POE,
+        AdESIndeterminate.TRY_LATER,
     }
 )
 
@@ -1527,12 +1808,14 @@ async def _process_signature_ts(
                     validation_path=validation_path,
                 ),
                 failure_msg=None,
+                validation_objects=signature_ts_prelim_result.validation_objects,
             )
         except errors.SignatureValidationError as e:
             signature_ts_result = AdESBasicValidationResult(
                 ades_subindic=e.ades_subindication or ts_current_time_sub_indic,
                 failure_msg=e.failure_message,
                 api_status=signature_ts_prelim_result.api_status,
+                validation_objects=signature_ts_prelim_result.validation_objects,
             )
     else:
         signature_ts_result = signature_ts_prelim_result
@@ -1623,6 +1906,7 @@ async def ades_lta_validation(
         known_crls=init_local_knowledge.known_crls + dss_facts.known_crls,
         known_certs=init_local_knowledge.known_certs + dss_facts.known_certs,
         known_poes=init_local_knowledge.known_poes,
+        nonrevoked_assertions=init_local_knowledge.nonrevoked_assertions,
     )
 
     augmented_validation_spec = dataclasses.replace(
@@ -1707,12 +1991,15 @@ async def ades_lta_validation(
             ),
             oldest_evidence_record_timestamp=oldest_evidence_record_timestamp,
             signature_timestamp_status=None,
+            validation_objects=signature_prelim_result.validation_objects,
         )
 
     # (4) Register PoE for the signature based on best_signature_time
     signature_bytes = embedded_sig.signer_info['signature'].native
     updated_poe_manager.register(
-        signature_bytes, signature_prelim_result.best_signature_time
+        signature_bytes,
+        poe_type=POEType.VALIDATION,
+        dt=signature_prelim_result.best_signature_time,
     )
 
     # (5) process signature TS if present
@@ -1753,6 +2040,7 @@ async def ades_lta_validation(
                 oldest_evidence_record_timestamp=(
                     oldest_evidence_record_timestamp
                 ),
+                validation_objects=signature_prelim_result.validation_objects,
             )
 
     # (7) get the oldest PoE for the signature
@@ -1788,6 +2076,7 @@ async def ades_lta_validation(
         ),
         signature_timestamp_status=signature_ts_result,
         oldest_evidence_record_timestamp=oldest_evidence_record_timestamp,
+        validation_objects=signature_prelim_result.validation_objects,
     )
 
 
@@ -1835,12 +2124,6 @@ async def simulate_future_ades_lta_validation(
     :return:
         An AdES LTA validation result.
     """
-    # TODO add a mode that validates the most recent docts live at the current
-    #  reference time? Otherwise timestamp validation will typically fail
-    #  if the gap between the timestamp and the time of the simulation is large,
-    #  since the revinfo in the document for that timestamp will be stale
-    #  (but if the TS cert is not expired, fresh revinfo should be available)
-
     now = current_reference_time or datetime.now(tz=timezone.utc)
     timing_info = ValidationTimingInfo(
         validation_time=future_validation_time,
@@ -1853,6 +2136,18 @@ async def simulate_future_ades_lta_validation(
     orig_sig_validation_spec = pdf_validation_spec.signature_validation_spec
     orig_local_knowledge = orig_sig_validation_spec.local_knowledge
     dss_knowledge = _dss_to_local_knowledge(embedded_sig.reader)
+    new_nonrevoked_assertions = list(orig_local_knowledge.nonrevoked_assertions)
+    # assert the nonrevoked status of the last timestamp cert, since we can't
+    # get "future" revinfo anyway
+    try:
+        last_ts = embedded_sig.reader.embedded_timestamp_signatures[-1]
+        new_nonrevoked_assertions.append(
+            NonRevokedStatusAssertion(
+                last_ts.signer_cert.sha256, at=future_validation_time
+            )
+        )
+    except IndexError:
+        pass
 
     def _poes():
         # For the purposes of this test, we assert all proofs of existence
@@ -1862,15 +2157,21 @@ async def simulate_future_ades_lta_validation(
         yield from orig_local_knowledge.assert_existence_known_at(now)
         yield from dss_knowledge.assert_existence_known_at(now)
         for prima_facie_poe in prima_facie_poes:
-            for digest in prima_facie_poe.digests_covered:
+            for item in prima_facie_poe.poes_implied:
                 # for the prima facie ones, we only emit POEs for <now>, since
                 # we don't validate the would-be POEs that are embedded in the
                 # document at this point
-                yield KnownPOE(digest=digest, poe_time=now)
+                yield KnownPOE(
+                    poe_type=POEType.PROVIDED,
+                    digest=item.digest,
+                    poe_time=now,
+                    validation_object=item.validation_object,
+                )
 
     updated_local_knowledge = dataclasses.replace(
         orig_local_knowledge,
         known_poes=list(_poes()),
+        nonrevoked_assertions=new_nonrevoked_assertions,
     )
 
     updated_pdf_validation_spec = dataclasses.replace(

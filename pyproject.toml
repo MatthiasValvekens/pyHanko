@@ -37,7 +37,7 @@ dependencies = [
     "asn1crypto>=1.5.1",
     "qrcode>=6.1",
     "tzlocal>=4.3",
-    "pyhanko-certvalidator>=0.24,<0.26",
+    "pyhanko-certvalidator>=0.26,<0.27",
     "click>=7.1.2",
     "requests>=2.24.0",
     "pyyaml>=5.3.1",
@@ -74,6 +74,7 @@ image-support = [
 ]
 pkcs11 = ["python-pkcs11~=0.7.0"]
 async-http = ["aiohttp~=3.8.0"]
+etsi = ["xsdata~=23.8"]
 testing-basic = [
     "pytest>=6.1.1",
     "requests-mock>=1.8.0",
@@ -85,6 +86,7 @@ testing-basic = [
 ]
 testing = [
     "pyHanko[testing-basic,pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
+    "pyHanko[etsi];python_version>=\"3.8\"",
     "pytest-aiohttp~=1.0.4",
     "certomancer-csc-dummy==0.2.2",
 ]
@@ -96,7 +98,7 @@ live-test = [
     "pytest-cov>=4.0,<4.2",
 ]
 mypy = [
-    "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs]",
+    "pyHanko[pkcs11,xmp,opentype,image-support,async-http,extra-pubkey-algs,etsi]",
     "types-requests",
     "types-python-dateutil",
     "types-PyYAML",

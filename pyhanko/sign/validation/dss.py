@@ -27,6 +27,7 @@ __all__ = [
     'DocumentSecurityStore',
     'async_add_validation_info',
     'collect_validation_info',
+    'enumerate_ocsp_certs',
 ]
 
 from ...pdf_utils.crypt import SerialisedCredential

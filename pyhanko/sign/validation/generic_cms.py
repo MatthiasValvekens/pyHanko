@@ -88,11 +88,30 @@ __all__ = [
     'extract_certs_for_validation',
     'collect_signer_attr_status',
     'validate_algorithm_protection',
+    'get_signing_cert_attr',
 ]
 
 logger = logging.getLogger(__name__)
 
 StatusType = TypeVar('StatusType', bound=SignatureStatus)
+
+
+def get_signing_cert_attr(
+    signed_attrs: cms.CMSAttributes,
+) -> Union[tsp.SigningCertificate, tsp.SigningCertificateV2, None]:
+    """
+    Retrieve the ``signingCertificate`` or ``signingCertificateV2`` attribute
+    (giving preference to the latter) from a signature's signed attributes.
+
+    :param signed_attrs:
+        Signed attributes.
+    :return:
+        The value of the attribute, if present, else ``None``.
+    """
+    attr = _grab_signing_cert_attr(signed_attrs, v2=True)
+    if attr is None:
+        attr = _grab_signing_cert_attr(signed_attrs, v2=False)
+    return attr
 
 
 def _grab_signing_cert_attr(signed_attrs, v2: bool):
@@ -123,12 +142,9 @@ def _check_signing_certificate(
     # TODO check certificate policies, enforce restrictions on chain of trust
     # TODO document and/or mark as internal API explicitly
 
-    attr = _grab_signing_cert_attr(signed_attrs, v2=True)
+    attr = get_signing_cert_attr(signed_attrs)
     if attr is None:
-        attr = _grab_signing_cert_attr(signed_attrs, v2=False)
-
-    if attr is None:
-        # if neither attr is present -> no constraints
+        # if not present -> no constraints
         return
 
     # For the main signer cert, we only care about the first value, the others
@@ -498,6 +514,9 @@ async def cms_basic_validation(
             ades_status = AdESIndeterminate.CERTIFICATE_CHAIN_GENERAL_FAILURE
 
     status_kwargs = status_kwargs or {}
+    status_kwargs['validation_time'] = (
+        None if validation_context is None else validation_context.moment
+    )
     status_kwargs.update(
         intact=intact,
         valid=valid,

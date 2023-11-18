@@ -159,6 +159,11 @@ class SignatureStatus:
     See :attr:`.KeyUsageConstraints.extd_key_usage`.
     """
 
+    validation_time: Optional[datetime]
+    """
+    Reference time for validation purposes.
+    """
+
     def summary_fields(self):
         if self.trusted:
             cert_status = 'TRUSTED'
