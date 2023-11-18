@@ -1,5 +1,9 @@
 # changelog
 
+## 0.26.1
+
+- Handle nonspecific OCSP validation errors cleanly during validation.
+
 ## 0.26.0
 
 - Fix error reporting on banned algorithms in some cases
