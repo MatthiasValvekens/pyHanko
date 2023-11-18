@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Iterable, List, Optional, Type
 
 import pytest
-import pytz
 from asn1crypto import crl, ocsp, x509
 from asn1crypto.util import timezone
 
@@ -145,7 +144,7 @@ def test_revocation_mode_soft():
     context = ValidationContext(
         trust_roots=ca_certs,
         other_certs=other_certs,
-        moment=datetime(2023, 1, 10, tzinfo=pytz.UTC),
+        moment=datetime(2023, 1, 10, tzinfo=timezone.utc),
         allow_fetching=True,
         weak_hash_algos={'md2', 'md5'},
         fetcher_backend=MockFetcherBackend(),
