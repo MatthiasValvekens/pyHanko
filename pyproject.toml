@@ -35,9 +35,9 @@ requires-python = ">=3.7"
 dependencies = [
     "asn1crypto>=1.5.1",
     "oscrypto>=1.1.0",
-    "cryptography>=3.3.1",
+    "cryptography>=41.0.5",
     "uritools>=3.0.1",
-    "requests>=2.24.0",
+    "requests>=2.31.0",
 ]
 
 
