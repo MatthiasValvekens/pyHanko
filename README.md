@@ -36,7 +36,7 @@ pip install pyHanko[pkcs11,image-support,opentype,xmp]
 This `pip` invocation includes the optional dependencies required for PKCS#11, image handling and
 OpenType/TrueType support.
 
-PyHanko requires Python 3.7 or later.
+PyHanko requires Python 3.8 or later.
 
 ### Contributing
 

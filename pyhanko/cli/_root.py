@@ -112,20 +112,6 @@ def _root(ctx: click.Context, config, verbose, no_plugins):
 
 def _load_plugins(root_config: Optional[CLIRootConfig], plugins_enabled: bool):
     import sys
-
-    if sys.version_info < (3, 8):
-        from pyhanko.cli.commands.signing.pkcs11_cli import (
-            BEIDPlugin,
-            PKCS11Plugin,
-        )
-        from pyhanko.cli.commands.signing.simple import (
-            PemderPlugin,
-            PKCS12Plugin,
-        )
-
-        # no plugins on 3.7, only load defaults
-        return [PemderPlugin(), PKCS12Plugin(), PKCS11Plugin(), BEIDPlugin()]
-
     from importlib import metadata
 
     # we always load the default ones
