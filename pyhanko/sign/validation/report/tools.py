@@ -1,10 +1,6 @@
 """
 ETSI TS 119 102-2 reporting functionality.
 
-.. info:
-    This module requires optional ``[etsi]`` dependency group,
-    and only works on Python 3.8+ for dependency reasons.
-
 .. warning::
     This feature is incubating and subject to API changes.
 """

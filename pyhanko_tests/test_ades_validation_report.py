@@ -36,10 +36,6 @@ from .signing_commons import (
 from .test_ades_validation import DEFAULT_SIG_VALIDATION_SPEC
 from .test_pades import PADES
 
-py38_only = pytest.mark.skipif(
-    sys.version_info < (3, 8), reason="validation reports require python 3.8+"
-)
-
 
 async def _generate_basic_report(requests_mock, out):
     with freeze_time('2020-11-25'):
@@ -56,7 +52,6 @@ async def _generate_basic_report(requests_mock, out):
 
 
 @pytest.mark.asyncio
-@py38_only
 async def test_pades_basic_report_smoke_test(requests_mock):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -71,7 +66,6 @@ async def test_pades_basic_report_smoke_test(requests_mock):
 
 
 @pytest.mark.asyncio
-@py38_only
 async def test_pades_basic_failing_report_smoke_test(requests_mock):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -89,7 +83,6 @@ async def test_pades_basic_failing_report_smoke_test(requests_mock):
 
 
 @pytest.mark.asyncio
-@py38_only
 async def test_pades_basic_indeteriminate_report_smoke_test(requests_mock):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -122,7 +115,6 @@ async def _generate_lta_report(
 
 
 @pytest.mark.asyncio
-@py38_only
 async def test_pades_lta_report_smoke_test(requests_mock):
     with freeze_time('2020-11-20'):
         w = IncrementalPdfFileWriter(BytesIO(MINIMAL_ONE_FIELD))
@@ -143,7 +135,6 @@ async def test_pades_lta_report_smoke_test(requests_mock):
 
 
 @pytest.mark.asyncio
-@py38_only
 async def test_pades_with_attributes_report_smoke_test(requests_mock):
     pki_arch = CERTOMANCER.get_pki_arch(ArchLabel('testing-ca-with-aa'))
 
