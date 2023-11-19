@@ -73,7 +73,7 @@ image-support = [
     "python-barcode==0.15.1"
 ]
 pkcs11 = ["python-pkcs11~=0.7.0"]
-async-http = ["aiohttp~=3.8.0"]
+async-http = ["aiohttp~=3.9.0"]
 etsi = ["xsdata~=23.8"]
 testing-basic = [
     "pytest>=6.1.1",
