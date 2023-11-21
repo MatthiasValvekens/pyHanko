@@ -642,7 +642,7 @@ class XRefBuilder:
         self.sections: List[XRefSection] = []
 
         self.trailer = TrailerDictionary()
-        self.trailer.container_ref = generic.TrailerReference(self)
+        self.trailer.container_ref = generic.TrailerReference(handler)
         self.has_xref_stream = False
 
     def _read_xref_stream_object(self):

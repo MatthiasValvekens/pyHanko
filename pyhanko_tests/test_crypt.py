@@ -493,7 +493,8 @@ def test_pubkey_unsupported_filter(delete_subfilter):
     out = BytesIO()
     w.write(out)
     with pytest.raises(misc.PdfReadError):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_pubkey_encryption_block_cfs_s4():
@@ -505,7 +506,8 @@ def test_pubkey_encryption_block_cfs_s4():
     out = BytesIO()
     w.write(out)
     with pytest.raises(misc.PdfReadError):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_pubkey_encryption_s5_requires_cfs():
@@ -518,7 +520,8 @@ def test_pubkey_encryption_s5_requires_cfs():
     out = BytesIO()
     w.write(out)
     with pytest.raises(misc.PdfReadError):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_pubkey_encryption_dict_errors():
@@ -1433,7 +1436,8 @@ def test_legacy_o_u_values(entry):
     w.write(out)
 
     with pytest.raises(misc.PdfError, match="be 32 bytes long"):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_key_length_constraint():
