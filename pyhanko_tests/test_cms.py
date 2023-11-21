@@ -66,10 +66,7 @@ from pyhanko.sign.validation.errors import (
 )
 from pyhanko.sign.validation.generic_cms import validate_sig_integrity
 from pyhanko.sign.validation.status import ClaimedAttributes
-from pyhanko.sign.validation.utils import (
-    DEFAULT_ALGORITHM_USAGE_POLICY,
-    CMSAlgorithmUsagePolicy,
-)
+from pyhanko.sign.validation.utils import CMSAlgorithmUsagePolicy
 from pyhanko_tests.samples import (
     CERTOMANCER,
     CRYPTO_DATA_DIR,
@@ -450,10 +447,9 @@ async def test_detached_cms_with_duplicated_attr():
         timestamper=DUMMY_TS,
     )
     signature = cms.ContentInfo.load(signature.dump())
-    with pytest.raises(SignatureValidationError, match='structural'):
+    with pytest.raises(SignatureValidationError, match='structural.*duplicate'):
         await async_validate_cms_signature(
             signature['content'],
-            raw_digest=hashlib.sha256(b'Hello world!').digest(),
         )
 
 
