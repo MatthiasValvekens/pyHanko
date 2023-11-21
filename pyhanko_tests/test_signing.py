@@ -1690,3 +1690,15 @@ def test_signature_dict_with_prop_auth_type():
     s = r.embedded_signatures[0]
     val_trusted(s)
     assert s.sig_object['/Prop_AuthType'] == 'Password'
+
+
+def test_sign_reject_econtent_if_detached():
+    fname = os.path.join(PDF_DATA_DIR, 'pdf-sig-with-econtent.pdf')
+    with open(fname, 'rb') as inf:
+        r = PdfFileReader(inf)
+        emb = r.embedded_signatures[0]
+
+        with pytest.raises(
+            SignatureValidationError, match='detached.*encapsulated'
+        ):
+            val_untrusted(emb)

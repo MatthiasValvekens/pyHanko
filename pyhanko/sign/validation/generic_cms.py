@@ -462,6 +462,12 @@ async def cms_basic_validation(
         md = hashes.Hash(md_spec)
         md.update(raw)
         raw_digest = md.finalize()
+    elif eci['content'] is not core.VOID:
+        raise errors.SignatureValidationError(
+            "CMS structural error: detached signatures should not have "
+            "encapsulated data",
+            ades_subindication=AdESFailure.FORMAT_FAILURE,
+        )
 
     # first, do the cryptographic identity checks
     # TODO theoretically (e.g. DSA with param inheritance) this requires

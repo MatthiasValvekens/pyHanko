@@ -111,7 +111,7 @@ def test_generic_data_sign_legacy():
     with pytest.deprecated_call():
         # noinspection PyDeprecation
         signature = FROM_CA.sign_general_data(
-            input_data, 'sha256', detached=False
+            input_data, 'sha256', detached=True
         )
 
     # reset the stream
@@ -136,7 +136,7 @@ def test_generic_data_sign_legacy():
 
     eci = content['encap_content_info']
     assert eci['content_type'].native == 'data'
-    assert eci['content'].native == b'Hello world!'
+    assert eci['content'].native is None
 
     assert status.valid
     assert status.intact
@@ -248,7 +248,7 @@ async def test_detached_cms_with_self_reported_timestamp():
     signature = await FROM_CA.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
         signed_attr_settings=PdfCMSSignedAttributes(signing_time=dt),
     )
     signature = cms.ContentInfo.load(signature.dump())
@@ -266,7 +266,7 @@ async def test_detached_cms_with_self_reported_timestamp():
 @pytest.mark.asyncio
 async def test_detached_cms_with_tst():
     signature = await FROM_CA.async_sign_general_data(
-        b'Hello world!', 'sha256', detached=False, timestamper=DUMMY_TS
+        b'Hello world!', 'sha256', detached=True, timestamper=DUMMY_TS
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -290,7 +290,7 @@ async def test_detached_cms_with_content_tst():
     signature = await FROM_CA.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
         timestamper=DUMMY_TS,
         signed_attr_settings=signed_attr_settings,
     )
@@ -343,7 +343,7 @@ async def test_detached_cms_with_wrong_tst():
     signature = await signer.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
         timestamper=DUMMY_TS,
         signed_attr_settings=PdfCMSSignedAttributes(
             cades_signed_attrs=CAdESSignedAttrSpec(timestamp_content=True)
@@ -394,7 +394,7 @@ async def test_detached_cms_with_wrong_content_tst():
     signature = await signer.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
         timestamper=DUMMY_TS,
     )
     signature = cms.ContentInfo.load(signature.dump())
@@ -1716,7 +1716,7 @@ async def test_detached_cades_cms_with_tst():
     signature = await FROM_CA.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
         timestamper=DUMMY_TS,
         use_cades=True,
     )
@@ -1935,7 +1935,7 @@ async def test_detached_cms_with_invalid_cn():
     signature = await sgn.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
     )
     signature = cms.ContentInfo.load(signature.dump())
     status = await async_validate_detached_cms(
@@ -2003,7 +2003,7 @@ async def test_detached_cms_with_invalid_cn_in_ca():
     signature = await sgn.async_sign_general_data(
         b'Hello world!',
         'sha256',
-        detached=False,
+        detached=True,
     )
 
     signature['content']['certificates'].append(
