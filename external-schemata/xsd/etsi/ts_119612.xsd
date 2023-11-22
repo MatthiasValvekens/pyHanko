@@ -266,7 +266,7 @@ This is a review done in January 2016 adding the possibility to specify the Serv
   <!-- SchemeTerritory -->
   <!-- 2014-04. XML Schema CHANGE-->
   <!-- element SchemeTerritory is now of type xsd:string. Suppressed the restriction of having only 2 characters,
-as this element may contain other values than the country codes-->
+    as this element may contain other values than the country codes-->
   <xsd:annotation>
     <xsd:documentation>Specified in TS 119 612 v2.1.1 clause 5.3.10 Scheme territory</xsd:documentation>
   </xsd:annotation>
@@ -335,7 +335,7 @@ as this element may contain other values than the country codes-->
   <!--DistributionPoints element-->
   <!-- 2013-10. XML Schema CHANGE-->
   <!-- DistributionPointschanged from ElectronicAddress to nonEmptyURIListType as ElectronicAddress does
-now contain a list of multilang URIs, which is not required for distribution points-->
+    now contain a list of multilang URIs, which is not required for distribution points-->
   <xsd:annotation>
     <xsd:documentation>Specified in TS 119 612 v2.1.1 clause 5.3.16 Distribution points</xsd:documentation>
   </xsd:annotation>
@@ -365,9 +365,9 @@ now contain a list of multilang URIs, which is not required for distribution poi
       <!--Specified in TS 119 612 v2.1.1 clause 5.4.2 TSP trade name-->
       <xsd:element name="TSPTradeName" type="tsl:InternationalNamesType" minOccurs="0"/>
       <!--Specified in TS 119 612 v2.1.1 clause 5.4.3 TSP address.
-postal address and electronic addresses have the formats specified in 5.3.5.1 and 5.3.5.2 respectively.
-Their semantics are specified in 5.4.3.1 and 5.4.3.2 respectively
--->
+            postal address and electronic addresses have the formats specified in 5.3.5.1 and 5.3.5.2 respectively.
+            Their semantics are specified in 5.4.3.1 and 5.4.3.2 respectively
+            -->
       <xsd:element name="TSPAddress" type="tsl:AddressType"/>
       <!--Specified in TS 119 612 v2.1.1 clause 5.4.4 TSP information URI-->
       <xsd:element name="TSPInformationURI" type="tsl:NonEmptyMultiLangURIListType"/>
@@ -429,11 +429,11 @@ Their semantics are specified in 5.4.3.1 and 5.4.3.2 respectively
   <!-- Type for Service Supply Points -->
   <!-- 2016-01. XML Schema CHANGE-->
   <!-- ServiceSupplyPointsType changed to use AttributedNonEmptyURIType. The optional type attribute of AttributedNonEmptyURIType allows for each URI to specify the service/information to be found under this URI.
-For example a ServiceSupplyPoints field associated to a service of a type "http://uri.etsi.org/TrstSvc/Svctype/CA/QC" could include:
--	a URI pointing towards a descriptive text where users could be given information on (local) registration authorities and procedures to follow for being issued qualified certificates;
--	a URI providing a CRL distribution point giving certificate status information for qualified certificates issued by or under the and further specified by the type attibute value "http://uri.etsi.org/TrstSvc/Svctype/Certstatus/CRL/QC". Such URI can for example provide access to a last and final CRL in case of service unexpected termination and/or impossibility to provide such a final CRL at the CRL distribution point available from issued certificate's extensions; and/or
--	a URI providing one access location of an OCSP responder authorized to provide certificate status information for qualified certificates issued by or under the service, and further specified by the type attibute value "http://uri.etsi.org/TrstSvc/Svctype/Certstatus/OCSP/QC".
--->
+    For example a ServiceSupplyPoints field associated to a service of a type "http://uri.etsi.org/TrstSvc/Svctype/CA/QC" could include:
+    -	a URI pointing towards a descriptive text where users could be given information on (local) registration authorities and procedures to follow for being issued qualified certificates;
+    -	a URI providing a CRL distribution point giving certificate status information for qualified certificates issued by or under the and further specified by the type attibute value "http://uri.etsi.org/TrstSvc/Svctype/Certstatus/CRL/QC". Such URI can for example provide access to a last and final CRL in case of service unexpected termination and/or impossibility to provide such a final CRL at the CRL distribution point available from issued certificate's extensions; and/or
+    -	a URI providing one access location of an OCSP responder authorized to provide certificate status information for qualified certificates issued by or under the service, and further specified by the type attibute value "http://uri.etsi.org/TrstSvc/Svctype/Certstatus/OCSP/QC".
+    -->
   <xsd:annotation>
     <xsd:documentation>Specified in TS 119 612 v2.1.1 clause 5.5.7 Service supply points</xsd:documentation>
   </xsd:annotation>
