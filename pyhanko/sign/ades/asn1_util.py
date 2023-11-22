@@ -1,8 +1,8 @@
 from typing import Type
 
-from asn1crypto import cms, core
+from asn1crypto import cms, core, x509
 
-__all__ = ['as_set_of', 'register_cms_attribute']
+__all__ = ['as_set_of', 'register_cms_attribute', 'register_x509_extension']
 
 
 def as_set_of(asn1_type: Type):
@@ -16,3 +16,12 @@ def register_cms_attribute(
 ):
     cms.CMSAttributeType._map[dotted_oid] = readable_name
     cms.CMSAttribute._oid_specs[readable_name] = as_set_of(asn1_type)
+
+
+def register_x509_extension(
+    dotted_oid: str,
+    readable_name: str,
+    asn1_type: Type,
+):
+    x509.ExtensionId._map[dotted_oid] = readable_name
+    x509.Extension._oid_specs[readable_name] = asn1_type
