@@ -69,6 +69,19 @@ from .ts_119612 import (
     TSPServiceType,
     TSPType,
 )
+from .ts_119612_sie import (
+    CriteriaListType,
+    CriteriaListTypeassert,
+    KeyUsageBitType,
+    KeyUsageBitTypename,
+    KeyUsageType,
+    PoliciesListType,
+    QualificationElementType,
+    Qualifications,
+    QualificationsType,
+    QualifiersType,
+)
+from .ts_119612_sie import QualifierType as Ts119612sieQualifierType
 from .ts_11910202 import (
     AdditionalValidationReportDataType,
     AttributeBaseType,
@@ -178,7 +191,9 @@ from .xades import (
     OtherCertStatusValuesType,
     OtherTimeStamp,
     OtherTimeStampType,
-    QualifierType,
+)
+from .xades import QualifierType as XadesQualifierType
+from .xades import (
     QualifyingProperties,
     QualifyingPropertiesReference,
     QualifyingPropertiesReferenceType,
@@ -344,6 +359,17 @@ __all__ = [
     "TrustServiceProviderListType",
     "TrustServiceStatusList",
     "TrustStatusListType",
+    "CriteriaListType",
+    "CriteriaListTypeassert",
+    "KeyUsageBitType",
+    "KeyUsageBitTypename",
+    "KeyUsageType",
+    "PoliciesListType",
+    "QualificationElementType",
+    "Qualifications",
+    "QualificationsType",
+    "Ts119612sieQualifierType",
+    "QualifiersType",
     "AllDataObjectsTimeStamp",
     "Anytype",
     "XadesAnyType",
@@ -394,7 +420,7 @@ __all__ = [
     "OtherCertStatusValuesType",
     "OtherTimeStamp",
     "OtherTimeStampType",
-    "QualifierType",
+    "XadesQualifierType",
     "QualifyingProperties",
     "QualifyingPropertiesReference",
     "QualifyingPropertiesReferenceType",
