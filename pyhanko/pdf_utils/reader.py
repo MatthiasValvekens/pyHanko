@@ -344,6 +344,8 @@ class PdfFileReader(PdfHandler):
             raise misc.PdfReadError("Encryption settings must be a dictionary")
         return encrypt_dict
 
+    encrypt_dict = property(_get_encryption_params)
+
     @property
     def trailer_view(self) -> generic.DictionaryObject:
         return self.trailer.flatten()
