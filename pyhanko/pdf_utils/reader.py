@@ -331,9 +331,18 @@ class PdfFileReader(PdfHandler):
         except KeyError:
             return None
         if isinstance(encrypt_ref, generic.IndirectObject):
-            return self.get_object(encrypt_ref.reference, never_decrypt=True)
+            encrypt_dict = self.get_object(
+                encrypt_ref.reference, never_decrypt=True
+            )
+        elif not self.strict:
+            encrypt_dict = encrypt_ref
         else:
-            return encrypt_ref
+            raise misc.PdfReadError(
+                "Encryption settings must be an indirect reference"
+            )
+        if not isinstance(encrypt_dict, generic.DictionaryObject):
+            raise misc.PdfReadError("Encryption settings must be a dictionary")
+        return encrypt_dict
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
