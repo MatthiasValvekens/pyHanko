@@ -14,7 +14,7 @@ import os
 import re
 from collections import defaultdict
 from io import BytesIO
-from typing import Dict, Generator, Optional, Set, Tuple, Union
+from typing import BinaryIO, Dict, Generator, Optional, Set, Tuple, Union
 
 from . import generic, misc
 from .crypt import (
@@ -37,7 +37,6 @@ from .xref import (
 )
 
 logger = logging.getLogger(__name__)
-
 
 __all__ = [
     'PdfFileReader',
@@ -132,6 +131,41 @@ def process_data_at_eof(stream) -> int:
     return startxref
 
 
+def _read_header_version(stream: BinaryIO) -> Tuple[int, int]:
+    stream.seek(0)
+    input_version = None
+    header = misc.read_until_whitespace(stream, maxchars=20)
+    # match ignores trailing chars
+    m = header_regex.match(header)
+    if m is not None:
+        major = int(m.group(1))
+        minor = int(m.group(2))
+        input_version = (major, minor)
+    if input_version is None:
+        raise PdfReadError('Illegal PDF header')
+    return input_version
+
+
+def _read_xrefs_and_trailer(
+    stream: BinaryIO, handler_ref: PdfHandler, strict: bool
+) -> Tuple[XRefCache, XRefBuilder]:
+    # start at the end to read the trailer & xref table
+    stream.seek(-1, os.SEEK_END)
+    # This needs to be recorded for incremental update purposes
+    last_startxref = process_data_at_eof(stream)
+
+    # Read the xref table
+    xref_builder = XRefBuilder(
+        handler=handler_ref,
+        stream=stream,
+        strict=strict,
+        last_startxref=last_startxref,
+    )
+    xref_sections = xref_builder.read_xrefs()
+    xref_cache = XRefCache(handler_ref, xref_sections)
+    return xref_cache, xref_builder
+
+
 class PdfFileReader(PdfHandler):
     """Class implementing functionality to read a PDF file and cache
     certain data about it."""
@@ -151,19 +185,28 @@ class PdfFileReader(PdfHandler):
             problems and also causes some correctable problems to be fatal.
             Defaults to ``True``.
         """
-        self.security_handler: Optional[SecurityHandler] = None
+        self._security_handler: Optional[SecurityHandler] = None
         self.strict = strict
         self.resolved_objects: Dict[Tuple[int, int], generic.PdfObject] = {}
         self._header_version = None
         self._input_version = None
         self._historical_resolver_cache: Dict[int, HistoricalResolver] = {}
         self.stream = stream
-        self.xrefs, self.trailer = self.read()
-        encrypt_dict = self._get_encryption_params()
-        if encrypt_dict is not None:
-            self.security_handler = SecurityHandler.build(encrypt_dict)
+        # first, read the header & PDF version number
+        # (version number can be overridden in the document catalog later)
+        self._header_version = _read_header_version(stream)
+        self.xrefs, xref_builder = _read_xrefs_and_trailer(stream, self, strict)
+        self.last_startxref = xref_builder.last_startxref
+        self.trailer = xref_builder.trailer
+        self.has_xref_stream = xref_builder.has_xref_stream
 
         self._embedded_signatures = None
+
+    @property
+    def security_handler(self):
+        if self.encrypt_dict and not self._security_handler:
+            self._security_handler = SecurityHandler.build(self.encrypt_dict)
+        return self._security_handler
 
     def _xmp_meta_view(self) -> Optional[DocumentMetadata]:
         try:
@@ -280,15 +323,25 @@ class PdfFileReader(PdfHandler):
         else:
             return generic.NullObject()
 
-    def _get_encryption_params(self) -> Optional[generic.DictionaryObject]:
+    @property
+    def encrypt_dict(self) -> Optional[generic.DictionaryObject]:
         try:
             encrypt_ref = self.trailer.raw_get('/Encrypt')
         except KeyError:
             return None
         if isinstance(encrypt_ref, generic.IndirectObject):
-            return self.get_object(encrypt_ref.reference, never_decrypt=True)
+            encrypt_dict = self.get_object(
+                encrypt_ref.reference, never_decrypt=True
+            )
+        elif not self.strict:
+            encrypt_dict = encrypt_ref
         else:
-            return encrypt_ref
+            raise misc.PdfReadError(
+                "Encryption settings must be an indirect reference"
+            )
+        if not isinstance(encrypt_dict, generic.DictionaryObject):
+            raise misc.PdfReadError("Encryption settings must be a dictionary")
+        return encrypt_dict
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
@@ -474,40 +527,6 @@ class PdfFileReader(PdfHandler):
     def cache_indirect_object(self, generation, idnum, obj):
         self.resolved_objects[(generation, idnum)] = obj
         return obj
-
-    def read(self):
-        # first, read the header & PDF version number
-        # (version number can be overridden in the document catalog later)
-        stream = self.stream
-        stream.seek(0)
-        input_version = None
-        header = misc.read_until_whitespace(stream, maxchars=20)
-        # match ignores trailing chars
-        m = header_regex.match(header)
-        if m is not None:
-            major = int(m.group(1))
-            minor = int(m.group(2))
-            input_version = (major, minor)
-        if input_version is None:
-            raise PdfReadError('Illegal PDF header')
-        self._header_version = input_version
-
-        # start at the end:
-        stream.seek(-1, os.SEEK_END)
-
-        # This needs to be recorded for incremental update purposes
-        self.last_startxref = last_startxref = process_data_at_eof(stream)
-        # Read the xref table
-        xref_builder = XRefBuilder(
-            handler=self,
-            stream=stream,
-            strict=self.strict,
-            last_startxref=last_startxref,
-        )
-        xref_sections = xref_builder.read_xrefs()
-        xref_cache = XRefCache(self, xref_sections)
-        self.has_xref_stream = xref_builder.has_xref_stream
-        return xref_cache, xref_builder.trailer
 
     def decrypt(self, password: Union[str, bytes]) -> AuthResult:
         """

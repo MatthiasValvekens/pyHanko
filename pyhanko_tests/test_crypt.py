@@ -493,7 +493,8 @@ def test_pubkey_unsupported_filter(delete_subfilter):
     out = BytesIO()
     w.write(out)
     with pytest.raises(misc.PdfReadError):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_pubkey_encryption_block_cfs_s4():
@@ -505,7 +506,8 @@ def test_pubkey_encryption_block_cfs_s4():
     out = BytesIO()
     w.write(out)
     with pytest.raises(misc.PdfReadError):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_pubkey_encryption_s5_requires_cfs():
@@ -518,7 +520,8 @@ def test_pubkey_encryption_s5_requires_cfs():
     out = BytesIO()
     w.write(out)
     with pytest.raises(misc.PdfReadError):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_pubkey_encryption_dict_errors():
@@ -1433,7 +1436,8 @@ def test_legacy_o_u_values(entry):
     w.write(out)
 
     with pytest.raises(misc.PdfError, match="be 32 bytes long"):
-        PdfFileReader(out)
+        # noinspection PyStatementEffect
+        PdfFileReader(out).root['/Pages']['/Kids'][0]['/Content'].data
 
 
 def test_key_length_constraint():
@@ -1529,3 +1533,27 @@ def test_add_crypt_filter_to_stream_without_security_handler():
     dummy_stream = generic.StreamObject(stream_data=b"1001")
     with pytest.raises(misc.PdfStreamError, match="no security handler"):
         dummy_stream.add_crypt_filter()
+
+
+@pytest.mark.parametrize(
+    "fname,strict",
+    [
+        ("malformed-encrypt-dict1.pdf", True),
+        ("malformed-encrypt-dict2.pdf", True),
+        ("malformed-encrypt-dict2.pdf", False),
+    ],
+)
+def test_malformed_crypt(fname, strict):
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        r = PdfFileReader(inf, strict=strict)
+        with pytest.raises(misc.PdfReadError, match='Encryption settings'):
+            r.encrypt_dict
+
+
+def test_tolerate_direct_encryption_dict_in_nonstrict():
+    fname = 'malformed-encrypt-dict1.pdf'
+    with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
+        r = PdfFileReader(inf, strict=False)
+        r.decrypt('ownersecret')
+        data = r.root['/Pages']['/Kids'][0]['/Contents'].data
+        assert b'Hello' in data
