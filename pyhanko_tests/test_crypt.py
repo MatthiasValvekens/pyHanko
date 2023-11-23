@@ -1547,7 +1547,7 @@ def test_malformed_crypt(fname, strict):
     with open(os.path.join(PDF_DATA_DIR, fname), 'rb') as inf:
         r = PdfFileReader(inf, strict=strict)
         with pytest.raises(misc.PdfReadError, match='Encryption settings'):
-            r._get_encryption_params()
+            r.encrypt_dict
 
 
 def test_tolerate_direct_encryption_dict_in_nonstrict():

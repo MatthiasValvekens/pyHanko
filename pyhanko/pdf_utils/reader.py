@@ -204,10 +204,8 @@ class PdfFileReader(PdfHandler):
 
     @property
     def security_handler(self):
-        if self._security_handler is None:
-            encrypt_dict = self._get_encryption_params()
-            if encrypt_dict is not None:
-                self._security_handler = SecurityHandler.build(encrypt_dict)
+        if self.encrypt_dict and not self._security_handler:
+            self._security_handler = SecurityHandler.build(self.encrypt_dict)
         return self._security_handler
 
     def _xmp_meta_view(self) -> Optional[DocumentMetadata]:
@@ -325,7 +323,8 @@ class PdfFileReader(PdfHandler):
         else:
             return generic.NullObject()
 
-    def _get_encryption_params(self) -> Optional[generic.DictionaryObject]:
+    @property
+    def encrypt_dict(self) -> Optional[generic.DictionaryObject]:
         try:
             encrypt_ref = self.trailer.raw_get('/Encrypt')
         except KeyError:
@@ -343,8 +342,6 @@ class PdfFileReader(PdfHandler):
         if not isinstance(encrypt_dict, generic.DictionaryObject):
             raise misc.PdfReadError("Encryption settings must be a dictionary")
         return encrypt_dict
-
-    encrypt_dict = property(_get_encryption_params)
 
     @property
     def trailer_view(self) -> generic.DictionaryObject:
