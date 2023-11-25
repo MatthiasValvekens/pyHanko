@@ -69,6 +69,17 @@ from .ts_119612 import (
     TSPServiceType,
     TSPType,
 )
+from .ts_119612_extra import (
+    CertSubjectDNAttribute,
+    CertSubjectDNAttributeType,
+    ExtendedKeyUsage,
+    ExtendedKeyUsageType,
+    MimeType,
+    PublicKeyLocation,
+    TakenOverBy,
+    TakenOverByType,
+    X509CertificateLocation,
+)
 from .ts_119612_sie import (
     CriteriaListType,
     CriteriaListTypeassert,
@@ -359,6 +370,15 @@ __all__ = [
     "TrustServiceProviderListType",
     "TrustServiceStatusList",
     "TrustStatusListType",
+    "CertSubjectDNAttribute",
+    "CertSubjectDNAttributeType",
+    "ExtendedKeyUsage",
+    "ExtendedKeyUsageType",
+    "MimeType",
+    "PublicKeyLocation",
+    "TakenOverBy",
+    "TakenOverByType",
+    "X509CertificateLocation",
     "CriteriaListType",
     "CriteriaListTypeassert",
     "KeyUsageBitType",
