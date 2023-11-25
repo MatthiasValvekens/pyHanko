@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Set
+from typing import Iterable, Optional
 
 from asn1crypto import x509
 from pyhanko_certvalidator.errors import InvalidCertificateError
@@ -30,14 +30,14 @@ class KeyUsageConstraints(ConfigurableMixin):
         Bring extended key usage semantics in line with :rfc:`5280` (PKIX).
     """
 
-    key_usage: Optional[Set[str]] = None
+    key_usage: Optional[Iterable[str]] = None
     """
     All or some (depending on :attr:`match_all_key_usage`) of these key usage
     extensions must be present in the signer's certificate.
     If not set or empty, all key usages are considered acceptable.
     """
 
-    key_usage_forbidden: Optional[Set[str]] = None
+    key_usage_forbidden: Optional[Iterable[str]] = None
     """
     These key usages must not be present in the signer's certificate.
 
@@ -46,7 +46,7 @@ class KeyUsageConstraints(ConfigurableMixin):
         compatibility with certificate seed value settings in ISO 32000.
     """
 
-    extd_key_usage: Optional[Set[str]] = None
+    extd_key_usage: Optional[Iterable[str]] = None
     """
     List of acceptable key purposes that can appear in an extended key
     usage extension in the signer's certificate, if such an extension is at all
@@ -106,8 +106,8 @@ class KeyUsageConstraints(ConfigurableMixin):
     def _validate_key_usage(self, key_usage_extension_value):
         if not self.key_usage:
             return
-        key_usage = self.key_usage or set()
-        key_usage_forbidden = self.key_usage_forbidden or set()
+        key_usage = set(self.key_usage or ())
+        key_usage_forbidden = set(self.key_usage_forbidden or ())
 
         # First, check the "regular" key usage extension
         cert_ku = (
