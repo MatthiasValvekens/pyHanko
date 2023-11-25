@@ -3,6 +3,72 @@ Release history
 ***************
 
 
+.. _release-0.21.0:
+
+*Release date:* 2023-11-26
+
+
+Dependency changes
+------------------
+
+ * Bumped the minimal supported Python version to 3.8 (dropping 3.7).
+ * Bumped the lower bound on ``qrcode`` to ``7.3.1``.
+ * Bumped ``pyhanko-certvalidator`` to ``0.26.x``.
+ * Bumped the lower bound on ``click`` to ``8.1.3``.
+ * Bumped the lower bound on ``requests`` to ``2.31.0``.
+ * Bumped the lower bound on ``pyyaml`` to ``6.0``.
+ * Bumped the lower bound on ``cryptography`` to ``41.0.5``.
+ * Bumped ``aiohttp`` to ``3.9.x``.
+ * Bumped ``certomancer-csc-dummy`` test dependency to ``0.2.3``.
+ * Introduced new dependency group ``etsi`` with ``xsdata`` for features
+   implementing functionality from AdES and related ETSI standards.
+
+
+New features and enhancements
+-----------------------------
+
+Signing
+^^^^^^^
+
+ * Add support for ``/ContactInfo``, ``/Prop_AuthTime`` and ``/Prop_AuthType``.
+
+
+Validation
+^^^^^^^^^^
+
+ * Experimental support for AdES validation reports (requires new ``etsi`` optional deps)
+ * New API function for simulating PAdES-LTA validation at a time in the future;
+   see :func:`~pyhanko.sign.validation.ades.simulate_future_ades_lta_validation`.
+ * Add support for asserting the nonrevoked status of a certificate chain.
+
+
+CLI
+^^^
+
+ * Add ``--resave`` flag to ``addfields`` subcommand.
+
+
+Bugs fixed
+----------
+
+ * Fixed an oversight in the serialisation of the ``/ByteRange`` entry
+   in a signature that prevented large documents from being signed correctly.
+ * Various adjustments to the (still experimental) AdES validation API.
+ * Various local documentation fixes.
+ * PDF signatures that do not omit the ``eContent`` field in their encapsulated
+   content info are now rejected as invalid.
+
+
+Miscellaneous
+-------------
+
+ * Include PyPDF2 licence file in package metadata.
+ * Cleaned up loading logic in :class:`~pyhanko.pdf_utils.reader.PdfFileReader`.
+   The most important impact of this change is that structural errors in the
+   encryption dictionary will now cause exceptions to be thrown when decryption
+   is attempted, not in the ``__init__`` function.
+
+
 .. _release-0.20.1:
 
 0.20.1
