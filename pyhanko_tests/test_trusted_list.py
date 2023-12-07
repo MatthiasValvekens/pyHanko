@@ -2,11 +2,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from signing_commons import FROM_CA
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 
 from pyhanko.generated.etsi import ts_119612
 from pyhanko.sign.validation import KeyUsageConstraints, eutl
+from pyhanko.sign.validation.eutl import CriteriaCombination
 
 
 def _read_cas_from_file(path: Path):
@@ -329,3 +331,86 @@ def test_parse_service_no_type():
     parse_result = _raw_tlservice_parse(xml)
     with pytest.raises(eutl.TSPServiceParsingError, match='Service type'):
         eutl._interpret_service_info_for_ca(parse_result)
+
+
+@pytest.mark.parametrize(
+    'criterion',
+    [
+        eutl.CriteriaList(CriteriaCombination.ALL, frozenset()),
+        eutl.CriteriaList(CriteriaCombination.NONE, frozenset()),
+        eutl.CriteriaList(
+            CriteriaCombination.ALL,
+            frozenset(
+                [
+                    eutl.CertSubjectDNCriterion(
+                        required_rdn_part_oids=frozenset(['2.5.4.3'])
+                    ),
+                    eutl.CertSubjectDNCriterion(
+                        required_rdn_part_oids=frozenset(['2.5.4.10'])
+                    ),
+                    eutl.KeyUsageCriterion(
+                        KeyUsageConstraints(
+                            key_usage=frozenset(['non_repudiation'])
+                        )
+                    ),
+                ]
+            ),
+        ),
+        eutl.CriteriaList(
+            CriteriaCombination.AT_LEAST_ONE,
+            frozenset(
+                [
+                    eutl.CertSubjectDNCriterion(
+                        required_rdn_part_oids=frozenset(['2.5.4.3'])
+                    ),
+                    eutl.PolicySetCriterion(frozenset(['2.999'])),
+                ]
+            ),
+        ),
+        eutl.CriteriaList(
+            CriteriaCombination.NONE,
+            frozenset(
+                [
+                    eutl.KeyUsageCriterion(
+                        KeyUsageConstraints(
+                            key_usage=frozenset(['key_encipherment'])
+                        )
+                    )
+                ]
+            ),
+        ),
+    ],
+)
+def test_criteria_accept(criterion):
+    assert criterion.matches(FROM_CA.signing_cert)
+
+
+@pytest.mark.parametrize(
+    'criterion',
+    [
+        eutl.CriteriaList(
+            CriteriaCombination.ALL,
+            frozenset(
+                [
+                    eutl.CertSubjectDNCriterion(
+                        required_rdn_part_oids=frozenset(['2.5.4.3'])
+                    ),
+                    eutl.PolicySetCriterion(frozenset(['2.999'])),
+                ]
+            ),
+        ),
+        eutl.CriteriaList(
+            CriteriaCombination.NONE,
+            frozenset(
+                [
+                    eutl.CertSubjectDNCriterion(
+                        required_rdn_part_oids=frozenset(['2.5.4.3'])
+                    ),
+                    eutl.PolicySetCriterion(frozenset(['2.999'])),
+                ]
+            ),
+        ),
+    ],
+)
+def test_criteria_reject(criterion):
+    assert not criterion.matches(FROM_CA.signing_cert)
