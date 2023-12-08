@@ -1,7 +1,6 @@
 from typing import Iterable, Optional, TypeVar, Union
 
 import click
-from pyhanko_certvalidator import ValidationContext
 
 from pyhanko.cli.config import CLIConfig
 from pyhanko.cli.utils import logger, readable_file

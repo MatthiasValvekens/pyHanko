@@ -13,13 +13,17 @@ from pyhanko.cli._trust import (
 from pyhanko.cli.commands.signing.plugin import command_from_plugin
 from pyhanko.cli.commands.stamp import select_style
 from pyhanko.cli.utils import parse_field_location_spec
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import DEFAULT_SIGNER_KEY_USAGE, fields, signers
 from pyhanko.sign.signers.pdf_byterange import BuildProps
+from pyhanko.sign.timestamps import HTTPTimeStamper
 
 from ..._ctx import CLIContext
 from ...plugin_api import SigningCommandPlugin
 
 __all__ = ['signing', 'addsig', 'register']
+
+from ...runtime import pyhanko_exception_manager
 
 
 @cli_root.group(help='sign PDFs and other files', name='sign')
@@ -270,3 +274,51 @@ def register(plugins: List[SigningCommandPlugin]):
                     callback=_unavailable,
                 )
             )
+
+
+readable_file = click.Path(exists=True, readable=True, dir_okay=False)
+writable_file = click.Path(writable=True, dir_okay=False)
+
+
+@trust_options
+@signing.command(name='timestamp', help='add timestamp to PDF')
+@click.argument('infile', type=readable_file)
+@click.argument('outfile', type=writable_file)
+@click.option(
+    '--timestamp-url',
+    help='URL for timestamp server',
+    required=True,
+    type=str,
+    default=None,
+)
+@click.pass_context
+def timestamp(
+    ctx,
+    infile,
+    outfile,
+    validation_context,
+    trust,
+    trust_replace,
+    other_certs,
+    timestamp_url,
+):
+    with pyhanko_exception_manager():
+        vc_kwargs = build_vc_kwargs(
+            ctx.obj.config,
+            validation_context,
+            trust,
+            trust_replace,
+            other_certs,
+            retroactive_revinfo=True,
+        )
+        timestamper = HTTPTimeStamper(timestamp_url)
+        with open(infile, 'rb') as inf:
+            w = IncrementalPdfFileWriter(inf)
+            pdf_timestamper = signers.PdfTimeStamper(timestamper)
+            with open(outfile, 'wb') as outf:
+                pdf_timestamper.timestamp_pdf(
+                    w,
+                    'sha256',
+                    validation_context=ValidationContext(**vc_kwargs),
+                    output=outf,
+                )

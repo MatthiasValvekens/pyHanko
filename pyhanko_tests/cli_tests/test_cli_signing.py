@@ -1205,3 +1205,32 @@ def test_cli_with_signature_dictionary_entries(cli_runner):
 
         assert last_sign['/ContactInfo'] == 'www.pyhanko.com/verify'
         assert last_sign['/Location'] == 'THIS-COMPUTER'
+
+
+def test_cli_timestamp(pki_arch_name, timestamp_url, cli_runner, root_cert):
+    if pki_arch_name == 'ed448':
+        # FIXME deal with this bug on the Certomancer end
+        pytest.skip("ed448 timestamping in Certomancer doesn't work")
+    cfg = {
+        'validation-contexts': {
+            'test': {
+                'trust': root_cert,
+            }
+        },
+    }
+
+    _write_config(cfg)
+    result = cli_runner.invoke(
+        cli_root,
+        [
+            'sign',
+            'timestamp',
+            '--validation-context',
+            'test',
+            '--timestamp-url',
+            timestamp_url,
+            INPUT_PATH,
+            SIGNED_OUTPUT_PATH,
+        ],
+    )
+    assert not result.exception, result.output
