@@ -5,12 +5,13 @@ import pytest
 from pyhanko.generated.etsi import ts_119612
 from pyhanko.sign.validation import KeyUsageConstraints, eutl
 from pyhanko.sign.validation.eutl import CriteriaCombination
+from test_data.samples import TEST_DIR
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 
-from test_data.samples import TEST_DIR
+from pyhanko_certvalidator.authority import AuthorityWithCert, NamedKeyAuthority
 
-from .signing_commons import FROM_CA
+from .signing_commons import ECC_INTERM_CERT, FROM_CA, INTERM_CERT
 
 
 def _read_cas_from_file(path: Path):
@@ -416,3 +417,94 @@ def test_criteria_accept(criterion):
 )
 def test_criteria_reject(criterion):
     assert not criterion.matches(FROM_CA.signing_cert)
+
+
+def _dummy_service_definition(*extra_certs) -> eutl.CAServiceInformation:
+    return eutl.CAServiceInformation(
+        eutl.BaseServiceInformation(
+            '',
+            'test1',
+            provider_certs=(INTERM_CERT, *extra_certs),
+            additional_info=frozenset(),
+        ),
+        qualifications=frozenset(),
+        expired_certs_revocation_info=None,
+    )
+
+
+def test_tsp_registry():
+    registry = eutl.TSPRegistry()
+    registry.register_ca(_dummy_service_definition())
+
+    result = list(
+        registry.applicable_service_definitions(AuthorityWithCert(INTERM_CERT))
+    )
+    assert len(result) == 1
+    assert result[0].base_info.service_name == 'test1'
+
+
+def test_tsp_registry_by_name():
+    registry = eutl.TSPRegistry()
+    registry.register_ca(_dummy_service_definition())
+
+    result = list(
+        registry.applicable_service_definitions(
+            NamedKeyAuthority(INTERM_CERT.subject, INTERM_CERT.public_key)
+        )
+    )
+    assert len(result) == 1
+    assert result[0].base_info.service_name == 'test1'
+
+
+def test_tsp_registry_alternative_cert():
+    registry = eutl.TSPRegistry()
+    registry.register_ca(_dummy_service_definition(ECC_INTERM_CERT))
+
+    result = list(
+        registry.applicable_service_definitions(AuthorityWithCert(INTERM_CERT))
+    )
+
+    result2 = list(
+        registry.applicable_service_definitions(
+            AuthorityWithCert(ECC_INTERM_CERT)
+        )
+    )
+    assert result == result2
+    assert len(result) == 1
+    assert result[0].base_info.service_name == 'test1'
+
+
+def test_tsp_registry_multiple_sds():
+    registry = eutl.TSPRegistry()
+    # multiple SDs with the same issuer
+    registry.register_ca(
+        eutl.CAServiceInformation(
+            eutl.BaseServiceInformation(
+                '',
+                'test1',  # quals are too much work to mock
+                provider_certs=(INTERM_CERT,),
+                additional_info=frozenset(),
+            ),
+            qualifications=frozenset(),
+            expired_certs_revocation_info=None,
+        )
+    )
+
+    registry.register_ca(
+        eutl.CAServiceInformation(
+            eutl.BaseServiceInformation(
+                '',
+                'test2',
+                provider_certs=(INTERM_CERT,),
+                additional_info=frozenset(),
+            ),
+            qualifications=frozenset(),
+            expired_certs_revocation_info=None,
+        )
+    )
+
+    result = list(
+        registry.applicable_service_definitions(AuthorityWithCert(INTERM_CERT))
+    )
+    assert len(result) == 2
+    assert set(r.base_info.service_name for r in result) == {'test1', 'test2'}
