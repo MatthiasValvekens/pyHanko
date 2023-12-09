@@ -1,13 +1,16 @@
 import enum
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     Any,
+    Dict,
     FrozenSet,
     Generator,
     Iterable,
     Optional,
+    Set,
     Tuple,
     TypeVar,
     Union,
@@ -29,7 +32,32 @@ from xsdata.formats.dataclass.parsers.handlers.lxml import (
     LxmlEventHandler,
 )
 
+from pyhanko_certvalidator.authority import (
+    Authority,
+    AuthorityWithCert,
+    TrustAnchor,
+)
 from pyhanko_certvalidator.errors import InvalidCertificateError
+from pyhanko_certvalidator.path import ValidationPath
+from pyhanko_certvalidator.registry import TrustManager
+
+__all__ = [
+    'TSPRegistry',
+    'CAServiceInformation',
+    'read_qualified_certificate_authorities',
+    'AdditionalServiceInformation',
+    'BaseServiceInformation',
+    'Criterion',
+    'KeyUsageCriterion',
+    'PolicySetCriterion',
+    'CertSubjectDNCriterion',
+    'CriteriaCombination',
+    'CriteriaList',
+    'Qualifier',
+    'Qualification',
+    'TSPServiceParsingError',
+]
+
 
 logger = logging.getLogger(__name__)
 
@@ -432,3 +460,54 @@ def read_qualified_certificate_authorities(
         yield from _interpret_service_info_for_cas(
             _required(tsp.tspservices, "TSP services").tspservice
         )
+
+
+class TSPRegistry:
+    def __init__(self: 'TSPRegistry'):
+        self._cert_to_si: Dict[Authority, Set[CAServiceInformation]] = (
+            defaultdict(set)
+        )
+
+    def register_ca(self, ca_service_info: CAServiceInformation):
+        for cert in ca_service_info.base_info.provider_certs:
+            self._cert_to_si[AuthorityWithCert(cert)].add(ca_service_info)
+
+    def applicable_service_definitions(
+        self, ca: Authority
+    ) -> Iterable[CAServiceInformation]:
+        return tuple(self._cert_to_si[ca])
+
+    @property
+    def known_authorities(self) -> Iterable[Authority]:
+        return self._cert_to_si.keys()
+
+    # TODO take date into account (and properly track it
+    #  for service definitions)
+    def applicable_tsps_on_path(
+        self,
+        path: ValidationPath,
+    ) -> Generator[CAServiceInformation, None, None]:
+        for ca in path.iter_authorities():
+            yield from self.applicable_service_definitions(ca)
+
+
+class TSPTrustManager(TrustManager):
+    def __init__(self, tsp_registry: TSPRegistry):
+        self.tsp_registry = tsp_registry
+
+    def is_root(self, cert: x509.Certificate) -> bool:
+        return bool(
+            self.tsp_registry.applicable_service_definitions(
+                AuthorityWithCert(cert)
+            )
+        )
+
+    def find_potential_issuers(
+        self, cert: x509.Certificate
+    ) -> Generator[TrustAnchor, None, None]:
+        # TODO food for thought: can we extract qualifiers from the service
+        #  definitions here? E.g. if we know that a cert can only be qualified
+        #  if it has a certain policy, we could enforce that at the PKIX level.
+        for authority in self.tsp_registry.known_authorities:
+            if authority.is_potential_issuer_of(cert):
+                yield TrustAnchor(authority)
