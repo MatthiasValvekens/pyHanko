@@ -1,12 +1,16 @@
 import enum
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
+    Dict,
     FrozenSet,
     Generator,
     Iterable,
+    List,
     Optional,
+    Set,
     Tuple,
     TypeVar,
     Union,
@@ -23,6 +27,7 @@ from pyhanko.sign.validation.settings import KeyUsageConstraints
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 
+from pyhanko_certvalidator.authority import Authority, AuthorityWithCert
 from pyhanko_certvalidator.errors import InvalidCertificateError
 
 logger = logging.getLogger(__name__)
@@ -404,3 +409,19 @@ def read_qualified_certificate_authorities(
         yield from _interpret_service_info_for_cas(
             _required(tsp.tspservices, "TSP services").tspservice
         )
+
+
+class TSPRegistry:
+    def __init__(self: 'TSPRegistry'):
+        self._cert_to_si: Dict[Authority, Set[CAServiceInformation]] = (
+            defaultdict(set)
+        )
+
+    def register_ca(self, ca_service_info: CAServiceInformation):
+        for cert in ca_service_info.base_info.provider_certs:
+            self._cert_to_si[AuthorityWithCert(cert)].add(ca_service_info)
+
+    def applicable_service_definitions(
+        self, ca: Authority
+    ) -> Iterable[CAServiceInformation]:
+        return tuple(self._cert_to_si[ca])
